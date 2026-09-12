@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
+See: .planning/PROJECT.md (updated 2026-09-12 after Phase 9)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 09 — Source View Follow-Through — Breadcrumb & Editor Handoff
+**Current focus:** Phase 10 — Index Health — The Coverage Denominator
 
 ## Current Position
 
@@ -315,6 +315,8 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode. `uat-predicate.cjs` accepts only `pass`/`passed` per test item, so a `skipped`-with-reason deferred follow-up blocks `phase uat-passed` even though the verify-work template calls that state `complete` and #1921 says a deferred follow-up must never block (P8 test 3). `gsd-verifier` declared every file in the phase dir — including `08-UAT.md` and `08-VALIDATION.md`, which verify-work and validate-phase WRITE — in `covered_files`, so the verification went `stale` by construction the moment its own downstream hooks ran; resolved by dropping those two outputs from the set and recomputing via `verification.fingerprint` (the verifier contract at `gsd-verifier.md:673` is PLAN/SUMMARY + requirements + impl files, not workflow outputs).
 - [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
+- ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
+- ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
 
 ### Quick Tasks Completed
 
@@ -421,9 +423,9 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T21:15:02.988Z
+Last session: 2026-09-12T21:24:52.000Z
 Stopped at: Phase 09 complete, ready to plan Phase 10
-  NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
+  NEXT: `/gsd-discuss-phase 10` (Index Health — The Coverage Denominator; no 10-CONTEXT.md yet)
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
@@ -438,7 +440,8 @@ Stopped at: Phase 09 complete, ready to plan Phase 10
 
 ## Operator Next Steps
 
-- Phase 8 is verified and closed (21/21 UAT, G-08-1 resolved by 08-05, tmux-e2e fired at executed=6 on CI); Phases 9-12 of v0.13.0 remain
+- Phase 9 is verified and closed (5/5 must-haves at `3fd47279` after gap-closure plan 09-06; deep review converged clean after six `fix(09)` commits); Phases 10-12 of v0.13.0 remain
+- Phase 8 is verified and closed (21/21 UAT, G-08-1 resolved by 08-05, tmux-e2e fired at executed=6 on CI)
 - Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go` — the ruleset currently lists 6 contexts and omits it (checked 2026-09-11)
 - PR #69 (phases 7-8 WIP) MERGED 2026-09-12 as squash `3da59354`; the pr-template-exempt / pr-issue-exempt markers went in with it. The next PR (phases 9-12, or per-phase if the maintainer prefers) needs a `feat:` title and `Resolves #N` from the start
-- Discuss the next phase with /gsd-discuss-phase 9 (Source View Follow-Through — Breadcrumb & Editor Handoff)
+- Discuss the next phase with /gsd-discuss-phase 10 (Index Health — The Coverage Denominator)
