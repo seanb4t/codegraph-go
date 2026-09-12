@@ -25,9 +25,17 @@ package uiserver
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
+	"net/url"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 
+	"github.com/seanb4t/codegraph-go/internal/query"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 )
 
@@ -124,30 +132,102 @@ const noTemplateConfiguredReason = "no editor template is configured — set --e
 // phrase "disabled by operator" is a stable, tested substring.
 const disabledByOperatorReason = "editor links are disabled by operator (--no-editor-url or CODEGRAPH_NO_EDITOR_URL)"
 
+// schemeRE matches a well-formed URI scheme (RFC 3986 §3.1): a letter
+// followed by any number of letters, digits, '+', '.' or '-'.
+var schemeRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*$`)
+
 // ValidateEditorTemplate reports whether template is a well-formed,
 // allowlisted editor URI template (D-13). nil means valid; a non-nil
 // error's text is used verbatim as GetEditorLink's TEMPLATE_INVALID
 // reason and as the CLI's startup-failure message (D-17) — ONE
 // validator, exercised from both call sites, never a second
-// implementation.
-//
-// STUB (RED phase, plan 09-01 Task 1): always returns
-// connect.NewError(CodeUnimplemented, ...) so
-// TestEditorTemplateSchemeAllowlist and friends fail on their own
-// assertions rather than on a missing symbol. Replaced with the real
-// validator in the GREEN commit.
+// implementation. Each distinct cause has its own message text; none
+// shares wording with another (permalink.go:33-52's distinct-reason
+// discipline).
 func ValidateEditorTemplate(template string) error {
-	return errStubNotYetImplemented
+	if template == "" {
+		return errors.New("template is empty")
+	}
+	if len(template) > EditorTemplateMaxBytes {
+		return fmt.Errorf("template is %d bytes, which exceeds the %d-byte limit", len(template), EditorTemplateMaxBytes)
+	}
+	for i := 0; i < len(template); i++ {
+		if b := template[i]; b < 0x21 || b == 0x7f {
+			return errors.New("template contains whitespace or a control character")
+		}
+	}
+
+	colon := strings.IndexByte(template, ':')
+	if colon <= 0 {
+		return errors.New("template has no scheme (expected a leading `scheme:`)")
+	}
+	scheme := template[:colon]
+	if !schemeRE.MatchString(scheme) {
+		return fmt.Errorf("template scheme %q is not well-formed", scheme)
+	}
+	if _, ok := editorURLSchemes[strings.ToLower(scheme)]; !ok {
+		return fmt.Errorf("template scheme %q is not in the allowlist", scheme)
+	}
+
+	hasPath := false
+	for i := 0; i < len(template); {
+		switch template[i] {
+		case '{':
+			end := strings.IndexByte(template[i:], '}')
+			if end == -1 {
+				return errors.New("template has an unbalanced '{' with no matching '}'")
+			}
+			token := template[i+1 : i+end]
+			if strings.ContainsAny(token, "{}") {
+				return errors.New("template has an unbalanced brace")
+			}
+			if _, ok := editorPlaceholders[token]; !ok {
+				return fmt.Errorf("template has an unknown placeholder {%s}", token)
+			}
+			if token == "path" {
+				hasPath = true
+			}
+			i += end + 1
+		case '}':
+			return errors.New("template has an unbalanced '}' with no matching '{'")
+		default:
+			i++
+		}
+	}
+	if !hasPath {
+		return errors.New("template has no {path} placeholder")
+	}
+	return nil
 }
 
 // buildEditorURL substitutes template's {path}/{line}/{col} placeholders
 // with absPath (percent-encoded per its position — before or after the
 // template's first '?') and line/col (decimal). template is assumed
 // already validated by ValidateEditorTemplate.
-//
-// STUB (RED phase): returns an empty string.
 func buildEditorURL(template, absPath string, line, col int32) string {
-	return ""
+	queryStart := strings.IndexByte(template, '?')
+
+	var b strings.Builder
+	for i := 0; i < len(template); {
+		if template[i] != '{' {
+			b.WriteByte(template[i])
+			i++
+			continue
+		}
+		end := strings.IndexByte(template[i:], '}')
+		token := template[i+1 : i+end]
+		switch token {
+		case "path":
+			inQuery := queryStart != -1 && i > queryStart
+			b.WriteString(encodeEditorPathSegments(absPath, inQuery))
+		case "line":
+			b.WriteString(strconv.Itoa(int(line)))
+		case "col":
+			b.WriteString(strconv.Itoa(int(col)))
+		}
+		i += end + 1
+	}
+	return b.String()
 }
 
 // encodeEditorPathSegments percent-encodes each "/"-separated segment of
@@ -159,10 +239,40 @@ func buildEditorURL(template, absPath string, line, col int32) string {
 // unambiguously); inQuery true applies url.QueryEscape per segment then
 // rewrites '+' to '%20' (QueryEscape's default space encoding, which an
 // editor's file-path query parameter must not receive literally).
-//
-// STUB (RED phase): returns absPath unchanged.
 func encodeEditorPathSegments(absPath string, inQuery bool) string {
-	return absPath
+	segments := strings.Split(absPath, "/")
+	for i, seg := range segments {
+		if inQuery {
+			seg = url.QueryEscape(seg)
+			seg = strings.ReplaceAll(seg, "+", "%20")
+		} else {
+			seg = url.PathEscape(seg)
+			seg = strings.ReplaceAll(seg, ":", "%3A")
+		}
+		segments[i] = seg
+	}
+	return strings.Join(segments, "/")
+}
+
+// editorTemplateSourceToProto maps an EditorTemplateSource onto its wire
+// projection — a named mapper, never an inline literal at the response-
+// building call site (statusToProto's mapper discipline). default
+// covers EditorTemplateNone and any future member, degrading to the
+// honest NONE wording rather than a positive claim about a source that
+// does not exist.
+func editorTemplateSourceToProto(s EditorTemplateSource) uiv1.EditorTemplateSource {
+	switch s {
+	case EditorTemplateFlag:
+		return uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_FLAG
+	case EditorTemplateEnv:
+		return uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_ENV
+	case EditorTemplateDiscovered:
+		return uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_DISCOVERED
+	case EditorTemplateDisabled:
+		return uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_DISABLED
+	default: // EditorTemplateNone, and any future member
+		return uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_NONE
+	}
 }
 
 // editorLinkAnswer builds a GetEditorLinkResponse from the server's
@@ -172,21 +282,120 @@ func encodeEditorPathSegments(absPath string, inQuery bool) string {
 // the same rationale permalink.go's remotePresenceResponse extraction
 // documents.
 //
-// STUB (RED phase): returns a zero-value response.
+// default_source/default_editor and presets are populated on EVERY
+// answer (D-07): the response always reports the SERVER DEFAULT's own
+// provenance, whether or not this call's answer used an override.
 func editorLinkAnswer(opts EditorLinkOptions, override *string, abs string, line, col int32) *uiv1.GetEditorLinkResponse {
-	return &uiv1.GetEditorLinkResponse{}
+	protoPresets := make([]*uiv1.EditorPreset, 0, 3)
+	for _, p := range EditorPresets() {
+		protoPresets = append(protoPresets, editorPresetToProto(p))
+	}
+
+	resp := &uiv1.GetEditorLinkResponse{
+		DefaultSource: editorTemplateSourceToProto(opts.Source),
+		DefaultEditor: opts.Editor,
+		Presets:       protoPresets,
+	}
+
+	var effectiveTemplate string
+	if override != nil && *override != "" {
+		effectiveTemplate = *override
+		resp.OverrideApplied = true
+	} else {
+		// D-16 first: an operator-disabled default is never silently
+		// replaced by discovery or a stale value. Every other source
+		// (None, Flag, Env, Discovered, and any future member) shares
+		// the same "configured or not" check via this default arm —
+		// the honest degrade permalink.go's own safe-default switch
+		// documents.
+		switch opts.Source {
+		case EditorTemplateDisabled:
+			resp.Availability = uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_NO_TEMPLATE
+			resp.Reason = disabledByOperatorReason
+			return resp
+		default:
+			if opts.Template == "" {
+				resp.Availability = uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_NO_TEMPLATE
+				resp.Reason = noTemplateConfiguredReason
+				return resp
+			}
+			effectiveTemplate = opts.Template
+		}
+	}
+
+	if err := ValidateEditorTemplate(effectiveTemplate); err != nil {
+		resp.Availability = uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID
+		resp.Reason = err.Error()
+		return resp
+	}
+
+	resp.Availability = uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_BUILDABLE
+	resp.Url = buildEditorURL(effectiveTemplate, abs, line, col)
+	return resp
 }
 
-// errStubNotYetImplemented marks a RED-phase declaration whose real body
-// lands in this plan's GREEN commit (test(09-01) -> feat(09-01)).
-var errStubNotYetImplemented = errors.New("uiserver: GetEditorLink is not yet implemented (plan 09-01 RED phase)")
-
-// GetEditorLink answers BRW-11/BRW-12 over the wire.
-//
-// STUB (RED phase): always returns connect.CodeUnimplemented so the
-// suite compiles and every named test fails on its own assertion
-// against a real, connectable server rather than on a missing symbol.
-// Replaced with the real handler body in this plan's GREEN commit.
+// GetEditorLink answers BRW-11/BRW-12 over the wire. line/col are
+// validated BEFORE withEngine, exactly like permalink.go:100-111 — a
+// present value below 1 refuses before the store is ever opened. path is
+// confined by (*query.Engine).ValidateRepoRelativePath — the SAME gate
+// GetNodeDetail, GetPermalink and FileSymbols already share (SRV-05);
+// this handler adds no second confinement implementation. The one
+// reclassification below (errors.Is(verr, fs.ErrNotExist)) mirrors
+// GetPermalink's own since-deleted-file handling, built from the
+// caller's own repo-relative path — never the absolute host path.
 func (s *uiService) GetEditorLink(ctx context.Context, req *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errStubNotYetImplemented)
+	if line := req.Msg.Line; line != nil && *line < 1 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("line %d must be >= 1", *line))
+	}
+	if col := req.Msg.Col; col != nil && *col < 1 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("col %d must be >= 1", *col))
+	}
+
+	var resp *uiv1.GetEditorLinkResponse
+	// classifiedErr carries the since-deleted-file reclassification
+	// OUTSIDE withEngine's own error-mapping path — see permalink.go's
+	// identical variable for the full rationale (IN-02: typed
+	// *connect.Error rather than the broader `error`).
+	var classifiedErr *connect.Error
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		path := req.Msg.GetPath()
+		if verr := eng.ValidateRepoRelativePath(path); verr != nil {
+			if errors.Is(verr, fs.ErrNotExist) {
+				classifiedErr = connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+					"path %q does not exist in the working tree — it may have existed at the indexed commit and been deleted or renamed since; re-index or check the commit history",
+					path,
+				))
+				return nil
+			}
+			return verr
+		}
+
+		root, err := filepath.Abs(s.repoPath)
+		if err != nil {
+			return err
+		}
+		// D-08: Join, never EvalSymlinks — editors key on the
+		// workspace folder the user opened, and the resolved form was
+		// only ever needed to PROVE confinement, above.
+		abs := filepath.Join(root, filepath.Clean(path))
+
+		line := int32(1)
+		if req.Msg.Line != nil {
+			line = *req.Msg.Line
+		}
+		col := int32(1)
+		if req.Msg.Col != nil {
+			col = *req.Msg.Col
+		}
+
+		resp = editorLinkAnswer(s.editorLink, req.Msg.Template, abs, line, col)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if classifiedErr != nil {
+		return nil, classifiedErr
+	}
+	return connect.NewResponse(resp), nil
 }
