@@ -214,8 +214,26 @@ Plans:
   4. A phase `SECURITY.md` names the browser's external-protocol prompt — not CSP — as the security boundary and covers validation of the template's inputs, with every named threat carrying a test or a recorded verdict rather than prose (BRW-13)
 
 **Notes**: `BRW-10` is sequenced first within the phase despite the milestone scope listing `BRW-11` first: it is pure frontend reuse of the already-shipped `FileSymbols` rpc with no proto edit, no new Engine method and no CLI flag, so it is the smallest demonstrable item in the whole follow-through set. Whether `BRW-11` extends `GetPermalink` — whose availability enum has no real analog for an editor link's buildable/not-buildable state — or uses a small purpose-built message is an open design question to settle at discuss-phase time. Zed is deliberately neither a preset nor a claimed target: file+line open via URL is an open upstream request, and a preset would be a promise this project cannot keep. Server-side shell-out to launch an editor is out of scope by construction — it breaks read-only-by-construction (`SRV-03`); the browser's own URI-handler dispatch is the mechanism. `BRW-13`'s SECURITY.md is not optional paperwork: v0.12.0 Phase 1 shipped with no `01-SECURITY.md` despite 11 plans carrying threat models, the only such omission in project history, and it was caught only by the milestone audit.
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+
+- [ ] 09-01-PLAN.md — TRACER: `GetEditorLink` as UIService's 15th rpc (closed enums, presets on the wire) proven through the real listener with confinement and the positive scheme allowlist; `--editor-url` / `--no-editor-url` / `CODEGRAPH_EDITOR_URL` / `CODEGRAPH_NO_EDITOR_URL` resolved at startup, malformed values refuse to bind
+
+**Wave 2** *(blocked on Wave 1 completion; 09-02 and 09-03 run in parallel)*
+
+- [ ] 09-02-PLAN.md — startup editor discovery (PATH then app dirs, committed popularity order, probe-only, never fatal) wired as the third rung of the precedence chain, provenance on the wire
+- [ ] 09-03-PLAN.md — the ONE per-line `SourcePane` restructure with an always-rendered gutter, the sticky innermost-symbol breadcrumb with its honest empty state, the live Chromium gate `breadcrumb-check.mjs` against this repo's index, and `09-MUTATION-LOG.md` family (a) watched RED against the pre-fix binary
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 09-04-PLAN.md — header "Open in editor" link from the load-time probe, one-rpc-per-click gutter targets, the per-browser localStorage override and the three-preset picker with provenance display; live gate extended with the editor-link phases
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 09-05-PLAN.md — mutation-log families (b) stale breadcrumb, (c) bypassed confinement, (d) poisoned allowlist; `09-SECURITY.md` naming the browser's external-protocol prompt (not CSP) as the boundary with every threat carrying a test or a verdict; phase-close gate run
 
 ### Phase 10: Index Health — The Coverage Denominator
 
