@@ -16,12 +16,19 @@
 	import { buildCallTargetIndex, callTargets } from '$lib/call-targets';
 	import { NAV_INTENT, type BrowseNavDelta, type NavIntent } from '$lib/browse-nav';
 	import type { BrowseTargetState } from '$lib/browse-state';
+	import { readEditorOverride, templateForRequest } from '$lib/editor-prefs';
+	import type { EditorOverride } from '$lib/editor-prefs';
 	import {
 		PermalinkAvailability,
+		EditorLinkAvailability,
+		EditorTemplateSource,
 		type GetPermalinkRequestSchema,
 		type GetPermalinkResponse,
 		type FileSymbolsRequestSchema,
 		type FileSymbolsResponse,
+		type GetEditorLinkRequestSchema,
+		type GetEditorLinkResponse,
+		type EditorPreset,
 		type Node as GraphNode
 	} from '$lib/gen/ui_pb';
 	import CopyAction from './CopyAction.svelte';
@@ -51,6 +58,18 @@
 		): Promise<FileSymbolsResponse>;
 	}
 
+	// EditorLinkClient (09-04, BRW-11/BRW-12): the header link's and the
+	// gutter's ONLY data source. Optional on the client prop — same
+	// "absent member behaves as idle" discipline as PermalinkClient and
+	// FileSymbolsClient — so existing stub clients in tests that predate
+	// this plan remain valid with no changes.
+	interface EditorLinkClient {
+		getEditorLink(
+			request: MessageInitShape<typeof GetEditorLinkRequestSchema>,
+			options?: { signal?: AbortSignal }
+		): Promise<GetEditorLinkResponse>;
+	}
+
 	// onNavigate (03-08 Task 1, D-18): a single-def view's `calls` list is
 	// the click-to-definition index (BRW-04) — clicking a decorated
 	// identifier re-issues navigation by SYMBOL NAME alone (never
@@ -67,9 +86,7 @@
 		onNavigate
 	}: {
 		state: BrowseTargetState;
-		// Plan 09-04 widens this again with an EditorLinkClient member —
-		// leave that widening to that plan; do not pre-declare it here.
-		client?: PermalinkClient & Partial<FileSymbolsClient>;
+		client?: PermalinkClient & Partial<FileSymbolsClient> & Partial<EditorLinkClient>;
 		// indexStale (03-09, D-03): the SAME `GetStatusResponse.stale` flag
 		// the layout's status banner already reads, passed down so this
 		// pane's own source-absent message can split by cause. Optional
@@ -319,6 +336,147 @@
 	function gutterWidthCh(lineCount: number): string {
 		return `${String(lineCount).length + 1}ch`;
 	}
+
+	// --- BRW-11/BRW-12: the "Open in editor" header link and gutter ----
+
+	// editorLinkParamsFor mirrors permalinkParamsFor's shape: file mode
+	// probes line 1 col 1 (D-09 — "open this whole file" reduces to its
+	// first line for editor purposes); a single-def probes the node's
+	// OWN start position. node.startCol is 0-based tree-sitter data
+	// (internal/indexer/goextract/goextract.go:163), so the request adds
+	// 1 to convert to the 1-based column editors expect.
+	interface EditorLinkParams {
+		path: string;
+		line: number;
+		col: number;
+	}
+
+	function editorLinkParamsFor(s: BrowseTargetState): EditorLinkParams | undefined {
+		if (s.kind === 'file') {
+			return { path: s.path, line: 1, col: 1 };
+		}
+		if (s.kind === 'single-def') {
+			return { path: s.node.filePath, line: s.node.startLine, col: s.node.startCol + 1 };
+		}
+		return undefined;
+	}
+
+	// editorOverride: read ONCE at mount (D-18). The picker's callbacks
+	// (Task 3) write through editor-prefs and reassign this $state, which
+	// re-triggers the probe effect below with the new template.
+	let editorOverride = $state<EditorOverride | null>(readEditorOverride());
+
+	type EditorLinkState =
+		| { kind: 'idle' }
+		| { kind: 'loading' }
+		| { kind: 'loaded'; response: GetEditorLinkResponse };
+
+	let editorLinkState = $state<EditorLinkState>({ kind: 'idle' });
+
+	// lastPresets: the most recent loaded response's presets, so a preset
+	// override (id only) resolves to its template string on the NEXT
+	// probe or click (D-06) — the browser never holds a second copy of a
+	// template it constructs itself.
+	let lastPresets = $state<EditorPreset[]>([]);
+
+	// pickerOpenedOnce: D-14's "the SPA presents the picker on first use"
+	// — fires at most once per mount, from the load-time probe only (a
+	// gutter click's own answer never re-opens an already-dismissed
+	// picker).
+	let pickerOpenedOnce = false;
+	let pickerOpen = $state(false);
+
+	function needsPickerPrompt(response: GetEditorLinkResponse): boolean {
+		if (response.availability === EditorLinkAvailability.TEMPLATE_INVALID) return true;
+		return (
+			response.availability === EditorLinkAvailability.NO_TEMPLATE &&
+			response.defaultSource !== EditorTemplateSource.DISABLED
+		);
+	}
+
+	// Individual primitive $deriveds (not one object $derived) — same
+	// once-per-value-change discipline as filePath above: a re-render
+	// passing a brand-new BrowseTargetState object for the SAME target
+	// must not re-dispatch the probe.
+	let editorTargetPath = $derived(editorLinkParamsFor(target)?.path);
+	let editorTargetLine = $derived(editorLinkParamsFor(target)?.line);
+	let editorTargetCol = $derived(editorLinkParamsFor(target)?.col);
+
+	$effect(() => {
+		const path = editorTargetPath;
+		const line = editorTargetLine;
+		const col = editorTargetCol;
+		const override = editorOverride;
+		const activeClient = stableClient;
+		if (path === undefined || line === undefined || col === undefined || !activeClient?.getEditorLink) {
+			editorLinkState = { kind: 'idle' };
+			return;
+		}
+		editorLinkState = { kind: 'loading' };
+		const controller = new AbortController();
+		// untrack: lastPresets is $state and this effect's own .then below
+		// writes it — reading it reactively here would make the write
+		// re-trigger this same effect (the fileSymbolsCache pitfall 09-03
+		// already documented and fixed the same way).
+		const template = templateForRequest(override, untrack(() => lastPresets));
+		activeClient
+			.getEditorLink({ path, line, col, template }, { signal: controller.signal })
+			.then((response) => {
+				lastPresets = response.presets;
+				editorLinkState = { kind: 'loaded', response };
+				if (needsPickerPrompt(response) && !pickerOpenedOnce) {
+					pickerOpenedOnce = true;
+					pickerOpen = true;
+				}
+			})
+			.catch(() => {
+				// A failed probe is not the whole pane's failure — it only
+				// means no editor-link surface renders for this target.
+				editorLinkState = { kind: 'idle' };
+			});
+		return () => controller.abort();
+	});
+
+	// gutterClickInFlight: a SINGLE flag shared across every gutter cell
+	// (T-09-20) — a click burst while a request is pending issues exactly
+	// one rpc, never one per cell.
+	let gutterClickInFlight = $state(false);
+
+	let editorLinkBuildable = $derived(
+		editorLinkState.kind === 'loaded' &&
+			editorLinkState.response.availability === EditorLinkAvailability.BUILDABLE
+	);
+
+	async function handleGutterClick(lineNumber: number): Promise<void> {
+		if (gutterClickInFlight) return;
+		const activeClient = client;
+		const path = editorLinkParamsFor(target)?.path;
+		if (!activeClient?.getEditorLink || !path) return;
+		gutterClickInFlight = true;
+		try {
+			const response = await activeClient.getEditorLink({
+				path,
+				line: lineNumber,
+				col: 1,
+				template: templateForRequest(editorOverride, lastPresets)
+			});
+			lastPresets = response.presets;
+			if (response.availability === EditorLinkAvailability.BUILDABLE) {
+				// A same-tab navigation to a custom external scheme — never
+				// window.open, which leaves a blank tab behind for a
+				// non-http(s) handoff (09-RESEARCH.md Open Question 2).
+				window.location.assign(response.url);
+			} else {
+				// Surface the reason in the header exactly as the probe would.
+				editorLinkState = { kind: 'loaded', response };
+			}
+		} catch {
+			// Leave state as-is — a failed click is not the whole pane's
+			// failure.
+		} finally {
+			gutterClickInFlight = false;
+		}
+	}
 </script>
 
 {#snippet permalinkSurface()}
@@ -349,6 +507,53 @@
 	{/if}
 {/snippet}
 
+{#snippet editorLinkSurface()}
+	{#if editorLinkState.kind === 'loaded'}
+		{@const r = editorLinkState.response}
+		{#if r.availability === EditorLinkAvailability.BUILDABLE}
+			<a
+				href={r.url}
+				rel="noreferrer"
+				class="text-xs underline decoration-dotted underline-offset-2"
+				data-testid="editor-link"
+			>
+				Open in editor
+			</a>
+			<button
+				type="button"
+				class="text-xs text-muted-foreground"
+				data-testid="editor-link-picker-toggle"
+				aria-label="Editor link settings"
+				aria-expanded={pickerOpen}
+				onclick={() => (pickerOpen = !pickerOpen)}
+			>
+				⚙
+			</button>
+		{:else if r.availability === EditorLinkAvailability.NO_TEMPLATE && r.defaultSource === EditorTemplateSource.DISABLED}
+			<!-- D-16: hidden, not explained — no editor surface at all. -->
+		{:else}
+			<span class="text-xs text-muted-foreground" data-testid="editor-link-reason">
+				{r.reason}
+			</span>
+			<button
+				type="button"
+				class="text-xs text-muted-foreground"
+				data-testid="editor-link-picker-toggle"
+				aria-label="Editor link settings"
+				aria-expanded={pickerOpen}
+				onclick={() => (pickerOpen = !pickerOpen)}
+			>
+				⚙
+			</button>
+		{/if}
+		{#if pickerOpen}
+			<!-- Filled by plan 09-04 Task 3 with EditorLinkPicker.svelte;
+			     the testid is kept stable across that change. -->
+			<div data-testid="editor-link-picker"></div>
+		{/if}
+	{/if}
+{/snippet}
+
 {#if target.kind === 'idle'}
 	<p class="mt-4 text-sm text-muted-foreground" data-testid="browse-idle">
 		Search for a symbol or open a file to see its source.
@@ -374,6 +579,7 @@
 		<div class="mb-2 flex flex-wrap items-center gap-3">
 			<CopyAction value={target.path} label="file path" />
 			{@render permalinkSurface()}
+			{@render editorLinkSurface()}
 		</div>
 		{#if target.truncated}
 			<p class="mb-2 text-xs text-muted-foreground" data-testid="browse-truncated">
@@ -419,13 +625,21 @@
 		<pre class="overflow-x-auto rounded border p-4 text-sm"><code
 				bind:this={codeEl}
 				>{#each lines as html, i}<span class="line" data-line={i + 1} id={`L${i + 1}`}
-						><span
-							class="gutter inline-block select-none text-right text-muted-foreground"
-							data-testid={`gutter-line-${i + 1}`}
-							aria-hidden="true"
-							style={`width: ${gutterWidthCh(lines.length)}; margin-right: 1ch;`}
-							>{i + 1}</span
-						>{@html html}</span
+						>{#if editorLinkBuildable}<button
+								type="button"
+								class="gutter inline-block select-none text-right text-muted-foreground"
+								data-testid={`gutter-line-${i + 1}`}
+								data-line={i + 1}
+								style={`width: ${gutterWidthCh(lines.length)}; margin-right: 1ch;`}
+								onclick={() => handleGutterClick(i + 1)}
+								>{i + 1}</button
+							>{:else}<span
+								class="gutter inline-block select-none text-right text-muted-foreground"
+								data-testid={`gutter-line-${i + 1}`}
+								aria-hidden="true"
+								style={`width: ${gutterWidthCh(lines.length)}; margin-right: 1ch;`}
+								>{i + 1}</span
+							>{/if}{@html html}</span
 					>
 {/each}</code
 			></pre>
@@ -439,6 +653,7 @@
 			<CopyAction value={target.node.filePath} label="file path" />
 			<CopyAction value={target.node.name} label="symbol name" />
 			{@render permalinkSurface()}
+			{@render editorLinkSurface()}
 		</div>
 		{#if source}
 			{@const text = new TextDecoder().decode(source.content)}
@@ -451,13 +666,21 @@
 			<pre class="overflow-x-auto rounded border p-4 text-sm"><code
 					use:callTargets={{ index: callIndex, onSelect: handleCallTargetSelect }}
 					>{#each lines as html, i}<span class="line" data-line={i + 1} id={`L${i + 1}`}
-							><span
-								class="gutter inline-block select-none text-right text-muted-foreground"
-								data-testid={`gutter-line-${i + 1}`}
-								aria-hidden="true"
-								style={`width: ${gutterWidthCh(lines.length)}; margin-right: 1ch;`}
-								>{i + 1}</span
-							>{@html html}</span
+							>{#if editorLinkBuildable}<button
+									type="button"
+									class="gutter inline-block select-none text-right text-muted-foreground"
+									data-testid={`gutter-line-${i + 1}`}
+									data-line={i + 1}
+									style={`width: ${gutterWidthCh(lines.length)}; margin-right: 1ch;`}
+									onclick={() => handleGutterClick(i + 1)}
+									>{i + 1}</button
+								>{:else}<span
+									class="gutter inline-block select-none text-right text-muted-foreground"
+									data-testid={`gutter-line-${i + 1}`}
+									aria-hidden="true"
+									style={`width: ${gutterWidthCh(lines.length)}; margin-right: 1ch;`}
+									>{i + 1}</span
+								>{/if}{@html html}</span
 						>
 {/each}</code
 				></pre>

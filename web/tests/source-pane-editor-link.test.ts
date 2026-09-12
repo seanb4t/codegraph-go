@@ -97,9 +97,19 @@ function editorLinkResponse(overrides: Partial<GetEditorLinkResponse> = {}): Get
 	} as GetEditorLinkResponse;
 }
 
-type GetEditorLinkMock = ReturnType<typeof vi.fn>;
+interface EditorLinkRequestLike {
+	path: string;
+	line?: number;
+	col?: number;
+	template?: string;
+}
 
-function stubClient(opts: { getEditorLink?: GetEditorLinkMock } = {}) {
+type GetEditorLinkFn = (
+	request: EditorLinkRequestLike,
+	options?: { signal?: AbortSignal }
+) => Promise<GetEditorLinkResponse>;
+
+function stubClient(opts: { getEditorLink?: GetEditorLinkFn } = {}) {
 	const base = {
 		getPermalink: vi.fn(
 			async () =>
@@ -119,7 +129,7 @@ beforeEach(() => {
 
 describe('SourcePane: header "Open in editor" load-time probe', () => {
 	it('resolves a real <a href> from the probe for a file target, requesting line 1 col 1', async () => {
-		const getEditorLink = vi.fn(async () =>
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
 			editorLinkResponse({
 				url: 'vscode://file/x/a.go:1:1',
 				availability: EditorLinkAvailability.BUILDABLE,
@@ -143,7 +153,7 @@ describe('SourcePane: header "Open in editor" load-time probe', () => {
 	});
 
 	it('requests node.startCol + 1 for a single-def target', async () => {
-		const getEditorLink = vi.fn(async () => editorLinkResponse());
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () => editorLinkResponse());
 		const n = node('Foo', { filePath: 'pkg/foo.go', startLine: 10, startCol: 4 });
 		render(SourcePane, {
 			props: { state: singleDefState({ node: n }), client: stubClient({ getEditorLink }) }
@@ -159,7 +169,7 @@ describe('SourcePane: header "Open in editor" load-time probe', () => {
 
 	it('sends a pre-seeded custom override as the probe template', async () => {
 		writeEditorOverride({ kind: 'custom', template: 'cursor://file/{path}:{line}' });
-		const getEditorLink = vi.fn(async () => editorLinkResponse());
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () => editorLinkResponse());
 		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
 		await waitFor(() => expect(getEditorLink).toHaveBeenCalled());
 		expect(getEditorLink.mock.calls[0][0].template).toBe('cursor://file/{path}:{line}');
@@ -175,7 +185,7 @@ describe('SourcePane: header "Open in editor" load-time probe', () => {
 	});
 
 	it('degrades to idle on a rejected getEditorLink promise, no unhandled rejection', async () => {
-		const getEditorLink = vi.fn(async () => {
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () => {
 			throw new Error('boom');
 		});
 		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
@@ -189,7 +199,7 @@ describe('SourcePane: header "Open in editor" load-time probe', () => {
 
 describe('SourcePane: NO_TEMPLATE / TEMPLATE_INVALID answers', () => {
 	it('NO_TEMPLATE (defaultSource NONE) shows the reason, the toggle, and opens the picker on first use; gutter stays plain', async () => {
-		const getEditorLink = vi.fn(async () =>
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
 			editorLinkResponse({
 				availability: EditorLinkAvailability.NO_TEMPLATE,
 				reason: 'no editor configured',
@@ -208,7 +218,7 @@ describe('SourcePane: NO_TEMPLATE / TEMPLATE_INVALID answers', () => {
 	});
 
 	it('NO_TEMPLATE (defaultSource DISABLED) renders no editor surface at all', async () => {
-		const getEditorLink = vi.fn(async () =>
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
 			editorLinkResponse({
 				availability: EditorLinkAvailability.NO_TEMPLATE,
 				reason: 'disabled by operator',
@@ -227,7 +237,7 @@ describe('SourcePane: NO_TEMPLATE / TEMPLATE_INVALID answers', () => {
 	});
 
 	it('TEMPLATE_INVALID shows the reason and the toggle; gutter stays plain', async () => {
-		const getEditorLink = vi.fn(async () =>
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
 			editorLinkResponse({
 				availability: EditorLinkAvailability.TEMPLATE_INVALID,
 				reason: 'unknown scheme: zed',
@@ -247,7 +257,7 @@ describe('SourcePane: NO_TEMPLATE / TEMPLATE_INVALID answers', () => {
 describe('SourcePane: gutter one-rpc-per-click handoff', () => {
 	it('BUILDABLE gutter cells are buttons; a click issues one rpc then navigates via location.assign, a burst click is ignored', async () => {
 		let resolveClick: ((r: GetEditorLinkResponse) => void) | undefined;
-		const getEditorLink = vi.fn((_request: unknown) => {
+		const getEditorLink = vi.fn<GetEditorLinkFn>((_request: EditorLinkRequestLike) => {
 			if (getEditorLink.mock.calls.length === 1) {
 				return Promise.resolve(
 					editorLinkResponse({

@@ -6,6 +6,58 @@
 import '@testing-library/jest-dom/vitest';
 import '@testing-library/svelte/vitest';
 
+// 09-04 (BRW-11/BRW-12, editor-prefs.ts): Node >=22 ships a global Web
+// Storage API (localStorage/sessionStorage) ON by default, but every
+// call silently no-ops with an ExperimentalWarning unless the process
+// was started with --localstorage-file — and this global is installed
+// on `globalThis` BEFORE jsdom constructs its own window, so jsdom's
+// real Storage implementation never gets a chance to win the property.
+// editor-prefs.ts is the SPA's first localStorage consumer (09-PATTERNS.md
+// § editor-prefs.ts: no analog exists), so this is the first test run to
+// notice a bare `window.localStorage.setItem` doing nothing at all.
+// Replace it here, once, for the whole suite, with a minimal but fully
+// functional in-memory Storage — a real browser's localStorage, and a
+// pre-22 Node's jsdom-backed one, already behave this way; this shim
+// only compensates for Node's own broken-by-default global.
+function probeStorageWorks(storage: Storage | undefined): boolean {
+	if (!storage) return false;
+	try {
+		const key = '__codegraph_storage_probe__';
+		storage.setItem(key, '1');
+		const ok = storage.getItem(key) === '1';
+		storage.removeItem(key);
+		return ok;
+	} catch {
+		return false;
+	}
+}
+
+function inMemoryStorage(): Storage {
+	const store = new Map<string, string>();
+	return {
+		getItem: (key: string) => (store.has(key) ? (store.get(key) as string) : null),
+		setItem: (key: string, value: string) => {
+			store.set(key, String(value));
+		},
+		removeItem: (key: string) => {
+			store.delete(key);
+		},
+		clear: () => store.clear(),
+		key: (index: number) => Array.from(store.keys())[index] ?? null,
+		get length() {
+			return store.size;
+		}
+	} as Storage;
+}
+
+if (!probeStorageWorks(globalThis.localStorage)) {
+	Object.defineProperty(globalThis, 'localStorage', {
+		value: inMemoryStorage(),
+		configurable: true,
+		writable: true
+	});
+}
+
 // 04-07 Task 4 (D-08): @tanstack/svelte-virtual computes its visible row
 // range from the scroll container's REAL offsetWidth/offsetHeight
 // (@tanstack/virtual-core's `getRect`, not getBoundingClientRect) —
