@@ -418,6 +418,13 @@
 			editorLinkState = { kind: 'idle' };
 			return;
 		}
+		// getEditorLink (09-06): capture the guard-narrowed method once,
+		// bound to activeClient, so TypeScript's narrowing from the guard
+		// above survives into the async .then closure below — property-
+		// access narrowing does not cross a closure boundary, but a const
+		// local narrowed to a defined function type does. Both the initial
+		// probe and the CR-01 corrective re-probe call this same local.
+		const getEditorLink = activeClient.getEditorLink.bind(activeClient);
 		editorLinkState = { kind: 'loading' };
 		const controller = new AbortController();
 		// untrack: lastPresets is $state and this effect's own .then below
@@ -425,8 +432,7 @@
 		// re-trigger this same effect (the fileSymbolsCache pitfall 09-03
 		// already documented and fixed the same way).
 		const template = templateForRequest(override, untrack(() => lastPresets));
-		activeClient
-			.getEditorLink({ path, line, col, template }, { signal: controller.signal })
+		getEditorLink({ path, line, col, template }, { signal: controller.signal })
 			.then(async (response) => {
 				lastPresets = response.presets;
 				// Corrective re-probe (CR-01): a pending PRESET override
@@ -443,7 +449,7 @@
 				if (template === undefined && override?.kind === 'preset') {
 					const resolved = templateForRequest(override, response.presets);
 					if (resolved !== undefined) {
-						const corrected = await activeClient.getEditorLink(
+						const corrected = await getEditorLink(
 							{ path, line, col, template: resolved },
 							{ signal: controller.signal }
 						);
