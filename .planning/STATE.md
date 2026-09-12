@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 09
 current_phase_name: Source View Follow-Through — Breadcrumb & Editor Handoff
 status: executing
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-09-12T18:00:53.522Z"
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-09-12T18:38:04.868Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 09 execution started
-state_head: cc48f44f41969fcfa76cb662b0b6a9e25ed76441
+state_head: d4592a2a39b6418e5570ba20d3906661e6118f3b
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
 ## Current Position
 
 Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 09 execution started
 
@@ -121,6 +121,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 08 P05 | 25 min | 3 tasks | 8 files |
 | Phase 09 P01 | 30min | 2 tasks | 15 files |
 | Phase 09 P02 | 14min | 2 tasks | 4 files |
+| Phase 09 P03 | 35min | 3 tasks | 45 files |
 
 ## Accumulated Context
 
@@ -260,6 +261,10 @@ Standing decisions that outlive every milestone:
 - [Phase 09]: GetEditorLink shares GetPermalink's validator/answer-not-error discipline; field-number fixture extended additively (uiProtoFieldFixtureLenAtPlan0901)
 - [Phase 09]: [Phase 09]: 09-02: gofmt's struct-literal column alignment padded discover: with extra spaces, defeating the plan's own single-space literal verify grep -- fixed by adding an explanatory comment above the field to break gofmt's alignment group, satisfying both gofmt and the check without touching either
 - [Phase 09]: [Phase 09]: 09-02: templateForLauncher never restates the vscode/cursor template strings -- it looks them up from uiserver.EditorPresets() by ID, so both presets have exactly one source of truth across plans 09-01 and 09-02
+- [Phase 09]: 09-03: innermostSymbolAt/firstFullyVisibleLine kept pure and DOM-free in breadcrumb.ts, unit-tested independently of SourcePane
+- [Phase 09]: 09-03: gutter renders plain digits this plan (D-10) — 09-04 turns cells into links, no link markup added here
+- [Phase 09]: 09-03: breadcrumb symbol is a button, never a hash-fragment <a>, to avoid colliding with the browse route's own URL-driven navigation identity
+- [Phase 09]: 09-03: breadcrumb-check.mjs's oracle independently re-implements innermost-range derivation (sort-based) and fetches FileSymbols directly over HTTP, never importing the SPA's own module
 
 ### Pending Todos
 
@@ -407,8 +412,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T18:00:53.498Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-09-12T18:38:04.844Z
+Stopped at: Completed 09-03-PLAN.md
   NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
   CARRY-OVER:
 

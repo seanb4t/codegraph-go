@@ -220,3 +220,9 @@ The per-line DOM restructure now exists once, in both the file and single-def br
 ---
 *Phase: 09-source-view-follow-through-breadcrumb-editor-handoff*
 *Completed: 2026-09-12*
+
+## Self-Check: PASSED
+
+- All 9 created files verified present on disk (`web/src/lib/source-lines.ts`, `web/src/lib/breadcrumb.ts`, three test files, `web/scripts/breadcrumb-check.mjs`, `corpora/breadcrumb-check.json`, `09-MUTATION-LOG.md`, this SUMMARY).
+- All 6 commit hashes (`9af6f095`, `9985fb04`, `86e8ca8d`, `ff2e5a64`, `966026a7`, `d4592a2`) verified present via `git log --oneline --all`.
+- Full `pnpm -C web exec vitest run` (45 files, 499 tests) and `pnpm -C web check` (0 errors) re-confirmed green at HEAD before writing this SUMMARY.
