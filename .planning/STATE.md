@@ -5,17 +5,17 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 09
 current_phase_name: Source View Follow-Through — Breadcrumb & Editor Handoff
 status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-09-12T18:38:04.868Z"
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-09-12T19:08:29.943Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 09 execution started
-state_head: d4592a2a39b6418e5570ba20d3906661e6118f3b
+state_head: 690330e0f11887117e6fd12bfe636e535c7fca3b
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 14
-  completed_plans: 12
-  percent: 17
+  completed_plans: 13
+  percent: 0
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
 ## Current Position
 
 Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 09 execution started
 
@@ -122,6 +122,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 09 P01 | 30min | 2 tasks | 15 files |
 | Phase 09 P02 | 14min | 2 tasks | 4 files |
 | Phase 09 P03 | 35min | 3 tasks | 45 files |
+| Phase 09 P04 | 25min | 3 tasks | 34 files |
 
 ## Accumulated Context
 
@@ -265,6 +266,8 @@ Standing decisions that outlive every milestone:
 - [Phase 09]: 09-03: gutter renders plain digits this plan (D-10) — 09-04 turns cells into links, no link markup added here
 - [Phase 09]: 09-03: breadcrumb symbol is a button, never a hash-fragment <a>, to avoid colliding with the browse route's own URL-driven navigation identity
 - [Phase 09]: 09-03: breadcrumb-check.mjs's oracle independently re-implements innermost-range derivation (sort-based) and fetches FileSymbols directly over HTTP, never importing the SPA's own module
+- [Phase 09]: editor-prefs.ts is the SPA's first localStorage consumer: try/catch every access, degrade to no-override on any failure; templateForRequest is the one seam both the probe and a gutter click resolve through
+- [Phase 09]: [Rule 3] Node >=26's built-in global Web Storage API shadows jsdom's real localStorage and no-ops silently without --localstorage-file; fixed with a probe-and-replace in-memory Storage shim in web/tests/setup.ts, test-infra only
 
 ### Pending Todos
 
@@ -412,8 +415,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T18:38:04.844Z
-Stopped at: Completed 09-03-PLAN.md
+Last session: 2026-09-12T19:08:29.916Z
+Stopped at: Completed 09-04-PLAN.md
   NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
   CARRY-OVER:
 

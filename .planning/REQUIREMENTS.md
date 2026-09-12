@@ -38,7 +38,7 @@
 
 - [ ] **BRW-10**: While scrolling a long file's source, a single-line breadcrumb shows the innermost containing symbol, computed client-side from `FileSymbols` line ranges; verified in a live browser against a real index, not only jsdom
 - [ ] **BRW-11**: Node detail and source views offer an "open in editor" link built from a URI template with `{path}`, `{line}` and `{col}` placeholders, resolved server-side so the absolute path never weakens repo-root confinement at the RPC boundary
-- [ ] **BRW-12**: The template default is set by `codegraph ui --editor-url <template>` and can be overridden per browser in the UI; presets exist for VS Code, Cursor and JetBrains; Zed is neither a preset nor a claimed target
+- [x] **BRW-12**: The template default is set by `codegraph ui --editor-url <template>` and can be overridden per browser in the UI; presets exist for VS Code, Cursor and JetBrains; Zed is neither a preset nor a claimed target
 - [ ] **BRW-13**: Editor handoff ships with a threat model naming the browser's external-protocol prompt, not CSP, as the security boundary, and covering validation of the template's inputs
 
 ### Index Health
@@ -117,7 +117,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TTY-07 | Phase 8 | Complete |
 | BRW-10 | Phase 9 | Pending |
 | BRW-11 | Phase 9 | Pending |
-| BRW-12 | Phase 9 | Pending |
+| BRW-12 | Phase 9 | Complete |
 | BRW-13 | Phase 9 | Pending |
 | HLT-04 | Phase 10 | Pending |
 | HLT-05 | Phase 10 | Pending |
