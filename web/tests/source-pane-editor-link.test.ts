@@ -9,7 +9,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import SourcePane from '$lib/components/browse/SourcePane.svelte';
-import { writeEditorOverride, clearEditorOverride } from '$lib/editor-prefs';
+import { writeEditorOverride, clearEditorOverride, readEditorOverride } from '$lib/editor-prefs';
 import {
 	PermalinkAvailability,
 	EditorLinkAvailability,
@@ -307,5 +307,44 @@ describe('SourcePane: gutter one-rpc-per-click handoff', () => {
 		);
 		await waitFor(() => expect(assignSpy).toHaveBeenCalledWith('vscode://file/x/a.go:3:1'));
 		expect(getEditorLink).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('SourcePane: picker integration (Task 3)', () => {
+	it('choosing a preset writes it to localStorage and re-runs the probe with that preset\'s template', async () => {
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
+			editorLinkResponse({
+				availability: EditorLinkAvailability.NO_TEMPLATE,
+				reason: 'no editor configured',
+				defaultSource: EditorTemplateSource.NONE
+			})
+		);
+		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
+		await waitFor(() => expect(screen.getByTestId('editor-link-picker')).toBeTruthy());
+
+		await fireEvent.click(screen.getByTestId('editor-preset-cursor'));
+
+		await waitFor(() => expect(getEditorLink).toHaveBeenCalledTimes(2));
+		expect(getEditorLink.mock.calls[1][0].template).toBe('cursor://file/{path}:{line}:{col}');
+		expect(readEditorOverride()).toEqual({ kind: 'preset', id: 'cursor' });
+	});
+
+	it('"Use server default" clears the override and re-runs the probe with no template', async () => {
+		writeEditorOverride({ kind: 'custom', template: 'cursor://file/{path}:{line}' });
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
+			editorLinkResponse({
+				availability: EditorLinkAvailability.NO_TEMPLATE,
+				reason: 'no editor configured',
+				defaultSource: EditorTemplateSource.NONE
+			})
+		);
+		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
+		await waitFor(() => expect(screen.getByTestId('editor-link-picker')).toBeTruthy());
+
+		await fireEvent.click(screen.getByTestId('editor-use-server-default'));
+
+		await waitFor(() => expect(getEditorLink).toHaveBeenCalledTimes(2));
+		expect(getEditorLink.mock.calls[1][0].template).toBeUndefined();
+		expect(readEditorOverride()).toBeNull();
 	});
 });

@@ -16,7 +16,12 @@
 	import { buildCallTargetIndex, callTargets } from '$lib/call-targets';
 	import { NAV_INTENT, type BrowseNavDelta, type NavIntent } from '$lib/browse-nav';
 	import type { BrowseTargetState } from '$lib/browse-state';
-	import { readEditorOverride, templateForRequest } from '$lib/editor-prefs';
+	import {
+		readEditorOverride,
+		writeEditorOverride,
+		clearEditorOverride,
+		templateForRequest
+	} from '$lib/editor-prefs';
 	import type { EditorOverride } from '$lib/editor-prefs';
 	import {
 		PermalinkAvailability,
@@ -32,6 +37,7 @@
 		type Node as GraphNode
 	} from '$lib/gen/ui_pb';
 	import CopyAction from './CopyAction.svelte';
+	import EditorLinkPicker from './EditorLinkPicker.svelte';
 
 	// PermalinkClient is the minimal shape SourcePane needs from a
 	// UIService client — the same declared-independently-of-the-real-
@@ -477,6 +483,37 @@
 			gutterClickInFlight = false;
 		}
 	}
+
+	// Picker callbacks (Task 3, D-18): write through editor-prefs.ts —
+	// the picker itself holds no storage access — then reassign
+	// editorOverride, which re-triggers the probe $effect above with the
+	// new template. A preset/default choice closes the panel; a custom
+	// apply keeps it open so a TEMPLATE_INVALID answer stays visible
+	// (the plan's own instruction).
+	function handleChoosePreset(id: string): void {
+		const next: EditorOverride = { kind: 'preset', id };
+		writeEditorOverride(next);
+		editorOverride = next;
+		pickerOpen = false;
+	}
+
+	function handleApplyCustom(template: string): void {
+		const next: EditorOverride = { kind: 'custom', template };
+		writeEditorOverride(next);
+		editorOverride = next;
+	}
+
+	function handleUseServerDefault(): void {
+		clearEditorOverride();
+		editorOverride = null;
+		pickerOpen = false;
+	}
+
+	function handlePickerKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			pickerOpen = false;
+		}
+	}
 </script>
 
 {#snippet permalinkSurface()}
@@ -547,9 +584,15 @@
 			</button>
 		{/if}
 		{#if pickerOpen}
-			<!-- Filled by plan 09-04 Task 3 with EditorLinkPicker.svelte;
-			     the testid is kept stable across that change. -->
-			<div data-testid="editor-link-picker"></div>
+			<div onkeydown={handlePickerKeydown} role="presentation">
+				<EditorLinkPicker
+					response={r}
+					override={editorOverride}
+					onChoosePreset={handleChoosePreset}
+					onApplyCustom={handleApplyCustom}
+					onUseServerDefault={handleUseServerDefault}
+				/>
+			</div>
 		{/if}
 	{/if}
 {/snippet}
