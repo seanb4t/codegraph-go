@@ -413,7 +413,7 @@ Stopped at: Phase 08 complete (UAT 21/21, verification passed, Nyquist validated
     - **`GRF-09`'s threshold is committed BEFORE its measurement, in its own commit** — `GRF-01`'s precedent, where the threshold file has exactly one commit that is an ancestor of both observation commits, so the ordering is checkable rather than assertable. A failing measurement triggers the documented index-time-persistence fallback into the reserved 50-59 field range, never a raised bar.
     - **Every guard in this milestone carries a positive assertion that it did its work** (rule `84d1gfpywd`) and is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation before it is trusted green. `GRD-06` is that proof committed rather than asserted.
     - **The tmux harness (Phase 8) lands before the UI work** so that work has a real-terminal rung. `TTY-02`'s capture-twice-and-compare stability poll is the single highest flake risk in the milestone; no assertion may run against one capture.
-    - **`branching_strategy: milestone`** — this milestone lives on one branch and is not incrementally merged.
+    - **`branching_strategy: milestone`** — this milestone lives on one branch. Amended 2026-09-12: the maintainer merged phases 7-8 mid-milestone as PR #69 (squash `3da59354`, title `test(tmux): …`, so release-please cut no release); the branch was rebased onto that squash commit (`git rebase --onto origin/main 5ffdc2a0`, the 4 post-merge `.planning/` commits replayed conflict-free) and continues for phases 9-12. Any later PR from this branch diffs against `3da59354`.
     - **No `v0.13.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline. The label is a prediction that holds because the UI follow-through lands `feat:` commits.
     - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
 
@@ -421,5 +421,5 @@ Stopped at: Phase 08 complete (UAT 21/21, verification passed, Nyquist validated
 
 - Phase 8 is verified and closed (21/21 UAT, G-08-1 resolved by 08-05, tmux-e2e fired at executed=6 on CI); Phases 9-12 of v0.13.0 remain
 - Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go` — the ruleset currently lists 6 contexts and omits it (checked 2026-09-11)
-- PR #69 still carries the pr-template-exempt / pr-issue-exempt WIP markers; ship must replace them with a `feat:` title and `Resolves #N`
+- PR #69 (phases 7-8 WIP) MERGED 2026-09-12 as squash `3da59354`; the pr-template-exempt / pr-issue-exempt markers went in with it. The next PR (phases 9-12, or per-phase if the maintainer prefers) needs a `feat:` title and `Resolves #N` from the start
 - Discuss the next phase with /gsd-discuss-phase 9 (Source View Follow-Through — Breadcrumb & Editor Handoff)
