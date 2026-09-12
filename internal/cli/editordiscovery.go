@@ -60,16 +60,16 @@ var jetbrainsLaunchers = func() map[string]struct{} {
 // indicate it is installed, when it is not found on PATH. Each name is
 // probed under /Applications and then under $HOME/Applications.
 var macAppBundles = map[string][]string{
-	"code":      {"Visual Studio Code.app"},
-	"cursor":    {"Cursor.app"},
-	"idea":      {"IntelliJ IDEA.app", "IntelliJ IDEA CE.app"},
-	"goland":    {"GoLand.app"},
-	"webstorm":  {"WebStorm.app"},
-	"pycharm":   {"PyCharm.app", "PyCharm CE.app"},
-	"rider":     {"Rider.app"},
-	"clion":     {"CLion.app"},
-	"phpstorm":  {"PhpStorm.app"},
-	"rubymine":  {"RubyMine.app"},
+	"code":     {"Visual Studio Code.app"},
+	"cursor":   {"Cursor.app"},
+	"idea":     {"IntelliJ IDEA.app", "IntelliJ IDEA CE.app"},
+	"goland":   {"GoLand.app"},
+	"webstorm": {"WebStorm.app"},
+	"pycharm":  {"PyCharm.app", "PyCharm CE.app"},
+	"rider":    {"Rider.app"},
+	"clion":    {"CLion.app"},
+	"phpstorm": {"PhpStorm.app"},
+	"rubymine": {"RubyMine.app"},
 }
 
 // linuxAppDirs returns the Linux application-directory candidates for a
@@ -134,11 +134,17 @@ func appDirCandidates(launcher, goos string, getenv func(string) string) []strin
 // matching editorpresets.go's [ASSUMED] JetBrains template shape. An
 // unknown launcher (one not in editorLaunchers) returns ("", "").
 func templateForLauncher(launcher string) (presetID, template string) {
-	// RED phase stub (plan 09-02 Task 1): declared with its final
-	// signature so editordiscovery_test.go compiles, but not yet wired
-	// to editorLaunchers/presetTemplate/jetbrainsLaunchers — every
-	// caller sees a not-found answer until the GREEN commit.
-	return "", ""
+	switch launcher {
+	case "code":
+		return presetTemplate("vscode")
+	case "cursor":
+		return presetTemplate("cursor")
+	default:
+		if _, ok := jetbrainsLaunchers[launcher]; ok {
+			return "jetbrains", launcher + "://open?file={path}&line={line}"
+		}
+		return "", ""
+	}
 }
 
 // presetTemplate looks up id's template from uiserver.EditorPresets(),
@@ -161,11 +167,18 @@ func presetTemplate(id string) (string, string) {
 // finding nothing is reported as (discoveredEditor{}, false), never a
 // panic or an error.
 func discoverEditorWith(p editorProbes) (discoveredEditor, bool) {
-	// RED phase stub (plan 09-02 Task 1): declared with its final
-	// signature so editordiscovery_test.go compiles, but the probe loop
-	// (PATH then app directories, in editorLaunchers order) is not yet
-	// implemented — every call reports not-found until the GREEN
-	// commit.
+	for _, launcher := range editorLaunchers {
+		if _, err := p.lookPath(launcher); err == nil {
+			presetID, template := templateForLauncher(launcher)
+			return discoveredEditor{Launcher: launcher, PresetID: presetID, Template: template}, true
+		}
+		for _, dir := range appDirCandidates(launcher, p.goos, p.getenv) {
+			if _, err := p.stat(dir); err == nil {
+				presetID, template := templateForLauncher(launcher)
+				return discoveredEditor{Launcher: launcher, PresetID: presetID, Template: template}, true
+			}
+		}
+	}
 	return discoveredEditor{}, false
 }
 
