@@ -541,6 +541,40 @@
 			pickerOpen = false;
 		}
 	}
+
+	// Focus management (WR-02 review, a11y): the picker can self-open
+	// with no user gesture (a load-time probe answer, not a click), so
+	// nothing else moves focus for it. panelWrapperEl wraps whichever
+	// EditorLinkPicker instance is rendered; toggleButtonEl is bound to
+	// whichever of the two toggle `<button>`s (BUILDABLE vs. reason)
+	// renders — only one exists at a time. wasPickerOpen is a plain
+	// (non-reactive) local, not $state: it exists only to let this
+	// effect diff pickerOpen's PREVIOUS value against its current one,
+	// the same edge-detection shape the fileSymbolsCache pitfall
+	// (09-03) already established for effects that must react to a
+	// transition, not merely a value.
+	let panelWrapperEl: HTMLDivElement | undefined = $state();
+	let toggleButtonEl: HTMLButtonElement | undefined = $state();
+	let wasPickerOpen = false;
+
+	$effect(() => {
+		const isOpen = pickerOpen;
+		if (isOpen && !wasPickerOpen) {
+			// Opened: move focus into the panel's first focusable element
+			// (never redesign the picker itself into a focus-trap — this
+			// is the minimal "focus lands inside the dialog" contract).
+			const target = panelWrapperEl?.querySelector<HTMLElement>(
+				'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+			);
+			target?.focus();
+		} else if (!isOpen && wasPickerOpen) {
+			// Closed (Escape or any callback that sets pickerOpen = false):
+			// restore focus to the toggle that opened it, exactly as a
+			// disclosure/dialog pattern is expected to on dismiss.
+			toggleButtonEl?.focus();
+		}
+		wasPickerOpen = isOpen;
+	});
 </script>
 
 {#snippet permalinkSurface()}
@@ -584,6 +618,7 @@
 				Open in editor
 			</a>
 			<button
+				bind:this={toggleButtonEl}
 				type="button"
 				class="text-xs text-muted-foreground"
 				data-testid="editor-link-picker-toggle"
@@ -600,6 +635,7 @@
 				{r.reason}
 			</span>
 			<button
+				bind:this={toggleButtonEl}
 				type="button"
 				class="text-xs text-muted-foreground"
 				data-testid="editor-link-picker-toggle"
@@ -611,7 +647,7 @@
 			</button>
 		{/if}
 		{#if pickerOpen}
-			<div onkeydown={handlePickerKeydown} role="presentation">
+			<div bind:this={panelWrapperEl} onkeydown={handlePickerKeydown} role="presentation">
 				<EditorLinkPicker
 					response={r}
 					override={editorOverride}

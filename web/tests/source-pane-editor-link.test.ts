@@ -342,6 +342,27 @@ describe('SourcePane: picker integration (Task 3)', () => {
 		expect(readEditorOverride()).toEqual({ kind: 'preset', id: 'cursor' });
 	});
 
+	it('moves focus into the picker on auto-open and restores it to the toggle on Escape (WR-03)', async () => {
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
+			editorLinkResponse({
+				availability: EditorLinkAvailability.NO_TEMPLATE,
+				reason: 'no editor configured',
+				defaultSource: EditorTemplateSource.NONE
+			})
+		);
+		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
+		const toggle = await screen.findByTestId('editor-link-picker-toggle');
+		const panel = await screen.findByTestId('editor-link-picker');
+
+		// Auto-opened by the probe (no user gesture) — focus must still
+		// land inside the panel, on its first focusable element.
+		await waitFor(() => expect(panel.contains(document.activeElement)).toBe(true));
+
+		await fireEvent.keyDown(panel, { key: 'Escape' });
+		await waitFor(() => expect(screen.queryByTestId('editor-link-picker')).toBeNull());
+		expect(document.activeElement).toBe(toggle);
+	});
+
 	it('"Use server default" clears the override and re-runs the probe with no template', async () => {
 		writeEditorOverride({ kind: 'custom', template: 'cursor://file/{path}:{line}' });
 		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
