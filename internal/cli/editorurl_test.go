@@ -276,6 +276,21 @@ func TestResolveEditorLinkOffSwitch(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit --no-editor-url flag short-circuits a malformed CODEGRAPH_NO_EDITOR_URL (WR-04)", func(t *testing.T) {
+		in := editorResolveInputs{
+			noEditorURL: true,
+			getenv:      fakeGetenv(map[string]string{noEditorURLEnvVar: "disabled"}),
+		}
+		got, err := resolveEditorLink(in)
+		if err != nil {
+			t.Fatalf("resolveEditorLink: %v, want no error — the explicit flag alone must settle the outcome", err)
+		}
+		want := uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}
+		if got != want {
+			t.Fatalf("resolveEditorLink = %+v, want %+v", got, want)
+		}
+	})
+
 	t.Run("malformed flag beats the off switch", func(t *testing.T) {
 		in := editorResolveInputs{
 			flagTemplate: "javascript:{path}",

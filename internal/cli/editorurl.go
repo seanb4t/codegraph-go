@@ -90,12 +90,21 @@ func resolveEditorLink(in editorResolveInputs) (uiserver.EditorLinkOptions, erro
 	}
 
 	// (2) D-16: the off switch, consulted only after both explicit
-	// values above have passed validation.
+	// template values above have passed validation. The explicit
+	// --no-editor-url FLAG short-circuits the env parse below (WR-04):
+	// once the operator's own unambiguous flag has already settled the
+	// outcome, a stray malformed CODEGRAPH_NO_EDITOR_URL left over in
+	// their shell must never defeat it by refusing to start. This does
+	// NOT touch D-17's explicit-template-values-first ordering above —
+	// only this boolean off-switch's own malformed-value case.
+	if in.noEditorURL {
+		return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}, nil
+	}
 	disabled, err := parseBoolEnv(in.getenv(noEditorURLEnvVar))
 	if err != nil {
 		return uiserver.EditorLinkOptions{}, fmt.Errorf("%s: %s", noEditorURLEnvVar, err)
 	}
-	if in.noEditorURL || disabled {
+	if disabled {
 		return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}, nil
 	}
 
