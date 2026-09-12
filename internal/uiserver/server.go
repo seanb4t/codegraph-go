@@ -51,13 +51,14 @@ const (
 	idleTimeout       = 120 * time.Second
 )
 
-// Options configures Listen. RepoPath and Addr are the ONLY two fields —
-// asserted by TestUIServiceHoldsNoStoreTypedField's sibling assertion in
-// server_test.go, a reflected field-set equality with a length-2 check —
-// so neither an unwired option nor a second browser-launch owner can be
-// reintroduced. Browser-launch policy and the launch itself live
-// entirely in internal/cli, never here: one owner means neither an
-// unused option nor a double launch (review MEDIUM 01-06).
+// Options configures Listen. RepoPath, Addr and EditorLink are the ONLY
+// three fields — asserted by TestUIServiceHoldsNoStoreTypedField's
+// sibling assertion in server_test.go, a reflected field-set equality
+// with a length-3 check — so neither an unwired option nor a second
+// browser-launch owner can be reintroduced. Browser-launch policy and
+// the launch itself live entirely in internal/cli, never here: one
+// owner means neither an unused option nor a double launch (review
+// MEDIUM 01-06).
 type Options struct {
 	// RepoPath is the single repository uiService answers every rpc
 	// for.
@@ -70,6 +71,12 @@ type Options struct {
 	// override of a field that already exists, not a restructuring
 	// (SRV-03).
 	Addr string
+
+	// EditorLink is the server's frozen-at-startup editor-link default
+	// (D-14/D-15/D-16), written ONLY by internal/cli's startup
+	// resolver — flag, env, discovery — and copied into uiService here
+	// at Listen, never re-read per request (plan 09-01, Pattern 3).
+	EditorLink EditorLinkOptions
 }
 
 // Server is a bound codegraph ui listener: bound the instant Listen
@@ -152,7 +159,7 @@ func Listen(o Options) (*Server, error) {
 	// ever fires when application truncation was somehow missed — never
 	// on correctly-truncated output.
 	mux.Handle(uiv1connect.NewUIServiceHandler(
-		&uiService{repoPath: o.RepoPath, publisher: pub},
+		&uiService{repoPath: o.RepoPath, publisher: pub, editorLink: o.EditorLink},
 		connect.WithSendMaxBytes(transportSendMaxBytes),
 		connect.WithReadMaxBytes(transportReadMaxBytes),
 	))

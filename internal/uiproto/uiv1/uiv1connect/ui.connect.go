@@ -96,6 +96,8 @@ const (
 	UIServiceFileSymbolsProcedure = "/codegraph.ui.v1.UIService/FileSymbols"
 	// UIServiceWatchGraphProcedure is the fully-qualified name of the UIService's WatchGraph RPC.
 	UIServiceWatchGraphProcedure = "/codegraph.ui.v1.UIService/WatchGraph"
+	// UIServiceGetEditorLinkProcedure is the fully-qualified name of the UIService's GetEditorLink RPC.
+	UIServiceGetEditorLinkProcedure = "/codegraph.ui.v1.UIService/GetEditorLink"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -171,6 +173,20 @@ type UIServiceClient interface {
 	// fixture before being written here — WatchIndex, IndexEvents,
 	// StreamIndex and LiveUpdates were all rejected by that same fixture.
 	WatchGraph(context.Context, *connect.Request[uiv1.WatchGraphRequest]) (*connect.ServerStreamForClient[uiv1.WatchGraphEvent], error)
+	// GetEditorLink is plan 09-01's fifteenth rpc (D-05): it turns a
+	// repo-relative path plus an optional line/col into an editor URI
+	// built from a {path}/{line}/{col} template. It is a NEW rpc rather
+	// than an extension of GetPermalink: GetPermalink runs git
+	// introspection with a timeout and its PermalinkAvailability enum
+	// encodes remote trust, while an editor link has no remote and no
+	// commit at all. Read-only: it performs no network operation,
+	// launches nothing and mutates nothing (SRV-03) — its name was
+	// verified clean against the live mutatingVerbs fixture before being
+	// written here. path is confined by the SAME
+	// (*query.Engine).ValidateRepoRelativePath gate GetNodeDetail,
+	// GetPermalink and FileSymbols already use (SRV-05) — no second
+	// confinement implementation.
+	GetEditorLink(context.Context, *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -268,6 +284,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("WatchGraph")),
 			connect.WithClientOptions(opts...),
 		),
+		getEditorLink: connect.NewClient[uiv1.GetEditorLinkRequest, uiv1.GetEditorLinkResponse](
+			httpClient,
+			baseURL+UIServiceGetEditorLinkProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("GetEditorLink")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -287,6 +309,7 @@ type uIServiceClient struct {
 	fileGraph     *connect.Client[uiv1.FileGraphRequest, uiv1.FileGraphResponse]
 	fileSymbols   *connect.Client[uiv1.FileSymbolsRequest, uiv1.FileSymbolsResponse]
 	watchGraph    *connect.Client[uiv1.WatchGraphRequest, uiv1.WatchGraphEvent]
+	getEditorLink *connect.Client[uiv1.GetEditorLinkRequest, uiv1.GetEditorLinkResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -357,6 +380,11 @@ func (c *uIServiceClient) FileSymbols(ctx context.Context, req *connect.Request[
 // WatchGraph calls codegraph.ui.v1.UIService.WatchGraph.
 func (c *uIServiceClient) WatchGraph(ctx context.Context, req *connect.Request[uiv1.WatchGraphRequest]) (*connect.ServerStreamForClient[uiv1.WatchGraphEvent], error) {
 	return c.watchGraph.CallServerStream(ctx, req)
+}
+
+// GetEditorLink calls codegraph.ui.v1.UIService.GetEditorLink.
+func (c *uIServiceClient) GetEditorLink(ctx context.Context, req *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error) {
+	return c.getEditorLink.CallUnary(ctx, req)
 }
 
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
@@ -432,6 +460,20 @@ type UIServiceHandler interface {
 	// fixture before being written here — WatchIndex, IndexEvents,
 	// StreamIndex and LiveUpdates were all rejected by that same fixture.
 	WatchGraph(context.Context, *connect.Request[uiv1.WatchGraphRequest], *connect.ServerStream[uiv1.WatchGraphEvent]) error
+	// GetEditorLink is plan 09-01's fifteenth rpc (D-05): it turns a
+	// repo-relative path plus an optional line/col into an editor URI
+	// built from a {path}/{line}/{col} template. It is a NEW rpc rather
+	// than an extension of GetPermalink: GetPermalink runs git
+	// introspection with a timeout and its PermalinkAvailability enum
+	// encodes remote trust, while an editor link has no remote and no
+	// commit at all. Read-only: it performs no network operation,
+	// launches nothing and mutates nothing (SRV-03) — its name was
+	// verified clean against the live mutatingVerbs fixture before being
+	// written here. path is confined by the SAME
+	// (*query.Engine).ValidateRepoRelativePath gate GetNodeDetail,
+	// GetPermalink and FileSymbols already use (SRV-05) — no second
+	// confinement implementation.
+	GetEditorLink(context.Context, *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -525,6 +567,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("WatchGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceGetEditorLinkHandler := connect.NewUnaryHandler(
+		UIServiceGetEditorLinkProcedure,
+		svc.GetEditorLink,
+		connect.WithSchema(uIServiceMethods.ByName("GetEditorLink")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -555,6 +603,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceFileSymbolsHandler.ServeHTTP(w, r)
 		case UIServiceWatchGraphProcedure:
 			uIServiceWatchGraphHandler.ServeHTTP(w, r)
+		case UIServiceGetEditorLinkProcedure:
+			uIServiceGetEditorLinkHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -618,4 +668,8 @@ func (UnimplementedUIServiceHandler) FileSymbols(context.Context, *connect.Reque
 
 func (UnimplementedUIServiceHandler) WatchGraph(context.Context, *connect.Request[uiv1.WatchGraphRequest], *connect.ServerStream[uiv1.WatchGraphEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.WatchGraph is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) GetEditorLink(context.Context, *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetEditorLink is not implemented"))
 }

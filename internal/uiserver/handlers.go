@@ -202,6 +202,11 @@ type uiService struct {
 	// (*query.Engine, graphstore.GraphStore, graphstore.Reader) does
 	// not name it, and it is not one of them.
 	publisher *livePublisher
+
+	// editorLink is GetEditorLink's frozen-at-startup server default
+	// (D-14/D-15/D-16), copied from Options.EditorLink at construction
+	// time (Listen) and never re-read per request (plan 09-01).
+	editorLink EditorLinkOptions
 }
 
 // statusToProto maps internal/query.StatusResult onto uiv1.GetStatusResponse

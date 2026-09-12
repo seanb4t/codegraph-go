@@ -119,6 +119,20 @@ service UIService {
   // fixture before being written here — WatchIndex, IndexEvents,
   // StreamIndex and LiveUpdates were all rejected by that same fixture.
   rpc WatchGraph(WatchGraphRequest) returns (stream WatchGraphEvent);
+  // GetEditorLink is plan 09-01's fifteenth rpc (D-05): it turns a
+  // repo-relative path plus an optional line/col into an editor URI
+  // built from a {path}/{line}/{col} template. It is a NEW rpc rather
+  // than an extension of GetPermalink: GetPermalink runs git
+  // introspection with a timeout and its PermalinkAvailability enum
+  // encodes remote trust, while an editor link has no remote and no
+  // commit at all. Read-only: it performs no network operation,
+  // launches nothing and mutates nothing (SRV-03) — its name was
+  // verified clean against the live mutatingVerbs fixture before being
+  // written here. path is confined by the SAME
+  // (*query.Engine).ValidateRepoRelativePath gate GetNodeDetail,
+  // GetPermalink and FileSymbols already use (SRV-05) — no second
+  // confinement implementation.
+  rpc GetEditorLink(GetEditorLinkRequest) returns (GetEditorLinkResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -983,4 +997,96 @@ message WatchGraphEvent {
 
   // commit_sha mirrors GetStatusResponse.commit_sha.
   string commit_sha = 6;
+}
+
+// GetEditorLinkRequest carries the repo-relative path and optional
+// line/col GetEditorLink needs to build an editor URI (D-05, D-08).
+// path is confined by the same gate GetNodeDetailRequest.file,
+// GetPermalinkRequest.path and FileSymbolsRequest.path use
+// ((*query.Engine).ValidateRepoRelativePath, SRV-05 — no second
+// confinement implementation). line and col are both `optional` (proto3
+// presence) so the wire can distinguish "unset" (substituted with 1)
+// from an explicit 0, which is refused. template is `optional` so an
+// absent per-request override is distinguishable from an explicit empty
+// string — when set, it replaces the server's effective default for
+// this one call only (D-06) and is validated by the SAME validator the
+// server's own flag/env value uses.
+message GetEditorLinkRequest {
+  string path = 1;
+  optional int32 line = 2;
+  optional int32 col = 3;
+  optional string template = 4;
+}
+
+// EditorLinkAvailability is a CLOSED, four-valued classification of
+// whether GetEditorLink could build a URL (D-07) — deliberately never a
+// boolean and never an open string. EDITOR_LINK_AVAILABILITY_UNSPECIFIED
+// is the required proto3 zero value and is never a state GetEditorLink
+// itself produces.
+//
+//   - BUILDABLE: url is populated.
+//   - NO_TEMPLATE: no effective template is configured — either nothing
+//     was ever set (flag, env, or discovery all came up empty) or the
+//     operator explicitly disabled editor links (D-16). reason
+//     distinguishes the two cases with two different strings.
+//   - TEMPLATE_INVALID: the effective template (server default or a
+//     per-request override) failed validation. reason names the cause.
+//
+// Configuration states are ANSWERS, never errors (D-07) — the same
+// "empty is a successful response" discipline GetPermalink already
+// follows. The ONE error case is a rejected path.
+enum EditorLinkAvailability {
+  EDITOR_LINK_AVAILABILITY_UNSPECIFIED = 0;
+  EDITOR_LINK_AVAILABILITY_BUILDABLE = 1;
+  EDITOR_LINK_AVAILABILITY_NO_TEMPLATE = 2;
+  EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID = 3;
+}
+
+// EditorTemplateSource reports the SERVER DEFAULT's provenance,
+// regardless of any per-request override (D-07) — so the browser's
+// picker (D-18) can show where the current default came from even when
+// an override is active for this browser only.
+enum EditorTemplateSource {
+  EDITOR_TEMPLATE_SOURCE_UNSPECIFIED = 0;
+  EDITOR_TEMPLATE_SOURCE_FLAG = 1;
+  EDITOR_TEMPLATE_SOURCE_ENV = 2;
+  EDITOR_TEMPLATE_SOURCE_DISCOVERED = 3;
+  EDITOR_TEMPLATE_SOURCE_NONE = 4;
+  EDITOR_TEMPLATE_SOURCE_DISABLED = 5;
+}
+
+// EditorPreset is one of the three fixed editor choices the picker
+// offers (D-18): VS Code, Cursor, JetBrains. The browser never holds a
+// second copy of a template it constructs itself — presets ride on
+// every GetEditorLinkResponse so the server remains the one place a
+// template is ever interpreted.
+message EditorPreset {
+  string id = 1;
+  string name = 2;
+  string template = 3;
+}
+
+// GetEditorLinkResponse answers honestly in every configuration state
+// (D-07): NO_TEMPLATE and TEMPLATE_INVALID are SUCCESSFUL responses,
+// never errors. url is populated only when availability is BUILDABLE;
+// reason is populated whenever it is not.
+message GetEditorLinkResponse {
+  string url = 1;
+  EditorLinkAvailability availability = 2;
+  string reason = 3;
+
+  // default_source and default_editor report the SERVER DEFAULT's
+  // provenance (D-07) — populated on every response, whether or not
+  // this call's answer used an override.
+  EditorTemplateSource default_source = 4;
+  string default_editor = 5;
+
+  // override_applied is true when GetEditorLinkRequest.template was
+  // set and non-empty and was the template actually used to build (or
+  // attempt to build) this response's url (D-06).
+  bool override_applied = 6;
+
+  // presets carries exactly the picker's three choices (D-18) so the
+  // browser never holds a second copy of a template.
+  repeated EditorPreset presets = 7;
 }

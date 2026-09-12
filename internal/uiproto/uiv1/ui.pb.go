@@ -187,6 +187,137 @@ func (PermalinkAvailability) EnumDescriptor() ([]byte, []int) {
 	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{1}
 }
 
+// EditorLinkAvailability is a CLOSED, four-valued classification of
+// whether GetEditorLink could build a URL (D-07) — deliberately never a
+// boolean and never an open string. EDITOR_LINK_AVAILABILITY_UNSPECIFIED
+// is the required proto3 zero value and is never a state GetEditorLink
+// itself produces.
+//
+//   - BUILDABLE: url is populated.
+//   - NO_TEMPLATE: no effective template is configured — either nothing
+//     was ever set (flag, env, or discovery all came up empty) or the
+//     operator explicitly disabled editor links (D-16). reason
+//     distinguishes the two cases with two different strings.
+//   - TEMPLATE_INVALID: the effective template (server default or a
+//     per-request override) failed validation. reason names the cause.
+//
+// Configuration states are ANSWERS, never errors (D-07) — the same
+// "empty is a successful response" discipline GetPermalink already
+// follows. The ONE error case is a rejected path.
+type EditorLinkAvailability int32
+
+const (
+	EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_UNSPECIFIED      EditorLinkAvailability = 0
+	EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_BUILDABLE        EditorLinkAvailability = 1
+	EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_NO_TEMPLATE      EditorLinkAvailability = 2
+	EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID EditorLinkAvailability = 3
+)
+
+// Enum value maps for EditorLinkAvailability.
+var (
+	EditorLinkAvailability_name = map[int32]string{
+		0: "EDITOR_LINK_AVAILABILITY_UNSPECIFIED",
+		1: "EDITOR_LINK_AVAILABILITY_BUILDABLE",
+		2: "EDITOR_LINK_AVAILABILITY_NO_TEMPLATE",
+		3: "EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID",
+	}
+	EditorLinkAvailability_value = map[string]int32{
+		"EDITOR_LINK_AVAILABILITY_UNSPECIFIED":      0,
+		"EDITOR_LINK_AVAILABILITY_BUILDABLE":        1,
+		"EDITOR_LINK_AVAILABILITY_NO_TEMPLATE":      2,
+		"EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID": 3,
+	}
+)
+
+func (x EditorLinkAvailability) Enum() *EditorLinkAvailability {
+	p := new(EditorLinkAvailability)
+	*p = x
+	return p
+}
+
+func (x EditorLinkAvailability) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EditorLinkAvailability) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_uiproto_uiv1_ui_proto_enumTypes[2].Descriptor()
+}
+
+func (EditorLinkAvailability) Type() protoreflect.EnumType {
+	return &file_internal_uiproto_uiv1_ui_proto_enumTypes[2]
+}
+
+func (x EditorLinkAvailability) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EditorLinkAvailability.Descriptor instead.
+func (EditorLinkAvailability) EnumDescriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{2}
+}
+
+// EditorTemplateSource reports the SERVER DEFAULT's provenance,
+// regardless of any per-request override (D-07) — so the browser's
+// picker (D-18) can show where the current default came from even when
+// an override is active for this browser only.
+type EditorTemplateSource int32
+
+const (
+	EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_UNSPECIFIED EditorTemplateSource = 0
+	EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_FLAG        EditorTemplateSource = 1
+	EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_ENV         EditorTemplateSource = 2
+	EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_DISCOVERED  EditorTemplateSource = 3
+	EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_NONE        EditorTemplateSource = 4
+	EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_DISABLED    EditorTemplateSource = 5
+)
+
+// Enum value maps for EditorTemplateSource.
+var (
+	EditorTemplateSource_name = map[int32]string{
+		0: "EDITOR_TEMPLATE_SOURCE_UNSPECIFIED",
+		1: "EDITOR_TEMPLATE_SOURCE_FLAG",
+		2: "EDITOR_TEMPLATE_SOURCE_ENV",
+		3: "EDITOR_TEMPLATE_SOURCE_DISCOVERED",
+		4: "EDITOR_TEMPLATE_SOURCE_NONE",
+		5: "EDITOR_TEMPLATE_SOURCE_DISABLED",
+	}
+	EditorTemplateSource_value = map[string]int32{
+		"EDITOR_TEMPLATE_SOURCE_UNSPECIFIED": 0,
+		"EDITOR_TEMPLATE_SOURCE_FLAG":        1,
+		"EDITOR_TEMPLATE_SOURCE_ENV":         2,
+		"EDITOR_TEMPLATE_SOURCE_DISCOVERED":  3,
+		"EDITOR_TEMPLATE_SOURCE_NONE":        4,
+		"EDITOR_TEMPLATE_SOURCE_DISABLED":    5,
+	}
+)
+
+func (x EditorTemplateSource) Enum() *EditorTemplateSource {
+	p := new(EditorTemplateSource)
+	*p = x
+	return p
+}
+
+func (x EditorTemplateSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EditorTemplateSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_uiproto_uiv1_ui_proto_enumTypes[3].Descriptor()
+}
+
+func (EditorTemplateSource) Type() protoreflect.EnumType {
+	return &file_internal_uiproto_uiv1_ui_proto_enumTypes[3]
+}
+
+func (x EditorTemplateSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EditorTemplateSource.Descriptor instead.
+func (EditorTemplateSource) EnumDescriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{3}
+}
+
 // Node is the shared wire projection of a graph symbol record — the
 // fields a UI view actually renders, mirroring internal/schema/graph.proto's
 // Node message field-for-field (minus its reserved 50-59 annotation
@@ -3525,6 +3656,255 @@ func (x *WatchGraphEvent) GetCommitSha() string {
 	return ""
 }
 
+// GetEditorLinkRequest carries the repo-relative path and optional
+// line/col GetEditorLink needs to build an editor URI (D-05, D-08).
+// path is confined by the same gate GetNodeDetailRequest.file,
+// GetPermalinkRequest.path and FileSymbolsRequest.path use
+// ((*query.Engine).ValidateRepoRelativePath, SRV-05 — no second
+// confinement implementation). line and col are both `optional` (proto3
+// presence) so the wire can distinguish "unset" (substituted with 1)
+// from an explicit 0, which is refused. template is `optional` so an
+// absent per-request override is distinguishable from an explicit empty
+// string — when set, it replaces the server's effective default for
+// this one call only (D-06) and is validated by the SAME validator the
+// server's own flag/env value uses.
+type GetEditorLinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Line          *int32                 `protobuf:"varint,2,opt,name=line,proto3,oneof" json:"line,omitempty"`
+	Col           *int32                 `protobuf:"varint,3,opt,name=col,proto3,oneof" json:"col,omitempty"`
+	Template      *string                `protobuf:"bytes,4,opt,name=template,proto3,oneof" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEditorLinkRequest) Reset() {
+	*x = GetEditorLinkRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEditorLinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEditorLinkRequest) ProtoMessage() {}
+
+func (x *GetEditorLinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEditorLinkRequest.ProtoReflect.Descriptor instead.
+func (*GetEditorLinkRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *GetEditorLinkRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GetEditorLinkRequest) GetLine() int32 {
+	if x != nil && x.Line != nil {
+		return *x.Line
+	}
+	return 0
+}
+
+func (x *GetEditorLinkRequest) GetCol() int32 {
+	if x != nil && x.Col != nil {
+		return *x.Col
+	}
+	return 0
+}
+
+func (x *GetEditorLinkRequest) GetTemplate() string {
+	if x != nil && x.Template != nil {
+		return *x.Template
+	}
+	return ""
+}
+
+// EditorPreset is one of the three fixed editor choices the picker
+// offers (D-18): VS Code, Cursor, JetBrains. The browser never holds a
+// second copy of a template it constructs itself — presets ride on
+// every GetEditorLinkResponse so the server remains the one place a
+// template is ever interpreted.
+type EditorPreset struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Template      string                 `protobuf:"bytes,3,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditorPreset) Reset() {
+	*x = EditorPreset{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditorPreset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditorPreset) ProtoMessage() {}
+
+func (x *EditorPreset) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditorPreset.ProtoReflect.Descriptor instead.
+func (*EditorPreset) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *EditorPreset) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *EditorPreset) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *EditorPreset) GetTemplate() string {
+	if x != nil {
+		return x.Template
+	}
+	return ""
+}
+
+// GetEditorLinkResponse answers honestly in every configuration state
+// (D-07): NO_TEMPLATE and TEMPLATE_INVALID are SUCCESSFUL responses,
+// never errors. url is populated only when availability is BUILDABLE;
+// reason is populated whenever it is not.
+type GetEditorLinkResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Url          string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Availability EditorLinkAvailability `protobuf:"varint,2,opt,name=availability,proto3,enum=codegraph.ui.v1.EditorLinkAvailability" json:"availability,omitempty"`
+	Reason       string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// default_source and default_editor report the SERVER DEFAULT's
+	// provenance (D-07) — populated on every response, whether or not
+	// this call's answer used an override.
+	DefaultSource EditorTemplateSource `protobuf:"varint,4,opt,name=default_source,json=defaultSource,proto3,enum=codegraph.ui.v1.EditorTemplateSource" json:"default_source,omitempty"`
+	DefaultEditor string               `protobuf:"bytes,5,opt,name=default_editor,json=defaultEditor,proto3" json:"default_editor,omitempty"`
+	// override_applied is true when GetEditorLinkRequest.template was
+	// set and non-empty and was the template actually used to build (or
+	// attempt to build) this response's url (D-06).
+	OverrideApplied bool `protobuf:"varint,6,opt,name=override_applied,json=overrideApplied,proto3" json:"override_applied,omitempty"`
+	// presets carries exactly the picker's three choices (D-18) so the
+	// browser never holds a second copy of a template.
+	Presets       []*EditorPreset `protobuf:"bytes,7,rep,name=presets,proto3" json:"presets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEditorLinkResponse) Reset() {
+	*x = GetEditorLinkResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEditorLinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEditorLinkResponse) ProtoMessage() {}
+
+func (x *GetEditorLinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEditorLinkResponse.ProtoReflect.Descriptor instead.
+func (*GetEditorLinkResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *GetEditorLinkResponse) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *GetEditorLinkResponse) GetAvailability() EditorLinkAvailability {
+	if x != nil {
+		return x.Availability
+	}
+	return EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_UNSPECIFIED
+}
+
+func (x *GetEditorLinkResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *GetEditorLinkResponse) GetDefaultSource() EditorTemplateSource {
+	if x != nil {
+		return x.DefaultSource
+	}
+	return EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_UNSPECIFIED
+}
+
+func (x *GetEditorLinkResponse) GetDefaultEditor() string {
+	if x != nil {
+		return x.DefaultEditor
+	}
+	return ""
+}
+
+func (x *GetEditorLinkResponse) GetOverrideApplied() bool {
+	if x != nil {
+		return x.OverrideApplied
+	}
+	return false
+}
+
+func (x *GetEditorLinkResponse) GetPresets() []*EditorPreset {
+	if x != nil {
+		return x.Presets
+	}
+	return nil
+}
+
 var File_internal_uiproto_uiv1_ui_proto protoreflect.FileDescriptor
 
 const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
@@ -3790,7 +4170,27 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\fstore_exists\x18\x04 \x01(\bR\vstoreExists\x120\n" +
 	"\x14indexing_in_progress\x18\x05 \x01(\bR\x12indexingInProgress\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\x06 \x01(\tR\tcommitSha*\x8e\x01\n" +
+	"commit_sha\x18\x06 \x01(\tR\tcommitSha\"\x99\x01\n" +
+	"\x14GetEditorLinkRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x17\n" +
+	"\x04line\x18\x02 \x01(\x05H\x00R\x04line\x88\x01\x01\x12\x15\n" +
+	"\x03col\x18\x03 \x01(\x05H\x01R\x03col\x88\x01\x01\x12\x1f\n" +
+	"\btemplate\x18\x04 \x01(\tH\x02R\btemplate\x88\x01\x01B\a\n" +
+	"\x05_lineB\x06\n" +
+	"\x04_colB\v\n" +
+	"\t_template\"N\n" +
+	"\fEditorPreset\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
+	"\btemplate\x18\x03 \x01(\tR\btemplate\"\xe7\x02\n" +
+	"\x15GetEditorLinkResponse\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12K\n" +
+	"\favailability\x18\x02 \x01(\x0e2'.codegraph.ui.v1.EditorLinkAvailabilityR\favailability\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12L\n" +
+	"\x0edefault_source\x18\x04 \x01(\x0e2%.codegraph.ui.v1.EditorTemplateSourceR\rdefaultSource\x12%\n" +
+	"\x0edefault_editor\x18\x05 \x01(\tR\rdefaultEditor\x12)\n" +
+	"\x10override_applied\x18\x06 \x01(\bR\x0foverrideApplied\x127\n" +
+	"\apresets\x18\a \x03(\v2\x1d.codegraph.ui.v1.EditorPresetR\apresets*\x8e\x01\n" +
 	"\x0eNodeDetailMode\x12 \n" +
 	"\x1cNODE_DETAIL_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15NODE_DETAIL_MODE_FILE\x10\x01\x12\x1f\n" +
@@ -3800,7 +4200,19 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\"PERMALINK_AVAILABILITY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fPERMALINK_AVAILABILITY_LINKABLE\x10\x01\x12.\n" +
 	"*PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED\x10\x02\x12\"\n" +
-	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\x8d\t\n" +
+	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x03*\xc3\x01\n" +
+	"\x16EditorLinkAvailability\x12(\n" +
+	"$EDITOR_LINK_AVAILABILITY_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"EDITOR_LINK_AVAILABILITY_BUILDABLE\x10\x01\x12(\n" +
+	"$EDITOR_LINK_AVAILABILITY_NO_TEMPLATE\x10\x02\x12-\n" +
+	")EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID\x10\x03*\xec\x01\n" +
+	"\x14EditorTemplateSource\x12&\n" +
+	"\"EDITOR_TEMPLATE_SOURCE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bEDITOR_TEMPLATE_SOURCE_FLAG\x10\x01\x12\x1e\n" +
+	"\x1aEDITOR_TEMPLATE_SOURCE_ENV\x10\x02\x12%\n" +
+	"!EDITOR_TEMPLATE_SOURCE_DISCOVERED\x10\x03\x12\x1f\n" +
+	"\x1bEDITOR_TEMPLATE_SOURCE_NONE\x10\x04\x12#\n" +
+	"\x1fEDITOR_TEMPLATE_SOURCE_DISABLED\x10\x052\xed\t\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
@@ -3816,7 +4228,8 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\tFileGraph\x12!.codegraph.ui.v1.FileGraphRequest\x1a\".codegraph.ui.v1.FileGraphResponse\x12X\n" +
 	"\vFileSymbols\x12#.codegraph.ui.v1.FileSymbolsRequest\x1a$.codegraph.ui.v1.FileSymbolsResponse\x12T\n" +
 	"\n" +
-	"WatchGraph\x12\".codegraph.ui.v1.WatchGraphRequest\x1a .codegraph.ui.v1.WatchGraphEvent0\x01B<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"WatchGraph\x12\".codegraph.ui.v1.WatchGraphRequest\x1a .codegraph.ui.v1.WatchGraphEvent0\x01\x12^\n" +
+	"\rGetEditorLink\x12%.codegraph.ui.v1.GetEditorLinkRequest\x1a&.codegraph.ui.v1.GetEditorLinkResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -3830,126 +4243,136 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 	return file_internal_uiproto_uiv1_ui_proto_rawDescData
 }
 
-var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
 	(PermalinkAvailability)(0),    // 1: codegraph.ui.v1.PermalinkAvailability
-	(*Node)(nil),                  // 2: codegraph.ui.v1.Node
-	(*Location)(nil),              // 3: codegraph.ui.v1.Location
-	(*GetStatusRequest)(nil),      // 4: codegraph.ui.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),     // 5: codegraph.ui.v1.GetStatusResponse
-	(*SearchRequest)(nil),         // 6: codegraph.ui.v1.SearchRequest
-	(*SearchResponse)(nil),        // 7: codegraph.ui.v1.SearchResponse
-	(*FileEntry)(nil),             // 8: codegraph.ui.v1.FileEntry
-	(*FileTreeNode)(nil),          // 9: codegraph.ui.v1.FileTreeNode
-	(*FilesRequest)(nil),          // 10: codegraph.ui.v1.FilesRequest
-	(*FilesResponse)(nil),         // 11: codegraph.ui.v1.FilesResponse
-	(*CallersRequest)(nil),        // 12: codegraph.ui.v1.CallersRequest
-	(*CallersResponse)(nil),       // 13: codegraph.ui.v1.CallersResponse
-	(*CalleesRequest)(nil),        // 14: codegraph.ui.v1.CalleesRequest
-	(*CalleesResponse)(nil),       // 15: codegraph.ui.v1.CalleesResponse
-	(*ImpactRequest)(nil),         // 16: codegraph.ui.v1.ImpactRequest
-	(*ImpactResponse)(nil),        // 17: codegraph.ui.v1.ImpactResponse
-	(*AffectedRequest)(nil),       // 18: codegraph.ui.v1.AffectedRequest
-	(*AffectedResponse)(nil),      // 19: codegraph.ui.v1.AffectedResponse
-	(*GetNodeDetailRequest)(nil),  // 20: codegraph.ui.v1.GetNodeDetailRequest
-	(*SourceBlob)(nil),            // 21: codegraph.ui.v1.SourceBlob
-	(*NodeDefinition)(nil),        // 22: codegraph.ui.v1.NodeDefinition
-	(*GetNodeDetailResponse)(nil), // 23: codegraph.ui.v1.GetNodeDetailResponse
-	(*ExploreRequest)(nil),        // 24: codegraph.ui.v1.ExploreRequest
-	(*ExploreGroup)(nil),          // 25: codegraph.ui.v1.ExploreGroup
-	(*BlastEntry)(nil),            // 26: codegraph.ui.v1.BlastEntry
-	(*ExploreResponse)(nil),       // 27: codegraph.ui.v1.ExploreResponse
-	(*IndexingInProgress)(nil),    // 28: codegraph.ui.v1.IndexingInProgress
-	(*GetPermalinkRequest)(nil),   // 29: codegraph.ui.v1.GetPermalinkRequest
-	(*GetPermalinkResponse)(nil),  // 30: codegraph.ui.v1.GetPermalinkResponse
-	(*GetHealthRequest)(nil),      // 31: codegraph.ui.v1.GetHealthRequest
-	(*WorktreeMismatch)(nil),      // 32: codegraph.ui.v1.WorktreeMismatch
-	(*PendingChanges)(nil),        // 33: codegraph.ui.v1.PendingChanges
-	(*IndexHealth)(nil),           // 34: codegraph.ui.v1.IndexHealth
-	(*GetHealthResponse)(nil),     // 35: codegraph.ui.v1.GetHealthResponse
-	(*FileGraphRequest)(nil),      // 36: codegraph.ui.v1.FileGraphRequest
-	(*FileGraphNode)(nil),         // 37: codegraph.ui.v1.FileGraphNode
-	(*FileGraphEdge)(nil),         // 38: codegraph.ui.v1.FileGraphEdge
-	(*FileGraphResponse)(nil),     // 39: codegraph.ui.v1.FileGraphResponse
-	(*FileSymbolsRequest)(nil),    // 40: codegraph.ui.v1.FileSymbolsRequest
-	(*FileSymbolsResponse)(nil),   // 41: codegraph.ui.v1.FileSymbolsResponse
-	(*WatchGraphRequest)(nil),     // 42: codegraph.ui.v1.WatchGraphRequest
-	(*WatchGraphEvent)(nil),       // 43: codegraph.ui.v1.WatchGraphEvent
-	nil,                           // 44: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	nil,                           // 45: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	nil,                           // 46: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
-	nil,                           // 47: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	(EditorLinkAvailability)(0),   // 2: codegraph.ui.v1.EditorLinkAvailability
+	(EditorTemplateSource)(0),     // 3: codegraph.ui.v1.EditorTemplateSource
+	(*Node)(nil),                  // 4: codegraph.ui.v1.Node
+	(*Location)(nil),              // 5: codegraph.ui.v1.Location
+	(*GetStatusRequest)(nil),      // 6: codegraph.ui.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),     // 7: codegraph.ui.v1.GetStatusResponse
+	(*SearchRequest)(nil),         // 8: codegraph.ui.v1.SearchRequest
+	(*SearchResponse)(nil),        // 9: codegraph.ui.v1.SearchResponse
+	(*FileEntry)(nil),             // 10: codegraph.ui.v1.FileEntry
+	(*FileTreeNode)(nil),          // 11: codegraph.ui.v1.FileTreeNode
+	(*FilesRequest)(nil),          // 12: codegraph.ui.v1.FilesRequest
+	(*FilesResponse)(nil),         // 13: codegraph.ui.v1.FilesResponse
+	(*CallersRequest)(nil),        // 14: codegraph.ui.v1.CallersRequest
+	(*CallersResponse)(nil),       // 15: codegraph.ui.v1.CallersResponse
+	(*CalleesRequest)(nil),        // 16: codegraph.ui.v1.CalleesRequest
+	(*CalleesResponse)(nil),       // 17: codegraph.ui.v1.CalleesResponse
+	(*ImpactRequest)(nil),         // 18: codegraph.ui.v1.ImpactRequest
+	(*ImpactResponse)(nil),        // 19: codegraph.ui.v1.ImpactResponse
+	(*AffectedRequest)(nil),       // 20: codegraph.ui.v1.AffectedRequest
+	(*AffectedResponse)(nil),      // 21: codegraph.ui.v1.AffectedResponse
+	(*GetNodeDetailRequest)(nil),  // 22: codegraph.ui.v1.GetNodeDetailRequest
+	(*SourceBlob)(nil),            // 23: codegraph.ui.v1.SourceBlob
+	(*NodeDefinition)(nil),        // 24: codegraph.ui.v1.NodeDefinition
+	(*GetNodeDetailResponse)(nil), // 25: codegraph.ui.v1.GetNodeDetailResponse
+	(*ExploreRequest)(nil),        // 26: codegraph.ui.v1.ExploreRequest
+	(*ExploreGroup)(nil),          // 27: codegraph.ui.v1.ExploreGroup
+	(*BlastEntry)(nil),            // 28: codegraph.ui.v1.BlastEntry
+	(*ExploreResponse)(nil),       // 29: codegraph.ui.v1.ExploreResponse
+	(*IndexingInProgress)(nil),    // 30: codegraph.ui.v1.IndexingInProgress
+	(*GetPermalinkRequest)(nil),   // 31: codegraph.ui.v1.GetPermalinkRequest
+	(*GetPermalinkResponse)(nil),  // 32: codegraph.ui.v1.GetPermalinkResponse
+	(*GetHealthRequest)(nil),      // 33: codegraph.ui.v1.GetHealthRequest
+	(*WorktreeMismatch)(nil),      // 34: codegraph.ui.v1.WorktreeMismatch
+	(*PendingChanges)(nil),        // 35: codegraph.ui.v1.PendingChanges
+	(*IndexHealth)(nil),           // 36: codegraph.ui.v1.IndexHealth
+	(*GetHealthResponse)(nil),     // 37: codegraph.ui.v1.GetHealthResponse
+	(*FileGraphRequest)(nil),      // 38: codegraph.ui.v1.FileGraphRequest
+	(*FileGraphNode)(nil),         // 39: codegraph.ui.v1.FileGraphNode
+	(*FileGraphEdge)(nil),         // 40: codegraph.ui.v1.FileGraphEdge
+	(*FileGraphResponse)(nil),     // 41: codegraph.ui.v1.FileGraphResponse
+	(*FileSymbolsRequest)(nil),    // 42: codegraph.ui.v1.FileSymbolsRequest
+	(*FileSymbolsResponse)(nil),   // 43: codegraph.ui.v1.FileSymbolsResponse
+	(*WatchGraphRequest)(nil),     // 44: codegraph.ui.v1.WatchGraphRequest
+	(*WatchGraphEvent)(nil),       // 45: codegraph.ui.v1.WatchGraphEvent
+	(*GetEditorLinkRequest)(nil),  // 46: codegraph.ui.v1.GetEditorLinkRequest
+	(*EditorPreset)(nil),          // 47: codegraph.ui.v1.EditorPreset
+	(*GetEditorLinkResponse)(nil), // 48: codegraph.ui.v1.GetEditorLinkResponse
+	nil,                           // 49: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	nil,                           // 50: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	nil,                           // 51: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	nil,                           // 52: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
-	3,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
-	9,  // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
-	8,  // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
-	9,  // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
-	3,  // 4: codegraph.ui.v1.CallersResponse.callers:type_name -> codegraph.ui.v1.Location
-	3,  // 5: codegraph.ui.v1.CalleesResponse.callees:type_name -> codegraph.ui.v1.Location
-	3,  // 6: codegraph.ui.v1.ImpactResponse.affected:type_name -> codegraph.ui.v1.Location
-	3,  // 7: codegraph.ui.v1.AffectedResponse.affected_tests:type_name -> codegraph.ui.v1.Location
-	2,  // 8: codegraph.ui.v1.NodeDefinition.node:type_name -> codegraph.ui.v1.Node
-	2,  // 9: codegraph.ui.v1.NodeDefinition.calls:type_name -> codegraph.ui.v1.Node
-	2,  // 10: codegraph.ui.v1.NodeDefinition.called_by:type_name -> codegraph.ui.v1.Node
-	21, // 11: codegraph.ui.v1.NodeDefinition.source:type_name -> codegraph.ui.v1.SourceBlob
+	5,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
+	11, // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
+	10, // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
+	11, // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
+	5,  // 4: codegraph.ui.v1.CallersResponse.callers:type_name -> codegraph.ui.v1.Location
+	5,  // 5: codegraph.ui.v1.CalleesResponse.callees:type_name -> codegraph.ui.v1.Location
+	5,  // 6: codegraph.ui.v1.ImpactResponse.affected:type_name -> codegraph.ui.v1.Location
+	5,  // 7: codegraph.ui.v1.AffectedResponse.affected_tests:type_name -> codegraph.ui.v1.Location
+	4,  // 8: codegraph.ui.v1.NodeDefinition.node:type_name -> codegraph.ui.v1.Node
+	4,  // 9: codegraph.ui.v1.NodeDefinition.calls:type_name -> codegraph.ui.v1.Node
+	4,  // 10: codegraph.ui.v1.NodeDefinition.called_by:type_name -> codegraph.ui.v1.Node
+	23, // 11: codegraph.ui.v1.NodeDefinition.source:type_name -> codegraph.ui.v1.SourceBlob
 	0,  // 12: codegraph.ui.v1.GetNodeDetailResponse.mode:type_name -> codegraph.ui.v1.NodeDetailMode
-	2,  // 13: codegraph.ui.v1.GetNodeDetailResponse.node:type_name -> codegraph.ui.v1.Node
-	2,  // 14: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
-	2,  // 15: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
-	22, // 16: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
-	21, // 17: codegraph.ui.v1.GetNodeDetailResponse.source:type_name -> codegraph.ui.v1.SourceBlob
-	2,  // 18: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
-	21, // 19: codegraph.ui.v1.ExploreGroup.source:type_name -> codegraph.ui.v1.SourceBlob
-	2,  // 20: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
-	25, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
-	26, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
+	4,  // 13: codegraph.ui.v1.GetNodeDetailResponse.node:type_name -> codegraph.ui.v1.Node
+	4,  // 14: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
+	4,  // 15: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
+	24, // 16: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
+	23, // 17: codegraph.ui.v1.GetNodeDetailResponse.source:type_name -> codegraph.ui.v1.SourceBlob
+	4,  // 18: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
+	23, // 19: codegraph.ui.v1.ExploreGroup.source:type_name -> codegraph.ui.v1.SourceBlob
+	4,  // 20: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
+	27, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
+	28, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
 	1,  // 23: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
-	44, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	45, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	46, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
-	33, // 27: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
-	34, // 28: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
-	32, // 29: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
-	47, // 30: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
-	37, // 31: codegraph.ui.v1.FileGraphResponse.nodes:type_name -> codegraph.ui.v1.FileGraphNode
-	38, // 32: codegraph.ui.v1.FileGraphResponse.edges:type_name -> codegraph.ui.v1.FileGraphEdge
-	2,  // 33: codegraph.ui.v1.FileSymbolsResponse.symbols:type_name -> codegraph.ui.v1.Node
-	4,  // 34: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	6,  // 35: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	10, // 36: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	12, // 37: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
-	14, // 38: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
-	16, // 39: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
-	18, // 40: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
-	20, // 41: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
-	24, // 42: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
-	29, // 43: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
-	31, // 44: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
-	36, // 45: codegraph.ui.v1.UIService.FileGraph:input_type -> codegraph.ui.v1.FileGraphRequest
-	40, // 46: codegraph.ui.v1.UIService.FileSymbols:input_type -> codegraph.ui.v1.FileSymbolsRequest
-	42, // 47: codegraph.ui.v1.UIService.WatchGraph:input_type -> codegraph.ui.v1.WatchGraphRequest
-	5,  // 48: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	7,  // 49: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	11, // 50: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	13, // 51: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	15, // 52: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	17, // 53: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	19, // 54: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	23, // 55: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	27, // 56: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
-	30, // 57: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
-	35, // 58: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
-	39, // 59: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
-	41, // 60: codegraph.ui.v1.UIService.FileSymbols:output_type -> codegraph.ui.v1.FileSymbolsResponse
-	43, // 61: codegraph.ui.v1.UIService.WatchGraph:output_type -> codegraph.ui.v1.WatchGraphEvent
-	48, // [48:62] is the sub-list for method output_type
-	34, // [34:48] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	49, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	50, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	51, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	35, // 27: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
+	36, // 28: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
+	34, // 29: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
+	52, // 30: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	39, // 31: codegraph.ui.v1.FileGraphResponse.nodes:type_name -> codegraph.ui.v1.FileGraphNode
+	40, // 32: codegraph.ui.v1.FileGraphResponse.edges:type_name -> codegraph.ui.v1.FileGraphEdge
+	4,  // 33: codegraph.ui.v1.FileSymbolsResponse.symbols:type_name -> codegraph.ui.v1.Node
+	2,  // 34: codegraph.ui.v1.GetEditorLinkResponse.availability:type_name -> codegraph.ui.v1.EditorLinkAvailability
+	3,  // 35: codegraph.ui.v1.GetEditorLinkResponse.default_source:type_name -> codegraph.ui.v1.EditorTemplateSource
+	47, // 36: codegraph.ui.v1.GetEditorLinkResponse.presets:type_name -> codegraph.ui.v1.EditorPreset
+	6,  // 37: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	8,  // 38: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	12, // 39: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	14, // 40: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	16, // 41: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	18, // 42: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	20, // 43: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	22, // 44: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
+	26, // 45: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
+	31, // 46: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
+	33, // 47: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
+	38, // 48: codegraph.ui.v1.UIService.FileGraph:input_type -> codegraph.ui.v1.FileGraphRequest
+	42, // 49: codegraph.ui.v1.UIService.FileSymbols:input_type -> codegraph.ui.v1.FileSymbolsRequest
+	44, // 50: codegraph.ui.v1.UIService.WatchGraph:input_type -> codegraph.ui.v1.WatchGraphRequest
+	46, // 51: codegraph.ui.v1.UIService.GetEditorLink:input_type -> codegraph.ui.v1.GetEditorLinkRequest
+	7,  // 52: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	9,  // 53: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	13, // 54: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	15, // 55: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	17, // 56: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	19, // 57: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	21, // 58: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	25, // 59: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	29, // 60: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	32, // 61: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
+	37, // 62: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
+	41, // 63: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
+	43, // 64: codegraph.ui.v1.UIService.FileSymbols:output_type -> codegraph.ui.v1.FileSymbolsResponse
+	45, // 65: codegraph.ui.v1.UIService.WatchGraph:output_type -> codegraph.ui.v1.WatchGraphEvent
+	48, // 66: codegraph.ui.v1.UIService.GetEditorLink:output_type -> codegraph.ui.v1.GetEditorLinkResponse
+	52, // [52:67] is the sub-list for method output_type
+	37, // [37:52] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -3959,13 +4382,14 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 	}
 	file_internal_uiproto_uiv1_ui_proto_msgTypes[18].OneofWrappers = []any{}
 	file_internal_uiproto_uiv1_ui_proto_msgTypes[27].OneofWrappers = []any{}
+	file_internal_uiproto_uiv1_ui_proto_msgTypes[42].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   46,
+			NumEnums:      4,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

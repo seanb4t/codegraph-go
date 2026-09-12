@@ -61,6 +61,13 @@ import (
 // store's Meta.last_sync_unix_ms changes. A stream is still a read — it
 // performs no network operation and mutates nothing — and belongs in
 // this read set for exactly the same reason the other thirteen do.
+// UPDATED at plan 09-01: GetEditorLink (D-05) is the fifteenth read-only
+// rpc, added additively to internal/uiproto/uiv1/ui.proto's `service
+// UIService` block. It turns a repo-relative path plus an optional
+// line/col into an editor URI from an operator- or discovery-supplied
+// template. It performs no network operation, launches nothing and
+// mutates nothing — and belongs in this read set for exactly the same
+// reason the other fourteen do.
 var wantUIServiceMethods = map[string]struct{}{
 	"GetStatus":     {},
 	"Search":        {},
@@ -76,17 +83,18 @@ var wantUIServiceMethods = map[string]struct{}{
 	"FileGraph":     {},
 	"FileSymbols":   {},
 	"WatchGraph":    {},
+	"GetEditorLink": {},
 }
 
 // TestUIServiceMethodSetIsExactlyTheReadSet reflects over the generated
 // uiv1connect.UIServiceHandler interface — the machine-readable method
 // inventory a mutating rpc would have to appear in before it could ever
 // be dispatched — and asserts the observed method-name set is EXACTLY
-// wantUIServiceMethods: same length (14, as of plan 06-01's WatchGraph)
-// AND same membership. A negative-only guard ("no method name contains a
-// write verb") passes vacuously the moment its verb list stops matching
-// a newly-added verb; this positive set-equality guard instead fails in
-// BOTH directions (SRV-03, T-01-04).
+// wantUIServiceMethods: same length (15, as of plan 09-01's
+// GetEditorLink) AND same membership. A negative-only guard ("no method
+// name contains a write verb") passes vacuously the moment its verb list
+// stops matching a newly-added verb; this positive set-equality guard
+// instead fails in BOTH directions (SRV-03, T-01-04).
 func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	typ := reflect.TypeOf((*uiv1connect.UIServiceHandler)(nil)).Elem()
 
@@ -95,8 +103,8 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 		got[typ.Method(i).Name] = struct{}{}
 	}
 
-	if len(got) != 14 {
-		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 14: %v", len(got), got)
+	if len(got) != 15 {
+		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 15: %v", len(got), got)
 	}
 	if len(got) != len(wantUIServiceMethods) {
 		t.Fatalf("observed method set size %d != fixture size %d — the fixture itself is stale", len(got), len(wantUIServiceMethods))
@@ -109,7 +117,7 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	}
 	for name := range got {
 		if _, ok := wantUIServiceMethods[name]; !ok {
-			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the fourteen-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
+			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the fifteen-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
 		}
 	}
 }
@@ -249,6 +257,18 @@ const uiProtoFieldFixtureLenAtPlan0506 = uiProtoFieldFixtureLenAtPlan0502 + 4
 // never as a bare literal, mirroring the established chained-extension
 // pattern (01-10, 01-11, 03-05, 04-03, 05-02, 05-06).
 const uiProtoFieldFixtureLenAtPlan0601 = uiProtoFieldFixtureLenAtPlan0506 + 7
+
+// uiProtoFieldFixtureLenAtPlan0901 EXTENDS uiProtoFieldFixtureLenAtPlan0601
+// by exactly 14 (plan 09-01, BRW-11/BRW-12, the fifteenth rpc
+// GetEditorLink): GetEditorLinkRequest's four fields (path, line, col,
+// template) + EditorPreset's three (id, name, template) + GetEditorLinkResponse's
+// seven (url, availability, reason, default_source, default_editor,
+// override_applied, presets) = 4 + 3 + 7 = 14 — all three new messages,
+// additive from field 1 on each since every one is new. Declared in
+// terms of the prior constant, never as a bare literal, mirroring the
+// established chained-extension pattern (01-10, 01-11, 03-05, 04-03,
+// 05-02, 05-06, 06-01).
+const uiProtoFieldFixtureLenAtPlan0901 = uiProtoFieldFixtureLenAtPlan0601 + 14
 
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
@@ -490,6 +510,22 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"WatchGraphEvent", "store_exists", 4},
 	{"WatchGraphEvent", "indexing_in_progress", 5},
 	{"WatchGraphEvent", "commit_sha", 6},
+	// Plan 09-01's fourteen — see uiProtoFieldFixtureLenAtPlan0901's own
+	// doc comment for the arithmetic.
+	{"GetEditorLinkRequest", "path", 1},
+	{"GetEditorLinkRequest", "line", 2},
+	{"GetEditorLinkRequest", "col", 3},
+	{"GetEditorLinkRequest", "template", 4},
+	{"EditorPreset", "id", 1},
+	{"EditorPreset", "name", 2},
+	{"EditorPreset", "template", 3},
+	{"GetEditorLinkResponse", "url", 1},
+	{"GetEditorLinkResponse", "availability", 2},
+	{"GetEditorLinkResponse", "reason", 3},
+	{"GetEditorLinkResponse", "default_source", 4},
+	{"GetEditorLinkResponse", "default_editor", 5},
+	{"GetEditorLinkResponse", "override_applied", 6},
+	{"GetEditorLinkResponse", "presets", 7},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -516,8 +552,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0601 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0601 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0601)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0901 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0901 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0901)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")
