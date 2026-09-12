@@ -1,43 +1,43 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.12.0 — Local Graph UI",
+  "milestone": "v0.13.0 — Guard Hardening & UI Follow-through",
   "phases": [
     {
-      "number": "1",
-      "name": "Engine Seam, Wire Protocol & Secure Transport",
+      "number": "7",
+      "name": "Guards That Cannot Fire",
       "status": "complete"
     },
     {
-      "number": "2",
-      "name": "SPA Toolchain, Embedded App Shell & JS Supply Chain",
-      "status": "complete"
+      "number": "8",
+      "name": "tmux Real-PTY Harness",
+      "status": "in_progress"
     },
     {
-      "number": "3",
-      "name": "Browse, Inspect & Navigation",
-      "status": "complete"
+      "number": "9",
+      "name": "Source View Follow-Through — Breadcrumb & Editor Handoff",
+      "status": "pending"
     },
     {
-      "number": "4",
-      "name": "Query Workbench & Index Health",
-      "status": "complete"
+      "number": "10",
+      "name": "Index Health — The Coverage Denominator",
+      "status": "pending"
     },
     {
-      "number": "5",
-      "name": "File/Package Graph View",
-      "status": "complete"
+      "number": "11",
+      "name": "Graph View — Community Clustering",
+      "status": "pending"
     },
     {
-      "number": "6",
-      "name": "Live Push",
-      "status": "complete"
+      "number": "12",
+      "name": "CLI Reference & Docs Tail",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 08 of 6 · 0% · executing"
   },
-  "updated_at": "2026-09-08T13:07:02.457Z"
+  "updated_at": "2026-09-11T21:58:59.870Z"
 }

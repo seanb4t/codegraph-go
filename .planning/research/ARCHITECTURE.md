@@ -1,319 +1,727 @@
-# Architecture Research: v0.12.0 Local Graph UI
+# Architecture Integration Research: v0.13.0 Guard Hardening & UI Follow-through
 
-**Domain:** Adding a ConnectRPC-served, `go:embed`'d Svelte SPA to an existing mature Go CLI/MCP product
-**Researched:** 2026-08-22
-**Confidence:** HIGH for integration points and the Pebble multi-process finding (verified against real code + upstream issue tracker); MEDIUM for exact protobuf message shapes and live-push fan-out sizing (design recommendations, not yet built)
+**Domain:** integration architecture for a new-features milestone on an established codebase
+**Researched:** 2026-09-08
+**Confidence:** HIGH — every claim below is either a quoted source line from this repository at HEAD, or an explicit inference labelled as such.
 
-## Standard Architecture
+## How to read this file
 
-### System Overview
+This is not a green-field architecture doc. `internal/query.Engine` is the single read-only
+seam; `internal/uiserver` is a ConnectRPC surface over it guarded by two tests
+(`internal/uiserver/readonly_test.go`) that this milestone must clear for every new symbol;
+`internal/schema/graph.proto` (on-disk) and `internal/uiproto/uiv1/ui.proto` (wire) are two
+independently-evolving, additive-only proto surfaces (D-02a). Each numbered section below
+answers one milestone question with file paths, quoted source, and an explicit
+new-vs-modified verdict.
 
-```
-                    ┌─────────────────────────────────────────────┐
-                    │              Browser (localhost)             │
-                    │   Svelte + shadcn-svelte SPA (connect-es)    │
-                    └───────────────┬───────────────┬─────────────┘
-                                    │ unary RPC      │ server-stream
-                                    │ (Connect proto)│ (Connect proto,
-                                    │                │  HTTP/1.1 chunked,
-                                    │                │  no h2c needed)
-┌───────────────────────────────────▼───────────────▼─────────────┐
-│  `codegraph ui` process (own PID, loopback-only net/http.Server) │
-│  ┌──────────────┐  ┌─────────────────┐  ┌──────────────────────┐│
-│  │ internal/ui  │  │ internal/ui      │  │ internal/ui           ││
-│  │ /assets.go   │  │ /rpc.go          │  │ /stream.go            ││
-│  │ go:embed     │  │ Connect service  │  │ fsnotify on           ││
-│  │ dist/ SPA,   │  │ impls: open a    │  │ .codegraph/           ││
-│  │ SPA fallback │  │ fresh query.     │  │ .sync-pending,        ││
-│  │ to index.html│  │ OpenAt PER CALL  │  │ fan-out to N tabs     ││
-│  └──────────────┘  └────────┬─────────┘  └──────────┬───────────┘│
-│         mounted on one http.ServeMux, Origin/Host-validated       │
-└──────────────────────────────┼────────────────────────┼──────────┘
-                                │                        │ (signal only,
-                                ▼                        │  no store read)
-                    ┌───────────────────────┐            │
-                    │  internal/query.Engine │◄───────────┘ (push triggers a
-                    │  (UNCHANGED seam;      │               fresh OpenAt on
-                    │   3rd consumer, not a  │               next client poll/
-                    │   2nd implementation)  │               query, not inside
-                    └───────────┬───────────┘               the stream handler)
-                                │ graphstore.Open(dir) — PER CALL, closed after
-                                ▼
-                    ┌───────────────────────┐        ┌─────────────────────┐
-                    │ internal/graphstore    │◄──────►│ `serve --mcp` /      │
-                    │ (Pebble, D-04a's sole  │  same  │ `codegraph daemon`   │
-                    │  door)                 │  dir,  │ (separate process,   │
-                    │  EXCLUSIVE directory   │  never │  its own daemon      │
-                    │  LOCK held only while  │  held  │  lockfile, writes    │
-                    │  a GraphStore handle   │  open  │  .sync-pending       │
-                    │  is open — see the     │  long- │  before/after each   │
-                    │  Pebble finding below  │  term  │  debounced flush)    │
-                    └───────────────────────┘        └─────────────────────┘
-```
+---
 
-The important structural fact this diagram encodes: **`internal/ui` never talks to Pebble.** It is a pure transport/translation layer over `internal/query.Engine`, exactly like `internal/mcp` today — confirmed by the existing `internal/graphstore/archtest.TestNoPackageBypassesGraphStore`, which already scans the *whole module* for direct `pebble/v2` imports outside `internal/graphstore`. `internal/ui` inherits that enforcement for free the moment it exists, with zero new archtest code required, as long as it is written to the same discipline `internal/mcp` and `internal/cli` already follow.
+## 1. HLT-04 — coverage denominator ("files discovered but NOT indexed, with reason")
 
-### Component Responsibilities
+### What `internal/indexer.Discover` actually knows and drops
 
-| Component | Responsibility | New / Modified |
-|-----------|-----------------|-----------------|
-| `internal/cli/ui.go` (`newUICmd`) | Cobra command: resolve start path, require an index (UI has nothing useful to show without one — unlike `serve --mcp`'s MCP-03 zero-tools-without-index tolerance), build `internal/ui.Server`, bind loopback, print URL, optional `--open` browser launch | **New** |
-| `internal/ui/server.go` | Constructs one `*http.Server`/`http.ServeMux` combining Connect handlers + static asset handler + Origin/Host validation middleware; loopback-only listener | **New** |
-| `internal/ui/rpc.go` | Implements the generated Connect service interface(s); each RPC method calls `query.OpenAt` (or a UI-scoped equivalent) fresh, never holds a Reader across calls | **New** |
-| `internal/ui/stream.go` | The server-streaming live-push method: fsnotify-watches `.codegraph/.sync-pending`, fans out "index changed" events to connected stream handlers with bounded/non-blocking send | **New** |
-| `internal/ui/assets.go` | `//go:embed` the committed `dist/` SPA build; SPA fallback-to-`index.html` for client-side routes | **New** |
-| `internal/ui/archtest/` | Confinement guard (extends D-04a's existing whole-module scan automatically) + drift guards (see Build-Time Architecture) | **New** |
-| `proto/codegraph/ui/v1/*.proto` | The wire-API protobuf schema (distinct package from `internal/schema`'s storage-format proto) | **New** |
-| `internal/query.Engine` (`node.go`, `explore.go`) | Gains two new structured-result methods (`NodeDetail`, `ExploreResult` — names illustrative) that reuse existing fetch helpers; **zero change** to `Node()`/`Explore()`'s markdown output | **Modified (additive only)** |
-| `internal/query` (new file, e.g. `filegraph.go`) | New `Engine.FileGraph()`-shaped method computing the file/package rollup from a fresh full scan, mirroring `BuildReverseAdjacency`'s fresh-per-call discipline | **New method on an existing package** |
-| `internal/mcp/server.go` | CR-01 fix: `pendingWriter`'s counter corruption from server-initiated notifications | **Modified (bug fix, unrelated surface but folded into this milestone)** |
-| `internal/graphstore`, `internal/daemon`, `internal/watch` | **Untouched.** The UI's read path reuses `graphstore.Open`'s existing bounded-retry/`ErrStoreLocked` mechanism; its push signal reuses the existing `.sync-pending` sidecar `internal/daemon` already writes | **Unmodified** |
+`internal/indexer/discover.go:97` (`func Discover(root string) ([]DiscoveredFile, string, error)`)
+walks the tree with `filepath.WalkDir` and for every candidate file either appends a
+`pendingFile` or returns `nil` from the callback with **no record kept**. Three exclusion
+reasons exist in the walk today, none of them persisted or even counted:
 
-## Recommended Project Structure
+1. **Directory skip** — `discover.go:106`: `if p != root && ShouldSkipDir(d.Name()) { return fs.SkipDir }`. `ShouldSkipDir` (`discover.go:53`) excludes `vendor` and any dot-prefixed directory.
+2. **Unregistered extension** — `discover.go:113-116`: `spec, ok := lookupLanguageByExt(ext); if !ok { return nil }`.
+3. **Go build-tag mismatch** — `discover.go:128-134`: `ctx.MatchFile(...)`, Go-only, via `go/build.Context`.
 
-```
-internal/
-├── ui/
-│   ├── server.go          # http.Server assembly, loopback bind, Origin/Host guard
-│   ├── rpc.go              # Connect service implementations (query translation)
-│   ├── filegraph_rpc.go    # (or folded into rpc.go) rollup RPC handler
-│   ├── stream.go           # live-push server-streaming handler + fan-out registry
-│   ├── assets.go           # go:embed dist/*, SPA fallback handler
-│   ├── dist/                # COMMITTED built SPA assets (git-tracked, not .gitignore'd)
-│   └── archtest/
-│       ├── graphstore_confinement_test.go   # thin, mostly free via D-04a's existing scope
-│       ├── proto_drift_test.go              # .proto ↔ generated codegen, non-vacuous
-│       └── dist_drift_test.go               # SPA source ↔ committed dist/, non-vacuous
-├── query/
-│   ├── node.go              # MODIFIED (additive): extract fetch from render
-│   ├── explore.go           # MODIFIED (additive): extract fetch from render
-│   └── filegraph.go         # NEW: file/package rollup, fresh-per-call scan
-├── mcp/
-│   └── server.go            # MODIFIED: CR-01 pendingWriter fix
-proto/
-└── codegraph/ui/v1/
-    ├── graph.proto           # Node/Edge/File/Package wire messages, spans, pagination
-    ├── query.proto            # unary RPCs: search, node detail, callers/callees/impact/affected, files, status, explore
-    └── stream.proto           # server-streaming live-push RPC
-web/                            # SPA SOURCE (not embedded directly — dist/ is)
-├── src/
-├── package.json
-└── ...
-```
+None of these three produce any record — the file's relative path is never captured before
+the early `return nil`. This is genuinely new discovery-time data the store does not persist
+today, exactly as the milestone context predicted.
 
-### Structure Rationale
+### A second, already-persisted category the milestone context did not anticipate
 
-- **`internal/ui/` mirrors `internal/mcp/`'s shape** (`server.go` for construction, a handlers file, an assets/resources file) — this is a deliberate consistency choice, not a new pattern: the codebase already has exactly one precedent for "a second front-end over `internal/query.Engine`," and the UI should look structurally like it, not invent a new shape.
-- **`dist/` lives under `internal/ui/`, not the repo root**, so the `//go:embed dist/*` directive in `assets.go` needs no `..` traversal — the same constraint `claudeassets.go`'s doc comment already documents for this exact reason (Go embed patterns cannot cross into a sibling directory via `..`; embedding only works at-or-below the directory containing the source file with the directive). Unlike `claudeassets.go` (which had to move to the repo root because its source lived at `.claude/`, a sibling of `internal/`), `internal/ui/dist/` can live directly under the package that embeds it, so no root-level indirection package is needed here.
-- **`proto/codegraph/ui/v1/` is a separate protobuf package from `internal/schema`'s `codegraph.v1`** (see Protobuf Schema Design below) — the storage format and the wire API are different concerns with different evolution cadences and different consumers (Pebble records vs. a browser client), and this repo's own storage schema doc comment already frames `codegraph.v1` as specifically the "record format for the codegraph-go graph store," not a general-purpose API contract.
-- **`web/` (SPA source) is a sibling of `internal/`, not nested inside it** — keeps the Go module's `go build ./...` and `go list ./...` machinery (which already special-cases `testdata/`, per `GOLDEN-01`'s documented gotcha) from ever needing to reason about a `node_modules/` tree, and matches this repo's existing convention of keeping non-Go build inputs (proto source, in a project with one) at predictable top-level locations.
+Files that **do** pass `Discover` and reach Pass 1 (`internal/indexer/extract.go`) but fail to
+parse or read are **already recorded**, end to end:
 
-## Engine Reuse Without Forking Query Logic (the markdown-vs-structured seam)
+- `extract.go:122-129`: a read failure is captured on `goextract.FileResult.Err`.
+- `internal/indexer/resolve.go:296-298`:
+  ```go
+  if r.Err != nil {
+      f.Errors = []string{r.Err.Error()}
+  }
+  ```
+  — a `schema.File` record is still minted for the failed file, with `Errors` populated.
+- `internal/schema/graph.proto:113-117`:
+  ```proto
+  // errors records per-file extraction failures (e.g. oversized or
+  // unparseable source) so one bad file does not abort the whole index run
+  repeated string errors = 6;
+  ```
 
-This is the single most consequential integration decision, and the codebase already answers most of it by precedent — **8 of the Engine's 10 read methods are already structured, not markdown**:
+So `schema.File.errors` **already exists on disk, schema version 1, no migration needed** —
+but nothing reads it out. `rg -n "Errors|errors" internal/query/status.go internal/query/files.go`
+returns zero hits outside `"errors"` the stdlib import and two `errors.Is` calls — confirmed:
+no Engine method surfaces `File.Errors` today.
 
-| Engine method | Return shape today | UI can consume directly? |
+**HLT-04 is therefore two distinct sub-problems, not one:**
+
+| Category | Source of truth | Persisted today? | What's needed |
+|---|---|---|---|
+| Discovered-but-excluded-before-extraction (vendor/dot-dir, unsupported ext, Go build-tag) | Not captured anywhere | No | New discovery-time collection, computed fresh at query time (see below) |
+| Discovered, extracted, but failed (parse/read error) | `schema.File.Errors` | **Yes**, already on disk | Just a new Engine read + wire projection |
+
+### Additive-only feasibility (D-02a)
+
+No schema change is required for either category if computed at query time rather than
+persisted:
+- Category 2 already has a field (`File.errors`, number 6, spent since Phase 2/3) — reading
+  it is pure Engine work, zero proto changes to `internal/schema/graph.proto`.
+- Category 1 does **not** need a schema field at all if implemented as a live filesystem
+  walk at query time (see next section) — the "reserved 50 to 59" annotation slots on
+  `Node`/`Edge` (`graph.proto:65`, `:96`) are explicitly earmarked for a **different**
+  concern ("embedding vector, community/cluster assignment" — see §2) and should not be
+  overloaded for this.
+
+### Recommended integration: query-time, not index-time — following `Status()`'s own precedent
+
+`internal/query.Engine` already does **live filesystem work alongside store reads**, not just
+pure store scans — this is the load-bearing precedent that makes a new Coverage-style method
+architecturally consistent rather than a special case:
+
+- `Engine` carries `repoRoot string` (`internal/query/engine.go:42`).
+- `Status()` conditionally walks the filesystem when `e.repoRoot != ""`
+  (`internal/query/status.go:317-320`, `newestSourceMtime` at `status.go:113`), and degrades
+  gracefully to a zero value when no repo root is configured (New vs OpenAt) — exactly the
+  degrade discipline a new method should copy.
+
+**Recommended new Engine surface** (new, per milestone context's own framing): an
+`Engine.Coverage()`-shaped method (naming below is illustrative, not binding) that:
+1. Re-walks `e.repoRoot` reusing `indexer.ShouldSkipDir` and the language-extension registry
+   (or a small sibling of `indexer.Discover` that records exclusions with a reason string
+   instead of silently continuing) to enumerate category 1 — computed **fresh per call**, no
+   cache, mirroring `FileGraph()`'s and `BuildReverseAdjacency`'s fresh-per-call discipline
+   (`traverse.go:150-152`: *"It is built FRESH inside every call, with no package-level
+   cache and no once-latch"*).
+2. Scans `IterateFiles()` for records with non-empty `Errors` for category 2 — a cheap
+   addition to the same scan `Status()` already runs (`status.go:260-269`).
+3. Degrades to an empty/zero result when `e.repoRoot == ""`, never erroring — same contract
+   `Status()`'s `DbSizeBytes` follows (`status.go:317`, D-07 precedent).
+
+This needs a genuinely **new package-level function in `internal/indexer`** (or a query-local
+duplicate, mirroring the `shouldSkipStaleDir` precedent in `status.go:107-110`, which
+duplicates `indexer.ShouldSkipDir` specifically "to avoid an internal/query -> internal/indexer
+dependency edge" — the same choice must be made here, and the T-01-18 archtest in §6 will
+directly govern it).
+
+### Wire integration — extend `GetHealth`, do not add a 15th rpc
+
+`GetHealthResponse` (`internal/uiproto/uiv1/ui.proto:742-812`) is the health-page-only,
+heavier-than-`GetStatus` surface — its own doc comment says it exists "separately from
+GetStatus (which stays cheap for every-navigation polling, D-01)" (readonly_test.go's
+plan-04-03 comment). Coverage is inherently a health/diagnostic question ("why is my file
+missing"), and the last spent field number on `GetHealthResponse` is 16
+(`commit_sha`, `ui.proto:809`) — **field 17 is free and additive**. The frontend precedent
+(`web/src/routes/health/+page.svelte`) already exists as the natural consumer; no existing
+"coverage" concept is in the frontend today (`rg -n "coverage|Coverage" web/src` finds
+nothing outside unrelated `highlight.ts`/`SourcePane.svelte` matches), confirming this is new
+UI, not rewiring.
+
+**Verdict: no new rpc is required.** Extend `GetHealthResponse` with a new nested message
+(mirroring the `IndexHealth`/`PendingChanges`/`WorktreeMismatch` per-concept message
+pattern already established at fields 12-14) at field 17, mapped by a new
+`coverageToProto`-named function in `internal/uiserver/handlers.go` alongside
+`healthToProto` (`handlers.go:900`), `fileGraphToProto` (`:997`), `fileSymbolsToProto`
+(`:1082`) — **never an inline literal at the call site**, matching every existing mapper's
+documented discipline.
+
+**Naming gotcha if a new rpc is chosen instead** (e.g. if planning decides Coverage warrants
+its own call for pagination/cost reasons): `mutatingVerbs`
+(`internal/uiserver/readonly_test.go`) forbids the *substring* `"Index"` anywhere in a method
+name — `TestUIServiceDeclaresNoMutatingMethod` matches with `strings.Contains(name, verb)`.
+A tempting name like `GetIndexCoverage` or `IndexCoverage` **fails this guard outright**,
+despite being purely read-only. Safe names: `GetCoverage`, `Coverage`. This is a real,
+source-verified trap, not a style note.
+
+### New vs modified — HLT-04
+
+| Component | New / Modified | File |
 |---|---|---|
-| `Query`, `Search` | `[]*schema.Node` / `[]Location` | Yes, as-is |
-| `Callers`, `Callees` | `CallersResult` / `CalleesResult` (JSON-tagged) | Yes, as-is |
-| `Impact`, `Affected` | `ImpactResult` / `AffectedResult` (JSON-tagged) | Yes, as-is |
-| `Files` | `FilesResult` (JSON-tagged) | Yes, as-is |
-| `Status` | `StatusResult` (JSON-tagged) | Yes, as-is |
-| `Node` | `(string, error)` — markdown only, via `RenderNode`/`RenderNodeMultiDef` | **No — needs a new structured variant** |
-| `Explore` | `(string, error)` — markdown only, via `RenderExplore` | **No — needs a new structured variant** |
+| Discovery-exclusion collector | **New** function (likely `internal/indexer`) | `internal/indexer/discover.go` or a new sibling file |
+| `Engine.Coverage()` (or extension of `Status()`) | **New** Engine method | `internal/query/status.go` or a new `internal/query/coverage.go` |
+| `GetHealthResponse` field 17 + nested message | **Modified** (additive) | `internal/uiproto/uiv1/ui.proto` |
+| `coverageToProto` mapper | **New** function | `internal/uiserver/handlers.go` |
+| `GetHealth` handler | **Modified** (calls the new Engine method) | `internal/uiserver/health.go` (or wherever `GetHealth` is implemented — verify exact file at plan time; `health_test.go` exists in `internal/uiserver/`) |
+| Health page UI | **New** rendering | `web/src/routes/health/+page.svelte` |
+| `uiProtoFieldNumbers` fixture | **Modified** (extended, never rewritten) | `internal/uiserver/readonly_test.go` |
 
-These already-structured six exist precisely because `internal/cli`'s `--json` flags and `internal/mcp`'s SURF-06 JSON→markdown conversion (v1.0 Phase 2) both needed a non-string shape to work from — this is a well-worn seam, not a novel one. The UI's Connect handlers for `Callers`/`Callees`/`Impact`/`Affected`/`Search`/`Files`/`Status` are a **thin, mechanical field-mapping translation** from these existing `Marshal*JSON`-adjacent Go structs into the corresponding protobuf response messages. Zero risk to the frozen golden tests, because none of this touches `internal/query/render_markdown.go` or the `--json`/MCP paths at all.
+---
 
-### The real gap: `Node` and `Explore`
+## 2. GRF-06 — community clustering
 
-Both already compute structured intermediate data internally before rendering to markdown — they are not monolithic string-builders:
+### Where the schema "reserves annotation space" — and why that is the wrong slot for this feature
 
-- `Node`'s single-def path (`renderSingleDefNode`) already separates fetch from render: `fetchCalls(node)` and `fetchCalledBy(node, rev)` return `[]*schema.Node`, then `RenderNode(node, calls, calledBy)` renders. The multi-def path (`renderMultiDefNode`) does the same per-candidate via a `fetch` closure returning `(source []byte, calls, calledBy []*schema.Node, error)`, then `RenderNodeMultiDef(symbol, matches, fetch)` renders.
-- `Explore` already builds `groups []exploreFileGroup`, `blasts []exploreBlast`, and a `sources map[string][]byte` before calling `RenderExplore(query, fileCount, symbolCount, groups, blasts, sources, stale, skeletonFiles)`.
+`internal/schema/graph.proto` reserves field ranges 50-59 on **`Node`** (`:65`), **`Edge`**
+(`:96`), and a third message (`:166`, reserved for "team-scale provenance") — this is the
+**on-disk, persisted** schema, explicitly earmarked:
 
-**The least-invasive fix is a pure extraction, not a rewrite:**
+```proto
+// Reserved now, before any consumer exists, so a future embedding-vector
+// or community/cluster-assignment field lands at a pre-agreed number
+// instead of colliding with whatever the next organic field would be.
+reserved 50 to 59; // future: embedding vector, community/cluster assignment
+```
 
-1. Add `Engine.NodeDetail(symbol, file string, line *int) (NodeDetailResult, error)` that runs the *exact same* resolution/fetch pipeline `Node()` already runs (`resolveNodeForDetail` / `enumerateSymbolDefs` + `narrowNodeMatches`, then `fetchCalls`/`fetchCalledBy`/`readSourceFile` per candidate) and returns the raw pieces as a new JSON/proto-friendly struct, **stopping before the `RenderNode`/`RenderNodeMultiDef` call**. `Node()` itself is untouched — it still calls the same fetch helpers and the same render functions in the same order, so its output is byte-identical and the frozen golden suite never sees a diff.
-2. Add `Engine.ExploreResult(query string, maxFiles int) (ExploreResult, error)` the same way: run the identical ranking/gathering pipeline that produces `groups`/`blasts`/`sources`/`stale`/`skeletonFiles`, return them as an exported struct, stop before `RenderExplore`. `Explore()` is untouched.
-3. Both new methods are **purely additive** — no existing exported signature changes, no existing test needs to change, and the CLI/MCP markdown consumers (protected by frozen goldens) never execute this new code path at all.
+This IS the literal slot the milestone context refers to. But using it would mean **persisting
+community assignments at index time** into `Node` records on every re-index — a structural
+choice with real consequences (index-time compute cost, staleness between re-indexes,
+migration of the reserved-field convention from "future" to "spent").
 
-This is a small, mechanical refactor (the fetch/render split already exists inside both functions; it just isn't exposed as two separate exported steps yet) and should be scoped as its own early phase precisely because everything downstream (the UI's node-detail and graph-explore views) depends on it.
+### The established counter-precedent: `FileGraphNode.CycleID` is computed fresh, at query time
 
-## Protobuf Schema Design
+`internal/query/traverse.go`'s `FileGraph()` already solves the **structurally identical**
+problem — partitioning the file-adjacency graph into components — for cycle detection, and it
+does so **without touching the persisted schema at all**:
 
-### Two separate `.proto` packages, deliberately
+- `traverse.go:87-89`: `CycleID` is "0 for a node in no strongly-connected cycle and is
+  populated by the cycle detector, not by this scan."
+- `traverse.go:305-314`: cycle detection runs **inside** `FileGraph()`, over the same
+  aggregated `cycleAdj` adjacency map the edge-rollup scan just built, via
+  `stronglyConnectedCycles(cycleAdj)` — a pure in-memory graph algorithm, no store write.
+- `traverse.go:150-152` (doc comment on `FileGraph` itself): *"It is built FRESH inside every
+  call, with no package-level cache and no once-latch — mirroring `BuildReverseAdjacency`'s
+  fresh-per-call discipline."*
 
-`internal/schema/graph.proto` (`package codegraph.v1`) is the **on-disk Pebble record format** — its evolution is governed by `D-02a` (additive-only, reserved field ranges for embedding vectors and community assignments) and is a private implementation detail of `internal/graphstore`. The **wire API to the browser** is a different contract with different consumers and a different, faster-moving cadence (a UI iteration can add a field to a response message without touching the storage format at all). Model it as a new package (e.g. `codegraph.ui.v1`) under `proto/codegraph/ui/v1/`, generated into `internal/ui/uiv1/` (or similar) — never reuse `schema.Node`/`schema.Edge` directly as wire types. Translate at the RPC-handler boundary in `internal/ui/rpc.go`, the same way `query.Location`/`query.CallersResult` already re-project `schema.Node` into smaller, JSON-shaped structs rather than serializing `schema.Node` verbatim.
+`FileGraphNode` (`ui.proto:824-839`) and `FileGraphEdge` (`ui.proto:842-871`) carry **no
+`reserved` clause at all** — unlike `Node`, `SourceBlob`, and the graph.proto messages, this
+message was never given a pre-agreed annotation band, because nothing anticipated needing one:
+the pattern established for extending it is a plain **additive new field**, exactly like
+`CycleID`/`cycle_id` (field 4) and `InCycle`/`in_cycle` (field 5) were added.
 
-### Message shapes
+### Recommendation: community detection is computed at QUERY TIME inside `FileGraph()`, following the `CycleID` pattern exactly — not persisted, and not using the schema's reserved 50-59 slot
 
-- **Node** (wire): `id`, `kind`, `name`, `qualified_name`, `file_path`, `language`, `start_line`, `end_line` — a thin subset of `schema.Node`'s fields, matching what `query.Location` already exposes plus whatever `NodeDetail` needs (signature, docstring, visibility). Do **not** wire-expose `schema.Node`'s reserved-for-future fields (embedding vectors, community assignment) until they have a real producer — reserve field numbers in the new proto the same way `graph.proto` already does, so a later addition is additive.
-- **Edge** (wire): `source`, `target`, `kind` — same shape as the storage record, since callers/callees/impact/affected already expose this via `Location` pairs.
-- **File** / **Package** (wire, for the rollup view): `path`, `language`, `symbol_count`, aggregated **edge counts by kind** between file/package pairs (not full edge lists) — this is a rollup, not a re-export of every edge; keep it small. Package is derived from `file_path`'s directory (or, for Go, its declared package — the extractor's existing `ModuleKey` concept may already carry this; verify against `internal/indexer/goextract` at implementation time rather than assuming).
-- **SourceSpan**: `file_path`, `start_line`, `end_line`, `start_col`, `end_col` — a small reusable message referenced by Node and by any "jump to definition" response, rather than four loose scalar fields repeated in every message that needs a location.
-- **Bounded traversals** (`impact`/`affected` depth, `callers`/`callees`/search limit): mirror the Engine's *already-enforced* server-side bounds — `validateDepth`/`clampDepth`/`clampAffectedDepth` and `validateLimit`/`MaxLimit` already exist in `internal/query`. The proto request messages should carry `depth`/`limit` as plain `int32` fields with **no client-trusted upper bound of their own** — the Connect handler must call the *existing* Engine methods, which already reject or clamp out-of-range values server-side. Do not re-implement bounds-checking in `internal/ui`; it would be a second, driftable copy of a rule the Engine already owns.
-- **Pagination**: none of the Engine's current methods are cursor-paginated — they are limit-capped, full-result-in-one-call methods (`MaxLimit`). For v1 of the UI, mirror that: a bounded `limit` per request, no cursor/continuation token. This matches the CLI's own capability today and avoids inventing a pagination contract the CLI/MCP surfaces don't have and can't validate against.
+This is a direct, source-backed answer to the milestone's open question. The reserved
+50-59 range on `schema.Node`/`Edge` remains earmarked for a genuinely different, later
+concern (embeddings, team-scale provenance) and should be left untouched by GRF-06.
 
-### Verbatim source blobs — keep them out of the graph messages
+Concretely:
+1. `internal/query.FileGraphNode` (`traverse.go:74-90`) gets a new field, e.g. `CommunityID
+   int`, populated the same way `CycleID` is — a second graph-partitioning pass over the same
+   `cycleAdj`-shaped adjacency (or a purpose-built one, since community detection algorithms
+   like label propagation or Louvain are not the same as Tarjan SCC) inside `FileGraph()`,
+   after the existing cycle-detection block (`traverse.go:305-330`).
+2. `FileGraphResult` (`traverse.go:112-129`) gets a corresponding aggregate field (mirroring
+   `CycleCount`, `traverse.go:128`), e.g. `CommunityCount int`.
+3. `uiv1.FileGraphNode` (`ui.proto:824-839`) gets an additive `community_id` field at the next
+   free number (5 — `cycle_id` is 4, no gap), and `FileGraphResponse` (`ui.proto:881-905`)
+   gets a `community_count` field at 7 (`cycle_count` is 6, `ui.proto:905`).
+4. **No new rpc** — `FileGraph` (the 12th method, already in `wantUIServiceMethods`) is
+   extended additively, exactly as `GRF-04`'s cycle detection was folded into the same rpc
+   rather than minting a separate one. This directly avoids the exact mistake the milestone's
+   own question flags ("a prior milestone's research claimed an rpc supplied data it did not,
+   costing an unbudgeted 13th rpc") — `FileGraph` genuinely already computes and returns the
+   file-adjacency graph GRF-06 needs to partition; there is no missing rpc here.
+5. `fileGraphToProto` (`internal/uiserver/handlers.go:997`) is modified, not replaced.
 
-`Node`'s multi-def render path already reads verbatim file source fresh from disk per candidate (`readSourceFile`, confined by `resolveSourcePath`'s repo-root confinement) — this can be large (a whole file). Putting a `bytes` or `string` verbatim-source field directly on the `Node` message that a *rollup* or *search* response returns would mean every symbol-list response silently carries megabytes of duplicate source text. Two established pitfalls this must avoid:
+### New vs modified — GRF-06
 
-1. **Don't attach source to list-shaped responses at all.** `Search`/`Files`/rollup responses should carry only `SourceSpan` (path + line range) — the client fetches source lazily via a dedicated `GetSource(file_path, [start_line, end_line])`-shaped unary RPC only when a symbol is actually opened, mirroring how `Node`'s file-mode already does an on-demand `readSourceFile` rather than the graph store carrying source inline (the store itself never persists source text — `readSourceFile` reads fresh from disk on every call, D-05a).
-2. **Cap what a single `NodeDetail`/source-fetch response can return.** protobuf itself has no built-in message-size ceiling beyond gRPC's (and Connect's) default max-receive-message-size — a pathologically large generated/vendored file opened through this path could produce a multi-MB response. `connect-go`'s handler options include a `WithReadMaxBytes`/`WithSendMaxBytes`-shaped configuration surface (verify exact option name against the pinned `connect-go` version at implementation time); set an explicit ceiling rather than relying on the default, and have `NodeDetail`/`GetSource` truncate (with a `truncated: bool` flag in the response) rather than fail outright on an oversized file, matching this codebase's existing "degrade rather than abort" convention (`WR-04`'s dangling-edge-skip pattern, applied here to oversized-source rather than missing-node).
+| Component | New / Modified | File |
+|---|---|---|
+| Community-detection algorithm | **New** function | `internal/query/traverse.go` (near `stronglyConnectedCycles`) |
+| `FileGraphNode.CommunityID`, `FileGraphResult.CommunityCount` | **Modified** (additive struct fields) | `internal/query/traverse.go:74-129` |
+| `FileGraphNode.community_id`, `FileGraphResponse.community_count` | **Modified** (additive proto fields) | `internal/uiproto/uiv1/ui.proto` |
+| `fileGraphToProto` | **Modified** | `internal/uiserver/handlers.go:997` |
+| `uiProtoFieldNumbers` fixture | **Modified** (extended) | `internal/uiserver/readonly_test.go` |
+| Graph view color/grouping-by-community | **New** rendering | `web/src/routes/graph/+page.svelte`, `web/src/lib/components/graph/file-graph-transform.ts` |
 
-## Live Push Architecture
+---
 
-### The event source: a signal that already exists
+## 3. BRW-11 — editor handoff (configurable URI scheme)
 
-`internal/daemon`'s `flush` already touches `.codegraph/.sync-pending` before every debounced sync and removes it after a successful commit (`staleSidecarName`, referenced identically in `internal/query/status.go`'s `computeStale` — "true when `.codegraph/.sync-pending` exists (watcher/daemon signal)"). This file is written by **whichever process is actually running the watcher** — `serve --mcp`'s own default-on watcher, a standalone `codegraph daemon`, or a plain `codegraph sync` invocation — regardless of which process that is.
+### The exact architectural precedent already exists: `GetPermalink`
 
-**`codegraph ui` should not run its own daemon/watcher at all.** It is read-only by construction (a stated milestone constraint); spawning a second competing writer process would be scope creep and would collide with `internal/daemon`'s existing single-writer lockfile the moment both `serve --mcp` and a hypothetical `codegraph ui`-embedded daemon tried to hold it. Instead:
+`internal/uiserver/permalink.go` is a **near-complete template** for this feature. It already:
+- Confines a caller-supplied `path`+`line`+`end_line` through
+  `eng.ValidateRepoRelativePath(path)` (`permalink.go:138`) — "the SAME `resolveSourcePath`
+  gate `GetNodeDetail` and `Explore` already share (SRV-05)."
+- Builds a URL server-side from validated inputs, never trusting the client to assemble one
+  (`buildGitHubBlobURL`, `permalink.go:259-277`).
+- Establishes the **exact precedent for the absolute-path tension** the milestone context
+  flags. `GetHealthResponse.worktree_mismatch` (`ui.proto:685-695`, `WorktreeMismatch`
+  message) is documented as *"the ONE scoped exception to this service's
+  project_path/index_path privacy stance... because the warning is useless without naming
+  both trees, and a clean tree still leaks nothing (T-04-09, accepted)."* This is a
+  **maintainer-approved precedent for a deliberate, scoped absolute-path exception at the RPC
+  boundary** — exactly the shape BRW-11 needs.
 
-- `internal/ui/stream.go` opens **one lightweight `fsnotify.Watcher`** scoped to the single file `.codegraph/.sync-pending` (or, more robustly, the containing `.codegraph/` directory filtered to that one filename — `fsnotify` doesn't watch non-existent files, so watching the directory and filtering `event.Name` is the correct pattern for a sidecar that is created/removed rather than always-present).
-- On sidecar **removed** (sync completed successfully), broadcast an "index changed" event to every connected stream.
-- On sidecar **created** (sync started), optionally broadcast a lighter "syncing" status event — nice-to-have, not required for the milestone's stated scope.
-- This is completely decoupled from *who* is syncing, requires no new daemon/lockfile interaction, and costs nothing when no other process is actively syncing (the watch is idle).
+### Resolving "how the absolute path reaches the browser without weakening repo-root confinement"
 
-### Event granularity: whole-index-changed, not per-file deltas
+The confinement gate (`ValidateRepoRelativePath`) is **only** about which files the server
+will read/reference — not about whether the *response* may carry an absolute path once that
+gate has passed. `GetPermalink` proves the pattern: validate the repo-relative path
+server-side, then **compute the full destination URL server-side** (there, a GitHub blob URL;
+here, an editor URI such as `vscode://file/<abs-path>:<line>`), and return only the
+already-assembled string. The client never independently learns or reconstructs the server's
+absolute filesystem prefix — it receives an opaque URI it can hand to `window.open()`. This is
+architecturally identical to `WorktreeMismatch.worktree_root`/`index_root` carrying absolute
+paths only when the maintainer scoped that exception explicitly (T-04-09) — BRW-11's plan
+should record the same kind of explicit, scoped, one-line decision rather than reopening the
+general privacy stance.
 
-The watcher already debounces bursts into one flush per `internal/watch.DebounceDuration()` window (default tunable via `CODEGRAPH_DEBOUNCE_MS`) — by the time `.sync-pending` clears, an arbitrary number of files may have changed in that window. Computing and pushing a precise per-node/per-edge diff would require either (a) diffing two full graph snapshots (expensive, and the store has no changelog/CDC mechanism today) or (b) threading fine-grained change info out of `indexer.Sync` through the sidecar file itself (a real but much larger change to `internal/daemon`/`internal/indexer`, out of scope for this milestone). The stated requirement — "views update in place rather than going quietly stale" — is satisfied by the coarser signal: push a single `IndexChanged{ meta: <fresh Status()-shaped summary> }` event, and let the browser's already-open views re-issue their normal unary queries (which each do their own fresh `OpenAt`) to refresh. This is simpler, cheaper, and correctness-equivalent to a fine-grained diff for a "view updates" UX (as opposed to an "animate exactly what changed" UX, which is explicitly not what was scoped).
+Given the whole UI is **already loopback-only bound** (v0.12.0 scope: "Loopback-only bind +
+Origin/Host validation, read-only by construction"), the practical exposure of an editor URI
+carrying the server's own absolute repo path is materially lower than a public service would
+have — the same host that can reach the UI already has filesystem access to that path.
 
-### Fan-out, backpressource, clean shutdown, reconnect
+### Where the configurable URI scheme lives
 
-- **Fan-out**: maintain a small in-memory registry (`map[streamID]chan Event` guarded by a mutex, or a `sync.Map`) in `internal/ui/stream.go`. Each `StreamUpdates` RPC call registers a channel on entry and deregisters (via `defer`) on exit — standard Go server-streaming teardown, and `connect-go`'s `ServerStreamForHandler` already ties stream lifetime to the request context, so a client disconnect (browser tab closed) cancels `ctx` and the handler's `Send` loop should select on `ctx.Done()` to exit promptly.
-- **Backpressure**: each per-client channel should be small and buffered (e.g. capacity 1) with a **non-blocking send** (`select { case ch <- event: default: /* drop; the next event supersedes it anyway */ }`) from the fan-out publisher. Because the event payload itself is coarse ("index changed," not a queue of deltas), dropping a stale "changed" notification in favor of a newer one is lossless in effect — the client's next unary query reads current state regardless of how many "changed" events it actually received. This sidesteps the harder general pub/sub backpressure problem entirely: **the event stream carries no state, so at-least-one-eventually-delivered is sufficient**, unlike a delta-stream design which would need to guarantee ordered, lossless delivery.
-- **Reconnect/resume**: because events are stateless notifications (not deltas), there is no sequence-number/resume-token semantics to design. A browser reconnecting after a network blip simply re-issues its normal set of unary queries on connect (or the SPA proactively refetches on stream-open, treating "stream just (re)connected" the same as "an update arrived") — no server-side session state to reconstruct.
-- **Clean shutdown**: `internal/ui/server.go`'s `http.Server` shutdown (triggered by the CLI command's signal handling, mirroring `serve --mcp`'s existing pattern of deferred watcher cancel + drain) should call `http.Server.Shutdown(ctx)`, which lets in-flight streams observe context cancellation and exit their `Send` loops; the fsnotify watcher on `.sync-pending` should be closed in the same shutdown path.
+`uiserver.Options` (`internal/uiserver/server.go:61-73`) currently has exactly two fields:
+`RepoPath` and `Addr`. `Addr`'s own doc comment states the established pattern for adding a
+new configurable knob:
 
-## Concurrency and Consistency — the Pebble multi-process question, VERIFIED
+```go
+// Nothing outside this package writes this field in v1 — no flag, no
+// environment variable, no configuration file reads it (D-08). A later
+// `--host`/`--port` is therefore an override of a field that already
+// exists, not a restructuring (SRV-03).
+```
 
-**Claim to verify:** does a second OS process opening the same Pebble directory a `serve --mcp`/daemon process already holds open cause a lock conflict, and does `Options.ReadOnly` (if it exists) offer an escape hatch?
+`internal/cli/ui.go`'s `newUiCmd()` (`ui.go:29-80`) registers exactly two flags today
+(`--path`/`-p`, `--no-open`) and passes them into `uiserver.Options{RepoPath: start}`
+(`ui.go:57`). **Recommendation**: add a new `Options.EditorURIScheme string` field (default
+`"vscode"` when empty, following the `Addr`-defaults-to-`DefaultAddr`-when-empty pattern
+already established at `server.go:66-67`), wired from a new `codegraph ui --editor` flag —
+this is additive to `Options` and to `newUiCmd`, not a restructuring, exactly matching the
+`Addr` precedent's own stated intent for future flags.
 
-**Verified finding (upstream, current as of the version pinned in `go.mod`, `github.com/cockroachdb/pebble/v2 v2.1.6`):** Pebble's `Open` acquires an **exclusive** directory lock unconditionally — a read-only open still takes the exclusive lock. This is a documented, still-open upstream limitation: [cockroachdb/pebble#1583](https://github.com/cockroachdb/pebble/issues/1583) states directly, quoting the maintainers' own framing of the gap, *"the pebble.Open method tries to acquire an exclusive lock regardless whether or not the DB is being opened in read-only mode"* — the issue asks for a proper 1-writer/N-reader multi-process mode and it does not exist; Pebble's own recommended path for concurrent multi-process access is to put a server (like CockroachDB itself) in front of it, which is exactly what this project's own `internal/graphstore.GraphStore` interface already is, in miniature. **There is no `Options.ReadOnly` escape hatch for the cross-process case** — read-only intent does not relax the lock.
+A **per-request override** (an optional field on the request message, so a user can switch
+editors without restarting the server) is architecturally cheap to add later and should not
+block v1 — same "field added speculatively can never be taken back" discipline the
+`FileSymbolsRequest` doc comment states (`ui.proto:906-913`: *"There is no limit field in v1
+... a limit can be added additively later"*). Client-side localStorage for a *display*
+preference (which scheme label is shown/selected in a dropdown) is a legitimate frontend-only
+concern independent of the wire contract — it does not need any server awareness.
 
-**Why this is not a blocker, and requires zero new mechanism:** this codebase already discovered and solved exactly this problem, twice, before the UI was ever conceived:
+### Does it need a new rpc at all?
 
-1. `internal/graphstore/pebble_store.go`'s `Open()` already wraps every `pebble.Open` call in a bounded retry (`openLockRetryAttempts=5`, `openLockRetryBackoff=100ms`) and classifies a lock-held failure into the exported `ErrStoreLocked` sentinel — built for exactly the CLI-vs-daemon-vs-another-CLI-invocation collision this project already has today (documented in `Open`'s doc comment: "every open site in the module... collides on Pebble's exclusive directory LOCK by design").
-2. `internal/graphstore` never holds a store open longer than one logical operation: `query.OpenAt` opens, takes one `Snapshot()`, and the caller `Close()`s when done — "one snapshot per invocation, never reused across calls" (Engine's own doc comment). `internal/indexer.Sync` does the identical open→write→close per debounced flush. **Nothing in this codebase holds a `GraphStore` handle open for a whole process's lifetime today** — which is precisely why the exclusive-lock limitation has never bitten it: collisions are always brief (a snapshot read or a batch commit), never permanent.
-3. `internal/mcp`'s `openEngine` (referenced in `Engine.UseDetector`'s doc comment) already builds a **fresh `Engine`** — meaning a fresh `graphstore.Open` — **on every single MCP tool call**, inside a long-lived server process. This is the direct precedent: a long-lived server process that must serve many requests over its lifetime already pays the "reopen Pebble per request" cost today, by design, specifically to avoid holding the exclusive lock for the process's whole lifetime.
+**Recommendation: no.** `GetPermalink` already accepts `path`+`line`+`end_line` and returns a
+computed URL — the mechanically simplest, most economical extension is an additive
+`editor_url` field on `GetPermalinkResponse` (`ui.proto:651-668`, next field number would be
+4 after `url`=1, `availability`=2, `reason`=3), computed unconditionally alongside the GitHub
+URL whenever the path resolves.
 
-**The concrete implication for `internal/ui/rpc.go`: every RPC handler must open a fresh `query.OpenAt`-equivalent snapshot per call and close it before returning — exactly like `internal/mcp`'s `openEngine`, never once per server startup.** Get this wrong (cache one `*query.Engine`/`GraphStore` for the UI server's whole lifetime, to save the reopen cost) and the UI process will hold Pebble's exclusive lock continuously, and `serve --mcp`'s watcher flushes will exhaust their 5-attempt/400ms retry budget and start hard-failing syncs the entire time the UI is running — a severe, easy-to-miss regression that would only show up under real concurrent use, not in an isolated UI-only test. This should be called out explicitly in the phase plan and covered by an integration test that runs a real `codegraph daemon` (or `serve --mcp`) alongside a real `codegraph ui` against the same store and asserts sync flushes keep succeeding.
+**The one real design risk with reusing `GetPermalink`**: its `PermalinkAvailability` enum
+(`LINKABLE` / `LINKABLE_UNVERIFIED` / `NO_LINK`) encodes GitHub-specific uncertainty (remote
+presence, commit SHA verification) that has **no analog** for an editor link — an editor URI
+is either buildable (path resolves) or not (it doesn't), with no "unverified" middle state.
+Mixing two different availability semantics onto one response risks exactly the kind of
+"same field, two meanings" ambiguity this codebase's own conventions elsewhere go out of their
+way to avoid (e.g. `NodeDefinition.detail_gathered` exists specifically so emptiness is never
+overloaded with two meanings, `ui.proto:459-472`). If planning decides the semantics really
+don't fit together, the fallback is a small, purpose-built new message
+(`GetEditorLinkResponse`) reusing `ValidateRepoRelativePath` — **still no new rpc is
+mandatory if it's folded as fields onto `GetNodeDetailResponse` or kept as a `GetPermalink`
+extension with its own always-populated field and no availability enum at all** (simplest:
+`editor_url` is just empty string when the path does not resolve, no enum needed, since there
+is no "maybe available" state to express).
 
-**Snapshot consistency for the UI specifically:** each unary RPC call gets one `Snapshot()` — a single, internally-consistent point-in-time view for that one request (Pebble snapshots are lock-free with respect to an in-flight writer, per `graphstore.Reader`'s own doc comment: "Multiple snapshots may be open concurrently with an in-flight writer; Pebble coordinates this without pinning memtables or blocking readers"). A UI request that fans out into several Engine calls internally (e.g. a rollup view that calls `Files()` then a new `FileGraph()`-shaped aggregation) should take **one** `OpenAt`/snapshot and reuse it across those calls within the single request — not reopen per sub-call — so the whole response reflects one consistent point in time, matching how `Node`'s multi-def render path already reuses one `BuildReverseAdjacency` scan across every candidate rather than rebuilding it per candidate.
+### New vs modified — BRW-11
 
-## The File/Package Rollup Projection
+| Component | New / Modified | File |
+|---|---|---|
+| `Options.EditorURIScheme` | **New** field (additive) | `internal/uiserver/server.go:61-73` |
+| `--editor` flag | **New** flag | `internal/cli/ui.go` (`newUiCmd`) |
+| `GetPermalinkResponse.editor_url` | **Modified** (additive field) | `internal/uiproto/uiv1/ui.proto:651-668` |
+| Editor-URI builder function | **New** function, mirroring `buildGitHubBlobURL` | `internal/uiserver/permalink.go` (new sibling function, same file) |
+| `GetPermalink` handler | **Modified** | `internal/uiserver/permalink.go:86-203` |
+| `uiProtoFieldNumbers` fixture | **Modified** (extended) | `internal/uiserver/readonly_test.go` |
+| UI "open in editor" affordance | **New** rendering | `web/src/lib/components/browse/SourcePane.svelte` (or wherever the permalink button already lives) |
 
-**Computed on demand, not precomputed** — this matches the maintainer's own stated rationale in `PROJECT.md` ("the rollup is largely reading edges that already exist rather than computing a new projection") and the codebase's existing performance posture.
+---
 
-**Cost shape:** this codebase already pays full-graph-scan costs on every single `Callers`/`Impact`/`Affected`/`Status --json` (`edgesByKind`) call, by explicit design — `BuildReverseAdjacency`, `BuildImplementsIndex`, and `buildContainsIndex` are each a full `IterateEdges("")` scan, built **fresh on every call, with no package-level cache and no `sync.Once`** ("a long-lived process (the future MCP server) must never serve a stale point-in-time reverse view across multiple calls"). A file/package rollup is the same shape of work — one full `IterateNodes()` scan (group by `FilePath`, derive package from path/module-key) plus one full `IterateEdges("")` scan (aggregate `(source-file, target-file, kind)` triples into counts) — and should follow the identical fresh-per-call discipline as a new `Engine.FileGraph()` method in `internal/query`, not a new cached/precomputed projection living in the store.
+## 4. BRW-10 — "where am I" breadcrumb
 
-At "a few thousand files" (the milestone's own stated scale, and in range of already-benchmarked corpora — `temporal/sdk-java` at 1223 files, `ccstatusline` at 13k files for TS/JS), this is the same O(nodes + edges) single-pass cost class this codebase's benchmarks already report favorably against TS CodeGraph (indexing throughput and query latency both measured, per `docs/BENCHMARKS.md`) — a *read* scan over an already-built graph is cheaper than the indexing pass itself. No new caching layer is warranted for v1 of this feature; if profiling after implementation shows the rollup view is measurably slower than the CLI's existing full-scan queries at comparable corpus size, the correct fix is the same one already used elsewhere in this codebase for *write*-side costs (batch writes into one `Writer`/`Commit`) — not a store-level precomputed projection, which would need its own invalidation-on-sync logic and reopen the "stale point-in-time view" risk `BuildReverseAdjacency`'s doc comment explicitly warns against.
+### The exact data already exists — via a call that is not yet wired into the file view
 
-**If a cache is added later** (e.g. because a specific UI interaction pattern proves the full scan too slow to re-run on every rollup-view open), it should be invalidated by the exact same `.sync-pending` signal `internal/ui/stream.go` already watches for live push — "cache goes stale exactly when the graph does" is a free correctness property of reusing that signal, and inventing a second staleness mechanism would be worth avoiding.
+`GetNodeDetailResponse` in `NODE_DETAIL_MODE_FILE` mode returns **only** `path` and `source`
+(`ui.proto:493-524`: *"NODE_DETAIL_MODE_FILE | path, source"*) — **no per-symbol line ranges**.
+The breadcrumb cannot be computed from this response alone.
 
-## Build-Time Architecture
+But `FileSymbols` — the 13th rpc, already shipped in Phase 5 (`readonly_test.go`'s
+plan-05-06 comment) — returns exactly the data needed:
 
-### Two independent tool-generation pipelines, both following an existing repo pattern
+```proto
+message FileSymbolsResponse {
+  repeated Node symbols = 1;   // reuses the shared Node message
+  int32 total_count = 2;
+  bool truncated = 3;
+}
+```
 
-This repository already has a working precedent for "pin an external code-generation tool without polluting the main module's dependency graph": `go.tool.mod` (task, goreleaser) and `go.tool-lint.mod` (actionlint) are isolated `-modfile`s specifically because co-locating unrelated tool dependencies in the root `go.mod` measurably bloats the main module's build list, `govulncheck` scope, and release SBOM. `protoc-gen-go`/`protoc-gen-connect-go` (and, for the TS side, `protoc-gen-es`/`protoc-gen-connect-es`, or `buf generate` driving both) should follow the **same isolation pattern** — a new tool-modfile (e.g. `go.tool-proto.mod`) rather than a root `go.mod` addition, keeping the release binary's dependency closure exactly as minimal as the "Minimal, audited dependencies" constraint requires. Note `internal/schema/graph.pb.go` was already generated once by `protoc v7.35.1` + `protoc-gen-go v1.36.11`, evidently outside any committed Taskfile target today — this milestone is a natural point to formalize that gap for both the existing storage proto and the new wire-API proto in one pass, rather than leaving proto codegen as an uncodified, manually-run step.
+And the shared `Node` message (`ui.proto:131-145`) carries `start_line = 7` and `end_line = 8`
+for every symbol. This is confirmed by `FileSymbols`'s own doc comment
+(`ui.proto:906-913`), which explicitly contrasts it with `GetNodeDetail`'s file mode: *"...
+separately from GetNodeDetail (whose file mode carries a path and a source blob only, and does
+not enumerate symbols) so that every-navigation message stays cheap (D-01 precedent)."* —
+i.e., the split between "cheap file view" and "symbol enumeration" was a **deliberate,
+already-made** architectural decision, not an oversight.
 
-Proposed Taskfile additions (mirroring the `vuln`/`vuln:selftest` blocking/self-test pairing already in `Taskfile.yml`):
+### Confirmed: `FileSymbols` is not yet consumed by the file-detail view
 
-- `task generate:proto` — regenerates `internal/schema/graph.pb.go` and the new `internal/ui/uiv1/*.pb.go` + `*_connect.go` (and drives the TS generator for `web/src/gen/`) from the committed `.proto` sources, via the isolated tool-modfile.
-- `task generate:ui` — runs the SPA's own build (`npm run build` or equivalent) producing `internal/ui/dist/`.
-- `task check:proto-drift` and `task check:dist-drift` — the two drift guards this milestone explicitly requires (see below), run in CI on every push, never as a build-time regeneration step (regeneration is a local/CI-triggered developer action; the *check* is what gates merges).
+`rg -n "fileSymbols|FileSymbols" web/src` returns exactly three hits:
+`web/src/routes/graph/+page.svelte`, `web/src/lib/gen/ui_pb.ts` (generated client), and
+`web/src/lib/components/graph/file-graph-transform.ts` — all on the `/graph` route (drilling
+into a file for its symbol list from the file/package graph view). The file-source rendering
+component, `web/src/lib/components/browse/SourcePane.svelte` (found via
+`rg -ln "GetNodeDetail|getNodeDetail" web/src`, alongside `web/src/routes/browse/+page.svelte`),
+does **not** currently call `FileSymbols`.
 
-### Drift guards that satisfy rule `84d1gfpywd` (positive assertion, not "nothing bad appeared")
+### Recommendation: no backend work at all — reuse `FileSymbols`, purely a frontend integration
 
-This repository already has two directly-analogous, battle-tested precedents to copy the *shape* of, not just the intent:
+This directly answers the milestone's open question ("whether a `FileSymbols`-style call must
+be reused") — yes, and it is a pure reuse, zero proto/Engine changes:
+1. When the browse/file view opens a file in `NODE_DETAIL_MODE_FILE`, also call `FileSymbols`
+   for that path (a second, parallel rpc call — the same two-call pattern the `/graph` route
+   already exercises for its own file drill-down).
+2. Client-side, on scroll, compute the containing symbol by interval containment over each
+   returned `Node.start_line`/`end_line` against the current scroll position — pure frontend
+   logic, no new wire shape.
+3. `MaxFileSymbols` (referenced in `ui.proto:910`, `internal/query.Engine.FileSymbols`,
+   file `internal/query/filesymbols.go`) already caps and truncates server-side — the
+   breadcrumb calculation should treat a `truncated=true` response as "breadcrumb may be
+   incomplete for very large files" rather than erroring.
 
-1. **`resources_schema_drift_test.go`** (`GUARD-01/02`) — derives every claim from its real source (never hand-typed), and — critically — the phase that shipped it was explicit that "ungated resource content is worse than none," with a companion non-vacuity requirement: the guard must be demonstrated red against a real mutation before being trusted, and the review process for it found and fixed a real doc-drift bug the first time it ran for real.
-2. **`TestGoldenScenarioCountIsExact` / `TestReFrozenGoldensValid`** (`FIXT-03/07`) — "sound only as a *pair*": one guard pins enumeration↔constant, the other pins enumeration↔filesystem; **neither alone suffices**, and both are individually zero-guarded (i.e., each asserts a nonzero/expected count before trusting the comparison, so an empty enumeration can't make the check pass vacuously).
-3. **`import_graph_test.go`'s `foundGraphstoreImporter` sanity check** — after scanning for a forbidden import and finding none, the test does **not** stop there; it asserts that the scan *itself* found at least the one known-legitimate importer (`internal/graphstore` importing `pebble/v2`), so a scan that silently stopped resolving the target import path entirely (e.g. after a refactor) fails loudly instead of passing for the wrong reason.
+### New vs modified — BRW-10
 
-Both of this milestone's required guards should be built to the same shape:
+| Component | New / Modified | File |
+|---|---|---|
+| Breadcrumb component + scroll-position tracking | **New** | `web/src/lib/components/browse/SourcePane.svelte` (or a new sibling component) |
+| `FileSymbols` client call wiring | **Modified** (new call site, existing rpc) | `web/src/routes/browse/+page.svelte` |
+| Everything backend (`internal/query`, `internal/uiserver`, `ui.proto`) | **Untouched** | — |
 
-**`dist_drift_test.go`** (SPA source ↔ committed `dist/`):
-- Compute a deterministic content hash over the SPA source tree (`web/src/**`, `web/package.json`, lockfile — explicitly excluding `node_modules/` and `dist/` itself).
-- Compare against a hash recorded in a small sidecar the build writes alongside `dist/` (e.g. `internal/ui/dist/.source-sha256`).
-- **Positive assertion, not just equality:** before trusting a match, assert the computed source-file count is above a floor (e.g. `> 0`, or a known minimum matching the SPA's expected file count) — a glob that silently matched zero files (e.g. after a directory rename) must not produce a vacuous "hash of nothing equals hash of nothing" pass.
-- **Non-vacuity proof required before trusting it green:** mutate one SPA source file without regenerating `dist/`, run the guard, confirm it goes red naming the specific drift, then revert — the same "demonstrated red against a confirmed-applied mutation" standing rule this repo already applies to every other gate (per `PROJECT.md`'s Key Decisions table).
+This is the cheapest of the four UI follow-ons in real engineering terms, and the ROADMAP's
+own "ordered by increasing scope" placement (BRW-11, BRW-10, HLT-04, GRF-06) is consistent
+with this finding only if BRW-10 is read as "smaller than HLT-04/GRF-06" rather than smaller
+than BRW-11 — worth flagging to the roadmapper: on this research, BRW-10 is architecturally the
+**smallest** item in the whole follow-through set (frontend-only), smaller than BRW-11 (which
+touches `Options`, a new flag, and a proto field even in the reuse-`GetPermalink` design).
 
-**`proto_drift_test.go`** (Protobuf codegen ↔ `.proto` definitions):
-- Regenerate `*.pb.go`/`*_connect.go` (and, for full coverage, the TS output too, if CI has the toolchain for it) into a temp directory from the committed `.proto` files, using the pinned tool-modfile toolchain.
-- Byte-diff (or a normalized diff tolerant only of a generator-version comment line, matching the existing `graph.pb.go` header's own `protoc-gen-go v1.36.11` / `protoc v7.35.1` version-stamp convention) against the committed generated files.
-- **Positive assertion:** before diffing, assert `len(regeneratedFiles) == len(committedFiles) && len(regeneratedFiles) > 0` — a broken tool invocation that silently emits zero files (wrong working directory, missing plugin on `PATH`) must fail loudly as "generated nothing," never pass as "no diff found."
-- **Non-vacuity proof:** hand-edit one committed generated file (a field name, a comment) without touching the `.proto`, confirm the guard goes red, revert.
+---
 
-## New vs. Modified Components — Explicit
+## 5. 999.2 — tmux real-PTY e2e harness
 
-**New:**
-- `internal/ui/` package (server, RPC handlers, stream handler, asset embed, archtest)
-- `internal/cli/ui.go` (`newUICmd`, registered in `root.go`'s `AddCommand`)
-- `proto/codegraph/ui/v1/*.proto` + generated `internal/ui/uiv1/*.pb.go`/`*_connect.go`
-- `web/` (SPA source, Svelte + shadcn-svelte) + `internal/ui/dist/` (committed build output)
-- `internal/query/filegraph.go` (new `Engine.FileGraph()`-shaped method)
-- A new isolated tool-modfile for protobuf/connect codegen tooling (mirroring `go.tool.mod`)
-- Two Taskfile drift-guard targets + their CI wiring
+### There is no existing precedent for building/exec'ing the release binary in tests
 
-**Modified (additive only — no existing exported behavior changes):**
-- `internal/query/node.go` — new `NodeDetail`-shaped exported method, extracted from `Node()`'s existing fetch pipeline
-- `internal/query/explore.go` — new `ExploreResult`-shaped exported method, extracted from `Explore()`'s existing gather pipeline
-- `internal/cli/root.go` — one new line adding `newUICmd()` to `AddCommand(...)`
-- `Taskfile.yml`, `.github/workflows/ci.yml` — new generate/check targets and jobs
-- `internal/mcp/server.go` — CR-01 `pendingWriter` fix (unrelated bug, folded into this milestone per `PROJECT.md`'s stated rationale: "this milestone adds a second long-lived connection-bearing surface, so the existing one being correct matters more, not less")
+Confirmed by direct search: `rg -n "go build -o" internal -g '*_test.go'` returns **zero
+hits**, and `rg -n "tmux"` across the whole repository (`.go`, `.yml` files) returns **zero
+hits**. The only `exec.Command` usage in `internal/cli/*_test.go` is `git`
+(`githooks_test.go:25`, `notice_test.go:30`) — never the `codegraph` binary itself. This
+confirms the milestone context's framing directly: this is genuinely new infrastructure, not
+an extension of an existing exec-based test.
 
-**Explicitly unmodified:**
-- `internal/graphstore` (no new methods, no `ReadOnly` mode — not needed, see the Pebble finding)
-- `internal/daemon`, `internal/watch` (the UI reuses the existing `.sync-pending` signal rather than adding a hook)
-- `internal/schema`'s `graph.proto`/`graph.pb.go` (the storage format; the UI gets its own separate proto package)
-- Every existing markdown-rendering path (`render_markdown.go`, `RenderNode`, `RenderNodeMultiDef`, `RenderExplore`) and every frozen golden test that depends on it
+### Why the existing suite structurally cannot cover this (the ROADMAP's own stated reason)
 
-## Suggested Build Order
+The existing "piped integration tests" in `internal/cli` invoke Cobra commands **in-process**
+against buffered stdin/stdout — this never allocates a real pty, so escape-sequence
+handshakes (DECRQM capability probes) and alternate-screen entry/exit (which only a real
+terminal driver honors) are invisible to them. `ROADMAP.md`'s own Phase 999.2 scope entry
+names the exact two bugs (G-07-1, G-07-2) that both "the full piped automated suite AND a deep
+multi-agent code review missed" for precisely this reason.
 
-1. **Engine seam extraction** (`NodeDetail`, `ExploreResult` in `internal/query`) — no dependency on anything else in this milestone; unblocks all UI read paths; lowest risk (pure extraction of already-existing logic) and highest leverage (everything downstream needs it). Should land and be independently tested (including a regression check that `Node()`/`Explore()`'s markdown output is unchanged) before any proto/UI work starts.
-2. **Protobuf schema + codegen tooling** (`proto/codegraph/ui/v1/*.proto`, the isolated tool-modfile, `task generate:proto`, and the `proto_drift_test.go` guard) — can proceed in parallel with step 1 once the Engine's structured shapes from step 1 are known well enough to model the wire messages against them; the drift guard itself has no dependency on step 1 and can be built and proven non-vacuous immediately against the *existing* `internal/schema/graph.proto` before the new UI proto even exists, de-risking the guard mechanism itself early.
-3. **`internal/ui` server skeleton** (`server.go`, `rpc.go` for the already-structured 7 methods, loopback bind, Origin/Host validation, `newUICmd`) — depends on 1 and 2. This is the first point at which `codegraph ui` does anything real (serves Connect RPCs for search/callers/callees/impact/affected/files/status) and is a natural first UAT checkpoint, even before the SPA or `NodeDetail`/`FileGraph`/streaming exist.
-4. **`NodeDetail` + `ExploreResult` RPC wiring** — depends on step 1's structs and step 3's server skeleton.
-5. **File/package rollup** (`Engine.FileGraph()` + its RPC handler) — depends on step 3; can proceed in parallel with step 4 since it's a new, independent Engine method with no shared state.
-6. **Live push** (`stream.go`, fsnotify-on-sidecar, fan-out registry, streaming RPC + proto) — depends on step 3's server skeleton and step 2's proto tooling; should be built and integration-tested **specifically alongside a real running `serve --mcp`/`codegraph daemon`** (per the Pebble-lock finding above) rather than in isolation, since the property it must not violate (never holding the store open) is only observable under real concurrent multi-process use.
-7. **SPA build + `dist/` embed + `dist_drift_test.go`** — depends on 2 (needs the generated `connect-es` TS client) and benefits from 3-6 being far enough along to build real UI screens against; the drift guard itself, like the proto one, can be built and proven non-vacuous as soon as *any* committed `dist/` exists, even a placeholder.
-8. **CR-01 fix** (`internal/mcp/server.go` `pendingWriter`) — no dependency on any of the above; can be done at any point, but is lowest-risk to land *early* (it's an isolated, well-understood bug in an unrelated file) so it doesn't get rushed at the end of the milestone alongside integration-heavy UI work.
+### Where it should live
 
-Step 8 aside, the critical path is **1 → 2 → 3 → {4, 5} → 6 → 7**, with 2 and 1 parallelizable, and 4/5 parallelizable once 3 lands.
+No `//go:build` tag convention exists in this repo for anything but OS gating today
+(`internal/daemon/stop_posix.go: //go:build !windows`, `procstart_linux.go: //go:build linux`,
+`procstart_other.go: //go:build !linux` — `rg -n "^//go:build" internal`). A new **feature**
+build tag (e.g. `//go:build tmux`) would be the first of its kind in this codebase — this is
+worth flagging explicitly to whoever plans it, since it is establishing a new convention, not
+following one.
 
-## Anti-Patterns to Avoid
+**Recommended location**: a new package, e.g. `test/tmux/` (top-level, alongside no existing
+sibling — there is currently no top-level `test/` directory; verify at plan time whether one
+should be introduced or whether this belongs under `internal/tmuxtest` following the
+`internal/`-only convention every other test package in this repo uses). Given every existing
+test package in this repo lives under `internal/`, favor `internal/tmuxtest/` unless a
+deliberate decision is made to break that pattern for e2e-only scope.
 
-### Anti-Pattern 1: Caching a long-lived `*query.Engine`/`GraphStore` in the UI server
-**What people do:** hold one `Engine`/`GraphStore` handle open for the whole `codegraph ui` process lifetime, to avoid the per-request `pebble.Open` cost.
-**Why it's wrong:** Pebble's exclusive directory lock is held for as long as the handle is open (verified: [cockroachdb/pebble#1583](https://github.com/cockroachdb/pebble/issues/1583)), so this would permanently starve any concurrently-running `serve --mcp`/`codegraph daemon` sync flush, exhausting `graphstore.Open`'s existing 5-attempt retry budget and turning transient collisions into permanent failures for as long as the UI runs.
-**Instead:** open fresh per RPC call (per logical request, reusing one snapshot across sub-calls within that request), exactly like `internal/mcp`'s existing `openEngine` convention.
+### How it obtains the built binary
 
-### Anti-Pattern 2: Re-implementing depth/limit validation in `internal/ui`
-**What people do:** add client-request bounds-checking in the Connect handler before calling into the Engine, "for defense in depth."
-**Why it's wrong:** `internal/query` already owns and enforces `validateDepth`/`clampDepth`/`clampAffectedDepth`/`validateLimit`/`MaxLimit` server-side; a second copy in `internal/ui` is a driftable duplicate of a rule the Engine already guarantees for every caller (CLI, MCP, and now UI).
-**Instead:** pass the client-supplied `depth`/`limit` straight through to the existing Engine methods and trust their existing validation; the UI's proto request messages need no bespoke bounds beyond what protobuf's own scalar types provide.
+No existing test builds the binary via `go build`. The harness needs a `TestMain` (or a
+`sync.Once`-guarded helper) that runs `go build -o <tmp>/codegraph .` once per test binary
+invocation, or — more in keeping with this repo's CI-first discipline (GoReleaser owns the
+release build) — consumes a path to an **already-built** binary passed via an environment
+variable set by the CI job (e.g. `CODEGRAPH_BIN`), falling back to a local `go build` for
+local development. This mirrors the project's own stated preference (v0.5.0 scope: "the
+release pipeline is now one `goreleaser release` invocation") for not duplicating build logic.
 
-### Anti-Pattern 3: Threading verbatim source text through list/rollup responses
-**What people do:** attach full file source to every `Node` message so the client "has everything in one round trip."
-**Why it's wrong:** balloons response size for search/rollup views that never need source, and duplicates the exact anti-pattern this project's own storage design already rejected — the store itself never persists source text; it's read fresh from disk on demand (`D-05a`).
-**Instead:** carry only `SourceSpan` in list-shaped responses; fetch verbatim source lazily via a dedicated call when a symbol is actually opened.
+### How CI provides tmux
 
-### Anti-Pattern 4: A precomputed/cached rollup projection with its own invalidation logic
-**What people do:** pre-compute the file/package graph at sync time and store it as a new record kind, to make the rollup view "instant."
-**Why it's wrong:** invents a second staleness/invalidation mechanism the project doesn't need yet, contradicts the maintainer's own stated rationale for choosing the rollup approach ("reading edges that already exist rather than computing a new projection"), and repeats the exact anti-pattern `BuildReverseAdjacency`'s doc comment already warns against for a long-lived process ("must never serve a stale point-in-time... view across multiple calls").
-**Instead:** compute on demand, fresh per call, following the same discipline every other multi-edge-scan Engine method already uses; revisit only with a measured performance problem, and invalidate via the same `.sync-pending` signal already in use for live push if a cache is ever added.
+`.github/workflows/ci.yml`'s job list (`rg -n "^  [a-zA-Z0-9_-]+:$"`) currently has: `test`,
+`govulncheck`, `tool-vuln`, `reproducibility`, `perf-regression`, `actionlint`,
+`transcript-freeze`, `goreleaser-check`. None install `tmux`. A new job (or a new step within
+`test`) would need `apt-get install -y tmux` (or the `ubuntu-latest` runner's package
+manager equivalent) — cheap, and the ROADMAP scope already anticipates this ("gate the suite
+behind a build tag / CI job that has tmux available; skips cleanly elsewhere").
+
+### How it relates to the existing piped integration tests
+
+Not a replacement — an **additional rung**. `ROADMAP.md`'s own framing: *"the missing rung
+between the piped never-hang/byte-identity integration tests (necessary, TTY-blind) and manual
+human UAT (thorough, unautomated)."* The existing `internal/cli` piped suite stays exactly as
+is; this is a wholly new, orthogonal test surface that exercises the **same built binary**
+through a **different I/O path** (a real pty via tmux send-keys/capture-pane) rather than a
+buffered `bytes.Buffer`.
+
+### Build-order implication (see §7's global ordering)
+
+The ROADMAP explicitly states this "lands **before** the UI work so that work has a real-
+terminal rung" — but note this refers to the *existing* TUI surfaces (daemon picker,
+install/uninstall checkbox picker), not to the new `codegraph ui` web surface, which has no
+terminal-rendering component at all and is therefore unaffected by tmux ordering.
+
+### New vs modified — 999.2
+
+| Component | New / Modified | File |
+|---|---|---|
+| tmux harness package | **New** | `internal/tmuxtest/` (recommended) or `test/tmux/` |
+| Binary-build/locate helper | **New** | same package |
+| `//go:build tmux` tag | **New convention** — first feature build tag in this repo | same package |
+| CI job/step installing tmux | **New** | `.github/workflows/ci.yml` |
+| `Taskfile.yml` `test:tmux` leg | **New** task; **not** added to the `test:` wrapper by default (see `TestTaskfileWrapperIsSerial`, `internal/upgrade`, which set-equality-guards the wrapper's leg list — a new leg must be deliberately added there or deliberately left out, either way a conscious edit) | `Taskfile.yml` |
+
+---
+
+## 6. Guard hardening — five items, each with exact source location
+
+### 999.4 — `CheckRegression` current-metrics positivity
+
+**Exact location**: `internal/bench/regression.go:110-111`:
+```go
+if baseline.PeakRSSBytes <= 0 {
+    return fmt.Errorf("bench: invalid baseline: PeakRSSBytes must be positive, got %d", baseline.PeakRSSBytes)
+}
+```
+This is the **only** positivity check in the function — confirmed by `rg -n "PeakRSSBytes|Throughput" internal/bench/*.go`, which shows no equivalent check on `current`. `current.PeakRSSBytes`,
+`current.FilesPerSec` (and any other current-side metric consumed by the relative-delta and
+absolute-ceiling checks at `regression.go:115-133`) are unguarded.
+
+**Non-vacuous replacement structurally**: mirror the existing baseline check exactly, on
+`current`, naming the degenerate field — `regression.go` already establishes the pattern (the
+GOOS/GOARCH and Runner checks earlier in the same function, `:51-59`, `:74-...`, are
+similarly named, field-specific refusals). Demonstrated RED per the repo's standing rule: a
+test constructing `current.PeakRSSBytes = 0` with an otherwise-matching, non-regressing frame,
+asserting `CheckRegression` returns a non-nil error naming `PeakRSSBytes` — currently this
+returns `nil` (the exact bypass `10-SECURITY.md` and code-review finding WR-06 already
+reproduced).
+
+### T-01-18 — `internal/query` dependency-direction archtest
+
+**Reusable shape already exists**: `internal/graphstore/archtest/import_graph_test.go` (full
+file read above) is a **direct, one-for-one template**:
+```go
+cfg := &packages.Config{
+    Mode:  packages.NeedImports | packages.NeedName | packages.NeedDeps,
+    Tests: true,
+}
+pkgs, err := packages.Load(cfg, "github.com/seanb4t/codegraph-go/...")
+```
+plus a **non-vacuity positive control** (`archtest`'s own: *"if internal/graphstore itself no
+longer imports pebble/v2 ... the check above is vacuously true for the wrong reason ... this
+test cannot verify enforcement"*) — the todo's own suggested fix already names the exact same
+pattern with `google.golang.org/protobuf` (via `internal/schema`) as the positive control.
+
+**Recommended location**: a new sibling test file — either a new `internal/query/archtest/`
+subpackage (mirroring `internal/graphstore/archtest`'s own placement one level down from the
+package it guards) or directly inside `internal/query` as `archtest_test.go`. Given
+`internal/graphstore/archtest` is a **separate package** specifically so the archtest itself
+cannot accidentally import the thing it's checking, the same isolation argument favors a
+separate `internal/query/archtest/` package over a same-package test file.
+
+**Assertions**: `go list -deps` (or `packages.Load` with `NeedDeps`) over
+`internal/query`'s package path contains zero entries for `connectrpc.com/connect` and zero
+for `internal/uiproto` (any subpackage), with `google.golang.org/protobuf` asserted present as
+the positive control (arriving legitimately via `internal/schema`).
+
+### `release:dry-run-signed` additions-only diff guard
+
+**Exact location, verified at HEAD** (line numbers differ from the todo file, which predates
+several unrelated Taskfile edits — cite the live location, not the stale one):
+- `Taskfile.yml:1771` — task `release:dry-run-signed:`
+- `Taskfile.yml:1841` — the awk anchor: `/^      - "sign-blob"$/ { print keyline }`
+- `Taskfile.yml:2225` / `:2381` — the second consumer, `release:rehearse-notarize:`, reusing
+  the identical anchor (confirmed by the task's own comment at `:2367-2368`: *"the SAME awk
+  anchor and additions-only diff guard `release:dry-run-signed` already uses"*).
+
+**Non-vacuous replacement**: add a positive assertion immediately after the awk injection in
+both tasks — count the injected `--key=` lines and hard-fail if the count is zero, **before**
+running the additions-only diff. Demonstrated RED by deliberately re-indenting the `sign-blob`
+args block in a generated copy (not the committed file) and observing the new assertion fail
+loudly rather than the diff silently reporting zero additions.
+
+### `post-release-verify.yml` event-aware conclusion guard
+
+**Exact locations**: `.github/workflows/post-release-verify.yml:303`, `:408` (job-level `if:`
+guards), cross-checked by `internal/upgrade/release_workflow_shape_test.go:1369`
+(`TestPostReleaseJobsDeclareCheckoutPolicy`), which enumerates the same file's jobs via
+`postReleaseCheckoutShapes` (`release_workflow_shape_test.go:1306-1325`) but — confirmed by
+reading `fullWorkflowJob`'s struct definition (`:1042-1046`) — **carries no `If` field at
+all**: `Env`, `Permissions`, `Steps` only. This directly confirms the todo's claim: no
+existing parser even sees the `if:` guard, let alone asserts it.
+
+**Non-vacuous replacement, reusing existing scaffolding**: add `If string \`yaml:"if"\`` to
+`fullWorkflowJob` (additive struct field, `release_workflow_shape_test.go:1042-1046`), extend
+`postReleaseCheckoutShape` (`:1297-1302`) with the same field, and extend
+`postReleaseCheckoutShapes` (`:1306-1325`) to capture it — the exact wrapper
+`TestPostReleaseJobsDeclareCheckoutPolicy` (`:1582`) already iterates every job and classifies
+it (`latestVerifierJobIDs`/`releaseMatchedTestJobIDs`, referenced at `:1593-1596`); add a new
+assertion in that same loop requiring every job's `If` to contain the verbatim disjunct
+`github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'`.
+Pair with a non-vacuity companion mirroring
+`TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError` (`:1277-1285`): an empty/malformed
+document must error, never silently pass.
+
+### `TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets`
+
+**Exact location**: `internal/upgrade/release_workflow_shape_test.go:1565-1574`. Confirmed
+tautological by direct read:
+```go
+func TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets(t *testing.T) {
+    releasePleaseAppSecretNames := []string{"APP_ID", "APP_PRIVATE_KEY"}
+    for _, tapName := range homebrewTapCredentialNames[:2] {
+        for _, rpName := range releasePleaseAppSecretNames {
+            if tapName == rpName { t.Errorf(...) }
+```
+Both sides are in-test constants (`homebrewTapCredentialNames` at `:1366-1370`); the function
+reads zero workflow files.
+
+**Non-vacuous replacement, reusing existing scaffolding**: `findHomebrewTapCredentialReferences`
+(`:1382-1415`) already exists and is exercised by the sibling test
+`TestHomebrewTapTokenScopedToReleaseJob` (`:1450-1558`) — it decodes real workflow files
+(`decodeFullWorkflowDoc`, `:1059-1069`) and finds actual secret-name references at
+env:/with: scope. The fix: read `release.yml`'s actual referenced secret names (via this
+existing walker, filtered to the release job) and `release-please.yml`'s actual referenced
+secret names (the same walker, parameterized with `releasePleaseAppSecretNames`), then assert
+the two **observed, file-derived** sets are disjoint — never comparing two hardcoded literals
+against each other. Add the same positive-floor discipline
+`TestHomebrewTapTokenScopedToReleaseJob` already documents (`:1495-1509`, rule `84d1gfpywd`):
+both sets must be non-empty before the disjointness assertion is trusted. Demonstrated RED by
+pointing `release.yml`'s mint at `APP_ID`/`APP_PRIVATE_KEY` (the todo's own suggested
+mutation).
+
+### New vs modified — guard hardening (all five)
+
+Every item in this section is a **modification** to an existing file — no new packages, no new
+production code paths, purely test/CI-config hardening. This is the cheapest set in the whole
+milestone in terms of surface area touched, though not necessarily in effort (each requires a
+genuine RED demonstration per this repo's `84d1gfpywd` rule, not just a code change).
+
+| Item | File(s) modified |
+|---|---|
+| 999.4 | `internal/bench/regression.go`, `internal/bench/regression_test.go` |
+| T-01-18 | New file: `internal/query/archtest/import_graph_test.go` (or in-package) |
+| `dry-run-signed` guard | `Taskfile.yml` (both `release:dry-run-signed:` and `release:rehearse-notarize:`) |
+| `post-release-verify` guard | `internal/upgrade/release_workflow_shape_test.go` |
+| Tap-secret distinctness | `internal/upgrade/release_workflow_shape_test.go` |
+
+---
+
+## 7. Suggested build order
+
+Ordering rationale, not a rigid phase-count prescription — the roadmapper decomposes phases;
+this is the dependency graph that should drive that decomposition.
+
+### Wave 0 — guard hardening (§6), fully independent, do first
+
+All five guard-hardening items touch disjoint files, have zero dependency on each other or on
+anything else in this milestone, and each is small (test/CI-config only). They can run in
+parallel across sub-agents/plans and should land **before** any UI work, matching the
+ROADMAP's own stated rationale ("every item in it already has a written RED demonstration in
+mind"). T-01-18 in particular should land early since it **governs** how the HLT-04
+discovery-exclusion helper is allowed to be wired (internal/query must not gain a new
+dependency edge toward internal/indexer without violating the same invariant the archtest
+checks the other direction — verify at plan time whether the archtest should also assert
+`internal/query -> internal/indexer` is forbidden or merely `internal/query -> connectrpc`/
+`internal/uiproto`; the todo's stated scope is the latter only).
+
+### Wave 1 — 999.2 tmux harness, before any TUI-adjacent verification
+
+Genuinely new infrastructure (new package, new build tag, new CI job) with no dependency on
+Wave 0 or on any of the UI follow-ons — it exercises the *terminal* UI (daemon/install
+pickers), not the *web* UI. Can run in parallel with Wave 0. The ROADMAP places it "before the
+UI work" for terminal-rung reasons that do not extend to `codegraph ui` (a browser surface with
+no pty involvement) — sequencing it before §§1-4 is about narrative/CI-availability
+convenience, not a hard dependency.
+
+### Wave 2 — UI follow-through, ordered by real dependency and scope, not the ROADMAP's listed order
+
+The ROADMAP lists BRW-11, BRW-10, HLT-04, GRF-06 "by increasing scope." This research finds a
+different real ordering by scope and risk:
+
+1. **BRW-10 (breadcrumb)** — smallest by a wide margin: **zero backend changes**, pure
+   frontend reuse of an already-shipped rpc (`FileSymbols`). No proto edit, no new Engine
+   method, no new fixture entries. Should go first regardless of the ROADMAP's listed order,
+   since it has no risk of blocking anything else and can be demonstrated complete fastest.
+2. **BRW-11 (editor handoff)** — small: one new `Options` field, one new CLI flag, one
+   additive proto field on an existing message (`GetPermalinkResponse`), reusing
+   `ValidateRepoRelativePath` entirely. The one open design question (whether the
+   `PermalinkAvailability` enum semantics fit an editor link) should be resolved at discuss-
+   phase time before planning, since it changes whether this is "add one field" or "add one
+   small new message."
+3. **HLT-04 (coverage denominator)** — medium: genuinely new discovery-time logic
+   (`internal/indexer` or a query-local duplicate), a new Engine method, and an additive
+   `GetHealthResponse` field/message. Depends on T-01-18 (Wave 0) if the new discovery-
+   exclusion helper is placed in a way that could create a forbidden dependency edge —
+   verify the archtest's scope covers this before writing the helper.
+4. **GRF-06 (community clustering)** — largest of the four: a new graph-partitioning
+   algorithm (a real algorithmic choice — label propagation, Louvain, etc. — not just wiring),
+   plus additive fields on `FileGraphNode`/`FileGraphResult`/their proto projections, plus
+   frontend rendering (grouping/coloring by community) on top of the `/graph` view that
+   already exists. This is also the item most likely to hit the guava-scale rendering ceiling
+   the milestone context explicitly warns about (v0.12.0's GRF-01 threshold failure on a
+   3,233-node view) — GRF-07 (whole-symbol graph) was explicitly parked for exactly this
+   reason, and community clustering adds visual complexity to the same file-graph view GRF-01
+   already found expensive. Budget a measured-render-time checkpoint for this item
+   specifically, mirroring GRF-01's own "committed the threshold before measuring" discipline.
+
+### Wave 3 — DOCS-05 (self-authored CLI reference + drift guard)
+
+Independent of everything above, but logically last since it should document the **final**
+flag surface, including any new flags §3 (BRW-11's `--editor`) introduces. The exact reusable
+shape is `internal/cli/flag_parity_test.go` (deleted at v0.11.0, commit `5139e60c`, git-log
+confirmed) — resurrect its `newRootCmd()` + `cmd.Flags().VisitAll` recursive walk +
+substring-presence-in-doc pattern verbatim, retargeted from `docs/FLAG-PARITY.md` at
+`internal/cli/flag_parity_test.go:16` to a new `docs/CLI-REFERENCE.md`. This is a fully
+proven, previously-shipped pattern — the lowest-risk item in the whole milestone.
+
+### Summary table
+
+| Wave | Items | Parallelizable within wave | Blocks |
+|---|---|---|---|
+| 0 | 999.4, T-01-18, dry-run-signed guard, post-release-verify guard, tap-secret test | Yes, all 5 | Wave 2's HLT-04 (via T-01-18) |
+| 1 | 999.2 tmux harness | N/A (one item) | Nothing downstream (terminal-only) |
+| 2a | BRW-10 | N/A | Nothing |
+| 2b | BRW-11 | N/A | Nothing (independent of 2a) |
+| 2c | HLT-04 | Depends on Wave 0 (T-01-18) | Nothing |
+| 2d | GRF-06 | Independent, but budget render-time risk | Nothing |
+| 3 | DOCS-05 | Should follow Wave 2 (documents its flags) | — |
+
+---
 
 ## Sources
 
-- `internal/query/engine.go`, `node.go`, `traverse.go` (this repo, read directly, HIGH confidence) — `OpenAt`/`Engine` seam, fresh-per-call discipline, `BuildReverseAdjacency`/`BuildImplementsIndex` conventions
-- `internal/mcp/server.go`, `resources.go` (this repo, read directly, HIGH confidence) — `openEngine`-per-call precedent, `go:embed` precedent, `pendingWriter`/CR-01 bug location
-- `internal/graphstore/store.go`, `pebble_store.go`, `open_lock_test.go` (this repo, read directly, HIGH confidence) — `GraphStore`/`Reader`/`Writer` interfaces, `Open`'s bounded-retry/`ErrStoreLocked` mechanism, snapshot semantics
-- `internal/daemon/daemon.go`, `internal/query/status.go` (this repo, read directly, HIGH confidence) — `.sync-pending` sidecar mechanism (`staleSidecarName`), `flush`'s open/close-per-invocation pattern
-- `internal/schema/graph.proto`, `graph.pb.go` (this repo, read directly, HIGH confidence) — existing protobuf conventions (additive-only, reserved ranges), confirms `protoc`/`protoc-gen-go` codegen is already in use but not yet Taskfile/CI-formalized
-- `go.tool.mod`, `go.tool-lint.mod`, `Taskfile.yml` (this repo, read directly, HIGH confidence) — isolated tool-modfile pattern for external codegen/lint tools, `vuln`/`vuln:selftest` blocking/self-test pairing precedent
-- `internal/graphstore/archtest/import_graph_test.go`, `internal/mcp/resources_schema_drift_test.go`, `internal/cli/present/archtest/charm_cgo_test.go` (this repo, read directly, HIGH confidence) — drift-guard and confinement-guard shapes, non-vacuity/self-test conventions satisfying rule `84d1gfpywd`
-- `.planning/PROJECT.md` (this repo, read directly, HIGH confidence) — milestone scope, maintainer directives on ConnectRPC/Svelte/embed/loopback-only, rollup rationale
-- [cockroachdb/pebble#1583](https://github.com/cockroachdb/pebble/issues/1583) (web, MEDIUM-HIGH confidence — direct GitHub issue text, cross-checked against this repo's own observed lock-retry behavior) — **VERIFIED**: `pebble.Open` acquires an exclusive lock regardless of `ReadOnly`; no multi-process 1-writer/N-reader mode exists
-- `connectrpc/connect-go` (Context7, MEDIUM confidence, official docs) — `NewXHandler` returns `(path, http.Handler)` mountable on a plain `http.ServeMux`; `NewServerStreamHandler` shape
-- General Go `http.ServeMux`/SPA-fallback pattern (web, LOW-MEDIUM confidence, several independent tutorial sources agreeing on the same shape) — longest-pattern-match naturally prefers a registered RPC path prefix over a catch-all SPA fallback with no extra ordering logic required
+Every claim above is either a direct quote from a file at this repository's HEAD (2026-09-08,
+tag `v0.12.0`, commit `17e88d67`) verified via `Read`/`rg`/`git log`, or is explicitly labelled
+as inference. No external documentation lookup was needed or performed — this is a pure
+codebase-integration research task, and the source of truth is the repository itself.
+
+- `internal/query/engine.go`, `internal/query/status.go`, `internal/query/traverse.go` — Engine surface, `Status()`'s filesystem-degrade precedent, `FileGraph()`'s fresh-per-call cycle detection
+- `internal/indexer/discover.go`, `internal/indexer/extract.go`, `internal/indexer/resolve.go` — discovery/extraction exclusion paths, existing `File.Errors` persistence
+- `internal/schema/graph.proto` — on-disk schema, reserved annotation ranges, additive-only discipline
+- `internal/uiproto/uiv1/ui.proto` — wire schema, all 14 rpcs, message field numbers
+- `internal/uiserver/readonly_test.go` — `mutatingVerbs`, `wantUIServiceMethods`, `uiProtoFieldNumbers` fixture mechanics
+- `internal/uiserver/permalink.go`, `internal/uiserver/server.go`, `internal/uiserver/handlers.go` — GetPermalink precedent, Options shape, mapper-function convention
+- `internal/cli/ui.go` — `codegraph ui` command, flag registration
+- `internal/bench/regression.go` — `CheckRegression` positivity gap
+- `internal/graphstore/archtest/import_graph_test.go` — reusable archtest shape for T-01-18
+- `Taskfile.yml` — `release:dry-run-signed`, `release:rehearse-notarize`, `test:` wrapper, `TestTaskfileWrapperIsSerial` reference
+- `internal/upgrade/release_workflow_shape_test.go` — `fullWorkflowJob`/`fullWorkflowDoc` parsing shape, `TestPostReleaseJobsDeclareCheckoutPolicy`, `TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets`, `findHomebrewTapCredentialReferences`
+- `.github/workflows/ci.yml`, `.github/workflows/post-release-verify.yml` — job lists, conclusion guard locations
+- `git log --oneline --all -- docs/FLAG-PARITY.md internal/cli/flag_parity_test.go` + `git show v0.10.0:internal/cli/flag_parity_test.go` — DOCS-05's reusable prior-art
+- `web/src/routes/{health,graph,browse}/`, `web/src/lib/components/browse/SourcePane.svelte` — confirmed frontend consumption gaps for BRW-10/HLT-04/GRF-06
+- `.planning/PROJECT.md` — milestone goal, target features, key context
+- `.planning/todos/pending/*.md` — exact guard descriptions and threat refs for §6
+- `.planning/ROADMAP.md` — Backlog 999.2 and 999.4 verbatim scopes

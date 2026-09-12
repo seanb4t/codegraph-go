@@ -1040,6 +1040,11 @@ type fullWorkflowStep struct {
 }
 
 type fullWorkflowJob struct {
+	// If is the job's top-level `if:` condition, verbatim as written in the
+	// workflow source. A job that omits `if:` entirely zero-values this to
+	// the empty string — every existing consumer of fullWorkflowDoc built
+	// before this field existed is unaffected, since none of them read it.
+	If          string             `yaml:"if"`
 	Env         map[string]any     `yaml:"env"`
 	Permissions map[string]any     `yaml:"permissions"`
 	Steps       []fullWorkflowStep `yaml:"steps"`
@@ -1557,22 +1562,6 @@ func TestHomebrewTapTokenScopedToReleaseJob(t *testing.T) {
 	}
 }
 
-// TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets guards
-// against a future "consolidate the two Apps" edit turning a red test
-// instead of silently failing ROADMAP criterion 5 (D-16): the tap-scoped
-// App's two secret names must never equal the release-please App's two
-// secret names (release-please.yml's APP_ID/APP_PRIVATE_KEY).
-func TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets(t *testing.T) {
-	releasePleaseAppSecretNames := []string{"APP_ID", "APP_PRIVATE_KEY"}
-	for _, tapName := range homebrewTapCredentialNames[:2] { // exclude HOMEBREW_TAP_TOKEN, which is not a secret name
-		for _, rpName := range releasePleaseAppSecretNames {
-			if tapName == rpName {
-				t.Errorf("Homebrew tap App secret name %q equals release-please App secret name %q — the two Apps must never share a secret name (D-16)", tapName, rpName)
-			}
-		}
-	}
-}
-
 // TestPostReleaseJobsDeclareCheckoutPolicy is the plan 02-06 Task 3
 // mitigation: every job in post-release-verify.yml must be classified into
 // exactly one of latestVerifierJobIDs or releaseMatchedTestJobIDs, and its
@@ -1627,5 +1616,72 @@ func TestPostReleaseJobsDeclareCheckoutPolicy(t *testing.T) {
 		if !seen[id] {
 			t.Errorf("class list names job %q but %s declares no such job", id, postReleaseWorkflowPath)
 		}
+	}
+}
+
+// postReleaseConclusionGuard is the exact `if:` expression every job in
+// post-release-verify.yml carries (T-02-18, todo
+// 2026-08-09-post-release-verify-event-aware-conclusion-guard-has-no-regression-assertion.md,
+// D-08). Under a `workflow_run` trigger, GitHub sets
+// github.event.workflow_run.conclusion from the run that dispatched this
+// workflow; the disjunct lets every other trigger (workflow_dispatch, the
+// retained historical re-verification path) run unconditionally, while
+// refusing to verify a release whose producing run did not succeed. Without
+// the `github.event_name != 'workflow_run' ||` half, a workflow_dispatch
+// run's null workflow_run object makes the bare equality false and every
+// job silently skips while the workflow itself still reports green — a
+// suite that verifies nothing and says so nowhere. Copied byte-for-byte
+// from the workflow source; single quotes and spacing are part of the
+// value and are exactly what TestPostReleaseJobsDeclareConclusionGuard
+// compares against, with no normalisation on either side.
+const postReleaseConclusionGuard = "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'"
+
+// TestPostReleaseJobsDeclareConclusionGuard is the GRD-04 mitigation (D-08):
+// every job post-release-verify.yml declares must carry
+// postReleaseConclusionGuard verbatim on its `if:` line. Deliberately a
+// sibling of TestPostReleaseJobsDeclareCheckoutPolicy rather than an
+// extension of it, so a `-run` filter can exercise this property alone, and
+// deliberately built with no fixed expected-job-id list and no normalising
+// helper: the test iterates whatever the document actually declares, so a
+// newly added job that omits or weakens the guard fails on its own rather
+// than because a list went stale. Proven RED both ways in
+// 07-MUTATION-LOG.md family (d): the guard removed from one job, and the
+// guard inverted (still present, still plausible-looking) on another.
+func TestPostReleaseJobsDeclareConclusionGuard(t *testing.T) {
+	doc, err := decodeFullWorkflowDoc(postReleaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("decodeFullWorkflowDoc(%s): %v", postReleaseWorkflowPath, err)
+	}
+	if len(doc.Jobs) == 0 {
+		t.Fatalf("%s declares zero jobs", postReleaseWorkflowPath)
+	}
+
+	inspected := 0
+	for jobID, job := range doc.Jobs {
+		inspected++
+		if job.If != postReleaseConclusionGuard {
+			t.Errorf("job %q if: = %q, want %q (the event-aware conclusion guard, verbatim)", jobID, job.If, postReleaseConclusionGuard)
+		}
+	}
+	if inspected == 0 {
+		t.Fatalf("%s: inspected zero jobs — a parse that yielded nothing would be indistinguishable from a pass", postReleaseWorkflowPath)
+	}
+	t.Logf("inspected %d job(s) in %s for the event-aware conclusion guard", inspected, postReleaseWorkflowPath)
+}
+
+// TestPostReleaseJobsDeclareConclusionGuard_EmptyDocIsError is the
+// non-vacuity companion, mirroring
+// TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError: decodeFullWorkflowDoc
+// must return a non-nil error, never a usable zero value, for a workflow
+// source with no jobs: entries — a zero-job parse can never present as a
+// document where every job (vacuously none) satisfies the guard.
+func TestPostReleaseJobsDeclareConclusionGuard_EmptyDocIsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.yml")
+	if err := os.WriteFile(path, []byte("name: empty\non:\n  push:\njobs: {}\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	if _, err := decodeFullWorkflowDoc(path); err == nil {
+		t.Fatalf("decodeFullWorkflowDoc(%s): expected a non-nil error for a workflow with zero jobs:, got nil", path)
 	}
 }

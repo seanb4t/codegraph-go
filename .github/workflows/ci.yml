@@ -443,6 +443,68 @@ jobs:
         # class is the right one to stay on, not migrate off.
         run: task bench:regression
 
+  # tmux-e2e (TTY-01..TTY-07, 08-tmux-real-pty-harness): the real-PTY harness
+  # gives the terminal UI the missing rung between the piped, TTY-blind
+  # integration suite and manual human UAT — it builds the real codegraph
+  # binary, drives it inside a genuine tmux pane, and asserts on
+  # capture-pane output.
+  #
+  #   - runs-on: ubuntu-latest, not a Namespace profile (D-10): this job's
+  #     entire purpose is to prove a real pty behaves correctly, and a
+  #     documented, publicly-inspectable image matters more here than the
+  #     Namespace cache speedup the rest of this workflow otherwise prefers.
+  #     govulncheck and perf-regression already made the same call.
+  #   - tmux is install-then-assert, not apt-pinned (D-11): `apt-get install
+  #     tmux=<exact-version>` starts failing the moment the archive snapshot
+  #     rolls, turning an unrelated event into a red build. Instead,
+  #     test:tmux installs whatever ubuntu-latest currently ships and then
+  #     fails loudly when `tmux -V` doesn't match the committed
+  #     TMUX_EXPECTED_VERSION constant in Taskfile.yml — drift becomes a
+  #     visible one-line decision, not a silent behavior change (the same
+  #     govulncheck go-version-input: stable lesson this workflow already
+  #     paid for once, see the govulncheck job's own comment above).
+  #   - What actually gates this job is the EXECUTED-COUNT EQUALITY inside
+  #     `task test:tmux`, not the job's exit code in isolation: a runner
+  #     without tmux, a misspelled build tag, or one silently-skipping case
+  #     all produce an executed count that is not exactly
+  #     TMUX_EXPECTED_TESTS, and each fails the job rather than passing it
+  #     empty (D-01/D-02). Nothing on this job or any of its steps can turn
+  #     a failure soft or make a step conditional — a job that can silently
+  #     skip its own count assertion is the failure shape this phase exists
+  #     to close.
+  tmux-e2e:
+    name: tmux e2e (real-pty harness, TTY-01..TTY-07)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Install tmux
+        run: task test:tmux:install
+
+      # CI is carried through this step-level env: key, never interpolated
+      # into the run: body — taskCallLineRe
+      # (internal/upgrade/taskfile_shape_test.go:204) matches only a bare
+      # `task <target>` line, so `CI=1 task test:tmux` here would be a hard
+      # TestWorkflowRunBodiesInvokeTask failure. GitHub already exports CI
+      # on every hosted runner; this entry is kept anyway so the
+      # strict-mode trigger is visible in the job rather than implicit in
+      # the platform (matches transcript-freeze's TRANSCRIPT_FREEZE_BASE
+      # pattern above).
+      - name: tmux real-pty harness (TTY-01..TTY-07)
+        env:
+          CI: "1"
+        run: task test:tmux
+
   # actionlint: this phase's guarantees now live in FOUR workflow files
   # (ci.yml, release.yml, release-please.yml, pr-title.yml) — a static
   # schema/expression-type/injection checker over all of them is mandatory,

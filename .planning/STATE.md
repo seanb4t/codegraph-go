@@ -1,37 +1,38 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.12.0
-milestone_name: Local Graph UI
-status: Awaiting next milestone
-stopped_at: Phase 6 complete — all phases complete
-last_updated: "2026-09-08T13:07:02.438Z"
-last_activity: 2026-09-08
-last_activity_desc: Milestone v0.12.0 completed and archived
-state_head: f74784bf2c3c523fd6fc14779f4409d96a629ea6
+milestone: v0.13.0
+milestone_name: Guard Hardening & UI Follow-through
+current_phase: 08
+current_phase_name: tmux Real-PTY Harness
+status: executing
+stopped_at: Completed 08-05-PLAN.md
+last_updated: "2026-09-11T21:59:38.323Z"
+last_activity: 2026-09-11
+last_activity_desc: Phase 08 execution started
+state_head: 21063a2e40cca0d455075c0d84a93e86cfd79c57
 progress:
   total_phases: 6
-  completed_phases: 6
-  total_plans: 51
-  completed_plans: 51
-  percent: 100
-current_phase: 6
+  completed_phases: 0
+  total_plans: 9
+  completed_plans: 9
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-07 at the v0.12.0 close)
+See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Planning next milestone — v0.12.0 shipped 2026-09-07; nothing is scoped. Run /gsd-new-milestone.
+**Current focus:** Phase 08 — tmux Real-PTY Harness
 
 ## Current Position
 
-Phase: Milestone v0.12.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-08 — Milestone v0.12.0 completed and archived
+Phase: 08 (tmux Real-PTY Harness) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-09-11 — Phase 08 execution started
 
 ## Performance Metrics
 
@@ -49,6 +50,7 @@ Last activity: 2026-09-08 — Milestone v0.12.0 completed and archived
 | 04 | 7 | - | - |
 | 5 | 8 | - | - |
 | 6 | 8 | - | - |
+| 7 | 4 | - | - |
 
 **Velocity (v0.11.0 — archived, shipped 2026-08-16):** 6 phases, 30 plans, 60 tasks over 4 days.
 
@@ -107,6 +109,15 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P05 | 640min | 3 tasks | 5 files |
 | Phase 06 P06 | 22min | 2 tasks | 3 files |
 | Phase 06 P07 | 45min | 3 tasks | 4 files |
+| Phase 07 P01 | 8min | 3 tasks | 3 files |
+| Phase 07 P02 | 22 min | 3 tasks | 5 files |
+| Phase 07 P03 | 18min | 3 tasks | 4 files |
+| Phase 07 P04 | 15min | 3 tasks | 4 files |
+| Phase 08 P01 | 35min | 3 tasks | 6 files |
+| Phase 08 P02 | 27min | 3 tasks | 7 files |
+| Phase 08 P03 | ~20min | 2 tasks | 2 files |
+| Phase 08 P04 | ~25min | 3 tasks | 5 files |
+| Phase 08 P05 | 25 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -225,19 +236,33 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: Two double-invocation Svelte 5 effect bugs fixed via identity-comparison guards (lastAppliedElements/lastAppliedLiveElements), found only by real-browser testing at guava scale
 - [Phase 6]: Criterion 5 verified with a real 3-process gate (daemon+serve --mcp+ui), measured baseline, and a demonstrated RED (store held open -> flushesStarved 3/3)
 - [Phase 6]: pendingWriter-analogue verdict recorded: no analogue in internal/uiserver, discriminating control on 'type pendingWriter struct' (=1) vs bare word (=9)
+- [Phase 07]: Followed D-10 exactly: current-metrics positivity checks inserted immediately after the baseline positivity checks and before delta math
+- [Phase 07]: 07-MUTATION-LOG.md family (a) has no revert step because RED was the absence of the fix, not a mutation of correct code
+- [Phase 07]: GRD-02: internal/query archtest scoped the indexer-root rule to the production compilation unit only, allowing internal/query/engine_test.go's legitimate in-package import of the internal/indexer root for fixture construction, per D-01/D-04.
+- [Phase 7]: [Phase 07]: 07-03: extracted the dry-run-signed cosign-key injection and additions-only diff guard into scripts/inject-cosign-key.sh, adding the missing positive assertion (exactly 1 injected --key= line) that closes T-02-08's vacuous-guard gap; no shape test added asserting the wiring per D-07
+- [Phase 7]: [Phase 07]: 07-03: family (c)'s mutation-log entry has no tracked-file mutation or revert step (deliberate deviation) — the RED perturbation was applied to a copy of .goreleaser.yaml in a temp dir, since the committed release config must never be edited to prove a guard
+- [Phase 7]: GRD-04 conclusion-guard test is a sibling of TestPostReleaseJobsDeclareCheckoutPolicy, comparing every job's parsed if: against one verbatim const with no fixed job-id list and no normaliser
+- [Phase 7]: Deleted TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets outright (D-09) rather than rewriting it -- a tautological test comparing two in-test constants is worse than none
+- [Phase 08]: [Phase 08-01]: pollUntilStable's interval tuned to 1s/10s deadline (not the initial 100ms/5s guess) — measured a real, consistent 700-900ms pre-execution subprocess-startup plateau on this machine that a sub-second interval would false-converge on; comparison semantics unchanged
+- [Phase 08]: [Phase 08-01]: pollUntilStable's interval pacing uses <-time.After(...), never time.Sleep(...) — the plan's own verify gate greps for zero time.Sleep occurrences in test/tmux; matches test/integration's existing goroutine+time.After bounded-wait convention
+- [Phase 08]: TTY-05's positive-control assertion uses the picker title, not the help footer text — the footer never renders at the default 100x30 pane with all 8 agent targets due to a bubbles/v2/list pagination-padding overflow, verified via temporary reverted debug instrumentation
+- [Phase 08]: confighash.go's doc comment avoids the literal substring 'sha256sum' after the plan's own verify gate tripped on it appearing in explanatory prose rather than a shell-out
+- [Phase 08]: [Phase 08]: [Phase 08-03]: tmux-e2e CI job lands on ubuntu-latest with the TMUX_EXPECTED_VERSION sentinel deliberately unresolved — no real ci.yml run exists for this branch yet (gh run list returned empty), so D-11's bootstrap stays in its designed deferred state rather than guessing a version
+- [Phase 08]: [Phase 08]: [Phase 08-03]: own comment prose in the new tmux-e2e job tripped the plan's own continue-on-error substring-count gate — reworded to describe the same no-soft-fail property without the literal token, third instance of this phase's recurring substring-proxy gate defect (after time.Sleep in 08-01, sha256sum in 08-02)
+- [Phase 08]: [Phase 08-04]: Family (d)'s D-06-specified v.AltScreen=false mutation does NOT fail TestInstallPickerFrameStableWhileIdle — the test converges past the settling transient before its idle-stability loop begins, and the AltScreen-driven scroll this mutation targets is confined to that transient. Confirmed reproducibly (two runs); reported honestly in 08-MUTATION-LOG.md and WINDOWS.md (unmet-truth) rather than forced. — Following the plan's own explicit contingency instruction ("stop and report it... do not adjust the test") and Phase 7's D-07 precedent against adding a second guard/test for a property one assertion already covers.
+- [Phase 08]: Fixed pollUntilStable's G-08-1 cold-start race by giving it a required readiness predicate (ready(capture) && capture == predecessor) rather than warming the binary or raising the poll interval.
+- [Phase 08]: Cold-arm evidence runs all showed K<=1 (machine warm); did not re-run chasing K>=2 per the plan's own interpretation rule — relied on the deterministic self-test's RED/GREEN transcripts as proof instead.
 
 ### Pending Todos
 
-8 pending — `/gsd-capture --list` to review. One (`CR-01`) is now in scope as this milestone's `FIX-01` (Phase 1); the `bench pinnedAt` item was expected to reconcile in v0.11.0 Phase 6 and should be re-checked. None block v0.12.0.
+5 listed — `/gsd-capture --list` to review. Phase 7 resolved three (dry-run-signed, post-release-verify, tap-secret distinctness) and code review filed one new. **This table has drifted from `.planning/todos/pending/`, which holds only 2 files** (brew-trust, graphstore archtest): the mcp flake, golangci-lint, `bench pinnedAt` and `CR-01` rows predate v0.13.0 and were never reconciled when their files moved or were folded into a milestone. Reconciling those four is out of Phase 7's scope and is left for a deliberate pass. None block v0.13.0.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
 | 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
-| 2026-08-09 | release | — | `dry-run-signed` additions-only diff guard passes vacuously |
-| 2026-08-09 | ci | — | post-release-verify event-aware conclusion guard has no regression assertion |
 | 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
 | 2026-08-10 | docs | — | `brew trust` instructions recommend broader tap grant with no security framing |
-| 2026-08-10 | ci | — | Tap App secret distinctness test is tautological and reads no workflow |
+| 2026-09-08 | testing | — | `internal/graphstore/archtest` ignores per-package `go/packages` load errors — sibling of the blindness fixed in `internal/query/archtest` (P7 CR-01); filed by code review after the Phase 7 plans closed |
 | 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces |
 | — | mcp | major | **CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications. NOW IN SCOPE as v0.12.0 `FIX-01`, Phase 1.** |
 
@@ -249,6 +274,9 @@ Resolved and filed to `.planning/todos/completed/`:
 | 2026-07-31 | perf | Bisect the indexer throughput regression — **REFUTED**; the regression did not exist (cross-platform baseline comparison) |
 | 2026-07-31 | perf | Rebless perf baseline on ubuntu-latest — **DONE**; gate green on main |
 | 2026-08-13 | agents | Author a codegraph usage skill for agents — closed by v0.10.0 Phases 6–8 |
+| 2026-09-08 | release | `dry-run-signed` additions-only diff guard passes vacuously — closed by Phase 7 `GRD-03` (`scripts/inject-cosign-key.sh` asserts exactly one injected `--key=` line) |
+| 2026-09-08 | ci | post-release-verify event-aware conclusion guard has no regression assertion — closed by Phase 7 `GRD-04` (`TestPostReleaseJobsDeclareConclusionGuard`) |
+| 2026-09-08 | ci | Tap App secret distinctness test is tautological and reads no workflow — closed by Phase 7 `GRD-05` by deleting the test, per maintainer decision |
 
 ### Blockers/Concerns
 
@@ -264,6 +292,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
+- [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
 
 ### Quick Tasks Completed
 
@@ -370,20 +399,22 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-07T20:35:11.345Z
-Stopped at: Phase 6 complete — all phases complete
-  NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
+Last session: 2026-09-11T21:59:38.302Z
+Stopped at: Completed 08-05-PLAN.md
+  NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
-    - **Phase numbering restarts at 1** (this milestone was started with `--reset-phase-numbers`). `.planning/phases/` holds only `999.x` backlog directories, so Phases 1–6 collide with nothing.
-    - **`branching_strategy: milestone`** — this milestone lives on one branch (`gsd/v0.12.0-local-graph-ui`) and is not incrementally merged.
-    - **Phase 1 is complete and verified** (5/5 ROADMAP criteria, `01-VERIFICATION.md`). The Connect server, the nine read-only RPCs, the Origin/Host guard and the `internal/query` seams are live and golden-clean.
-    - **Phase 2 inherits one open UAT item by design:** `01-UAT.md` test 1 records `GET /` → 404 because Phase 1 mounts only the Connect handler prefix and ships no SPA. It is recorded as `deferred` in `01-VERIFICATION.md`, and Phase 2's success criterion 1 (embedded SPA on this same mux) closes it by construction. `phase uat-passed 1` therefore reports `passed:false` on that one named blocker — this is a real, non-vacuous blocker, not the empty-blockers failure mode.
-    - **The protobuf half of the drift guard already exists** (`task proto:drift`, 3 files compared, RED-proven). Phase 2's `dist/`↔SPA guard is the second consumer of that one pattern, not a new one.
-    - **Within Phase 5, `GRF-01` blocks everything else in the phase.** Its pass condition must be written down before it is dispatched, and the roadmap deliberately names no renderer.
-    - **No `v0.12.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+    - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
+    - **Backlog 999.2 and 999.4 are promoted, not deleted.** Both entries stay in `ROADMAP.md` → Backlog, annotated with the phase that consumed them (999.2 → Phase 8 as TTY-01…07; 999.4 → Phase 7 as GRD-01). This closes the standing "backlog bookkeeping inconsistency" recorded in Blockers above.
+    - **Phase 7 gates Phase 10.** `GRD-02`'s archtest fixes the dependency-direction rule `internal/query` must obey, and `HLT-05`'s discovery-exclusion helper has to be wired inside it. The open question of whether the archtest also forbids a `query`→`indexer` edge is resolved in Phase 7, not discovered in Phase 10.
+    - **`GRF-09`'s threshold is committed BEFORE its measurement, in its own commit** — `GRF-01`'s precedent, where the threshold file has exactly one commit that is an ancestor of both observation commits, so the ordering is checkable rather than assertable. A failing measurement triggers the documented index-time-persistence fallback into the reserved 50-59 field range, never a raised bar.
+    - **Every guard in this milestone carries a positive assertion that it did its work** (rule `84d1gfpywd`) and is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation before it is trusted green. `GRD-06` is that proof committed rather than asserted.
+    - **The tmux harness (Phase 8) lands before the UI work** so that work has a real-terminal rung. `TTY-02`'s capture-twice-and-compare stability poll is the single highest flake risk in the milestone; no assertion may run against one capture.
+    - **`branching_strategy: milestone`** — this milestone lives on one branch and is not incrementally merged.
+    - **No `v0.13.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline. The label is a prediction that holds because the UI follow-through lands `feat:` commits.
     - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Phase 7 is verified and closed; Phases 8-12 of v0.13.0 remain
+- Discuss the next phase with /gsd-discuss-phase 8 (tmux Real-PTY Harness)

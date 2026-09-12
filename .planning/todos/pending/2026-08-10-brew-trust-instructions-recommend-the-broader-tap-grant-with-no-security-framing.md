@@ -2,6 +2,7 @@
 created: 2026-08-10T00:00:00.000Z
 title: brew trust instructions recommend the broader --tap grant and carry no security framing
 area: docs
+resolves_phase: 12
 severity: medium
 files:
 

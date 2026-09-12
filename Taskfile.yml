@@ -176,6 +176,96 @@ tasks:
     cmds:
       - go test ./test/wireoracle/...
 
+  test:tmux:install:
+    desc: >-
+      Installs tmux, the tmux real-PTY harness's (test/tmux, TTY-01..TTY-07)
+      only external dependency. A task rather than an inline CI step because
+      Taskfile.yml is the single definition of every CI job body
+      (TestWorkflowRunBodiesInvokeTask) — the tmux-e2e job in ci.yml calls
+      this target rather than embedding its own apt-get lines. CI-only: a
+      local contributor without tmux should install it through their own
+      package manager (Homebrew, apt, etc.) instead of running this target.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "test:tmux:install is the CI installer for a Debian-family (ubuntu-latest) runner — a local contributor should install tmux through their own package manager instead."
+    cmds:
+      - sudo apt-get update
+      - sudo apt-get install -y tmux
+
+  test:tmux:
+    desc: >-
+      Real-PTY harness (test/tmux, TTY-01..TTY-07) — spawns the real
+      codegraph binary inside a real tmux pane and asserts on capture-pane
+      output; build-tagged (`-tags tmux`), so a bare `go test ./...` never
+      reaches it. TMUX_EXPECTED_TESTS is D-02's exact-equality anti-vacuity
+      constant: adding, deleting, or silently skipping a top-level Test*
+      function in test/tmux fails this target until the constant is updated
+      in the SAME commit — a floor (>=N) is deliberately not used, since a
+      floor is satisfied by one case running while the rest skip.
+      TMUX_EXPECTED_VERSION is D-11's install-then-assert pin. Its value is
+      the string ubuntu-latest's own `tmux -V` printed on the first real
+      tmux-e2e run (PR #69, run 34606828356), never a guess from a dev box.
+      Always prints an executed count and a skipped count (D-03); enforces
+      the executed-count equality and the tmux-version match only when CI
+      is set, so a contributor without tmux gets a clean skip report and
+      exit 0 while CI fails hard on either mismatch.
+    vars:
+      TMUX_EXPECTED_TESTS: 6
+      TMUX_EXPECTED_VERSION: tmux 3.4
+    preconditions:
+      - sh: command -v jq
+        msg: "jq not found — required to parse go test -json output for test:tmux's anti-vacuity executed-count gate."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # D-11: install-then-assert. Only when CI is set — a contributor's
+        # local tmux version is never asserted, only whatever ubuntu-latest
+        # actually installed. Printing the observed string alongside the
+        # expected one on mismatch is the bootstrap mechanism: the first
+        # real CI run's own failure output supplies the value plan 08-03
+        # commits as the real TMUX_EXPECTED_VERSION.
+        if [ -n "${CI:-}" ]; then
+          OBSERVED_TMUX="$(tmux -V)"
+          if [ "${OBSERVED_TMUX}" != "{{.TMUX_EXPECTED_VERSION}}" ]; then
+            echo "::error::test:tmux: tmux -V reports \"${OBSERVED_TMUX}\" but TMUX_EXPECTED_VERSION is \"{{.TMUX_EXPECTED_VERSION}}\" — D-11 requires drift to be a visible one-line decision, not a silent behavior change"
+            exit 1
+          fi
+        fi
+
+        JSON_OUT="$(mktemp)"
+        trap 'rm -f "${JSON_OUT}"' EXIT
+        STATUS=0
+        GOTOOLCHAIN=go1.26.6 go test -tags tmux -count=1 -json ./test/tmux/... 2>&1 | tee "${JSON_OUT}" || STATUS=$?
+
+        # D-01/Pattern 4: count top-level Test* pass events only — exclude
+        # subtests (.Test contains "/") and the package-level summary event
+        # (Action=="pass" with no .Test field at all).
+        EXECUTED="$(jq -s '[.[] | select(.Action=="pass" and .Test != null and (.Test | contains("/") | not))] | length' "${JSON_OUT}")"
+        SKIPPED="$(jq -s '[.[] | select(.Action=="skip" and .Test != null and (.Test | contains("/") | not))] | length' "${JSON_OUT}")"
+
+        echo "test:tmux: executed=${EXECUTED} skipped=${SKIPPED} expected={{.TMUX_EXPECTED_TESTS}}"
+
+        # TTY-06 (TestInstallPickerFrameStableWhileIdle) logs this line via
+        # t.Logf, which go test -json carries as an Action=="output" event
+        # regardless of -v — this is what surfaces the reported N in the
+        # job log rather than only under -v.
+        jq -r 'select(.Output != null and (.Output | startswith("TTY-06: frame-stable across N="))) | .Output' "${JSON_OUT}" || true
+
+        if [ -n "${CI:-}" ]; then
+          if ! [[ "${EXECUTED}" =~ ^[0-9]+$ ]] || [ "${EXECUTED}" -ne {{.TMUX_EXPECTED_TESTS}} ]; then
+            echo "::error::test:tmux: executed=${EXECUTED} but TMUX_EXPECTED_TESTS={{.TMUX_EXPECTED_TESTS}} — D-02 requires an exact equality, not a floor: a floor is satisfied by one case running while the rest skip"
+            exit 1
+          fi
+          if [ "${STATUS}" -ne 0 ]; then
+            echo "::error::test:tmux: go test exited ${STATUS} — a matching executed count never masks a genuine assertion failure"
+            exit 1
+          fi
+          exit 0
+        fi
+
+        exit "${STATUS}"
+
   test:daemon:
     desc: >-
       internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
@@ -1836,31 +1926,7 @@ tasks:
         # Env = ToEnv(append(os.Environ(), ...))), so COSIGN_PASSWORD needs
         # no per-pipe env: addition — this one inserted line is the delta.
         GENERATED_CONFIG="${SIGNTEST_DIR}/.goreleaser.signtest.yaml"
-        awk -v keyline="      - \"--key=${SIGNTEST_DIR}/cosign.key\"" '
-          { print }
-          /^      - "sign-blob"$/ { print keyline }
-        ' .goreleaser.yaml > "${GENERATED_CONFIG}"
-
-        # Assert the copy is a MINIMAL, ADDITIONS-ONLY delta before
-        # invoking anything, so the rehearsal cannot silently drift into
-        # testing a different configuration than the one that ships. `<`
-        # lines in default diff(1) output are deletions/replacements —
-        # their presence is a hard failure. Every `>` (added) line must
-        # carry --key= or COSIGN_PASSWORD.
-        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_CONFIG}" || true)"
-        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
-          echo "::error::${GENERATED_CONFIG} differs from the committed .goreleaser.yaml by more than additions:"
-          printf '%s\n' "${DIFF_OUT}"
-          exit 1
-        fi
-        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
-        if [ -n "${BAD_ADDITIONS}" ]; then
-          echo "::error::${GENERATED_CONFIG} has additions not matching --key= or COSIGN_PASSWORD:"
-          printf '%s\n' "${BAD_ADDITIONS}"
-          exit 1
-        fi
-        echo "generated config differs from the committed .goreleaser.yaml by additions only:"
-        printf '%s\n' "${DIFF_OUT}"
+        ./scripts/inject-cosign-key.sh .goreleaser.yaml "${GENERATED_CONFIG}" "${SIGNTEST_DIR}/cosign.key"
 
         # Build GoReleaser NATIVELY, no GOOS/GOARCH in the environment —
         # identical reasoning to release:dry-run's own comment: a
@@ -2376,25 +2442,7 @@ tasks:
         COSIGN_PUBKEY="${REHEARSE_DIR}/cosign.pub"
 
         GENERATED_ENABLED="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.yaml"
-        awk -v keyline="      - \"--key=${REHEARSE_DIR}/cosign.key\"" '
-          { print }
-          /^      - "sign-blob"$/ { print keyline }
-        ' .goreleaser.yaml > "${GENERATED_ENABLED}"
-
-        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_ENABLED}" || true)"
-        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
-          echo "::error::${GENERATED_ENABLED} differs from the committed .goreleaser.yaml by more than additions:"
-          printf '%s\n' "${DIFF_OUT}"
-          exit 1
-        fi
-        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
-        if [ -n "${BAD_ADDITIONS}" ]; then
-          echo "::error::${GENERATED_ENABLED} has additions not matching --key= or COSIGN_PASSWORD:"
-          printf '%s\n' "${BAD_ADDITIONS}"
-          exit 1
-        fi
-        echo "generated config (notarize-enabled base) differs from the committed .goreleaser.yaml by additions only:"
-        printf '%s\n' "${DIFF_OUT}"
+        ./scripts/inject-cosign-key.sh .goreleaser.yaml "${GENERATED_ENABLED}" "${REHEARSE_DIR}/cosign.key"
 
         # notarize-DISABLED baseline template: the SAME generated-enabled
         # config, ONE line changed — notarize.macos[0].enabled forced to

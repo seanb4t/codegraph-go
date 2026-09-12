@@ -2,7 +2,11 @@
 created: 2026-08-09T00:00:00.000Z
 title: post-release-verify.yml's event-aware conclusion guard has no test asserting it, so a regression would be silent
 area: ci
+resolves_phase: 7
 severity: high
+status: resolved
+resolved_at: 2026-09-08T00:00:00.000Z
+resolved_by_phase: 7
 files:
 
   - .github/workflows/post-release-verify.yml:303
@@ -76,3 +80,29 @@ addition is small:
 
 Prove it RED-then-GREEN: strip the disjunct from one job, observe the test
 fail naming that job, restore, observe green.
+
+## Resolution (2026-09-08, Phase 7, 07-04-PLAN.md, D-08)
+
+Landed as a sibling test, `TestPostReleaseJobsDeclareConclusionGuard`
+(`internal/upgrade/release_workflow_shape_test.go`), rather than an
+extension of `TestPostReleaseJobsDeclareCheckoutPolicy`, so a `-run` filter
+can exercise the conclusion guard alone. A new `If` field (`yaml:"if"`) on
+`fullWorkflowJob` exposes the parsed value; the new package-level const
+`postReleaseConclusionGuard` holds the exact disjunct byte-for-byte. Every
+job's `If` is compared against the constant with plain string equality — no
+fixed expected-job-id list and no normalising helper, per this todo's own
+"set-equality over job ids" framing, generalized to "no id list at all" so a
+newly added unguarded job fails on its own rather than because a list went
+stale. The inspected job count is logged and fataled on zero.
+`TestPostReleaseJobsDeclareConclusionGuard_EmptyDocIsError` mirrors
+`TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError` exactly.
+
+Proven RED-then-GREEN both ways this todo's risk shape names: the disjunct
+stripped from the `gatekeeper` job (failure naming `gatekeeper` with an
+empty value), and — going further than "strip it" — the conclusion
+comparison inverted on the `resolve-tag` job while keeping an `if:` present
+and plausible-looking (failure naming `resolve-tag` and quoting both the
+value found and the value wanted), proving the assertion discriminates on
+content, not merely on presence. Both mutations reverted byte-clean
+(`git diff --quiet -- .github/workflows/post-release-verify.yml`). Full
+transcripts in `07-MUTATION-LOG.md` family (d).
