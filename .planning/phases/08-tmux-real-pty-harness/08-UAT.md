@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 08-tmux-real-pty-harness
-source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-VERIFICATION.md]
+source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-VERIFICATION.md]
 started: 2026-09-10T18:08:06.378Z
-updated: 2026-09-11T20:37:58Z
+updated: 2026-09-12T01:28:48Z
 ---
 
 ## Current Test
@@ -15,7 +15,9 @@ updated: 2026-09-11T20:37:58Z
 ### 1. TTY-03 tracer assertion is timing-flaky against a cold binary
 
 expected: TestDaemonEmptyRegistryLeaksNoModeQueryBytes passes on every run at HEAD, including the first run on a cold machine, because pollUntilStable cannot converge on a pre-output frame.
-result: issue
+result: pass
+resolved_by: 08-05-PLAN.md (G-08-1)
+evidence: "Re-executed at HEAD 5ffdc2a0 on 2026-09-11: task test:tmux -> executed=6 skipped=0 expected=6, TestDaemonEmptyRegistryLeaksNoModeQueryBytes PASS (2.84s local; 2.09s on CI run 34658987243 job 103457354620, ubuntu-latest fresh build). pollUntilStable now requires a readiness predicate (paneContains(\"no running daemons\")); the self-test TestPollUntilStableDoesNotConvergeOnPreOutputFrame was watched RED (e994b0a5) then GREEN (b9dfc849)."
 reported: "Found by Claude re-executing the covering check at HEAD, not by the user: FAILED 3/3 on a cold machine, PASSED ~13/13 once warm. First exec of a fresh binary = 1567 ms in-pane vs stabilityPollInterval = 1000 ms; pollUntilStable converges on the pre-output frame. capture.go's 'can never both land inside that window by construction' claim is false on the cold path."
 severity: major
 note: |
@@ -41,7 +43,8 @@ coverage_id: 08-03-D2
 ### 3. TTY-06 family (d) non-reproduction — human decision on scope
 
 expected: A decision is recorded on whether the D-06-specified v.AltScreen=false mutation's failure to fail TestInstallPickerFrameStableWhileIdle warrants a follow-up settling-transient-observing assertion, or is accepted as a recorded limitation per Phase 7's D-07 precedent.
-result: skipped
+result: pass
+decision: "defer — accepted as a recorded limitation for this phase; follow-up captured under Deferred Follow-Ups (user re-confirmed 2026-09-11 on verify-work resume)"
 reason: "Deferred follow-up: defer"
 coverage_id: 08-04-D4
 
@@ -129,13 +132,59 @@ result: pass
 source: automated
 coverage_id: 08-04-D5
 
+### 16. 08-05 D1: pollUntilStable requires a readiness predicate; convergence is ready AND byte-equal
+
+expected: pollUntilStable takes a required readiness predicate (ready func(capture string) bool); convergence is ready(capture) && capture == predecessor; nil predicate is an immediate t.Fatal; empty paneContains needle is an immediate t.Fatal.
+result: pass
+source: automated
+coverage_id: 08-05-D1
+evidence: "TestPollUntilStableDoesNotConvergeOnPreOutputFrame PASS (5.82s local at 5ffdc2a0; 6.05s CI job 103457354620)"
+
+### 17. 08-05 D2: TTY-03 passes on the first exec of a freshly built binary
+
+expected: TestDaemonEmptyRegistryLeaksNoModeQueryBytes (TTY-03) passes on the first exec of a freshly built binary because the poll anchors on "no running daemons" and cannot converge on the pre-output frame.
+result: pass
+source: automated
+coverage_id: 08-05-D2
+evidence: "PASS 2.84s local at 5ffdc2a0 (first exec after TestMain fresh build); PASS 2.09s on CI job 103457354620 (ubuntu-latest, fresh VM + fresh build)"
+
+### 18. 08-05 D3: TMUX_EXPECTED_TESTS 5 -> 6 in the same commit as the sixth test
+
+expected: TMUX_EXPECTED_TESTS bumped 5 -> 6 in the same commit as the new self-test; task test:tmux reports executed=6 skipped=0 expected=6.
+result: pass
+source: automated
+coverage_id: 08-05-D3
+evidence: "task test:tmux at 5ffdc2a0 printed 'test:tmux: executed=6 skipped=0 expected=6' locally and in CI job 103457354620"
+
+### 19. 08-05 D4 — capture.go doc comments state only what is guaranteed and record cold vs warm measurements
+
+expected: test/tmux/capture.go's header comment and pollUntilStable's doc comment state only what is actually guaranteed (interval = sampling cadence only; the readiness predicate, not the interval, prevents pre-output convergence; the deadline is the sole timing value that must exceed startup latency), record the cold (1.1-1.6s in-pane / 739-1230ms shell-timed) vs warm (167-226ms; 08-01's 700-900ms trace re-labelled warm) measurements, and the false "exceeds the measured worst case ... by construction" claim is deleted (0 occurrences at HEAD). Wording reads as intended.
+result: pass
+coverage_id: 08-05-D4
+
+### 20. 08-05 D5: no production file or main_test.go changed; only 08-01's poll truth amended
+
+expected: No production file (internal/cli/daemon.go, internal/cli/tui/daemonpicker.go, internal/cli/tui/agentpicker.go) or test/tmux/main_test.go changed; 08-01-PLAN.md's poll truth amended, nothing else in that file touched.
+result: pass
+source: automated
+coverage_id: 08-05-D5
+evidence: "git diff --quiet 5baba883..HEAD -- internal/cli/daemon.go internal/cli/tui/daemonpicker.go internal/cli/tui/agentpicker.go test/tmux/main_test.go exited 0 at 5ffdc2a0"
+
+### 21. TTY-07 backstop re-fired at HEAD: exact-count gate proved executed=6 on a real CI run
+
+expected: The tmux-e2e job log at a commit carrying TMUX_EXPECTED_TESTS=6 shows "test:tmux: executed=6 skipped=0 expected=6", job conclusion is success, and the tmux -V line matches the committed TMUX_EXPECTED_VERSION (tmux 3.4) — the gate went green because a real 6 printed, not because a step was skipped.
+result: pass
+source: ci-log
+evidence: "PR #69 head = HEAD = origin = 5ffdc2a0 (0 ahead / 0 behind). ci.yml run 34658987243 at 5ffdc2a0: all 9 jobs success; job 103457354620 'tmux e2e (real-pty harness, TTY-01..TTY-07)' log contains 'test:tmux: executed=6 skipped=0 expected=6', 'tmux 3.4' (= TMUX_EXPECTED_VERSION), and six '--- PASS' lines (TTY-03 2.09s, TTY-04 4.09s, TTY-05 11.12s, TTY-06 7.06s, poll self-test 6.05s, TTY-01 skip-contract 0.00s). The three '::error::' lines in the log carry unexpanded ${EXECUTED}/${STATUS}/${OBSERVED_TMUX} — Taskfile's command echo, not fired annotations."
+coverage_id: 08-VERIFICATION-human_verification-1
+
 ## Summary
 
-total: 15
-passed: 13
-issues: 1
+total: 21
+passed: 21
+issues: 0
 pending: 0
-skipped: 1
+skipped: 0
 blocked: 0
 
 ## Deferred Follow-Ups
@@ -148,7 +197,9 @@ blocked: 0
 
 - gap_id: G-08-1
   truth: "TestDaemonEmptyRegistryLeaksNoModeQueryBytes passes on every run at HEAD, including the first run on a cold machine"
-  status: failed
+  status: resolved
+  resolved_by: 08-05-PLAN.md
+  resolved_at: 2026-09-11
   reason: "Claude re-executed 08-01 D2's covering check at HEAD 5baba883: FAILED 3/3 at session start (cold machine), PASSED ~13/13 afterwards. In-pane first-exec latency of a freshly built binary = 1567 ms; subsequent = 167-226 ms; stabilityPollInterval = 1000 ms. TestMain builds a fresh binary per run and daemon_empty_test.go is the first test to exec it, so TTY-03 alone pays the cold cost and pollUntilStable converges on the pre-output frame. capture.go:16-27's 'by construction' margin claim does not hold. Not reproducible on demand once warm."
   severity: major
   test: 1
