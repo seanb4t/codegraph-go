@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 09
 current_phase_name: Source View Follow-Through — Breadcrumb & Editor Handoff
 status: executing
-stopped_at: Completed 09-05-PLAN.md
-last_updated: "2026-09-12T21:05:50.187Z"
+stopped_at: Completed 09-06-PLAN.md
+last_updated: "2026-09-12T21:15:03.014Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 09 execution started
-state_head: e13e1f56f76d4fe723414eda3cd5a43af230aec7
+state_head: 5865d9186c54a7d39103f73398390e3c96b82a28
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
 
 ## Current Position
 
-Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — READY TO EXECUTE
-Plan: 5 of 5
+Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 09 execution started
 
@@ -124,6 +124,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 09 P03 | 35min | 3 tasks | 45 files |
 | Phase 09 P04 | 25min | 3 tasks | 34 files |
 | Phase 09 P05 | 30min | 3 tasks | 2 files |
+| Phase 09 P06 | 20min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -271,6 +272,7 @@ Standing decisions that outlive every milestone:
 - [Phase 09]: [Rule 3] Node >=26's built-in global Web Storage API shadows jsdom's real localStorage and no-ops silently without --localstorage-file; fixed with a probe-and-replace in-memory Storage shim in web/tests/setup.ts, test-infra only
 - [Phase 09]: Family (b)'s live-gate demonstration needed a different --file target (internal/cli/editorurl.go) than the script's default, since the default's structure lets the scroll loop's own break condition fire before reaching the exposing gap
 - [Phase 09]: 09-SECURITY.md records Cursor/JetBrains preset templates as still [ASSUMED] rather than confirmed — no real IDE was available to click through in this autonomous session; WINDOWS.md #35 stays open
+- [Phase 09]: [Phase 09] 09-06: Closed the svelte-check gap (2 errors at SourcePane.svelte:446:31, introduced by CR-01 commit 28d5d795) by capturing the guard-narrowed getEditorLink once and calling it from both the initial probe and the corrective re-probe -- no behavioral change, gate restored to 0 errors, task web:build/web:drift both MATCH.
 
 ### Pending Todos
 
@@ -418,8 +420,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T19:39:51.297Z
-Stopped at: Completed 09-05-PLAN.md
+Last session: 2026-09-12T21:15:02.988Z
+Stopped at: Completed 09-06-PLAN.md
   NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
   CARRY-OVER:
 
