@@ -1,6 +1,6 @@
 ---
 phase: 09-source-view-follow-through-breadcrumb-editor-handoff
-reviewed: 2026-09-12T19:49:59Z
+reviewed: 2026-09-12T20:18:20Z
 depth: deep
 files_reviewed: 27
 files_reviewed_list:
@@ -33,273 +33,114 @@ files_reviewed_list:
   - web/tests/source-pane-breadcrumb.test.ts
   - web/tests/source-pane-editor-link.test.ts
 findings:
-  critical: 1
-  warning: 4
-  info: 0
-  total: 5
-status: issues_found
+  critical: 0
+  warning: 0
+  info: 1
+  total: 1
+status: clean
 ---
 
 # Phase 09: Code Review Report
 
-**Reviewed:** 2026-09-12T19:49:59Z
+**Reviewed:** 2026-09-12T20:18:20Z
 **Depth:** deep
 **Files Reviewed:** 27
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-This phase adds the sticky source-view breadcrumb (BRW-10) and the editor
-handoff (BRW-11/BRW-12): a new `GetEditorLink` RPC, its Go-side template
-validator/allowlist/discovery machinery, and the SPA's probe/gutter/picker
-UI. The Go side is careful and well-tested: the scheme allowlist is
-positive-only and asserted at exactly 15 members, path confinement runs
-before any substitution, `{path}` is built via `filepath.Join`
-(never `EvalSymlinks`-resolved), percent-encoding is scoped per template
-position with a dedicated boundary test, discovery is proven probe-only
-by DI-based fakes, and `go build`/`go vet`/the targeted Go test subset all
-pass cleanly. The frontend correctly isolates the one `{@html}` render
-site behind `splitHighlightedLines`'s balanced-tag scan, guards every
-`localStorage` call, and never assembles a URL client-side.
+This is iteration 3 (final) of the review→fix loop, scoped to verifying
+WR-05's fix (commit `422952f8`) and re-checking for regressions across the
+full file set. Independently re-ran `GOTOOLCHAIN=go1.26.6 go build ./...`,
+`go vet ./internal/cli/... ./internal/uiserver/...`, `go test
+./internal/cli/... ./internal/uiserver/...` (all passing, including the
+34s `internal/uiserver` suite), `pnpm -C web test` (542/542), and `task
+web:drift` (source half MATCH at 114 files, output half MATCH at 32 files,
+committed `web/build/**` reflects the current source with no manual edits)
+in this checkout — no residual process was left running.
 
-The one real functional defect found is in the SPA's editor-link probe
-cold-start path: a persisted **preset** override (as opposed to a
-**custom** one) is silently dropped on the very first `GetEditorLink`
-call of a page load, because the template lookup depends on a preset
-list that has not arrived yet. The test suite exercises the pre-seeded
-**custom**-override path but never the pre-seeded **preset**-override
-path, which is exactly the one that is broken — see CR-01.
+**WR-05 is genuinely resolved.** Read `git show 422952f8` directly rather
+than trusting the fixer's own description:
 
-## Critical Issues
+- `EditorLinkPicker.svelte:81-84`'s root dropped `aria-modal="true"` and
+  changed `role="dialog"` to `role="region"`, keeping `aria-label="Editor
+  link"` — a `role="region"` requires an accessible name per WAI-ARIA, and
+  this one has it (verified directly in the source, not just inferred from
+  the fixer's claim; the test suite does not separately assert the
+  `aria-label`, but the markup carries it unconditionally).
+- `rg -n "aria-modal" web/src` returns zero attribute occurrences — the
+  only matches anywhere are inside code comments in `SourcePane.svelte`
+  explaining *why* `aria-modal` was deliberately not used, and inside two
+  test files' own comments/assertion names. `rg -n 'role="dialog"'
+  web/src -g '*.svelte'` also returns zero matches — no other component
+  regressed this pattern in either direction.
+- The focus-restore path (`toggleButtonEl?.focus()`,
+  `SourcePane.svelte:578`) uses optional chaining against a `$state`
+  binding that Svelte sets back to `undefined` on unmount, so it cannot
+  throw if the toggle button was removed from the DOM before the picker
+  closes (e.g. `editorLinkState` transitioning away from `loaded` while
+  `pickerOpen` is still true) — confirmed by inspecting the binding site,
+  not merely assumed.
+- WR-03's behavior (focus-in on auto-open, focus-restore on close) is
+  unchanged in this diff — only the two `role`/`aria-modal` attributes and
+  surrounding comments moved — and the regression tests in both
+  `editor-link-picker.test.ts` and `source-pane-editor-link.test.ts` now
+  pin `role="region"` plus `hasAttribute('aria-modal') === false` on top of
+  the pre-existing focus assertions, so a future accidental reintroduction
+  of `aria-modal` or the modal role would fail loudly in two independent
+  test files, not just one.
+- No keyboard trap was introduced: the panel wrapper is `role="presentation"`
+  with only an `Escape` keydown handler (`handlePickerKeydown`) and no
+  `Tab`/`Shift+Tab` interception, consistent with `role="region"`'s
+  non-modal semantics — a sighted keyboard user can freely tab in and out
+  of the panel, matching what a screen-reader user now also perceives
+  (the panel is present in, not removed from, the accessibility tree).
 
-### CR-01: A persisted preset editor-link override is silently ignored on the first probe of every page load
+No other file in the fixed commit, or in the wider file set, showed a
+regression. `internal/uiserver`'s threat register
+(`.planning/phases/09-.../09-SECURITY.md`) still reports `threats_open: 0`
+at ASVS L1 — I found no unmitigated `high`-severity threat, and this
+iteration's single fix (dropping two attributes and updating comments)
+does not touch any of the register's mitigated rows.
 
-**File:** `web/src/lib/components/browse/SourcePane.svelte:386, 411-444`
-(also `web/src/lib/editor-prefs.ts:86-93`)
+**IN-01 carries forward, unfixed** (correctly — it is Info-severity and out
+of `critical_warning` fix scope per the fixer's own report): see below.
 
-**Issue:**
+## Info
 
-`templateForRequest` resolves a `{kind: 'preset', id}` override by looking
-its id up in a `presets` array supplied by the caller:
+### IN-01: `TestEditorDiscoverySourceNeverSpawnsAProcess`'s trailing zero-check is dead code
 
-```ts
-// web/src/lib/editor-prefs.ts:86-93
-export function templateForRequest(
-	override: EditorOverride | null,
-	presets: readonly EditorPreset[]
-): string | undefined {
-	if (!override) return undefined;
-	if (override.kind === 'custom') return override.template;
-	return presets.find((p) => p.id === override.id)?.template;
-}
-```
+**File:** `internal/cli/editordiscovery_test.go:331-339`
 
-`SourcePane.svelte` supplies that list from `lastPresets`, a `$state`
-that starts at `[]` and is only populated *after* the first
-`GetEditorLink` response arrives:
+**Issue:** The loop over `required` (`internal/cli/editordiscovery_test.go:332-337`)
+already calls `t.Fatalf` — which halts the test via `runtime.Goexit` — on
+the first missing substring, so `inspected` can only ever equal
+`len(required)` (2) by the time the loop completes normally. The trailing
+`if inspected == 0 { t.Fatal(...) }` at line 338 can never execute. This is
+harmless — it does not weaken the guard, since the `t.Fatalf` inside the
+loop already provides the "positive control" protection the surrounding
+comment describes — but it is unreachable code that reads as if it
+verifies something the loop hasn't already guaranteed.
 
-```ts
-// web/src/lib/components/browse/SourcePane.svelte:386
-let lastPresets = $state<EditorPreset[]>([]);
-...
-// :427 (inside the probe $effect)
-const template = templateForRequest(override, untrack(() => lastPresets));
-activeClient.getEditorLink({ path, line, col, template }, ...).then((response) => {
-	lastPresets = response.presets;
-	editorLinkState = { kind: 'loaded', response };
-	...
-});
-```
-
-`editorOverride` is itself seeded from `localStorage` at mount
-(`readEditorOverride()`, line 373), i.e. from a *previous* session. On
-the very first probe of a fresh page load, if the persisted override is
-`{kind: 'preset', id: 'cursor'}` (the common case — the picker's most
-prominent affordance is its three preset buttons, not the custom-template
-field), `templateForRequest(override, [])` returns `undefined` because
-`[].find(...)` cannot match anything. The very first `GetEditorLink`
-request is therefore sent with **no** template override at all, so the
-server answers using its own effective default (flag/env/discovery/none)
-instead of the user's saved preference — silently, with no error and no
-visible indication that the override was dropped.
-
-Concretely: a user who saved "Cursor" as their editor and reloads the
-page will see the header "Open in editor" link resolve to whatever the
-*server's* default happens to be (e.g. a discovered VS Code install, or
-no link at all) on that first load, not their saved Cursor preference.
-Only the *second* `GetEditorLink` call in the same page session (any
-subsequent file navigation) is correct, because by then `lastPresets` has
-been populated by the first (wrongly-templated) response.
-
-This is precisely the "assumption-delta invariant" the file's own header
-comment states `templateForRequest` exists to prevent
-(`editor-prefs.ts:1-12`: "both the load-time probe and a gutter click
-call it so they always resolve identically for the same override") — it
-holds for `gutterClick` vs. subsequent probes, but is violated by the
-very first probe of a session.
-
-The gap is visible in test coverage: `source-pane-editor-link.test.ts`
-has a test "sends a pre-seeded custom override as the probe template"
-(line 170) but no equivalent test for a pre-seeded **preset** override,
-which is exactly the code path that is broken. A `kind: 'custom'`
-override is unaffected because `templateForRequest` never needs a
-presets list for that branch.
-
-**Fix:** Do not let the very first probe silently drop a pending preset
-override. One option: if the resolved `template` differs from what a
-non-empty `lastPresets` would have produced once the first response's
-`presets` arrive, immediately re-issue the probe with the corrected
-template before settling `editorLinkState`:
-
-```ts
-activeClient
-	.getEditorLink({ path, line, col, template }, { signal: controller.signal })
-	.then(async (response) => {
-		lastPresets = response.presets;
-		if (template === undefined && override?.kind === 'preset') {
-			const resolved = templateForRequest(override, response.presets);
-			if (resolved !== undefined) {
-				const corrected = await activeClient.getEditorLink(
-					{ path, line, col, template: resolved },
-					{ signal: controller.signal }
-				);
-				editorLinkState = { kind: 'loaded', response: corrected };
-				return;
-			}
-		}
-		editorLinkState = { kind: 'loaded', response };
-		...
-	})
-```
-
-A simpler alternative that avoids a double round-trip: have the server
-also report enough about "what is buildable" that the client can pick a
-preset id without first knowing its wire template — but that reopens a
-design question (D-18's "never hold a second template copy") this plan
-already settled, so the corrective re-probe above is the smaller change.
-At minimum, add a regression test seeding a **preset** (not custom)
-override before mount and asserting the first `getEditorLink` call
-carries that preset's template.
-
-## Warnings
-
-### WR-01: `buildEditorURL` assumes a pre-validated template with no defensive guard
-
-**File:** `internal/uiserver/editorlink.go:207-231`
-
-**Issue:** `buildEditorURL` locates a placeholder's closing brace with
-`end := strings.IndexByte(template[i:], '}')` and immediately slices
-`template[i+1 : i+end]` with no check for `end == -1`. Every current call
-site (`editorLinkAnswer`) validates the template via
-`ValidateEditorTemplate` first, which does reject unbalanced braces, so
-this is not reachable today — but the function's own doc comment only
-says the input "is assumed already validated," and nothing in the type
-system enforces that. A future call site (or a refactor that reorders
-validation) that skips `ValidateEditorTemplate` would panic
-(slice bounds out of range) inside a request handler instead of failing
-gracefully with `TEMPLATE_INVALID`.
-
-**Fix:** Add a defensive `if end == -1 { break }` (writing the remainder
-verbatim, mirroring `source-lines.ts`'s own malformed-input fallback) or
-have `buildEditorURL` return `(string, error)` so a validation-invariant
-violation degrades to `TEMPLATE_INVALID` rather than panicking:
+**Fix:** Either remove the trailing dead check, or restructure to actually
+need it (count matches without failing early inside the loop, then assert
+the total once after the loop):
 
 ```go
-end := strings.IndexByte(template[i:], '}')
-if end == -1 {
-	b.WriteString(template[i:])
-	break
+inspected := 0
+for _, r := range required {
+	if strings.Contains(text, r) {
+		inspected++
+	}
+}
+if inspected != len(required) {
+	t.Fatalf("editordiscovery.go is missing %d of %d required probe-only substrings %v — positive control failed",
+		len(required)-inspected, len(required), required)
 }
 ```
-
-### WR-02: No source-level guard that `editordiscovery.go` never calls a process-spawning API
-
-**File:** `internal/cli/editordiscovery_test.go` (whole file); `internal/cli/editordiscovery.go`
-
-**Issue:** `TestDiscoverEditorNeverExecutes` proves `discoverEditorWith`
-(the dependency-injected function) only calls the supplied `lookPath`/
-`stat` fakes — it does not, and cannot, prove that `editordiscovery.go`
-itself contains no `exec.Command`/`os.StartProcess`/`syscall.Exec` call
-anywhere in the file (e.g., in a future helper function never routed
-through `editorProbes`). A `grep` today shows zero such calls, but unlike
-this package's other SRV-03 guards (`TestUIServiceMethodSetIsExactlyTheReadSet`,
-`TestUIServiceDeclaresNoMutatingMethod` in `readonly_test.go`, which
-reflect over the generated interface — a structural, not merely
-behavioral, check), there is no equivalent static assertion here. This
-is exactly the class of guard the review scope for this phase called out
-by name ("verify the source guard test actually asserts this"), and it
-does not yet exist as a source-level check — only a behavioral,
-DI-based one.
-
-**Fix:** Add a lightweight source-scan test (e.g. `go/parser` over the
-file, or a literal `strings.Contains` scan of the file's bytes) asserting
-`internal/cli/editordiscovery.go` contains none of `exec.Command(`,
-`os.StartProcess(`, `syscall.Exec(`, matching the "positive, non-vacuous,
-fails in both directions" discipline this codebase already applies
-elsewhere (rule 84d1gfpywd, cited throughout `readonly_test.go`).
-
-### WR-03: `EditorLinkPicker` self-opens as `role="dialog"` with no focus management
-
-**File:** `web/src/lib/components/browse/EditorLinkPicker.svelte:80-84`; `web/src/lib/components/browse/SourcePane.svelte:388-401, 433-436`
-
-**Issue:** The picker can open itself with no direct user gesture — on
-the first `NO_TEMPLATE` (non-disabled) or `TEMPLATE_INVALID` answer to
-the load-time probe, `pickerOpenedOnce`/`pickerOpen` flip true
-automatically (`SourcePane.svelte:433-436`). The rendered panel declares
-`role="dialog" aria-label="Editor link"` but has no `aria-modal`, no
-programmatic focus movement into the panel when it opens, and no focus
-restoration when it closes (Escape only reassigns `pickerOpen`, it never
-calls `.focus()` on the toggle button). A screen-reader user has no
-signal that a dialog just appeared, and a keyboard user's focus stays
-wherever it was (likely nowhere, since this is a probe-driven auto-open,
-not a click).
-
-**Fix:** Either drop `role="dialog"` in favor of a role that matches an
-inline, non-modal disclosure panel (e.g. `role="region"`), or — if
-`dialog` semantics are intended — move focus into the panel's first
-interactive element on open and back to the `editor-link-picker-toggle`
-button on close, and add `aria-modal="false"` to make the non-modal
-nature explicit to assistive tech.
-
-### WR-04: `CODEGRAPH_NO_EDITOR_URL` parsing runs even when `--no-editor-url` already settled the outcome
-
-**File:** `internal/cli/editorurl.go:92-100`
-
-**Issue:** `resolveEditorLink` always calls `parseBoolEnv` on
-`CODEGRAPH_NO_EDITOR_URL` before checking `in.noEditorURL`:
-
-```go
-disabled, err := parseBoolEnv(in.getenv(noEditorURLEnvVar))
-if err != nil {
-	return uiserver.EditorLinkOptions{}, fmt.Errorf("%s: %s", noEditorURLEnvVar, err)
-}
-if in.noEditorURL || disabled {
-	return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}, nil
-}
-```
-
-If an operator passes the correct, explicit `--no-editor-url` flag but
-also has a stray, malformed `CODEGRAPH_NO_EDITOR_URL` value left over in
-their shell environment (e.g. `CODEGRAPH_NO_EDITOR_URL=disabled` instead
-of `true`), `codegraph ui` refuses to start at all, even though the
-operator's explicit, unambiguous flag already fully determines the
-outcome. This is a defensible "fail loud on ambiguous config" choice,
-but it is not the same choice D-17 documents for the flag/env template
-values (where the flag winning is allowed to short-circuit discovery,
-just not validation) — worth a one-line comment explaining the choice,
-or reordering so `in.noEditorURL` short-circuits the env parse the same
-way the malformed-template case is allowed to be pre-empted by which
-value actually wins.
-
-**Fix:** Either document why this ordering is intentional (env is
-"validated regardless of who wins," mirroring D-17's flag/env template
-rule), or swap the order so `if in.noEditorURL { return Disabled }` is
-checked before parsing the env var, so an operator's own explicit,
-correct flag can never be defeated by an unrelated stray environment
-variable.
 
 ---
 
-_Reviewed: 2026-09-12T19:49:59Z_
+_Reviewed: 2026-09-12T20:18:20Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
