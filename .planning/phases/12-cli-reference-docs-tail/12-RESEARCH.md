@@ -410,14 +410,14 @@ Verified counts this session (temporary probe, `internal/cli`, tree left clean a
 
 **If this table is empty:** N/A — two low-risk assumptions recorded above; everything else in this document is `[VERIFIED]` via direct source reads or a live probe run this session, or `[CITED]` from the deleted-test git history and Taskfile/ci.yml as committed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `tools/clidoc` also generate a page for the `root` command itself?**
+1. **Should `tools/clidoc` also generate a page for the `root` command itself?** — RESOLVED at plan time (12-01-PLAN.md Task 1: `walk(root)` — the root section is generated, matching `codegraph --help` parity).
    - What we know: `GenMarkdownTreeCustom` always generates the command it's called on plus recurses into children — so cobra's own convention includes root. `GenMarkdownCustom(root, ...)` prints root's own `Short`/`Long`/usage/`### Options` (none today — root has no local flags, only the auto `--help`)/`### SEE ALSO` (root has no parent link, but lists every available top-level child).
    - What's unclear: whether a root-level section adds value in a single-file reference where the top-level command list is already implicit from the section headers below it.
    - Recommendation: Include it (as the skeleton above does) — it's what a real `codegraph --help` shows, it's zero extra code (the same `walk` function handles it), and omitting it would be an arbitrary special case to maintain.
 
-2. **Exact allowlist line format details (D-08 leaves this to planner discretion).**
+2. **Exact allowlist line format details (D-08 leaves this to planner discretion).** — RESOLVED at plan time (12-01-PLAN.md Task 2: a literal tab character delimits `<command path>[ --flag]` from `<reason>`; `#`-prefixed comment lines and blank lines are ignored).
    - What we know: D-08 specifies the semantic content (`<full command path> [--flag]<TAB><reason>`, one whole-hidden-command line covers all its flags) and the one committed example (`codegraph man` for D-02's reason).
    - What's unclear: whether to use a literal tab character or a documented delimiter convention, and whether comment lines (`#`-prefixed) should be supported for readability.
    - Recommendation: A literal tab is fine and matches D-08's own notation; a plan can add `#`-comment support for zero extra guard complexity if useful, but it is not required by any of D-07..D-10.
