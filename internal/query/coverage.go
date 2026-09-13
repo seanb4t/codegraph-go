@@ -197,18 +197,37 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 
 	var rows []CoverageRow
 
-	if !filterByReason {
+	// TestCoverageRowsOrderingAndPagingAreStable (RED before this fix):
+	// the two segments are walked in the STORE's own key order (a
+	// length-prefixed encoding, keys.go's appendSegment — see
+	// CoverageRow's own doc comment), never plain lexical path order.
+	// The resume cursor therefore cannot use a lexical "path <=
+	// cursorPath" comparison to decide "already returned" — that
+	// comparison is only monotonic when the store's key order happens
+	// to agree with lexical order, which it does not once paths differ
+	// in length. Instead, each segment replays from its own start and
+	// skips forward until it has SEEN the exact cursor path once more
+	// (an identical fresh iterator over unchanged data reproduces the
+	// same sequence), then resumes emitting from the next row. A
+	// cursor sitting in the later 'x' segment additionally means the
+	// earlier 'f' segment is already fully consumed and must be
+	// skipped in its entirety, not re-walked from its own start.
+	if !filterByReason && cursorSeg != 'x' {
 		fit, err := e.reader.IterateFiles()
 		if err != nil {
 			return CoveragePage{}, err
 		}
+		skipping := cursorSeg == 'f'
 		for len(rows) <= pageSize && fit.Next() {
 			f := fit.File()
 			if len(f.GetErrors()) == 0 {
 				continue
 			}
 			path := f.GetPath()
-			if cursorSeg == 'f' && path <= cursorPath {
+			if skipping {
+				if path == cursorPath {
+					skipping = false
+				}
 				continue
 			}
 			rows = append(rows, CoverageRow{
@@ -229,13 +248,17 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 		if err != nil {
 			return CoveragePage{}, err
 		}
+		skipping := cursorSeg == 'x'
 		for len(rows) <= pageSize && xit.Next() {
 			x := xit.ExcludedFile()
 			if filterByReason && x.GetReason() != opts.Reason {
 				continue
 			}
 			path := x.GetPath()
-			if cursorSeg == 'x' && path <= cursorPath {
+			if skipping {
+				if path == cursorPath {
+					skipping = false
+				}
 				continue
 			}
 			rows = append(rows, CoverageRow{
