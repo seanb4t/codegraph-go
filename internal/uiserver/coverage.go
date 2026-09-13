@@ -2,7 +2,6 @@ package uiserver
 
 import (
 	"context"
-	"errors"
 
 	"connectrpc.com/connect"
 
@@ -52,15 +51,45 @@ func coverageRowToProto(r query.CoverageRow) *uiv1.CoverageRow {
 	}
 }
 
-// errCoverageUnimplemented is plan 10-01's RED-phase placeholder — GREEN
-// replaces this handler body with the real eng.CoverageRows call.
-var errCoverageUnimplemented = errors.New("uiserver: GetCoverage is not yet implemented (plan 10-01 RED phase)")
+// coveragePageToProto maps internal/query.CoveragePage onto
+// uiv1.GetCoverageResponse field-for-field.
+func coveragePageToProto(p query.CoveragePage) *uiv1.GetCoverageResponse {
+	rows := make([]*uiv1.CoverageRow, len(p.Rows))
+	for i, r := range p.Rows {
+		rows[i] = coverageRowToProto(r)
+	}
+	return &uiv1.GetCoverageResponse{
+		Rows:          rows,
+		NextPageToken: p.NextPageToken,
+		Known:         p.Known,
+	}
+}
 
 // GetCoverage pages the per-file coverage-gap row list (Phase 10
 // HLT-05/HLT-06, D-10) that GetHealthResponse.coverage deliberately
 // omits to stay bounded on a polled call. Uses the ORDINARY withEngine
 // shape (Callers/Callees/Files/GetHealth/FileGraph/FileSymbols'
-// convention) — not GetStatus's degrade path.
+// convention) — not GetStatus's degrade path. A malformed page token
+// surfaces as query.ErrInvalidArgument -> CodeInvalidArgument through
+// the shared mapEngineError translation, unwrapped from inside the
+// closure exactly as FileSymbols/GetNodeDetail/GetPermalink do it —
+// no second mapping is added here.
 func (s *uiService) GetCoverage(ctx context.Context, req *connect.Request[uiv1.GetCoverageRequest]) (*connect.Response[uiv1.GetCoverageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errCoverageUnimplemented)
+	var resp *uiv1.GetCoverageResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		page, err := eng.CoverageRows(query.CoverageRowsOptions{
+			PageSize:  int(req.Msg.GetPageSize()),
+			PageToken: req.Msg.GetPageToken(),
+			Reason:    schema.ExclusionReason(req.Msg.GetReason()),
+		})
+		if err != nil {
+			return err
+		}
+		resp = coveragePageToProto(page)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
 }

@@ -902,7 +902,10 @@ func (s *uiService) Explore(ctx context.Context, req *connect.Request[uiv1.Explo
 // supplied by the caller (GetHealth), computed through the SAME
 // schema.IndexedCommitSHA + schema.IsCommitSHA validation gate GetStatus
 // applies — never re-derived here (Task 1 checkpoint sub-decision 2).
-func healthToProto(result query.StatusResult, commitSHA string) *uiv1.GetHealthResponse {
+// coverage (Phase 10, plan 10-01) is likewise supplied by the caller,
+// computed via eng.CoverageSummary() inside the SAME withEngine closure
+// as eng.Status(ctx) — see GetHealth's own doc comment.
+func healthToProto(result query.StatusResult, commitSHA string, coverage query.CoverageSummary) *uiv1.GetHealthResponse {
 	return &uiv1.GetHealthResponse{
 		Initialized:     result.Initialized,
 		Version:         result.Version,
@@ -931,6 +934,7 @@ func healthToProto(result query.StatusResult, commitSHA string) *uiv1.GetHealthR
 		WorktreeMismatch: worktreeMismatchToProto(result.WorktreeMismatch),
 		Stale:            result.Stale,
 		CommitSha:        commitSHA,
+		Coverage:         coverageToProto(coverage),
 	}
 }
 
@@ -984,7 +988,15 @@ func (s *uiService) GetHealth(ctx context.Context, _ *connect.Request[uiv1.GetHe
 		if ok && !schema.IsCommitSHA(commitSHA) {
 			commitSHA = ""
 		}
-		resp = healthToProto(result, commitSHA)
+		// Phase 10 HLT-05/HLT-06: eng.CoverageSummary() is called inside
+		// this SAME withEngine closure as eng.Status(ctx) above, so the
+		// discovered-vs-indexed denominator is read from the SAME
+		// snapshot as every other GetHealth field.
+		coverage, err := eng.CoverageSummary()
+		if err != nil {
+			return err
+		}
+		resp = healthToProto(result, commitSHA, coverage)
 		return nil
 	})
 	if err != nil {
