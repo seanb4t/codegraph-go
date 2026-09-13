@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 10
 current_phase_name: Index Health — The Coverage Denominator
 status: executing
-stopped_at: Completed 10-01-PLAN.md (coverage denominator tracer)
-last_updated: "2026-09-13T01:52:25.374Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-09-13T02:20:28.224Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 10 execution started
-state_head: dc4aa4caecaec71f9bdbe6681ebe1b80a466868e
+state_head: bc10004d2a14d78f53974f981979cde9d586ce97
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-12 after Phase 9)
 ## Current Position
 
 Phase: 10 (Index Health — The Coverage Denominator) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 10 execution started
 
@@ -127,6 +127,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 09 P05 | 30min | 3 tasks | 2 files |
 | Phase 09 P06 | 20min | 2 tasks | 14 files |
 | Phase 10 P01 | 1h 5min | 2 tasks | 37 files |
+| Phase 10 P02 | ~50min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -276,6 +277,8 @@ Standing decisions that outlive every milestone:
 - [Phase 09]: 09-SECURITY.md records Cursor/JetBrains preset templates as still [ASSUMED] rather than confirmed — no real IDE was available to click through in this autonomous session; WINDOWS.md #35 stays open
 - [Phase 09]: [Phase 09] 09-06: Closed the svelte-check gap (2 errors at SourcePane.svelte:446:31, introduced by CR-01 commit 28d5d795) by capturing the guard-narrowed getEditorLink once and calling it from both the initial probe and the corrective re-probe -- no behavioral change, gate restored to 0 errors, task web:build/web:drift both MATCH.
 - [Phase 10]: prefixExcludedFile='c'; ExcludedByReason keyed by full enum name; Export Open Question 1 decided as implement (exportKindExcludedFile=5).
+- [Phase 10]: [Phase 10] Assumption A1 (dangling .py symlink for extraction-failure fixture) VERIFIED on first probe run — no chmod fallback needed
+- [Phase 10]: [Phase 10] Coverage-index test fixtures must never pre-create repoRoot/.codegraph/store before indexer.Run — DiscoverAll's walk runs before graphstore.Open creates it on a real first index, and pre-creating it produces a phantom DIR_DOTPREFIX exclusion
 
 ### Pending Todos
 
@@ -425,8 +428,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-13T01:52:25.347Z
-Stopped at: Completed 10-01-PLAN.md (coverage denominator tracer)
+Last session: 2026-09-13T02:20:28.197Z
+Stopped at: Completed 10-02-PLAN.md
   NEXT: `/gsd-discuss-phase 10` (Index Health — The Coverage Denominator; no 10-CONTEXT.md yet)
   CARRY-OVER:
 

@@ -21,7 +21,7 @@
     {
       "number": "10",
       "name": "Index Health — The Coverage Denominator",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "11",
@@ -39,5 +39,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 10 of 6 · 0% · executing"
   },
-  "updated_at": "2026-09-13T01:52:01.018Z"
+  "updated_at": "2026-09-13T02:20:17.284Z"
 }
