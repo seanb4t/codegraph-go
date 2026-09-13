@@ -13,6 +13,8 @@ threat_ref: UF-2 (03-SECURITY.md)
 audit_acknowledged:
   milestone: v0.11.0
   at: 2026-08-17
+completed: 2026-09-13
+status: completed
 ---
 
 ## Problem
