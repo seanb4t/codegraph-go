@@ -30,10 +30,13 @@ func uiserverBuildTagFixture(t *testing.T) string {
 	writeCoverageFixtureFile(t, root, "main.go", "package main\n\nfunc main() {}\n")
 	writeCoverageFixtureFile(t, root, "tagged.go", "//go:build ignore\n\npackage main\n\nfunc Tagged() {}\n")
 
+	// Phase 10 Plan 2: storeDir is deliberately NOT pre-created —
+	// indexer.Run's own DiscoverAll walk runs BEFORE graphstore.Open
+	// creates it, mirroring production's first-index ordering. Pre-
+	// creating it here would make decision point 1 record a phantom
+	// DIR_DOTPREFIX exclusion for ".codegraph" that a real from-scratch
+	// index never sees.
 	storeDir := filepath.Join(root, ".codegraph", "store")
-	if err := os.MkdirAll(storeDir, 0o755); err != nil {
-		t.Fatalf("mkdir store dir: %v", err)
-	}
 	if _, err := indexer.Run(root, storeDir, indexer.Options{Quiet: true}); err != nil {
 		t.Fatalf("index fixture: %v", err)
 	}
@@ -134,19 +137,29 @@ func TestGetHealthCarriesCoverageForBuildTagExclusion(t *testing.T) {
 	if !covResp.Msg.GetKnown() {
 		t.Fatal("GetCoverage known = false, want true")
 	}
+	// Phase 10 Plan 2 also records go.mod itself as an
+	// UNSUPPORTED_EXTENSION exclusion (decision point 2) — this fixture
+	// now yields both records, not just tagged.go's.
 	rows := covResp.Msg.GetRows()
-	if len(rows) != 1 {
-		t.Fatalf("GetCoverage rows = %+v, want exactly 1", rows)
+	if len(rows) != 2 {
+		t.Fatalf("GetCoverage rows = %+v, want exactly 2", rows)
 	}
-	row := rows[0]
-	if row.GetPath() != "tagged.go" {
-		t.Errorf("row.Path = %q, want %q", row.GetPath(), "tagged.go")
+	byPath := make(map[string]*uiv1.CoverageRow, len(rows))
+	for _, r := range rows {
+		byPath[r.GetPath()] = r
+	}
+	row, ok := byPath["tagged.go"]
+	if !ok {
+		t.Fatalf("GetCoverage rows = %+v, want a tagged.go row", rows)
 	}
 	if row.GetKind() != uiv1.CoverageRowKind_COVERAGE_ROW_KIND_EXCLUDED {
 		t.Errorf("row.Kind = %v, want COVERAGE_ROW_KIND_EXCLUDED", row.GetKind())
 	}
 	if row.GetReason() != uiv1.ExclusionReason_EXCLUSION_REASON_BUILD_TAG {
 		t.Errorf("row.Reason = %v, want EXCLUSION_REASON_BUILD_TAG", row.GetReason())
+	}
+	if goModRow, ok := byPath["go.mod"]; !ok || goModRow.GetReason() != uiv1.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION {
+		t.Fatalf("GetCoverage rows = %+v, want a go.mod UNSUPPORTED_EXTENSION row too", rows)
 	}
 	if covResp.Msg.GetNextPageToken() != "" {
 		t.Errorf("NextPageToken = %q, want empty", covResp.Msg.GetNextPageToken())

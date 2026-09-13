@@ -34,13 +34,15 @@ func writeFixture(t *testing.T, root, relPath, contents string) {
 
 // indexCoverageFixture indexes root via a real indexer.Run into
 // root/.codegraph/store and returns an opened Reader over that store, its
-// own close func, and an *Engine wrapping it.
+// own close func, and an *Engine wrapping it. The store directory is
+// deliberately NOT pre-created (Phase 10 Plan 2: indexer.Run's own
+// DiscoverAll walk runs BEFORE graphstore.Open creates storeDir, exactly
+// mirroring production's first-index ordering — pre-creating it here
+// would make decision point 1 record a phantom DIR_DOTPREFIX exclusion
+// for ".codegraph" that a real from-scratch index never sees).
 func indexCoverageFixture(t *testing.T, root string) (*Engine, func()) {
 	t.Helper()
 	storeDir := filepath.Join(root, ".codegraph", "store")
-	if err := os.MkdirAll(storeDir, 0o755); err != nil {
-		t.Fatalf("mkdir store dir: %v", err)
-	}
 	if _, err := indexer.Run(root, storeDir, indexer.Options{Quiet: true}); err != nil {
 		t.Fatalf("index fixture: %v", err)
 	}
@@ -201,7 +203,7 @@ func TestCoverageRowsUnknownGraphAndSingleRow(t *testing.T) {
 		}
 	})
 
-	t.Run("tagged repo single row", func(t *testing.T) {
+	t.Run("tagged repo two rows", func(t *testing.T) {
 		root := buildTagRepoFixture(t)
 		eng, closer := indexCoverageFixture(t, root)
 		defer closer()
@@ -213,18 +215,32 @@ func TestCoverageRowsUnknownGraphAndSingleRow(t *testing.T) {
 		if !page.Known {
 			t.Fatal("Known = false, want true")
 		}
-		if len(page.Rows) != 1 {
-			t.Fatalf("Rows = %+v, want exactly 1", page.Rows)
+		// Phase 10 Plan 2 also records go.mod itself as an
+		// UNSUPPORTED_EXTENSION exclusion (decision point 2) — this
+		// fixture now yields both records, not just tagged.go's.
+		if len(page.Rows) != 2 {
+			t.Fatalf("Rows = %+v, want exactly 2", page.Rows)
 		}
-		row := page.Rows[0]
-		if row.Path != "tagged.go" {
-			t.Errorf("Rows[0].Path = %q, want %q", row.Path, "tagged.go")
+		byPath := make(map[string]CoverageRow, len(page.Rows))
+		for _, r := range page.Rows {
+			byPath[r.Path] = r
 		}
-		if row.Kind != CoverageRowExcluded {
-			t.Errorf("Rows[0].Kind = %v, want CoverageRowExcluded", row.Kind)
+		taggedRow, ok := byPath["tagged.go"]
+		if !ok {
+			t.Fatalf("Rows = %+v, want a tagged.go row", page.Rows)
 		}
-		if row.Reason != schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG {
-			t.Errorf("Rows[0].Reason = %v, want EXCLUSION_REASON_BUILD_TAG", row.Reason)
+		if taggedRow.Kind != CoverageRowExcluded {
+			t.Errorf("tagged.go Kind = %v, want CoverageRowExcluded", taggedRow.Kind)
+		}
+		if taggedRow.Reason != schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG {
+			t.Errorf("tagged.go Reason = %v, want EXCLUSION_REASON_BUILD_TAG", taggedRow.Reason)
+		}
+		goModRow, ok := byPath["go.mod"]
+		if !ok {
+			t.Fatalf("Rows = %+v, want a go.mod row", page.Rows)
+		}
+		if goModRow.Reason != schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION {
+			t.Errorf("go.mod Reason = %v, want EXCLUSION_REASON_UNSUPPORTED_EXTENSION", goModRow.Reason)
 		}
 		if page.NextPageToken != "" {
 			t.Errorf("NextPageToken = %q, want empty", page.NextPageToken)

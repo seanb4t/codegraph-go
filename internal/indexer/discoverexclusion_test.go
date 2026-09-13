@@ -38,23 +38,32 @@ func TestDiscoverAll_RecordsBuildTagExclusion(t *testing.T) {
 		t.Fatalf("ModulePath = %q, want %q", d.ModulePath, "example.com/tmp")
 	}
 
-	if len(d.Excluded) != 1 {
-		t.Fatalf("Excluded = %+v, want exactly 1 record", d.Excluded)
+	// Plan 02 also records go.mod itself as an UNSUPPORTED_EXTENSION
+	// exclusion (decision point 2, since ".mod" is not a registered
+	// language extension) — this test pins only the BUILD_TAG record's
+	// own shape, so look it up by path rather than assuming it is the
+	// walk's only record.
+	byPath := make(map[string]*schema.ExcludedFile, len(d.Excluded))
+	for _, x := range d.Excluded {
+		byPath[x.GetPath()] = x
 	}
-	got := d.Excluded[0]
-	if got.GetPath() != "tagged.go" {
-		t.Fatalf("Excluded[0].Path = %q, want %q", got.GetPath(), "tagged.go")
+	got, ok := byPath["tagged.go"]
+	if !ok {
+		t.Fatalf("Excluded = %+v, want a record for tagged.go", d.Excluded)
 	}
 	if got.GetReason() != schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG {
-		t.Fatalf("Excluded[0].Reason = %v, want EXCLUSION_REASON_BUILD_TAG", got.GetReason())
+		t.Fatalf("tagged.go Reason = %v, want EXCLUSION_REASON_BUILD_TAG", got.GetReason())
 	}
 	wantDetail := build.Default.GOOS + "/" + build.Default.GOARCH
 	if got.GetDetail() != wantDetail {
-		t.Fatalf("Excluded[0].Detail = %q, want %q (build.Default, never runtime.GOOS which a GOOS override would desynchronise)", got.GetDetail(), wantDetail)
+		t.Fatalf("tagged.go Detail = %q, want %q (build.Default, never runtime.GOOS which a GOOS override would desynchronise)", got.GetDetail(), wantDetail)
 	}
 	wantSize := int64(len("//go:build ignore\n\npackage tmp\n\nfunc Tagged() {}\n"))
 	if got.GetSizeBytes() != wantSize {
-		t.Fatalf("Excluded[0].SizeBytes = %d, want %d", got.GetSizeBytes(), wantSize)
+		t.Fatalf("tagged.go SizeBytes = %d, want %d", got.GetSizeBytes(), wantSize)
+	}
+	if modGot, ok := byPath["go.mod"]; !ok || modGot.GetReason() != schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION {
+		t.Fatalf("Excluded = %+v, want a go.mod UNSUPPORTED_EXTENSION record too", d.Excluded)
 	}
 
 	// Discover (the unchanged wrapper) still returns the same Files/

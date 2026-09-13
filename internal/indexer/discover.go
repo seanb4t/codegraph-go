@@ -60,12 +60,14 @@ type pendingFile struct {
 	mtimeUnixNs, sizeBytes int64
 }
 
-// Discover walks root and returns every file whose extension is claimed by
-// a registered LanguageSpec (D-03), sorted by RelPath in ascending byte
-// order. It is a thin wrapper around DiscoverAll (Phase 10 D-01,
-// discoverexclusion.go) for the many existing callers that need only the
-// discovered-file list and module path, not the exclusion-reason list —
-// see DiscoverAll's own doc comment for the full walk contract.
+// Discover returns the extraction-bound subset of DiscoverAll's result:
+// every file whose extension is claimed by a registered LanguageSpec
+// (D-03), sorted by RelPath in ascending byte order, and the resolved
+// module path — never the exclusion-reason list. It is a thin wrapper
+// around DiscoverAll (Phase 10 D-01, discoverexclusion.go) for the many
+// existing callers that only ever consumed the discovered-file list and
+// module path — see DiscoverAll's own doc comment for the full walk
+// contract, including all four exclusion decision points.
 func Discover(root string) ([]DiscoveredFile, string, error) {
 	d, err := DiscoverAll(root)
 	if err != nil {
