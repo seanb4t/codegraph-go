@@ -8,6 +8,8 @@ files:
   - internal/graphstore/archtest/import_graph_test.go:33-46
 
 threat_ref: CR-01 (07-REVIEW.md), sibling of the internal/query archtest fix in Phase 7
+completed: 2026-09-13
+status: completed
 ---
 
 ## Problem
