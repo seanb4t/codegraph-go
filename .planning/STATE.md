@@ -21,10 +21,10 @@ current_phase: 12
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-13 after Phase 12)
+See: .planning/PROJECT.md (updated 2026-09-13 after v0.13.0 milestone)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** v0.13.0 milestone close — audit → complete → cleanup (all six phases 7–12 verified)
+**Current focus:** Planning next milestone (v0.13.0 shipped 2026-09-13, verified closeout)
 
 ## Current Position
 
@@ -451,8 +451,8 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-13T14:17:49.000Z
-Stopped at: Phase 12 complete — all phases complete
-  NEXT: `/gsd-audit-milestone` (all six v0.13.0 phases complete and verified; Phases 7–10 read `stale` by the #4155 mechanism and need `/gsd-verify-work` re-verification if the audit requires `passed`)
+Stopped at: v0.13.0 milestone complete and archived (verified closeout); no milestone scoped
+  NEXT: `/gsd-cleanup` (autonomous run's last lifecycle step), then push the branch + open the phases 9–12 PR, then `/gsd-new-milestone`
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
@@ -467,4 +467,8 @@ Stopped at: Phase 12 complete — all phases complete
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- v0.13.0 SHIPPED 2026-09-13 as a `verified_closeout` — 6/6 phases canonical `passed` after re-verification, 26/26 requirements, both pre-close open artefacts resolved (tty03 debug session; graphstore archtest vacuity fixed as quick task `260913-pkp`); archived under `milestones/v0.13.0-*`
+- Push the branch (~180 commits ahead of origin) and open the phases 9–12 PR with a `feat:` title and `Resolves #N`; CI will run `docs:cli:drift` and the tmux `expected=6` gate at HEAD for the first time
+- Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go`
+- Cheap follow-ups: wire `task check:gonum` and `task check:no-force-layout` into `ci.yml`; run `/gsd-validate-phase` against the archived 09–12 VALIDATION files if a `validated` record is wanted; reconcile the Pending Todos table; inspect and remove the stale `.claude/worktrees/agent-aebfa7de95041ec86` worktree
+- Start the next milestone with /gsd-new-milestone (Phase numbering continues from 13)
