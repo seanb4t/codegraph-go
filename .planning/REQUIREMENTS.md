@@ -56,9 +56,9 @@
 
 ### Documentation
 
-- [ ] **DOCS-05**: A committed `docs/CLI-REFERENCE.md`, generated from the live Cobra tree by `cobra/doc` and kept current by a regenerate-and-diff gate, documents every non-hidden command and flag, replacing what `docs/FLAG-PARITY.md` used to carry
-- [ ] **DOCS-06**: A guard walks the live Cobra tree — including hidden, inherited persistent and deprecated flags — and fails when any registered flag is unaccounted for (in the generated reference, or in a committed hidden/deprecated allowlist with a reason); demonstrated RED by registering a throwaway hidden flag
-- [ ] **DOCS-07**: The brew-trust instructions recommend the narrow grant with security framing rather than the broader `--tap` grant
+- [x] **DOCS-05**: A committed `docs/CLI-REFERENCE.md`, generated from the live Cobra tree by `cobra/doc` and kept current by a regenerate-and-diff gate, documents every non-hidden command and flag, replacing what `docs/FLAG-PARITY.md` used to carry
+- [x] **DOCS-06**: A guard walks the live Cobra tree — including hidden, inherited persistent and deprecated flags — and fails when any registered flag is unaccounted for (in the generated reference, or in a committed hidden/deprecated allowlist with a reason); demonstrated RED by registering a throwaway hidden flag
+- [x] **DOCS-07**: The brew-trust instructions recommend the narrow grant with security framing rather than the broader `--tap` grant
 
 ## v2 Requirements
 
@@ -126,9 +126,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRF-08 | Phase 11 | Complete |
 | GRF-09 | Phase 11 | Complete |
 | GRF-10 | Phase 11 | Complete |
-| DOCS-05 | Phase 12 | Pending |
-| DOCS-06 | Phase 12 | Pending |
-| DOCS-07 | Phase 12 | Pending |
+| DOCS-05 | Phase 12 | Complete |
+| DOCS-06 | Phase 12 | Complete |
+| DOCS-07 | Phase 12 | Complete |
 
 **Coverage:**
 
