@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "thresholdRef": "corpora/graph-cluster-threshold.json",
+  "thresholdDigest": "sha256:6adc6722ff0148b5000e5653c77b4737fb698d27e6f632983baee474e766b971",
+  "corpus": {
+    "repo": "google/guava",
+    "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa"
+  },
+  "storeSource": "manifest",
+  "storeRelative": ".codegraph/store",
+  "nodeCount": 3233,
+  "edgeCount": 21554,
+  "communityCount": 355,
+  "runs": [
+    {
+      "run": 1,
+      "clusteringTimeMs": 108,
+      "fileGraphWallMs": 351
+    },
+    {
+      "run": 2,
+      "clusteringTimeMs": 95,
+      "fileGraphWallMs": 331
+    },
+    {
+      "run": 3,
+      "clusteringTimeMs": 106,
+      "fileGraphWallMs": 264
+    }
+  ],
+  "clusteringTimeMs": {
+    "values": [
+      108,
+      95,
+      106
+    ],
+    "median": 106,
+    "max": 500,
+    "unit": "ms",
+    "statistic": "median",
+    "comparison": "median \u003c= max",
+    "verdict": "PASS"
+  },
+  "verdict": "PASS",
+  "measuredAt": "2026-09-13T16:51:22Z",
+  "goVersion": "go1.26.6",
+  "goos": "darwin",
+  "goarch": "arm64"
+}
