@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "purpose": "GRF-09's pass condition, locked before any measurement exists (D-05, the GRF-01 protocol). tools/graphcluster reads every value here — corpus, metrics.clusteringTimeMs (max, statistic, runs), minNodes and onFailure — rather than carrying its own defaults. Amending, widening or relaxing any value in this file after tools/graphcluster measures against it is forbidden; on FAIL the remedy is onFailure (index-time persistence into Node field 50, community_id), never a raised bar.",
+  "corpus": {
+    "repo": "google/guava",
+    "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
+    "note": "SHA copied verbatim from corpora/manifest.json, the sole pin authority. The largest locally indexed corpus at file-rollup scale (3,233 file nodes / 21,554 file-pair edges per GRF-01). The harness opens the already-indexed store under ~/.cache/codegraph/corpora/ READ-ONLY and never re-indexes it."
+  },
+  "metrics": {
+    "clusteringTimeMs": {
+      "max": 500,
+      "unit": "ms",
+      "statistic": "median",
+      "runs": 3,
+      "definition": "Elapsed wall-clock time of one AssignCommunities(nodes, edges) call over the FileGraphResult rollup of the pinned corpus — from the rollup being complete (FileGraph() returned) to the community assignment map being complete — measured in-process by tools/graphcluster, truncated to integer milliseconds from time.Duration, over `runs` cold calls (a fresh store snapshot and a fresh FileGraph() per run; no cache, no warm-up call excluded, no GC forced between runs), binding statistic the median (the sorted middle value, never an average). PASS iff median <= max; equality passes. The comparison is integer-only: no floats anywhere in the verdict path."
+    }
+  },
+  "minNodes": 2,
+  "minNodesNote": "The harness REFUSES (exit 2, no observation written) when the pinned corpus resolves to fewer than 2 file nodes — a 0 ms observation over an empty rollup is not a meaningful PASS.",
+  "recordedNonBinding": {
+    "fileGraphWallMs": {
+      "definition": "Recorded, never a bar: total FileGraph() wall time per run, includes one embedded clustering pass; recorded so the split between scan cost and clustering cost stays visible."
+    },
+    "nodeCount": {
+      "definition": "Recorded, never a bar: the number of file-level nodes in the measured rollup."
+    },
+    "edgeCount": {
+      "definition": "Recorded, never a bar: the number of aggregated file-pair edges in the measured rollup."
+    },
+    "communityCount": {
+      "definition": "Recorded, never a bar: the number of distinct community ids the measured run assigned."
+    }
+  },
+  "measurementProtocol": {
+    "harness": "tools/graphcluster",
+    "storeSource": "the cached corpus store resolved through corpora/manifest.json + internal/corpora.Entry.Dir + .codegraph/store, opened with graphstore.Open + Snapshot, never indexer.Run",
+    "runsNote": "The binding run count lives once, at metrics.clusteringTimeMs.runs — not duplicated here, so there is exactly one number to keep in sync.",
+    "statistic": "median",
+    "precision": "integer milliseconds truncated from time.Duration",
+    "comparison": "PASS iff median <= max; equality passes",
+    "observationFile": "corpora/graph-cluster-observations.json",
+    "observationCarriesThresholdDigest": true,
+    "observationCarriesThresholdDigestNote": "The observation records a sha256 of this file's bytes so a later edit to this file is detected by a persisted test.",
+    "ancestryProof": "tools/graphcluster/ancestry_test.go — the commit that added this file must be an ancestor (or the same commit, after a squash-merge) of every commit touching the observation file and the harness"
+  },
+  "onFailure": "If clusteringTimeMs.median exceeds max, the observation records verdict FAIL verbatim and the phase executes the documented fallback: community assignment is PROMOTED to an index-time computation persisted on the file-kind Node record as int32 community_id = 50 (the first number of internal/schema/graph.proto's reserved 50-59 range), written in the indexer's commit batch and read back by FileGraph() IN PLACE OF the fresh per-call compute, which is removed — one source of truth, never two. Lowering, widening or re-scoping this threshold is NOT an available remedy.",
+  "lockedBy": "11-01-PLAN.md Task 1 (D-05); committed alone as the phase's first commit, before internal/query/community.go, tools/graphcluster or any web/src change exists.",
+  "prohibitions": [
+    "MUST NOT amend, widen, or relax any value in this file after tools/graphcluster measures against it.",
+    "MUST NOT judge GRF-09 against any value not present in this committed artifact."
+  ]
+}
