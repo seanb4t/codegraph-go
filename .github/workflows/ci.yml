@@ -195,6 +195,13 @@ jobs:
       - name: Proto codegen drift guard (BLD-04)
         run: task proto:drift
 
+      # DOCS-05, v0.13.0 Phase 12: proves the committed docs/CLI-REFERENCE.md
+      # still matches what tools/clidoc generates from the live Cobra tree.
+      # Regenerated into a temp file, never in place; fires on every flag
+      # addition that forgets `task docs:cli`.
+      - name: CLI reference drift guard (DOCS-05)
+        run: task docs:cli:drift
+
       # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
       # by `go list ./...` above (it's a normal package, not testdata/), but
       # an explicit named step guards against a future refactor of that

@@ -478,6 +478,62 @@ tasks:
 
         echo "proto:drift: all ${nfiles} generated files byte-identical to the pinned toolchain's regeneration (temporary tree only — source tree untouched)"
 
+  docs:cli:
+    desc: >-
+      DOCS-05/D-01-D-03: regenerates docs/CLI-REFERENCE.md IN PLACE from the
+      live codegraph Cobra tree via tools/clidoc — the only sanctioned way
+      to change this file (a hand edit is exactly what docs:cli:drift
+      exists to catch). Every go invocation is GOTOOLCHAIN=go1.26.6-pinned
+      (D-14).
+    cmds:
+      - |
+        set -euo pipefail
+        GOTOOLCHAIN=go1.26.6 go run ./tools/clidoc -out docs/CLI-REFERENCE.md
+        echo "docs:cli: regenerated docs/CLI-REFERENCE.md from the live Cobra tree via tools/clidoc"
+
+  docs:cli:drift:
+    desc: >-
+      DOCS-05's docs/CLI-REFERENCE.md drift guard (D-03), mirroring
+      proto:drift's shape: regenerates with the SAME pinned toolchain into a
+      TEMPORARY directory, never in place, so a developer's uncommitted
+      edit survives a guard run untouched. Reports `compared N generated
+      file` BEFORE comparing anything, and fails with a named error when N
+      is below the floor of 1, so a broken enumeration can never read as a
+      clean pass (rule 84d1gfpywd). A header-only or whitespace-only
+      difference IS drift. Wired into ci.yml's test job immediately after
+      proto:drift (D-14).
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — docs:cli:drift runs the generator via go run, same as docs:cli."
+      - sh: command -v git
+        msg: "git not found — docs:cli:drift enumerates the committed generated file via git ls-files."
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        files=$(git ls-files -- 'docs/CLI-REFERENCE.md')
+        ndocs=0
+        if [ -n "${files}" ]; then
+          ndocs=$(printf '%s\n' "${files}" | wc -l | tr -d ' ')
+        fi
+        echo "docs:cli:drift: compared ${ndocs} generated file"
+        if [ "${ndocs}" -lt 1 ]; then
+          echo "::error::docs:cli:drift: enumerated only ${ndocs} committed generated file at docs/CLI-REFERENCE.md (expected exactly 1) — a broken enumeration must fail loud, never read as a clean pass"
+          exit 1
+        fi
+
+        GOTOOLCHAIN=go1.26.6 go run ./tools/clidoc -out "${scratch}/CLI-REFERENCE.md"
+
+        if ! cmp -s docs/CLI-REFERENCE.md "${scratch}/CLI-REFERENCE.md"; then
+          echo "::error::docs:cli:drift: docs/CLI-REFERENCE.md differs from a fresh regeneration by the pinned toolchain — run \`task docs:cli\` and commit the result"
+          diff -u docs/CLI-REFERENCE.md "${scratch}/CLI-REFERENCE.md" | head -40 || true
+          exit 1
+        fi
+
+        echo "docs:cli:drift: docs/CLI-REFERENCE.md byte-identical to a fresh regeneration (temporary file only — source tree untouched)"
+
   web:deps:
     desc: >-
       BLD-01's resolve-then-install step. Resolution order, reported so the
