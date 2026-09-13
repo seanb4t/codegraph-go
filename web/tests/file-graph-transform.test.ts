@@ -24,14 +24,18 @@ import {
 
 function node(
 	path: string,
-	opts: Partial<{ language: string; symbolCount: bigint; cycleId: number }> = {}
+	opts: Partial<{ language: string; symbolCount: bigint; cycleId: number; communityId: number }> = {}
 ): FileGraphNode {
-	return {
+	const n: Record<string, unknown> = {
 		path,
 		language: opts.language ?? 'go',
 		symbolCount: opts.symbolCount ?? 1n,
 		cycleId: opts.cycleId ?? 0
-	} as unknown as FileGraphNode;
+	};
+	if (opts.communityId !== undefined) {
+		n.communityId = opts.communityId;
+	}
+	return n as unknown as FileGraphNode;
 }
 
 function edge(
@@ -172,6 +176,91 @@ describe('file-graph-transform: cycle information is copied, never invented', ()
 		expect(files.every((f) => f.cycleId === 7)).toBe(true);
 		const edgeEls = edgeData(elements);
 		expect(edgeEls[0].inCycle).toBe(true);
+	});
+});
+
+describe('file-graph-transform: community information is copied, never invented', () => {
+	it('a file node with communityId 4 yields data.communityId === 4 and exactly one graph-community-3 class', () => {
+		const elements = rollupToElements(response([node('a.go', { communityId: 4 })], []), new Set());
+		const files = fileNodeData(elements);
+		expect(files[0].communityId).toBe(4);
+		const el = elements.find((e) => (e.data as FileGraphNodeData).id === 'a.go');
+		const classes = (el && 'classes' in el ? el.classes : undefined) ?? '';
+		expect(classes.split(' ').filter((c) => c === 'graph-community-3')).toHaveLength(1);
+	});
+
+	it('communityId 0 and a fixture built WITHOUT the field both yield data.communityId === 0 and no graph-community- class (id 1 is the positive control)', () => {
+		const zeroElements = rollupToElements(response([node('a.go', { communityId: 0 })], []), new Set());
+		const zeroFile = fileNodeData(zeroElements)[0];
+		expect(zeroFile.communityId).toBe(0);
+		const zeroEl = zeroElements.find((e) => (e.data as FileGraphNodeData).id === 'a.go');
+		expect((zeroEl && 'classes' in zeroEl ? zeroEl.classes : undefined) ?? '').not.toMatch(/graph-community-/);
+
+		const missingElements = rollupToElements(response([node('b.go')], []), new Set());
+		const missingFile = fileNodeData(missingElements)[0];
+		expect(missingFile.communityId).toBe(0);
+		const missingEl = missingElements.find((e) => (e.data as FileGraphNodeData).id === 'b.go');
+		expect((missingEl && 'classes' in missingEl ? missingEl.classes : undefined) ?? '').not.toMatch(
+			/graph-community-/
+		);
+
+		const positiveElements = rollupToElements(response([node('c.go', { communityId: 1 })], []), new Set());
+		const positiveEl = positiveElements.find((e) => (e.data as FileGraphNodeData).id === 'c.go');
+		const positiveClasses = (positiveEl && 'classes' in positiveEl ? positiveEl.classes : undefined) ?? '';
+		expect(positiveClasses.split(' ')).toContain('graph-community-0');
+	});
+
+	it('ids 1, 12, 13 map to classes graph-community-0, graph-community-11, graph-community-0 (cycling)', () => {
+		const elements = rollupToElements(
+			response(
+				[node('a.go', { communityId: 1 }), node('b.go', { communityId: 12 }), node('c.go', { communityId: 13 })],
+				[]
+			),
+			new Set()
+		);
+		function classesFor(id: string): string {
+			const el = elements.find((e) => (e.data as FileGraphNodeData).id === id);
+			return (el && 'classes' in el ? el.classes : undefined) ?? '';
+		}
+		expect(classesFor('a.go').split(' ')).toContain('graph-community-0');
+		expect(classesFor('b.go').split(' ')).toContain('graph-community-11');
+		expect(classesFor('c.go').split(' ')).toContain('graph-community-0');
+	});
+
+	it('a node with cycleId 2 and communityId 5 carries graph-cycle, graph-cycle-2 AND graph-community-4 (composition)', () => {
+		const elements = rollupToElements(
+			response([node('a.go', { cycleId: 2, communityId: 5 })], []),
+			new Set()
+		);
+		const el = elements.find((e) => (e.data as FileGraphNodeData).id === 'a.go');
+		const classes = ((el && 'classes' in el ? el.classes : undefined) ?? '').split(' ');
+		expect(classes).toContain('graph-cycle');
+		expect(classes).toContain('graph-cycle-2');
+		expect(classes).toContain('graph-community-4');
+	});
+
+	it('directory compounds stay neutral: an expanded and a collapsed directory over mixed-community files carry no communityId and no graph-community- class (D-11)', () => {
+		const nodes = [
+			node('a/x.go', { communityId: 1 }),
+			node('a/y.go', { communityId: 2 }),
+			node('b/p.go', { communityId: 1 }),
+			node('b/q.go', { communityId: 2 })
+		];
+		const elements = rollupToElements(response(nodes, []), new Set(['a']));
+
+		const expandedDir = elements.find((e) => (e.data as FileGraphNodeData).id === 'a');
+		expect(expandedDir).toBeDefined();
+		expect((expandedDir!.data as FileGraphNodeData).communityId).toBeUndefined();
+		expect((expandedDir && 'classes' in expandedDir ? expandedDir.classes : undefined) ?? '').not.toMatch(
+			/graph-community-/
+		);
+
+		const collapsedDir = elements.find((e) => (e.data as FileGraphNodeData).id === 'b');
+		expect(collapsedDir).toBeDefined();
+		expect((collapsedDir!.data as FileGraphNodeData).communityId).toBeUndefined();
+		expect((collapsedDir && 'classes' in collapsedDir ? collapsedDir.classes : undefined) ?? '').not.toMatch(
+			/graph-community-/
+		);
 	});
 });
 
