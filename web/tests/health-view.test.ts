@@ -353,7 +353,7 @@ describe('fetchAllCoverageRows: bounded page walker over GetCoverage', () => {
 
 	it('returns { known: false, rows: [] } after exactly one call when the first page reports known === false', async () => {
 		const { client, calls } = pagingClient([
-			{ rows: [], nextPageToken: '', known: false } as GetCoverageResponse
+			{ rows: [], nextPageToken: '', known: false } as unknown as GetCoverageResponse
 		]);
 
 		const result = await fetchAllCoverageRows(client);
@@ -371,7 +371,7 @@ describe('fetchAllCoverageRows: bounded page walker over GetCoverage', () => {
 					rows: [],
 					nextPageToken: `t${calls}`,
 					known: true
-				} as GetCoverageResponse);
+				} as unknown as GetCoverageResponse);
 			})
 		};
 

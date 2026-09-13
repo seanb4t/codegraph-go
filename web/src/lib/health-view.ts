@@ -12,7 +12,14 @@
 // over one index is exactly the repudiation failure HLT-02 exists to
 // prevent (T-04-17).
 import type { MessageInitShape } from '@bufbuild/protobuf';
-import type { GetHealthRequestSchema, GetHealthResponse } from '$lib/gen/ui_pb';
+import { CoverageRowKind, ExclusionReasonSchema } from '$lib/gen/ui_pb';
+import type {
+	CoverageRow,
+	GetCoverageRequestSchema,
+	GetCoverageResponse,
+	GetHealthRequestSchema,
+	GetHealthResponse
+} from '$lib/gen/ui_pb';
 import type { IndexStatus, StatusVerdict } from './status';
 
 // CountRow is the shared {key,count} row shape for all three of
@@ -119,4 +126,216 @@ export interface HealthClient {
 		request: MessageInitShape<typeof GetHealthRequestSchema>,
 		options?: { signal?: AbortSignal }
 	): Promise<GetHealthResponse>;
+}
+
+// --- Coverage (Phase 10, plan 10-04, D-11) -------------------------------
+//
+// The functions below are pure projections of GetHealthResponse.coverage
+// and GetCoverageResponse rows onto /health's Coverage section. Same
+// discipline as everything above: no verdict is computed here (D-04),
+// health-view.ts stays downstream of status.ts's ONE classifier, and
+// these functions never re-derive a coverage number the server already
+// counted — they only reshape what GetHealth/GetCoverage already sent.
+
+// CoverageView discriminates on `known` (D-06's never-0/0 rule): a
+// pre-Phase-10 graph, or a response whose `coverage` field is absent
+// entirely, renders the SAME { known: false } shape — the renderer never
+// sees an empty table it could mistake for "no gaps".
+export interface CoverageViewUnknown {
+	known: false;
+}
+
+export interface CoverageViewKnown {
+	known: true;
+	discovered: number;
+	indexed: number;
+	excluded: number;
+	extractionFailed: number;
+	// byReason is `excludedByReason` projected through the SAME
+	// toCountRows sort every other count table on this page uses (count
+	// desc, key asc) — one deterministic-order function, not a second one
+	// for this table.
+	byReason: CountRow[];
+	// directoryPrunes is the sum of the two directory-level reasons
+	// (DIR_VENDOR, DIR_DOTPREFIX) — entries whose contents were never
+	// discovered at all, called out separately from per-file exclusions.
+	directoryPrunes: number;
+}
+
+export type CoverageView = CoverageViewUnknown | CoverageViewKnown;
+
+const DIRECTORY_REASON_KEYS = new Set(['EXCLUSION_REASON_DIR_VENDOR', 'EXCLUSION_REASON_DIR_DOTPREFIX']);
+
+export function toCoverageView(response: GetHealthResponse): CoverageView {
+	const coverage = response.coverage;
+	if (!coverage || coverage.known === false) {
+		return { known: false };
+	}
+	const byReason = toCountRows(coverage.excludedByReason);
+	const directoryPrunes = byReason
+		.filter((row) => DIRECTORY_REASON_KEYS.has(row.key))
+		.reduce((sum, row) => sum + row.count, 0);
+	return {
+		known: true,
+		discovered: Number(coverage.discovered),
+		indexed: Number(coverage.indexed),
+		excluded: Number(coverage.excluded),
+		extractionFailed: Number(coverage.extractionFailed),
+		byReason,
+		directoryPrunes
+	};
+}
+
+// REASON_LABELS is keyed by ExclusionReason's FULL generated proto names
+// (the same strings the server uses as excluded_by_reason map keys and
+// reasonKeyOf resolves numbers to) — never the bare TS enum member name.
+export const REASON_LABELS: Record<string, string> = {
+	EXCLUSION_REASON_DIR_VENDOR: 'Vendored directory (pruned)',
+	EXCLUSION_REASON_DIR_DOTPREFIX: 'Dot-prefixed directory (pruned)',
+	EXCLUSION_REASON_UNSUPPORTED_EXTENSION: 'Unsupported extension',
+	EXCLUSION_REASON_BUILD_TAG: 'Excluded by build constraints',
+	EXCLUSION_REASON_SIZE_LIMIT: 'Over the size limit'
+};
+
+// reasonLabel falls back to "Unknown reason (<key>)" for
+// EXCLUSION_REASON_UNSPECIFIED, an empty key, or any future reason this
+// build does not yet know how to label (T-10-08) — never a crash and
+// never a silently dropped row.
+export function reasonLabel(key: string): string {
+	return REASON_LABELS[key] ?? `Unknown reason (${key})`;
+}
+
+// reasonKeyOf resolves a wire ExclusionReason number to its full proto
+// name through the GENERATED enum descriptor's `values` array — a
+// lookup, never a hand-written switch that could silently skew from the
+// wire (D-08/D-09). An unrecognised number (a future reason this build
+// predates) resolves to EXCLUSION_REASON_UNSPECIFIED rather than
+// throwing.
+export function reasonKeyOf(reason: number): string {
+	return ExclusionReasonSchema.values.find((v) => v.number === reason)?.name ?? 'EXCLUSION_REASON_UNSPECIFIED';
+}
+
+// CoverageGroup is one expandable group in the Coverage section: either
+// the EXTRACTION_FAILED group (rows from a File with a non-empty errors
+// list) or one group per exclusion reason present in the row list.
+export interface CoverageGroup {
+	key: string;
+	label: string;
+	count: number;
+	rows: CoverageRow[];
+}
+
+// groupCoverageRows groups a page-walked CoverageRow[] for display. The
+// EXTRACTION_FAILED group, when any row has that kind, is placed FIRST —
+// extraction failures are a data-loss signal distinct from a pre-
+// extraction exclusion and must not be buried alphabetically among
+// exclusion reasons. Remaining rows are grouped by reasonKeyOf(row.
+// reason) (an unrecognised reason lands in its own "Unknown reason"
+// group rather than being dropped — T-10-08), then reason groups are
+// ordered by count desc, key asc — the SAME deterministic tie-break
+// toCountRows uses elsewhere on this page. Rows keep their incoming
+// (server) order within a group.
+export function groupCoverageRows(rows: CoverageRow[]): CoverageGroup[] {
+	const failedRows = rows.filter((row) => row.kind === CoverageRowKind.EXTRACTION_FAILED);
+	const exclusionRows = rows.filter((row) => row.kind !== CoverageRowKind.EXTRACTION_FAILED);
+
+	const groups: CoverageGroup[] = [];
+	if (failedRows.length > 0) {
+		groups.push({
+			key: 'EXTRACTION_FAILED',
+			label: 'Extraction failed',
+			count: failedRows.length,
+			rows: failedRows
+		});
+	}
+
+	const byKey = new Map<string, CoverageRow[]>();
+	for (const row of exclusionRows) {
+		const key = reasonKeyOf(row.reason);
+		const existing = byKey.get(key);
+		if (existing) {
+			existing.push(row);
+		} else {
+			byKey.set(key, [row]);
+		}
+	}
+
+	const reasonGroups: CoverageGroup[] = Array.from(byKey.entries())
+		.map(([key, groupRows]) => ({
+			key,
+			label: reasonLabel(key),
+			count: groupRows.length,
+			rows: groupRows
+		}))
+		.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+
+	return [...groups, ...reasonGroups];
+}
+
+// CoverageClient mirrors HealthClient's minimal-client shape (D-19's test-
+// stub-without-a-transport convention) for the one method /health's
+// coverage rows fetch needs.
+export interface CoverageClient {
+	getCoverage(
+		request: MessageInitShape<typeof GetCoverageRequestSchema>,
+		options?: { signal?: AbortSignal }
+	): Promise<GetCoverageResponse>;
+}
+
+// COVERAGE_PAGE_SIZE matches GetCoverageRequest's server-side clamp
+// (D-10 verbatim: > 1000 is clamped to 1000) — requesting the maximum
+// every page minimizes round trips for the bounded walk below.
+export const COVERAGE_PAGE_SIZE = 1000;
+
+// COVERAGE_MAX_PAGES bounds the client-side walk (T-10-03): a server
+// that never returns an empty next_page_token (bug or hostile response)
+// must not spin this loop forever. 100 pages * 1000 rows/page is
+// 100,000 coverage-gap rows — far beyond any repo this tool targets.
+export const COVERAGE_MAX_PAGES = 100;
+
+export interface CoverageRowsResult {
+	known: boolean;
+	rows: CoverageRow[];
+}
+
+// fetchAllCoverageRows pages GetCoverage to bounded completion, one row
+// list for the whole Coverage section. Grouping happens CLIENT-SIDE
+// (groupCoverageRows) because the per-file row list is bounded PER PAGE,
+// never per call (D-10's transport-cap rationale) — the server has no
+// single rpc that returns every row pre-grouped.
+//
+// A first page reporting `known === false` short-circuits after exactly
+// one call: an old graph's coverage rows are exactly as unknown as its
+// summary counts (D-06), so there is nothing to page.
+//
+// Caveat (documented, not solved here): consecutive pages may be read at
+// different index snapshots if a re-index runs mid-walk — the same
+// staleness caveat every other paged rpc in this tree carries. The
+// Coverage section renders whatever the walk returns; it does not
+// attempt cross-page consistency of its own.
+export function fetchAllCoverageRows(
+	client: CoverageClient,
+	signal?: AbortSignal
+): Promise<CoverageRowsResult> {
+	const rows: CoverageRow[] = [];
+
+	async function walk(pageToken: string, page: number): Promise<CoverageRowsResult> {
+		if (page >= COVERAGE_MAX_PAGES) {
+			throw new Error('coverage: page limit exceeded');
+		}
+		const response = await client.getCoverage(
+			{ pageSize: COVERAGE_PAGE_SIZE, pageToken },
+			{ signal }
+		);
+		if (!response.known) {
+			return { known: false, rows: [] };
+		}
+		rows.push(...response.rows);
+		if (!response.nextPageToken) {
+			return { known: true, rows };
+		}
+		return walk(response.nextPageToken, page + 1);
+	}
+
+	return walk('', 0);
 }
