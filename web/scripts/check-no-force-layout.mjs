@@ -20,6 +20,7 @@
 // from ever matching — neither sits in a `name: '<x>'` position, so
 // neither is a layout-name reference at all.
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as url from 'node:url';
 
@@ -52,12 +53,34 @@ const LAYOUT_IMPORT_RE = /['"]cytoscape-(cose-bilkent|fcose|cola|euler|spread)['
 const ELK_NAME_RE = /\bname\s*:\s*['"]elk['"]/g;
 const ELK_IMPORT_RE = /['"]cytoscape-elk['"]/g;
 
-function walk(dir, files) {
+// walk decides recursion with fs.statSync (which FOLLOWS symlinks) rather
+// than a readdirSync Dirent's own isDirectory() (which does NOT — a
+// symlink-to-directory Dirent reports isDirectory() === false, so the old
+// check-based-on-the-Dirent version never recursed into, or scanned, a
+// symlinked directory anywhere under web/src — a real blind spot in the
+// "reachable from any code path" claim, WR-02). visitedRealDirs tracks the
+// REAL (symlink-resolved) path of every directory already descended into,
+// so a symlink cycle (a directory that, through one or more symlinks,
+// points back at an ancestor) terminates instead of recursing forever.
+function walk(dir, files, visitedRealDirs = new Set([fs.realpathSync(dir)])) {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		const full = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			walk(full, files);
+		let stat;
+		try {
+			stat = fs.statSync(full);
+		} catch {
+			// A broken symlink (or a race with something else deleting the
+			// entry) has nothing to scan — skip it rather than crash the scan.
+			continue;
+		}
+		if (stat.isDirectory()) {
+			const real = fs.realpathSync(full);
+			if (visitedRealDirs.has(real)) continue;
+			visitedRealDirs.add(real);
+			walk(full, files, visitedRealDirs);
 		} else if (SCAN_EXTENSIONS.has(path.extname(entry.name))) {
+			// A symlinked FILE with a scanned extension is scanned too —
+			// stat() already resolved it to a regular file above.
 			files.push(full);
 		}
 	}
@@ -170,12 +193,49 @@ function assertLayoutNameRegexCoversDeclaredFamilies() {
 }
 assertLayoutNameRegexCoversDeclaredFamilies();
 
+// selfTestSymlinkTraversal (WR-02) proves the walker's symlink-following
+// fix on REAL disk structure, not just the in-memory scan mechanism: a
+// forbidden layout name planted in a directory that is reachable ONLY
+// through a symlink must still be found. Both temp roots live under
+// os.tmpdir() and are always removed, even on failure/throw.
+function selfTestSymlinkTraversal() {
+	const base = fs.mkdtempSync(path.join(os.tmpdir(), 'check-no-force-layout-planted-'));
+	const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'check-no-force-layout-root-'));
+	try {
+		const plantedDir = path.join(base, 'planted');
+		fs.mkdirSync(plantedDir, { recursive: true });
+		fs.writeFileSync(path.join(plantedDir, 'injected.ts'), "const layout = { name: 'cose' };\n");
+		fs.symlinkSync(plantedDir, path.join(linkRoot, 'linkdir'), 'dir');
+
+		const files = walk(linkRoot, []);
+		const fileTexts = files.map((file) => ({ file, text: fs.readFileSync(file, 'utf8') }));
+		const result = scanFileTexts(fileTexts);
+		const found = result.forbiddenMatches.some((m) => m.match.includes('cose'));
+
+		if (!found) {
+			console.log(
+				'check-no-force-layout self-test (symlink traversal): FAIL — a forbidden match reachable only through a symlinked directory was NOT detected'
+			);
+			return false;
+		}
+		console.log(
+			'check-no-force-layout self-test (symlink traversal): PASS — forbidden match found through linkdir -> planted'
+		);
+		return true;
+	} finally {
+		fs.rmSync(linkRoot, { recursive: true, force: true });
+		fs.rmSync(base, { recursive: true, force: true });
+	}
+}
+
 // selfTest runs the SAME scan function over the real tree plus one
 // injected in-memory source planting `name: 'cose'`. It passes only if
 // that injected match is the ONLY forbidden match reported (the real tree
 // stayed clean) AND the real tree's own file count proves the walk is not
 // silently empty — a scan that cannot detect a match it was JUST handed
 // must never be trusted, no matter how clean its real-tree verdict looks.
+// It also runs selfTestSymlinkTraversal (WR-02), a real on-disk case the
+// in-memory injection above cannot exercise.
 function selfTest() {
 	const injected = { file: '<self-test>/injected.ts', text: "const layout = { name: 'cose' };" };
 	const report = runScan({ extraFiles: [injected] });
@@ -183,8 +243,9 @@ function selfTest() {
 	const injectedMatch = report.forbiddenMatches.find((m) => m.file === injected.file && m.line === 1);
 	const onlyInjectedMatch = report.forbiddenMatches.length === 1 && injectedMatch !== undefined;
 	const bigEnough = report.filesScanned >= 50;
+	const symlinkOk = selfTestSymlinkTraversal();
 
-	if (onlyInjectedMatch && bigEnough) {
+	if (onlyInjectedMatch && bigEnough && symlinkOk) {
 		console.log(`check-no-force-layout self-test: PASS — injected 'cose' detected at ${injected.file}:1`);
 		process.exit(0);
 	}
