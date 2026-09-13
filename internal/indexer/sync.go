@@ -212,6 +212,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		// been recorded), so it genuinely HAS coverage by the time this
 		// Commit lands.
 		newMeta.HasCoverage = true
+		// WR-01 (iteration 2): read-modify-write the prior generation from
+		// the SAME meta this function already read (r0.GetMeta() at the
+		// top of Sync), incrementing by exactly 1 — a monotonic counter
+		// cannot alias within the same wall-clock millisecond the way
+		// LastSyncUnixMs can.
+		newMeta.CoverageGeneration = meta.GetCoverageGeneration() + 1
 		if err := w.PutMeta(newMeta); err != nil {
 			w.Close()
 			return Stats{}, err
@@ -452,6 +458,11 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// this write), so it genuinely HAS coverage by the time this Commit
 	// lands, mirroring HasFileIndex's own precedent (D-06).
 	newMeta.HasCoverage = true
+	// WR-01 (iteration 2): read-modify-write the prior generation from the
+	// SAME meta this function already read (r0.GetMeta() at the top of
+	// Sync), incrementing by exactly 1 — see the sibling small-commit
+	// write site above for the full rationale.
+	newMeta.CoverageGeneration = meta.GetCoverageGeneration() + 1
 	if err := w.PutMeta(newMeta); err != nil {
 		w.Close()
 		return Stats{}, err

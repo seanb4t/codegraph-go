@@ -610,9 +610,24 @@ type Meta struct {
 	// exclusions would otherwise be indistinguishable from a pre-Phase-10
 	// graph). A store whose Meta lacks this field must re-index to record
 	// coverage.
-	HasCoverage   bool `protobuf:"varint,9,opt,name=has_coverage,json=hasCoverage,proto3" json:"has_coverage,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HasCoverage bool `protobuf:"varint,9,opt,name=has_coverage,json=hasCoverage,proto3" json:"has_coverage,omitempty"`
+	// coverage_generation is a monotonically-incrementing counter, bumped by
+	// exactly 1 at every one of the same three meta-write sites that stamp
+	// has_coverage (Phase 10 WR-01). It replaces last_sync_unix_ms as the
+	// page-token generation marker for CoverageRows: a wall-clock,
+	// millisecond-resolution marker can alias when two coverage-affecting
+	// commits land within the same millisecond, silently defeating the
+	// "index changed since the last page fetch" check. A plain integer
+	// counter guarantees two distinct writes imply two distinct generations
+	// regardless of clock resolution or backward clock steps. Additive
+	// Phase-10 field, following has_coverage's own precedent exactly:
+	// absent/zero means either a pre-this-fix graph or a graph that has
+	// never recorded coverage — CoverageRows' has_coverage short-circuit
+	// already refuses to mint a token in that case (D-06), so an unset
+	// value here is never observed by a real page token.
+	CoverageGeneration int64 `protobuf:"varint,10,opt,name=coverage_generation,json=coverageGeneration,proto3" json:"coverage_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
@@ -708,6 +723,13 @@ func (x *Meta) GetHasCoverage() bool {
 	return false
 }
 
+func (x *Meta) GetCoverageGeneration() int64 {
+	if x != nil {
+		return x.CoverageGeneration
+	}
+	return 0
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -765,7 +787,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xc5\x02\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xf6\x02\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -778,7 +800,9 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x0ehas_file_index\x18\a \x01(\bR\fhasFileIndex\x12\x1d\n" +
 	"\n" +
 	"commit_sha\x18\b \x01(\tR\tcommitSha\x12!\n" +
-	"\fhas_coverage\x18\t \x01(\bR\vhasCoverageJ\x04\b2\x10<*\xe5\x01\n" +
+	"\fhas_coverage\x18\t \x01(\bR\vhasCoverage\x12/\n" +
+	"\x13coverage_generation\x18\n" +
+	" \x01(\x03R\x12coverageGenerationJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +

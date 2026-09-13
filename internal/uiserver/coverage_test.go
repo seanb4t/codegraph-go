@@ -422,8 +422,10 @@ func TestGetCoverageMalformedTokenIsInvalidArgument(t *testing.T) {
 // generation marker directly (simulating a concurrent Sync), then
 // replaying page 1's token must answer connect.CodeAborted over the real
 // wire — never CodeInternal, never a silently wrong page. The mutation is
-// a hand-set LastSyncUnixMs, never time.Now(), so this cannot flake on
-// two commits landing in the same host millisecond.
+// a hand-set CoverageGeneration increment, never time.Now() (and, since
+// iteration 2, never a wall-clock value at all — see graph.proto's
+// coverage_generation doc comment for why), so this cannot flake on two
+// commits landing in the same host millisecond.
 func TestGetCoverageAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
 	dir := copyCoverageFixtureForUI(t)
 	srv := startedServer(t, dir)
@@ -459,7 +461,7 @@ func TestGetCoverageAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
 	if err := snap.Close(); err != nil {
 		t.Fatalf("snap.Close: %v", err)
 	}
-	meta.LastSyncUnixMs = 999999
+	meta.CoverageGeneration++
 	w, err := store.NewWriter()
 	if err != nil {
 		t.Fatalf("NewWriter: %v", err)

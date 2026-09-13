@@ -619,7 +619,7 @@ func TestCoverageRowsRejectsMalformedTokens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IndexMeta: %v", err)
 	}
-	generation := meta.GetLastSyncUnixMs()
+	generation := meta.GetCoverageGeneration()
 	validXToken := encodeCoverageToken('x', generation, "go.mod")
 	zeroGen := strings.Repeat("\x00", coverageTokenGenerationLen)
 
@@ -682,15 +682,17 @@ func TestCoverageRowsRejectsMalformedTokens(t *testing.T) {
 }
 
 // TestCoverageRowsAbortsWhenGenerationChangedBetweenPages is WR-01's
-// regression test: a page token embeds the store's LastSyncUnixMs at the
-// moment it was produced (coverage.go's encodeCoverageToken doc comment),
-// and the NEXT CoverageRows call rejects a token whose embedded generation
-// disagrees with the store's now-current LastSyncUnixMs as ErrAborted —
-// the client's honest signal to retry the whole walk from the first page,
-// rather than silently returning a page that might disagree with earlier
-// ones. The generation bump below is a hand-set literal, never
-// time.Now(), so this test cannot flake on two commits landing in the
-// same host millisecond.
+// regression test: a page token embeds the store's CoverageGeneration at
+// the moment it was produced (coverage.go's encodeCoverageToken doc
+// comment), and the NEXT CoverageRows call rejects a token whose embedded
+// generation disagrees with the store's now-current CoverageGeneration as
+// ErrAborted — the client's honest signal to retry the whole walk from the
+// first page, rather than silently returning a page that might disagree
+// with earlier ones. The generation bump below is a hand-set literal
+// (never time.Now(), and — since iteration 2 — never a wall-clock value at
+// all): CoverageGeneration is a plain incrementing counter precisely so
+// this class of test (and the real write paths) cannot flake or alias on
+// two commits landing in the same host millisecond.
 func TestCoverageRowsAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
 	store, openEngine := newCoverageMutationStore(t)
 
@@ -723,7 +725,7 @@ func TestCoverageRowsAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
 	}
 	meta := schema.NewMeta()
 	meta.HasCoverage = true
-	meta.LastSyncUnixMs = 999999
+	meta.CoverageGeneration = 1 // seed store's Meta never set this, so it started at the zero value
 	if err := w.PutMeta(meta); err != nil {
 		t.Fatalf("PutMeta: %v", err)
 	}
@@ -736,6 +738,78 @@ func TestCoverageRowsAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
 	closer2()
 	if err == nil {
 		t.Fatal("CoverageRows: got nil error, want ErrAborted after the store's generation changed between page fetches (WR-01)")
+	}
+	if !errors.Is(err, ErrAborted) {
+		t.Fatalf("CoverageRows: err = %v, want errors.Is(err, ErrAborted)", err)
+	}
+}
+
+// TestCoverageRowsAbortsOnGenerationChangeEvenWhenLastSyncUnixMsIsUnchanged
+// is WR-01's iteration-2 regression test: it proves CoverageRows' staleness
+// check keys off Meta.CoverageGeneration alone, NOT LastSyncUnixMs — the
+// wall-clock, millisecond-resolution marker the pre-iteration-2 mechanism
+// used, which could alias when two coverage-affecting commits land within
+// the same host millisecond. Both metas below carry the exact SAME
+// LastSyncUnixMs value; only CoverageGeneration differs. A generation-only
+// bump must still trip the abort, and (as the inverse control) holding
+// CoverageGeneration fixed while changing LastSyncUnixMs must NOT trip it —
+// together these prove the check is generation-keyed, not clock-keyed.
+func TestCoverageRowsAbortsOnGenerationChangeEvenWhenLastSyncUnixMsIsUnchanged(t *testing.T) {
+	store, openEngine := newCoverageMutationStore(t)
+	const fixedClockValue int64 = 1234567890
+
+	putMeta := func(t *testing.T, generation int64, lastSyncUnixMs int64) {
+		t.Helper()
+		w, err := store.NewWriter()
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		meta := schema.NewMeta()
+		meta.HasCoverage = true
+		meta.CoverageGeneration = generation
+		meta.LastSyncUnixMs = lastSyncUnixMs
+		if err := w.PutMeta(meta); err != nil {
+			t.Fatalf("PutMeta: %v", err)
+		}
+		if err := w.Commit(); err != nil {
+			t.Fatalf("Commit: %v", err)
+		}
+	}
+
+	// Seed at generation 1, a fixed (never time.Now()) LastSyncUnixMs.
+	putMeta(t, 1, fixedClockValue)
+
+	eng1, closer1 := openEngine()
+	page1, err := eng1.CoverageRows(CoverageRowsOptions{PageSize: 1})
+	closer1()
+	if err != nil {
+		t.Fatalf("CoverageRows (page1): %v", err)
+	}
+	if page1.NextPageToken == "" {
+		t.Fatal("page1.NextPageToken is empty, want non-empty")
+	}
+
+	// Inverse control: bump LastSyncUnixMs while holding CoverageGeneration
+	// fixed at 1 — a page token minted at generation 1 must still be
+	// accepted, since the check no longer looks at the clock at all.
+	putMeta(t, 1, fixedClockValue+999)
+	engClockOnly, closerClockOnly := openEngine()
+	_, err = engClockOnly.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: page1.NextPageToken})
+	closerClockOnly()
+	if err != nil {
+		t.Fatalf("CoverageRows (LastSyncUnixMs changed, CoverageGeneration unchanged, inverse control): got %v, want nil — the check must not key off the clock", err)
+	}
+
+	// The real regression case: bump CoverageGeneration to 2 while holding
+	// LastSyncUnixMs at the EXACT SAME fixed value used to mint page1's
+	// token — this is precisely the scenario a wall-clock marker would
+	// have missed (same millisecond, two distinct writes).
+	putMeta(t, 2, fixedClockValue)
+	eng2, closer2 := openEngine()
+	_, err = eng2.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: page1.NextPageToken})
+	closer2()
+	if err == nil {
+		t.Fatal("CoverageRows: got nil error, want ErrAborted — CoverageGeneration changed even though LastSyncUnixMs did not")
 	}
 	if !errors.Is(err, ErrAborted) {
 		t.Fatalf("CoverageRows: err = %v, want errors.Is(err, ErrAborted)", err)

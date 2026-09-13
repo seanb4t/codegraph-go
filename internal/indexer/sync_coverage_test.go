@@ -196,6 +196,75 @@ func TestSyncIsANoOpWhenNothingChangedAndCoverageIsRecorded(t *testing.T) {
 	}
 }
 
+// TestCoverageGenerationIncrementsByExactlyOnePerCommit is WR-01's
+// iteration-2 regression test: CoverageGeneration is a monotonic counter,
+// not a wall-clock sample, so it must advance by EXACTLY 1 at every one of
+// the three coverage-bearing write sites regardless of how close together
+// in time two commits land — including two commits close enough to share
+// the same host millisecond, which is exactly the case the pre-iteration-2
+// LastSyncUnixMs-based marker could alias on. This test does not need to
+// inject or stub a clock to prove that: the counter's correctness does not
+// depend on timing at all, so driving three real, back-to-back
+// coverage-affecting commits (Run's from-scratch write, then two of
+// Sync's incremental small-commit writes) and asserting each step's
+// generation is exactly the previous one plus 1 is a direct proof,
+// independent of whatever the host clock happens to read.
+func TestCoverageGenerationIncrementsByExactlyOnePerCommit(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"main.go": "package main\n\nfunc main() {}\n",
+	})
+	storeDir := t.TempDir()
+
+	// Commit 1: Run's from-scratch writeGraph.
+	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Run (seed): %v", err)
+	}
+	gen1 := readCoverageGeneration(t, storeDir)
+	if gen1 == 0 {
+		t.Fatalf("CoverageGeneration after Run = 0, want a stamped nonzero generation")
+	}
+
+	// Commit 2: a coverage-only Sync (new build-tag exclusion, no indexed
+	// file changes) — the small-commit write site in sync.go.
+	writeFixtureFile(t, repoRoot, "tagged.go", buildTagFixture)
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (commit 2): %v", err)
+	}
+	gen2 := readCoverageGeneration(t, storeDir)
+	if gen2 != gen1+1 {
+		t.Fatalf("CoverageGeneration after commit 2 = %d, want %d (commit 1's %d + 1)", gen2, gen1+1, gen1)
+	}
+
+	// Commit 3: immediately back-to-back with commit 2 — real back-to-back
+	// Sync calls with no artificial delay, so on a fast host these two
+	// commits may well land within the same wall-clock millisecond. The
+	// counter must still advance by exactly 1: it has no dependency on
+	// time.Now() at all.
+	writeFixtureFile(t, repoRoot, "tagged2.go", buildTagFixture)
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (commit 3): %v", err)
+	}
+	gen3 := readCoverageGeneration(t, storeDir)
+	if gen3 != gen2+1 {
+		t.Fatalf("CoverageGeneration after commit 3 = %d, want %d (commit 2's %d + 1)", gen3, gen2+1, gen2)
+	}
+}
+
+// readCoverageGeneration opens a fresh snapshot on storeDir and returns
+// its Meta.CoverageGeneration — a small helper so
+// TestCoverageGenerationIncrementsByExactlyOnePerCommit's three read
+// points stay uncluttered.
+func readCoverageGeneration(t *testing.T, storeDir string) int64 {
+	t.Helper()
+	r, closer := openSnapshot(t, storeDir)
+	defer closer()
+	meta, err := r.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	return meta.GetCoverageGeneration()
+}
+
 // TestSyncBackfillsCoverageOnAGraphThatHasFileIndexButNoCoverage covers
 // D-06's "known" transition for a fabricated pre-Phase-10 graph: HasFileIndex
 // true, HasCoverage false/unset, empty c/ namespace. One incremental Sync

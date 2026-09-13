@@ -299,8 +299,10 @@ export interface CoverageRowsResult {
 	rows: CoverageRow[];
 	// incomplete is true when the walk could not be completed even after
 	// one retry-from-start (WR-01): GetCoverage's page token carries a
-	// generation marker (the index's LastSyncUnixMs at the moment the
-	// token was produced), and the server answers Code.Aborted rather
+	// generation marker (the index's Meta.coverage_generation counter at
+	// the moment the token was produced — a monotonic counter, not a
+	// wall-clock timestamp, since 10-REVIEW.md iteration 2), and the
+	// server answers Code.Aborted rather
 	// than a page of rows when a Sync committed between two page
 	// fetches — the honest signal that the walk's cross-page consistency
 	// can no longer be trusted, replacing the OLD failure mode of

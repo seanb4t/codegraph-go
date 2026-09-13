@@ -198,6 +198,22 @@ message Meta {
   // coverage.
   bool has_coverage = 9;
 
+  // coverage_generation is a monotonically-incrementing counter, bumped by
+  // exactly 1 at every one of the same three meta-write sites that stamp
+  // has_coverage (Phase 10 WR-01). It replaces last_sync_unix_ms as the
+  // page-token generation marker for CoverageRows: a wall-clock,
+  // millisecond-resolution marker can alias when two coverage-affecting
+  // commits land within the same millisecond, silently defeating the
+  // "index changed since the last page fetch" check. A plain integer
+  // counter guarantees two distinct writes imply two distinct generations
+  // regardless of clock resolution or backward clock steps. Additive
+  // Phase-10 field, following has_coverage's own precedent exactly:
+  // absent/zero means either a pre-this-fix graph or a graph that has
+  // never recorded coverage — CoverageRows' has_coverage short-circuit
+  // already refuses to mint a token in that case (D-06), so an unset
+  // value here is never observed by a real page token.
+  int64 coverage_generation = 10;
+
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of
   // colliding with whatever the next organic field would be — mirroring

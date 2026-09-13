@@ -179,7 +179,13 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 	if meta == nil || !meta.GetHasCoverage() {
 		return CoveragePage{Known: false}, nil
 	}
-	generation := meta.GetLastSyncUnixMs()
+	// WR-01 (iteration 2): CoverageGeneration is a monotonic counter
+	// stamped at every coverage-bearing write site, replacing
+	// LastSyncUnixMs as the page-token generation marker — a wall-clock,
+	// millisecond-resolution value can alias two distinct commits onto the
+	// same generation, silently defeating this check (see coverage.go's
+	// token doc comments below for the full rationale).
+	generation := meta.GetCoverageGeneration()
 
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
@@ -194,7 +200,7 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 		return CoveragePage{}, err
 	}
 	// WR-01: a non-empty token whose embedded generation disagrees with
-	// the store's CURRENT LastSyncUnixMs means a Sync committed between
+	// the store's CURRENT CoverageGeneration means a Sync committed between
 	// the previous page fetch and this one. CR-01's position-based
 	// resume no longer risks dropping rows in that case, but the walk's
 	// cross-page consistency is no longer guaranteed either (rows may
@@ -355,8 +361,8 @@ func truncateAtRuneBoundary(s string, maxBytes int) string {
 
 // coverageTokenGenerationLen is the fixed width (bytes) of a page token's
 // embedded generation marker (WR-01) — a big-endian encoding of
-// schema.Meta's LastSyncUnixMs at the moment the page carrying this token
-// was produced.
+// schema.Meta's CoverageGeneration at the moment the page carrying this
+// token was produced.
 const coverageTokenGenerationLen = 8
 
 // encodeCoverageToken frames a resume cursor as [kind byte][generation,
@@ -364,19 +370,22 @@ const coverageTokenGenerationLen = 8
 // to the caller and is used ONLY as an in-memory byte comparison (T-10-04)
 // — never as a Pebble bound, never as a filesystem path.
 //
-// generation is meta.GetLastSyncUnixMs() read in the SAME CoverageRows
-// call that produced this token (WR-01): LastSyncUnixMs is stamped at
-// every one of the three commit sites a coverage-bearing graph can be
-// written from (indexer.Run's from-scratch write and Sync's two commit
-// paths), so it is already a zero-plumbing, always-fresh "has anything
-// changed" marker — no new write-path field was added for this. The NEXT
-// CoverageRows call re-reads the store's current LastSyncUnixMs and
-// rejects a token whose embedded generation disagrees as ErrAborted: a
-// Sync committed between the two page fetches, so the walk is no longer
-// guaranteed to be over the same key-order snapshot family CR-01's
-// position-based resume assumes, and the honest answer is "retry from the
-// first page" rather than silently returning a page that might disagree
-// with what the caller already collected.
+// generation is meta.GetCoverageGeneration() read in the SAME CoverageRows
+// call that produced this token (WR-01, revised at 10-REVIEW.md iteration
+// 2): CoverageGeneration is a monotonically-incrementing counter, bumped
+// by exactly 1 at every one of the three commit sites a coverage-bearing
+// graph can be written from (indexer.Run's from-scratch write and Sync's
+// two commit paths) — see graph.proto's own doc comment on the field for
+// why a counter replaced the original LastSyncUnixMs-based marker (a
+// wall-clock, millisecond-resolution value can alias two distinct commits
+// onto the same generation, silently defeating this check; a counter
+// cannot). The NEXT CoverageRows call re-reads the store's current
+// CoverageGeneration and rejects a token whose embedded generation
+// disagrees as ErrAborted: a Sync committed between the two page fetches,
+// so the walk is no longer guaranteed to be over the same key-order
+// snapshot family CR-01's position-based resume assumes, and the honest
+// answer is "retry from the first page" rather than silently returning a
+// page that might disagree with what the caller already collected.
 func encodeCoverageToken(kind byte, generation int64, path string) string {
 	buf := make([]byte, 0, 1+coverageTokenGenerationLen+len(path))
 	buf = append(buf, kind)
@@ -394,7 +403,7 @@ func encodeCoverageToken(kind byte, generation int64, path string) string {
 // path over 4096 bytes — is rejected as ErrInvalidArgument (T-10-04);
 // never a filesystem path, never a Pebble bound. generation is returned
 // undecoded (the caller compares it against the store's current
-// LastSyncUnixMs — WR-01) so this function stays a pure decode with no
+// CoverageGeneration — WR-01) so this function stays a pure decode with no
 // store dependency.
 func decodeCoverageToken(tok string) (kind byte, generation int64, path string, err error) {
 	if tok == "" {

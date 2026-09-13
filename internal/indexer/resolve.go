@@ -741,6 +741,28 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 
 	collapsedEdges := collapseEdges(edges, nodeFilePath)
 
+	// WR-01 (iteration 2): read-modify-write the prior CoverageGeneration
+	// via a snapshot Reader — never a second Writer — so a from-scratch
+	// rewrite over an EXISTING store (Sync's D-02b backfill path delegates
+	// here too) still increments monotonically rather than resetting to 1
+	// every time. A genuinely fresh store (no Meta record yet) has no
+	// prior generation to read, so it starts at 0 and this commit stamps
+	// 1, mirroring needsFileIndexBackfill's own ErrNotFound-means-fresh
+	// handling.
+	var priorGeneration int64
+	r, snapErr := store.Snapshot()
+	if snapErr != nil {
+		return snapErr
+	}
+	priorMeta, metaErr := r.GetMeta()
+	r.Close()
+	if metaErr != nil && metaErr != graphstore.ErrNotFound {
+		return metaErr
+	}
+	if metaErr == nil {
+		priorGeneration = priorMeta.GetCoverageGeneration()
+	}
+
 	w, err := store.NewWriter()
 	if err != nil {
 		return err
@@ -812,6 +834,11 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// Stamping the flag here mirrors HasFileIndex's own precedent: only a
 	// GENUINELY pre-Phase-10 store is ever missing it (D-06).
 	meta.HasCoverage = true
+	// WR-01 (iteration 2): stamp the read-modify-written generation
+	// computed above — see this function's own comment at the Snapshot
+	// read for why a from-scratch rewrite still increments monotonically
+	// rather than resetting.
+	meta.CoverageGeneration = priorGeneration + 1
 	// Phase 4 D-04a: stamp LastSyncUnixMs here too, not just in Sync's own
 	// meta-write step (internal/indexer/sync.go) — otherwise a graph built
 	// via a from-scratch `codegraph index` (this path) carries a zero

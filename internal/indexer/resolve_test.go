@@ -1083,14 +1083,69 @@ func (w *stubWriter) Close() error {
 // stubStore is a graphstore.GraphStore stand-in whose NewWriter always
 // returns the same injected stubWriter, so a test can inspect it after
 // writeGraph returns.
+//
+// snapshotMeta/snapshotErr configure what Snapshot().GetMeta() reports to
+// writeGraph's WR-01 (iteration 2) read-modify-write of CoverageGeneration.
+// The zero value (both nil) mimics a genuinely fresh store — GetMeta
+// returns graphstore.ErrNotFound, exactly as pebbleReader.GetMeta does for
+// a store with no Meta record yet — so every pre-existing test in this
+// file, none of which set these fields, exercises the "fresh store starts
+// at generation 1" path unchanged.
 type stubStore struct {
 	writer *stubWriter
+
+	snapshotMeta *schema.Meta
+	snapshotErr  error
 }
 
-func (s *stubStore) Snapshot() (graphstore.Reader, error)  { return nil, nil }
+func (s *stubStore) Snapshot() (graphstore.Reader, error) {
+	if s.snapshotMeta != nil {
+		return &stubReader{meta: s.snapshotMeta}, nil
+	}
+	if s.snapshotErr != nil {
+		return &stubReader{err: s.snapshotErr}, nil
+	}
+	return &stubReader{err: graphstore.ErrNotFound}, nil
+}
 func (s *stubStore) NewWriter() (graphstore.Writer, error) { return s.writer, nil }
 func (s *stubStore) Export(w io.Writer) error              { return nil }
 func (s *stubStore) Close() error                          { return nil }
+
+// stubReader is a graphstore.Reader stand-in used ONLY for writeGraph's
+// prior-Meta read (Snapshot().GetMeta()). Every other method panics if
+// called — writeGraph never calls them, and a future caller that starts
+// doing so should fail loudly rather than silently return a zero value.
+type stubReader struct {
+	meta *schema.Meta
+	err  error
+}
+
+func (r *stubReader) GetMeta() (*schema.Meta, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.meta, nil
+}
+func (r *stubReader) GetNode(id string) (*schema.Node, error) { panic("stubReader.GetNode not implemented") }
+func (r *stubReader) GetFile(path string) (*schema.File, error) {
+	panic("stubReader.GetFile not implemented")
+}
+func (r *stubReader) IterateEdges(srcPrefix string) (graphstore.EdgeIterator, error) {
+	panic("stubReader.IterateEdges not implemented")
+}
+func (r *stubReader) IterateNodes() (graphstore.NodeIterator, error) {
+	panic("stubReader.IterateNodes not implemented")
+}
+func (r *stubReader) IterateFiles() (graphstore.FileIterator, error) {
+	panic("stubReader.IterateFiles not implemented")
+}
+func (r *stubReader) IterateFileIndex(path string) (graphstore.FileIndexIterator, error) {
+	panic("stubReader.IterateFileIndex not implemented")
+}
+func (r *stubReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	panic("stubReader.IterateExcludedFiles not implemented")
+}
+func (r *stubReader) Close() error { return nil }
 
 // TestSingleWriter_CommitsOnce proves the entire resolved graph is written
 // through exactly ONE GraphStore.Writer with a single Commit() — no
@@ -1188,6 +1243,57 @@ func TestWriteGraphStagesExcludedFilesInTheSameBatch(t *testing.T) {
 	if !w.meta.GetHasCoverage() {
 		t.Error("Meta.HasCoverage = false, want true")
 	}
+}
+
+// TestWriteGraphStampsMonotonicCoverageGeneration proves the WR-01
+// (iteration 2) fix: writeGraph read-modify-writes CoverageGeneration from
+// whatever the store's PRIOR Meta recorded, incrementing by exactly 1 —
+// never resetting to 1 unconditionally — so a from-scratch rewrite over an
+// EXISTING store (Sync's D-02b backfill path delegates to writeGraph too)
+// continues the same monotonic sequence a live CoverageRows page token may
+// already be pinned to.
+func TestWriteGraphStampsMonotonicCoverageGeneration(t *testing.T) {
+	t.Run("fresh store (no prior Meta) starts at generation 1", func(t *testing.T) {
+		w := &stubWriter{}
+		store := &stubStore{writer: w} // zero value: Snapshot().GetMeta() -> ErrNotFound
+
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil); err != nil {
+			t.Fatalf("writeGraph returned error: %v", err)
+		}
+		if w.meta == nil {
+			t.Fatal("PutMeta was never called")
+		}
+		if got := w.meta.GetCoverageGeneration(); got != 1 {
+			t.Errorf("CoverageGeneration = %d, want 1 for a fresh store", got)
+		}
+	})
+
+	t.Run("existing store continues from its prior generation", func(t *testing.T) {
+		w := &stubWriter{}
+		store := &stubStore{writer: w, snapshotMeta: &schema.Meta{CoverageGeneration: 41}}
+
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil); err != nil {
+			t.Fatalf("writeGraph returned error: %v", err)
+		}
+		if w.meta == nil {
+			t.Fatal("PutMeta was never called")
+		}
+		if got := w.meta.GetCoverageGeneration(); got != 42 {
+			t.Errorf("CoverageGeneration = %d, want 42 (41 + 1)", got)
+		}
+	})
+
+	t.Run("a non-ErrNotFound Snapshot/GetMeta failure propagates", func(t *testing.T) {
+		w := &stubWriter{}
+		store := &stubStore{writer: w, snapshotErr: errStubWrite}
+
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil); err == nil {
+			t.Fatal("writeGraph returned nil error, want the propagated snapshot/GetMeta failure")
+		}
+		if w.commitCalls != 0 {
+			t.Errorf("commitCalls = %d, want 0 — a prior-Meta read failure must abort before any Writer is opened", w.commitCalls)
+		}
+	})
 }
 
 // TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting proves
