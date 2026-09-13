@@ -1,7 +1,9 @@
 package query
 
 import (
+	"os"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -106,6 +108,7 @@ func TestAssignCommunitiesDeterministic(t *testing.T) {
 		t.Logf("compared %d runs", runs)
 	})
 
+	// mutation: per-call seed counter
 	t.Run("tie", func(t *testing.T) {
 		nodes, edges := communityTieFixture()
 		const runs = 5
@@ -195,4 +198,268 @@ func TestFileGraphPopulatesCommunityFields(t *testing.T) {
 			t.Fatalf("FileGraph: node %q CommunityID drifted between calls: %d vs %d", got.Nodes[i].Path, second.Nodes[i].CommunityID, got.Nodes[i].CommunityID)
 		}
 	}
+}
+
+// TestAssignCommunitiesSeedPerturbationFlipsTheTieFixture is D-04's RED
+// control: it proves the fixed seed is LOAD-BEARING by finding a seed
+// offset that flips the modularity-tying tie fixture to the other of
+// its two symmetric partitions, then shows the well-separated structured
+// fixture is unaffected by that same offset — a well-separated graph is
+// seed-invariant, while a modularity tie is not, which is exactly why
+// the fixed seed matters.
+func TestAssignCommunitiesSeedPerturbationFlipsTheTieFixture(t *testing.T) {
+	tieNodes, tieEdges := communityTieFixture()
+	baseline := AssignCommunities(tieNodes, tieEdges)
+
+	var flipOffset int
+	for k := 1; k <= 32; k++ {
+		perturbed := assignCommunitiesWith(tieNodes, tieEdges, communityOptions{
+			seed1: communitySeed1 + uint64(k),
+			seed2: communitySeed2,
+		})
+		if !communityMapsEqual(baseline, perturbed) {
+			flipOffset = k
+			t.Logf("seed offset %d flipped the tie fixture", k)
+			break
+		}
+	}
+	if flipOffset == 0 {
+		t.Fatalf("no seed offset in [1, 32] flipped the tie fixture — the fixed seed may not be load-bearing: baseline = %v", baseline)
+	}
+
+	structuredNodes, structuredEdges := communityStructuredFixture()
+	structuredBaseline := AssignCommunities(structuredNodes, structuredEdges)
+	structuredPerturbed := assignCommunitiesWith(structuredNodes, structuredEdges, communityOptions{
+		seed1: communitySeed1 + uint64(flipOffset),
+		seed2: communitySeed2,
+	})
+	if !communityMapsEqual(structuredBaseline, structuredPerturbed) {
+		t.Fatalf("structured fixture changed under the flipping offset %d: baseline = %v, perturbed = %v — a well-separated graph should be seed-invariant", flipOffset, structuredBaseline, structuredPerturbed)
+	}
+	t.Logf("structured fixture invariant under the flipping offset")
+}
+
+// TestAssignCommunitiesCanonicalRelabelNeutralisesInsertionOrder is
+// D-02c's positive control: canonical relabeling, not gonum itself, is
+// what neutralises node-insertion order. With the relabel step ON,
+// reversing insertion order produces the SAME result as the default
+// (forward) order. With the relabel step turned OFF (test-only seam),
+// reversing insertion order produces a DIFFERENT result — proving the
+// relabel step is load-bearing, not cosmetic.
+func TestAssignCommunitiesCanonicalRelabelNeutralisesInsertionOrder(t *testing.T) {
+	nodes, edges := communityStructuredFixture()
+
+	forward := AssignCommunities(nodes, edges)
+	reversedRelabeled := assignCommunitiesWith(nodes, edges, communityOptions{
+		seed1:            communitySeed1,
+		seed2:            communitySeed2,
+		reverseInsertion: true,
+	})
+	if !communityMapsEqual(forward, reversedRelabeled) {
+		t.Fatalf("reverseInsertion with canonical relabel ON = %v, want it to equal the default result %v — canonical relabeling should neutralise insertion order", reversedRelabeled, forward)
+	}
+
+	forwardRaw := assignCommunitiesWith(nodes, edges, communityOptions{
+		seed1:                communitySeed1,
+		seed2:                communitySeed2,
+		skipCanonicalRelabel: true,
+	})
+	reversedRaw := assignCommunitiesWith(nodes, edges, communityOptions{
+		seed1:                communitySeed1,
+		seed2:                communitySeed2,
+		reverseInsertion:     true,
+		skipCanonicalRelabel: true,
+	})
+	if communityMapsEqual(forwardRaw, reversedRaw) {
+		t.Fatalf("with canonical relabel OFF, forward and reversed insertion order produced the SAME labels %v — this positive control requires them to differ, otherwise the relabel step cannot be shown load-bearing", forwardRaw)
+	}
+}
+
+// TestAssignCommunitiesDegenerate pins the degenerate and encoding
+// boundary cases: zero nodes, a single node, zero edges over several
+// nodes, and byte-wise (never case-folded) path ordering.
+func TestAssignCommunitiesDegenerate(t *testing.T) {
+	t.Run("zero nodes", func(t *testing.T) {
+		got := AssignCommunities(nil, nil)
+		if got == nil {
+			t.Fatal("AssignCommunities(nil, nil) returned a nil map, want a non-nil empty map")
+		}
+		if len(got) != 0 {
+			t.Fatalf("AssignCommunities(nil, nil) = %v, want empty", got)
+		}
+
+		e := New(&traverseFakeReader{nodes: map[string]*schema.Node{}, edges: nil})
+		fg, err := e.FileGraph()
+		if err != nil {
+			t.Fatalf("FileGraph over an empty reader: unexpected error: %v", err)
+		}
+		if fg.CommunityCount != 0 {
+			t.Fatalf("FileGraph over an empty reader: CommunityCount = %d, want 0", fg.CommunityCount)
+		}
+	})
+
+	t.Run("one node", func(t *testing.T) {
+		got := AssignCommunities([]FileGraphNode{{Path: "only.go"}}, nil)
+		want := map[string]int{"only.go": 1}
+		if !communityMapsEqual(got, want) {
+			t.Fatalf("AssignCommunities(one node) = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("zero edges", func(t *testing.T) {
+		nodes := []FileGraphNode{{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}, {Path: "d.go"}}
+		got := AssignCommunities(nodes, nil)
+		want := map[string]int{"a.go": 1, "b.go": 2, "c.go": 3, "d.go": 4}
+		if !communityMapsEqual(got, want) {
+			t.Fatalf("AssignCommunities(zero edges) = %v, want %v (ascending path order)", got, want)
+		}
+	})
+
+	t.Run("byte order encoding", func(t *testing.T) {
+		nodes := []FileGraphNode{{Path: "B.go"}, {Path: "a.go"}}
+		got := AssignCommunities(nodes, nil)
+		want := map[string]int{"B.go": 1, "a.go": 2}
+		if !communityMapsEqual(got, want) {
+			t.Fatalf("AssignCommunities(B.go, a.go) = %v, want %v — byte-wise order (uppercase sorts first), never case-folded", got, want)
+		}
+	})
+
+	t.Run("every id dense and >= 1", func(t *testing.T) {
+		nodes, edges := communityStructuredFixture()
+		got := AssignCommunities(nodes, edges)
+		maxID := 0
+		distinct := map[int]struct{}{}
+		for _, id := range got {
+			if id < 1 {
+				t.Fatalf("AssignCommunities: id %d < 1", id)
+			}
+			distinct[id] = struct{}{}
+			if id > maxID {
+				maxID = id
+			}
+		}
+		if maxID != len(distinct) {
+			t.Fatalf("AssignCommunities: max id %d != distinct count %d, want dense 1..N", maxID, len(distinct))
+		}
+	})
+}
+
+// TestUndirectedPairWeightsSumBothDirections proves undirectedPairWeights
+// SUMS both directions of a file pair's TotalCount into one undirected
+// weight (measured this session: simple.WeightedUndirectedGraph.
+// SetWeightedEdge REPLACES rather than accumulates), while skipping
+// self-edges, non-positive counts, and edges naming an id absent from
+// idByPath.
+func TestUndirectedPairWeightsSumBothDirections(t *testing.T) {
+	idByPath := map[string]int64{"a": 0, "b": 1, "c": 2}
+	edges := []FileGraphEdge{
+		{SourceFile: "a", TargetFile: "b", TotalCount: 3},
+		{SourceFile: "b", TargetFile: "a", TotalCount: 2},
+		{SourceFile: "a", TargetFile: "c", TotalCount: 1},
+		{SourceFile: "c", TargetFile: "c", TotalCount: 9},   // self edge, skipped
+		{SourceFile: "a", TargetFile: "zzz", TotalCount: 4}, // unknown endpoint, skipped
+		{SourceFile: "b", TargetFile: "c", TotalCount: 0},   // zero, skipped
+	}
+	got := undirectedPairWeights(idByPath, edges)
+	want := map[[2]int64]float64{
+		{0, 1}: 5,
+		{0, 2}: 1,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("undirectedPairWeights = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("undirectedPairWeights[%v] = %v, want %v (full map: %v)", k, got[k], v, got)
+		}
+	}
+}
+
+// forbiddenCommunitySourceSubstrings are the schema Node field-50
+// accessor shapes and persistence/caching calls the assumption-delta
+// invariant forbids on the fresh-compute path (D-15). Finding any of
+// these in community.go or traverse.go means the fresh-compute-only
+// assumption has been silently replaced by index-time persistence —
+// exactly the D-07 fallback, which is sanctioned ONLY as 11-02 Task 3's
+// deliberate, documented inversion on a FAIL verdict.
+//
+// mutation: read Node field 50 instead of computing
+var forbiddenCommunitySourceSubstrings = []string{
+	"GetCommunityId(",
+	".CommunityId",
+	"sync.Once",
+	"NewWriter(",
+	"PutNode(",
+}
+
+// stripCommentLines removes every line-comment line (a line whose
+// trimmed content starts with "//") from src, so a forbidden-substring
+// scan checks actual code, never prose that legitimately DISCUSSES a
+// forbidden shape (e.g. a doc comment explaining what is NOT present).
+// This is a line-level strip, not a full Go tokenizer — sufficient here
+// because every forbidden substring this file scans for is checked
+// against whole lines of source, not embedded in a multi-line string
+// literal.
+func stripCommentLines(src string) string {
+	lines := strings.Split(src, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// TestFileGraphCommunitySourceIsFreshComputeOnly is the assumption-delta
+// invariant test (orchestrator decision, 11-01-PLAN.md): community
+// assignment's sole primary is fresh computation inside FileGraph()
+// (D-15). It asserts community.go and traverse.go contain none of
+// forbiddenCommunitySourceSubstrings, with a positive control proving
+// the scan actually inspects the files it claims to (AssignCommunities(
+// result.Nodes, result.Edges) present exactly once in traverse.go,
+// community.Modularize( present exactly once in community.go).
+// 11-02 Task 3 is the ONLY sanctioned inversion of this test, on a FAIL
+// verdict.
+func TestFileGraphCommunitySourceIsFreshComputeOnly(t *testing.T) {
+	communitySrc, err := os.ReadFile("community.go")
+	if err != nil {
+		t.Fatalf("read community.go: %v", err)
+	}
+	traverseSrc, err := os.ReadFile("traverse.go")
+	if err != nil {
+		t.Fatalf("read traverse.go: %v", err)
+	}
+	if len(communitySrc) == 0 {
+		t.Fatal("community.go is empty — this guard would pass vacuously")
+	}
+	if len(traverseSrc) == 0 {
+		t.Fatal("traverse.go is empty — this guard would pass vacuously")
+	}
+
+	for _, name := range []struct {
+		file string
+		text string
+	}{
+		{"community.go", stripCommentLines(string(communitySrc))},
+		{"traverse.go", stripCommentLines(string(traverseSrc))},
+	} {
+		for _, forbidden := range forbiddenCommunitySourceSubstrings {
+			if strings.Contains(name.text, forbidden) {
+				t.Fatalf("%s contains %q outside a comment — D-15 forbids the fresh-compute path from reading or writing the persisted Node field-50 community_id, or from caching/persisting an assignment", name.file, forbidden)
+			}
+		}
+	}
+
+	callSiteCount := strings.Count(string(traverseSrc), "AssignCommunities(result.Nodes, result.Edges)")
+	if callSiteCount != 1 {
+		t.Fatalf("traverse.go: AssignCommunities(result.Nodes, result.Edges) appears %d times, want exactly 1 (positive control)", callSiteCount)
+	}
+	modularizeCount := strings.Count(string(communitySrc), "community.Modularize(")
+	if modularizeCount != 1 {
+		t.Fatalf("community.go: community.Modularize( appears %d times, want exactly 1 (positive control)", modularizeCount)
+	}
+
+	t.Logf("inspected %d bytes (community.go) + %d bytes (traverse.go), 0 forbidden substrings, 2 positive controls", len(communitySrc), len(traverseSrc))
 }
