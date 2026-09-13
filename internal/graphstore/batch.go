@@ -102,6 +102,16 @@ func (w *pebbleWriter) PutFile(f *schema.File) error {
 	return w.batch.Set(fileKey(f.GetPath()), data, nil)
 }
 
+// PutExcludedFile stages x's c/ record (Phase 10 D-05), exactly as
+// PutFile stages a File record under f/.
+func (w *pebbleWriter) PutExcludedFile(x *schema.ExcludedFile) error {
+	data, err := deterministicMarshal(x)
+	if err != nil {
+		return err
+	}
+	return w.batch.Set(excludedFileKey(x.GetPath()), data, nil)
+}
+
 func (w *pebbleWriter) PutMeta(m *schema.Meta) error {
 	data, err := deterministicMarshal(m)
 	if err != nil {

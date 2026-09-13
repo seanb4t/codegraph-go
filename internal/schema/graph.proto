@@ -129,6 +129,35 @@ message File {
   int64 size_bytes = 8;
 }
 
+// ExclusionReason is the closed vocabulary of reasons a discovered path
+// was NOT indexed, decided at Discover's own decision points and
+// persisted verbatim (Phase 10 HLT-05, D-08) — never reconstructed by a
+// query-time walk. Closed like EditorLinkAvailability so the UI can never
+// meet an unknown reason and set-equality tests can pin the set.
+enum ExclusionReason {
+  EXCLUSION_REASON_UNSPECIFIED = 0;
+  EXCLUSION_REASON_DIR_VENDOR = 1;
+  EXCLUSION_REASON_DIR_DOTPREFIX = 2;
+  EXCLUSION_REASON_UNSUPPORTED_EXTENSION = 3;
+  EXCLUSION_REASON_BUILD_TAG = 4;
+  EXCLUSION_REASON_SIZE_LIMIT = 5;
+}
+
+// ExcludedFile is a sibling record to File (never a field on it, D-05):
+// one record per path the walker visited but did not index, or one
+// record per pruned directory (D-02). path is the slash-normalized
+// repo-relative path exactly as File.path — a pruned directory's record
+// carries the directory path with no trailing slash. detail is bounded
+// free text (the extension, the byte size, the GOOS/GOARCH pair, or the
+// pruned directory name). size_bytes is the discovery-time stat size (0
+// for a directory record).
+message ExcludedFile {
+  string path = 1;
+  ExclusionReason reason = 2;
+  string detail = 3;
+  int64 size_bytes = 4;
+}
+
 // Meta is the single versioned record (stored under the `meta/` key
 // prefix, D-03) that stamps the on-disk schema version plus aggregate
 // counts and index health. schema_version is bumped ONLY for a genuinely
@@ -158,6 +187,16 @@ message Meta {
   // permanently (D-02a): once shipped, field 8 can never be renumbered or
   // reused — retiring it means adding 8 to a `reserved` clause.
   string commit_sha = 8;
+
+  // has_coverage reports whether this graph's on-disk store has been
+  // populated with the Phase-10 `c/` exclusion-reason namespace (D-06).
+  // Additive Phase-10 field, following has_file_index's precedent
+  // exactly: absent/false means coverage is UNKNOWN — never 0/0, never
+  // inferred from `c/` key presence (a repo with genuinely zero
+  // exclusions would otherwise be indistinguishable from a pre-Phase-10
+  // graph). A store whose Meta lacks this field must re-index to record
+  // coverage.
+  bool has_coverage = 9;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of

@@ -72,6 +72,13 @@ type Reader interface {
 	// DeleteEdge for a changed/deleted file's scattered subgraph.
 	IterateFileIndex(path string) (FileIndexIterator, error)
 
+	// IterateExcludedFiles returns an ExcludedFileIterator over every
+	// record under the c/ namespace — a single contiguous range scan
+	// (Phase 10 D-05) — the ONLY read path internal/query's coverage
+	// summary uses; reasons are never reconstructed by a query-time walk
+	// (D-14).
+	IterateExcludedFiles() (ExcludedFileIterator, error)
+
 	// Close releases the Reader's underlying snapshot.
 	Close() error
 }
@@ -165,6 +172,26 @@ type FileIndexIterator interface {
 	Close() error
 }
 
+// ExcludedFileIterator walks a contiguous range of ExcludedFile records
+// (Phase 10 D-05). Callers must call Next before the first call to
+// ExcludedFile, and check Err after Next returns false to distinguish
+// end-of-range from an error.
+type ExcludedFileIterator interface {
+	// Next advances the iterator and reports whether a record is
+	// available.
+	Next() bool
+
+	// ExcludedFile returns the record at the iterator's current
+	// position. Only valid after a call to Next that returned true.
+	ExcludedFile() *schema.ExcludedFile
+
+	// Err returns the first error encountered during iteration, if any.
+	Err() error
+
+	// Close releases the iterator's resources.
+	Close() error
+}
+
 // Writer batches graph mutations for one file-change / debounce window. A
 // Writer commits atomically: either every staged Put/Delete is applied, or
 // none is (D-04).
@@ -186,6 +213,10 @@ type Writer interface {
 
 	// PutMeta stages the store-wide Meta record for write.
 	PutMeta(m *schema.Meta) error
+
+	// PutExcludedFile stages x for write under the c/ namespace
+	// (Phase 10 D-05). x.Path determines its key.
+	PutExcludedFile(x *schema.ExcludedFile) error
 
 	// DeleteNode stages a point-delete of the node record identified by
 	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after

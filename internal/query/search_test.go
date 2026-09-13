@@ -45,6 +45,9 @@ func (f *searchFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("searchFakeReader: IterateFiles not implemented")
 }
 
+func (f *searchFakeReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	return nil, errors.New("searchFakeReader: IterateExcludedFiles not implemented")
+}
 func (f *searchFakeReader) IterateFileIndex(string) (graphstore.FileIndexIterator, error) {
 	return nil, errors.New("searchFakeReader: IterateFileIndex not implemented")
 }

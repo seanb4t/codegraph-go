@@ -34,6 +34,14 @@ const (
 	// additive-only-no-bump rule; a new key namespace is not a
 	// record-format break).
 	prefixFileIndex byte = 'x'
+
+	// prefixExcludedFile is the Phase-10 coverage-denominator namespace
+	// (HLT-05, D-05): c/<path> holds one ExcludedFile record per path the
+	// walker visited but did not index, or one per pruned directory
+	// (D-02) — distinguished by the record's reason enum, no sub-prefix.
+	// Chosen because m n e f a x are already taken and 'c' reads as
+	// "coverage".
+	prefixExcludedFile byte = 'c'
 )
 
 // fileIndexKindNode and fileIndexKindEdge are fixed, code-controlled marker
@@ -190,6 +198,18 @@ func fileIndexEdgeKey(path, src, kind, dst string) []byte {
 	buf = appendSegment(buf, src)
 	buf = appendSegment(buf, kind)
 	return appendSegment(buf, dst)
+}
+
+// excludedFileKey encodes an ExcludedFile record (path, reason, detail,
+// size_bytes — Phase 10's ExcludedFile message) under the c/ namespace,
+// copying fileKey's exact length-prefixed shape (appendSegment, never
+// string concatenation — T-01-02) so distinct paths never alias and a
+// crafted path cannot bleed into an adjacent record or namespace.
+func excludedFileKey(path string) []byte {
+	buf := make([]byte, 0, 1+binary.MaxVarintLen64+len(path))
+	buf = append(buf, prefixExcludedFile)
+	buf = appendSegment(buf, path)
+	return buf
 }
 
 // metaKey encodes a store-wide metadata entry (e.g. schema version) under

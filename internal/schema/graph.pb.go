@@ -31,6 +31,69 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ExclusionReason is the closed vocabulary of reasons a discovered path
+// was NOT indexed, decided at Discover's own decision points and
+// persisted verbatim (Phase 10 HLT-05, D-08) — never reconstructed by a
+// query-time walk. Closed like EditorLinkAvailability so the UI can never
+// meet an unknown reason and set-equality tests can pin the set.
+type ExclusionReason int32
+
+const (
+	ExclusionReason_EXCLUSION_REASON_UNSPECIFIED           ExclusionReason = 0
+	ExclusionReason_EXCLUSION_REASON_DIR_VENDOR            ExclusionReason = 1
+	ExclusionReason_EXCLUSION_REASON_DIR_DOTPREFIX         ExclusionReason = 2
+	ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION ExclusionReason = 3
+	ExclusionReason_EXCLUSION_REASON_BUILD_TAG             ExclusionReason = 4
+	ExclusionReason_EXCLUSION_REASON_SIZE_LIMIT            ExclusionReason = 5
+)
+
+// Enum value maps for ExclusionReason.
+var (
+	ExclusionReason_name = map[int32]string{
+		0: "EXCLUSION_REASON_UNSPECIFIED",
+		1: "EXCLUSION_REASON_DIR_VENDOR",
+		2: "EXCLUSION_REASON_DIR_DOTPREFIX",
+		3: "EXCLUSION_REASON_UNSUPPORTED_EXTENSION",
+		4: "EXCLUSION_REASON_BUILD_TAG",
+		5: "EXCLUSION_REASON_SIZE_LIMIT",
+	}
+	ExclusionReason_value = map[string]int32{
+		"EXCLUSION_REASON_UNSPECIFIED":           0,
+		"EXCLUSION_REASON_DIR_VENDOR":            1,
+		"EXCLUSION_REASON_DIR_DOTPREFIX":         2,
+		"EXCLUSION_REASON_UNSUPPORTED_EXTENSION": 3,
+		"EXCLUSION_REASON_BUILD_TAG":             4,
+		"EXCLUSION_REASON_SIZE_LIMIT":            5,
+	}
+)
+
+func (x ExclusionReason) Enum() *ExclusionReason {
+	p := new(ExclusionReason)
+	*p = x
+	return p
+}
+
+func (x ExclusionReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ExclusionReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_schema_graph_proto_enumTypes[0].Descriptor()
+}
+
+func (ExclusionReason) Type() protoreflect.EnumType {
+	return &file_internal_schema_graph_proto_enumTypes[0]
+}
+
+func (x ExclusionReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ExclusionReason.Descriptor instead.
+func (ExclusionReason) EnumDescriptor() ([]byte, []int) {
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{0}
+}
+
 // Node is a single symbol record (function, type, method, etc.) extracted
 // from a source file.
 //
@@ -435,6 +498,82 @@ func (x *File) GetSizeBytes() int64 {
 	return 0
 }
 
+// ExcludedFile is a sibling record to File (never a field on it, D-05):
+// one record per path the walker visited but did not index, or one
+// record per pruned directory (D-02). path is the slash-normalized
+// repo-relative path exactly as File.path — a pruned directory's record
+// carries the directory path with no trailing slash. detail is bounded
+// free text (the extension, the byte size, the GOOS/GOARCH pair, or the
+// pruned directory name). size_bytes is the discovery-time stat size (0
+// for a directory record).
+type ExcludedFile struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Reason        ExclusionReason        `protobuf:"varint,2,opt,name=reason,proto3,enum=codegraph.v1.ExclusionReason" json:"reason,omitempty"`
+	Detail        string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	SizeBytes     int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExcludedFile) Reset() {
+	*x = ExcludedFile{}
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExcludedFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExcludedFile) ProtoMessage() {}
+
+func (x *ExcludedFile) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExcludedFile.ProtoReflect.Descriptor instead.
+func (*ExcludedFile) Descriptor() ([]byte, []int) {
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ExcludedFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ExcludedFile) GetReason() ExclusionReason {
+	if x != nil {
+		return x.Reason
+	}
+	return ExclusionReason_EXCLUSION_REASON_UNSPECIFIED
+}
+
+func (x *ExcludedFile) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *ExcludedFile) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
 // Meta is the single versioned record (stored under the `meta/` key
 // prefix, D-03) that stamps the on-disk schema version plus aggregate
 // counts and index health. schema_version is bumped ONLY for a genuinely
@@ -462,14 +601,23 @@ type Meta struct {
 	// other value is never written. This field number is now spent
 	// permanently (D-02a): once shipped, field 8 can never be renumbered or
 	// reused — retiring it means adding 8 to a `reserved` clause.
-	CommitSha     string `protobuf:"bytes,8,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	CommitSha string `protobuf:"bytes,8,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	// has_coverage reports whether this graph's on-disk store has been
+	// populated with the Phase-10 `c/` exclusion-reason namespace (D-06).
+	// Additive Phase-10 field, following has_file_index's precedent
+	// exactly: absent/false means coverage is UNKNOWN — never 0/0, never
+	// inferred from `c/` key presence (a repo with genuinely zero
+	// exclusions would otherwise be indistinguishable from a pre-Phase-10
+	// graph). A store whose Meta lacks this field must re-index to record
+	// coverage.
+	HasCoverage   bool `protobuf:"varint,9,opt,name=has_coverage,json=hasCoverage,proto3" json:"has_coverage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
 	*x = Meta{}
-	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +629,7 @@ func (x *Meta) String() string {
 func (*Meta) ProtoMessage() {}
 
 func (x *Meta) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,7 +642,7 @@ func (x *Meta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Meta.ProtoReflect.Descriptor instead.
 func (*Meta) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Meta) GetSchemaVersion() uint32 {
@@ -553,6 +701,13 @@ func (x *Meta) GetCommitSha() string {
 	return ""
 }
 
+func (x *Meta) GetHasCoverage() bool {
+	if x != nil {
+		return x.HasCoverage
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -604,7 +759,13 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06errors\x18\x06 \x03(\tR\x06errors\x12\"\n" +
 	"\rmtime_unix_ns\x18\a \x01(\x03R\vmtimeUnixNs\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\b \x01(\x03R\tsizeBytes\"\xa2\x02\n" +
+	"size_bytes\x18\b \x01(\x03R\tsizeBytes\"\x90\x01\n" +
+	"\fExcludedFile\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x125\n" +
+	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xc5\x02\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -616,7 +777,15 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x0ehealth_message\x18\x06 \x01(\tR\rhealthMessage\x12$\n" +
 	"\x0ehas_file_index\x18\a \x01(\bR\fhasFileIndex\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\b \x01(\tR\tcommitShaJ\x04\b2\x10<B1Z/github.com/seanb4t/codegraph-go/internal/schemab\x06proto3"
+	"commit_sha\x18\b \x01(\tR\tcommitSha\x12!\n" +
+	"\fhas_coverage\x18\t \x01(\bR\vhasCoverageJ\x04\b2\x10<*\xe5\x01\n" +
+	"\x0fExclusionReason\x12 \n" +
+	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +
+	"\x1eEXCLUSION_REASON_DIR_DOTPREFIX\x10\x02\x12*\n" +
+	"&EXCLUSION_REASON_UNSUPPORTED_EXTENSION\x10\x03\x12\x1e\n" +
+	"\x1aEXCLUSION_REASON_BUILD_TAG\x10\x04\x12\x1f\n" +
+	"\x1bEXCLUSION_REASON_SIZE_LIMIT\x10\x05B1Z/github.com/seanb4t/codegraph-go/internal/schemab\x06proto3"
 
 var (
 	file_internal_schema_graph_proto_rawDescOnce sync.Once
@@ -630,21 +799,25 @@ func file_internal_schema_graph_proto_rawDescGZIP() []byte {
 	return file_internal_schema_graph_proto_rawDescData
 }
 
-var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_internal_schema_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_internal_schema_graph_proto_goTypes = []any{
-	(*Node)(nil), // 0: codegraph.v1.Node
-	(*Edge)(nil), // 1: codegraph.v1.Edge
-	(*File)(nil), // 2: codegraph.v1.File
-	(*Meta)(nil), // 3: codegraph.v1.Meta
-	nil,          // 4: codegraph.v1.Edge.MetadataEntry
+	(ExclusionReason)(0), // 0: codegraph.v1.ExclusionReason
+	(*Node)(nil),         // 1: codegraph.v1.Node
+	(*Edge)(nil),         // 2: codegraph.v1.Edge
+	(*File)(nil),         // 3: codegraph.v1.File
+	(*ExcludedFile)(nil), // 4: codegraph.v1.ExcludedFile
+	(*Meta)(nil),         // 5: codegraph.v1.Meta
+	nil,                  // 6: codegraph.v1.Edge.MetadataEntry
 }
 var file_internal_schema_graph_proto_depIdxs = []int32{
-	4, // 0: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	6, // 0: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
+	0, // 1: codegraph.v1.ExcludedFile.reason:type_name -> codegraph.v1.ExclusionReason
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_internal_schema_graph_proto_init() }
@@ -657,13 +830,14 @@ func file_internal_schema_graph_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_schema_graph_proto_rawDesc), len(file_internal_schema_graph_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   5,
+			NumEnums:      1,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_internal_schema_graph_proto_goTypes,
 		DependencyIndexes: file_internal_schema_graph_proto_depIdxs,
+		EnumInfos:         file_internal_schema_graph_proto_enumTypes,
 		MessageInfos:      file_internal_schema_graph_proto_msgTypes,
 	}.Build()
 	File_internal_schema_graph_proto = out.File

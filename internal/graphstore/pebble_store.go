@@ -296,6 +296,19 @@ func (r *pebbleReader) IterateFiles() (FileIterator, error) {
 	return &pebbleFileIterator{iter: iter}, nil
 }
 
+// IterateExcludedFiles returns an iterator over the whole c/ namespace
+// (Phase 10 D-05) — a single contiguous range scan, mirroring
+// IterateFiles exactly.
+func (r *pebbleReader) IterateExcludedFiles() (ExcludedFileIterator, error) {
+	lower := []byte{prefixExcludedFile}
+	upper := rangeUpperBound(lower)
+	iter, err := r.snap.NewIter(&pebble.IterOptions{LowerBound: lower, UpperBound: upper})
+	if err != nil {
+		return nil, err
+	}
+	return &pebbleExcludedFileIterator{iter: iter}, nil
+}
+
 // IterateFileIndex bounds a scan to exactly path's own x/ file-index
 // entries — both its node and edge sub-ranges together (Phase 4 D-02).
 func (r *pebbleReader) IterateFileIndex(path string) (FileIndexIterator, error) {
@@ -434,6 +447,47 @@ func (it *pebbleFileIterator) Next() bool {
 func (it *pebbleFileIterator) File() *schema.File { return it.cur }
 func (it *pebbleFileIterator) Err() error         { return it.err }
 func (it *pebbleFileIterator) Close() error       { return it.iter.Close() }
+
+// pebbleExcludedFileIterator adapts a *pebble.Iterator ranging over the
+// whole c/ namespace to the ExcludedFileIterator interface (Phase 10
+// D-05) — a renamed copy of pebbleFileIterator's shape, unmarshaling
+// schema.ExcludedFile instead of schema.File.
+type pebbleExcludedFileIterator struct {
+	iter    *pebble.Iterator
+	started bool
+	cur     *schema.ExcludedFile
+	err     error
+}
+
+func (it *pebbleExcludedFileIterator) Next() bool {
+	if it.err != nil {
+		return false
+	}
+	var ok bool
+	if !it.started {
+		it.started = true
+		ok = it.iter.First()
+	} else {
+		ok = it.iter.Next()
+	}
+	if !ok {
+		if err := it.iter.Error(); err != nil {
+			it.err = err
+		}
+		return false
+	}
+	var x schema.ExcludedFile
+	if err := proto.Unmarshal(it.iter.Value(), &x); err != nil {
+		it.err = err
+		return false
+	}
+	it.cur = &x
+	return true
+}
+
+func (it *pebbleExcludedFileIterator) ExcludedFile() *schema.ExcludedFile { return it.cur }
+func (it *pebbleExcludedFileIterator) Err() error                        { return it.err }
+func (it *pebbleExcludedFileIterator) Close() error                      { return it.iter.Close() }
 
 // pebbleFileIndexIterator adapts a *pebble.Iterator ranging over one
 // file's x/ index prefix to the FileIndexIterator interface. Unlike the

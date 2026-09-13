@@ -39,6 +39,9 @@ func (f *scoringFakeReader) GetMeta() (*schema.Meta, error) {
 func (f *scoringFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("scoringFakeReader: IterateFiles not implemented")
 }
+func (f *scoringFakeReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	return nil, errors.New("scoringFakeReader: IterateExcludedFiles not implemented")
+}
 func (f *scoringFakeReader) IterateFileIndex(string) (graphstore.FileIndexIterator, error) {
 	return nil, errors.New("scoringFakeReader: IterateFileIndex not implemented")
 }

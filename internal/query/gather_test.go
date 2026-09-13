@@ -34,6 +34,9 @@ func (f *gatherFakeReader) IterateEdges(string) (graphstore.EdgeIterator, error)
 func (f *gatherFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("gatherFakeReader: IterateFiles not implemented")
 }
+func (f *gatherFakeReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	return nil, errors.New("gatherFakeReader: IterateExcludedFiles not implemented")
+}
 func (f *gatherFakeReader) IterateFileIndex(string) (graphstore.FileIndexIterator, error) {
 	return nil, errors.New("gatherFakeReader: IterateFileIndex not implemented")
 }
