@@ -252,8 +252,27 @@ Plans:
   4. The coverage surface extends `GetHealthResponse` additively, or adds an rpc whose name clears every `mutatingVerbs` substring including "Index", with `wantUIServiceMethods` updated by set-equality in both directions and the method count asserted from both sides — so neither an added nor a removed method can slip through (HLT-06)
 
 **Notes**: This is the milestone's only write-path change, and its central risk is named explicitly: reasons inferred after the fact are plausible-sounding lies, so they are captured at the real pipeline decision point and never reconstructed by a query-time walk that only sees static, present-tense file properties. The discovered-count definition must be pinned once and used by both the denominator and the reason list, or the two disagree in the user's face. "Re-index this file" auto-remediation on the coverage view is out of scope by construction — the same `SRV-03` violation as an editor shell-out; show reason and remedy as text only. Where the discovery-exclusion helper may live depends on Phase 7's landed archtest scope; check it against the archtest as written, not as remembered.
-**Plans**: TBD
+**Plans**: 6 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — TRACER: one BUILD_TAG exclusion through every layer — `ExcludedFile`/`ExclusionReason`/`Meta.has_coverage=9` in `graph.proto`, the `c/` graphstore namespace, `DiscoverAll` capturing at the decision point, the one-batch `writeGraph` commit, `Engine.CoverageSummary`/`CoverageRows`, `GetHealthResponse.coverage=17` and the paged `GetCoverage` (16th rpc) proven over the real listener with every fixture guard moved in the same commit; then namespace lifecycle (point/range delete, export/import kind 5 — Open Question 1 implemented)
+
+**Wave 2** *(blocked on Wave 1 completion; 10-02, 10-03 and 10-04 run in parallel on disjoint files)*
+
+- [ ] 10-02-PLAN.md — the other three reasons + the strict stat-based size pre-check as pure helpers with boundary tests; the committed `testdata/coverage/` fixture module, the verified extraction-failure technique, the exact-counts test and the mutate-without-reindex test (D-13, D-14a)
+- [ ] 10-03-PLAN.md — `Sync` upserts/prunes the `c/` namespace per path inside its one commit, stamps `has_coverage` at both meta sites, treats an exclusion-only change as work; backfill of a pre-Phase-10 graph by one incremental Sync
+- [ ] 10-04-PLAN.md — `/health` Coverage section: counts line, reason groups expanding to rows, extraction failures visibly distinct, first-class "Coverage unknown — re-index to record it", text-only remedy; vitest-level verification (Open Question 3: no Playwright gate); SPA rebuilt drift-clean
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 10-05-PLAN.md — the full-fixture contract at Engine and listener level: exact numbers, two-segment ordering and page stability, reason filter, page-size clamp, the closed page-token refusal set → `CodeInvalidArgument`, detail scrubbing, empty-known vs old-graph unknown
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 10-06-PLAN.md — `10-MUTATION-LOG.md` families (a) D-15 unset-as-zero, (b) D-16 decoy rename, (c) D-14 present-tense reconstruction; `10-SECURITY.md` with every threat row test-or-verdict; validation map filled; phase-close gate
 
 ### Phase 11: Graph View — Community Clustering
 
