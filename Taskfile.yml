@@ -1586,6 +1586,157 @@ tasks:
 
         echo "vuln:selftest: PASS — govulncheck -mode=binary exited 3 and named GO-2026-5932 against testdata/vulnredpoc"
 
+  check:gonum:
+    desc: >-
+      GRF-10's local, BLOCKING, positive-controlled proof for the milestone's
+      one new direct require (gonum.org/v1/gonum v0.17.0, D-13). Three
+      halves, each reporting the count it inspected BEFORE asserting
+      anything (rule 84d1gfpywd) — a scan that never looked at anything must
+      never read as clean. The govulncheck half runs in SOURCE mode over the
+      MAIN module — the same scope as ci.yml's "govulncheck (DIST-03, blocking)"
+      job, which stays the CI gate, unchanged, and this target does not
+      modify it — NOT the `vuln:` target's advisory binary-mode scan of tool
+      binaries (symbol-level, not call-graph-aware, and never fails the
+      build). The SBOM half generates the document the way
+      release.yml/.goreleaser.yaml does (syft over a built binary,
+      spdx-json), checked for gonum by name and pinned version beside a
+      known-module positive control. The cgo half is the literal `go list
+      -deps -f` closure walk over gonum.org/v1/gonum/graph/community with a
+      known-cgo positive control, so an empty or blind closure can never
+      read as clean. This target only reports and asserts — it never
+      modifies go.mod, go.sum, `vuln:`, or ci.yml.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — check:gonum builds a pinned govulncheck copy and the codegraph binary from source."
+      - sh: command -v syft
+        msg: "syft not found — .goreleaser.yaml's sboms: block uses syft to generate the release SBOM; check:gonum's SBOM half mirrors that exact tool."
+      - sh: command -v node
+        msg: "node not found — check:gonum parses the generated SPDX JSON SBOM with node -e, the same pattern web:test uses for its JSON reporter."
+      - sh: command -v awk
+        msg: "awk not found — check:gonum's cgo-closure half filters `go list -deps` output with awk, the same pattern proto:drift and web:test use."
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        # ---- Half 1: govulncheck, SOURCE mode, MAIN module (BLOCKING) ----
+        # Pinned build, verbatim from vuln:'s own precedent — same build
+        # mechanism, different scope: main module, source mode, matching
+        # ci.yml's blocking govulncheck job, not vuln:'s advisory tool-binary
+        # scan.
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/govulncheck" golang.org/x/vuln/cmd/govulncheck
+
+        set +e
+        "${scratch}/govulncheck" ./... > "${scratch}/govulncheck.txt" 2>&1
+        status=$?
+        set -e
+        cat "${scratch}/govulncheck.txt"
+
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:gonum: govulncheck (source mode, main module) exited ${status}" >&2
+          exit 1
+        fi
+
+        # `|| true` guards the same pipefail landmine as blascgo below: a
+        # legitimate zero-match result must not kill this script before the
+        # ${ngonum} -lt 1 check gets to report it with a named error.
+        ngonum=$(go list -deps ./cmd/codegraph | { grep -o '^gonum\.org/v1/gonum' || true; } | wc -l | tr -d ' ')
+        echo "check:gonum: govulncheck (source mode, main module) clean — ${ngonum} gonum packages in the scanned set"
+        if [ "${ngonum}" -lt 1 ]; then
+          echo "::error::check:gonum: gonum is not in the main module's package graph — nothing was scanned for it" >&2
+          exit 1
+        fi
+
+        # ---- Half 2: SBOM, generated the way release.yml/.goreleaser.yaml does ----
+        go build -o "${scratch}/codegraph" ./cmd/codegraph
+        syft "${scratch}/codegraph" --output "spdx-json=${scratch}/codegraph.spdx.json" -q
+
+        SBOM_FIELDS=$(node -e '
+          const doc = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+          const packages = doc.packages || [];
+          const gonum = packages.filter(function (p) { return p.name === "gonum.org/v1/gonum"; });
+          const pebble = packages.filter(function (p) { return p.name === "github.com/cockroachdb/pebble/v2"; });
+          console.log(String(packages.length));
+          console.log(String(gonum.length));
+          console.log(gonum.length === 1 ? gonum[0].versionInfo : "");
+          console.log(String(pebble.length));
+        ' "${scratch}/codegraph.spdx.json")
+        npkg=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '1p')
+        ngonum_sbom=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '2p')
+        gonum_version=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '3p')
+        npebble=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '4p')
+
+        echo "check:gonum: SBOM lists ${npkg} packages; gonum.org/v1/gonum present ${ngonum_sbom} time(s) at ${gonum_version}; positive control github.com/cockroachdb/pebble/v2 present ${npebble} time(s)"
+
+        if [ "${npkg}" -le 0 ]; then
+          echo "::error::check:gonum: SBOM is empty — 0 packages found, nothing was scanned" >&2
+          exit 1
+        fi
+        if [ "${ngonum_sbom}" != "1" ]; then
+          echo "::error::check:gonum: gonum.org/v1/gonum present ${ngonum_sbom} time(s) in the SBOM, want exactly 1" >&2
+          exit 1
+        fi
+        if [ "${gonum_version}" != "v0.17.0" ]; then
+          echo "::error::check:gonum: gonum.org/v1/gonum SBOM versionInfo is '${gonum_version}', want v0.17.0" >&2
+          exit 1
+        fi
+        if [ "${npebble}" != "1" ]; then
+          echo "::error::check:gonum: positive control github.com/cockroachdb/pebble/v2 present ${npebble} time(s) in the SBOM, want exactly 1 — the SBOM half's own detection cannot be trusted" >&2
+          exit 1
+        fi
+
+        # ---- Half 3: cgo-closure scan with a known-cgo positive control ----
+        # The escape sequences quoted below are NOT decoration: Task renders
+        # every cmds: string through Go text/template BEFORE the shell ever
+        # sees it — including inside comments — so a raw, unescaped Go
+        # template expression written directly here is consumed by TASK's
+        # own templating, never reaches `go list` at all, and this is a
+        # documented pitfall elsewhere in this file (see the
+        # release:goreleaser target's comment on the same `go list -f`
+        # hazard). Confirmed live: writing the unescaped form here fails
+        # this target outright with a "template: executing" / "len:
+        # reflect: call of reflect.Value.Type on zero Value" error, because
+        # Task has no matching field to resolve. Wrapping each opening and
+        # closing double-brace pair in a quoted sub-template (Task's own
+        # documented escape) is what lets the literal template characters
+        # survive Task's own render pass and reach `go list` unmolested.
+        go list -deps -f '{{"{{"}}.ImportPath{{"}}"}} {{"{{"}}len .CgoFiles{{"}}"}}' gonum.org/v1/gonum/graph/community > "${scratch}/closure.txt"
+        n=$(wc -l < "${scratch}/closure.txt" | tr -d ' ')
+        nonzero=$(awk '$2 != "0"' "${scratch}/closure.txt" | wc -l | tr -d ' ')
+        # `|| true` guards against grep's own zero-matches-is-exit-1
+        # semantics tripping `set -euo pipefail` on the assignment: under
+        # pipefail, ANY non-zero exit in the pipe (not just the last
+        # command) becomes the pipeline's exit status, so a legitimate
+        # "0 matches" result would otherwise kill this script before the
+        # ${blascgo} -ne 0 check below ever got to report it cleanly.
+        blascgo=$({ grep -o 'gonum.org/v1/gonum/blas/cgo' "${scratch}/closure.txt" || true; } | wc -l | tr -d ' ')
+
+        go list -deps -f '{{"{{"}}.ImportPath{{"}}"}} {{"{{"}}len .CgoFiles{{"}}"}}' github.com/tree-sitter/go-tree-sitter > "${scratch}/control.txt"
+        cnon=$(awk '$2 != "0"' "${scratch}/control.txt" | wc -l | tr -d ' ')
+
+        echo "check:gonum: cgo closure over gonum.org/v1/gonum/graph/community — ${n} packages inspected, ${nonzero} with cgo (want 0), blas/cgo references ${blascgo} (want 0); positive control github.com/tree-sitter/go-tree-sitter — ${cnon} with cgo (want >= 1)"
+
+        if [ "${n}" -lt 50 ]; then
+          echo "::error::check:gonum: cgo closure over gonum.org/v1/gonum/graph/community enumerated only ${n} packages — a broken enumeration must fail loud, never read as a clean pass" >&2
+          exit 1
+        fi
+        if [ "${nonzero}" -ne 0 ]; then
+          echo "::error::check:gonum: cgo closure found ${nonzero} package(s) with cgo files inside gonum.org/v1/gonum/graph/community's import closure:" >&2
+          awk '$2 != "0"' "${scratch}/closure.txt" >&2
+          exit 1
+        fi
+        if [ "${blascgo}" -ne 0 ]; then
+          echo "::error::check:gonum: gonum.org/v1/gonum/blas/cgo appears ${blascgo} time(s) in the import closure — the cgo BLAS backend must never be reachable" >&2
+          exit 1
+        fi
+        if [ "${cnon}" -lt 1 ]; then
+          echo "::error::check:gonum: positive control found no cgo in github.com/tree-sitter/go-tree-sitter — the scan cannot detect cgo, its clean verdict is meaningless" >&2
+          exit 1
+        fi
+
+        echo "check:gonum: PASS"
+
   check:darwin-toolchain:
     desc: >-
       Prove a native darwin host can CGo-build both release arches — the D-08
