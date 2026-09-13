@@ -445,8 +445,13 @@ func (it *pebbleFileIterator) Next() bool {
 }
 
 func (it *pebbleFileIterator) File() *schema.File { return it.cur }
-func (it *pebbleFileIterator) Err() error         { return it.err }
-func (it *pebbleFileIterator) Close() error       { return it.iter.Close() }
+
+// RawKey returns the underlying Pebble iterator's current key, valid until
+// the next Next/Close call (FileIterator.RawKey's doc comment, Phase 10
+// CR-01).
+func (it *pebbleFileIterator) RawKey() []byte { return it.iter.Key() }
+func (it *pebbleFileIterator) Err() error     { return it.err }
+func (it *pebbleFileIterator) Close() error   { return it.iter.Close() }
 
 // pebbleExcludedFileIterator adapts a *pebble.Iterator ranging over the
 // whole c/ namespace to the ExcludedFileIterator interface (Phase 10
@@ -486,8 +491,11 @@ func (it *pebbleExcludedFileIterator) Next() bool {
 }
 
 func (it *pebbleExcludedFileIterator) ExcludedFile() *schema.ExcludedFile { return it.cur }
-func (it *pebbleExcludedFileIterator) Err() error                        { return it.err }
-func (it *pebbleExcludedFileIterator) Close() error                      { return it.iter.Close() }
+
+// RawKey mirrors pebbleFileIterator.RawKey (Phase 10 CR-01).
+func (it *pebbleExcludedFileIterator) RawKey() []byte { return it.iter.Key() }
+func (it *pebbleExcludedFileIterator) Err() error     { return it.err }
+func (it *pebbleExcludedFileIterator) Close() error   { return it.iter.Close() }
 
 // pebbleFileIndexIterator adapts a *pebble.Iterator ranging over one
 // file's x/ index prefix to the FileIndexIterator interface. Unlike the

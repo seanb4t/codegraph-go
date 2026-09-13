@@ -212,6 +212,21 @@ func excludedFileKey(path string) []byte {
 	return buf
 }
 
+// FileKey exports fileKey's byte-comparable encoding of path (Phase 10
+// CR-01): the key IS a pure function of path alone, independent of whether
+// a File record for path currently exists in the store, so a caller
+// holding a cursor path from an earlier page can always recompute the
+// SAME key bytes to resume a FileIterator walk by bytes.Compare position
+// — see FileIterator.RawKey's doc comment. This is the one sanctioned way
+// for code outside this file to obtain File-namespace key bytes; it does
+// not create a second key-construction path (this file's own top-of-file
+// comment), it just exports the existing one.
+func FileKey(path string) []byte { return fileKey(path) }
+
+// ExcludedFileKey is FileKey's ExcludedFile-namespace counterpart (Phase
+// 10 CR-01).
+func ExcludedFileKey(path string) []byte { return excludedFileKey(path) }
+
 // metaKey encodes a store-wide metadata entry (e.g. schema version) under
 // the m/ namespace.
 func metaKey(name string) []byte {

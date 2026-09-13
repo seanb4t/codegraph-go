@@ -134,6 +134,18 @@ type FileIterator interface {
 	// valid after a call to Next that returned true.
 	File() *schema.File
 
+	// RawKey returns the store's own key bytes for the record at the
+	// iterator's current position (Phase 10 CR-01): a paged walk that
+	// resumes by comparing RawKey against FileKey(cursorPath) via
+	// bytes.Compare tracks POSITION in the store's key order, not the
+	// mutable record VALUE — so a cursor row that was deleted or changed
+	// between two page fetches still resumes at the next row after its
+	// position instead of silently truncating the rest of the walk. The
+	// returned slice is only valid until the next call to Next or Close;
+	// a caller that needs it afterward must copy it. Only valid after a
+	// call to Next that returned true.
+	RawKey() []byte
+
 	// Err returns the first error encountered during iteration, if any.
 	Err() error
 
@@ -185,6 +197,10 @@ type ExcludedFileIterator interface {
 	// ExcludedFile returns the record at the iterator's current
 	// position. Only valid after a call to Next that returned true.
 	ExcludedFile() *schema.ExcludedFile
+
+	// RawKey is FileIterator.RawKey's ExcludedFileIterator counterpart —
+	// compare against ExcludedFileKey(cursorPath) (Phase 10 CR-01).
+	RawKey() []byte
 
 	// Err returns the first error encountered during iteration, if any.
 	Err() error

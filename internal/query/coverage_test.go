@@ -890,6 +890,266 @@ func TestCoverageRowsDetailIsScrubbedAndBounded(t *testing.T) {
 	})
 }
 
+// newCoverageMutationStore opens a fresh graphstore.GraphStore seeded
+// DIRECTLY via a Writer (never a real indexer.Run / real files), so the
+// test fully controls key order and can mutate the store between page
+// fetches independently of the filesystem: three extraction-failed File
+// records ("a_err.go".."c_err.go") and three ExcludedFile records
+// ("d_excl.md".."f_excl.md"). Every seeded path is the SAME byte length
+// within its own segment, so appendSegment's identical length-prefix byte
+// makes the store's own key order collapse to plain lexical path order
+// within that segment (keys.go's appendSegment doc comment) — the test
+// can therefore reason about page contents without separately probing the
+// store's internal encoding. Returns the open store (caller must NOT
+// close directly — the returned openEngine reuses it) and a helper that
+// opens a fresh *Engine over a FRESH snapshot each call, mirroring
+// uiserver's GetCoverage opening a new Engine per rpc (SRV-04, coverage.
+// go's own header comment) — the precondition CR-01's bug report itself
+// requires: two page fetches answered from two DIFFERENT snapshots.
+func newCoverageMutationStore(t *testing.T) (graphstore.GraphStore, func() (*Engine, func())) {
+	t.Helper()
+	store, err := graphstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("graphstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	w, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	must(w.PutFile(&schema.File{Path: "a_err.go", Errors: []string{"boom a"}}))
+	must(w.PutFile(&schema.File{Path: "b_err.go", Errors: []string{"boom b"}}))
+	must(w.PutFile(&schema.File{Path: "c_err.go", Errors: []string{"boom c"}}))
+	must(w.PutExcludedFile(&schema.ExcludedFile{Path: "d_excl.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}))
+	must(w.PutExcludedFile(&schema.ExcludedFile{Path: "e_excl.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}))
+	must(w.PutExcludedFile(&schema.ExcludedFile{Path: "f_excl.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}))
+	meta := schema.NewMeta()
+	meta.HasCoverage = true
+	must(w.PutMeta(meta))
+	must(w.Commit())
+
+	openEngine := func() (*Engine, func()) {
+		snap, err := store.Snapshot()
+		if err != nil {
+			t.Fatalf("Snapshot: %v", err)
+		}
+		return New(snap), func() { _ = snap.Close() }
+	}
+	return store, openEngine
+}
+
+// TestCoverageRowsSurvivesCursorMutationBetweenPages is CR-01's own
+// regression test: neither existing test mutates the store BETWEEN two
+// page fetches (TestCoverageRowsOrderingAndPagingAreStable pages a
+// static, never-mutated fixture) — this is the case the review found
+// uncovered. Both segment transitions ('f' cursor deleted, 'x' cursor
+// deleted) are exercised, matching CR-01's two described failure modes:
+// silently dropping the rest of the segment, and — worse — reporting
+// NextPageToken == "" (pagination falsely "complete") when rows remain.
+func TestCoverageRowsSurvivesCursorMutationBetweenPages(t *testing.T) {
+	t.Run("extraction-failed segment: cursor row deleted between pages", func(t *testing.T) {
+		store, openEngine := newCoverageMutationStore(t)
+
+		baseEng, baseCloser := openEngine()
+		full, err := baseEng.CoverageRows(CoverageRowsOptions{PageSize: 1000})
+		baseCloser()
+		if err != nil {
+			t.Fatalf("CoverageRows (baseline): %v", err)
+		}
+		if len(full.Rows) != 6 {
+			t.Fatalf("baseline Rows = %+v, want exactly 6", full.Rows)
+		}
+
+		eng1, closer1 := openEngine()
+		page1, err := eng1.CoverageRows(CoverageRowsOptions{PageSize: 1})
+		closer1()
+		if err != nil {
+			t.Fatalf("CoverageRows (page1): %v", err)
+		}
+		if len(page1.Rows) != 1 || page1.Rows[0].Kind != CoverageRowExtractionFailed {
+			t.Fatalf("page1.Rows = %+v, want exactly one extraction-failed row", page1.Rows)
+		}
+		if page1.NextPageToken == "" {
+			t.Fatal("page1.NextPageToken is empty, want non-empty (5 rows remain)")
+		}
+		cursorPath := page1.Rows[0].Path
+
+		// Simulate a concurrent Sync pruning the cursor's own File
+		// record between the two page fetches — squarely in-scope, not
+		// hypothetical (coverage.go's own header comment: two
+		// consecutive CoverageRows calls may be answered from different
+		// snapshots).
+		w, err := store.NewWriter()
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.DeleteFileSubgraph(cursorPath); err != nil {
+			t.Fatalf("DeleteFileSubgraph(%q): %v", cursorPath, err)
+		}
+		if err := w.Commit(); err != nil {
+			t.Fatalf("Commit (mutation): %v", err)
+		}
+
+		// Walk every remaining page from a FRESH Engine/snapshot per
+		// call, exactly like uiserver's GetCoverage.
+		got := append([]CoverageRow(nil), page1.Rows...)
+		tok := page1.NextPageToken
+		for i := 0; tok != "" && i < 10; i++ {
+			eng, closer := openEngine()
+			page, err := eng.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: tok})
+			closer()
+			if err != nil {
+				t.Fatalf("CoverageRows (page token=%q): %v", tok, err)
+			}
+			got = append(got, page.Rows...)
+			tok = page.NextPageToken
+		}
+
+		// cursorPath itself was already legitimately returned in page1,
+		// BEFORE the mutation — the full set of expected paths across
+		// every page is therefore every path in `full`, unchanged. What
+		// CR-01 breaks is whatever comes AFTER the (now-deleted)
+		// cursor's position: b_err.go/c_err.go must still surface, not
+		// vanish.
+		wantPaths := map[string]bool{}
+		for _, r := range full.Rows {
+			wantPaths[r.Path] = true
+		}
+		gotPaths := map[string]bool{}
+		for _, r := range got {
+			gotPaths[r.Path] = true
+		}
+		if len(gotPaths) != len(wantPaths) {
+			t.Fatalf("collected %d distinct rows %v across all pages, want %d %v (nothing after the deleted cursor %q may be dropped — CR-01)",
+				len(gotPaths), gotPaths, len(wantPaths), wantPaths, cursorPath)
+		}
+		for p := range wantPaths {
+			if !gotPaths[p] {
+				t.Errorf("row %q was silently dropped after the cursor row %q was deleted mid-pagination (CR-01)", p, cursorPath)
+			}
+		}
+	})
+
+	t.Run("excluded segment: cursor row deleted between pages does not falsely end pagination", func(t *testing.T) {
+		store, openEngine := newCoverageMutationStore(t)
+
+		baseEng, baseCloser := openEngine()
+		full, err := baseEng.CoverageRows(CoverageRowsOptions{PageSize: 1000})
+		baseCloser()
+		if err != nil {
+			t.Fatalf("CoverageRows (baseline): %v", err)
+		}
+
+		// Walk with PageSize:1 until the cursor is an 'x'-segment row
+		// with at least one 'x' row still remaining after it — the
+		// fixture's three ExcludedFile records (all in one 'x' segment,
+		// after the three 'f' rows) guarantee this exists. Every row
+		// seen during this discovery walk is legitimate (fetched before
+		// any mutation) and is accumulated into `got` alongside the
+		// post-mutation pages below.
+		var got []CoverageRow
+		var tok string
+		var lastPage CoveragePage
+		found := false
+		for i := 0; i < 10; i++ {
+			eng, closer := openEngine()
+			page, err := eng.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: tok})
+			closer()
+			if err != nil {
+				t.Fatalf("CoverageRows (walk, token=%q): %v", tok, err)
+			}
+			lastPage = page
+			got = append(got, page.Rows...)
+			if len(page.Rows) == 1 && page.Rows[0].Kind == CoverageRowExcluded && page.NextPageToken != "" {
+				found = true
+				break
+			}
+			if page.NextPageToken == "" {
+				t.Fatal("walked off the end before reaching an 'x' cursor with remaining rows — fixture assumption violated")
+			}
+			tok = page.NextPageToken
+		}
+		if !found {
+			t.Fatal("never reached an 'x'-segment cursor with a remaining row — fixture assumption violated")
+		}
+		cursorPath := lastPage.Rows[0].Path
+		nextTok := lastPage.NextPageToken
+
+		// Simulate a concurrent Sync pruning the cursor's own
+		// ExcludedFile record between the two page fetches.
+		w, err := store.NewWriter()
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.DeleteExcludedFile(cursorPath); err != nil {
+			t.Fatalf("DeleteExcludedFile(%q): %v", cursorPath, err)
+		}
+		if err := w.Commit(); err != nil {
+			t.Fatalf("Commit (mutation): %v", err)
+		}
+
+		eng2, closer2 := openEngine()
+		page2, err := eng2.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: nextTok})
+		closer2()
+		if err != nil {
+			t.Fatalf("CoverageRows (post-mutation page): %v", err)
+		}
+		// CR-01's "worse" case: the buggy implementation returns ZERO
+		// rows here AND an empty NextPageToken — the caller is told
+		// pagination is COMPLETE while a whole row (whichever 'x' row
+		// sorts immediately after the deleted cursor) was silently
+		// discarded. Assert the row is NOT dropped.
+		if len(page2.Rows) == 0 {
+			t.Fatalf("page2.Rows is empty after the cursor's own row (%q) was deleted — CR-01's silent-truncation bug (a row was dropped, not deferred)", cursorPath)
+		}
+		if page2.Rows[0].Path == cursorPath {
+			t.Errorf("page2 still returned the deleted cursor row %q — want it gone", cursorPath)
+		}
+
+		// Collect every remaining page (fresh Engine/snapshot per call,
+		// mirroring GetCoverage) into the SAME `got` the discovery walk
+		// above started, and confirm the full set is exactly reproduced
+		// — no row lost, none duplicated, despite the deleted cursor.
+		got = append(got, page2.Rows...)
+		tok = page2.NextPageToken
+		for i := 0; tok != "" && i < 10; i++ {
+			eng, closer := openEngine()
+			page, err := eng.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: tok})
+			closer()
+			if err != nil {
+				t.Fatalf("CoverageRows (page token=%q): %v", tok, err)
+			}
+			got = append(got, page.Rows...)
+			tok = page.NextPageToken
+		}
+
+		wantPaths := map[string]bool{}
+		for _, r := range full.Rows {
+			wantPaths[r.Path] = true
+		}
+		gotPaths := map[string]bool{}
+		for _, r := range got {
+			gotPaths[r.Path] = true
+		}
+		if len(gotPaths) != len(wantPaths) {
+			t.Fatalf("collected %d distinct rows %v across all pages, want %d %v (nothing after the deleted cursor %q may be dropped — CR-01)",
+				len(gotPaths), gotPaths, len(wantPaths), wantPaths, cursorPath)
+		}
+		for p := range wantPaths {
+			if !gotPaths[p] {
+				t.Errorf("row %q was silently dropped after the cursor row %q was deleted mid-pagination (CR-01)", p, cursorPath)
+			}
+		}
+	})
+}
+
 // TestCoverageRowsSurviveDiskMutationWithoutReindex is the Engine-level
 // twin of Plan 02's indexer-level D-14a test (D-14's behavioural guard):
 // after indexing the fixture, the disk is mutated WITHOUT re-indexing —

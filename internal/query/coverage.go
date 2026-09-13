@@ -1,10 +1,12 @@
 package query
 
 import (
+	"bytes"
 	"encoding/base64"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -197,41 +199,56 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 
 	var rows []CoverageRow
 
-	// TestCoverageRowsOrderingAndPagingAreStable (RED before this fix):
-	// the two segments are walked in the STORE's own key order (a
-	// length-prefixed encoding, keys.go's appendSegment — see
+	// CR-01 fix: the two segments are walked in the STORE's own key
+	// order (a length-prefixed encoding, keys.go's appendSegment — see
 	// CoverageRow's own doc comment), never plain lexical path order.
 	// The resume cursor therefore cannot use a lexical "path <=
-	// cursorPath" comparison to decide "already returned" — that
-	// comparison is only monotonic when the store's key order happens
-	// to agree with lexical order, which it does not once paths differ
-	// in length. Instead, each segment replays from its own start and
-	// skips forward until it has SEEN the exact cursor path once more
-	// (an identical fresh iterator over unchanged data reproduces the
-	// same sequence), then resumes emitting from the next row. A
-	// cursor sitting in the later 'x' segment additionally means the
-	// earlier 'f' segment is already fully consumed and must be
-	// skipped in its entirety, not re-walked from its own start.
+	// cursorPath" comparison, NOR value-equality against the cursor's
+	// decoded path, to decide "already returned": both break the
+	// instant the cursor's own record is mutated or deleted by a
+	// concurrent Sync between two page fetches (each GetCoverage call
+	// opens its own Engine/snapshot, SRV-04 — this file's own header
+	// comment), leaving a value-equality "skipping" flag stuck true for
+	// the rest of that segment and silently dropping every remaining
+	// row.
+	//
+	// Instead, resume by POSITION: graphstore.FileKey(cursorPath) /
+	// graphstore.ExcludedFileKey(cursorPath) recompute the cursor's own
+	// key bytes purely from its path — independent of whether that
+	// record still exists — and each row's RawKey() is compared against
+	// it with bytes.Compare, which reflects the store's actual key
+	// order regardless of any mutation. Once a row's key sorts strictly
+	// after the cursor's key, skipping ends and emission resumes from
+	// there: a deleted cursor row resumes at the very next row after
+	// its position; a cursor row that still exists is skipped exactly
+	// once, exactly as before. A cursor sitting in the later 'x'
+	// segment additionally means the earlier 'f' segment is already
+	// fully consumed and must be skipped in its entirety, not re-walked
+	// from its own start.
 	if !filterByReason && cursorSeg != 'x' {
 		fit, err := e.reader.IterateFiles()
 		if err != nil {
 			return CoveragePage{}, err
 		}
 		skipping := cursorSeg == 'f'
+		var cursorKey []byte
+		if skipping {
+			cursorKey = graphstore.FileKey(cursorPath)
+		}
 		for len(rows) <= pageSize && fit.Next() {
+			if skipping {
+				if bytes.Compare(fit.RawKey(), cursorKey) > 0 {
+					skipping = false
+				} else {
+					continue
+				}
+			}
 			f := fit.File()
 			if len(f.GetErrors()) == 0 {
 				continue
 			}
-			path := f.GetPath()
-			if skipping {
-				if path == cursorPath {
-					skipping = false
-				}
-				continue
-			}
 			rows = append(rows, CoverageRow{
-				Path:   path,
+				Path:   f.GetPath(),
 				Kind:   CoverageRowExtractionFailed,
 				Detail: coverageExtractionDetail(f, e.repoRoot),
 			})
@@ -249,20 +266,24 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 			return CoveragePage{}, err
 		}
 		skipping := cursorSeg == 'x'
+		var cursorKey []byte
+		if skipping {
+			cursorKey = graphstore.ExcludedFileKey(cursorPath)
+		}
 		for len(rows) <= pageSize && xit.Next() {
+			if skipping {
+				if bytes.Compare(xit.RawKey(), cursorKey) > 0 {
+					skipping = false
+				} else {
+					continue
+				}
+			}
 			x := xit.ExcludedFile()
 			if filterByReason && x.GetReason() != opts.Reason {
 				continue
 			}
-			path := x.GetPath()
-			if skipping {
-				if path == cursorPath {
-					skipping = false
-				}
-				continue
-			}
 			rows = append(rows, CoverageRow{
-				Path:   path,
+				Path:   x.GetPath(),
 				Kind:   CoverageRowExcluded,
 				Reason: x.GetReason(),
 				Detail: x.GetDetail(),
