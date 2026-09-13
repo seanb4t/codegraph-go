@@ -252,7 +252,7 @@ Plans:
   4. The coverage surface extends `GetHealthResponse` additively, or adds an rpc whose name clears every `mutatingVerbs` substring including "Index", with `wantUIServiceMethods` updated by set-equality in both directions and the method count asserted from both sides — so neither an added nor a removed method can slip through (HLT-06)
 
 **Notes**: This is the milestone's only write-path change, and its central risk is named explicitly: reasons inferred after the fact are plausible-sounding lies, so they are captured at the real pipeline decision point and never reconstructed by a query-time walk that only sees static, present-tense file properties. The discovered-count definition must be pinned once and used by both the denominator and the reason list, or the two disagree in the user's face. "Re-index this file" auto-remediation on the coverage view is out of scope by construction — the same `SRV-03` violation as an editor shell-out; show reason and remedy as text only. Where the discovery-exclusion helper may live depends on Phase 7's landed archtest scope; check it against the archtest as written, not as remembered.
-**Plans**: 2/6 plans executed
+**Plans**: 3/6 plans executed
 **UI hint**: yes
 
 Plans:
@@ -263,7 +263,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion; 10-02, 10-03 and 10-04 run in parallel on disjoint files)*
 
 - [x] 10-02-PLAN.md — the other three reasons + the strict stat-based size pre-check as pure helpers with boundary tests; the committed `testdata/coverage/` fixture module, the verified extraction-failure technique, the exact-counts test and the mutate-without-reindex test (D-13, D-14a)
-- [ ] 10-03-PLAN.md — `Sync` upserts/prunes the `c/` namespace per path inside its one commit, stamps `has_coverage` at both meta sites, treats an exclusion-only change as work; backfill of a pre-Phase-10 graph by one incremental Sync
+- [x] 10-03-PLAN.md — `Sync` upserts/prunes the `c/` namespace per path inside its one commit, stamps `has_coverage` at both meta sites, treats an exclusion-only change as work; backfill of a pre-Phase-10 graph by one incremental Sync
 - [ ] 10-04-PLAN.md — `/health` Coverage section: counts line, reason groups expanding to rows, extraction failures visibly distinct, first-class "Coverage unknown — re-index to record it", text-only remedy; vitest-level verification (Open Question 3: no Playwright gate); SPA rebuilt drift-clean
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -314,7 +314,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | 7. Guards That Cannot Fire | 4/4 | Complete    | 2026-09-08 |
 | 8. tmux Real-PTY Harness | 5/5 | Complete    | 2026-09-11 |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 6/6 | Complete    | 2026-09-12 |
-| 10. Index Health — The Coverage Denominator | 2/6 | In Progress|  |
+| 10. Index Health — The Coverage Denominator | 3/6 | In Progress|  |
 | 11. Graph View — Community Clustering | 0/TBD | Not started | - |
 | 12. CLI Reference & Docs Tail | 0/TBD | Not started | - |
 
