@@ -1,6 +1,15 @@
 #!/usr/bin/env node
-// check-no-force-layout.mjs — GRF-06's "no force-directed layout mode is
-// reachable from any code path" proof (D-12b), by static scan.
+// check-no-force-layout.mjs (WR-03a: narrowed claim) — proves that no
+// cytoscape layout is invoked with a forbidden name WRITTEN AS A STRING
+// LITERAL at the `name:` option position, or as a `cytoscape-<x>` import/
+// dependency specifier. It does NOT prove "no force-directed layout is
+// reachable from any code path" in full generality: a layout name built
+// at runtime (string concatenation, a ternary, an imported constant, an
+// options object assembled elsewhere and spread into the call) is NOT
+// resolved by this scan. WR-03b's unresolvedLayoutName check narrows that
+// residual gap further (see below) but does not close it completely —
+// resolving an arbitrary expression to its runtime value is a data-flow
+// problem this plain-regex scan does not attempt.
 //
 // This file does NOT run the SPA, does NOT launch a browser, and does NOT
 // parse an AST — it is a plain regex scan SCOPED TO LAYOUT-NAME POSITIONS
@@ -19,6 +28,24 @@
 // like "never force-directed" (GraphCanvas.svelte's own layout comment)
 // from ever matching — neither sits in a `name: '<x>'` position, so
 // neither is a layout-name reference at all.
+//
+// WR-03b (unresolvedLayoutNames, REPORTED BUT NON-FATAL — does not affect
+// the PASS/FAIL verdict): additionally flags every `layout(` / `.layout(`
+// call site under web/src whose `name` option cannot be statically
+// resolved to a quoted string literal within that call site's own line
+// plus the following 5 lines — this catches both a bare variable
+// (`name: layoutName`) and a spread of an options object declared
+// elsewhere (`{ ...LAYOUT_OPTIONS, fit }`), since neither shows a
+// resolvable literal at the call site itself. This is a genuinely weaker
+// guarantee than a full data-flow trace: it does NOT verify what the
+// referenced variable/spread actually resolves to, only that the call
+// site's own text does not. Verified against this scan's own real tree:
+// GraphCanvas.svelte's one production call site spreads LAYOUT_OPTIONS
+// (declared a few lines above with a literal `name: 'elk'`) and IS
+// flagged by this heuristic today — a real, acknowledged residual gap,
+// which is exactly why this check is advisory (reported, with file:line)
+// rather than build-breaking. Per WR-03's own guidance, GraphCanvas.svelte
+// is NOT rewritten to dodge this scan; the gap is documented here instead.
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -52,6 +79,15 @@ const LAYOUT_IMPORT_RE = /['"]cytoscape-(cose-bilkent|fcose|cola|euler|spread)['
 // anything at all.
 const ELK_NAME_RE = /\bname\s*:\s*['"]elk['"]/g;
 const ELK_IMPORT_RE = /['"]cytoscape-elk['"]/g;
+
+// WR-03b: any `layout(`/`.layout(` call site (word-boundary catches both
+// the bare identifier and the `.` method-call form).
+const LAYOUT_CALL_RE = /\blayout\(/g;
+// A resolvable literal `name:` value — quoted, anchored the same way
+// LAYOUT_NAME_RE/ELK_NAME_RE are. If a call site's own window (its line
+// plus the 5 following) does not contain this, the name could not be
+// statically resolved to a literal from the call site's own text.
+const LITERAL_NAME_IN_WINDOW_RE = /\bname\s*:\s*['"][^'"]*['"]/;
 
 // walk decides recursion with fs.statSync (which FOLLOWS symlinks) rather
 // than a readdirSync Dirent's own isDirectory() (which does NOT — a
@@ -106,6 +142,24 @@ function scanForbidden(re, file, text, out) {
 	}
 }
 
+// scanUnresolvedLayoutNames (WR-03b) finds every layout( / .layout( call
+// site whose own line + the following 5 lines contain no resolvable
+// quoted `name:` literal — a bare variable (`name: layoutName`) or a
+// spread of an options object declared elsewhere both look the same to
+// this line-windowed check: unresolved from the call site's own text.
+function scanUnresolvedLayoutNames(file, text, out) {
+	const lines = text.split('\n');
+	LAYOUT_CALL_RE.lastIndex = 0;
+	let m;
+	while ((m = LAYOUT_CALL_RE.exec(text)) !== null) {
+		const lineNum = lineOf(text, m.index);
+		const window = lines.slice(lineNum - 1, lineNum - 1 + 6).join('\n');
+		if (!LITERAL_NAME_IN_WINDOW_RE.test(window)) {
+			out.push({ file, line: lineNum, snippet: lines[lineNum - 1].trim() });
+		}
+	}
+}
+
 // scanFileTexts is the ONE scan function both the real-tree walk and
 // --self-test's injected-source path call — the same mechanism, never two
 // independently-written scanners that could silently drift apart.
@@ -113,15 +167,17 @@ function scanFileTexts(fileTexts) {
 	let elkLayoutRefs = 0;
 	let elkImportRefs = 0;
 	const forbiddenMatches = [];
+	const unresolvedLayoutNames = [];
 
 	for (const { file, text } of fileTexts) {
 		elkLayoutRefs += countMatches(text, ELK_NAME_RE);
 		elkImportRefs += countMatches(text, ELK_IMPORT_RE);
 		scanForbidden(LAYOUT_NAME_RE, file, text, forbiddenMatches);
 		scanForbidden(LAYOUT_IMPORT_RE, file, text, forbiddenMatches);
+		scanUnresolvedLayoutNames(file, text, unresolvedLayoutNames);
 	}
 
-	return { filesScanned: fileTexts.length, elkLayoutRefs, elkImportRefs, forbiddenMatches };
+	return { filesScanned: fileTexts.length, elkLayoutRefs, elkImportRefs, forbiddenMatches, unresolvedLayoutNames };
 }
 
 function scanPackageJson(packageJsonPath) {
@@ -156,22 +212,29 @@ function runScan({ extraFiles = [] } = {}) {
 	const elkLayoutRefs = srcResult.elkLayoutRefs;
 	const elkImportRefs = srcResult.elkImportRefs + pkgResult.elkImportRefs;
 	const forbiddenMatches = [...srcResult.forbiddenMatches, ...pkgResult.forbiddenMatches];
+	// unresolvedLayoutNames (WR-03b) is reported but deliberately excluded
+	// from the verdict below — see the header comment for why this is
+	// advisory, not build-breaking.
+	const unresolvedLayoutNames = srcResult.unresolvedLayoutNames;
 
 	const verdict =
 		filesScanned > 0 && elkLayoutRefs >= 1 && elkImportRefs >= 1 && forbiddenMatches.length === 0
 			? 'PASS'
 			: 'FAIL';
 
-	return { filesScanned, elkLayoutRefs, elkImportRefs, forbiddenMatches, verdict };
+	return { filesScanned, elkLayoutRefs, elkImportRefs, forbiddenMatches, unresolvedLayoutNames, verdict };
 }
 
 function printReport(report) {
 	console.log(JSON.stringify(report));
 	console.log(
-		`check-no-force-layout: scanned ${report.filesScanned} files; elk layout refs ${report.elkLayoutRefs}; elk import refs ${report.elkImportRefs}; forbidden matches ${report.forbiddenMatches.length}; verdict ${report.verdict}`
+		`check-no-force-layout: scanned ${report.filesScanned} files; elk layout refs ${report.elkLayoutRefs}; elk import refs ${report.elkImportRefs}; forbidden matches ${report.forbiddenMatches.length}; unresolved layout names (advisory) ${report.unresolvedLayoutNames.length}; verdict ${report.verdict}`
 	);
 	for (const m of report.forbiddenMatches) {
 		console.log(`  forbidden: ${m.file}:${m.line} — ${m.match}`);
+	}
+	for (const m of report.unresolvedLayoutNames) {
+		console.log(`  unresolved (advisory, does not fail verdict): ${m.file}:${m.line} — ${m.snippet}`);
 	}
 }
 
@@ -228,24 +291,44 @@ function selfTestSymlinkTraversal() {
 	}
 }
 
-// selfTest runs the SAME scan function over the real tree plus one
-// injected in-memory source planting `name: 'cose'`. It passes only if
-// that injected match is the ONLY forbidden match reported (the real tree
-// stayed clean) AND the real tree's own file count proves the walk is not
-// silently empty — a scan that cannot detect a match it was JUST handed
-// must never be trusted, no matter how clean its real-tree verdict looks.
-// It also runs selfTestSymlinkTraversal (WR-02), a real on-disk case the
-// in-memory injection above cannot exercise.
+// selfTest runs the SAME scan function over the real tree plus two
+// injected in-memory sources: one planting `name: 'cose'` (the forbidden-
+// literal case) and one planting `cy.layout({ name: layoutName })` (the
+// WR-03b unresolved-name case). It passes only if the forbidden injection
+// is the ONLY forbidden match reported (the real tree stayed clean), the
+// unresolved injection is detected as an advisory finding, AND the real
+// tree's own file count proves the walk is not silently empty — a scan
+// that cannot detect a match it was JUST handed must never be trusted, no
+// matter how clean its real-tree verdict looks. It also runs
+// selfTestSymlinkTraversal (WR-02), a real on-disk case the in-memory
+// injections above cannot exercise.
 function selfTest() {
 	const injected = { file: '<self-test>/injected.ts', text: "const layout = { name: 'cose' };" };
-	const report = runScan({ extraFiles: [injected] });
+	const injectedUnresolved = {
+		file: '<self-test>/unresolved.ts',
+		text: 'cy.layout({ name: layoutName });'
+	};
+	const report = runScan({ extraFiles: [injected, injectedUnresolved] });
 
 	const injectedMatch = report.forbiddenMatches.find((m) => m.file === injected.file && m.line === 1);
 	const onlyInjectedMatch = report.forbiddenMatches.length === 1 && injectedMatch !== undefined;
 	const bigEnough = report.filesScanned >= 50;
 	const symlinkOk = selfTestSymlinkTraversal();
 
-	if (onlyInjectedMatch && bigEnough && symlinkOk) {
+	const unresolvedFound = report.unresolvedLayoutNames.some(
+		(m) => m.file === injectedUnresolved.file && m.line === 1
+	);
+	if (unresolvedFound) {
+		console.log(
+			`check-no-force-layout self-test (WR-03b): PASS — unresolved layout name detected at ${injectedUnresolved.file}:1`
+		);
+	} else {
+		console.log(
+			`check-no-force-layout self-test (WR-03b): FAIL — unresolved layout name at ${injectedUnresolved.file}:1 was NOT detected`
+		);
+	}
+
+	if (onlyInjectedMatch && bigEnough && symlinkOk && unresolvedFound) {
 		console.log(`check-no-force-layout self-test: PASS — injected 'cose' detected at ${injected.file}:1`);
 		process.exit(0);
 	}

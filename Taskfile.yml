@@ -1739,11 +1739,17 @@ tasks:
 
   check:no-force-layout:
     desc: >-
-      GRF-06's local, BLOCKING, positive-controlled proof that no force-
-      directed layout (D-12b) is reachable from any code path under
-      web/src or web/package.json's dependencies. Runs the script's own
-      --self-test first (a scan that cannot detect a planted layout name
-      must never be trusted), then the real scan.
+      GRF-06's local, BLOCKING, positive-controlled proof (D-12b) that no
+      cytoscape layout is invoked with a forbidden name written as a
+      string literal at the `name:` option position, or as a
+      `cytoscape-<x>` import/dependency specifier, under web/src or
+      web/package.json's dependencies (WR-03: narrowed from "reachable
+      from any code path" — a string-built or variable layout name is
+      NOT detected by this scan; a non-fatal, reported-only
+      unresolvedLayoutNames finding flags call sites this scan could not
+      statically resolve to a literal). Runs the script's own --self-test
+      first (a scan that cannot detect a planted layout name must never
+      be trusted), then the real scan.
     preconditions:
       - sh: command -v node
         msg: "node not found — check:no-force-layout runs a static Node scan over web/src, no browser required."
