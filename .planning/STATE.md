@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 10
 current_phase_name: Index Health — The Coverage Denominator
 status: executing
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-09-13T02:49:29.137Z"
+stopped_at: Completed 10-04-PLAN.md
+last_updated: "2026-09-13T03:14:21.005Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 10 execution started
-state_head: be615003aec140faeab015da950d34ab5ffdd03e
+state_head: 3890480900861bc0ee2ea15e47391f823aebc923
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-12 after Phase 9)
 ## Current Position
 
 Phase: 10 (Index Health — The Coverage Denominator) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 10 execution started
 
@@ -129,6 +129,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 10 P01 | 1h 5min | 2 tasks | 37 files |
 | Phase 10 P02 | ~50min | 2 tasks | 13 files |
 | Phase 10 P03 | 35min | 2 tasks | 4 files |
+| Phase 10 P04 | 55min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -282,6 +283,7 @@ Standing decisions that outlive every milestone:
 - [Phase 10]: [Phase 10] Coverage-index test fixtures must never pre-create repoRoot/.codegraph/store before indexer.Run — DiscoverAll's walk runs before graphstore.Open creates it on a real first index, and pre-creating it produces a phantom DIR_DOTPREFIX exclusion
 - [Phase 10]: fabricatePreCoverageStore forces HasCoverage=false as a direct literal (no bool param) to satisfy the plan's structural verify gate and keep the fabrication unambiguous
 - [Phase 10]: Task 2's three backfill/preservation tests were written directly against Task 1's implementation and passed on first run — Task 1's coverageDirty gate and Plan 01's writeGraph range-delete were both already correct, no third write site needed
+- [Phase 10]: Open Question 3 decided: /health Coverage verification stays at vitest level (health-page.test.ts / health-view.test.ts) — no Playwright gate added.
 
 ### Pending Todos
 
@@ -431,8 +433,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-13T02:49:29.111Z
-Stopped at: Completed 10-03-PLAN.md
+Last session: 2026-09-13T03:14:20.979Z
+Stopped at: Completed 10-04-PLAN.md
   NEXT: `/gsd-discuss-phase 10` (Index Health — The Coverage Denominator; no 10-CONTEXT.md yet)
   CARRY-OVER:
 
