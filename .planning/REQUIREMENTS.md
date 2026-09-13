@@ -43,9 +43,9 @@
 
 ### Index Health
 
-- [ ] **HLT-04**: Index health shows the coverage denominator — files discovered but not indexed — with a per-file reason, distinguishing extraction failures (already persisted in `File.errors`) from pre-extraction exclusions
-- [ ] **HLT-05**: Pre-extraction exclusion reasons (vendor/dot-dir, unsupported extension, build tag, size limit) are recorded at the discovery decision point and persisted additively within SchemaVersion 1, never inferred by a query-time re-walk
-- [ ] **HLT-06**: The coverage surface extends `GetHealthResponse` additively, or adds an rpc whose name clears every `mutatingVerbs` substring including "Index", with `wantUIServiceMethods` updated by set-equality in both directions
+- [x] **HLT-04**: Index health shows the coverage denominator — files discovered but not indexed — with a per-file reason, distinguishing extraction failures (already persisted in `File.errors`) from pre-extraction exclusions
+- [x] **HLT-05**: Pre-extraction exclusion reasons (vendor/dot-dir, unsupported extension, build tag, size limit) are recorded at the discovery decision point and persisted additively within SchemaVersion 1, never inferred by a query-time re-walk
+- [x] **HLT-06**: The coverage surface extends `GetHealthResponse` additively, or adds an rpc whose name clears every `mutatingVerbs` substring including "Index", with `wantUIServiceMethods` updated by set-equality in both directions
 
 ### Graph View
 
@@ -119,9 +119,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BRW-11 | Phase 9 | Complete |
 | BRW-12 | Phase 9 | Complete |
 | BRW-13 | Phase 9 | Complete |
-| HLT-04 | Phase 10 | Pending |
-| HLT-05 | Phase 10 | Pending |
-| HLT-06 | Phase 10 | Pending |
+| HLT-04 | Phase 10 | Complete |
+| HLT-05 | Phase 10 | Complete |
+| HLT-06 | Phase 10 | Complete |
 | GRF-06 | Phase 11 | Pending |
 | GRF-08 | Phase 11 | Pending |
 | GRF-09 | Phase 11 | Pending |

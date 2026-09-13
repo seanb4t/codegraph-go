@@ -4,17 +4,17 @@ milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
 current_phase: 10
 current_phase_name: Index Health — The Coverage Denominator
-status: executing
-stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-09-13T03:40:47.083Z"
+status: verifying
+stopped_at: Completed 10-06-PLAN.md (phase 10 complete)
+last_updated: "2026-09-13T03:59:07.383Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 10 execution started
-state_head: dfdca783cabe569b5841e2de95793f92ef914ea5
+state_head: 073807692a571e8e535ef41a8f00cbc6f2110c7f
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-12 after Phase 9)
 
 Phase: 10 (Index Health — The Coverage Denominator) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-12 — Phase 10 execution started
 
 ## Performance Metrics
@@ -131,6 +131,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 10 P03 | 35min | 2 tasks | 4 files |
 | Phase 10 P04 | 55min | 2 tasks | 5 files |
 | Phase 10-index-health-the-coverage-denominator P05 | 55min | 2 tasks | 3 files |
+| Phase 10 P06 | 50min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -286,6 +287,7 @@ Standing decisions that outlive every milestone:
 - [Phase 10]: Task 2's three backfill/preservation tests were written directly against Task 1's implementation and passed on first run — Task 1's coverageDirty gate and Plan 01's writeGraph range-delete were both already correct, no third write site needed
 - [Phase 10]: Open Question 3 decided: /health Coverage verification stays at vitest level (health-page.test.ts / health-view.test.ts) — no Playwright gate added.
 - [Phase 10]: Fixed CoverageRows pagination cursor to skip-until-seen-cursor-path per segment (was comparing paths lexically against the store's non-lexical length-prefixed key order). — The store's real iteration order for ExcludedFile/File records is length-prefixed (keys.go appendSegment), not lexical path order; a lexical <= cursor comparison silently broke once paging crossed segments, causing infinite duplicate rows.
+- [Phase 10]: Merged colliding threat ids across Plans 01-05 (T-10-01/03/04/05/06/07/08/10/15) into single 10-SECURITY.md rows citing every contributing plan's mitigation — The read_first instructions required deduplicating by id and merging mitigation text rather than dropping or inventing ids
 
 ### Pending Todos
 
@@ -435,8 +437,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-13T03:40:47.056Z
-Stopped at: Completed 10-05-PLAN.md
+Last session: 2026-09-13T03:59:07.356Z
+Stopped at: Completed 10-06-PLAN.md (phase 10 complete)
   NEXT: `/gsd-discuss-phase 10` (Index Health — The Coverage Denominator; no 10-CONTEXT.md yet)
   CARRY-OVER:
 
