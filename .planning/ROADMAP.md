@@ -125,7 +125,7 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
 - [x] **Phase 7: Guards That Cannot Fire** - Every guard in the known-vacuous set now fails when the property it claims to check is violated, each proven by a recorded RED demonstration rather than a green run (completed 2026-09-08)
 - [x] **Phase 8: tmux Real-PTY Harness** - The interactive TUI is finally exercised on a terminal that answers escape queries and actually scrolls, closing the gap between the TTY-blind piped suite and manual human UAT (completed 2026-09-11)
 - [x] **Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff** - A developer reading a long file always knows which symbol they are inside, and can jump from any node or line straight into their own editor (completed 2026-09-12)
-- [ ] **Phase 10: Index Health — The Coverage Denominator** - "Why is my file missing" is answered by the index itself: how many files were discovered, how many were indexed, and a recorded reason for every gap
+- [x] **Phase 10: Index Health — The Coverage Denominator** - "Why is my file missing" is answered by the index itself: how many files were discovered, how many were indexed, and a recorded reason for every gap (completed 2026-09-13)
 - [ ] **Phase 11: Graph View — Community Clustering** - The file/package graph reads as groups rather than a flat mesh, coloured by communities computed deterministically on the layout already shipped
 - [ ] **Phase 12: CLI Reference & Docs Tail** - Every flag the binary actually registers is documented in a reference this project authored, kept honest by a walk of the live command tree
 
@@ -314,7 +314,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | 7. Guards That Cannot Fire | 4/4 | Complete    | 2026-09-08 |
 | 8. tmux Real-PTY Harness | 5/5 | Complete    | 2026-09-11 |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 6/6 | Complete    | 2026-09-12 |
-| 10. Index Health — The Coverage Denominator | 6/6 | In Progress|  |
+| 10. Index Health — The Coverage Denominator | 6/6 | Complete    | 2026-09-13 |
 | 11. Graph View — Community Clustering | 0/TBD | Not started | - |
 | 12. CLI Reference & Docs Tail | 0/TBD | Not started | - |
 
