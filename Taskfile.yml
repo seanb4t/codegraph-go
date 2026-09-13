@@ -1737,6 +1737,20 @@ tasks:
 
         echo "check:gonum: PASS"
 
+  check:no-force-layout:
+    desc: >-
+      GRF-06's local, BLOCKING, positive-controlled proof that no force-
+      directed layout (D-12b) is reachable from any code path under
+      web/src or web/package.json's dependencies. Runs the script's own
+      --self-test first (a scan that cannot detect a planted layout name
+      must never be trusted), then the real scan.
+    preconditions:
+      - sh: command -v node
+        msg: "node not found — check:no-force-layout runs a static Node scan over web/src, no browser required."
+    cmds:
+      - node web/scripts/check-no-force-layout.mjs --self-test
+      - node web/scripts/check-no-force-layout.mjs
+
   check:darwin-toolchain:
     desc: >-
       Prove a native darwin host can CGo-build both release arches — the D-08
