@@ -16,11 +16,19 @@
 	import type { IndexStatus, StatusGate } from '$lib/status';
 	import type { LiveStore } from '$lib/live/live-store';
 	import type { GetHealthResponse } from '$lib/gen/ui_pb';
-	import { toCountRows, hasWorktreeMismatch, describeFreshness } from '$lib/health-view';
+	import {
+		toCountRows,
+		hasWorktreeMismatch,
+		describeFreshness,
+		toCoverageView,
+		groupCoverageRows,
+		fetchAllCoverageRows
+	} from '$lib/health-view';
 	import { describeWorkbenchFailure } from '$lib/workbench-failure';
 	import TrustVerdict from '$lib/components/health/TrustVerdict.svelte';
 	import WorktreeMismatchWarning from '$lib/components/health/WorktreeMismatchWarning.svelte';
 	import CountTable from '$lib/components/health/CountTable.svelte';
+	import CoverageSection, { type RowsState } from '$lib/components/health/CoverageSection.svelte';
 
 	const statusGate = getContext<StatusGate>('statusGate');
 	let indexStatus: IndexStatus = $state({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
@@ -36,6 +44,60 @@
 		| { kind: 'failed'; failure: ReturnType<typeof describeWorkbenchFailure> };
 
 	let pageState: PageState = $state({ kind: 'loading' });
+
+	// rowsState is the Coverage section's per-file row list, fetched
+	// SEPARATELY from GetHealth via loadCoverageRows below (D-11): the
+	// counts line comes from GetHealth's already-bounded coverage
+	// summary, while the row list is paged through GetCoverage —
+	// independent fetches, so a GetCoverage failure never blanks the
+	// counts (health-page.test.ts's "rows failure" case).
+	let rowsState: RowsState = $state({ kind: 'idle' });
+
+	// coverageController is tracked alongside the health fetch's own
+	// AbortController: aborted on component teardown, and superseded
+	// (the PREVIOUS in-flight walk aborted) whenever a new coverage
+	// rows fetch starts — mirroring the health fetch's own controller
+	// discipline, one field over.
+	let coverageController: AbortController | null = null;
+
+	$effect(() => {
+		return () => {
+			coverageController?.abort();
+		};
+	});
+
+	// loadCoverageRows is invoked from BOTH GetHealth fetch paths (the
+	// mount effect and issueLiveHealthFetch) right after pageState is
+	// set to 'loaded', guarded by the SAME requestId ordering token (CR-
+	// 01) so a stale rows response can never overwrite a newer one. When
+	// the just-fetched response's coverage is unknown, this returns
+	// immediately WITHOUT issuing GetCoverage at all (D-11's prohibition
+	// on ever paging coverage rows for an old graph) and resets rowsState
+	// to idle — the Coverage section then renders its own first-class
+	// unknown copy from `view`, never an empty table.
+	function loadCoverageRows(response: GetHealthResponse, id: number): void {
+		if (!toCoverageView(response).known) {
+			rowsState = { kind: 'idle' };
+			return;
+		}
+		coverageController?.abort();
+		const controller = new AbortController();
+		coverageController = controller;
+		rowsState = { kind: 'loading' };
+		fetchAllCoverageRows(uiClient, controller.signal)
+			.then((result) => {
+				if (id !== requestId || controller.signal.aborted) return;
+				if (!result.known) {
+					rowsState = { kind: 'idle' };
+					return;
+				}
+				rowsState = { kind: 'loaded', groups: groupCoverageRows(result.rows) };
+			})
+			.catch((err: unknown) => {
+				if (id !== requestId || controller.signal.aborted) return;
+				rowsState = { kind: 'failed', message: err instanceof Error ? err.message : String(err) };
+			});
+	}
 
 	// CR-01 (06-REVIEW.md): the mount fetch below and issueLiveHealthFetch
 	// share ONE monotonic ordering token (mirroring AnalysisPanel.svelte's
@@ -62,6 +124,7 @@
 			.then((response) => {
 				if (id !== requestId || controller.signal.aborted) return;
 				pageState = { kind: 'loaded', response };
+				loadCoverageRows(response, id);
 			})
 			.catch((err: unknown) => {
 				if (id !== requestId || controller.signal.aborted) return;
@@ -93,6 +156,7 @@
 			.then((response) => {
 				if (id !== requestId || controller.signal.aborted) return;
 				pageState = { kind: 'loaded', response };
+				loadCoverageRows(response, id);
 			})
 			.catch((err: unknown) => {
 				if (id !== requestId || controller.signal.aborted) return;
@@ -191,5 +255,7 @@
 			rows={toCountRows(pageState.response.edgesByKind)}
 			keyHeader="Kind"
 		/>
+
+		<CoverageSection view={toCoverageView(pageState.response)} rows={rowsState} />
 	{/if}
 </div>
