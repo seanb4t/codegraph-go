@@ -56,8 +56,8 @@
 
 ### Documentation
 
-- [ ] **DOCS-05**: A self-authored `docs/CLI-REFERENCE.md` documents every command and flag in the Cobra tree, replacing what `docs/FLAG-PARITY.md` used to carry
-- [ ] **DOCS-06**: A drift guard walks the live Cobra tree — including hidden, inherited persistent and deprecated flags — and fails when any registered flag is missing from the reference; demonstrated RED by registering a throwaway flag
+- [ ] **DOCS-05**: A committed `docs/CLI-REFERENCE.md`, generated from the live Cobra tree by `cobra/doc` and kept current by a regenerate-and-diff gate, documents every non-hidden command and flag, replacing what `docs/FLAG-PARITY.md` used to carry
+- [ ] **DOCS-06**: A guard walks the live Cobra tree — including hidden, inherited persistent and deprecated flags — and fails when any registered flag is unaccounted for (in the generated reference, or in a committed hidden/deprecated allowlist with a reason); demonstrated RED by registering a throwaway hidden flag
 - [ ] **DOCS-07**: The brew-trust instructions recommend the narrow grant with security framing rather than the broader `--tap` grant
 
 ## v2 Requirements
