@@ -654,9 +654,14 @@ func lastPathSegment(importPath string) string {
 //
 // excluded (Phase 10 D-01/D-07) is DiscoverAll's exclusion-reason list,
 // threaded through unchanged into writeGraph's SAME commit batch.
-func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile) (int, error) {
+//
+// coverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is threaded
+// through unchanged to writeGraph — see Options.CoverageGenerationFloor's
+// doc comment (pipeline.go) for why a caller that wipes storeDir before
+// calling Run needs this lower bound.
+func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error) {
 	nodes, packageNodes, edges, files, unresolvedCount := resolveRefs(results, modulePath)
-	if err := writeGraph(store, nodes, packageNodes, edges, files, commitSHA, excluded); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, commitSHA, excluded, coverageGenerationFloor); err != nil {
 		return unresolvedCount, err
 	}
 	return unresolvedCount, nil
@@ -724,7 +729,13 @@ func collapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*sche
 // Phase 10 D-07) — through exactly one GraphStore.Writer, committing once
 // (D-04a). Any staging error releases the batch via Close() (never a
 // partial Commit) and returns the error.
-func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, commitSHA string, excluded []*schema.ExcludedFile) error {
+//
+// coverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is a lower
+// bound on the generation this commit stamps — see
+// Options.CoverageGenerationFloor's doc comment (pipeline.go) for the
+// full rationale. Zero is a no-op: the store's own prior-generation read
+// below is used unchanged.
+func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) error {
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
 		nodeFilePath[n.Id] = n.FilePath
@@ -838,7 +849,23 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// computed above — see this function's own comment at the Snapshot
 	// read for why a from-scratch rewrite still increments monotonically
 	// rather than resetting.
-	meta.CoverageGeneration = priorGeneration + 1
+	//
+	// CR-01 (iteration 3): priorGeneration alone is only the TARGET
+	// store's own history — genuinely 0 for a store that was just wiped
+	// (RemoveAll+MkdirAll, internal/cli/index.go), even if the store that
+	// USED to live at that path had climbed much higher. A caller that
+	// read the prior store's generation before wiping it passes that
+	// value as coverageGenerationFloor, so the stamped generation never
+	// regresses below a value a live client's page token may already
+	// carry. A caller with nothing to float against (a genuinely fresh
+	// `codegraph init`, or Sync's own backfill/incremental paths, which
+	// never wipe) passes 0, leaving this identical to iteration 2's
+	// priorGeneration+1.
+	generation := priorGeneration
+	if coverageGenerationFloor > generation {
+		generation = coverageGenerationFloor
+	}
+	meta.CoverageGeneration = generation + 1
 	// Phase 4 D-04a: stamp LastSyncUnixMs here too, not just in Sync's own
 	// meta-write step (internal/indexer/sync.go) — otherwise a graph built
 	// via a from-scratch `codegraph index` (this path) carries a zero

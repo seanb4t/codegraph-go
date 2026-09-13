@@ -1170,7 +1170,7 @@ func TestSingleWriter_CommitsOnce(t *testing.T) {
 		{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go", NodeCount: 2, EdgeCount: 1},
 	}
 
-	if err := writeGraph(store, nodes, packageNodes, edges, files, "", nil); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, "", nil, 0); err != nil {
 		t.Fatalf("writeGraph returned error: %v", err)
 	}
 
@@ -1221,7 +1221,7 @@ func TestWriteGraphStagesExcludedFilesInTheSameBatch(t *testing.T) {
 		{Path: "a/tagged.go", Reason: schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG, Detail: "linux/amd64"},
 	}
 
-	if err := writeGraph(store, nodes, nil, nil, files, "", excluded); err != nil {
+	if err := writeGraph(store, nodes, nil, nil, files, "", excluded, 0); err != nil {
 		t.Fatalf("writeGraph returned error: %v", err)
 	}
 
@@ -1257,7 +1257,7 @@ func TestWriteGraphStampsMonotonicCoverageGeneration(t *testing.T) {
 		w := &stubWriter{}
 		store := &stubStore{writer: w} // zero value: Snapshot().GetMeta() -> ErrNotFound
 
-		if err := writeGraph(store, nil, nil, nil, nil, "", nil); err != nil {
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err != nil {
 			t.Fatalf("writeGraph returned error: %v", err)
 		}
 		if w.meta == nil {
@@ -1272,7 +1272,7 @@ func TestWriteGraphStampsMonotonicCoverageGeneration(t *testing.T) {
 		w := &stubWriter{}
 		store := &stubStore{writer: w, snapshotMeta: &schema.Meta{CoverageGeneration: 41}}
 
-		if err := writeGraph(store, nil, nil, nil, nil, "", nil); err != nil {
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err != nil {
 			t.Fatalf("writeGraph returned error: %v", err)
 		}
 		if w.meta == nil {
@@ -1287,7 +1287,7 @@ func TestWriteGraphStampsMonotonicCoverageGeneration(t *testing.T) {
 		w := &stubWriter{}
 		store := &stubStore{writer: w, snapshotErr: errStubWrite}
 
-		if err := writeGraph(store, nil, nil, nil, nil, "", nil); err == nil {
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err == nil {
 			t.Fatal("writeGraph returned nil error, want the propagated snapshot/GetMeta failure")
 		}
 		if w.commitCalls != 0 {
@@ -1311,7 +1311,7 @@ func TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting(t *testing.T) {
 		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
 	}
 
-	if err := writeGraph(store, nil, nil, nil, nil, "", excluded); err != nil {
+	if err := writeGraph(store, nil, nil, nil, nil, "", excluded, 0); err != nil {
 		t.Fatalf("writeGraph returned error: %v", err)
 	}
 
@@ -1354,7 +1354,7 @@ func TestSingleWriter_CloseOnStagingError(t *testing.T) {
 	edges := []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}}
 	files := []*schema.File{{Path: "pkg/a.go"}}
 
-	err := writeGraph(store, nodes, nil, edges, files, "", nil)
+	err := writeGraph(store, nodes, nil, edges, files, "", nil, 0)
 	if err == nil {
 		t.Fatal("expected writeGraph to return the staging error, got nil")
 	}
@@ -1378,7 +1378,7 @@ func TestResolve_EndToEnd(t *testing.T) {
 	}
 	defer store.Close()
 
-	if _, err := Resolve(store, results, modulePath, "", nil); err != nil {
+	if _, err := Resolve(store, results, modulePath, "", nil, 0); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 

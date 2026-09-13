@@ -93,7 +93,7 @@ var errInjectedResolveFailure = errors.New("indexer: injected resolve failure fo
 // with a Pebble lock-contention error.
 func TestPipelineRun_ClosesStoreOnResolveError(t *testing.T) {
 	storeDir := t.TempDir()
-	failingResolve := func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile) (int, error) {
+	failingResolve := func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error) {
 		return 0, errInjectedResolveFailure
 	}
 
