@@ -1,0 +1,4 @@
+# DOCS-06 allowlist: flags docs/CLI-REFERENCE.md cannot show by design
+# (hidden commands, hidden flags, deprecated flags). One entry per line:
+# <full command path>[ --flag]<TAB><reason>. An entry matching nothing FAILS the guard.
+codegraph man	hidden by v0.5.0 D-02 — the Homebrew cask post-install hook's man-page generator, never an interactive command; its only flag is cobra's --help (12-CONTEXT D-05)
