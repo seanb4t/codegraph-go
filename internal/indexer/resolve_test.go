@@ -987,10 +987,11 @@ var errStubWrite = errors.New("stub write error")
 // Pebble-backed store. failOn, when non-empty, names the Put* method that
 // should fail (simulating a mid-write staging error).
 type stubWriter struct {
-	nodes []*schema.Node
-	edges []*schema.Edge
-	files []*schema.File
-	meta  *schema.Meta
+	nodes    []*schema.Node
+	edges    []*schema.Edge
+	files    []*schema.File
+	excluded []*schema.ExcludedFile
+	meta     *schema.Meta
 
 	commitCalls int
 	closeCalls  int
@@ -1027,6 +1028,14 @@ func (w *stubWriter) PutMeta(m *schema.Meta) error {
 		return errStubWrite
 	}
 	w.meta = m
+	return nil
+}
+
+func (w *stubWriter) PutExcludedFile(x *schema.ExcludedFile) error {
+	if w.failOn == "PutExcludedFile" {
+		return errStubWrite
+	}
+	w.excluded = append(w.excluded, x)
 	return nil
 }
 
@@ -1083,7 +1092,7 @@ func TestSingleWriter_CommitsOnce(t *testing.T) {
 		{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go", NodeCount: 2, EdgeCount: 1},
 	}
 
-	if err := writeGraph(store, nodes, packageNodes, edges, files, ""); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, "", nil); err != nil {
 		t.Fatalf("writeGraph returned error: %v", err)
 	}
 
@@ -1119,6 +1128,45 @@ func TestSingleWriter_CommitsOnce(t *testing.T) {
 	}
 }
 
+// TestWriteGraphStagesExcludedFilesInTheSameBatch proves writeGraph stages
+// ExcludedFile records on the SAME Writer/Commit as every other record
+// kind (Phase 10 D-07/T-10-10) — never a second commit — and stamps
+// Meta.HasCoverage true.
+func TestWriteGraphStagesExcludedFilesInTheSameBatch(t *testing.T) {
+	w := &stubWriter{}
+	store := &stubStore{writer: w}
+
+	nodes := []*schema.Node{{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"}}
+	files := []*schema.File{{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go"}}
+	excluded := []*schema.ExcludedFile{
+		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION, Detail: ".md"},
+		{Path: "a/tagged.go", Reason: schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG, Detail: "linux/amd64"},
+	}
+
+	if err := writeGraph(store, nodes, nil, nil, files, "", excluded); err != nil {
+		t.Fatalf("writeGraph returned error: %v", err)
+	}
+
+	if w.commitCalls != 1 {
+		t.Errorf("commitCalls = %d, want 1", w.commitCalls)
+	}
+	if w.closeCalls != 0 {
+		t.Errorf("closeCalls = %d, want 0", w.closeCalls)
+	}
+	if len(w.excluded) != 2 {
+		t.Fatalf("staged %d excluded records, want 2", len(w.excluded))
+	}
+	if w.excluded[0].GetPath() != "a/tagged.go" || w.excluded[1].GetPath() != "b.md" {
+		t.Fatalf("excluded records not path-sorted: got [%q, %q], want [\"a/tagged.go\", \"b.md\"]", w.excluded[0].GetPath(), w.excluded[1].GetPath())
+	}
+	if w.meta == nil {
+		t.Fatal("PutMeta was never called")
+	}
+	if !w.meta.GetHasCoverage() {
+		t.Error("Meta.HasCoverage = false, want true")
+	}
+}
+
 // TestSingleWriter_CloseOnStagingError proves a staging error mid-write
 // calls Writer.Close() (releasing the batch) instead of Commit(), and
 // writeGraph returns the error — never a partial commit.
@@ -1130,7 +1178,7 @@ func TestSingleWriter_CloseOnStagingError(t *testing.T) {
 	edges := []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}}
 	files := []*schema.File{{Path: "pkg/a.go"}}
 
-	err := writeGraph(store, nodes, nil, edges, files, "")
+	err := writeGraph(store, nodes, nil, edges, files, "", nil)
 	if err == nil {
 		t.Fatal("expected writeGraph to return the staging error, got nil")
 	}
@@ -1154,7 +1202,7 @@ func TestResolve_EndToEnd(t *testing.T) {
 	}
 	defer store.Close()
 
-	if _, err := Resolve(store, results, modulePath, ""); err != nil {
+	if _, err := Resolve(store, results, modulePath, "", nil); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 
