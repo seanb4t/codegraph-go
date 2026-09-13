@@ -90,7 +90,7 @@ func TestAssignCommunitiesDeterministic(t *testing.T) {
 			"a/x.go": 1, "a/y.go": 1, "a/z.go": 1,
 			"b/p.go": 2, "b/q.go": 2, "b/r.go": 2,
 			"lone.go": 3,
-			"s/1.go": 4, "s/2.go": 4, "s/3.go": 4, "s/4.go": 4,
+			"s/1.go":  4, "s/2.go": 4, "s/3.go": 4, "s/4.go": 4,
 		}
 		const runs = 5
 		var first map[string]int

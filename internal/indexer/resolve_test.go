@@ -1126,7 +1126,9 @@ func (r *stubReader) GetMeta() (*schema.Meta, error) {
 	}
 	return r.meta, nil
 }
-func (r *stubReader) GetNode(id string) (*schema.Node, error) { panic("stubReader.GetNode not implemented") }
+func (r *stubReader) GetNode(id string) (*schema.Node, error) {
+	panic("stubReader.GetNode not implemented")
+}
 func (r *stubReader) GetFile(path string) (*schema.File, error) {
 	panic("stubReader.GetFile not implemented")
 }

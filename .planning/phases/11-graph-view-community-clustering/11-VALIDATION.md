@@ -4,8 +4,8 @@ slug: "graph-view-community-clustering"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-13"
 ---
 
@@ -53,15 +53,15 @@ the planner can attach them. Test names are illustrative until the planner fixes
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | 1 | GRF-09 | T-11 threshold tampering | `corpora/graph-cluster-threshold.json` exists in exactly one commit that is an ancestor of every commit touching the observation/verdict files; the check reports the threshold commit hash and the count of measurement commits compared | unit (Go, git-backed) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestClusterThresholdCommitIsAncestorOfEveryMeasurement' ./tools/...` | ❌ Wave 0 | ⬜ pending |
-| TBD | TBD | 1 | GRF-10 | T-11 supply chain | `gonum.org/v1/gonum` direct require; `govulncheck` clean; SBOM names it (positive control: `github.com/cockroachdb/pebble` also present); cgo scan over the `graph/community` closure reports the package count and zero non-zero `CgoFiles` rows (positive control: a known-cgo package such as `github.com/tree-sitter/go-tree-sitter` reports > 0) | script (Taskfile) | `GOTOOLCHAIN=go1.26.6 task check:gonum` | ❌ Wave 0 | ⬜ pending |
-| TBD | TBD | 1 | GRF-08 | T-11 non-determinism | ≥3 runs of the clustering on identical sorted input yield canonical-relabel-equal assignments; the test logs the run count it compared; a perturbed node order or seed (test-only seam) turns it RED | unit (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestAssignCommunitiesDeterministic' -v ./internal/query/...` | ❌ Wave 0 (mirrors `TestFileGraphCyclesDeterministicIds`) | ⬜ pending |
-| TBD | TBD | 1 | GRF-08 | — | Degenerate inputs: zero edges → each node its own community (ids 1..N); single node → community 1; empty graph → `community_count = 0`; ids are dense 1-based, 0 never emitted once computed | unit (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestAssignCommunitiesDegenerate' ./internal/query/...` | ❌ Wave 0 | ⬜ pending |
-| TBD | TBD | 1 | GRF-09 | — | Harness reads the threshold file (never its own defaults), opens the cached guava store, times `AssignCommunities` in isolation as median-of-3 cold runs, writes an observation with `verdict` PASS/FAIL and never rewrites the threshold; the run's exit status mirrors the verdict | harness (Go in-process) | `GOTOOLCHAIN=go1.26.6 go run ./tools/corpora -mode cluster-measure` (or sibling tool per planner) | ❌ Wave 0 | ⬜ pending |
-| TBD | TBD | 2 | GRF-06 | — | `FileGraph()` populates `CommunityID` (1-based) on every node and `CommunityCount` on the result, fresh per call (D-15); on the wire as `community_id = 5` / `community_count = 7`; field-number fixture and 16-method set unchanged | unit + integration (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestFileGraphPopulatesCommunityFields\|TestUIServiceMethodSetIsExactlyTheReadSet\|TestKnownUIProtoFieldNumbersAreStable' ./internal/query/... ./internal/uiserver/...` && `task proto:drift` | ❌ Wave 0 (extends `readonly_test.go`) | ⬜ pending |
-| TBD | TBD | 2 | GRF-06 | — | Transform assigns a palette class/colour keyed by `communityId` on nodes; two nodes with equal `communityId` get equal colour, differing ids differ (within the 12-hue cycle); directory compounds stay neutral (D-11); layout config unchanged | unit (vitest) | `pnpm -C web test -- file-graph` | ❌ Wave 0 (extends `web/tests/file-graph-transform.test.ts`) | ⬜ pending |
-| TBD | TBD | 2 | GRF-06 | — | Positive-controlled source scan over `web/src`: ≥1 `elk` layout reference found, zero matches for `cose\|fcose\|cola\|euler\|spread\|force` layout names; reports both counts | script (Node) | `node web/scripts/check-no-force-layout.mjs` | ❌ Wave 0 | ⬜ pending |
-| TBD | TBD | 2 | GRF-06 | — | Graph view toolbar shows "N communities" and the count equals the distinct communities rendered | unit (vitest) | `pnpm -C web test -- graph-page` | ❌ Wave 0 | ⬜ pending |
+| T2 | 11-02 | 1 | GRF-09 | T-11-02 threshold tampering | `corpora/graph-cluster-threshold.json` exists in exactly one commit that is an ancestor of every commit touching the observation/verdict files; the check reports the threshold commit hash and the count of measurement commits compared | unit (Go, git-backed) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestClusterThresholdCommitIsAncestorOfEveryMeasurement' ./tools/graphcluster/...` | ✅ `tools/graphcluster/ancestry_test.go` | ✅ green |
+| T1 | 11-03 | 1 | GRF-10 | T-11-01 / T-11-10 supply chain | `gonum.org/v1/gonum` direct require; `govulncheck` clean; SBOM names it (positive control: `github.com/cockroachdb/pebble/v2` also present); cgo scan over the `graph/community` closure reports the package count and zero non-zero `CgoFiles` rows (positive control: `github.com/tree-sitter/go-tree-sitter` reports > 0) | script (Taskfile) | `GOTOOLCHAIN=go1.26.6 task -s check:gonum` | ✅ `Taskfile.yml` `check:gonum` target | ✅ PASS |
+| T2+T3 | 11-01 | 1 | GRF-08 | T-11-03 non-determinism | ≥3 runs of the clustering on identical sorted input yield canonical-relabel-equal assignments; the test logs the run count it compared; a perturbed seed (test-only seam) turns it RED | unit (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestAssignCommunitiesDeterministic' -v ./internal/query/...` | ✅ `internal/query/community_test.go` (mirrors `TestFileGraphCyclesDeterministicIds`) | ✅ green |
+| T3 | 11-01 | 1 | GRF-08 | — | Degenerate inputs: zero edges → each node its own community (ids 1..N); single node → community 1; empty graph → `community_count = 0`; ids are dense 1-based, 0 never emitted once computed | unit (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestAssignCommunitiesDegenerate' ./internal/query/...` | ✅ `internal/query/community_test.go` | ✅ green |
+| T1+T2 | 11-02 | 1 | GRF-09 | — | Harness reads the threshold file (never its own defaults), opens the cached guava store, times `AssignCommunities` in isolation as median-of-3 cold runs, writes an observation with `verdict` PASS/FAIL and never rewrites the threshold; the run's exit status mirrors the verdict | harness (Go in-process) | `GOTOOLCHAIN=go1.26.6 go run ./tools/graphcluster -threshold corpora/graph-cluster-threshold.json -out corpora/graph-cluster-observations.json` | ✅ `tools/graphcluster/main.go` | ✅ PASS — median 106 ms vs 500 ms max |
+| T2 | 11-01 | 2 | GRF-06 | — | `FileGraph()` populates `CommunityID` (1-based) on every node and `CommunityCount` on the result, fresh per call (D-15); on the wire as `community_id = 5` / `community_count = 7`; field-number fixture and 16-method set unchanged | unit + integration (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run 'TestFileGraphPopulatesCommunityFields\|TestUIServiceMethodSetIsExactlyTheReadSet\|TestUIProtoFieldNumbersAreStableAndUnique' ./internal/query/... ./internal/uiserver/...` && `task proto:drift` | ✅ extends `readonly_test.go` | ✅ green |
+| T1 | 11-04 | 2 | GRF-06 | T-11-13 | Transform assigns a palette class/colour keyed by `communityId` on nodes; two nodes with equal `communityId` get equal colour, differing ids differ (within the 12-hue cycle); directory compounds stay neutral (D-11); layout config unchanged | unit (vitest) | `pnpm -C web test -- graph-communities file-graph-transform` | ✅ `web/tests/graph-communities.test.ts`, `web/tests/file-graph-transform.test.ts` (extended) | ✅ green |
+| T3 | 11-04 | 2 | GRF-06 | T-11-12 | Positive-controlled source scan over `web/src`: ≥1 `elk` layout reference found, zero matches for `cose\|fcose\|cola\|euler\|spread\|force` layout names; reports both counts | script (Node) | `node web/scripts/check-no-force-layout.mjs` | ✅ `web/scripts/check-no-force-layout.mjs` | ✅ PASS |
+| T2 | 11-04 | 2 | GRF-06 | — | Graph view toolbar shows "N communities" and the count equals the distinct communities rendered, reading `communityCount` verbatim from the wire | unit (vitest) | `pnpm -C web test -- graph-communities` | ✅ `web/tests/graph-communities.test.ts` | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -69,16 +69,16 @@ the planner can attach them. Test names are illustrative until the planner fixes
 
 ## Wave 0 Requirements
 
-- [ ] `corpora/graph-cluster-threshold.json` — committed ALONE first (D-05); `maxClusteringMs: 500`, `corpus` pin (`google/guava@94f39958…`), `runs: 3`, `statistic: median`, pre-written `onFailure` naming the D-07 persistence fallback
-- [ ] `internal/query/community.go` + `internal/query/community_test.go` — `AssignCommunities` over the `FileGraphResult` rollup, sorted-path node ids, fixed `rand.NewPCG` seed, canonical relabel; determinism + RED-control seam + degenerate cases
-- [ ] `tools/…` GRF-09 harness (extend `tools/corpora -mode measure` or a sibling) + its git-backed ancestry test
-- [ ] `Taskfile.yml` `check:gonum` target — govulncheck (pinned via `go.tool.mod`, precedent `Taskfile.yml:1514`), `syft` SBOM grep with positive control, `go list -deps` cgo scan with positive control
-- [ ] `internal/uiproto/uiv1/ui.proto` — `FileGraphNode.community_id = 5`, `FileGraphResponse.community_count = 7`; regenerated output + `readonly_test.go` fixture in the same commit
-- [ ] `web/src/lib/components/graph/file-graph-transform.ts` / `graph-style.ts` — `communityId` on element data, 12-hue palette class generator alongside the `cycleDiscriminatorClass` precedent; `web/tests/file-graph-transform.test.ts` extended
-- [ ] `web/scripts/check-no-force-layout.mjs` — positive-controlled layout-name scan
-- [ ] `11-MUTATION-LOG.md` — families: seed perturbation / node-order perturbation (GRF-08), threshold widened after measurement (GRF-09 ancestry), a force-layout name injected into `web/src` (GRF-06 scan), cgo package injected into the scan's positive control (GRF-10) — each RED, byte-cleanly reverted
-- [ ] `11-SECURITY.md` — threat register per D-16
-- [ ] Framework install: `gonum.org/v1/gonum v0.17.0` promoted to a direct require (already in `go.sum` transitively); `govulncheck` and `syft` present locally (research verified)
+- [x] `corpora/graph-cluster-threshold.json` — committed ALONE first (D-05); `maxClusteringMs: 500`, `corpus` pin (`google/guava@94f39958…`), `runs: 3`, `statistic: median`, pre-written `onFailure` naming the D-07 persistence fallback
+- [x] `internal/query/community.go` + `internal/query/community_test.go` — `AssignCommunities` over the `FileGraphResult` rollup, sorted-path node ids, fixed `rand.NewPCG` seed, canonical relabel; determinism + RED-control seam + degenerate cases
+- [x] `tools/graphcluster` GRF-09 harness + its git-backed ancestry test (`tools/graphcluster/ancestry_test.go`)
+- [x] `Taskfile.yml` `check:gonum` target — govulncheck (pinned via `go.tool.mod`), `syft` SBOM grep with positive control, `go list -deps` cgo scan with positive control
+- [x] `internal/uiproto/uiv1/ui.proto` — `FileGraphNode.community_id = 5`, `FileGraphResponse.community_count = 7`; regenerated output + `readonly_test.go` fixture in the same commit
+- [x] `web/src/lib/components/graph/file-graph-transform.ts` / `graph-style.ts` — `communityId` on element data, 12-hue palette class generator alongside the `cycleDiscriminatorClass` precedent; `web/tests/file-graph-transform.test.ts` extended
+- [x] `web/scripts/check-no-force-layout.mjs` — positive-controlled layout-name scan
+- [x] `11-MUTATION-LOG.md` — families: seed counter perturbation (GRF-08), threshold widened after measurement (GRF-09 ancestry/digest), a force-layout name planted into `web/src` (GRF-06 scan), cgo positive control neutered (GRF-10) — each RED, byte-cleanly reverted
+- [x] `11-SECURITY.md` — threat register per D-16
+- [x] Framework install: `gonum.org/v1/gonum v0.17.0` promoted to a direct require (already in `go.sum` transitively); `govulncheck` and `syft` present locally (research verified)
 
 ---
 
