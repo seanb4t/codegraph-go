@@ -268,7 +268,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 10-05-PLAN.md — the full-fixture contract at Engine and listener level: exact numbers, two-segment ordering and page stability, reason filter, page-size clamp, the closed page-token refusal set → `CodeInvalidArgument`, detail scrubbing, empty-known vs old-graph unknown
+- [x] 10-05-PLAN.md — the full-fixture contract at Engine and listener level: exact numbers, two-segment ordering and page stability, reason filter, page-size clamp, the closed page-token refusal set → `CodeInvalidArgument`, detail scrubbing, empty-known vs old-graph unknown
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
