@@ -127,7 +127,7 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
 - [x] **Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff** - A developer reading a long file always knows which symbol they are inside, and can jump from any node or line straight into their own editor (completed 2026-09-12)
 - [x] **Phase 10: Index Health — The Coverage Denominator** - "Why is my file missing" is answered by the index itself: how many files were discovered, how many were indexed, and a recorded reason for every gap (completed 2026-09-13)
 - [x] **Phase 11: Graph View — Community Clustering** - The file/package graph reads as groups rather than a flat mesh, coloured by communities computed deterministically on the layout already shipped (completed 2026-09-13)
-- [ ] **Phase 12: CLI Reference & Docs Tail** - Every flag the binary actually registers is documented in a reference this project authored, kept honest by a walk of the live command tree
+- [x] **Phase 12: CLI Reference & Docs Tail** - Every flag the binary actually registers is documented in a reference this project authored, kept honest by a walk of the live command tree (completed 2026-09-13)
 
 ## Phase Details
 
@@ -328,15 +328,15 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 12-01-PLAN.md — the TRACER: `NewRootCmd` exported → `tools/clidoc` renders the live Cobra tree (completed with `InitDefaultCompletionCmd` + `InitDefaultVersionFlag`, `DisableAutoGenTag`) through `doc.GenMarkdownCustom` into ONE committed `docs/CLI-REFERENCE.md` → `task docs:cli` / `task docs:cli:drift` (regenerate-into-temp, `compared 1 generated file` before `cmp -s`) → ci.yml step after `proto:drift`, drift RED on the untracked file then MATCH twice; then DOCS-06's `TestEveryRegisteredFlagIsAccountedFor` — every command walked hidden-included, `Flags()`+`PersistentFlags()`, reference-or-allowlist rule, rot fails, counts ≥ 26 / ≥ 50 logged — RED fail-closed, RED naming `codegraph man --help`, GREEN with the one-entry allowlist
+- [x] 12-01-PLAN.md — the TRACER: `NewRootCmd` exported → `tools/clidoc` renders the live Cobra tree (completed with `InitDefaultCompletionCmd` + `InitDefaultVersionFlag`, `DisableAutoGenTag`) through `doc.GenMarkdownCustom` into ONE committed `docs/CLI-REFERENCE.md` → `task docs:cli` / `task docs:cli:drift` (regenerate-into-temp, `compared 1 generated file` before `cmp -s`) → ci.yml step after `proto:drift`, drift RED on the untracked file then MATCH twice; then DOCS-06's `TestEveryRegisteredFlagIsAccountedFor` — every command walked hidden-included, `Flags()`+`PersistentFlags()`, reference-or-allowlist rule, rot fails, counts ≥ 26 / ≥ 50 logged — RED fail-closed, RED naming `codegraph man --help`, GREEN with the one-entry allowlist
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 12-02-PLAN.md — DOCS-07: `docs/RELEASE.md` recommends `brew trust --cask seanb4t/tap/codegraph` with one sentence of security framing, the tap-wide grant named but never spelled, the quoted error trimmed; no test by decision, verified by reading the diff; the 2026-08-10 brew-trust todo resolved through the todo tool in the same commit; README gains its one link to `docs/CLI-REFERENCE.md` (D-06)
+- [x] 12-02-PLAN.md — DOCS-07: `docs/RELEASE.md` recommends `brew trust --cask seanb4t/tap/codegraph` with one sentence of security framing, the tap-wide grant named but never spelled, the quoted error trimmed; no test by decision, verified by reading the diff; the 2026-08-10 brew-trust todo resolved through the todo tool in the same commit; README gains its one link to `docs/CLI-REFERENCE.md` (D-06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 12-03-PLAN.md — `12-MUTATION-LOG.md` families (a) throwaway hidden flag on `ui` → guard RED while drift stays green, (b) `--no-open` line deleted from the reference → drift RED naming the file + guard RED, (c) bogus allowlist entry → guard RED on rot; `12-SECURITY.md` with every T-12 row test-or-verdict (`threats_open: 0`); `12-VALIDATION.md` map filled; phase-close gate
+- [x] 12-03-PLAN.md — `12-MUTATION-LOG.md` families (a) throwaway hidden flag on `ui` → guard RED while drift stays green, (b) `--no-open` line deleted from the reference → drift RED naming the file + guard RED, (c) bogus allowlist entry → guard RED on rot; `12-SECURITY.md` with every T-12 row test-or-verdict (`threats_open: 0`); `12-VALIDATION.md` map filled; phase-close gate
 
 ## Progress
 
@@ -350,7 +350,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 6/6 | Complete    | 2026-09-12 |
 | 10. Index Health — The Coverage Denominator | 6/6 | Complete    | 2026-09-13 |
 | 11. Graph View — Community Clustering | 5/5 | Complete    | 2026-09-13 |
-| 12. CLI Reference & Docs Tail | 0/TBD | Not started | - |
+| 12. CLI Reference & Docs Tail | 3/3 | Complete    | 2026-09-13 |
 
 7 milestones shipped. v0.13.0 scoped: 6 phases (7–12), 27 requirements, 0/6 phases complete (0%). Backlog below is preserved across milestone closes.
 

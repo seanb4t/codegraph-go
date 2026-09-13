@@ -3,18 +3,17 @@ gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
 current_phase: 12
-current_phase_name: CLI Reference & Docs Tail
-status: executing
-stopped_at: Phase 11 complete, ready to plan Phase 12
-last_updated: "2026-09-13T20:31:24.645Z"
+status: completed
+stopped_at: Phase 12 complete — all phases complete
+last_updated: "2026-09-13T21:35:47.015Z"
 last_activity: 2026-09-13
-last_activity_desc: Phase 11 complete, transitioned to Phase 12
-state_head: 99b23d0308d27b7326e9a6f6e325b2d93d66adf8
+last_activity_desc: Phase 12 complete
+state_head: 2bcd0f6c147dccc1693d4390a2431a248f3a2b33
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 29
-  completed_plans: 26
+  completed_plans: 29
   percent: 17
 ---
 
@@ -22,17 +21,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-13 after Phase 11)
+See: .planning/PROJECT.md (updated 2026-09-13 after Phase 12)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 12 — CLI Reference & Docs Tail
+**Current focus:** v0.13.0 milestone close — audit → complete → cleanup (all six phases 7–12 verified)
 
 ## Current Position
 
-Phase: 12 (CLI Reference & Docs Tail) — READY TO EXECUTE
+Phase: 12
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-13 — Phase 11 complete, transitioned to Phase 12
+Status: All phases complete
+Last activity: 2026-09-13 — Phase 12 complete
 
 ## Performance Metrics
 
@@ -55,6 +54,7 @@ Last activity: 2026-09-13 — Phase 11 complete, transitioned to Phase 12
 | 09 | 6 | - | - |
 | 10 | 6 | - | - |
 | 11 | 5 | - | - |
+| 12 | 3 | - | - |
 
 **Velocity (v0.11.0 — archived, shipped 2026-08-16):** 6 phases, 30 plans, 60 tasks over 4 days.
 
@@ -338,6 +338,9 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 11] `gonum.org/v1/gonum` package legitimacy is `[ASSUMED]` (long-lived, already transitive via sigstore in `go.sum`; `package-legitimacy check` has no Go ecosystem support) — recorded in `11-SECURITY.md`, not a gap.
 - ⚠️ [Phase 11] The graph page's console shows four entries at load (CSP-blocked svelte-logo data-URI image; 2× cytoscape `text-valign: right` warning; a cytoscape `Cannot read properties of null (reading 'notify')` TypeError from `layoutPositions`) — all reproduced identically by a pre-phase build (`18ef2434`), so pre-existing and out of Phase 11 scope; unowned by any phase yet.
 - ⚠️ [Phase 11] Phases 7, 8, 9 AND 10 all read `verification_status: stale` after Phase 11's `phase.complete` by the #4155 mechanism (each `covered_files` list includes `.planning/REQUIREMENTS.md`, which every later `phase.complete` rewrites); only Phase 11's report was written without `REQUIREMENTS.md` in `covered_files` (its plans/summaries + implementation files only) and stays `passed`. Repair for 7–10 remains `/gsd-verify-work <phase>`; surfaces at the milestone audit.
+- ⚠️ [Phase 12] The DOCS-06 guard matches `--name` as a whole-document substring of the generated reference (anchored on the flag's own `--` prefix and a trailing delimiter); a future flag whose name is a strict prefix of another's is the one shape that could read as documented when it is not — recorded in 12-SECURITY.md as accepted residual, re-checked by the guard's own counts on every run.
+- ⚠️ [Phase 12] DOCS-07 has no ongoing gate by decision (D-12): nothing stops a future edit from re-introducing a copy-pasteable tap-wide `brew trust` instruction in `docs/RELEASE.md`; review of that file's diffs is the control.
+- ⚠️ [Phase 12] `DisableAutoGenTag = true` is set on the tree `NewRootCmd()` returns; `codegraph man` builds its own tree in `man.go` and still emits cobra's auto-gen date line — unchanged behaviour, noted so nobody expects the man pages to be byte-stable across days.
 - ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
 
@@ -447,8 +450,8 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-13T14:17:49.000Z
-Stopped at: Phase 11 complete, ready to plan Phase 12
-  NEXT: `/gsd-discuss-phase 12` (CLI Reference & Docs Tail; no 12-CONTEXT.md yet)
+Stopped at: Phase 12 complete — all phases complete
+  NEXT: `/gsd-audit-milestone` (all six v0.13.0 phases complete and verified; Phases 7–10 read `stale` by the #4155 mechanism and need `/gsd-verify-work` re-verification if the audit requires `passed`)
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
@@ -463,10 +466,11 @@ Stopped at: Phase 11 complete, ready to plan Phase 12
 
 ## Operator Next Steps
 
+- Phase 12 is verified and closed (9/9 must-haves at `af95a438`; cobra/doc-generated reference + drift gate in CI, accounting guard 36/115, brew-trust wording, WR-01 fixed `666569e9`) — ALL SIX v0.13.0 PHASES COMPLETE; next is the milestone lifecycle (audit → complete → cleanup)
 - Phase 11 is verified and closed (12/12 must-haves at `77d4a9c6` + live UAT accepted; GRF-09 measured PASS at 106 ms median vs the 500 ms bar locked in `698235a2`; deep review's three warnings fixed and re-reviewed clean); Phase 12 of v0.13.0 remains, then the milestone audit
 - Phase 10 is verified and closed (15/15 must-haves at `783e60f0`; deep review ran 4 passes — three real paging/generation bugs fixed, one lock-collision residual accepted as WINDOWS.md #36)
 - Phase 9 is verified and closed (5/5 must-haves at `3fd47279` after gap-closure plan 09-06; deep review converged clean after six `fix(09)` commits)
 - Phase 8 is verified and closed (21/21 UAT, G-08-1 resolved by 08-05, tmux-e2e fired at executed=6 on CI)
 - Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go` — the ruleset currently lists 6 contexts and omits it (checked 2026-09-11)
 - PR #69 (phases 7-8 WIP) MERGED 2026-09-12 as squash `3da59354`; the pr-template-exempt / pr-issue-exempt markers went in with it. The next PR (phases 9-12, or per-phase if the maintainer prefers) needs a `feat:` title and `Resolves #N` from the start
-- Discuss the next phase with /gsd-discuss-phase 12 (CLI Reference & Docs Tail)
+- Run the milestone lifecycle: /gsd-audit-milestone → /gsd-complete-milestone v0.13.0 → /gsd-cleanup; then open the phases 9–12 PR with a `feat:` title and `Resolves #N`
