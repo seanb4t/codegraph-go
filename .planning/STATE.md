@@ -5,10 +5,10 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 12
 status: completed
 stopped_at: Phase 12 complete — all phases complete
-last_updated: "2026-09-13T21:35:47.015Z"
+last_updated: "2026-09-13T22:40:11.789Z"
 last_activity: 2026-09-13
 last_activity_desc: Phase 12 complete
-state_head: 2bcd0f6c147dccc1693d4390a2431a248f3a2b33
+state_head: 2b553b6219c4a1d1654e71ba9bb948e18be78082
 progress:
   total_phases: 6
   completed_phases: 1
@@ -350,6 +350,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 |---|-------------|------|--------|-----------|
 | 260807-gho | Drop native Windows support — WSL2 only | 2026-08-07 | 085b7a3 | [260807-gho-drop-native-windows-support-wsl2-only](./quick/260807-gho-drop-native-windows-support-wsl2-only/) |
 | 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
+| 260913-pkp | Fix graphstore archtest to fail closed on per-package go/packages load errors (CR-01 sibling of a90b5457); todo 2026-09-08 resolved | 2026-09-13 | 2b553b62 | [260913-pkp-fix-graphstore-archtest-to-fail-closed-o](./quick/260913-pkp-fix-graphstore-archtest-to-fail-closed-o/) |
 
 ## Deferred Items
 
