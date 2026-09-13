@@ -36,8 +36,16 @@ export const COMMUNITY_CLASS_PREFIX = 'graph-community-';
 // communityPaletteIndex maps a 1-based, canonical community id onto its
 // palette slot, cycling beyond COMMUNITY_PALETTE.length (D-10). Callers
 // pass ids >= 1 — id 0 ("not computed") is never rendered as a colour and
-// must be filtered out by the caller before reaching this function.
+// must be filtered out by the caller before reaching this function. The
+// precondition is enforced HERE, not merely documented: JavaScript's `%`
+// does not floor-modulo a negative dividend ((0 - 1) % 12 === -1, not 11),
+// so a non-integer or sub-1 id would otherwise silently produce a
+// malformed class string that matches none of graph-style.ts's 12
+// generated selectors — a vacuous, undetected mis-render (WR-01).
 export function communityPaletteIndex(communityId: number): number {
+	if (!Number.isInteger(communityId) || communityId < 1) {
+		throw new Error(`communityPaletteIndex: communityId must be an integer >= 1, got ${communityId}`);
+	}
 	return (communityId - 1) % COMMUNITY_PALETTE.length;
 }
 

@@ -79,6 +79,14 @@ describe('community palette and stylesheet (Task 1)', () => {
 		expect(communityPaletteIndex(25)).toBe(0);
 	});
 
+	it('communityPaletteIndex throws on a non-integer or sub-1 id instead of silently mis-mapping (WR-01)', () => {
+		// (0 - 1) % 12 === -1 in JavaScript (no floor-modulo), which would
+		// otherwise produce the malformed, unmatched class "graph-community--1".
+		expect(() => communityPaletteIndex(0)).toThrow(/integer >= 1/);
+		expect(() => communityPaletteIndex(-1)).toThrow(/integer >= 1/);
+		expect(() => communityPaletteIndex(1.5)).toThrow(/integer >= 1/);
+	});
+
 	it('the style sheet contains exactly 12 per-community rules, each setting ONLY background-color, in cascade order between the file base rule and the first cycle rule', () => {
 		const entries = fileGraphStyle as StyleEntry[];
 		const communityRe = /^node\[!isDirectory\]\.graph-community-(\d+)$/;
