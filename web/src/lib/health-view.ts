@@ -12,6 +12,7 @@
 // over one index is exactly the repudiation failure HLT-02 exists to
 // prevent (T-04-17).
 import type { MessageInitShape } from '@bufbuild/protobuf';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { CoverageRowKind, ExclusionReasonSchema } from '$lib/gen/ui_pb';
 import type {
 	CoverageRow,
@@ -296,6 +297,27 @@ export const COVERAGE_MAX_PAGES = 100;
 export interface CoverageRowsResult {
 	known: boolean;
 	rows: CoverageRow[];
+	// incomplete is true when the walk could not be completed even after
+	// one retry-from-start (WR-01): GetCoverage's page token carries a
+	// generation marker (the index's LastSyncUnixMs at the moment the
+	// token was produced), and the server answers Code.Aborted rather
+	// than a page of rows when a Sync committed between two page
+	// fetches — the honest signal that the walk's cross-page consistency
+	// can no longer be trusted, replacing the OLD failure mode of
+	// silently returning a page that might disagree with rows already
+	// collected (CR-01/WR-01, 10-REVIEW.md). Always false when `known`
+	// is false, since there was nothing to page in that case.
+	incomplete: boolean;
+}
+
+// isRetryableCoverageAbort reports whether err is the specific
+// Code.Aborted GetCoverage answers for a stale page-token generation
+// (WR-01) — never a general Connect-error classifier (that job belongs to
+// rpc-errors.ts's ONE translation, D-04): this is a narrow, single-code
+// check local to fetchAllCoverageRows' own retry loop, not a second
+// error-kind taxonomy.
+function isRetryableCoverageAbort(err: unknown): boolean {
+	return err instanceof ConnectError && err.code === Code.Aborted;
 }
 
 // fetchAllCoverageRows pages GetCoverage to bounded completion, one row
@@ -308,34 +330,47 @@ export interface CoverageRowsResult {
 // one call: an old graph's coverage rows are exactly as unknown as its
 // summary counts (D-06), so there is nothing to page.
 //
-// Caveat (documented, not solved here): consecutive pages may be read at
-// different index snapshots if a re-index runs mid-walk — the same
-// staleness caveat every other paged rpc in this tree carries. The
-// Coverage section renders whatever the walk returns; it does not
-// attempt cross-page consistency of its own.
+// WR-01: if a page fetch answers Code.Aborted (a Sync committed between
+// two page fetches, detected server-side via the page token's generation
+// marker), the WHOLE walk is retried from the first page exactly once — a
+// fresh walk starts a fresh generation and is not itself more likely to
+// trip the same check. If that retry ALSO aborts, the Coverage section
+// renders an honest incomplete result (`incomplete: true`) instead of
+// throwing or silently asserting a complete list. Any other error still
+// propagates to the caller unchanged.
 export function fetchAllCoverageRows(
 	client: CoverageClient,
 	signal?: AbortSignal
 ): Promise<CoverageRowsResult> {
-	const rows: CoverageRow[] = [];
-
-	async function walk(pageToken: string, page: number): Promise<CoverageRowsResult> {
-		if (page >= COVERAGE_MAX_PAGES) {
-			throw new Error('coverage: page limit exceeded');
+	async function attempt(): Promise<CoverageRowsResult> {
+		const rows: CoverageRow[] = [];
+		let pageToken = '';
+		for (let page = 0; page < COVERAGE_MAX_PAGES; page++) {
+			const response = await client.getCoverage(
+				{ pageSize: COVERAGE_PAGE_SIZE, pageToken },
+				{ signal }
+			);
+			if (!response.known) {
+				return { known: false, rows: [], incomplete: false };
+			}
+			rows.push(...response.rows);
+			if (!response.nextPageToken) {
+				return { known: true, rows, incomplete: false };
+			}
+			pageToken = response.nextPageToken;
 		}
-		const response = await client.getCoverage(
-			{ pageSize: COVERAGE_PAGE_SIZE, pageToken },
-			{ signal }
-		);
-		if (!response.known) {
-			return { known: false, rows: [] };
-		}
-		rows.push(...response.rows);
-		if (!response.nextPageToken) {
-			return { known: true, rows };
-		}
-		return walk(response.nextPageToken, page + 1);
+		throw new Error('coverage: page limit exceeded');
 	}
 
-	return walk('', 0);
+	return attempt().catch((err: unknown) => {
+		if (!isRetryableCoverageAbort(err)) {
+			throw err;
+		}
+		return attempt().catch((retryErr: unknown) => {
+			if (!isRetryableCoverageAbort(retryErr)) {
+				throw retryErr;
+			}
+			return { known: true, rows: [], incomplete: true };
+		});
+	});
 }

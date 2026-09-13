@@ -417,6 +417,72 @@ func TestGetCoverageMalformedTokenIsInvalidArgument(t *testing.T) {
 	}
 }
 
+// TestGetCoverageAbortsWhenGenerationChangedBetweenPages is WR-01's
+// listener-level regression test: fetching page 1, mutating the store's
+// generation marker directly (simulating a concurrent Sync), then
+// replaying page 1's token must answer connect.CodeAborted over the real
+// wire — never CodeInternal, never a silently wrong page. The mutation is
+// a hand-set LastSyncUnixMs, never time.Now(), so this cannot flake on
+// two commits landing in the same host millisecond.
+func TestGetCoverageAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
+	dir := copyCoverageFixtureForUI(t)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+	ctx := context.Background()
+
+	page1, err := client.GetCoverage(ctx, connect.NewRequest(&uiv1.GetCoverageRequest{PageSize: 1}))
+	if err != nil {
+		t.Fatalf("GetCoverage (page1): %v", err)
+	}
+	if page1.Msg.GetNextPageToken() == "" {
+		t.Fatal("page1.NextPageToken is empty, want non-empty")
+	}
+
+	// Bump the store's generation marker directly, between the two page
+	// fetches — the same shape internal/query/coverage_test.go's
+	// TestCoverageRowsAbortsWhenGenerationChangedBetweenPages uses at the
+	// Engine level, reproduced here to prove the classification survives
+	// the wire (mapEngineError -> connect.CodeAborted).
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+	store, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("graphstore.Open: %v", err)
+	}
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	meta, err := snap.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if err := snap.Close(); err != nil {
+		t.Fatalf("snap.Close: %v", err)
+	}
+	meta.LastSyncUnixMs = 999999
+	w, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	if err := w.PutMeta(meta); err != nil {
+		t.Fatalf("PutMeta: %v", err)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatalf("Commit (bump generation): %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("store.Close: %v", err)
+	}
+
+	_, err = client.GetCoverage(ctx, connect.NewRequest(&uiv1.GetCoverageRequest{PageSize: 1, PageToken: page1.Msg.GetNextPageToken()}))
+	if err == nil {
+		t.Fatal("GetCoverage with a stale-generation page_token succeeded, want an error")
+	}
+	if code := connect.CodeOf(err); code != connect.CodeAborted {
+		t.Fatalf("code = %v, want CodeAborted", code)
+	}
+}
+
 // TestGetCoveragePageSizeIsClampedOnTheWire is T-10-03's DoS mitigation
 // asserted over the real wire: an oversized page_size clamps to
 // CoverageMaxPageSize (1000), and a non-positive value falls back to

@@ -13,6 +13,7 @@
 // coverage*` test ids and zero `getCoverage` wiring).
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { ConnectError, Code } from '@connectrpc/connect';
 
 import type { GetHealthResponse, GetCoverageResponse, CoverageRow } from '$lib/gen/ui_pb';
 import { CoverageRowKind, ExclusionReason } from '$lib/gen/ui_pb';
@@ -456,6 +457,19 @@ describe('Coverage section: known state — counts, prunes, groups, distinct fai
 
 		await waitFor(() => expect(screen.getByTestId('health-coverage-counts')).toBeInTheDocument());
 		await waitFor(() => expect(screen.getByTestId('health-coverage-rows-failed')).toBeInTheDocument());
+	});
+
+	// WR-01: a page token whose generation is stale answers Code.Aborted;
+	// fetchAllCoverageRows retries the whole walk once, and if that ALSO
+	// aborts, the page renders health-coverage-rows-incomplete rather than
+	// asserting a (possibly wrong) complete row list.
+	it('renders health-coverage-rows-incomplete when getCoverage keeps answering Code.Aborted (WR-01)', async () => {
+		currentGetCoverageImpl = () => Promise.reject(new ConnectError('coverage: index changed', Code.Aborted));
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		await waitFor(() => expect(screen.getByTestId('health-coverage-counts')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByTestId('health-coverage-rows-incomplete')).toBeInTheDocument());
+		expect(screen.queryByTestId('health-coverage-rows-failed')).not.toBeInTheDocument();
 	});
 
 	it('re-issues getCoverage on a live-triggered getHealth refetch', async () => {

@@ -615,7 +615,13 @@ func TestCoverageRowsRejectsMalformedTokens(t *testing.T) {
 	eng, closer := indexCoverageFixtureExternal(t, root)
 	defer closer()
 
-	validXToken := encodeCoverageToken('x', "go.mod")
+	meta, err := eng.IndexMeta()
+	if err != nil {
+		t.Fatalf("IndexMeta: %v", err)
+	}
+	generation := meta.GetLastSyncUnixMs()
+	validXToken := encodeCoverageToken('x', generation, "go.mod")
+	zeroGen := strings.Repeat("\x00", coverageTokenGenerationLen)
 
 	cases := []struct {
 		name  string
@@ -633,11 +639,12 @@ func TestCoverageRowsRejectsMalformedTokens(t *testing.T) {
 		// decodeCoverageToken deliberately special-cases as "first page"
 		// (its own doc comment), so that literal shape is valid input,
 		// not malformed.
-		{"padded (non-raw-url) base64", base64URLNoPad("x"+"go.mod") + "==", CoverageRowsOptions{}},
-		{"unknown kind byte", base64URLNoPad("q" + "path"), CoverageRowsOptions{}},
-		{"oversized path", base64URLNoPad("x" + strings.Repeat("a", 4097)), CoverageRowsOptions{}},
-		{"invalid utf8", base64URLNoPad("x\xff\xfe"), CoverageRowsOptions{}},
-		{"f-token with reason filter", encodeCoverageToken('f', "broken.py"), CoverageRowsOptions{Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}},
+		{"padded (non-raw-url) base64", base64URLNoPad("x"+zeroGen+"go.mod") + "==", CoverageRowsOptions{}},
+		{"unknown kind byte", base64URLNoPad("q" + zeroGen + "path"), CoverageRowsOptions{}},
+		{"too short to hold the generation field", base64URLNoPad("x" + "\x00\x00\x00"), CoverageRowsOptions{}},
+		{"oversized path", base64URLNoPad("x" + zeroGen + strings.Repeat("a", 4097)), CoverageRowsOptions{}},
+		{"invalid utf8", base64URLNoPad("x" + zeroGen + "\xff\xfe"), CoverageRowsOptions{}},
+		{"f-token with reason filter", encodeCoverageToken('f', generation, "broken.py"), CoverageRowsOptions{Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}},
 	}
 	inspected := 0
 	for _, c := range cases {
@@ -671,6 +678,67 @@ func TestCoverageRowsRejectsMalformedTokens(t *testing.T) {
 		if r.Path == "go.mod" {
 			t.Errorf("positive control: rows still contain go.mod (the cursor row itself), want it excluded: %v", pathsOf(page.Rows))
 		}
+	}
+}
+
+// TestCoverageRowsAbortsWhenGenerationChangedBetweenPages is WR-01's
+// regression test: a page token embeds the store's LastSyncUnixMs at the
+// moment it was produced (coverage.go's encodeCoverageToken doc comment),
+// and the NEXT CoverageRows call rejects a token whose embedded generation
+// disagrees with the store's now-current LastSyncUnixMs as ErrAborted —
+// the client's honest signal to retry the whole walk from the first page,
+// rather than silently returning a page that might disagree with earlier
+// ones. The generation bump below is a hand-set literal, never
+// time.Now(), so this test cannot flake on two commits landing in the
+// same host millisecond.
+func TestCoverageRowsAbortsWhenGenerationChangedBetweenPages(t *testing.T) {
+	store, openEngine := newCoverageMutationStore(t)
+
+	eng1, closer1 := openEngine()
+	page1, err := eng1.CoverageRows(CoverageRowsOptions{PageSize: 1})
+	closer1()
+	if err != nil {
+		t.Fatalf("CoverageRows (page1): %v", err)
+	}
+	if page1.NextPageToken == "" {
+		t.Fatal("page1.NextPageToken is empty, want non-empty")
+	}
+
+	// Positive control: replaying page1's token against a fresh snapshot
+	// BEFORE any further mutation succeeds normally — the generation
+	// check does not misfire on an ordinary same-generation page fetch.
+	engControl, closerControl := openEngine()
+	_, err = engControl.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: page1.NextPageToken})
+	closerControl()
+	if err != nil {
+		t.Fatalf("CoverageRows (same-generation replay, positive control): %v", err)
+	}
+
+	// Bump the store's generation marker via a direct Meta write,
+	// simulating a concurrent Sync committing between the two page
+	// fetches.
+	w, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	meta := schema.NewMeta()
+	meta.HasCoverage = true
+	meta.LastSyncUnixMs = 999999
+	if err := w.PutMeta(meta); err != nil {
+		t.Fatalf("PutMeta: %v", err)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatalf("Commit (bump generation): %v", err)
+	}
+
+	eng2, closer2 := openEngine()
+	_, err = eng2.CoverageRows(CoverageRowsOptions{PageSize: 1, PageToken: page1.NextPageToken})
+	closer2()
+	if err == nil {
+		t.Fatal("CoverageRows: got nil error, want ErrAborted after the store's generation changed between page fetches (WR-01)")
+	}
+	if !errors.Is(err, ErrAborted) {
+		t.Fatalf("CoverageRows: err = %v, want errors.Is(err, ErrAborted)", err)
 	}
 }
 

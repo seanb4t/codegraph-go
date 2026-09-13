@@ -9,6 +9,7 @@
 // `fetchAllCoverageRows` exports — every import below failed until Task
 // 1's GREEN commit).
 import { describe, it, expect, vi } from 'vitest';
+import { ConnectError, Code } from '@connectrpc/connect';
 
 import {
 	toCountRows,
@@ -358,7 +359,7 @@ describe('fetchAllCoverageRows: bounded page walker over GetCoverage', () => {
 
 		const result = await fetchAllCoverageRows(client);
 
-		expect(result).toEqual({ known: false, rows: [] });
+		expect(result).toEqual({ known: false, rows: [], incomplete: false });
 		expect(calls).toHaveLength(1);
 	});
 
@@ -377,5 +378,57 @@ describe('fetchAllCoverageRows: bounded page walker over GetCoverage', () => {
 
 		await expect(fetchAllCoverageRows(client)).rejects.toThrow(/page limit/);
 		expect(calls).toBe(COVERAGE_MAX_PAGES);
+	});
+
+	// WR-01: GetCoverage answers Code.Aborted when a page token's embedded
+	// generation marker no longer matches the store (a Sync committed
+	// between two page fetches). fetchAllCoverageRows retries the whole
+	// walk from the first page exactly once before giving up.
+	describe('WR-01: retries the whole walk once on Code.Aborted, then reports incomplete', () => {
+		it('retries from the first page and succeeds when the retry does not abort', async () => {
+			const rowA = coverageRow({ path: 'a.go' });
+			let attempt = 0;
+			let callsThisAttempt = 0;
+			const client: CoverageClient = {
+				getCoverage: vi.fn(async () => {
+					callsThisAttempt += 1;
+					if (attempt === 0 && callsThisAttempt === 2) {
+						attempt += 1;
+						callsThisAttempt = 0;
+						throw new ConnectError('coverage: index changed', Code.Aborted);
+					}
+					if (callsThisAttempt === 1) {
+						return { rows: [rowA], nextPageToken: 't1', known: true } as unknown as GetCoverageResponse;
+					}
+					return { rows: [], nextPageToken: '', known: true } as unknown as GetCoverageResponse;
+				})
+			};
+
+			const result = await fetchAllCoverageRows(client);
+
+			expect(result).toEqual({ known: true, rows: [rowA], incomplete: false });
+		});
+
+		it('reports { known: true, rows: [], incomplete: true } when the retry ALSO aborts', async () => {
+			const client: CoverageClient = {
+				getCoverage: vi.fn(async () => {
+					throw new ConnectError('coverage: index changed', Code.Aborted);
+				})
+			};
+
+			const result = await fetchAllCoverageRows(client);
+
+			expect(result).toEqual({ known: true, rows: [], incomplete: true });
+		});
+
+		it('propagates a non-Aborted error unchanged, without retrying', async () => {
+			const calls = vi.fn(async () => {
+				throw new ConnectError('coverage: nope', Code.Internal);
+			});
+			const client: CoverageClient = { getCoverage: calls };
+
+			await expect(fetchAllCoverageRows(client)).rejects.toMatchObject({ message: expect.stringContaining('nope') });
+			expect(calls).toHaveBeenCalledTimes(1);
+		});
 	});
 });

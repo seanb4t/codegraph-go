@@ -91,7 +91,11 @@
 					rowsState = { kind: 'idle' };
 					return;
 				}
-				rowsState = { kind: 'loaded', groups: groupCoverageRows(result.rows) };
+				rowsState = {
+					kind: 'loaded',
+					groups: groupCoverageRows(result.rows),
+					incomplete: result.incomplete
+				};
 			})
 			.catch((err: unknown) => {
 				if (id !== requestId || controller.signal.aborted) return;

@@ -87,6 +87,11 @@ func mapContextError(err error) error {
 //
 //   - query.ErrNotFound or graphstore.ErrNotFound -> connect.CodeNotFound
 //   - query.ErrInvalidArgument -> connect.CodeInvalidArgument
+//   - query.ErrAborted -> connect.CodeAborted (Phase 10 WR-01): a paged
+//     rpc's resume token was valid but the store changed underneath it
+//     since the previous page fetch; the caller should retry the whole
+//     walk from the first page rather than treat this as a permanent
+//     failure
 //   - graphstore.ErrStoreLocked -> connect.CodeUnavailable with a typed
 //     IndexingInProgress detail (SRV-04's degrade path, D-14/D-15) —
 //     errIndexingInProgress() builds the one shape every non-GetStatus
@@ -108,6 +113,8 @@ func mapEngineError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, query.ErrInvalidArgument):
 		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, query.ErrAborted):
+		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, graphstore.ErrStoreLocked):
 		return errIndexingInProgress()
 	default:

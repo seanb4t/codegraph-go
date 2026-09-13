@@ -22,7 +22,7 @@
 	export type RowsState =
 		| { kind: 'idle' }
 		| { kind: 'loading' }
-		| { kind: 'loaded'; groups: CoverageGroup[] }
+		| { kind: 'loaded'; groups: CoverageGroup[]; incomplete: boolean }
 		| { kind: 'failed'; message: string };
 
 	let { view, rows }: { view: CoverageView; rows: RowsState } = $props();
@@ -73,6 +73,11 @@
 				Could not load the per-file coverage rows: {rows.message}
 			</p>
 		{:else if rows.kind === 'loaded'}
+			{#if rows.incomplete}
+				<p data-testid="health-coverage-rows-incomplete" class="mt-2 text-muted-foreground">
+					Coverage rows may be incomplete — the index changed while loading. Reload to confirm.
+				</p>
+			{/if}
 			<div class="mt-2 flex flex-col gap-1">
 				{#each rows.groups as group (group.key)}
 					<details data-testid={'health-coverage-group-' + group.key}>

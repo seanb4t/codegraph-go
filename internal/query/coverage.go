@@ -3,6 +3,7 @@ package query
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"strings"
 	"unicode/utf8"
 
@@ -178,6 +179,7 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 	if meta == nil || !meta.GetHasCoverage() {
 		return CoveragePage{Known: false}, nil
 	}
+	generation := meta.GetLastSyncUnixMs()
 
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
@@ -187,9 +189,21 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 		pageSize = CoverageMaxPageSize
 	}
 
-	cursorSeg, cursorPath, err := decodeCoverageToken(opts.PageToken)
+	cursorSeg, cursorGeneration, cursorPath, err := decodeCoverageToken(opts.PageToken)
 	if err != nil {
 		return CoveragePage{}, err
+	}
+	// WR-01: a non-empty token whose embedded generation disagrees with
+	// the store's CURRENT LastSyncUnixMs means a Sync committed between
+	// the previous page fetch and this one. CR-01's position-based
+	// resume no longer risks dropping rows in that case, but the walk's
+	// cross-page consistency is no longer guaranteed either (rows may
+	// have been added, removed, or reclassified), so the honest answer
+	// is to refuse and let the caller restart the whole walk rather than
+	// silently return a page from a different index generation than the
+	// one the caller has been accumulating.
+	if opts.PageToken != "" && cursorGeneration != generation {
+		return CoveragePage{}, abortedf("coverage: index changed since the previous page was fetched; retry from the first page")
 	}
 
 	filterByReason := opts.Reason != schema.ExclusionReason_EXCLUSION_REASON_UNSPECIFIED
@@ -304,7 +318,7 @@ func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
 		if last.Kind == CoverageRowExcluded {
 			seg = 'x'
 		}
-		nextToken = encodeCoverageToken(seg, last.Path)
+		nextToken = encodeCoverageToken(seg, generation, last.Path)
 	}
 
 	return CoveragePage{Known: true, Rows: rows, NextPageToken: nextToken}, nil
@@ -339,37 +353,65 @@ func truncateAtRuneBoundary(s string, maxBytes int) string {
 	return b
 }
 
-// encodeCoverageToken frames a resume cursor as [kind byte][path bytes],
-// base64url-encoded. The token is OPAQUE to the caller and is used ONLY
-// as an in-memory string comparison (T-10-04) — never as a Pebble bound,
-// never as a filesystem path.
-func encodeCoverageToken(kind byte, path string) string {
-	buf := make([]byte, 0, 1+len(path))
+// coverageTokenGenerationLen is the fixed width (bytes) of a page token's
+// embedded generation marker (WR-01) — a big-endian encoding of
+// schema.Meta's LastSyncUnixMs at the moment the page carrying this token
+// was produced.
+const coverageTokenGenerationLen = 8
+
+// encodeCoverageToken frames a resume cursor as [kind byte][generation,
+// 8 bytes big-endian][path bytes], base64url-encoded. The token is OPAQUE
+// to the caller and is used ONLY as an in-memory byte comparison (T-10-04)
+// — never as a Pebble bound, never as a filesystem path.
+//
+// generation is meta.GetLastSyncUnixMs() read in the SAME CoverageRows
+// call that produced this token (WR-01): LastSyncUnixMs is stamped at
+// every one of the three commit sites a coverage-bearing graph can be
+// written from (indexer.Run's from-scratch write and Sync's two commit
+// paths), so it is already a zero-plumbing, always-fresh "has anything
+// changed" marker — no new write-path field was added for this. The NEXT
+// CoverageRows call re-reads the store's current LastSyncUnixMs and
+// rejects a token whose embedded generation disagrees as ErrAborted: a
+// Sync committed between the two page fetches, so the walk is no longer
+// guaranteed to be over the same key-order snapshot family CR-01's
+// position-based resume assumes, and the honest answer is "retry from the
+// first page" rather than silently returning a page that might disagree
+// with what the caller already collected.
+func encodeCoverageToken(kind byte, generation int64, path string) string {
+	buf := make([]byte, 0, 1+coverageTokenGenerationLen+len(path))
 	buf = append(buf, kind)
+	var genBuf [coverageTokenGenerationLen]byte
+	binary.BigEndian.PutUint64(genBuf[:], uint64(generation))
+	buf = append(buf, genBuf[:]...)
 	buf = append(buf, path...)
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
 // decodeCoverageToken decodes a token produced by encodeCoverageToken. An
-// empty token means "first page" (kind 0, path ""). Any malformed value —
-// bad base64, empty payload, an unrecognized kind byte, invalid UTF-8, or
-// a path over 4096 bytes — is rejected as ErrInvalidArgument (T-10-04);
-// never a filesystem path, never a Pebble bound.
-func decodeCoverageToken(tok string) (kind byte, path string, err error) {
+// empty token means "first page" (kind 0, generation 0, path ""). Any
+// malformed value — bad base64, a payload too short to hold the kind byte
+// and generation field, an unrecognized kind byte, invalid UTF-8, or a
+// path over 4096 bytes — is rejected as ErrInvalidArgument (T-10-04);
+// never a filesystem path, never a Pebble bound. generation is returned
+// undecoded (the caller compares it against the store's current
+// LastSyncUnixMs — WR-01) so this function stays a pure decode with no
+// store dependency.
+func decodeCoverageToken(tok string) (kind byte, generation int64, path string, err error) {
 	if tok == "" {
-		return 0, "", nil
+		return 0, 0, "", nil
 	}
 	data, decErr := base64.RawURLEncoding.DecodeString(tok)
-	if decErr != nil || len(data) < 1 {
-		return 0, "", invalidArgumentf("coverage: malformed page token")
+	if decErr != nil || len(data) < 1+coverageTokenGenerationLen {
+		return 0, 0, "", invalidArgumentf("coverage: malformed page token")
 	}
 	kind = data[0]
 	if kind != 'f' && kind != 'x' {
-		return 0, "", invalidArgumentf("coverage: malformed page token")
+		return 0, 0, "", invalidArgumentf("coverage: malformed page token")
 	}
-	path = string(data[1:])
+	generation = int64(binary.BigEndian.Uint64(data[1 : 1+coverageTokenGenerationLen]))
+	path = string(data[1+coverageTokenGenerationLen:])
 	if !utf8.ValidString(path) || len(path) > 4096 {
-		return 0, "", invalidArgumentf("coverage: malformed page token")
+		return 0, 0, "", invalidArgumentf("coverage: malformed page token")
 	}
-	return kind, path, nil
+	return kind, generation, path, nil
 }
