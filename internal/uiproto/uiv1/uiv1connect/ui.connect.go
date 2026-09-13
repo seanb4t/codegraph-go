@@ -98,6 +98,8 @@ const (
 	UIServiceWatchGraphProcedure = "/codegraph.ui.v1.UIService/WatchGraph"
 	// UIServiceGetEditorLinkProcedure is the fully-qualified name of the UIService's GetEditorLink RPC.
 	UIServiceGetEditorLinkProcedure = "/codegraph.ui.v1.UIService/GetEditorLink"
+	// UIServiceGetCoverageProcedure is the fully-qualified name of the UIService's GetCoverage RPC.
+	UIServiceGetCoverageProcedure = "/codegraph.ui.v1.UIService/GetCoverage"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -187,6 +189,16 @@ type UIServiceClient interface {
 	// GetPermalink and FileSymbols already use (SRV-05) — no second
 	// confinement implementation.
 	GetEditorLink(context.Context, *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error)
+	// GetCoverage is plan 10-01's sixteenth rpc (Phase 10 HLT-05/HLT-06,
+	// D-10): it pages the per-file coverage-gap row list (extraction
+	// failures and pre-extraction exclusions) that GetHealthResponse.coverage
+	// deliberately omits to stay bounded on a polled call (the v0.12.0
+	// Phase 1 transport-cap lesson). Read-only: it performs no network
+	// operation and mutates nothing (SRV-03) — its name was verified clean
+	// against the live mutatingVerbs fixture before being written here
+	// (no "Index", the exact trap GetIndexHealth/WatchIndex/IndexEvents/
+	// StreamIndex were each rejected for).
+	GetCoverage(context.Context, *connect.Request[uiv1.GetCoverageRequest]) (*connect.Response[uiv1.GetCoverageResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -290,6 +302,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("GetEditorLink")),
 			connect.WithClientOptions(opts...),
 		),
+		getCoverage: connect.NewClient[uiv1.GetCoverageRequest, uiv1.GetCoverageResponse](
+			httpClient,
+			baseURL+UIServiceGetCoverageProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("GetCoverage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -310,6 +328,7 @@ type uIServiceClient struct {
 	fileSymbols   *connect.Client[uiv1.FileSymbolsRequest, uiv1.FileSymbolsResponse]
 	watchGraph    *connect.Client[uiv1.WatchGraphRequest, uiv1.WatchGraphEvent]
 	getEditorLink *connect.Client[uiv1.GetEditorLinkRequest, uiv1.GetEditorLinkResponse]
+	getCoverage   *connect.Client[uiv1.GetCoverageRequest, uiv1.GetCoverageResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -385,6 +404,11 @@ func (c *uIServiceClient) WatchGraph(ctx context.Context, req *connect.Request[u
 // GetEditorLink calls codegraph.ui.v1.UIService.GetEditorLink.
 func (c *uIServiceClient) GetEditorLink(ctx context.Context, req *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error) {
 	return c.getEditorLink.CallUnary(ctx, req)
+}
+
+// GetCoverage calls codegraph.ui.v1.UIService.GetCoverage.
+func (c *uIServiceClient) GetCoverage(ctx context.Context, req *connect.Request[uiv1.GetCoverageRequest]) (*connect.Response[uiv1.GetCoverageResponse], error) {
+	return c.getCoverage.CallUnary(ctx, req)
 }
 
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
@@ -474,6 +498,16 @@ type UIServiceHandler interface {
 	// GetPermalink and FileSymbols already use (SRV-05) — no second
 	// confinement implementation.
 	GetEditorLink(context.Context, *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error)
+	// GetCoverage is plan 10-01's sixteenth rpc (Phase 10 HLT-05/HLT-06,
+	// D-10): it pages the per-file coverage-gap row list (extraction
+	// failures and pre-extraction exclusions) that GetHealthResponse.coverage
+	// deliberately omits to stay bounded on a polled call (the v0.12.0
+	// Phase 1 transport-cap lesson). Read-only: it performs no network
+	// operation and mutates nothing (SRV-03) — its name was verified clean
+	// against the live mutatingVerbs fixture before being written here
+	// (no "Index", the exact trap GetIndexHealth/WatchIndex/IndexEvents/
+	// StreamIndex were each rejected for).
+	GetCoverage(context.Context, *connect.Request[uiv1.GetCoverageRequest]) (*connect.Response[uiv1.GetCoverageResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -573,6 +607,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("GetEditorLink")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceGetCoverageHandler := connect.NewUnaryHandler(
+		UIServiceGetCoverageProcedure,
+		svc.GetCoverage,
+		connect.WithSchema(uIServiceMethods.ByName("GetCoverage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -605,6 +645,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceWatchGraphHandler.ServeHTTP(w, r)
 		case UIServiceGetEditorLinkProcedure:
 			uIServiceGetEditorLinkHandler.ServeHTTP(w, r)
+		case UIServiceGetCoverageProcedure:
+			uIServiceGetCoverageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -672,4 +714,8 @@ func (UnimplementedUIServiceHandler) WatchGraph(context.Context, *connect.Reques
 
 func (UnimplementedUIServiceHandler) GetEditorLink(context.Context, *connect.Request[uiv1.GetEditorLinkRequest]) (*connect.Response[uiv1.GetEditorLinkResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetEditorLink is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) GetCoverage(context.Context, *connect.Request[uiv1.GetCoverageRequest]) (*connect.Response[uiv1.GetCoverageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetCoverage is not implemented"))
 }
