@@ -3242,7 +3242,12 @@ type FileGraphNode struct {
 	// cycle_id mirrors FileGraphNode.CycleID: 0 for a file in no
 	// strongly-connected cycle, else a 1-based component identifier
 	// (GRF-04, D-06).
-	CycleId       int32 `protobuf:"varint,4,opt,name=cycle_id,json=cycleId,proto3" json:"cycle_id,omitempty"`
+	CycleId int32 `protobuf:"varint,4,opt,name=cycle_id,json=cycleId,proto3" json:"cycle_id,omitempty"`
+	// community_id mirrors FileGraphNode.CommunityID: a 1-based canonical
+	// community identifier assigned by AssignCommunities, computed fresh
+	// on every FileGraph() call. 0 only when not computed (GRF-06, D-03,
+	// D-09).
+	CommunityId   int32 `protobuf:"varint,5,opt,name=community_id,json=communityId,proto3" json:"community_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3301,6 +3306,13 @@ func (x *FileGraphNode) GetSymbolCount() int64 {
 func (x *FileGraphNode) GetCycleId() int32 {
 	if x != nil {
 		return x.CycleId
+	}
+	return 0
+}
+
+func (x *FileGraphNode) GetCommunityId() int32 {
+	if x != nil {
+		return x.CommunityId
 	}
 	return 0
 }
@@ -3426,9 +3438,13 @@ type FileGraphResponse struct {
 	// (D-03).
 	ExcludedContainsEdgeCount int64 `protobuf:"varint,5,opt,name=excluded_contains_edge_count,json=excludedContainsEdgeCount,proto3" json:"excluded_contains_edge_count,omitempty"`
 	// cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
-	CycleCount    int32 `protobuf:"varint,6,opt,name=cycle_count,json=cycleCount,proto3" json:"cycle_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CycleCount int32 `protobuf:"varint,6,opt,name=cycle_count,json=cycleCount,proto3" json:"cycle_count,omitempty"`
+	// community_count mirrors FileGraphResult.CommunityCount: the number
+	// of distinct community ids assigned over nodes (singletons counted),
+	// so the UI reports the count without recounting (GRF-06, D-12a).
+	CommunityCount int32 `protobuf:"varint,7,opt,name=community_count,json=communityCount,proto3" json:"community_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *FileGraphResponse) Reset() {
@@ -3499,6 +3515,13 @@ func (x *FileGraphResponse) GetExcludedContainsEdgeCount() int64 {
 func (x *FileGraphResponse) GetCycleCount() int32 {
 	if x != nil {
 		return x.CycleCount
+	}
+	return 0
+}
+
+func (x *FileGraphResponse) GetCommunityCount() int32 {
+	if x != nil {
+		return x.CommunityCount
 	}
 	return 0
 }
@@ -4548,12 +4571,13 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"&\n" +
 	"\x10FileGraphRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"}\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xa0\x01\n" +
 	"\rFileGraphNode\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x12!\n" +
 	"\fsymbol_count\x18\x03 \x01(\x03R\vsymbolCount\x12\x19\n" +
-	"\bcycle_id\x18\x04 \x01(\x05R\acycleId\"\x9d\x02\n" +
+	"\bcycle_id\x18\x04 \x01(\x05R\acycleId\x12!\n" +
+	"\fcommunity_id\x18\x05 \x01(\x05R\vcommunityId\"\x9d\x02\n" +
 	"\rFileGraphEdge\x12\x1f\n" +
 	"\vsource_file\x18\x01 \x01(\tR\n" +
 	"sourceFile\x12\x1f\n" +
@@ -4566,7 +4590,7 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\bin_cycle\x18\x05 \x01(\bR\ainCycle\x1a=\n" +
 	"\x0fKindCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xd9\x02\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x82\x03\n" +
 	"\x11FileGraphResponse\x124\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x1e.codegraph.ui.v1.FileGraphNodeR\x05nodes\x124\n" +
 	"\x05edges\x18\x02 \x03(\v2\x1e.codegraph.ui.v1.FileGraphEdgeR\x05edges\x12=\n" +
@@ -4574,7 +4598,8 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x18excluded_self_edge_count\x18\x04 \x01(\x03R\x15excludedSelfEdgeCount\x12?\n" +
 	"\x1cexcluded_contains_edge_count\x18\x05 \x01(\x03R\x19excludedContainsEdgeCount\x12\x1f\n" +
 	"\vcycle_count\x18\x06 \x01(\x05R\n" +
-	"cycleCount\"(\n" +
+	"cycleCount\x12'\n" +
+	"\x0fcommunity_count\x18\a \x01(\x05R\x0ecommunityCount\"(\n" +
 	"\x12FileSymbolsRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\"\x85\x01\n" +
 	"\x13FileSymbolsResponse\x12/\n" +

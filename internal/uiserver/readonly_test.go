@@ -294,6 +294,15 @@ const uiProtoFieldFixtureLenAtPlan0901 = uiProtoFieldFixtureLenAtPlan0601 + 14
 // 03-05, 04-03, 05-02, 05-06, 06-01, 09-01).
 const uiProtoFieldFixtureLenAtPlan1001 = uiProtoFieldFixtureLenAtPlan0901 + 17
 
+// uiProtoFieldFixtureLenAtPlan1101 EXTENDS uiProtoFieldFixtureLenAtPlan1001
+// by exactly 2 (plan 11-01, Phase 11 GRF-06/GRF-09): FileGraphNode.
+// community_id + FileGraphResponse.community_count — both additive
+// fields on EXISTING messages, no new rpc, so the method set stays at
+// 16. Declared in terms of the prior constant, never as a bare literal,
+// mirroring the established chained-extension pattern (01-10, 01-11,
+// 03-05, 04-03, 05-02, 05-06, 06-01, 09-01, 10-01).
+const uiProtoFieldFixtureLenAtPlan1101 = uiProtoFieldFixtureLenAtPlan1001 + 2
+
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
 // the wave that completes GetNodeDetail and Explore). Per the corrected
@@ -569,6 +578,10 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"GetCoverageResponse", "rows", 1},
 	{"GetCoverageResponse", "next_page_token", 2},
 	{"GetCoverageResponse", "known", 3},
+	// Plan 11-01's two — see uiProtoFieldFixtureLenAtPlan1101's own
+	// doc comment for the arithmetic.
+	{"FileGraphNode", "community_id", 5},
+	{"FileGraphResponse", "community_count", 7},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -595,8 +608,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan1001 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan1001 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan1001)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan1101 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan1101 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan1101)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")

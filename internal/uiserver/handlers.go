@@ -1034,6 +1034,7 @@ func fileGraphToProto(result query.FileGraphResult) *uiv1.FileGraphResponse {
 		ExcludedSelfEdgeCount:     result.ExcludedSelfEdges,
 		ExcludedContainsEdgeCount: result.ExcludedContainsEdges,
 		CycleCount:                int32(result.CycleCount),
+		CommunityCount:            int32(result.CommunityCount),
 	}
 }
 
@@ -1047,6 +1048,7 @@ func fileGraphNodeToProto(n query.FileGraphNode) *uiv1.FileGraphNode {
 		Language:    n.Language,
 		SymbolCount: n.SymbolCount,
 		CycleId:     int32(n.CycleID),
+		CommunityId: int32(n.CommunityID),
 	}
 }
 

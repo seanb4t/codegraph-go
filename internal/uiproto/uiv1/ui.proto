@@ -867,6 +867,12 @@ message FileGraphNode {
   // strongly-connected cycle, else a 1-based component identifier
   // (GRF-04, D-06).
   int32 cycle_id = 4;
+
+  // community_id mirrors FileGraphNode.CommunityID: a 1-based canonical
+  // community identifier assigned by AssignCommunities, computed fresh
+  // on every FileGraph() call. 0 only when not computed (GRF-06, D-03,
+  // D-09).
+  int32 community_id = 5;
 }
 
 // FileGraphEdge is the uiv1 projection of internal/query.FileGraphEdge,
@@ -931,6 +937,11 @@ message FileGraphResponse {
 
   // cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
   int32 cycle_count = 6;
+
+  // community_count mirrors FileGraphResult.CommunityCount: the number
+  // of distinct community ids assigned over nodes (singletons counted),
+  // so the UI reports the count without recounting (GRF-06, D-12a).
+  int32 community_count = 7;
 }
 
 // FileSymbolsRequest is the uiv1 projection of
