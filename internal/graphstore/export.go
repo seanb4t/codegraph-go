@@ -22,6 +22,14 @@ const (
 	exportKindNode uint8 = 2
 	exportKindEdge uint8 = 3
 	exportKindFile uint8 = 4
+
+	// exportKindExcludedFile is Phase 10's fifth record kind (the c/
+	// namespace, D-05). Unlike x/ (the file-owned secondary index,
+	// which every PutNode/PutEdge regenerates on import), nothing else
+	// regenerates a c/ record — it MUST be framed explicitly here
+	// (RESEARCH Pitfall 2), or an Export/Import round trip would
+	// silently lose every exclusion record.
+	exportKindExcludedFile uint8 = 5
 )
 
 // maxImportRecordBytes bounds the per-record length prefix read by Import,
@@ -86,6 +94,9 @@ func (s *pebbleStore) Export(w io.Writer) error {
 	}
 	if err := exportNamespace(bw, snap, prefixFile, exportKindFile, func() proto.Message { return &schema.File{} }); err != nil {
 		return fmt.Errorf("export files: %w", err)
+	}
+	if err := exportNamespace(bw, snap, prefixExcludedFile, exportKindExcludedFile, func() proto.Message { return &schema.ExcludedFile{} }); err != nil {
+		return fmt.Errorf("export excluded files: %w", err)
 	}
 
 	return bw.Flush()
@@ -221,6 +232,14 @@ func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]str
 		}
 		if err := w.PutFile(&f); err != nil {
 			return fmt.Errorf("import: put file: %w", err)
+		}
+	case exportKindExcludedFile:
+		var x schema.ExcludedFile
+		if err := proto.Unmarshal(data, &x); err != nil {
+			return fmt.Errorf("import: unmarshal excluded file: %w", err)
+		}
+		if err := w.PutExcludedFile(&x); err != nil {
+			return fmt.Errorf("import: put excluded file: %w", err)
 		}
 	default:
 		return fmt.Errorf("import: unknown record kind %d", kind)

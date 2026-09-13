@@ -765,6 +765,20 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		}
 	}
 
+	// Phase 10 D-07: clear the WHOLE c/ namespace before rewriting it.
+	// run() is also Sync's D-02b backfill path against an EXISTING store
+	// (sync.go's needsFileIndexBackfill branch), so a from-scratch
+	// rewrite must range-delete stale c/ records rather than layer on
+	// top of them. On the from-scratch `codegraph index` path
+	// (internal/cli/index.go's RemoveAll) the range is already empty and
+	// this delete is a no-op. Staged on this SAME Writer, before any
+	// PutExcludedFile below, so a rewrite over an existing store never
+	// observes a mixed stale+fresh set even transiently.
+	if err := w.DeleteAllExcludedFiles(); err != nil {
+		w.Close()
+		return err
+	}
+
 	// Phase 10 D-07: excluded-file records are staged on this SAME
 	// Writer, in the SAME batch as every other record kind (T-10-10) —
 	// never a second commit. Sorted by path, mirroring sortedFiles' own

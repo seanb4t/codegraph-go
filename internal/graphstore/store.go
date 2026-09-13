@@ -25,8 +25,9 @@ type GraphStore interface {
 	// for one engine write per symbol (D-04).
 	NewWriter() (Writer, error)
 
-	// Export streams every record (meta, nodes, edges, files) in
-	// schema-versioned form from a consistent snapshot (ARCH-01).
+	// Export streams every record (meta, nodes, edges, files, excluded
+	// files) in schema-versioned form from a consistent snapshot
+	// (ARCH-01).
 	Export(w io.Writer) error
 
 	// Close releases the underlying engine handle.
@@ -217,6 +218,20 @@ type Writer interface {
 	// PutExcludedFile stages x for write under the c/ namespace
 	// (Phase 10 D-05). x.Path determines its key.
 	PutExcludedFile(x *schema.ExcludedFile) error
+
+	// DeleteExcludedFile stages a point-delete of the ExcludedFile
+	// record identified by path (Phase 10 D-07) — Plan 03's Sync prune
+	// primitive.
+	DeleteExcludedFile(path string) error
+
+	// DeleteAllExcludedFiles stages a range-delete of the WHOLE c/
+	// namespace (Phase 10 D-07) — the "full index range-deletes the
+	// namespace then rewrites" primitive a from-scratch writeGraph run
+	// uses before staging the fresh set, so a rewrite over an EXISTING
+	// store (Sync's D-02b backfill path) never layers on top of stale
+	// records. Bounded by the prefixExcludedFile byte; cannot reach
+	// m/n/e/f/a/x.
+	DeleteAllExcludedFiles() error
 
 	// DeleteNode stages a point-delete of the node record identified by
 	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after
