@@ -91,9 +91,14 @@ func docMentionsFlag(doc string, name string) bool {
 
 // parseCLIReferenceAllowlist parses testdata/cli-reference-allowlist.txt:
 // one entry per non-blank, non-"#" line, "<key><TAB><reason>", where key
-// is "<command path>" or "<command path> --<flag>". A line missing a tab
-// or carrying an empty reason is an error (fail closed — a reason is
-// mandatory, D-08); a duplicate key is an error.
+// is "<command path>" or "<command path> --<flag>". A bare "<command
+// path>" entry (no "--flag" suffix) is honored as a command-level entry
+// covering all of that command's flags ONLY when the command itself is
+// hidden from the generated reference; a flag on a documented (visible)
+// command always requires its own per-flag entry, even if a command-level
+// entry exists for that command (D-08). A line missing a tab or carrying
+// an empty reason is an error (fail closed — a reason is mandatory,
+// D-08); a duplicate key is an error.
 func parseCLIReferenceAllowlist(data []byte) (map[string]string, error) {
 	entries := make(map[string]string)
 	for i, line := range strings.Split(string(data), "\n") {
@@ -198,12 +203,25 @@ func TestEveryRegisteredFlagIsAccountedFor(t *testing.T) {
 			case hasAllowEntry(allow, allowKeyFlag):
 				used[allowKeyFlag] = true
 				viaAllowlist++
-			case hasAllowEntry(allow, allowKeyCmd):
+			// A command-level (flagless) entry only covers a command that
+			// is itself undocumented (hidden). Requiring
+			// !documentedByReference(cmd) here closes the loophole where a
+			// single command-path entry against a documented, visible
+			// command could pre-emptively cover any hidden or deprecated
+			// flag ever added to it later, without a per-flag reason
+			// (D-08 review WR-01).
+			case hasAllowEntry(allow, allowKeyCmd) && !documentedByReference(cmd):
 				used[allowKeyCmd] = true
 				viaAllowlist++
 			default:
-				unaccounted = append(unaccounted, fmt.Sprintf(
-					"unaccounted flag: %s (%s — add an allowlist entry with a reason)", key, ineligibleReason(cmd, f)))
+				reason := ineligibleReason(cmd, f)
+				if documentedByReference(cmd) {
+					unaccounted = append(unaccounted, fmt.Sprintf(
+						"unaccounted flag: %s (%s — a command-level allowlist entry only covers a hidden command; add a per-flag entry %q with a reason)", key, reason, allowKeyFlag))
+				} else {
+					unaccounted = append(unaccounted, fmt.Sprintf(
+						"unaccounted flag: %s (%s — add an allowlist entry with a reason)", key, reason))
+				}
 			}
 		}
 
