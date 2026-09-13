@@ -82,10 +82,14 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		workers = runtime.NumCPU()
 	}
 
-	files, modulePath, err := Discover(repoRoot)
+	// Phase 10: DiscoverAll's exclusion-reason list is Plan 03's own
+	// upsert/prune work — not consumed here yet. Only Files/ModulePath
+	// are used on this incremental path.
+	discovery, err := DiscoverAll(repoRoot)
 	if err != nil {
 		return Stats{}, err
 	}
+	files, modulePath := discovery.Files, discovery.ModulePath
 
 	discovered := make(map[string]DiscoveredFile, len(files))
 	for _, f := range files {
@@ -179,6 +183,13 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
 		newMeta.CommitSha = syncCommitSHA(headCommitSHA, meta)
+		// Phase 10 D-07: carry the prior HasCoverage value forward — this
+		// mtime-refresh path reparses nothing, so it must neither flip
+		// coverage to false (a genuinely-recorded graph would wrongly
+		// degrade to unknown) nor claim true before Plan 03's
+		// upsert/prune diff exists to keep it honest on an incremental
+		// path. Plan 03 replaces this line with the real stamp.
+		newMeta.HasCoverage = meta.GetHasCoverage()
 		if err := w.PutMeta(newMeta); err != nil {
 			w.Close()
 			return Stats{}, err
@@ -408,6 +419,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
 	newMeta.CommitSha = syncCommitSHA(headCommitSHA, meta)
+	// Phase 10 D-07: carry the prior HasCoverage value forward — this
+	// incremental path does not yet diff exclusion records (Plan 03's
+	// work), so it must neither flip coverage to false nor claim true
+	// before that diff exists. Plan 03 replaces this line with the real
+	// stamp.
+	newMeta.HasCoverage = meta.GetHasCoverage()
 	if err := w.PutMeta(newMeta); err != nil {
 		w.Close()
 		return Stats{}, err

@@ -2,12 +2,9 @@ package indexer
 
 import (
 	"fmt"
-	"go/build"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -65,153 +62,16 @@ type pendingFile struct {
 
 // Discover walks root and returns every file whose extension is claimed by
 // a registered LanguageSpec (D-03), sorted by RelPath in ascending byte
-// order. This stable order is determinism's first line of defense: the
-// same input tree always yields the same output order, regardless of
-// filesystem walk order.
-//
-// vendor/ directories and any dot-prefixed directory (.git, .codegraph,
-// etc.) are skipped entirely (ShouldSkipDir, shared verbatim with the
-// Phase-4 watcher). A candidate file is included iff its extension is
-// registered in the extension->language registry (languages.go); an
-// unsupported extension (.md, .json, ...) is never returned. Go source
-// files additionally require go/build.Context.MatchFile to report they
-// belong to the default build context (GOOS/GOARCH, build tags) — the same
-// primitive the go toolchain itself uses — gated to Language=="go" only,
-// since no other language in the registry has a build-tag concept.
-//
-// After the walk, each language actually present is given exactly one
-// chance to resolve its repo-root project descriptor (go.mod, pom.xml,
-// *.csproj, ...) via LanguageSpec.Descriptor. A descriptor that is absent,
-// malformed, or simply not implemented for that language does NOT fail
-// Discover (D-03/T-05-Manifest) — LanguageSpec.ModuleKey is called with a
-// nil descriptor and is required to degrade to a path-based identity
-// rather than dropping the file. This is the one behavioral relaxation
-// from the pre-Phase-5 contract: a root with no go.mod (and only Go files)
-// used to be a hard Discover error; it now succeeds with Go's own
-// nil-descriptor fallback (languages_go.go).
-//
-// Discover's second return value remains the repo's Go module path
-// specifically (as resolved by the "go" LanguageSpec's own descriptor, if
-// any) — every existing caller (Sync, Resolve, symbolindex.go) consumes
-// this Go-specific value unchanged; it is "" when no go.mod was found.
+// order. It is a thin wrapper around DiscoverAll (Phase 10 D-01,
+// discoverexclusion.go) for the many existing callers that need only the
+// discovered-file list and module path, not the exclusion-reason list —
+// see DiscoverAll's own doc comment for the full walk contract.
 func Discover(root string) ([]DiscoveredFile, string, error) {
-	ctx := build.Default
-	var pending []pendingFile
-
-	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if p != root && ShouldSkipDir(d.Name()) {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		ext := strings.ToLower(filepath.Ext(d.Name()))
-		spec, ok := lookupLanguageByExt(ext)
-		if !ok {
-			return nil
-		}
-
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return err
-		}
-
-		if spec.ID == "go" {
-			// Pitfall 5: MatchFile must be given the file's OWN parent
-			// directory, never a hoisted/cached value, or build-tag
-			// evaluation silently mis-fires. No other registered language
-			// has a build-tag concept, so this stays Go-only.
-			match, err := ctx.MatchFile(filepath.Dir(abs), filepath.Base(abs))
-			if err != nil {
-				return err
-			}
-			if !match {
-				return nil
-			}
-		}
-
-		relPath, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		relPath = filepath.ToSlash(relPath)
-
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-
-		pending = append(pending, pendingFile{
-			abs:         abs,
-			relPath:     relPath,
-			language:    spec.ID,
-			mtimeUnixNs: info.ModTime().UnixNano(),
-			sizeBytes:   info.Size(),
-		})
-		return nil
-	})
-	if walkErr != nil {
-		return nil, "", walkErr
+	d, err := DiscoverAll(root)
+	if err != nil {
+		return nil, "", err
 	}
-
-	// Resolve each present language's project descriptor exactly once per
-	// repo root (D-03) — never per file. A language with no Descriptor
-	// hook, or whose Descriptor call errors (missing/malformed manifest),
-	// simply has no entry in descriptors; ModuleKey is called with nil in
-	// that case and is contractually required to fall back to a
-	// path-based identity rather than dropping the file.
-	descriptors := make(map[string]ProjectDescriptor)
-	descriptorAttempted := make(map[string]bool)
-
-	files := make([]DiscoveredFile, 0, len(pending))
-	for _, pf := range pending {
-		spec, ok := lookupLanguageByID(pf.language)
-		if !ok {
-			// A file was matched by extension during the walk but its
-			// language was deregistered before this second pass ran —
-			// cannot happen in practice (registrations are init()-time
-			// and never removed), but skip defensively rather than panic.
-			continue
-		}
-
-		if !descriptorAttempted[pf.language] {
-			descriptorAttempted[pf.language] = true
-			if spec.Descriptor != nil {
-				if d, err := spec.Descriptor(root); err == nil {
-					descriptors[pf.language] = d
-				}
-			}
-		}
-
-		var importPath string
-		if spec.ModuleKey != nil {
-			importPath = spec.ModuleKey(descriptors[pf.language], pf.relPath)
-		} else {
-			importPath = pf.relPath
-		}
-
-		files = append(files, DiscoveredFile{
-			AbsPath:     pf.abs,
-			RelPath:     pf.relPath,
-			ImportPath:  importPath,
-			Language:    pf.language,
-			MtimeUnixNs: pf.mtimeUnixNs,
-			SizeBytes:   pf.sizeBytes,
-		})
-	}
-
-	sort.Slice(files, func(i, j int) bool { return files[i].RelPath < files[j].RelPath })
-
-	modulePath := ""
-	if d, ok := descriptors["go"]; ok {
-		modulePath = d.ModulePath()
-	}
-
-	return files, modulePath, nil
+	return d.Files, d.ModulePath, nil
 }
 
 // readModulePath parses root/go.mod and returns its declared module path.

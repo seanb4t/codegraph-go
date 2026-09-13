@@ -6,6 +6,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // Options configures one Run invocation.
@@ -63,7 +64,12 @@ type Stats struct {
 // top of this operation, threaded through rather than re-resolved inside
 // Resolve — see run's own doc comment on why resolution happens exactly
 // once per operation, here, before Resolve is ever called.
-type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string) (int, error)
+//
+// excluded (Phase 10 D-01/D-07) is DiscoverAll's exclusion-reason list —
+// the same walk that produced results' files — threaded through
+// unchanged so writeGraph can stage it in the SAME commit batch as every
+// other record kind.
+type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile) (int, error)
 
 // Run executes the full from-scratch indexing pipeline (D-04, D-01a):
 // Discover walks repoRoot for every source file whose extension is claimed
@@ -97,10 +103,12 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 	start := time.Now()
 	headCommitSHA := resolveHeadCommitSHA(repoRoot)
 
-	files, modulePath, err := Discover(repoRoot)
+	discovery, err := DiscoverAll(repoRoot)
 	if err != nil {
 		return Stats{}, err
 	}
+	files := discovery.Files
+	modulePath := discovery.ModulePath
 
 	workers := opts.Workers
 	if workers <= 0 {
@@ -133,7 +141,7 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 	}
 	defer store.Close()
 
-	unresolved, err := resolve(store, results, modulePath, headCommitSHA)
+	unresolved, err := resolve(store, results, modulePath, headCommitSHA, discovery.Excluded)
 	if err != nil {
 		return Stats{Files: len(files), Unresolved: unresolved, Duration: time.Since(start)}, err
 	}

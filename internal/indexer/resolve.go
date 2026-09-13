@@ -651,9 +651,12 @@ func lastPathSegment(importPath string) string {
 // none. An empty commitSHA is a legitimate value (non-git checkout, or git
 // unavailable) and is stamped as-is; schema.IndexedCommitSHA treats it as
 // absent.
-func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string) (int, error) {
+//
+// excluded (Phase 10 D-01/D-07) is DiscoverAll's exclusion-reason list,
+// threaded through unchanged into writeGraph's SAME commit batch.
+func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile) (int, error) {
 	nodes, packageNodes, edges, files, unresolvedCount := resolveRefs(results, modulePath)
-	if err := writeGraph(store, nodes, packageNodes, edges, files, commitSHA); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, commitSHA, excluded); err != nil {
 		return unresolvedCount, err
 	}
 	return unresolvedCount, nil
@@ -717,10 +720,11 @@ func collapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*sche
 // writeGraph collapses edges deterministically and stages the whole
 // resolved graph — package pseudo-nodes and symbol nodes (sorted by id),
 // then files (sorted by path), then collapsed edges (sorted by
-// source/kind/target) — through exactly one GraphStore.Writer, committing
-// once (D-04a). Any staging error releases the batch via Close() (never a
+// source/kind/target), then excluded-file records (sorted by path,
+// Phase 10 D-07) — through exactly one GraphStore.Writer, committing once
+// (D-04a). Any staging error releases the batch via Close() (never a
 // partial Commit) and returns the error.
-func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, commitSHA string) error {
+func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, commitSHA string, excluded []*schema.ExcludedFile) error {
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
 		nodeFilePath[n.Id] = n.FilePath
@@ -761,6 +765,20 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		}
 	}
 
+	// Phase 10 D-07: excluded-file records are staged on this SAME
+	// Writer, in the SAME batch as every other record kind (T-10-10) —
+	// never a second commit. Sorted by path, mirroring sortedFiles' own
+	// determinism discipline just above.
+	sortedExcluded := make([]*schema.ExcludedFile, len(excluded))
+	copy(sortedExcluded, excluded)
+	sort.Slice(sortedExcluded, func(i, j int) bool { return sortedExcluded[i].GetPath() < sortedExcluded[j].GetPath() })
+	for _, x := range sortedExcluded {
+		if err := w.PutExcludedFile(x); err != nil {
+			w.Close()
+			return err
+		}
+	}
+
 	meta := schema.NewMeta()
 	meta.NodeCount = int64(len(allNodes))
 	meta.EdgeCount = int64(len(collapsedEdges))
@@ -773,6 +791,13 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// GENUINELY pre-Phase-4 store (built before this field/namespace
 	// existed) is ever missing it.
 	meta.HasFileIndex = true
+	// Phase 10 D-07: every from-scratch writeGraph run (Run's own path,
+	// and Sync's D-02b backfill path which delegates to run()) stages
+	// the complete exclusion-reason set above — genuinely HAS coverage
+	// recorded by the time this Commit lands, regardless of caller.
+	// Stamping the flag here mirrors HasFileIndex's own precedent: only a
+	// GENUINELY pre-Phase-10 store is ever missing it (D-06).
+	meta.HasCoverage = true
 	// Phase 4 D-04a: stamp LastSyncUnixMs here too, not just in Sync's own
 	// meta-write step (internal/indexer/sync.go) — otherwise a graph built
 	// via a from-scratch `codegraph index` (this path) carries a zero
