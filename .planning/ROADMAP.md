@@ -323,7 +323,20 @@ Plans:
   3. The brew-trust instructions in `docs/RELEASE.md` (the file `README.md`'s Homebrew paragraph points at; README itself carries no `brew trust` text) recommend the narrow `brew trust --cask seanb4t/tap/codegraph` grant with one sentence of security framing rather than the broader `--tap` grant; a documentation wording change verified by reading the diff — no guard and no test, per the Notes above (DOCS-07)
 
 **Notes**: Amended 2026-09-13 at discuss time (maintainer): the reference IS `cobra/doc` output — `cobra/doc` is already a dependency (`codegraph man`), hand-maintaining ~94 flag rows is the toil a generator exists to remove, and hidden flags are hidden precisely so they stay out of user docs. The one blind spot a generator has (hidden/deprecated flags vanish silently) is closed by a separate ~40-line walk-based guard with an allowlist, not by reimplementing the generator. Nothing tests `cobra/doc`'s own behaviour — only this project's artefacts. `DOCS-05` was deliberately *declined* at v0.11.0 — recorded, not forgotten — when `docs/FLAG-PARITY.md` and its drift guard `internal/cli/flag_parity_test.go` were deleted; this phase is the deferred replacement, not a new idea. Lowest-risk phase in the milestone: a fully proven, previously-shipped guard pattern is retargetable here rather than invented. `DOCS-07` was considered for Phase 7 (it arrived as a pending todo beside the guard todos and carries security framing) and deliberately kept here so one phase owns the docs tree.
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 12-01-PLAN.md — the TRACER: `NewRootCmd` exported → `tools/clidoc` renders the live Cobra tree (completed with `InitDefaultCompletionCmd` + `InitDefaultVersionFlag`, `DisableAutoGenTag`) through `doc.GenMarkdownCustom` into ONE committed `docs/CLI-REFERENCE.md` → `task docs:cli` / `task docs:cli:drift` (regenerate-into-temp, `compared 1 generated file` before `cmp -s`) → ci.yml step after `proto:drift`, drift RED on the untracked file then MATCH twice; then DOCS-06's `TestEveryRegisteredFlagIsAccountedFor` — every command walked hidden-included, `Flags()`+`PersistentFlags()`, reference-or-allowlist rule, rot fails, counts ≥ 26 / ≥ 50 logged — RED fail-closed, RED naming `codegraph man --help`, GREEN with the one-entry allowlist
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 12-02-PLAN.md — DOCS-07: `docs/RELEASE.md` recommends `brew trust --cask seanb4t/tap/codegraph` with one sentence of security framing, the tap-wide grant named but never spelled, the quoted error trimmed; no test by decision, verified by reading the diff; the 2026-08-10 brew-trust todo resolved through the todo tool in the same commit; README gains its one link to `docs/CLI-REFERENCE.md` (D-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 12-03-PLAN.md — `12-MUTATION-LOG.md` families (a) throwaway hidden flag on `ui` → guard RED while drift stays green, (b) `--no-open` line deleted from the reference → drift RED naming the file + guard RED, (c) bogus allowlist entry → guard RED on rot; `12-SECURITY.md` with every T-12 row test-or-verdict (`threats_open: 0`); `12-VALIDATION.md` map filled; phase-close gate
 
 ## Progress
 
