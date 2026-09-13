@@ -4,16 +4,16 @@ milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
 current_phase: 12
 current_phase_name: CLI Reference & Docs Tail
-status: planning
+status: executing
 stopped_at: Phase 11 complete, ready to plan Phase 12
-last_updated: "2026-09-13T19:07:26.978Z"
+last_updated: "2026-09-13T20:31:24.645Z"
 last_activity: 2026-09-13
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
-state_head: 879758a1e53da34e980fea2fea0e997c96693b90
+state_head: 99b23d0308d27b7326e9a6f6e325b2d93d66adf8
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 26
+  total_plans: 29
   completed_plans: 26
   percent: 17
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-09-13 after Phase 11)
 
 ## Current Position
 
-Phase: 12 — CLI Reference & Docs Tail
+Phase: 12 (CLI Reference & Docs Tail) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-09-13 — Phase 11 complete, transitioned to Phase 12
 
 ## Performance Metrics
