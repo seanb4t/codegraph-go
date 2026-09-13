@@ -126,7 +126,7 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
 - [x] **Phase 8: tmux Real-PTY Harness** - The interactive TUI is finally exercised on a terminal that answers escape queries and actually scrolls, closing the gap between the TTY-blind piped suite and manual human UAT (completed 2026-09-11)
 - [x] **Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff** - A developer reading a long file always knows which symbol they are inside, and can jump from any node or line straight into their own editor (completed 2026-09-12)
 - [x] **Phase 10: Index Health — The Coverage Denominator** - "Why is my file missing" is answered by the index itself: how many files were discovered, how many were indexed, and a recorded reason for every gap (completed 2026-09-13)
-- [ ] **Phase 11: Graph View — Community Clustering** - The file/package graph reads as groups rather than a flat mesh, coloured by communities computed deterministically on the layout already shipped
+- [x] **Phase 11: Graph View — Community Clustering** - The file/package graph reads as groups rather than a flat mesh, coloured by communities computed deterministically on the layout already shipped (completed 2026-09-13)
 - [ ] **Phase 12: CLI Reference & Docs Tail** - Every flag the binary actually registers is documented in a reference this project authored, kept honest by a walk of the live command tree
 
 ## Phase Details
@@ -293,23 +293,23 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 11-01-PLAN.md — `corpora/graph-cluster-threshold.json` committed ALONE as the phase's first commit (D-05/D-06/D-07, onFailure pre-written); then the TRACER: `gonum` promoted to a direct require, `AssignCommunities` (sorted-path ids, summed undirected weights, fixed PCG seed, canonical relabel) computed fresh inside `FileGraph()` as `CommunityID`/`CommunityCount`, `community_id=5`/`community_count=7` on the wire with the +2 fixture in one commit, proven over the real listener; then GRF-08 hardening — the seed-perturbation RED-control seam, canonical relabel shown load-bearing, degenerate/encoding cases, the assumption-delta invariant test
+- [x] 11-01-PLAN.md — `corpora/graph-cluster-threshold.json` committed ALONE as the phase's first commit (D-05/D-06/D-07, onFailure pre-written); then the TRACER: `gonum` promoted to a direct require, `AssignCommunities` (sorted-path ids, summed undirected weights, fixed PCG seed, canonical relabel) computed fresh inside `FileGraph()` as `CommunityID`/`CommunityCount`, `community_id=5`/`community_count=7` on the wire with the +2 fixture in one commit, proven over the real listener; then GRF-08 hardening — the seed-perturbation RED-control seam, canonical relabel shown load-bearing, degenerate/encoding cases, the assumption-delta invariant test
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 11-02-PLAN.md — GRF-09: `tools/graphcluster` Go in-process harness (reads every bar from the threshold, opens the cached guava store read-only, median-of-3 integer ms, equality passes, digest-carrying observation, exit = verdict); the measurement run and `corpora/graph-cluster-observations.json` committed with its verdict verbatim; persisted ancestry + digest tests; the D-07 promote fallback as a conditional FAIL-only task
+- [x] 11-02-PLAN.md — GRF-09: `tools/graphcluster` Go in-process harness (reads every bar from the threshold, opens the cached guava store read-only, median-of-3 integer ms, equality passes, digest-carrying observation, exit = verdict); the measurement run and `corpora/graph-cluster-observations.json` committed with its verdict verbatim; persisted ancestry + digest tests; the D-07 promote fallback as a conditional FAIL-only task
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 11-03-PLAN.md — GRF-10: `check:gonum` Taskfile target — govulncheck source mode over the main module (pinned build, gonum proven in the scanned set), release-shaped syft SBOM naming `gonum.org/v1/gonum v0.17.0` beside a pebble control, cgo-closure scan reporting its package count with a go-tree-sitter positive control; RED rehearsals recorded
+- [x] 11-03-PLAN.md — GRF-10: `check:gonum` Taskfile target — govulncheck source mode over the main module (pinned build, gonum proven in the scanned set), release-shaped syft SBOM naming `gonum.org/v1/gonum v0.17.0` beside a pebble control, cgo-closure scan reporting its package count with a go-tree-sitter positive control; RED rehearsals recorded
 
 **Wave 4** *(blocked on Wave 3 completion — no UI wiring before the GRF-09 verdict)*
 
-- [ ] 11-04-PLAN.md — GRF-06 UI: 12-hue colour-blind-safe palette (`community-palette.ts`), `communityId` copied onto file elements, 12 static `graph-community-{i}` rules on the UNCHANGED ELK layout, directories neutral (D-11), colour==community vitest, the "N communities" toolbar line at route level, and `web/scripts/check-no-force-layout.mjs` (positive-controlled, `--self-test`) with its `check:no-force-layout` target
+- [x] 11-04-PLAN.md — GRF-06 UI: 12-hue colour-blind-safe palette (`community-palette.ts`), `communityId` copied onto file elements, 12 static `graph-community-{i}` rules on the UNCHANGED ELK layout, directories neutral (D-11), colour==community vitest, the "N communities" toolbar line at route level, and `web/scripts/check-no-force-layout.mjs` (positive-controlled, `--self-test`) with its `check:no-force-layout` target
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 11-05-PLAN.md — `11-MUTATION-LOG.md` families (a) seed counter, (b) threshold widened, (c) force-layout name planted, (d) cgo control neutered; `11-SECURITY.md` with every threat row test-or-verdict and the GRF-10 `[ASSUMED]` legitimacy recorded; `11-VALIDATION.md` map filled; phase-close gate
+- [x] 11-05-PLAN.md — `11-MUTATION-LOG.md` families (a) seed counter, (b) threshold widened, (c) force-layout name planted, (d) cgo control neutered; `11-SECURITY.md` with every threat row test-or-verdict and the GRF-10 `[ASSUMED]` legitimacy recorded; `11-VALIDATION.md` map filled; phase-close gate
 
 ### Phase 12: CLI Reference & Docs Tail
 
@@ -336,7 +336,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | 8. tmux Real-PTY Harness | 5/5 | Complete    | 2026-09-11 |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 6/6 | Complete    | 2026-09-12 |
 | 10. Index Health — The Coverage Denominator | 6/6 | Complete    | 2026-09-13 |
-| 11. Graph View — Community Clustering | 0/TBD | Not started | - |
+| 11. Graph View — Community Clustering | 5/5 | Complete    | 2026-09-13 |
 | 12. CLI Reference & Docs Tail | 0/TBD | Not started | - |
 
 7 milestones shipped. v0.13.0 scoped: 6 phases (7–12), 27 requirements, 0/6 phases complete (0%). Backlog below is preserved across milestone closes.

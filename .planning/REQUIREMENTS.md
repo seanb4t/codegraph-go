@@ -49,10 +49,10 @@
 
 ### Graph View
 
-- [ ] **GRF-06**: The file/package graph colors nodes by community, computed fresh inside `FileGraph()` following the `CycleID` precedent, on the existing layered layout — never a switch to force-directed
-- [ ] **GRF-08**: Community assignment is deterministic (sorted iteration, fixed seed, canonical relabeling), proven by a test running the algorithm at least three times on identical input and asserting label-canonicalized equality
-- [ ] **GRF-09**: Clustering time in isolation is measured against the guava corpus with the pass threshold committed before measurement, following GRF-01's precedent; a failing measurement triggers the documented fallback (index-time persistence into the reserved 50-59 range), not a raised bar
-- [ ] **GRF-10**: The new `gonum.org/v1/gonum` dependency passes govulncheck, appears in the SBOM, and its import closure is verified to contain no cgo
+- [x] **GRF-06**: The file/package graph colors nodes by community, computed fresh inside `FileGraph()` following the `CycleID` precedent, on the existing layered layout — never a switch to force-directed
+- [x] **GRF-08**: Community assignment is deterministic (sorted iteration, fixed seed, canonical relabeling), proven by a test running the algorithm at least three times on identical input and asserting label-canonicalized equality
+- [x] **GRF-09**: Clustering time in isolation is measured against the guava corpus with the pass threshold committed before measurement, following GRF-01's precedent; a failing measurement triggers the documented fallback (index-time persistence into the reserved 50-59 range), not a raised bar
+- [x] **GRF-10**: The new `gonum.org/v1/gonum` dependency passes govulncheck, appears in the SBOM, and its import closure is verified to contain no cgo
 
 ### Documentation
 
@@ -122,10 +122,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HLT-04 | Phase 10 | Complete |
 | HLT-05 | Phase 10 | Complete |
 | HLT-06 | Phase 10 | Complete |
-| GRF-06 | Phase 11 | Pending |
-| GRF-08 | Phase 11 | Pending |
-| GRF-09 | Phase 11 | Pending |
-| GRF-10 | Phase 11 | Pending |
+| GRF-06 | Phase 11 | Complete |
+| GRF-08 | Phase 11 | Complete |
+| GRF-09 | Phase 11 | Complete |
+| GRF-10 | Phase 11 | Complete |
 | DOCS-05 | Phase 12 | Pending |
 | DOCS-06 | Phase 12 | Pending |
 | DOCS-07 | Phase 12 | Pending |

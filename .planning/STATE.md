@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
-current_phase: 11
-current_phase_name: Graph View — Community Clustering
-status: executing
-stopped_at: Phase 10 complete, ready to plan Phase 11
-last_updated: "2026-09-13T16:15:23.435Z"
+current_phase: 12
+current_phase_name: CLI Reference & Docs Tail
+status: planning
+stopped_at: Phase 11 complete, ready to plan Phase 12
+last_updated: "2026-09-13T19:07:26.978Z"
 last_activity: 2026-09-13
-last_activity_desc: Phase 10 complete, transitioned to Phase 11
-state_head: 8f51f004386e6775e6079d401c25d0f79a89b28d
+last_activity_desc: Phase 11 complete, transitioned to Phase 12
+state_head: 879758a1e53da34e980fea2fea0e997c96693b90
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 26
-  completed_plans: 21
+  completed_plans: 26
   percent: 17
 ---
 
@@ -22,17 +22,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-13 after Phase 10)
+See: .planning/PROJECT.md (updated 2026-09-13 after Phase 11)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 11 — Graph View — Community Clustering
+**Current focus:** Phase 12 — CLI Reference & Docs Tail
 
 ## Current Position
 
-Phase: 11 (Graph View — Community Clustering) — READY TO EXECUTE
+Phase: 12 — CLI Reference & Docs Tail
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-13 — Phase 10 complete, transitioned to Phase 11
+Status: Ready to plan
+Last activity: 2026-09-13 — Phase 11 complete, transitioned to Phase 12
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Last activity: 2026-09-13 — Phase 10 complete, transitioned to Phase 11
 | 08 | 5 | - | - |
 | 09 | 6 | - | - |
 | 10 | 6 | - | - |
+| 11 | 5 | - | - |
 
 **Velocity (v0.11.0 — archived, shipped 2026-08-16):** 6 phases, 30 plans, 60 tasks over 4 days.
 
@@ -332,6 +333,11 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
 - ⚠️ [Phase 10] `priorCoverageGeneration` (`internal/cli/index.go:30-48`) collapses "store locked/corrupt at this instant" into the same floor-0 result as "never indexed": a live holder outlasting `graphstore.Open`'s ~400 ms retry during `codegraph index --force` re-admits the page-token aliasing shape in a narrow window. Accepted below the `high` gate; fix named in WINDOWS.md #36 / 10-SECURITY.md T-10-16.
 - ⚠️ [Phase 10] Phases 7 and 8 read `verification_status: stale` since Phase 9 completed: their `covered_files` include `.planning/REQUIREMENTS.md` (verifier contract #4155 — "mapped requirement"), which every later `phase.complete` rewrites. ROADMAP still shows them `[x]`; the tool-sanctioned repair is `/gsd-verify-work 07` / `08` re-verification. Will surface at the milestone audit.
+- ⚠️ [Phase 11] `check:gonum` and `check:no-force-layout` exist as Taskfile targets (GRF-10, GRF-06 D-12b) and pass locally, but are NOT wired into `ci.yml` — recorded as a follow-up in `11-SECURITY.md`; the CI govulncheck job still covers the main module, so the SBOM-name and cgo-closure halves are local-only until wired.
+- ⚠️ [Phase 11] `web/scripts/check-no-force-layout.mjs` proves only that no forbidden layout name appears as a string literal at the `name:` option position or as a `cytoscape-<x>` import/dependency specifier; a string-built or variable layout name is not detected. `GraphCanvas.svelte:374` spreads `LAYOUT_OPTIONS` (declared with literal `name: 'elk'`) and is reported as the one advisory `unresolvedLayoutNames` entry — non-fatal by design (WR-03).
+- ⚠️ [Phase 11] `gonum.org/v1/gonum` package legitimacy is `[ASSUMED]` (long-lived, already transitive via sigstore in `go.sum`; `package-legitimacy check` has no Go ecosystem support) — recorded in `11-SECURITY.md`, not a gap.
+- ⚠️ [Phase 11] The graph page's console shows four entries at load (CSP-blocked svelte-logo data-URI image; 2× cytoscape `text-valign: right` warning; a cytoscape `Cannot read properties of null (reading 'notify')` TypeError from `layoutPositions`) — all reproduced identically by a pre-phase build (`18ef2434`), so pre-existing and out of Phase 11 scope; unowned by any phase yet.
+- ⚠️ [Phase 11] Phases 7, 8, 9 AND 10 all read `verification_status: stale` after Phase 11's `phase.complete` by the #4155 mechanism (each `covered_files` list includes `.planning/REQUIREMENTS.md`, which every later `phase.complete` rewrites); only Phase 11's report was written without `REQUIREMENTS.md` in `covered_files` (its plans/summaries + implementation files only) and stays `passed`. Repair for 7–10 remains `/gsd-verify-work <phase>`; surfaces at the milestone audit.
 - ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
 
@@ -441,8 +447,8 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-13T14:17:49.000Z
-Stopped at: Phase 10 complete, ready to plan Phase 11
-  NEXT: `/gsd-discuss-phase 11` (Graph View — Community Clustering; no 11-CONTEXT.md yet)
+Stopped at: Phase 11 complete, ready to plan Phase 12
+  NEXT: `/gsd-discuss-phase 12` (CLI Reference & Docs Tail; no 12-CONTEXT.md yet)
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
@@ -457,9 +463,10 @@ Stopped at: Phase 10 complete, ready to plan Phase 11
 
 ## Operator Next Steps
 
-- Phase 10 is verified and closed (15/15 must-haves at `783e60f0`; deep review ran 4 passes — three real paging/generation bugs fixed, one lock-collision residual accepted as WINDOWS.md #36); Phases 11-12 of v0.13.0 remain
+- Phase 11 is verified and closed (12/12 must-haves at `77d4a9c6` + live UAT accepted; GRF-09 measured PASS at 106 ms median vs the 500 ms bar locked in `698235a2`; deep review's three warnings fixed and re-reviewed clean); Phase 12 of v0.13.0 remains, then the milestone audit
+- Phase 10 is verified and closed (15/15 must-haves at `783e60f0`; deep review ran 4 passes — three real paging/generation bugs fixed, one lock-collision residual accepted as WINDOWS.md #36)
 - Phase 9 is verified and closed (5/5 must-haves at `3fd47279` after gap-closure plan 09-06; deep review converged clean after six `fix(09)` commits)
 - Phase 8 is verified and closed (21/21 UAT, G-08-1 resolved by 08-05, tmux-e2e fired at executed=6 on CI)
 - Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go` — the ruleset currently lists 6 contexts and omits it (checked 2026-09-11)
 - PR #69 (phases 7-8 WIP) MERGED 2026-09-12 as squash `3da59354`; the pr-template-exempt / pr-issue-exempt markers went in with it. The next PR (phases 9-12, or per-phase if the maintainer prefers) needs a `feat:` title and `Resolves #N` from the start
-- Discuss the next phase with /gsd-discuss-phase 11 (Graph View — Community Clustering)
+- Discuss the next phase with /gsd-discuss-phase 12 (CLI Reference & Docs Tail)
