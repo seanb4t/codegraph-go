@@ -287,8 +287,29 @@ Plans:
   4. `gonum.org/v1/gonum` passes govulncheck, appears by name in the generated SBOM, and a check over its import closure reports the number of packages it inspected and finds zero cgo — so an empty closure cannot read as a clean one (GRF-10)
 
 **Notes**: Research flag — this is the highest-risk item in the milestone and the persistence-versus-fresh-compute question is settled by maintainer decision (2026-09-08: fresh per call, deterministically, inside `FileGraph()`, following the `CycleID` precedent and `ENG-03`'s discipline) but its *performance* premise is not, which is exactly what `GRF-09` measures. Persisted cluster assignments as the default are out of scope by construction; they are retained only as `GRF-09`'s documented fallback. Force-directed layout is out of scope by construction, repeatedly rejected across v0.12.0 — clustering is rendered as colouring on the layered layout, never as a layout change. `gonum` is the milestone's only new `go.mod` require; a documented zero-dependency fallback (hand-rolled label propagation) exists if the supply-chain review rejects it. Whether clusters recompute on every sync or only on a full re-index must be decided explicitly and recorded, not left implicit.
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+
+- [ ] 11-01-PLAN.md — `corpora/graph-cluster-threshold.json` committed ALONE as the phase's first commit (D-05/D-06/D-07, onFailure pre-written); then the TRACER: `gonum` promoted to a direct require, `AssignCommunities` (sorted-path ids, summed undirected weights, fixed PCG seed, canonical relabel) computed fresh inside `FileGraph()` as `CommunityID`/`CommunityCount`, `community_id=5`/`community_count=7` on the wire with the +2 fixture in one commit, proven over the real listener; then GRF-08 hardening — the seed-perturbation RED-control seam, canonical relabel shown load-bearing, degenerate/encoding cases, the assumption-delta invariant test
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 11-02-PLAN.md — GRF-09: `tools/graphcluster` Go in-process harness (reads every bar from the threshold, opens the cached guava store read-only, median-of-3 integer ms, equality passes, digest-carrying observation, exit = verdict); the measurement run and `corpora/graph-cluster-observations.json` committed with its verdict verbatim; persisted ancestry + digest tests; the D-07 promote fallback as a conditional FAIL-only task
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 11-03-PLAN.md — GRF-10: `check:gonum` Taskfile target — govulncheck source mode over the main module (pinned build, gonum proven in the scanned set), release-shaped syft SBOM naming `gonum.org/v1/gonum v0.17.0` beside a pebble control, cgo-closure scan reporting its package count with a go-tree-sitter positive control; RED rehearsals recorded
+
+**Wave 4** *(blocked on Wave 3 completion — no UI wiring before the GRF-09 verdict)*
+
+- [ ] 11-04-PLAN.md — GRF-06 UI: 12-hue colour-blind-safe palette (`community-palette.ts`), `communityId` copied onto file elements, 12 static `graph-community-{i}` rules on the UNCHANGED ELK layout, directories neutral (D-11), colour==community vitest, the "N communities" toolbar line at route level, and `web/scripts/check-no-force-layout.mjs` (positive-controlled, `--self-test`) with its `check:no-force-layout` target
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 11-05-PLAN.md — `11-MUTATION-LOG.md` families (a) seed counter, (b) threshold widened, (c) force-layout name planted, (d) cgo control neutered; `11-SECURITY.md` with every threat row test-or-verdict and the GRF-10 `[ASSUMED]` legitimacy recorded; `11-VALIDATION.md` map filled; phase-close gate
 
 ### Phase 12: CLI Reference & Docs Tail
 
