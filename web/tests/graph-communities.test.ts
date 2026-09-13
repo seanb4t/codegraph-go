@@ -12,7 +12,8 @@
 // Task 2 extends this file with a route-level "N communities" toolbar-line
 // describe block, mirroring web/tests/graph-cycles.test.ts's route-level
 // mocking shape.
-import { describe, expect, it } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/svelte';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { FileGraphEdge, FileGraphNode, FileGraphResponse } from '$lib/gen/ui_pb';
 import {
@@ -158,5 +159,153 @@ describe('colour == community (Task 1, D-12c)', () => {
 		expect(compound).toBeDefined();
 		const compoundClasses = (compound && 'classes' in compound ? compound.classes : undefined) ?? '';
 		expect(compoundClasses.includes(COMMUNITY_CLASS_PREFIX)).toBe(false);
+	});
+});
+
+// --- Task 2: route-level "N communities" toolbar line ---
+//
+// Mirrors web/tests/graph-cycles.test.ts's route-level mocking shape (mock
+// cytoscape/cytoscape-elk with a fake core; let the real +page.svelte run
+// against it) so the real route and the real prop surface is what gets
+// exercised.
+type FakeElement = { data: Record<string, unknown>; classes?: string };
+type FakeCoreOptions = { elements?: FakeElement[] };
+
+class FakeCollection {
+	constructor(public ids: string[]) {}
+	get length() {
+		return this.ids.length;
+	}
+	union(other: FakeCollection): FakeCollection {
+		const merged = new Set([...this.ids, ...other.ids]);
+		return new FakeCollection([...merged]);
+	}
+}
+
+class FakeCore {
+	private listeners = new Map<string, Array<(evt?: unknown) => void>>();
+	private elements: FakeElement[];
+
+	constructor(opts: FakeCoreOptions) {
+		this.elements = opts.elements ?? [];
+	}
+	on(event: string, ...args: unknown[]) {
+		const handler = args[args.length - 1] as (evt?: unknown) => void;
+		const list = this.listeners.get(event) ?? [];
+		list.push(handler);
+		this.listeners.set(event, list);
+		return this;
+	}
+	one(event: string, handler: (evt?: unknown) => void) {
+		return this.on(event, handler);
+	}
+	layout(_opts: unknown) {
+		return {
+			run: () => {
+				queueMicrotask(() => {
+					for (const h of this.listeners.get('layoutstop') ?? []) h();
+				});
+			}
+		};
+	}
+	nodes() {
+		const els = this.elements.filter((e) => !('source' in e.data));
+		return {
+			length: els.length,
+			map: (fn: (n: unknown) => unknown) =>
+				els.map((e) =>
+					fn({
+						id: () => e.data.id,
+						data: (k: string) => e.data[k],
+						renderedBoundingBox: () => ({ x1: 0, y1: 0, w: 10, h: 10 }),
+						children: () => ({ length: 0 })
+					})
+				)
+		};
+	}
+	edges() {
+		return { length: this.elements.filter((e) => 'source' in e.data).length };
+	}
+	collection() {
+		return new FakeCollection([]);
+	}
+	getElementById(id: string) {
+		const found = this.elements.some((e) => e.data.id === id);
+		return new FakeCollection(found ? [id] : []);
+	}
+	fit(_collection: FakeCollection) {}
+	resize() {}
+	destroy() {}
+}
+
+function fakeCytoscapeFactory(opts: FakeCoreOptions) {
+	return new FakeCore(opts);
+}
+fakeCytoscapeFactory.use = () => {};
+
+vi.mock('cytoscape', () => ({ default: fakeCytoscapeFactory }));
+vi.mock('cytoscape-elk', () => ({ default: () => {} }));
+
+let currentFileGraphImpl: () => Promise<FileGraphResponse> = () =>
+	Promise.reject(new Error('graph-communities.test.ts: no fileGraph stub configured for this test'));
+
+vi.doMock('$lib/client', () => ({
+	uiClient: {
+		fileGraph: () => currentFileGraphImpl()
+	}
+}));
+
+const { default: GraphPage } = await import('../src/routes/graph/+page.svelte');
+
+beforeEach(() => {
+	currentFileGraphImpl = () =>
+		Promise.reject(new Error('graph-communities.test.ts: no fileGraph stub configured for this test'));
+});
+
+describe('route: community count line (Task 2)', () => {
+	it('a response with communityCount 3 renders the line with "3" and "communities", no interaction required', async () => {
+		const nodes = [
+			node('a/x.go', { communityId: 1 }),
+			node('b/y.go', { communityId: 2 }),
+			node('c/z.go', { communityId: 3 })
+		];
+		currentFileGraphImpl = () => Promise.resolve(response(nodes, [], { communityCount: 3 }));
+		render(GraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		const summary = screen.getByTestId('graph-community-summary');
+		expect(summary.textContent).toContain('3');
+		expect(summary.textContent).toContain('communities');
+	});
+
+	it('a response with communityCount 1 renders the singular "1 community", not "communities"', async () => {
+		currentFileGraphImpl = () =>
+			Promise.resolve(response([node('a/x.go', { communityId: 1 })], [], { communityCount: 1 }));
+		render(GraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		const summary = screen.getByTestId('graph-community-summary');
+		expect(summary.textContent).toContain('1 community');
+		expect(summary.textContent).not.toContain('communities');
+	});
+
+	it('a response with communityCount 0 renders "No communities computed"', async () => {
+		currentFileGraphImpl = () => Promise.resolve(response([node('a/x.go')], [], { communityCount: 0 }));
+		render(GraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		const summary = screen.getByTestId('graph-community-summary');
+		expect(summary.textContent).toMatch(/no communities computed/i);
+	});
+
+	it('the count line reports the wire number, never a client recount — 5 nodes all in community 1 still shows "1 community"', async () => {
+		const nodes = Array.from({ length: 5 }, (_, i) => node(`d/f${i}.go`, { communityId: 1 }));
+		currentFileGraphImpl = () => Promise.resolve(response(nodes, [], { communityCount: 1 }));
+		render(GraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		const summary = screen.getByTestId('graph-community-summary');
+		expect(summary.textContent).toContain('1 community');
+		expect(summary.textContent).not.toContain('communities');
 	});
 });
