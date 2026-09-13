@@ -1,49 +1,28 @@
 ---
 phase: 10-index-health-the-coverage-denominator
-reviewed: 2026-09-13T05:08:38Z
+reviewed: 2026-09-13T00:00:00Z
 depth: deep
-files_reviewed: 37
+files_reviewed: 16
 files_reviewed_list:
-  - internal/graphstore/batch.go
-  - internal/graphstore/excludedfile_test.go
-  - internal/graphstore/export_test.go
-  - internal/graphstore/export.go
-  - internal/graphstore/keys.go
+  - internal/cli/index.go
+  - internal/cli/index_test.go
+  - internal/cli/init.go
+  - internal/indexer/pipeline.go
+  - internal/indexer/pipeline_test.go
+  - internal/indexer/resolve.go
+  - internal/indexer/resolve_test.go
+  - internal/indexer/sync.go
+  - internal/indexer/sync_coverage_test.go
+  - internal/query/coverage.go
+  - internal/query/coverage_test.go
+  - internal/query/errors.go
+  - internal/uiserver/handlers.go
+  - internal/uiserver/coverage_test.go
   - internal/graphstore/pebble_store.go
   - internal/graphstore/store.go
-  - internal/indexer/coverage_fixture_test.go
-  - internal/indexer/discover_test.go
-  - internal/indexer/discover.go
-  - internal/indexer/discoverexclusion_test.go
-  - internal/indexer/discoverexclusion.go
-  - internal/indexer/pipeline_test.go
-  - internal/indexer/pipeline.go
-  - internal/indexer/resolve_test.go
-  - internal/indexer/resolve.go
-  - internal/indexer/sync_coverage_test.go
-  - internal/indexer/sync.go
-  - internal/indexer/synccoverage_test.go
-  - internal/indexer/synccoverage.go
-  - internal/query/coverage_test.go
-  - internal/query/coverage.go
-  - internal/query/errors.go
-  - internal/schema/exclusion_test.go
-  - internal/schema/exclusion.go
-  - internal/schema/graph.proto
-  - internal/schema/meta_commit_test.go
-  - internal/uiproto/uiv1/ui.proto
-  - internal/uiserver/coverage_test.go
-  - internal/uiserver/coverage.go
-  - internal/uiserver/handlers.go
-  - internal/uiserver/readonly_test.go
-  - web/src/lib/components/health/CoverageSection.svelte
-  - web/src/lib/health-view.ts
-  - web/src/routes/health/+page.svelte
-  - web/tests/health-page.test.ts
-  - web/tests/health-view.test.ts
 findings:
-  critical: 1
-  warning: 0
+  critical: 0
+  warning: 1
   info: 3
   total: 4
 status: issues_found
@@ -51,70 +30,79 @@ status: issues_found
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-09-13T05:08:38Z
+**Reviewed:** 2026-09-13T00:00:00Z
 **Depth:** deep
-**Files Reviewed:** 37
+**Files Reviewed:** 16
 **Status:** issues_found
 
 ## Summary
 
-Final re-review (iteration 3) of `10e9c028`, which replaced the wall-clock, millisecond-resolution `LastSyncUnixMs` generation marker (iteration 2's WR-01 finding) with an additive `Meta.coverage_generation` (field 10, `int64`) monotonic counter, read-modify-written by exactly 1 at each of the three coverage-bearing meta-write sites: `writeGraph`'s from-scratch commit (`internal/indexer/resolve.go:822-841`), and `Sync`'s two mutually-exclusive commit paths (`internal/indexer/sync.go:220`, `:465`).
+Targeted deep re-review confirming the CR-01 closure from `83666cce` (`priorCoverageGeneration` in `internal/cli/index.go`, threaded as `indexer.Options.CoverageGenerationFloor` into `pipeline.go` → `Resolve` → `writeGraph`, which now stamps `max(priorGeneration, floor) + 1`). **CR-01 is genuinely closed for the case the finding described** — traced end to end, verified against the six specific checks the iteration context asked for:
 
-**Mechanics verified sound in isolation.** `sync.go`'s `meta` (read once via `r0.GetMeta()` at the top of `Sync`, line 75) is never mutated in place before either write site reads `meta.GetCoverageGeneration()`, and `newMeta` is always a fresh `schema.NewMeta()` — so both increments are genuine read-modify-writes of the snapshot value captured at the start of that `Sync` call, not a self-referential read of an already-mutated struct. `writeGraph` performs its own `store.Snapshot()` → `GetMeta()` read strictly before opening its `Writer` (`resolve.go:822-833`), so a from-scratch rewrite delegated from `Sync`'s D-02b backfill path (which opens the SAME already-populated store, never a fresh one) also increments correctly rather than resetting. `CoverageRows`' `ErrAborted` check (`coverage.go:211-213`) keys purely off `meta.GetCoverageGeneration()`, confirmed by `TestCoverageRowsGenerationCheckKeysOffCounterNotClock` (`internal/query/coverage_test.go:749-813`) to be genuinely independent of `LastSyncUnixMs`. An old graph (field unset → 0, `has_coverage` false) still short-circuits to `Known: false` before any token logic runs, so no compat gap. The schema field-number stability test (`internal/schema/meta_commit_test.go:119`) pins field 10. `TestCoverageRowsSurvivesCursorMutationBetweenPages` and `TestCoverageSourceNeverWalksDisk` are present and green; `internal/query/archtest` still forbids importing `internal/indexer`; `internal/uiserver/readonly_test.go`'s `wantUIServiceMethods` fixture is still 16 entries. `go build ./...`, `go vet ./...`, `go test ./internal/query/... ./internal/graphstore/... ./internal/uiserver/... ./internal/indexer/... ./internal/schema/...` all pass. `task web:drift` and `task proto:drift` both PASS (byte-identical). `internal/uiproto/uiv1/ui.proto` is untouched since `725ba1fb`.
+**(a) Pre-wipe read closes before `RemoveAll`; no lock-file leak; but a real, if narrow, residual exists.** `priorCoverageGeneration` (`internal/cli/index.go:30-48`) opens read-only via `graphstore.Open` → `Snapshot()` → `GetMeta()`, with `defer store.Close()` and `defer r.Close()` executing in LIFO order (reader closed, then store) strictly before the function returns — `newIndexCmd` calls this synchronously and only then calls `os.RemoveAll(storeDir)` (`index.go:101` then `:107`), so the two never race and no lock file is left behind. Confirmed by a clean `TestIndexForceRebuildBumpsCoverageGeneration` run with no lock errors. **However**, every failure mode of that read — including `graphstore.ErrStoreLocked` (a live holder: a concurrent `codegraph ui`/MCP-server per-request open, an in-flight `Sync` flush, or another `index`/`sync` invocation) surviving the full `openLockRetryAttempts × openLockRetryBackoff` (~400ms) retry budget in `graphstore.Open` — is tolerated to `0`, indistinguishable from "store was never indexed." See WR-01 below: this is a real, if narrow, reintroduction of CR-01's own aliasing shape, and I am flagging it explicitly per the review brief rather than silently accepting the "tolerate to 0" comment's framing at face value.
 
-**But the fix's own justification — "a plain counter guarantees two distinct writes imply two distinct generations regardless of clock resolution or backward clock steps" — does not hold once the store itself is wiped and rebuilt, which this codebase does routinely via `codegraph index`.** See CR-01 below: this is a real, deterministic aliasing path that the task-provided verification checklist specifically asked this iteration to check for, and it is present. WR-01's closure is therefore **not genuine** — the counter is only monotonic for the lifetime of one on-disk store directory, and a full re-index (`codegraph index`, `os.RemoveAll(storeDir)` then rebuild) resets it back to 1, which is *exactly* the generation value most in-flight page tokens will already be carrying.
+**(b) `codegraph init` does not rebuild an existing store — confirmed no fourth wipe path.** `internal/cli/init.go:47-52` `os.Stat`s `codegraphDir` and returns `ErrAlreadyInitialized` immediately if it exists, before `storeDir` is ever touched — it never reaches `os.MkdirAll`/`indexer.Run` on that path. `init.go` has zero diff against `8d28c634` (confirmed via `git diff --stat`): it was not touched by the CR-01 fix and did not need to be, since it can never wipe an existing store. No floor-threading gap exists here because there is no wipe to float across.
 
-IN-01, IN-02, and IN-03 from the prior review are unchanged and carried forward as Info (all pre-existing/low-severity, verified against current source).
+**(c) No other `RemoveAll`+rebuild path exists.** `rg -n 'RemoveAll' internal/` finds exactly one production wipe-then-rebuild call site: `internal/cli/index.go:107`. `internal/cli/uninit.go:53` also calls `RemoveAll`, but only to delete `.codegraph/` wholesale as a terminal operation (no `indexer.Run` follows it, no store is rebuilt in the same invocation). Every other `RemoveAll` hit is test-fixture cleanup (`internal/mcp/server_test.go`, `internal/githooks/githooks_test.go`, `internal/daemon/daemon_test.go`, `internal/agents/manifest_test.go`). `internal/indexer/sync.go`'s `Sync` entry point never wipes `storeDir` — it always operates incrementally against an existing store. Closed.
 
-## Critical Issues
+**(d) `max(prior, floor)+1` is applied in `writeGraph` only; `sync.go`'s two commit sites are unaffected and correctly so.** `sync.go:220` and `:465` both do `newMeta.CoverageGeneration = meta.GetCoverageGeneration() + 1`, where `meta` is read once via `r0.GetMeta()` at the top of `Sync` (never through a wiped store — `Sync` has no wipe path per (c)) and never mutated in place before either write site reads it. This is unchanged by the CR-01 fix (`sync.go` is not in the fix's modified-files list and has zero incremental diff attributable to `83666cce`) and correctly stays a plain read-modify-write, since `Sync` never sees an empty store the way `codegraph index`'s wipe does. Closed.
 
-### CR-01: `Meta.coverage_generation` resets to 1 on every full re-index, defeating the exact aliasing guarantee WR-01 was built to provide
+**(e) The new CLI test genuinely exercises the wipe, not a mock.** `TestIndexForceRebuildBumpsCoverageGeneration` (`internal/cli/index_test.go`) calls `execCmd("init", dir)`, mints a real page token via `query.OpenAt` + `CoverageRows(PageSize:1)` against the post-init store (`staleToken := page1.NextPageToken`), then calls `execCmd("index", "--force", dir)` — the real CLI command tree, driving the actual `RemoveAll`+`MkdirAll`+`indexer.Run` sequence, not a simulated one. It asserts both `gen2 > gen1` (traced: reverting the fix, `writeGraph`'s own post-wipe Snapshot read returns `ErrNotFound` → `priorGeneration=0` both times → `gen1==gen2==1`, so the assertion is load-bearing) and that replaying `staleToken` — minted strictly before the wipe — against the rebuilt store returns `errors.Is(err, query.ErrAborted)`. Both `go test ./internal/cli/...` and the full targeted suite (`./internal/cli/... ./internal/indexer/... ./internal/query/... ./internal/uiserver/... ./internal/graphstore/...`) pass. Closed.
 
-**File:** `internal/indexer/resolve.go:809-841`, `internal/cli/index.go:52-59`, `internal/query/coverage.go:198-213`
-**Issue:** `writeGraph`'s read-modify-write of `CoverageGeneration` (`resolve.go:809-819`) is explicitly designed around "a from-scratch rewrite over an EXISTING store" reading the prior generation back via `store.Snapshot()` before opening its `Writer` — and the code comment even cites `internal/cli/index.go`'s `RemoveAll` by name, but only to reason about the (already-handled) `c/`-namespace clear, not about its effect on this counter.
+**(f) No proto/web drift.** `git diff faaab420..HEAD -- internal/uiproto internal/schema/graph.proto web/src` is empty (re-verified this pass) and `task proto:drift` passes clean (4/4 generated files byte-identical). `go build ./...` and `go vet ./...` are clean.
 
-`newIndexCmd` (`internal/cli/index.go:52-59`) is `codegraph index`'s full-rebuild path — the one non-incremental way to (re)build a graph — and it unconditionally does:
-```go
-if err := os.RemoveAll(storeDir); err != nil { return err }
-if err := os.MkdirAll(storeDir, 0o755); err != nil { return err }
-```
-before calling `indexer.Run`. This deletes the ENTIRE pebble store directory, `Meta` included. When `writeGraph` then runs `store.Snapshot()` → `GetMeta()` against this genuinely empty directory, it gets `ErrNotFound`, so `priorGeneration = 0` and the commit stamps `CoverageGeneration = 1` — every single time `codegraph index` is run, regardless of how high the generation had climbed in the store that was just deleted.
+**Net verdict:** CR-01 as originally described (deterministic reset-to-1 on every `codegraph index` run, regardless of concurrency) is fixed. One narrower, previously-unstated residual survives the fix by construction (WR-01) and should be weighed by the team rather than silently accepted: a concurrent long-lived store holder at the exact moment of `codegraph index`'s pre-wipe read degrades the fix back to pre-CR-01 behavior for that one rebuild. IN-01/IN-02/IN-03 are unchanged from `10-REVIEW.iter4.md`, verified still present, and carried forward as Info.
 
-This means the counter is monotonic only *within the lifetime of one store directory*, not globally, and every store's *first* coverage-bearing commit — i.e. any freshly-`index`ed repo that has not yet had a `sync` run against it — is at generation 1. That is an extremely common, not a rare, state (the reasonable UI-viewing sequence "run `codegraph index`, then open `/health`" lands exactly there). Concrete reproduction (mechanically traced, not merely hypothesized):
+## Warnings
 
-1. `codegraph index` on a repo with >1000 coverage-relevant rows (extraction failures + excluded files combined — `CoverageDefaultPageSize`/`COVERAGE_PAGE_SIZE` is 1000) → store A, `CoverageGeneration = 1`.
-2. A client opens `/health`, `GetCoverage` page 1 returns a token embedding `generation=1`.
-3. Before the client fetches page 2, the operator re-runs `codegraph index --force` (a full rebuild — not `codegraph sync`, which is the incremental path this mechanism was actually validated against) because, e.g., files changed and a clean rebuild was chosen over an incremental sync. `RemoveAll` wipes store A; the rebuilt store B's first coverage commit again stamps `CoverageGeneration = 1` (there is no prior `Meta` to read — same code path as step 1).
-4. The client's page-2 request replays its stale token, `cursorGeneration=1`. `CoverageRows`' check (`coverage.go:211`) is `cursorGeneration != generation` → `1 != 1` is `false` → the check **passes**, no `ErrAborted`, and `CoverageRows` proceeds to resume the position-based walk (`bytes.Compare(fit.RawKey(), cursorKey)`) against store B — an entirely different graph than the one page 1 was drawn from. The client silently accumulates rows from two unrelated index generations into what it believes is one consistent walk, with no signal that anything went wrong.
+### WR-01: `priorCoverageGeneration`'s blanket failure-to-0 fallback silently re-admits CR-01's exact aliasing bug when the store is genuinely locked, not merely absent
 
-This is not the sub-millisecond wall-clock race iteration 2 flagged (which required two commits to land in the same host millisecond); it is a deterministic collision that fires on the very first generation value every rebuilt store ever produces, and it fires specifically on the full-rebuild path this fix's own regression tests never exercise (`TestCoverageGenerationIncrementsByExactlyOnePerCommit` and `TestWriteGraphStampsMonotonicCoverageGeneration` both test increments against a store that is never wiped between calls; nothing in the diff drives `os.RemoveAll` + a second `writeGraph` and asserts the generation is distinct from the first run's).
-**Fix:** Persist the generation counter's identity independently of the store directory's own lifetime, or detect the wipe. Two viable approaches:
-1. Seed a new store's very first `CoverageGeneration` from something that survives `RemoveAll` — e.g. a random 63-bit high-order salt written once at `codegraph init` time (outside `storeDir`, or into a file `index`'s `RemoveAll` does not touch) OR-ed / added into the counter, so two independently-initialized stores can never coincidentally start at the same value.
-2. Simpler and more robust: stop wiping `Meta.coverage_generation`'s effective history at all — have `codegraph index`'s `RemoveAll` step preserve (or `index.go` itself pass through) the prior store's last known `CoverageGeneration` into the rebuild, e.g. by reading it before `RemoveAll` and threading it into `indexer.Run`/`writeGraph` as a floor, mirroring exactly the "read prior, increment" discipline `writeGraph` already applies for the backfill-over-an-existing-store case — just extended to cover the CLI's own wipe-then-rebuild sequence.
-Either way, add a regression test that does two full rebuilds of the same `storeDir` (mirroring `codegraph index`'s actual `RemoveAll` + `Run` sequence, not just two `writeGraph` calls against a store that was never wiped) and asserts the second rebuild's `CoverageGeneration` is NOT equal to a value a client could plausibly still be holding a token for.
+**File:** `internal/cli/index.go:30-48`
+**Issue:** `priorCoverageGeneration` collapses three semantically distinct outcomes into the same return value, `0`:
+
+1. The store has never been indexed (`graphstore.Open` succeeds against an empty/new directory, `GetMeta` returns `graphstore.ErrNotFound`) — `0` is exactly correct here.
+2. The store directory doesn't exist at all — same as above, `0` is correct.
+3. **The store exists, has real coverage history, and is transiently unreadable** — `graphstore.Open` fails with `graphstore.ErrStoreLocked` after exhausting its own bounded retry (`openLockRetryAttempts=5` × `openLockRetryBackoff=100ms`, ~400ms total, `internal/graphstore/pebble_store.go:67-81`), because another process or goroutine genuinely holds the Pebble directory lock at that moment — a live `codegraph ui`/MCP-server per-request `openEngine` call (`internal/uiserver/handlers.go:56`), an in-flight `indexer.Sync` debounced flush, or a second concurrent `index`/`sync` invocation. `GetMeta` returning any error other than `ErrNotFound` (e.g., a corrupted/partially-written Meta record) falls into the same bucket.
+
+Case 3 is exactly CR-01's bug shape, reintroduced: the floor silently becomes `0`, `writeGraph`'s own post-wipe read of the now-empty target store also reads `0` (`resolve.go:763-775`), so the rebuild stamps `CoverageGeneration = 1` — identical to what a genuinely-fresh store would stamp, and identical to what the *previous* rebuild also stamped if it hit the same race or even just ran through the ordinary case-1/2 path. A client holding a pre-wipe page token whose embedded generation happens to equal the new store's `1` (the common case for any store that has not yet had many coverage-bearing commits) will have that token silently validated (`coverage.go:211`, `cursorGeneration != generation` is `false`) against a store built from a completely different graph.
+
+This is a materially narrower window than the original CR-01 (it requires an active lock holder to survive the full ~400ms retry budget at the exact moment `codegraph index` runs its pre-wipe read — an ordinary debounced-flush collision is already absorbed by that retry), so I am not classifying it as a Critical regression of the fixed behavior. But it is a real, reachable failure mode in this project's own stated direction ("optimized for concurrent access," a daemon/watcher that is default-on, an MCP/UI server process that opens the store per request) and it is currently silent: nothing distinguishes "confirmed no prior store" from "store exists but is locked/corrupt" in the log output, the CLI's own diagnostics, or a test. There is no test anywhere in the tree that exercises `priorCoverageGeneration`'s lock-held or corrupted-Meta branches (`rg -n priorCoverageGeneration internal/` finds only the three internal/cli/index.go references — no `_test.go` hit).
+
+**Fix:** Distinguish "confirmed absent" (`errors.Is(err, graphstore.ErrNotFound)` from `GetMeta`, or the directory genuinely does not exist) from "present but unreadable" (`errors.Is(err, graphstore.ErrStoreLocked)`, or any other `Open`/`Snapshot`/`GetMeta` error). For the latter, either:
+- surface a hard error from `newIndexCmd` before ever calling `RemoveAll` (forcing the operator to retry once the holder releases, which is consistent with this codebase's "never silently block/degrade past a lock" philosophy already documented in `pebble_store.go`'s own comments), or
+- at minimum, emit a diagnostic/warning line when the fallback fires for a reason other than "genuinely never indexed," so an operator investigating a coverage-page-token bug report has a signal to look at.
+Either way, add a regression test that holds the store open (mirroring `internal/graphstore/open_lock_test.go`'s `TestOpenSecondOpenInProcessReturnsErrStoreLocked` pattern) across a `codegraph index --force` run and asserts the chosen behavior (hard failure, or a floor that is provably still safe) rather than leaving this path silently untested.
 
 ## Info
 
 ### IN-01: `coverageExtractionDetail`'s absolute-path scrub is a plain substring replace, not anchored to a path boundary
 
 **File:** `internal/query/coverage.go:337-343`
-**Issue:** Unchanged from prior reviews. `strings.ReplaceAll(detail, repoRoot, ".")` replaces every literal occurrence of `repoRoot`, not just a leading-path occurrence, and depends on `e.repoRoot`'s capitalization/symlink-resolution matching whatever was embedded in the underlying parser error verbatim (e.g. a `/tmp` vs `/private/tmp` class of mismatch on macOS). Carried forward as low-severity: pre-existing pattern, not introduced by this phase.
+**Issue:** Unchanged from prior reviews (verified still present at the cited lines). `strings.ReplaceAll(detail, repoRoot, ".")` replaces every literal occurrence of `repoRoot`, not just a leading-path occurrence, and depends on `e.repoRoot`'s capitalization/symlink-resolution matching whatever was embedded in the underlying parser error verbatim (e.g. a `/tmp` vs `/private/tmp` class of mismatch on macOS). Carried forward as low-severity: pre-existing pattern, not introduced or touched by this fix.
 **Fix:** No action required unless a broader repoRoot-redaction audit is already planned.
 
 ### IN-02: `unsupportedExtensionDetail`/exclusion `detail` strings are unbounded on the write path
 
 **File:** `internal/indexer/discoverexclusion.go:78-100`
-**Issue:** Unchanged from prior reviews. No explicit byte bound is applied at write time the way `coverageDetailMaxBytes` bounds the read-time `Detail` for extraction failures. Low-severity: filesystem path-component limits already bound this in practice.
-**Fix:** No action required now; noted for completeness since coverage rows are now exposed over the wire to a browser.
+**Issue:** Unchanged from prior reviews (not part of this fix's diff, contents re-verified identical). No explicit byte bound is applied at write time the way `coverageDetailMaxBytes` bounds the read-time `Detail` for extraction failures. Low-severity: filesystem path-component limits already bound this in practice.
+**Fix:** No action required now; noted for completeness since coverage rows are exposed over the wire to a browser.
 
 ### IN-03: `fetchAllCoverageRows`'s second (retry) attempt discards any rows it collected before aborting a second time
 
 **File:** `web/src/lib/health-view.ts:335-365`
-**Issue:** Unchanged from prior reviews. When the retried walk itself throws `Code.Aborted` partway through (e.g. after collecting several pages, then hitting a third concurrent Sync), the final `.catch` returns a hardcoded `{ known: true, rows: [], incomplete: true }` rather than whatever partial `rows` the second attempt had already accumulated. Not a correctness bug (`incomplete: true` already tells the UI not to trust the list), just a minor, easily-avoidable loss of otherwise-good partial data.
+**Issue:** Unchanged from prior reviews (not part of this fix's diff, contents re-verified identical — confirmed `web/src` has zero diff against `faaab420`). When the retried walk itself throws `Code.Aborted` partway through, the final `.catch` returns a hardcoded `{ known: true, rows: [], incomplete: true }` rather than whatever partial `rows` the second attempt had already accumulated. Not a correctness bug (`incomplete: true` already tells the UI not to trust the list), just a minor, easily-avoidable loss of otherwise-good partial data.
 **Fix:** Optional: thread the partially-collected rows out of the second `attempt()` call. Not required before shipping.
+
+## Notes for threat-model reconciliation (`10-SECURITY.md`)
+
+`10-SECURITY.md` predates both the CR-01 and WR-01 findings across this review's iterations. For the reconciliation pass, I recommend:
+
+- **Add** a threat row for WR-01 above: "A live store holder (UI/MCP server per-request open, in-flight Sync flush, or a second concurrent index/sync) surviving `codegraph index`'s pre-wipe generation-floor read past its ~400ms retry budget silently resets `CoverageGeneration` to 1, reintroducing page-token aliasing across a rebuild." Suggested severity: Low/Medium (narrow race window, data-consistency impact only — a client may transiently see rows spliced from two unrelated index generations with no error signal — no confidentiality/integrity-of-storage impact, no code execution, no auth bypass).
+- **No change needed** for the original CR-01 threat row (if one exists): the deterministic, always-fires shape it described is confirmed fixed by `83666cce` per items (a)-(f) above.
+- I found no unmitigated Critical/High-severity threat in this file set at ASVS L1 scope: no injection, no hardcoded secrets, no unsafe deserialization, no path traversal in the reviewed files (the coverage detail-scrubbing paths in IN-01/IN-02 are informational-quality issues, not exploitable disclosure — `coverageDetailMaxBytes` and the repoRoot substitution already prevent the primary host-path leak scenario `T-10-05` documents).
 
 ---
 
-_Reviewed: 2026-09-13T05:08:38Z_
+_Reviewed: 2026-09-13T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
