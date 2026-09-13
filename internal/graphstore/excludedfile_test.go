@@ -1,6 +1,7 @@
 package graphstore
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -178,5 +179,147 @@ func TestExcludedFileKeyStartsWithPrefixAndIsolatesNeighbours(t *testing.T) {
 	}
 	if err := it.Err(); err != nil {
 		t.Fatalf("iteration Err: %v", err)
+	}
+}
+
+// excludedFilePaths drains it into a sorted slice of Paths, closing it.
+func excludedFilePaths(t *testing.T, it ExcludedFileIterator) []string {
+	t.Helper()
+	var got []string
+	for it.Next() {
+		got = append(got, it.ExcludedFile().GetPath())
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("iteration Err: %v", err)
+	}
+	if err := it.Close(); err != nil {
+		t.Fatalf("iteration Close: %v", err)
+	}
+	sort.Strings(got)
+	return got
+}
+
+// TestDeleteExcludedFileRemovesOnlyThatPath proves DeleteExcludedFile
+// point-deletes exactly one path, leaving a lexicographically adjacent
+// sibling ("a.md" vs "a.mdx") untouched — the length-prefixed key
+// isolates them (T-01-02).
+func TestDeleteExcludedFileRemovesOnlyThatPath(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	w1, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	for _, p := range []string{"a.md", "a.mdx", "b.md"} {
+		if err := w1.PutExcludedFile(&schema.ExcludedFile{Path: p, Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}); err != nil {
+			t.Fatalf("PutExcludedFile(%q): %v", p, err)
+		}
+	}
+	if err := w1.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	w2, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	if err := w2.DeleteExcludedFile("a.md"); err != nil {
+		t.Fatalf("DeleteExcludedFile: %v", err)
+	}
+	if err := w2.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	t.Cleanup(func() { _ = snap.Close() })
+	it, err := snap.IterateExcludedFiles()
+	if err != nil {
+		t.Fatalf("IterateExcludedFiles: %v", err)
+	}
+	got := excludedFilePaths(t, it)
+	want := []string{"a.mdx", "b.md"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("remaining paths = %v, want %v", got, want)
+	}
+}
+
+// TestDeleteAllExcludedFilesClearsOnlyTheNamespace proves
+// DeleteAllExcludedFiles range-deletes ONLY the c/ namespace: a File,
+// Node, and Meta record staged in the same store survive; a
+// PutExcludedFile staged on the SAME Writer after the range-delete
+// still lands (the writeGraph "clear then rewrite" sequence, D-07).
+func TestDeleteAllExcludedFilesClearsOnlyTheNamespace(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	w1, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	for _, p := range []string{"a.md", "b.md", "c.md"} {
+		if err := w1.PutExcludedFile(&schema.ExcludedFile{Path: p, Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}); err != nil {
+			t.Fatalf("PutExcludedFile(%q): %v", p, err)
+		}
+	}
+	if err := w1.PutFile(&schema.File{Path: "keep.go", Language: "go"}); err != nil {
+		t.Fatalf("PutFile: %v", err)
+	}
+	if err := w1.PutNode(&schema.Node{Id: "fn:keep", Kind: "function", Name: "keep"}); err != nil {
+		t.Fatalf("PutNode: %v", err)
+	}
+	if err := w1.PutMeta(schema.NewMeta()); err != nil {
+		t.Fatalf("PutMeta: %v", err)
+	}
+	if err := w1.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	w2, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	if err := w2.DeleteAllExcludedFiles(); err != nil {
+		t.Fatalf("DeleteAllExcludedFiles: %v", err)
+	}
+	if err := w2.PutExcludedFile(&schema.ExcludedFile{Path: "z.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION}); err != nil {
+		t.Fatalf("PutExcludedFile(z.md) after range-delete: %v", err)
+	}
+	if err := w2.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	t.Cleanup(func() { _ = snap.Close() })
+
+	it, err := snap.IterateExcludedFiles()
+	if err != nil {
+		t.Fatalf("IterateExcludedFiles: %v", err)
+	}
+	got := excludedFilePaths(t, it)
+	if len(got) != 1 || got[0] != "z.md" {
+		t.Fatalf("remaining excluded paths = %v, want [\"z.md\"]", got)
+	}
+
+	if _, err := snap.GetFile("keep.go"); err != nil {
+		t.Errorf("GetFile(keep.go) after DeleteAllExcludedFiles: %v, want nil (adjacent namespace untouched)", err)
+	}
+	if _, err := snap.GetNode("fn:keep"); err != nil {
+		t.Errorf("GetNode(fn:keep) after DeleteAllExcludedFiles: %v, want nil (adjacent namespace untouched)", err)
+	}
+	if _, err := snap.GetMeta(); err != nil {
+		t.Errorf("GetMeta after DeleteAllExcludedFiles: %v, want nil (adjacent namespace untouched)", err)
 	}
 }

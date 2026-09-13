@@ -993,8 +993,14 @@ type stubWriter struct {
 	excluded []*schema.ExcludedFile
 	meta     *schema.Meta
 
-	commitCalls int
-	closeCalls  int
+	commitCalls            int
+	closeCalls             int
+	deleteAllExcludedCalls int
+
+	// order records the call sequence of DeleteAllExcludedFiles and
+	// PutExcludedFile so a test can assert the range-delete happens
+	// BEFORE the rewrite (Phase 10 D-07, TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting).
+	order []string
 
 	failOn string
 }
@@ -1036,6 +1042,23 @@ func (w *stubWriter) PutExcludedFile(x *schema.ExcludedFile) error {
 		return errStubWrite
 	}
 	w.excluded = append(w.excluded, x)
+	w.order = append(w.order, "PutExcludedFile")
+	return nil
+}
+
+func (w *stubWriter) DeleteExcludedFile(path string) error {
+	if w.failOn == "DeleteExcludedFile" {
+		return errStubWrite
+	}
+	return nil
+}
+
+func (w *stubWriter) DeleteAllExcludedFiles() error {
+	if w.failOn == "DeleteAllExcludedFiles" {
+		return errStubWrite
+	}
+	w.deleteAllExcludedCalls++
+	w.order = append(w.order, "DeleteAllExcludedFiles")
 	return nil
 }
 
@@ -1164,6 +1187,53 @@ func TestWriteGraphStagesExcludedFilesInTheSameBatch(t *testing.T) {
 	}
 	if !w.meta.GetHasCoverage() {
 		t.Error("Meta.HasCoverage = false, want true")
+	}
+}
+
+// TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting proves
+// writeGraph clears the whole c/ namespace via DeleteAllExcludedFiles
+// BEFORE staging any PutExcludedFile — the D-07 "range-delete then
+// rewrite" sequence a from-scratch rewrite over an EXISTING store (e.g.
+// Sync's D-02b backfill path) needs to avoid layering stale records on
+// top of a fresh set — all in the SAME single-commit batch.
+func TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting(t *testing.T) {
+	w := &stubWriter{}
+	store := &stubStore{writer: w}
+
+	excluded := []*schema.ExcludedFile{
+		{Path: "a.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
+		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
+	}
+
+	if err := writeGraph(store, nil, nil, nil, nil, "", excluded); err != nil {
+		t.Fatalf("writeGraph returned error: %v", err)
+	}
+
+	if w.deleteAllExcludedCalls != 1 {
+		t.Fatalf("deleteAllExcludedCalls = %d, want 1", w.deleteAllExcludedCalls)
+	}
+	if w.commitCalls != 1 {
+		t.Fatalf("commitCalls = %d, want 1", w.commitCalls)
+	}
+
+	firstPutIdx := -1
+	deleteAllIdx := -1
+	for i, op := range w.order {
+		if op == "DeleteAllExcludedFiles" && deleteAllIdx == -1 {
+			deleteAllIdx = i
+		}
+		if op == "PutExcludedFile" && firstPutIdx == -1 {
+			firstPutIdx = i
+		}
+	}
+	if deleteAllIdx == -1 {
+		t.Fatal("DeleteAllExcludedFiles was never recorded in call order")
+	}
+	if firstPutIdx == -1 {
+		t.Fatal("PutExcludedFile was never recorded in call order")
+	}
+	if deleteAllIdx >= firstPutIdx {
+		t.Fatalf("DeleteAllExcludedFiles (index %d) did not precede the first PutExcludedFile (index %d): order = %v", deleteAllIdx, firstPutIdx, w.order)
 	}
 }
 
