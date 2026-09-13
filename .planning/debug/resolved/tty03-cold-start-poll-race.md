@@ -1,5 +1,7 @@
 ---
-status: root_cause_found
+status: resolved
+updated: 2026-09-13
+resolved_by: "plan 08-05 (fix direction 2 — readiness predicate), commits e994b0a5 (RED) / b9dfc849 (GREEN); re-verified at milestone close 2026-09-13"
 gap: G-08-1
 phase: 08-tmux-real-pty-harness
 created: 2026-09-10
@@ -69,3 +71,22 @@ arm proved nothing. Re-run properly as the cold-arm / warm-arm pair above.
 
 Whichever is chosen, capture.go:16-27's "by construction" paragraph must be rewritten to state
 what is actually guaranteed.
+
+## Resolution
+
+root_cause: |
+  Confirmed as diagnosed above: pollUntilStable accepted the first byte-identical pair of
+  captures, so on a cold first exec of the freshly built binary the two pre-output frames
+  matched and the poll converged before the command had printed anything.
+fix: |
+  Fix direction 2 (the positive anchor) shipped in plan 08-05: pollUntilStable now takes a
+  readiness predicate and converges only once a captured frame is both stable AND satisfies
+  it — for TTY-03, paneContains("no running daemons"). capture.go:11-45 was rewritten to state
+  what the 1s/10s constants actually guarantee (settling, not pre-output exclusion). The
+  self-test TestPollUntilStableDoesNotConvergeOnPreOutputFrame was watched RED (e994b0a5)
+  then GREEN (b9dfc849); TMUX_EXPECTED_TESTS moved 5 -> 6 in the same commit.
+verification: |
+  08-UAT.md (status complete, 2026-09-11): task test:tmux -> executed=6 skipped=0 expected=6
+  locally and on CI run 34658987243 job 103457354620. Re-verified at milestone close
+  2026-09-13 (08-VERIFICATION.md re-verification at HEAD 8c8149de, 15/15): local
+  task test:tmux executed=6 skipped=0 expected=6 with tmux 3.7c. Gap G-08-1 closed.
