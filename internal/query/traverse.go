@@ -87,6 +87,13 @@ type FileGraphNode struct {
 	// CycleID is 0 for a node in no strongly-connected cycle and is
 	// populated by the cycle detector, not by this scan.
 	CycleID int
+	// CommunityID is a 1-based canonical community id assigned by
+	// AssignCommunities, computed fresh on every FileGraph() call
+	// (GRF-06, D-15). 0 means "not computed" and is never emitted once
+	// the assignment pass has run — unlike CycleID, every node gets
+	// exactly one community, so a fully-populated FileGraphNode never
+	// carries a zero CommunityID (D-03).
+	CommunityID int
 }
 
 // FileGraphEdge is one aggregated source-file-to-target-file edge in
@@ -126,6 +133,10 @@ type FileGraphResult struct {
 	// of size 2 or more found over the aggregated file adjacency —
 	// populated by the cycle detector, not by this scan.
 	CycleCount int
+	// CommunityCount is the number of distinct community ids assigned
+	// over Nodes (GRF-06, D-15) — singletons count, so CommunityCount
+	// equals the maximum CommunityID assigned.
+	CommunityCount int
 }
 
 // fileAgg accumulates FileGraph's scan-one state per distinct file path:
@@ -328,6 +339,19 @@ func (e *Engine) FileGraph() (FileGraphResult, error) {
 		result.Edges[i].InCycle = srcOK && tgtOK && srcID == tgtID
 	}
 	result.CycleCount = len(distinctCycles)
+
+	// Community detection (GRF-06, D-15) runs server-side, fresh
+	// alongside everything else FileGraph derives — no cache, no store
+	// write. Every node gets exactly one id (D-03), so no `ok` check is
+	// needed on the lookup, unlike the cycle block above.
+	communityIDs := AssignCommunities(result.Nodes, result.Edges)
+	distinctCommunities := make(map[int]struct{})
+	for i := range result.Nodes {
+		id := communityIDs[result.Nodes[i].Path]
+		result.Nodes[i].CommunityID = id
+		distinctCommunities[id] = struct{}{}
+	}
+	result.CommunityCount = len(distinctCommunities)
 
 	return result, nil
 }
