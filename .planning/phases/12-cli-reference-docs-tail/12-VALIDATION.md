@@ -4,8 +4,8 @@ slug: "cli-reference-docs-tail"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-13"
 ---
 
@@ -51,11 +51,11 @@ the planner can attach them. Test names are illustrative until the planner fixes
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | 01 | 1 | DOCS-05 | T-12 generated-file tampering | `docs/CLI-REFERENCE.md` is regenerated into a temp file by `tools/clidoc` and byte-compared against the committed file; the gate reports `compared 1 generated file` before comparing and names the file on mismatch; `DisableAutoGenTag` keeps it byte-stable across days | drift (Task) | `GOTOOLCHAIN=go1.26.6 task -s docs:cli:drift` | ❌ Wave 0 (`tools/clidoc/main.go`, Taskfile targets) | ⬜ pending |
-| TBD | 01 | 1 | DOCS-06 | T-12 silent hiding / allowlist rot | Walk of every command (hidden included, `InitDefaultCompletionCmd` + `InitDefaultHelpFlag` applied) over `Flags()`+`PersistentFlags()` with `VisitAll`; each flag either appears as `--name` in the generated reference (available command, not hidden/deprecated) or matches an allowlist entry with a reason; unmatched allowlist entries fail; counts asserted (commands ≥ 26, flags ≥ 50) and logged | unit (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run TestEveryRegisteredFlagIsAccountedFor -v ./internal/cli/...` | ❌ Wave 0 (`internal/cli/cli_reference_test.go`, `internal/cli/testdata/cli-reference-allowlist.txt`) | ⬜ pending |
-| TBD | 01 | 1 | DOCS-05 | — | `ci.yml` runs `task docs:cli:drift` in the same job and immediately after `task proto:drift` (`ci.yml:195-196`) | source assertion | `test "$(rg -o 'run: task docs:cli:drift' .github/workflows/ci.yml \| wc -l \| tr -d ' ')" = "1"` | ❌ Wave 0 | ⬜ pending |
-| TBD | 02 | 2 | DOCS-07 | UF-2 docs-as-security-guidance | `docs/RELEASE.md` recommends `brew trust --cask seanb4t/tap/codegraph` with one framing sentence; the tap-wide grant is named as not recommended without its command spelled; the quoted Homebrew error is trimmed to the narrow form (README.md carries no `brew trust` text — it points at RELEASE.md; research finding 3) | manual: diff review (D-12) plus one-time source assertions in the plan | `test "$(rg -o 'brew trust --cask seanb4t/tap/codegraph' docs/RELEASE.md \| wc -l \| tr -d ' ')" -ge 1 && test "$(rg -o 'brew trust (--tap )?seanb4t/tap\b' docs/RELEASE.md \| wc -l \| tr -d ' ')" = "0"` | ✅ `docs/RELEASE.md` | ⬜ pending |
-| TBD | 02 | 2 | DOCS-05 | — | README.md links to `docs/CLI-REFERENCE.md` once | source assertion | `test "$(rg -o 'docs/CLI-REFERENCE.md' README.md \| wc -l \| tr -d ' ')" = "1"` | ✅ `README.md` | ⬜ pending |
+| 12-01 / T1 | 01 | 1 | DOCS-05 | T-12 generated-file tampering | `docs/CLI-REFERENCE.md` is regenerated into a temp file by `tools/clidoc` and byte-compared against the committed file; the gate reports `compared 1 generated file` before comparing and names the file on mismatch; `DisableAutoGenTag` keeps it byte-stable across days | drift (Task) | `GOTOOLCHAIN=go1.26.6 task -s docs:cli:drift` | ✅ `tools/clidoc/main.go`, `Taskfile.yml` | ✅ green |
+| 12-01 / T2 | 01 | 1 | DOCS-06 | T-12 silent hiding / allowlist rot | Walk of every command (hidden included, `InitDefaultCompletionCmd` + `InitDefaultHelpFlag` applied) over `Flags()`+`PersistentFlags()` with `VisitAll`; each flag either appears as `--name` in the generated reference (available command, not hidden/deprecated) or matches an allowlist entry with a reason; unmatched allowlist entries fail; counts asserted (commands ≥ 26, flags ≥ 50) and logged | unit (Go) | `GOTOOLCHAIN=go1.26.6 go test -count=1 -run TestEveryRegisteredFlagIsAccountedFor -v ./internal/cli/...` | ✅ `internal/cli/cli_reference_test.go`, `internal/cli/testdata/cli-reference-allowlist.txt` | ✅ green |
+| 12-01 / T1 | 01 | 1 | DOCS-05 | — | `ci.yml` runs `task docs:cli:drift` in the same job and immediately after `task proto:drift` (`ci.yml:195-196`) | source assertion | `test "$(rg -o 'run: task docs:cli:drift' .github/workflows/ci.yml \| wc -l \| tr -d ' ')" = "1"` | ✅ `.github/workflows/ci.yml` | ✅ green |
+| 12-02 / T1 | 02 | 2 | DOCS-07 | UF-2 docs-as-security-guidance | `docs/RELEASE.md` recommends `brew trust --cask seanb4t/tap/codegraph` with one framing sentence; the tap-wide grant is named as not recommended without its command spelled; the quoted Homebrew error is trimmed to the narrow form (README.md carries no `brew trust` text — it points at RELEASE.md; research finding 3) | manual: diff review (D-12) plus one-time source assertions in the plan (12-02 / T1: one-time RELEASE.md assertions — D-12: no committed test) | `test "$(rg -o 'brew trust --cask seanb4t/tap/codegraph' docs/RELEASE.md \| wc -l \| tr -d ' ')" -ge 1 && test "$(rg -o 'brew trust (--tap )?seanb4t/tap\b' docs/RELEASE.md \| wc -l \| tr -d ' ')" = "0"` | ✅ `docs/RELEASE.md` | ✅ green (diff-reviewed verdict, D-12 — no ongoing gate) |
+| 12-02 / T2 | 02 | 2 | DOCS-05 | — | README.md links to `docs/CLI-REFERENCE.md` once | source assertion | `test "$(rg -o 'docs/CLI-REFERENCE.md' README.md \| wc -l \| tr -d ' ')" = "1"` | ✅ `README.md` | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -63,14 +63,14 @@ the planner can attach them. Test names are illustrative until the planner fixes
 
 ## Wave 0 Requirements
 
-- [ ] `internal/cli/root.go` — exported `NewRootCmd()` wrapper (3 test call sites use `newRootCmd()`; no rename needed) and `DisableAutoGenTag = true` on the root
-- [ ] `tools/clidoc/main.go` — single-file `GenMarkdownCustom` walk in Cobra order with `InitDefaultCompletionCmd()`, banner line, `-out` flag
-- [ ] `docs/CLI-REFERENCE.md` — first generated output, committed in the same commit as the generator and Taskfile targets
-- [ ] `Taskfile.yml` — `docs:cli` (regenerate in place) and `docs:cli:drift` (temp + `cmp -s`, `compared 1 generated file` reported first); `.github/workflows/ci.yml` step after `task proto:drift`
-- [ ] `internal/cli/cli_reference_test.go` + `internal/cli/testdata/cli-reference-allowlist.txt` (one entry: `codegraph man`, D-02 reason)
-- [ ] `12-MUTATION-LOG.md` — families: (a) throwaway hidden flag on `ui` → guard RED; (b) one line deleted from the committed reference → drift RED; (c) bogus allowlist entry → guard RED on rot — each applied, RED captured, reverted byte-clean
-- [ ] `12-SECURITY.md` — threat register (UF-2 framing, generated-file tampering, allowlist rot, exported constructor widens nothing)
-- [ ] Framework install: none
+- [x] `internal/cli/root.go` — exported `NewRootCmd()` wrapper (3 test call sites use `newRootCmd()`; no rename needed) and `DisableAutoGenTag = true` on the root
+- [x] `tools/clidoc/main.go` — single-file `GenMarkdownCustom` walk in Cobra order with `InitDefaultCompletionCmd()`, banner line, `-out` flag
+- [x] `docs/CLI-REFERENCE.md` — first generated output, committed in the same commit as the generator and Taskfile targets
+- [x] `Taskfile.yml` — `docs:cli` (regenerate in place) and `docs:cli:drift` (temp + `cmp -s`, `compared 1 generated file` reported first); `.github/workflows/ci.yml` step after `task proto:drift`
+- [x] `internal/cli/cli_reference_test.go` + `internal/cli/testdata/cli-reference-allowlist.txt` (one entry: `codegraph man`, D-02 reason)
+- [x] `12-MUTATION-LOG.md` — families: (a) throwaway hidden flag on `ui` → guard RED; (b) one line deleted from the committed reference → drift RED; (c) bogus allowlist entry → guard RED on rot — each applied, RED captured, reverted byte-clean
+- [x] `12-SECURITY.md` — threat register (UF-2 framing, generated-file tampering, allowlist rot, exported constructor widens nothing)
+- [x] Framework install: none
 
 ---
 
@@ -84,11 +84,11 @@ the planner can attach them. Test names are illustrative until the planner fixes
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
