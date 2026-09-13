@@ -5,11 +5,20 @@
 // existed (module import failure — the file itself did not exist),
 // then GREEN once every assertion below was satisfied by /health's
 // existing markup with no component changes required.
+//
+// 10-04 Task 2 extends this file with the Coverage section: the
+// getCoverage mock plumbing below, and the describe blocks at the
+// bottom of the file, were written RED before CoverageSection.svelte
+// and +page.svelte's loadCoverageRows existed (missing `health-
+// coverage*` test ids and zero `getCoverage` wiring).
 import { render, screen, waitFor } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { GetHealthResponse } from '$lib/gen/ui_pb';
+import type { GetHealthResponse, GetCoverageResponse, CoverageRow } from '$lib/gen/ui_pb';
+import { CoverageRowKind, ExclusionReason } from '$lib/gen/ui_pb';
 import type { IndexStatus } from '$lib/status';
+import type { LiveEvent } from '$lib/live/live-client';
+import type { LiveStore } from '$lib/live/live-store';
 
 let currentGetHealthImpl: (
 	req: unknown,
@@ -21,10 +30,27 @@ const getStatusSpy = vi.fn(() =>
 	Promise.reject(new Error('health-page.test.ts: getStatus must never be called by this route'))
 );
 
+let currentGetCoverageImpl: (
+	req: unknown,
+	opts?: { signal?: AbortSignal }
+) => Promise<GetCoverageResponse> = () =>
+	Promise.resolve({ rows: [], nextPageToken: '', known: true } as unknown as GetCoverageResponse);
+let getCoverageCalls: Array<{ req: unknown; opts?: { signal?: AbortSignal } }> = [];
+
+beforeEach(() => {
+	currentGetCoverageImpl = () =>
+		Promise.resolve({ rows: [], nextPageToken: '', known: true } as unknown as GetCoverageResponse);
+	getCoverageCalls = [];
+});
+
 vi.doMock('$lib/client', () => ({
 	uiClient: {
 		getHealth: (req: unknown, opts?: { signal?: AbortSignal }) => currentGetHealthImpl(req, opts),
-		getStatus: getStatusSpy
+		getStatus: getStatusSpy,
+		getCoverage: (req: unknown, opts?: { signal?: AbortSignal }) => {
+			getCoverageCalls.push({ req, opts });
+			return currentGetCoverageImpl(req, opts);
+		}
 	}
 }));
 
@@ -65,10 +91,98 @@ function fakeStatusGate(status: Partial<IndexStatus> = {}) {
 
 function mountHealth(
 	getHealthImpl: typeof currentGetHealthImpl,
-	status: Partial<IndexStatus> = {}
+	status: Partial<IndexStatus> = {},
+	liveStore?: LiveStore
 ) {
 	currentGetHealthImpl = getHealthImpl;
-	return render(HealthPage, { context: new Map([['statusGate', fakeStatusGate(status)]]) });
+	const context = new Map<string, unknown>([['statusGate', fakeStatusGate(status)]]);
+	if (liveStore) context.set('liveStore', liveStore);
+	return render(HealthPage, { context });
+}
+
+/** fakeLiveStore mirrors web/tests/live-route-refetch.test.ts's own
+ * harness: it delivers already-admitted events directly, since the
+ * generation gate itself is live-store.ts's own tested concern. */
+function fakeLiveStore(): LiveStore & { deliver: (live: LiveEvent) => void } {
+	const listeners = new Set<(live: LiveEvent | null) => void>();
+	let current: LiveEvent | null = null;
+	return {
+		subscribe(run) {
+			listeners.add(run);
+			run(current);
+			return () => {
+				listeners.delete(run);
+			};
+		},
+		deliver(live) {
+			current = live;
+			for (const listener of listeners) listener(current);
+		}
+	};
+}
+
+function coverageRow(overrides: Partial<CoverageRow> = {}): CoverageRow {
+	return {
+		path: 'file.go',
+		kind: CoverageRowKind.EXCLUDED,
+		reason: ExclusionReason.UNSPECIFIED,
+		detail: '',
+		...overrides
+	} as CoverageRow;
+}
+
+function knownCoverage() {
+	return {
+		known: true,
+		discovered: 6n,
+		indexed: 1n,
+		excluded: 6n,
+		extractionFailed: 1n,
+		excludedByReason: {
+			EXCLUSION_REASON_UNSUPPORTED_EXTENSION: 2n,
+			EXCLUSION_REASON_DIR_DOTPREFIX: 1n,
+			EXCLUSION_REASON_DIR_VENDOR: 1n,
+			EXCLUSION_REASON_BUILD_TAG: 1n,
+			EXCLUSION_REASON_SIZE_LIMIT: 1n
+		}
+	} as never;
+}
+
+function coveragePages(): GetCoverageResponse[] {
+	return [
+		{
+			rows: [
+				coverageRow({
+					path: 'broken.py',
+					kind: CoverageRowKind.EXTRACTION_FAILED,
+					detail: 'indexer: reading ./broken.py: no such file or directory'
+				}),
+				coverageRow({ path: 'go.mod', reason: ExclusionReason.UNSUPPORTED_EXTENSION }),
+				coverageRow({ path: 'notes.md', reason: ExclusionReason.UNSUPPORTED_EXTENSION })
+			],
+			nextPageToken: 'p2',
+			known: true
+		} as unknown as GetCoverageResponse,
+		{
+			rows: [
+				coverageRow({ path: 'tagged.go', reason: ExclusionReason.BUILD_TAG }),
+				coverageRow({ path: 'vendor', reason: ExclusionReason.DIR_VENDOR }),
+				coverageRow({ path: '.hidden', reason: ExclusionReason.DIR_DOTPREFIX }),
+				coverageRow({ path: 'huge.go', reason: ExclusionReason.SIZE_LIMIT })
+			],
+			nextPageToken: '',
+			known: true
+		} as unknown as GetCoverageResponse
+	];
+}
+
+function pagedGetCoverage(pages: GetCoverageResponse[]) {
+	let i = 0;
+	return () => {
+		const page = pages[Math.min(i, pages.length - 1)];
+		i += 1;
+		return Promise.resolve(page);
+	};
 }
 
 describe('HLT-01: completeness — every fact in one render, no navigation', () => {
@@ -86,7 +200,7 @@ describe('HLT-01: completeness — every fact in one render, no navigation', () 
 });
 
 describe('one call: exactly one getHealth, zero getStatus', () => {
-	it('records exactly one getHealth invocation for one view open and never calls getStatus', async () => {
+	it('records exactly one getHealth invocation for one view open and never calls getStatus or getCoverage (fixture carries no coverage)', async () => {
 		let calls = 0;
 		mountHealth(() => {
 			calls += 1;
@@ -96,6 +210,7 @@ describe('one call: exactly one getHealth, zero getStatus', () => {
 		await waitFor(() => expect(screen.getByTestId('health-freshness')).toBeInTheDocument());
 		expect(calls).toBe(1);
 		expect(getStatusSpy).not.toHaveBeenCalled();
+		expect(getCoverageCalls).toHaveLength(0);
 	});
 });
 
@@ -223,5 +338,154 @@ describe('CR-02: the fabricated always-zero "Pending changes" tally is never ren
 		await waitFor(() => expect(screen.getByTestId('health-freshness')).toBeInTheDocument());
 		expect(screen.queryByTestId('health-pending-changes')).toBeNull();
 		expect(screen.queryByText(/Pending changes/)).toBeNull();
+	});
+});
+
+describe('Coverage section (D-11/HLT-04): unknown state is first-class, never an empty table', () => {
+	it('renders health-coverage-unknown with no counts and zero getCoverage calls when coverage is absent', async () => {
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: undefined })));
+
+		const unknown = await screen.findByTestId('health-coverage-unknown');
+		expect(unknown.textContent).toContain('Coverage unknown — re-index to record it');
+		expect(screen.queryByTestId('health-coverage-counts')).toBeNull();
+		expect(screen.queryByTestId('health-coverage-group-EXTRACTION_FAILED')).toBeNull();
+		expect(getCoverageCalls).toHaveLength(0);
+	});
+
+	it('renders health-coverage-unknown with no counts and zero getCoverage calls when coverage.known is false', async () => {
+		mountHealth(() =>
+			Promise.resolve(healthResponse({ coverage: { known: false } as never }))
+		);
+
+		const unknown = await screen.findByTestId('health-coverage-unknown');
+		expect(unknown.textContent).toContain('Coverage unknown — re-index to record it');
+		expect(screen.queryByTestId('health-coverage-counts')).toBeNull();
+		expect(getCoverageCalls).toHaveLength(0);
+	});
+});
+
+describe('Coverage section: known state — counts, prunes, groups, distinct failed rows', () => {
+	it('renders the exact counts line and the pruned-directory note', async () => {
+		currentGetCoverageImpl = pagedGetCoverage(coveragePages());
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		await waitFor(() =>
+			expect(screen.getByTestId('health-coverage-counts').textContent).toBe(
+				'6 discovered · 1 indexed · 6 excluded · 1 extraction failures'
+			)
+		);
+		expect(screen.getByTestId('health-coverage-prunes').textContent).toContain('2');
+	});
+
+	it('pages getCoverage exactly twice with the expected token sequence', async () => {
+		currentGetCoverageImpl = pagedGetCoverage(coveragePages());
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		await waitFor(() => expect(getCoverageCalls).toHaveLength(2));
+		expect((getCoverageCalls[0].req as { pageToken: string }).pageToken).toBe('');
+		expect((getCoverageCalls[1].req as { pageToken: string }).pageToken).toBe('p2');
+	});
+
+	it('groups rows with the EXTRACTION_FAILED group first in DOM order, 7 rows total, and the unsupported-extension group opened shows its two files', async () => {
+		currentGetCoverageImpl = pagedGetCoverage(coveragePages());
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		const failedGroup = await screen.findByTestId('health-coverage-group-EXTRACTION_FAILED');
+		const unsupportedGroup = await screen.findByTestId(
+			'health-coverage-group-EXCLUSION_REASON_UNSUPPORTED_EXTENSION'
+		);
+		// eslint-disable-next-line no-bitwise
+		expect(
+			failedGroup.compareDocumentPosition(unsupportedGroup) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+
+		expect(unsupportedGroup.textContent).toContain('2');
+		expect(unsupportedGroup.textContent).toContain('go.mod');
+		expect(unsupportedGroup.textContent).toContain('notes.md');
+
+		await waitFor(() =>
+			expect(screen.getAllByTestId(/^health-coverage-row/).length).toBe(7)
+		);
+	});
+
+	it('renders the broken.py row as health-coverage-row-failed with a class list distinct from an exclusion row, text starting with "extraction failed:"', async () => {
+		currentGetCoverageImpl = pagedGetCoverage(coveragePages());
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		const failedRow = await screen.findByTestId('health-coverage-row-failed');
+		expect(failedRow.textContent?.trim().startsWith('extraction failed:')).toBe(true);
+
+		const exclusionRow = (await screen.findAllByTestId('health-coverage-row'))[0];
+		expect(failedRow.className).not.toBe(exclusionRow.className);
+	});
+
+	it('renders a markup-bearing path as literal text — no img element is created (T-10-01)', async () => {
+		const evilPath = '<img src=x onerror="alert(1)">';
+		currentGetCoverageImpl = pagedGetCoverage([
+			{
+				rows: [coverageRow({ path: evilPath, reason: ExclusionReason.BUILD_TAG })],
+				nextPageToken: '',
+				known: true
+			} as unknown as GetCoverageResponse
+		]);
+		const { container } = mountHealth(() =>
+			Promise.resolve(healthResponse({ coverage: knownCoverage() }))
+		);
+
+		await waitFor(() => expect(screen.getByTestId('health-coverage-row')).toBeInTheDocument());
+		expect(screen.getByText(evilPath)).toBeInTheDocument();
+		expect(container.querySelector('img')).toBeNull();
+	});
+
+	it('offers no action control: zero buttons, zero links, zero [onclick] attributes within the section', async () => {
+		currentGetCoverageImpl = pagedGetCoverage(coveragePages());
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		const section = await screen.findByTestId('health-coverage');
+		await waitFor(() =>
+			expect(section.querySelectorAll('[data-testid^="health-coverage-group-"]').length).toBe(6)
+		);
+		expect(section.querySelectorAll('button').length).toBe(0);
+		expect(section.querySelectorAll('a').length).toBe(0);
+		expect(section.querySelectorAll('[onclick]').length).toBe(0);
+	});
+
+	it('renders health-coverage-rows-failed on a rejected getCoverage while the counts line (from GetHealth) still renders', async () => {
+		currentGetCoverageImpl = () => Promise.reject(new Error('boom'));
+		mountHealth(() => Promise.resolve(healthResponse({ coverage: knownCoverage() })));
+
+		await waitFor(() => expect(screen.getByTestId('health-coverage-counts')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByTestId('health-coverage-rows-failed')).toBeInTheDocument());
+	});
+
+	it('re-issues getCoverage on a live-triggered getHealth refetch', async () => {
+		currentGetCoverageImpl = pagedGetCoverage(coveragePages());
+		let healthCalls = 0;
+		const live = fakeLiveStore();
+		mountHealth(
+			() => {
+				healthCalls += 1;
+				return Promise.resolve(healthResponse({ coverage: knownCoverage() }));
+			},
+			{},
+			live
+		);
+
+		await waitFor(() => expect(getCoverageCalls).toHaveLength(2));
+
+		live.deliver({
+			event: {
+				generation: 5n,
+				initialized: true,
+				stale: false,
+				storeExists: true,
+				indexingInProgress: false,
+				commitSha: ''
+			} as never,
+			epoch: 1
+		});
+
+		await waitFor(() => expect(healthCalls).toBe(2));
+		await waitFor(() => expect(getCoverageCalls.length).toBeGreaterThan(2));
 	});
 });
