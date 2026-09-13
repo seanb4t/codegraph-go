@@ -252,13 +252,13 @@ Plans:
   4. The coverage surface extends `GetHealthResponse` additively, or adds an rpc whose name clears every `mutatingVerbs` substring including "Index", with `wantUIServiceMethods` updated by set-equality in both directions and the method count asserted from both sides — so neither an added nor a removed method can slip through (HLT-06)
 
 **Notes**: This is the milestone's only write-path change, and its central risk is named explicitly: reasons inferred after the fact are plausible-sounding lies, so they are captured at the real pipeline decision point and never reconstructed by a query-time walk that only sees static, present-tense file properties. The discovered-count definition must be pinned once and used by both the denominator and the reason list, or the two disagree in the user's face. "Re-index this file" auto-remediation on the coverage view is out of scope by construction — the same `SRV-03` violation as an editor shell-out; show reason and remedy as text only. Where the discovery-exclusion helper may live depends on Phase 7's landed archtest scope; check it against the archtest as written, not as remembered.
-**Plans**: 6 plans
+**Plans**: 1/6 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — TRACER: one BUILD_TAG exclusion through every layer — `ExcludedFile`/`ExclusionReason`/`Meta.has_coverage=9` in `graph.proto`, the `c/` graphstore namespace, `DiscoverAll` capturing at the decision point, the one-batch `writeGraph` commit, `Engine.CoverageSummary`/`CoverageRows`, `GetHealthResponse.coverage=17` and the paged `GetCoverage` (16th rpc) proven over the real listener with every fixture guard moved in the same commit; then namespace lifecycle (point/range delete, export/import kind 5 — Open Question 1 implemented)
+- [x] 10-01-PLAN.md — TRACER: one BUILD_TAG exclusion through every layer — `ExcludedFile`/`ExclusionReason`/`Meta.has_coverage=9` in `graph.proto`, the `c/` graphstore namespace, `DiscoverAll` capturing at the decision point, the one-batch `writeGraph` commit, `Engine.CoverageSummary`/`CoverageRows`, `GetHealthResponse.coverage=17` and the paged `GetCoverage` (16th rpc) proven over the real listener with every fixture guard moved in the same commit; then namespace lifecycle (point/range delete, export/import kind 5 — Open Question 1 implemented)
 
 **Wave 2** *(blocked on Wave 1 completion; 10-02, 10-03 and 10-04 run in parallel on disjoint files)*
 
@@ -314,7 +314,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | 7. Guards That Cannot Fire | 4/4 | Complete    | 2026-09-08 |
 | 8. tmux Real-PTY Harness | 5/5 | Complete    | 2026-09-11 |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 6/6 | Complete    | 2026-09-12 |
-| 10. Index Health — The Coverage Denominator | 0/TBD | Not started | - |
+| 10. Index Health — The Coverage Denominator | 1/6 | In Progress|  |
 | 11. Graph View — Community Clustering | 0/TBD | Not started | - |
 | 12. CLI Reference & Docs Tail | 0/TBD | Not started | - |
 

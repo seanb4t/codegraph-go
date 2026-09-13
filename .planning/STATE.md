@@ -5,17 +5,17 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 10
 current_phase_name: Index Health — The Coverage Denominator
 status: executing
-stopped_at: Phase 09 complete, ready to plan Phase 10
-last_updated: "2026-09-13T01:04:17.818Z"
+stopped_at: Completed 10-01-PLAN.md (coverage denominator tracer)
+last_updated: "2026-09-13T01:52:25.374Z"
 last_activity: 2026-09-12
-last_activity_desc: Phase 09 complete, transitioned to Phase 10
-state_head: 3fea9102227468868ca03a536b2c3a4cfa42dad7
+last_activity_desc: Phase 10 execution started
+state_head: dc4aa4caecaec71f9bdbe6681ebe1b80a466868e
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 21
-  completed_plans: 15
-  percent: 17
+  completed_plans: 16
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-09-12 after Phase 9)
 
 ## Current Position
 
-Phase: 10 (Index Health — The Coverage Denominator) — READY TO EXECUTE
-Plan: Not started
+Phase: 10 (Index Health — The Coverage Denominator) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-09-12 — Phase 09 complete, transitioned to Phase 10
+Last activity: 2026-09-12 — Phase 10 execution started
 
 ## Performance Metrics
 
@@ -126,6 +126,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 09 P04 | 25min | 3 tasks | 34 files |
 | Phase 09 P05 | 30min | 3 tasks | 2 files |
 | Phase 09 P06 | 20min | 2 tasks | 14 files |
+| Phase 10 P01 | 1h 5min | 2 tasks | 37 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,7 @@ Standing decisions that outlive every milestone:
 - [Phase 09]: Family (b)'s live-gate demonstration needed a different --file target (internal/cli/editorurl.go) than the script's default, since the default's structure lets the scroll loop's own break condition fire before reaching the exposing gap
 - [Phase 09]: 09-SECURITY.md records Cursor/JetBrains preset templates as still [ASSUMED] rather than confirmed — no real IDE was available to click through in this autonomous session; WINDOWS.md #35 stays open
 - [Phase 09]: [Phase 09] 09-06: Closed the svelte-check gap (2 errors at SourcePane.svelte:446:31, introduced by CR-01 commit 28d5d795) by capturing the guard-narrowed getEditorLink once and calling it from both the initial probe and the corrective re-probe -- no behavioral change, gate restored to 0 errors, task web:build/web:drift both MATCH.
+- [Phase 10]: prefixExcludedFile='c'; ExcludedByReason keyed by full enum name; Export Open Question 1 decided as implement (exportKindExcludedFile=5).
 
 ### Pending Todos
 
@@ -423,8 +425,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T21:24:52.000Z
-Stopped at: Phase 09 complete, ready to plan Phase 10
+Last session: 2026-09-13T01:52:25.347Z
+Stopped at: Completed 10-01-PLAN.md (coverage denominator tracer)
   NEXT: `/gsd-discuss-phase 10` (Index Health — The Coverage Denominator; no 10-CONTEXT.md yet)
   CARRY-OVER:
 
