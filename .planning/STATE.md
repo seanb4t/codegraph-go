@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
-current_phase: 12
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 12 complete — all phases complete
-last_updated: "2026-09-13T22:40:11.789Z"
+last_updated: "2026-09-13T22:47:12.517Z"
 last_activity: 2026-09-13
-last_activity_desc: Phase 12 complete
-state_head: 2b553b6219c4a1d1654e71ba9bb948e18be78082
+last_activity_desc: Milestone v0.13.0 completed and archived
+state_head: d15f45af45e27978d1618309b53db1b63c0e6ece
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 6
   total_plans: 29
   completed_plans: 29
-  percent: 17
+  percent: 100
+current_phase: 12
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-09-13 after Phase 12)
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-09-13 — Phase 12 complete
+Phase: Milestone v0.13.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-13 — Milestone v0.13.0 completed and archived
 
 ## Performance Metrics
 
@@ -467,11 +467,4 @@ Stopped at: Phase 12 complete — all phases complete
 
 ## Operator Next Steps
 
-- Phase 12 is verified and closed (9/9 must-haves at `af95a438`; cobra/doc-generated reference + drift gate in CI, accounting guard 36/115, brew-trust wording, WR-01 fixed `666569e9`) — ALL SIX v0.13.0 PHASES COMPLETE; next is the milestone lifecycle (audit → complete → cleanup)
-- Phase 11 is verified and closed (12/12 must-haves at `77d4a9c6` + live UAT accepted; GRF-09 measured PASS at 106 ms median vs the 500 ms bar locked in `698235a2`; deep review's three warnings fixed and re-reviewed clean); Phase 12 of v0.13.0 remains, then the milestone audit
-- Phase 10 is verified and closed (15/15 must-haves at `783e60f0`; deep review ran 4 passes — three real paging/generation bugs fixed, one lock-collision residual accepted as WINDOWS.md #36)
-- Phase 9 is verified and closed (5/5 must-haves at `3fd47279` after gap-closure plan 09-06; deep review converged clean after six `fix(09)` commits)
-- Phase 8 is verified and closed (21/21 UAT, G-08-1 resolved by 08-05, tmux-e2e fired at executed=6 on CI)
-- Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go` — the ruleset currently lists 6 contexts and omits it (checked 2026-09-11)
-- PR #69 (phases 7-8 WIP) MERGED 2026-09-12 as squash `3da59354`; the pr-template-exempt / pr-issue-exempt markers went in with it. The next PR (phases 9-12, or per-phase if the maintainer prefers) needs a `feat:` title and `Resolves #N` from the start
-- Run the milestone lifecycle: /gsd-audit-milestone → /gsd-complete-milestone v0.13.0 → /gsd-cleanup; then open the phases 9–12 PR with a `feat:` title and `Resolves #N`
+- Start the next milestone with /gsd-new-milestone
