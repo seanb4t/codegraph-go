@@ -14,9 +14,9 @@ files_reviewed_list:
   - tools/clidoc/main.go
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 3
-  total: 4
+  total: 3
 status: issues_found
 ---
 
@@ -35,7 +35,7 @@ I traced a substring-collision risk in the guard's whole-document `docMentionsFl
 
 ## Warnings
 
-### WR-01: Command-level allowlist entries aren't restricted to hidden commands, undermining "no exemption list"
+### WR-01 (RESOLVED in `666569e9`, iteration 2 — verified by the orchestrator: guard re-run green at 36 commands / 115 flags, RED→GREEN transcript in 12-REVIEW-FIX.md): Command-level allowlist entries aren't restricted to hidden commands, undermining "no exemption list"
 
 **File:** `internal/cli/cli_reference_test.go:195-207` (the accounting `switch`), read together with `internal/cli/testdata/cli-reference-allowlist.txt`'s documented format and `12-CONTEXT.md` D-08 ("a whole hidden command may be listed once by path to cover all its flags").
 
