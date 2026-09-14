@@ -2,15 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-status: planning
-last_updated: "2026-09-14T17:03:28.956Z"
+current_phase_name: "roadmap created — 7 phases, 1–7; Phase 1: Defect & Flake Burn-down is next"
+status: Roadmap created — awaiting approval
+stopped_at: v0.14.0 roadmap created (7 phases, 55/55 requirements mapped, traceability filled); awaiting roadmap approval, then Phase 1 discuss/plan
+last_updated: "2026-09-14T18:02:01.717Z"
 last_activity: 2026-09-14
+state_head: 6677c1f45ff0a374f82ec152afd1b88c3e7ac1c4
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
   percent: 0
+last_activity_desc: "v0.14.0 roadmap created: 7 phases (--reset-phase-numbers, restart at 1), 55/55 requirements mapped, traceability filled"
 ---
 
 # Project State
@@ -20,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Milestone v0.14.0 Polish & Agent Reach — defining requirements
+**Current focus:** Milestone v0.14.0 Polish & Agent Reach — roadmap created (7 phases, 55/55 requirements mapped); awaiting roadmap approval, then Phase 1 discuss/plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-09-14 — Milestone v0.14.0 started
+Phase: Not started (roadmap created — 7 phases, 1–7; Phase 1: Defect & Flake Burn-down is next)
+Plan: — (none until Phase 1 is planned)
+Status: Roadmap created — awaiting approval
+Last activity: 2026-09-14
 
 ## Performance Metrics
 
@@ -446,9 +450,9 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-13T14:17:49.000Z
-Stopped at: v0.13.0 milestone complete and archived (verified closeout); no milestone scoped
-  NEXT: `/gsd-cleanup` (autonomous run's last lifecycle step), then push the branch + open the phases 9–12 PR, then `/gsd-new-milestone`
+Last session: 2026-09-14T18:02:01.702Z
+Stopped at: v0.14.0 roadmap created (7 phases, 55/55 requirements mapped, traceability filled); awaiting roadmap approval, then Phase 1 discuss/plan
+  NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.

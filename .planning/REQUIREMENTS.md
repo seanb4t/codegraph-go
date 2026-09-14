@@ -134,67 +134,67 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-02 | — | Pending |
-| FIX-03 | — | Pending |
-| FIX-04 | — | Pending |
-| FIX-05 | — | Pending |
-| FIX-06 | — | Pending |
-| FIX-07 | — | Pending |
-| FIX-08 | — | Pending |
-| FIX-09 | — | Pending |
-| FIX-10 | — | Pending |
-| FIX-11 | — | Pending |
-| GRD-09 | — | Pending |
-| GRD-10 | — | Pending |
-| GRD-11 | — | Pending |
-| GRD-12 | — | Pending |
-| GRD-13 | — | Pending |
-| GRD-14 | — | Pending |
-| DOCS-08 | — | Pending |
-| DOCS-09 | — | Pending |
-| DOCS-10 | — | Pending |
-| DOCS-11 | — | Pending |
-| CLI-01 | — | Pending |
-| CLI-02 | — | Pending |
-| CLI-03 | — | Pending |
-| CLI-04 | — | Pending |
-| CLI-05 | — | Pending |
-| CLI-06 | — | Pending |
-| CLI-07 | — | Pending |
-| CLI-08 | — | Pending |
-| VERB-01 | — | Pending |
-| VERB-02 | — | Pending |
-| VERB-03 | — | Pending |
-| VERB-04 | — | Pending |
-| VERB-05 | — | Pending |
-| VERB-06 | — | Pending |
-| VERB-07 | — | Pending |
-| VERB-08 | — | Pending |
-| AGENT-08 | — | Pending |
-| AGENT-09 | — | Pending |
-| AGENT-04 | — | Pending |
-| AGENT-06 | — | Pending |
-| AGENT-07 | — | Pending |
-| AGENT-10 | — | Pending |
-| AGENT-11 | — | Pending |
-| AGENT-13 | — | Pending |
-| AGENT-14 | — | Pending |
-| NUDGE-03 | — | Pending |
-| NUDGE-04 | — | Pending |
-| NUDGE-05 | — | Pending |
-| NUDGE-06 | — | Pending |
-| CODEX-01 | — | Pending |
-| CODEX-02 | — | Pending |
-| CODEX-03 | — | Pending |
-| CODEX-04 | — | Pending |
-| CODEX-05 | — | Pending |
-| CODEX-06 | — | Pending |
+| FIX-02 | Phase 1 | Pending |
+| FIX-03 | Phase 7 | Pending |
+| FIX-04 | Phase 1 | Pending |
+| FIX-05 | Phase 1 | Pending |
+| FIX-06 | Phase 1 | Pending |
+| FIX-07 | Phase 1 | Pending |
+| FIX-08 | Phase 1 | Pending |
+| FIX-09 | Phase 1 | Pending |
+| FIX-10 | Phase 1 | Pending |
+| FIX-11 | Phase 1 | Pending |
+| GRD-09 | Phase 2 | Pending |
+| GRD-10 | Phase 2 | Pending |
+| GRD-11 | Phase 2 | Pending |
+| GRD-12 | Phase 2 | Pending |
+| GRD-13 | Phase 4 | Pending |
+| GRD-14 | Phase 2 | Pending |
+| DOCS-08 | Phase 2 | Pending |
+| DOCS-09 | Phase 2 | Pending |
+| DOCS-10 | Phase 2 | Pending |
+| DOCS-11 | Phase 2 | Pending |
+| CLI-01 | Phase 4 | Pending |
+| CLI-02 | Phase 4 | Pending |
+| CLI-03 | Phase 4 | Pending |
+| CLI-04 | Phase 4 | Pending |
+| CLI-05 | Phase 4 | Pending |
+| CLI-06 | Phase 4 | Pending |
+| CLI-07 | Phase 4 | Pending |
+| CLI-08 | Phase 4 | Pending |
+| VERB-01 | Phase 3 | Pending |
+| VERB-02 | Phase 3 | Pending |
+| VERB-03 | Phase 3 | Pending |
+| VERB-04 | Phase 3 | Pending |
+| VERB-05 | Phase 3 | Pending |
+| VERB-06 | Phase 3 | Pending |
+| VERB-07 | Phase 3 | Pending |
+| VERB-08 | Phase 3 | Pending |
+| AGENT-08 | Phase 5 | Pending |
+| AGENT-09 | Phase 5 | Pending |
+| AGENT-04 | Phase 5 | Pending |
+| AGENT-06 | Phase 5 | Pending |
+| AGENT-07 | Phase 5 | Pending |
+| AGENT-10 | Phase 5 | Pending |
+| AGENT-11 | Phase 5 | Pending |
+| AGENT-13 | Phase 5 | Pending |
+| AGENT-14 | Phase 7 | Pending |
+| NUDGE-03 | Phase 6 | Pending |
+| NUDGE-04 | Phase 6 | Pending |
+| NUDGE-05 | Phase 6 | Pending |
+| NUDGE-06 | Phase 6 | Pending |
+| CODEX-01 | Phase 7 | Pending |
+| CODEX-02 | Phase 7 | Pending |
+| CODEX-03 | Phase 7 | Pending |
+| CODEX-04 | Phase 7 | Pending |
+| CODEX-05 | Phase 7 | Pending |
+| CODEX-06 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 55 total
-- Mapped to phases: 0
-- Unmapped: 55 ⚠️ (filled by roadmap creation)
+- Mapped to phases: 55
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-14*
-*Last updated: 2026-09-14 after initial definition*
+*Last updated: 2026-09-14 after roadmap creation (traceability filled: 7 phases)*
