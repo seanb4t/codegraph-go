@@ -20,7 +20,12 @@
 //     module also attaches (CYCLE_CLASS / cycleDiscriminatorClass below)
 //     is presentation vocabulary copied straight FROM those same wire
 //     fields — it is a second encoding of data already computed, never a
-//     new computation.
+//     new computation. The THIRD copied wire field is FileGraphNode.
+//     communityId (GRF-06/GRF-08) — deterministic Louvain community
+//     assignment computed fresh inside FileGraph(); this module copies it
+//     onto file-node element data and a graph-community-N class (see
+//     communityDiscriminatorClass, community-palette.ts) exactly the same
+//     way, never computing a community client-side.
 //
 // ONE function of (the decoded response, the set of expanded directory
 // paths) produces BOTH the collapsed default and every expanded view —
@@ -53,6 +58,7 @@
 // plain numbers, not bigint. This module performs that narrowing once,
 // here, so nothing downstream has to.
 import type { FileGraphEdge, FileGraphNode, FileGraphResponse, FileSymbolsResponse } from '$lib/gen/ui_pb';
+import { communityDiscriminatorClass } from './community-palette';
 
 export type FileGraphNodeData = {
 	id: string;
@@ -62,6 +68,11 @@ export type FileGraphNodeData = {
 	language?: string;
 	symbolCount?: number;
 	cycleId?: number;
+	// communityId is present ONLY on file nodes — directory compounds
+	// (expandedDirElement/collapsedDirElement below) never gain this field
+	// or its class (D-11): a directory that mixes communities must not lie
+	// about its contents by picking one.
+	communityId?: number;
 	// collapsed/fileCount/cycleIds are present ONLY on a collapsed
 	// directory node — a union of server-provided per-file values (D-06),
 	// never a client-side membership computation.
@@ -163,19 +174,33 @@ function fileNodeElement(
 	n: FileGraphNode,
 	parent: string | undefined
 ): { data: FileGraphNodeData; classes?: string } {
+	// `?? 0` is load-bearing: every pre-existing fixture in this repo's
+	// test suite omits communityId entirely (built before this field
+	// existed), and those fixtures must keep rendering exactly as before —
+	// undefined is treated identically to 0 ("not computed"/no community),
+	// never attaching a colour class.
+	const communityId = n.communityId ?? 0;
 	const data: FileGraphNodeData = {
 		id: n.path,
 		label: baseName(n.path),
 		isDirectory: false,
 		language: n.language,
 		symbolCount: Number(n.symbolCount),
-		cycleId: n.cycleId
+		cycleId: n.cycleId,
+		communityId
 	};
 	if (parent !== undefined) {
 		data.parent = parent;
 	}
+	const classes: string[] = [];
 	if (n.cycleId !== 0) {
-		return { data, classes: `${CYCLE_CLASS} ${cycleDiscriminatorClass(n.cycleId)}` };
+		classes.push(CYCLE_CLASS, cycleDiscriminatorClass(n.cycleId));
+	}
+	if (communityId > 0) {
+		classes.push(communityDiscriminatorClass(communityId));
+	}
+	if (classes.length > 0) {
+		return { data, classes: classes.join(' ') };
 	}
 	return { data };
 }

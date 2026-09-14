@@ -16,6 +16,11 @@ import "fmt"
 //     supplied a malformed or out-of-range argument (empty query, negative
 //     limit/depth, an out-of-bound max-files, a path that escapes the repo
 //     root, an unknown --kind, an unknown files format).
+//   - ErrAborted -> Connect CodeAborted. A caller-supplied page token's
+//     embedded generation marker no longer matches the store's current
+//     state, meaning a concurrent write committed between two page
+//     fetches (Phase 10 WR-01, CoverageRows). The caller should retry
+//     the whole paged walk from the first page.
 //
 // classifiedError is the unexported carrier both sentinels' constructors
 // (notFoundf/invalidArgumentf) return. Its Error() method returns its
@@ -55,6 +60,14 @@ var ErrNotFound = fmt.Errorf("query: not found")
 // full class list and the Connect code plan 01-09 maps it to.
 var ErrInvalidArgument = fmt.Errorf("query: invalid argument")
 
+// ErrAborted classifies a caller-reachable "retry the whole operation from
+// the start" condition (Phase 10 WR-01): a page token was valid but its
+// embedded generation marker no longer matches the store's current state,
+// meaning a Sync committed between two page fetches. See the package-level
+// doc comment above for the full class list and the Connect code plan
+// 01-09 maps it to.
+var ErrAborted = fmt.Errorf("query: aborted")
+
 // notFoundf constructs an ErrNotFound-classified error carrying msg,
 // formatted exactly like fmt.Errorf but never wrapping — see
 // classifiedError's doc comment for why a %w wrap must never be
@@ -69,4 +82,12 @@ func notFoundf(format string, args ...interface{}) error {
 // introduced here.
 func invalidArgumentf(format string, args ...interface{}) error {
 	return &classifiedError{class: ErrInvalidArgument, msg: fmt.Sprintf(format, args...)}
+}
+
+// abortedf constructs an ErrAborted-classified error carrying msg,
+// formatted exactly like fmt.Errorf but never wrapping — see
+// classifiedError's doc comment for why a %w wrap must never be
+// introduced here.
+func abortedf(format string, args ...interface{}) error {
+	return &classifiedError{class: ErrAborted, msg: fmt.Sprintf(format, args...)}
 }

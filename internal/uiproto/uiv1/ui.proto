@@ -119,6 +119,30 @@ service UIService {
   // fixture before being written here — WatchIndex, IndexEvents,
   // StreamIndex and LiveUpdates were all rejected by that same fixture.
   rpc WatchGraph(WatchGraphRequest) returns (stream WatchGraphEvent);
+  // GetEditorLink is plan 09-01's fifteenth rpc (D-05): it turns a
+  // repo-relative path plus an optional line/col into an editor URI
+  // built from a {path}/{line}/{col} template. It is a NEW rpc rather
+  // than an extension of GetPermalink: GetPermalink runs git
+  // introspection with a timeout and its PermalinkAvailability enum
+  // encodes remote trust, while an editor link has no remote and no
+  // commit at all. Read-only: it performs no network operation,
+  // launches nothing and mutates nothing (SRV-03) — its name was
+  // verified clean against the live mutatingVerbs fixture before being
+  // written here. path is confined by the SAME
+  // (*query.Engine).ValidateRepoRelativePath gate GetNodeDetail,
+  // GetPermalink and FileSymbols already use (SRV-05) — no second
+  // confinement implementation.
+  rpc GetEditorLink(GetEditorLinkRequest) returns (GetEditorLinkResponse);
+  // GetCoverage is plan 10-01's sixteenth rpc (Phase 10 HLT-05/HLT-06,
+  // D-10): it pages the per-file coverage-gap row list (extraction
+  // failures and pre-extraction exclusions) that GetHealthResponse.coverage
+  // deliberately omits to stay bounded on a polled call (the v0.12.0
+  // Phase 1 transport-cap lesson). Read-only: it performs no network
+  // operation and mutates nothing (SRV-03) — its name was verified clean
+  // against the live mutatingVerbs fixture before being written here
+  // (no "Index", the exact trap GetIndexHealth/WatchIndex/IndexEvents/
+  // StreamIndex were each rejected for).
+  rpc GetCoverage(GetCoverageRequest) returns (GetCoverageResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -805,6 +829,14 @@ message GetHealthResponse {
   // commit_sha is duplicated from GetStatusResponse — see this
   // message's doc comment above for why and how it is validated.
   string commit_sha = 16;
+
+  // coverage is plan 10-01's addition (Phase 10 HLT-05/HLT-06, D-09 as
+  // corrected — field 16 above is already commit_sha): the
+  // discovered-vs-indexed denominator, populated in the SAME withEngine
+  // call as every other GetHealth field so the health page shows it on
+  // its existing poll with no second rpc. known is false for a graph
+  // that predates this field (D-06) — never 0/0, never an error.
+  Coverage coverage = 17;
 }
 
 // FileGraphRequest is presently unread of any consulted field, mirroring
@@ -835,6 +867,12 @@ message FileGraphNode {
   // strongly-connected cycle, else a 1-based component identifier
   // (GRF-04, D-06).
   int32 cycle_id = 4;
+
+  // community_id mirrors FileGraphNode.CommunityID: a 1-based canonical
+  // community identifier assigned by AssignCommunities, computed fresh
+  // on every FileGraph() call. 0 only when not computed (GRF-06, D-03,
+  // D-09).
+  int32 community_id = 5;
 }
 
 // FileGraphEdge is the uiv1 projection of internal/query.FileGraphEdge,
@@ -899,6 +937,11 @@ message FileGraphResponse {
 
   // cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
   int32 cycle_count = 6;
+
+  // community_count mirrors FileGraphResult.CommunityCount: the number
+  // of distinct community ids assigned over nodes (singletons counted),
+  // so the UI reports the count without recounting (GRF-06, D-12a).
+  int32 community_count = 7;
 }
 
 // FileSymbolsRequest is the uiv1 projection of
@@ -983,4 +1026,169 @@ message WatchGraphEvent {
 
   // commit_sha mirrors GetStatusResponse.commit_sha.
   string commit_sha = 6;
+}
+
+// GetEditorLinkRequest carries the repo-relative path and optional
+// line/col GetEditorLink needs to build an editor URI (D-05, D-08).
+// path is confined by the same gate GetNodeDetailRequest.file,
+// GetPermalinkRequest.path and FileSymbolsRequest.path use
+// ((*query.Engine).ValidateRepoRelativePath, SRV-05 — no second
+// confinement implementation). line and col are both `optional` (proto3
+// presence) so the wire can distinguish "unset" (substituted with 1)
+// from an explicit 0, which is refused. template is `optional` so an
+// absent per-request override is distinguishable from an explicit empty
+// string — when set, it replaces the server's effective default for
+// this one call only (D-06) and is validated by the SAME validator the
+// server's own flag/env value uses.
+message GetEditorLinkRequest {
+  string path = 1;
+  optional int32 line = 2;
+  optional int32 col = 3;
+  optional string template = 4;
+}
+
+// EditorLinkAvailability is a CLOSED, four-valued classification of
+// whether GetEditorLink could build a URL (D-07) — deliberately never a
+// boolean and never an open string. EDITOR_LINK_AVAILABILITY_UNSPECIFIED
+// is the required proto3 zero value and is never a state GetEditorLink
+// itself produces.
+//
+//   - BUILDABLE: url is populated.
+//   - NO_TEMPLATE: no effective template is configured — either nothing
+//     was ever set (flag, env, or discovery all came up empty) or the
+//     operator explicitly disabled editor links (D-16). reason
+//     distinguishes the two cases with two different strings.
+//   - TEMPLATE_INVALID: the effective template (server default or a
+//     per-request override) failed validation. reason names the cause.
+//
+// Configuration states are ANSWERS, never errors (D-07) — the same
+// "empty is a successful response" discipline GetPermalink already
+// follows. The ONE error case is a rejected path.
+enum EditorLinkAvailability {
+  EDITOR_LINK_AVAILABILITY_UNSPECIFIED = 0;
+  EDITOR_LINK_AVAILABILITY_BUILDABLE = 1;
+  EDITOR_LINK_AVAILABILITY_NO_TEMPLATE = 2;
+  EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID = 3;
+}
+
+// EditorTemplateSource reports the SERVER DEFAULT's provenance,
+// regardless of any per-request override (D-07) — so the browser's
+// picker (D-18) can show where the current default came from even when
+// an override is active for this browser only.
+enum EditorTemplateSource {
+  EDITOR_TEMPLATE_SOURCE_UNSPECIFIED = 0;
+  EDITOR_TEMPLATE_SOURCE_FLAG = 1;
+  EDITOR_TEMPLATE_SOURCE_ENV = 2;
+  EDITOR_TEMPLATE_SOURCE_DISCOVERED = 3;
+  EDITOR_TEMPLATE_SOURCE_NONE = 4;
+  EDITOR_TEMPLATE_SOURCE_DISABLED = 5;
+}
+
+// EditorPreset is one of the three fixed editor choices the picker
+// offers (D-18): VS Code, Cursor, JetBrains. The browser never holds a
+// second copy of a template it constructs itself — presets ride on
+// every GetEditorLinkResponse so the server remains the one place a
+// template is ever interpreted.
+message EditorPreset {
+  string id = 1;
+  string name = 2;
+  string template = 3;
+}
+
+// GetEditorLinkResponse answers honestly in every configuration state
+// (D-07): NO_TEMPLATE and TEMPLATE_INVALID are SUCCESSFUL responses,
+// never errors. url is populated only when availability is BUILDABLE;
+// reason is populated whenever it is not.
+message GetEditorLinkResponse {
+  string url = 1;
+  EditorLinkAvailability availability = 2;
+  string reason = 3;
+
+  // default_source and default_editor report the SERVER DEFAULT's
+  // provenance (D-07) — populated on every response, whether or not
+  // this call's answer used an override.
+  EditorTemplateSource default_source = 4;
+  string default_editor = 5;
+
+  // override_applied is true when GetEditorLinkRequest.template was
+  // set and non-empty and was the template actually used to build (or
+  // attempt to build) this response's url (D-06).
+  bool override_applied = 6;
+
+  // presets carries exactly the picker's three choices (D-18) so the
+  // browser never holds a second copy of a template.
+  repeated EditorPreset presets = 7;
+}
+
+// ExclusionReason (Phase 10, plan 10-01) is a UI-LOCAL closed enum with
+// the same six values, numbered IDENTICALLY to
+// internal/schema/graph.proto's codegraph.v1.ExclusionReason (D-08).
+// ui.proto imports nothing today and its TS generator is scoped to this
+// one file (buf.gen.ts.yaml) — importing graph.proto would break
+// web/src/lib/gen/ui_pb.ts's generation. TestExclusionReasonEnumsAgree
+// pins the two enums to each other in both directions, so the wire
+// mapper (exclusionReasonToProto) is a plain numeric cast that cannot
+// silently skew.
+enum ExclusionReason {
+  EXCLUSION_REASON_UNSPECIFIED = 0;
+  EXCLUSION_REASON_DIR_VENDOR = 1;
+  EXCLUSION_REASON_DIR_DOTPREFIX = 2;
+  EXCLUSION_REASON_UNSUPPORTED_EXTENSION = 3;
+  EXCLUSION_REASON_BUILD_TAG = 4;
+  EXCLUSION_REASON_SIZE_LIMIT = 5;
+}
+
+// CoverageRowKind (Phase 10, plan 10-01) distinguishes a CoverageRow's
+// origin: a pre-extraction exclusion, or a File record with a non-empty
+// errors list.
+enum CoverageRowKind {
+  COVERAGE_ROW_KIND_UNSPECIFIED = 0;
+  COVERAGE_ROW_KIND_EXCLUDED = 1;
+  COVERAGE_ROW_KIND_EXTRACTION_FAILED = 2;
+}
+
+// Coverage (Phase 10, plan 10-01) is the discovered-vs-indexed
+// denominator: discovered == indexed + extraction_failed + (excluded
+// minus directory-level records). known == false means UNKNOWN — a
+// graph that predates this field (D-06) — never 0/0.
+message Coverage {
+  bool known = 1;
+  int64 discovered = 2;
+  int64 indexed = 3;
+  int64 excluded = 4;
+  int64 extraction_failed = 5;
+
+  // excluded_by_reason keys are ExclusionReason's full generated names
+  // (e.g. "EXCLUSION_REASON_BUILD_TAG") — the generated TS client
+  // resolves numbers to these same full names via
+  // ExclusionReasonSchema.values (D-09 discretion).
+  map<string, int64> excluded_by_reason = 6;
+}
+
+// GetCoverageRequest (Phase 10, plan 10-01, D-10 verbatim): page_size <= 0
+// defaults to 200, > 1000 is clamped to 1000; page_token is opaque,
+// server-issued, validated on the way in — malformed input is
+// INVALID_ARGUMENT (T-10-04). reason, when set to a value other than
+// UNSPECIFIED, restricts rows to that one exclusion reason.
+message GetCoverageRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  ExclusionReason reason = 3;
+}
+
+// CoverageRow is one per-file (or per-directory) coverage-gap row.
+message CoverageRow {
+  string path = 1;
+  CoverageRowKind kind = 2;
+  ExclusionReason reason = 3;
+  string detail = 4;
+}
+
+// GetCoverageResponse. known is additive to D-10's original shape and
+// required by D-06's never-0/0 rule: an old graph must be
+// distinguishable from a known graph with zero rows.
+message GetCoverageResponse {
+  repeated CoverageRow rows = 1;
+  string next_page_token = 2;
+  bool known = 3;
 }

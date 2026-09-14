@@ -61,6 +61,21 @@ import (
 // store's Meta.last_sync_unix_ms changes. A stream is still a read — it
 // performs no network operation and mutates nothing — and belongs in
 // this read set for exactly the same reason the other thirteen do.
+// UPDATED at plan 09-01: GetEditorLink (D-05) is the fifteenth read-only
+// rpc, added additively to internal/uiproto/uiv1/ui.proto's `service
+// UIService` block. It turns a repo-relative path plus an optional
+// line/col into an editor URI from an operator- or discovery-supplied
+// template. It performs no network operation, launches nothing and
+// mutates nothing — and belongs in this read set for exactly the same
+// reason the other fourteen do.
+// UPDATED at plan 10-01: GetCoverage (Phase 10 HLT-05/HLT-06, D-10) is
+// the sixteenth read-only rpc, added additively to
+// internal/uiproto/uiv1/ui.proto's `service UIService` block. It pages
+// the per-file coverage-gap row list GetHealthResponse.coverage
+// deliberately omits to stay bounded on a polled call. It is a
+// read-only verb — it performs no network operation and mutates
+// nothing — and belongs in this read set for exactly the same reason
+// the other fifteen do.
 var wantUIServiceMethods = map[string]struct{}{
 	"GetStatus":     {},
 	"Search":        {},
@@ -76,17 +91,19 @@ var wantUIServiceMethods = map[string]struct{}{
 	"FileGraph":     {},
 	"FileSymbols":   {},
 	"WatchGraph":    {},
+	"GetEditorLink": {},
+	"GetCoverage":   {},
 }
 
 // TestUIServiceMethodSetIsExactlyTheReadSet reflects over the generated
 // uiv1connect.UIServiceHandler interface — the machine-readable method
 // inventory a mutating rpc would have to appear in before it could ever
 // be dispatched — and asserts the observed method-name set is EXACTLY
-// wantUIServiceMethods: same length (14, as of plan 06-01's WatchGraph)
-// AND same membership. A negative-only guard ("no method name contains a
-// write verb") passes vacuously the moment its verb list stops matching
-// a newly-added verb; this positive set-equality guard instead fails in
-// BOTH directions (SRV-03, T-01-04).
+// wantUIServiceMethods: same length (16, as of plan 10-01's
+// GetCoverage) AND same membership. A negative-only guard ("no method
+// name contains a write verb") passes vacuously the moment its verb list
+// stops matching a newly-added verb; this positive set-equality guard
+// instead fails in BOTH directions (SRV-03, T-01-04).
 func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	typ := reflect.TypeOf((*uiv1connect.UIServiceHandler)(nil)).Elem()
 
@@ -95,8 +112,8 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 		got[typ.Method(i).Name] = struct{}{}
 	}
 
-	if len(got) != 14 {
-		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 14: %v", len(got), got)
+	if len(got) != 16 {
+		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 16: %v", len(got), got)
 	}
 	if len(got) != len(wantUIServiceMethods) {
 		t.Fatalf("observed method set size %d != fixture size %d — the fixture itself is stale", len(got), len(wantUIServiceMethods))
@@ -109,7 +126,7 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	}
 	for name := range got {
 		if _, ok := wantUIServiceMethods[name]; !ok {
-			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the fourteen-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
+			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the sixteen-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
 		}
 	}
 }
@@ -249,6 +266,42 @@ const uiProtoFieldFixtureLenAtPlan0506 = uiProtoFieldFixtureLenAtPlan0502 + 4
 // never as a bare literal, mirroring the established chained-extension
 // pattern (01-10, 01-11, 03-05, 04-03, 05-02, 05-06).
 const uiProtoFieldFixtureLenAtPlan0601 = uiProtoFieldFixtureLenAtPlan0506 + 7
+
+// uiProtoFieldFixtureLenAtPlan0901 EXTENDS uiProtoFieldFixtureLenAtPlan0601
+// by exactly 14 (plan 09-01, BRW-11/BRW-12, the fifteenth rpc
+// GetEditorLink): GetEditorLinkRequest's four fields (path, line, col,
+// template) + EditorPreset's three (id, name, template) + GetEditorLinkResponse's
+// seven (url, availability, reason, default_source, default_editor,
+// override_applied, presets) = 4 + 3 + 7 = 14 — all three new messages,
+// additive from field 1 on each since every one is new. Declared in
+// terms of the prior constant, never as a bare literal, mirroring the
+// established chained-extension pattern (01-10, 01-11, 03-05, 04-03,
+// 05-02, 05-06, 06-01).
+const uiProtoFieldFixtureLenAtPlan0901 = uiProtoFieldFixtureLenAtPlan0601 + 14
+
+// uiProtoFieldFixtureLenAtPlan1001 EXTENDS uiProtoFieldFixtureLenAtPlan0901
+// by exactly 17 (plan 10-01, Phase 10 HLT-05/HLT-06, the sixteenth rpc
+// GetCoverage): Coverage's six fields (known, discovered, indexed,
+// excluded, extraction_failed, excluded_by_reason) + GetCoverageRequest's
+// three (page_size, page_token, reason) + CoverageRow's four (path, kind,
+// reason, detail) + GetCoverageResponse's three (rows, next_page_token,
+// known) + GetHealthResponse.coverage's one = 6 + 3 + 4 + 3 + 1 = 17 — all
+// four new messages are additive from field 1 on each since every one is
+// new; GetHealthResponse.coverage is the one additive field on an
+// existing message (D-09 as corrected — field 16 is already commit_sha).
+// Declared in terms of the prior constant, never as a bare literal,
+// mirroring the established chained-extension pattern (01-10, 01-11,
+// 03-05, 04-03, 05-02, 05-06, 06-01, 09-01).
+const uiProtoFieldFixtureLenAtPlan1001 = uiProtoFieldFixtureLenAtPlan0901 + 17
+
+// uiProtoFieldFixtureLenAtPlan1101 EXTENDS uiProtoFieldFixtureLenAtPlan1001
+// by exactly 2 (plan 11-01, Phase 11 GRF-06/GRF-09): FileGraphNode.
+// community_id + FileGraphResponse.community_count — both additive
+// fields on EXISTING messages, no new rpc, so the method set stays at
+// 16. Declared in terms of the prior constant, never as a bare literal,
+// mirroring the established chained-extension pattern (01-10, 01-11,
+// 03-05, 04-03, 05-02, 05-06, 06-01, 09-01, 10-01).
+const uiProtoFieldFixtureLenAtPlan1101 = uiProtoFieldFixtureLenAtPlan1001 + 2
 
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
@@ -490,6 +543,45 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"WatchGraphEvent", "store_exists", 4},
 	{"WatchGraphEvent", "indexing_in_progress", 5},
 	{"WatchGraphEvent", "commit_sha", 6},
+	// Plan 09-01's fourteen — see uiProtoFieldFixtureLenAtPlan0901's own
+	// doc comment for the arithmetic.
+	{"GetEditorLinkRequest", "path", 1},
+	{"GetEditorLinkRequest", "line", 2},
+	{"GetEditorLinkRequest", "col", 3},
+	{"GetEditorLinkRequest", "template", 4},
+	{"EditorPreset", "id", 1},
+	{"EditorPreset", "name", 2},
+	{"EditorPreset", "template", 3},
+	{"GetEditorLinkResponse", "url", 1},
+	{"GetEditorLinkResponse", "availability", 2},
+	{"GetEditorLinkResponse", "reason", 3},
+	{"GetEditorLinkResponse", "default_source", 4},
+	{"GetEditorLinkResponse", "default_editor", 5},
+	{"GetEditorLinkResponse", "override_applied", 6},
+	{"GetEditorLinkResponse", "presets", 7},
+	// Plan 10-01's seventeen — see uiProtoFieldFixtureLenAtPlan1001's
+	// own doc comment for the arithmetic.
+	{"GetHealthResponse", "coverage", 17},
+	{"Coverage", "known", 1},
+	{"Coverage", "discovered", 2},
+	{"Coverage", "indexed", 3},
+	{"Coverage", "excluded", 4},
+	{"Coverage", "extraction_failed", 5},
+	{"Coverage", "excluded_by_reason", 6},
+	{"GetCoverageRequest", "page_size", 1},
+	{"GetCoverageRequest", "page_token", 2},
+	{"GetCoverageRequest", "reason", 3},
+	{"CoverageRow", "path", 1},
+	{"CoverageRow", "kind", 2},
+	{"CoverageRow", "reason", 3},
+	{"CoverageRow", "detail", 4},
+	{"GetCoverageResponse", "rows", 1},
+	{"GetCoverageResponse", "next_page_token", 2},
+	{"GetCoverageResponse", "known", 3},
+	// Plan 11-01's two — see uiProtoFieldFixtureLenAtPlan1101's own
+	// doc comment for the arithmetic.
+	{"FileGraphNode", "community_id", 5},
+	{"FileGraphResponse", "community_count", 7},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -516,8 +608,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0601 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0601 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0601)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan1101 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan1101 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan1101)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")
@@ -587,5 +679,59 @@ func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
 		if _, ok := fixtureKeys[key]; !ok {
 			t.Fatalf("descriptor declares field %s, but no fixture entry covers it — the fixture must cover every field of every message that exists at this wave", key)
 		}
+	}
+}
+
+// wantCoverageRPCName is plan 10-01's chosen sixteenth rpc name, verified
+// clean this session against the live mutatingVerbs fixture declared
+// above (never re-transcribed — this test reads that same package-level
+// var), mirroring rpcname_test.go's wantRPCName convention exactly.
+const wantCoverageRPCName = "GetCoverage"
+
+// TestCoverageRPCNameClearsMutatingVerbsWhileDecoyIsRejected is D-16's
+// table-test proof: GetCoverage clears every mutatingVerbs member while a
+// decoy GetIndexCoverage — which collides on "Index", the exact trap
+// GetIndexHealth/WatchIndex/IndexEvents/StreamIndex were each rejected
+// for — is correctly refused. The table asserts BOTH a clean row and a
+// rejected row exist, proving the discriminator is live and not merely
+// vacuously true for one direction (rule 84d1gfpywd).
+func TestCoverageRPCNameClearsMutatingVerbsWhileDecoyIsRejected(t *testing.T) {
+	if len(mutatingVerbs) == 0 {
+		t.Fatal("mutatingVerbs is empty — this guard would pass vacuously")
+	}
+
+	cases := []struct {
+		name      string
+		wantClean bool
+	}{
+		{wantCoverageRPCName, true},
+		{"GetIndexCoverage", false},
+	}
+
+	var sawClean, sawRejected bool
+	for _, tc := range cases {
+		collides := false
+		for _, verb := range mutatingVerbs {
+			if strings.Contains(tc.name, verb) {
+				collides = true
+				break
+			}
+		}
+		gotClean := !collides
+		if gotClean != tc.wantClean {
+			t.Errorf("name %q: clean = %v, want %v", tc.name, gotClean, tc.wantClean)
+		}
+		if gotClean {
+			sawClean = true
+		} else {
+			sawRejected = true
+		}
+	}
+	if !sawClean || !sawRejected {
+		t.Fatalf("table did not exercise both directions: sawClean=%v sawRejected=%v — the discriminator is unproven", sawClean, sawRejected)
+	}
+
+	if _, ok := wantUIServiceMethods[wantCoverageRPCName]; !ok {
+		t.Fatalf("%q is not a member of wantUIServiceMethods — the chosen name was never registered in the read-only fixture", wantCoverageRPCName)
 	}
 }

@@ -232,15 +232,57 @@ Everything the project *did* already stood on its own; the way it *described and
 - Notable: the integration checker still reported "18 verb-prefixes" while correctly listing nineteen — the third recorded instance of a subagent miscounting its own enumeration. Countable claims from subagents are re-derived as policy, not as suspicion.
 - Notable: 498 commits over 17 days, the longest-calendar milestone since v1.0, and the first to ship a user-facing GUI.
 
+## Milestone: v0.13.0 — Guard Hardening & UI Follow-through
+
+**Shipped:** 2026-09-13
+**Phases:** 6 (7–12) | **Plans:** 29 (+1 quick task at close) | **Calendar days:** 6 (2026-09-08 → 09-13) | **Commits:** 249 (81 in PR #69 for phases 7–8, 168 on the branch for 9–12 and the close)
+
+### What Was Built
+Every guard in the repo's known cannot-fire set closed with a recorded RED demonstration (`CheckRegression` current-metrics positivity, the `internal/query` archtest, the dry-run-signed injection count, `post-release-verify`'s conclusion guard, GRD-05 by deletion); a `test/tmux` real-PTY harness driving the release binary in a genuine pane with a readiness-predicate poll and a CI job gated on `executed=6 expected=6`; `GetEditorLink` (rpc #15) with confinement-before-substitution and a per-line `SourcePane` breadcrumb; the coverage denominator — exclusion reasons persisted at the discovery decision point in a new `c/` namespace, `GetCoverage` (rpc #16), a `/health` Coverage section; Louvain community clustering via `gonum` computed fresh per `FileGraph()` call under a threshold committed alone first (`698235a2`, measured 106 ms vs 500 ms) with a 12-hue palette on the unchanged ELK layout and a `check:gonum` supply-chain gate; `docs/CLI-REFERENCE.md` as `cobra/doc` output under `task docs:cli:drift` plus an allowlist guard for hidden flags; the brew-trust wording narrowed. 26/26 requirements; 21 mutation families; six SECURITY.md registers at `threats_open: 0`.
+
+### What Worked
+- **Threshold-before-measurement, second time, with the ancestry proof persisted.** GRF-09 copied GRF-01's protocol and improved it: the bar went in as the phase's first single-file commit, the harness reads every value from that file, and `tools/graphcluster/ancestry_test.go` proves the commit is an ancestor of every measurement and that its sha256 still matches — the manual `git merge-base` one-liner became a test. Louvain landed at 106 ms where research assumed "tens" — the measurement was worth taking.
+- **Deep code review as a standing gate paid every phase.** Phase 9's first-load preset override (CR-01), Phase 10's three paging/generation bugs (resume-by-value, wall-clock generation aliasing, wipe-resets-generation), Phase 11's negative-modulo palette index and symlink-blind walker, Phase 12's allowlist loophole — none were visible to a green suite. The Phase 10 loop needed a user-authorized fourth pass; it found a real bug.
+- **Live UAT done by the orchestrator, then handed to the maintainer as evidence.** Phase 11's one `human_needed` item was resolved by driving the real `codegraph ui` through the cytoscape instance (`container._cyreg.cy`), counting 8 distinct colours over 132 nodes with 0 inconsistencies, and rebuilding the pre-phase binary to prove four console entries pre-dated the phase — a screenshot and a decision, not a request to go look.
+- **A maintainer question reset a phase in two sentences.** Phase 12 was scoped as a hand-authored reference plus a section-scoped guard plus a docs-grep test. "Are we reimplementing cobra doc?" and "what are we actually testing here and why?" replaced it with generated docs under a drift gate, a ~40-line guard for the generator's one blind spot, and no test for a wording change — and the ROADMAP/REQUIREMENTS were reworded before planning so the record matches what shipped.
+- **Re-verify rather than override at the close.** All five earlier phases read `stale` for mechanical reasons; five verifier runs in parallel re-pinned them to canonical `passed` in under ten minutes, and the two open artefacts were resolved (one of them by fixing a real vacuous guard) instead of acknowledged — the first `verified_closeout` since v0.10.0.
+
+### What Was Inefficient
+- **Every phase's verification report went `stale` by construction, and it was noticed only at the audit.** Listing `.planning/REQUIREMENTS.md` in `covered_files` (#4155) means every later `phase.complete` re-stales the report; Phase 11 was then re-staled by Phase 12 legitimately editing a covered `Taskfile.yml`. The fix — plans + summaries + implementation files only, digest via the tool's own function — is now a stored gotcha; the cost was five re-verification runs at the close.
+- **The user could not see the questions being asked — twice.** Markdown tables printed before `AskUserQuestion` and the option `preview` field never reached the terminal; two interruptions ("I can't see the questions", "can't see the actual details") were needed before the details moved into the question text and option descriptions. Two more interruptions in Phase 12 ("overly pedantic") were about scope, not rendering, and were right.
+- **The tdd review-checkpoint gate never fires here.** GSD's `tdd-red-evidence` reads TAP only, so `go test` RED runs are invisible to it and every phase reports "No type:tdd plans"; RED→GREEN was carried by plan-declared Go gates instead. Correct, but the capability contributes nothing on a Go repo.
+- **Subagent miscounts continued.** The integration checker closed with "27/27" over a 26-row table and read Phase 8 as `human_needed` against a `passed` frontmatter; the Phase 12 plan checker reported "No PATTERNS.md" for a committed file; the Phase 12 planner had to normalize `- D-NN:` bullets to `- **D-NN:**` for the decision-coverage gate to parse them. Countable claims still need a second reader.
+- **Taskfile template escaping cost a deviation.** `cmds:` strings pass through Go `text/template` before the shell, so a `go list -f '{{…}}'` literal in `check:gonum` had to be escaped with `{{"{{"}}` and the plan's byte-literal grep assertions could never match — a known idiom (`release:goreleaser`) that was not in the planner's context.
+
+### Patterns Established
+- **Generated documentation is a build artefact with a drift gate; a guard covers only the generator's blind spot; never test a third-party library's behaviour; a wording change gets no test.** (Phase 12, maintainer.)
+- **Community/derived annotations are computed fresh per call; persistence is a promote-on-failed-verdict fallback, never add-alongside.** One source of truth for anything that colours the UI. (Phase 11, D-07/D-15, assumption-delta `no-change`.)
+- **Exclusion reasons are recorded at the decision point in the same batch as the records they explain, and read back without a walk.** A reason reconstructed later is a plausible lie. (Phase 10.)
+- **A wait primitive takes a caller-stated readiness predicate; interval tuning alone never excludes a pre-output frame.** (Phase 8 G-08-1.)
+- **`covered_files` = the phase's plans + summaries + implementation files; never REQUIREMENTS/UAT/VALIDATION/VERIFICATION; digest via `computeCoveredDigest`.** (Milestone close.)
+- **Present decisions inside the question text and option descriptions — nothing printed before the prompt reaches the user.**
+
+### Key Lessons
+1. **A guard's blind spot is found by making it fail, and the discipline finds more guards than the plan named.** Phase 7 fixed five; its own review found a sixth (CR-01); the milestone close found the seventh (the graphstore archtest's partial-load hole, sibling of CR-01, sitting in a todo since 2026-09-08). Every one passed green until a mutation was applied.
+2. **Two artefacts that agree can both be wrong.** `tools/clidoc` and the accounting guard would have agreed on a 26-command tree while the binary ships 36 — Cobra adds the `completion` family and `--version` only inside `Execute`. The research's live probe, not either artefact, caught it. Positive floors must be measured against the real thing.
+3. **The audit must read the canonical status, not the raw one.** Six `passed` frontmatters and five `stale` canonical statuses were both true at once; reporting only the first would have hidden a mechanism the next milestone would trip again.
+4. **Ask "what are we actually testing and why?" before building a gate.** DOCS-07's docs-grep, Phase 11's cobra/doc positive control, and the section-scoped flag match were all tests of something other than this project's own claims. Each was cut on that question alone.
+5. **A maintainer decision reached by argument is worth recording as the decision, not as the compromise.** The Phase 12 ROADMAP/REQUIREMENTS rewording is dated and cited in CONTEXT.md; the audit's Finding 2 says why. Future readers see the reasoning, not a mismatch between spec and delivery.
+
+### Cost Observations
+- Model mix: opus for orchestration and planning; sonnet for research, execution, review, fixes, verification and pattern mapping; haiku for plan checking and the integration check. Five concurrent sonnet verifiers at the close were the largest fan-out of the milestone and finished in ~6 minutes wall-clock.
+- Notable: 249 commits in 6 calendar days — the densest milestone yet; 21 mutation families; 5 code-review fix passes (Phase 10's needed user authorization for a fourth); 1 live UAT performed by the orchestrator; 2 UX interruptions about question visibility, 2 about scope.
+- Notable: three engram records written at Phase 11 (`qc5kkp2457` covered_files trap, `mjqcmvnrwm` phase decisions, `npwg333n9h` Taskfile template escaping) and one at Phase 12 (`a2t6qe2171` the two maintainer questions) — the close's re-verification would have been avoidable had `qc5kkp2457` existed at Phase 7.
+
 ## Cross-Milestone Trends
 
-| Metric | v0.1 | v1.0 | v0.5.0 | v0.10.0 | v0.11.0 | v0.12.0 |
-|--------|------|------|--------|---------|---------|---------|
-| Phases | 8 | 10 | 4 | 4 | 6 | 6 |
-| Plans | 66 | 72 | 24 | 15 | 30 | 51 |
-| Tasks | 142 | — | — | 34 | 60 | — |
-| Calendar days | — | 20 (2026-07-14 → 08-03) | 3 (2026-08-08 → 08-11) | 2 (2026-08-12 → 08-13) | 4 (2026-08-13 → 08-16) | 17 (2026-08-22 → 09-07) |
-| Commits | — | 594 | ~80 | — | 261 | 498 |
+| Metric | v0.1 | v1.0 | v0.5.0 | v0.10.0 | v0.11.0 | v0.12.0 | v0.13.0 |
+|--------|------|------|--------|---------|---------|---------|---------|
+| Phases | 8 | 10 | 4 | 4 | 6 | 6 | 6 (7–12) |
+| Plans | 66 | 72 | 24 | 15 | 30 | 51 | 29 (+1 quick) |
+| Tasks | 142 | — | — | 34 | 60 | — | 72 |
+| Calendar days | — | 20 (2026-07-14 → 08-03) | 3 (2026-08-08 → 08-11) | 2 (2026-08-12 → 08-13) | 4 (2026-08-13 → 08-16) | 17 (2026-08-22 → 09-07) | 6 (2026-09-08 → 09-13) |
+| Commits | — | 594 | ~80 | — | 261 | 498 | 249 |
 | Net product LOC (outside `.planning/`) | — | — | — | — | **−806** (first shrinking milestone) | **+51,387** (first GUI milestone; `web/tests` > `web/src`) |
 | Releases cut during the milestone | 1 | 1 | 6 (`v0.5.0` … `v0.9.0`) | 0 (no milestone tag by design — D-06R) | 0 (same) | 0 (same) |
 | Deep-review bugs caught (green suite missed) | Phases 4/6/7/8 — recurring, high-value | Every phase touching I/O, concurrency, or CI — 10/10 recurrence | 29 findings across 6 convergence cycles on Phase 1 alone; cycle 3 caught a test pinning a *broken* invariant | Phase 7: 2 CRITICAL + 4 WARNING from a deep review after a green TDD suite; a separate independent security review caught 1 real vulnerability pre-merge | Retroactive secure+validate sweep across all 6 phases: 131 threats modelled, 2 CRITICAL; 3 phantom `-run` patterns found reading green | Live browser UAT found real defects in **4 consecutive phases** a green suite could not; 06-08 added *after* the phase verified 5/5 |

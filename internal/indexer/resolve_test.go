@@ -987,13 +987,20 @@ var errStubWrite = errors.New("stub write error")
 // Pebble-backed store. failOn, when non-empty, names the Put* method that
 // should fail (simulating a mid-write staging error).
 type stubWriter struct {
-	nodes []*schema.Node
-	edges []*schema.Edge
-	files []*schema.File
-	meta  *schema.Meta
+	nodes    []*schema.Node
+	edges    []*schema.Edge
+	files    []*schema.File
+	excluded []*schema.ExcludedFile
+	meta     *schema.Meta
 
-	commitCalls int
-	closeCalls  int
+	commitCalls            int
+	closeCalls             int
+	deleteAllExcludedCalls int
+
+	// order records the call sequence of DeleteAllExcludedFiles and
+	// PutExcludedFile so a test can assert the range-delete happens
+	// BEFORE the rewrite (Phase 10 D-07, TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting).
+	order []string
 
 	failOn string
 }
@@ -1030,6 +1037,31 @@ func (w *stubWriter) PutMeta(m *schema.Meta) error {
 	return nil
 }
 
+func (w *stubWriter) PutExcludedFile(x *schema.ExcludedFile) error {
+	if w.failOn == "PutExcludedFile" {
+		return errStubWrite
+	}
+	w.excluded = append(w.excluded, x)
+	w.order = append(w.order, "PutExcludedFile")
+	return nil
+}
+
+func (w *stubWriter) DeleteExcludedFile(path string) error {
+	if w.failOn == "DeleteExcludedFile" {
+		return errStubWrite
+	}
+	return nil
+}
+
+func (w *stubWriter) DeleteAllExcludedFiles() error {
+	if w.failOn == "DeleteAllExcludedFiles" {
+		return errStubWrite
+	}
+	w.deleteAllExcludedCalls++
+	w.order = append(w.order, "DeleteAllExcludedFiles")
+	return nil
+}
+
 func (w *stubWriter) DeleteFileSubgraph(path string) error { return nil }
 
 func (w *stubWriter) DeleteNode(id string) error { return nil }
@@ -1051,14 +1083,71 @@ func (w *stubWriter) Close() error {
 // stubStore is a graphstore.GraphStore stand-in whose NewWriter always
 // returns the same injected stubWriter, so a test can inspect it after
 // writeGraph returns.
+//
+// snapshotMeta/snapshotErr configure what Snapshot().GetMeta() reports to
+// writeGraph's WR-01 (iteration 2) read-modify-write of CoverageGeneration.
+// The zero value (both nil) mimics a genuinely fresh store — GetMeta
+// returns graphstore.ErrNotFound, exactly as pebbleReader.GetMeta does for
+// a store with no Meta record yet — so every pre-existing test in this
+// file, none of which set these fields, exercises the "fresh store starts
+// at generation 1" path unchanged.
 type stubStore struct {
 	writer *stubWriter
+
+	snapshotMeta *schema.Meta
+	snapshotErr  error
 }
 
-func (s *stubStore) Snapshot() (graphstore.Reader, error)  { return nil, nil }
+func (s *stubStore) Snapshot() (graphstore.Reader, error) {
+	if s.snapshotMeta != nil {
+		return &stubReader{meta: s.snapshotMeta}, nil
+	}
+	if s.snapshotErr != nil {
+		return &stubReader{err: s.snapshotErr}, nil
+	}
+	return &stubReader{err: graphstore.ErrNotFound}, nil
+}
 func (s *stubStore) NewWriter() (graphstore.Writer, error) { return s.writer, nil }
 func (s *stubStore) Export(w io.Writer) error              { return nil }
 func (s *stubStore) Close() error                          { return nil }
+
+// stubReader is a graphstore.Reader stand-in used ONLY for writeGraph's
+// prior-Meta read (Snapshot().GetMeta()). Every other method panics if
+// called — writeGraph never calls them, and a future caller that starts
+// doing so should fail loudly rather than silently return a zero value.
+type stubReader struct {
+	meta *schema.Meta
+	err  error
+}
+
+func (r *stubReader) GetMeta() (*schema.Meta, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.meta, nil
+}
+func (r *stubReader) GetNode(id string) (*schema.Node, error) {
+	panic("stubReader.GetNode not implemented")
+}
+func (r *stubReader) GetFile(path string) (*schema.File, error) {
+	panic("stubReader.GetFile not implemented")
+}
+func (r *stubReader) IterateEdges(srcPrefix string) (graphstore.EdgeIterator, error) {
+	panic("stubReader.IterateEdges not implemented")
+}
+func (r *stubReader) IterateNodes() (graphstore.NodeIterator, error) {
+	panic("stubReader.IterateNodes not implemented")
+}
+func (r *stubReader) IterateFiles() (graphstore.FileIterator, error) {
+	panic("stubReader.IterateFiles not implemented")
+}
+func (r *stubReader) IterateFileIndex(path string) (graphstore.FileIndexIterator, error) {
+	panic("stubReader.IterateFileIndex not implemented")
+}
+func (r *stubReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	panic("stubReader.IterateExcludedFiles not implemented")
+}
+func (r *stubReader) Close() error { return nil }
 
 // TestSingleWriter_CommitsOnce proves the entire resolved graph is written
 // through exactly ONE GraphStore.Writer with a single Commit() — no
@@ -1083,7 +1172,7 @@ func TestSingleWriter_CommitsOnce(t *testing.T) {
 		{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go", NodeCount: 2, EdgeCount: 1},
 	}
 
-	if err := writeGraph(store, nodes, packageNodes, edges, files, ""); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, "", nil, 0); err != nil {
 		t.Fatalf("writeGraph returned error: %v", err)
 	}
 
@@ -1119,6 +1208,143 @@ func TestSingleWriter_CommitsOnce(t *testing.T) {
 	}
 }
 
+// TestWriteGraphStagesExcludedFilesInTheSameBatch proves writeGraph stages
+// ExcludedFile records on the SAME Writer/Commit as every other record
+// kind (Phase 10 D-07/T-10-10) — never a second commit — and stamps
+// Meta.HasCoverage true.
+func TestWriteGraphStagesExcludedFilesInTheSameBatch(t *testing.T) {
+	w := &stubWriter{}
+	store := &stubStore{writer: w}
+
+	nodes := []*schema.Node{{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"}}
+	files := []*schema.File{{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go"}}
+	excluded := []*schema.ExcludedFile{
+		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION, Detail: ".md"},
+		{Path: "a/tagged.go", Reason: schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG, Detail: "linux/amd64"},
+	}
+
+	if err := writeGraph(store, nodes, nil, nil, files, "", excluded, 0); err != nil {
+		t.Fatalf("writeGraph returned error: %v", err)
+	}
+
+	if w.commitCalls != 1 {
+		t.Errorf("commitCalls = %d, want 1", w.commitCalls)
+	}
+	if w.closeCalls != 0 {
+		t.Errorf("closeCalls = %d, want 0", w.closeCalls)
+	}
+	if len(w.excluded) != 2 {
+		t.Fatalf("staged %d excluded records, want 2", len(w.excluded))
+	}
+	if w.excluded[0].GetPath() != "a/tagged.go" || w.excluded[1].GetPath() != "b.md" {
+		t.Fatalf("excluded records not path-sorted: got [%q, %q], want [\"a/tagged.go\", \"b.md\"]", w.excluded[0].GetPath(), w.excluded[1].GetPath())
+	}
+	if w.meta == nil {
+		t.Fatal("PutMeta was never called")
+	}
+	if !w.meta.GetHasCoverage() {
+		t.Error("Meta.HasCoverage = false, want true")
+	}
+}
+
+// TestWriteGraphStampsMonotonicCoverageGeneration proves the WR-01
+// (iteration 2) fix: writeGraph read-modify-writes CoverageGeneration from
+// whatever the store's PRIOR Meta recorded, incrementing by exactly 1 —
+// never resetting to 1 unconditionally — so a from-scratch rewrite over an
+// EXISTING store (Sync's D-02b backfill path delegates to writeGraph too)
+// continues the same monotonic sequence a live CoverageRows page token may
+// already be pinned to.
+func TestWriteGraphStampsMonotonicCoverageGeneration(t *testing.T) {
+	t.Run("fresh store (no prior Meta) starts at generation 1", func(t *testing.T) {
+		w := &stubWriter{}
+		store := &stubStore{writer: w} // zero value: Snapshot().GetMeta() -> ErrNotFound
+
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err != nil {
+			t.Fatalf("writeGraph returned error: %v", err)
+		}
+		if w.meta == nil {
+			t.Fatal("PutMeta was never called")
+		}
+		if got := w.meta.GetCoverageGeneration(); got != 1 {
+			t.Errorf("CoverageGeneration = %d, want 1 for a fresh store", got)
+		}
+	})
+
+	t.Run("existing store continues from its prior generation", func(t *testing.T) {
+		w := &stubWriter{}
+		store := &stubStore{writer: w, snapshotMeta: &schema.Meta{CoverageGeneration: 41}}
+
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err != nil {
+			t.Fatalf("writeGraph returned error: %v", err)
+		}
+		if w.meta == nil {
+			t.Fatal("PutMeta was never called")
+		}
+		if got := w.meta.GetCoverageGeneration(); got != 42 {
+			t.Errorf("CoverageGeneration = %d, want 42 (41 + 1)", got)
+		}
+	})
+
+	t.Run("a non-ErrNotFound Snapshot/GetMeta failure propagates", func(t *testing.T) {
+		w := &stubWriter{}
+		store := &stubStore{writer: w, snapshotErr: errStubWrite}
+
+		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err == nil {
+			t.Fatal("writeGraph returned nil error, want the propagated snapshot/GetMeta failure")
+		}
+		if w.commitCalls != 0 {
+			t.Errorf("commitCalls = %d, want 0 — a prior-Meta read failure must abort before any Writer is opened", w.commitCalls)
+		}
+	})
+}
+
+// TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting proves
+// writeGraph clears the whole c/ namespace via DeleteAllExcludedFiles
+// BEFORE staging any PutExcludedFile — the D-07 "range-delete then
+// rewrite" sequence a from-scratch rewrite over an EXISTING store (e.g.
+// Sync's D-02b backfill path) needs to avoid layering stale records on
+// top of a fresh set — all in the SAME single-commit batch.
+func TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting(t *testing.T) {
+	w := &stubWriter{}
+	store := &stubStore{writer: w}
+
+	excluded := []*schema.ExcludedFile{
+		{Path: "a.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
+		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
+	}
+
+	if err := writeGraph(store, nil, nil, nil, nil, "", excluded, 0); err != nil {
+		t.Fatalf("writeGraph returned error: %v", err)
+	}
+
+	if w.deleteAllExcludedCalls != 1 {
+		t.Fatalf("deleteAllExcludedCalls = %d, want 1", w.deleteAllExcludedCalls)
+	}
+	if w.commitCalls != 1 {
+		t.Fatalf("commitCalls = %d, want 1", w.commitCalls)
+	}
+
+	firstPutIdx := -1
+	deleteAllIdx := -1
+	for i, op := range w.order {
+		if op == "DeleteAllExcludedFiles" && deleteAllIdx == -1 {
+			deleteAllIdx = i
+		}
+		if op == "PutExcludedFile" && firstPutIdx == -1 {
+			firstPutIdx = i
+		}
+	}
+	if deleteAllIdx == -1 {
+		t.Fatal("DeleteAllExcludedFiles was never recorded in call order")
+	}
+	if firstPutIdx == -1 {
+		t.Fatal("PutExcludedFile was never recorded in call order")
+	}
+	if deleteAllIdx >= firstPutIdx {
+		t.Fatalf("DeleteAllExcludedFiles (index %d) did not precede the first PutExcludedFile (index %d): order = %v", deleteAllIdx, firstPutIdx, w.order)
+	}
+}
+
 // TestSingleWriter_CloseOnStagingError proves a staging error mid-write
 // calls Writer.Close() (releasing the batch) instead of Commit(), and
 // writeGraph returns the error — never a partial commit.
@@ -1130,7 +1356,7 @@ func TestSingleWriter_CloseOnStagingError(t *testing.T) {
 	edges := []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}}
 	files := []*schema.File{{Path: "pkg/a.go"}}
 
-	err := writeGraph(store, nodes, nil, edges, files, "")
+	err := writeGraph(store, nodes, nil, edges, files, "", nil, 0)
 	if err == nil {
 		t.Fatal("expected writeGraph to return the staging error, got nil")
 	}
@@ -1154,7 +1380,7 @@ func TestResolve_EndToEnd(t *testing.T) {
 	}
 	defer store.Close()
 
-	if _, err := Resolve(store, results, modulePath, ""); err != nil {
+	if _, err := Resolve(store, results, modulePath, "", nil, 0); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 

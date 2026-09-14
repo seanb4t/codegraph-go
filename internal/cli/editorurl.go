@@ -1,0 +1,140 @@
+// editorurl.go resolves codegraph ui's editor-link configuration ONCE at
+// startup (D-14/D-15/D-16), before uiserver.Listen ever binds a port.
+// This is the CLI's operator boundary counterpart to
+// internal/uiserver/editorlink.go's per-request handler: both call the
+// SAME uiserver.ValidateEditorTemplate — this package declares no
+// second validator.
+package cli
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/seanb4t/codegraph-go/internal/uiserver"
+)
+
+// editorURLEnvVar and noEditorURLEnvVar are the two environment
+// variables `codegraph ui` reads for editor-link configuration
+// (D-14/D-16), following internal/watch/debounce.go's and
+// internal/corpora/manifest.go's existing CODEGRAPH_* named-const, read-
+// once convention.
+const (
+	editorURLEnvVar   = "CODEGRAPH_EDITOR_URL"
+	noEditorURLEnvVar = "CODEGRAPH_NO_EDITOR_URL"
+)
+
+// discoveredEditor is the shape plan 09-02's discoverEditor returns:
+// which launcher was found on PATH or in a platform app directory, the
+// matching preset id, and the template to use.
+type discoveredEditor struct {
+	Launcher string
+	PresetID string
+	Template string
+}
+
+// editorResolveInputs is resolveEditorLink's dependency-injected input
+// set, so the full precedence table is table-tested without touching a
+// real environment or a real filesystem probe.
+type editorResolveInputs struct {
+	// flagTemplate is --editor-url's raw value ("" means unset).
+	flagTemplate string
+	// noEditorURL is --no-editor-url's value.
+	noEditorURL bool
+	// getenv is os.Getenv in production; a map-backed fake in tests.
+	getenv func(string) string
+	// discover is plan 09-02's discoverEditor in production; nil means
+	// "no discovered-default source is available at all" (distinct
+	// from a non-nil discover that simply finds nothing).
+	discover func() (discoveredEditor, bool)
+}
+
+// resolveEditorLink resolves the server's effective editor-link default
+// ONCE, in this exact precedence order, each step documented with its
+// decision id:
+//
+//  1. D-17: explicit values are validated FIRST — the flag value AND
+//     the env value are BOTH checked, even though only one can win, an
+//     operator who typed a template meant it, so a typo in the losing
+//     source must not be silently ignored.
+//  2. D-16: the off switch — checked only after both explicit values
+//     have passed validation, so a malformed explicit value never
+//     silently falls through to "disabled" either.
+//  3. D-14: flag, then env, then discovery (run here — once — and
+//     never per request, Pattern 3), then unconfigured.
+//
+// A nil discover means the discovered-default source is absent
+// entirely; plan 09-02's discoverEditor is the production value passed
+// from newUiCmd. A config file is deliberately not a source in this
+// phase (09-CONTEXT.md Deferred Ideas).
+func resolveEditorLink(in editorResolveInputs) (uiserver.EditorLinkOptions, error) {
+	envValue := in.getenv(editorURLEnvVar)
+
+	// (1) D-17: both explicit values are validated regardless of which
+	// wins — an operator who typed a template meant it.
+	var flagErr, envErr error
+	if in.flagTemplate != "" {
+		if err := uiserver.ValidateEditorTemplate(in.flagTemplate); err != nil {
+			flagErr = fmt.Errorf("--editor-url: %s", err)
+		}
+	}
+	if envValue != "" {
+		if err := uiserver.ValidateEditorTemplate(envValue); err != nil {
+			envErr = fmt.Errorf("%s: %s", editorURLEnvVar, err)
+		}
+	}
+	if flagErr != nil {
+		return uiserver.EditorLinkOptions{}, flagErr
+	}
+	if envErr != nil {
+		return uiserver.EditorLinkOptions{}, envErr
+	}
+
+	// (2) D-16: the off switch, consulted only after both explicit
+	// template values above have passed validation. The explicit
+	// --no-editor-url FLAG short-circuits the env parse below (WR-04):
+	// once the operator's own unambiguous flag has already settled the
+	// outcome, a stray malformed CODEGRAPH_NO_EDITOR_URL left over in
+	// their shell must never defeat it by refusing to start. This does
+	// NOT touch D-17's explicit-template-values-first ordering above —
+	// only this boolean off-switch's own malformed-value case.
+	if in.noEditorURL {
+		return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}, nil
+	}
+	disabled, err := parseBoolEnv(in.getenv(noEditorURLEnvVar))
+	if err != nil {
+		return uiserver.EditorLinkOptions{}, fmt.Errorf("%s: %s", noEditorURLEnvVar, err)
+	}
+	if disabled {
+		return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}, nil
+	}
+
+	// (3) D-14: flag -> env -> discovered -> unconfigured.
+	if in.flagTemplate != "" {
+		return uiserver.EditorLinkOptions{Template: in.flagTemplate, Source: uiserver.EditorTemplateFlag}, nil
+	}
+	if envValue != "" {
+		return uiserver.EditorLinkOptions{Template: envValue, Source: uiserver.EditorTemplateEnv}, nil
+	}
+	if in.discover != nil {
+		if d, ok := in.discover(); ok {
+			return uiserver.EditorLinkOptions{Template: d.Template, Source: uiserver.EditorTemplateDiscovered, Editor: d.Launcher}, nil
+		}
+	}
+	return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateNone}, nil
+}
+
+// parseBoolEnv parses a CODEGRAPH_NO_EDITOR_URL-shaped boolean env
+// value: "true"/"1"/"yes" (case-insensitive) is on; ""/"false"/"0"/"no"
+// (case-insensitive) is off; anything else is an error naming the
+// offending value — the caller (resolveEditorLink) wraps it with the
+// variable name.
+func parseBoolEnv(v string) (bool, error) {
+	switch strings.ToLower(v) {
+	case "", "false", "0", "no":
+		return false, nil
+	case "true", "1", "yes":
+		return true, nil
+	default:
+		return false, fmt.Errorf("invalid value %q (want true|1|yes or false|0|no)", v)
+	}
+}

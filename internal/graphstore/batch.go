@@ -102,6 +102,29 @@ func (w *pebbleWriter) PutFile(f *schema.File) error {
 	return w.batch.Set(fileKey(f.GetPath()), data, nil)
 }
 
+// PutExcludedFile stages x's c/ record (Phase 10 D-05), exactly as
+// PutFile stages a File record under f/.
+func (w *pebbleWriter) PutExcludedFile(x *schema.ExcludedFile) error {
+	data, err := deterministicMarshal(x)
+	if err != nil {
+		return err
+	}
+	return w.batch.Set(excludedFileKey(x.GetPath()), data, nil)
+}
+
+// DeleteExcludedFile stages a point-delete of path's own c/ record
+// (Phase 10 D-07) — Plan 03's Sync prune primitive.
+func (w *pebbleWriter) DeleteExcludedFile(path string) error {
+	return w.batch.Delete(excludedFileKey(path), nil)
+}
+
+// DeleteAllExcludedFiles stages a range-delete over the WHOLE c/
+// namespace (Phase 10 D-07): [prefixExcludedFile, rangeUpperBound(...)) —
+// namespace-scoped by the single prefix byte, cannot reach m/n/e/f/a/x.
+func (w *pebbleWriter) DeleteAllExcludedFiles() error {
+	return w.batch.DeleteRange([]byte{prefixExcludedFile}, rangeUpperBound([]byte{prefixExcludedFile}), nil)
+}
+
 func (w *pebbleWriter) PutMeta(m *schema.Meta) error {
 	data, err := deterministicMarshal(m)
 	if err != nil {

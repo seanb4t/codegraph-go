@@ -35,6 +35,7 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/term v0.45.0
 	golang.org/x/tools v0.48.0
+	gonum.org/v1/gonum v0.17.0
 	google.golang.org/protobuf v1.36.11
 )
 

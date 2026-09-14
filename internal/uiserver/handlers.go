@@ -87,6 +87,11 @@ func mapContextError(err error) error {
 //
 //   - query.ErrNotFound or graphstore.ErrNotFound -> connect.CodeNotFound
 //   - query.ErrInvalidArgument -> connect.CodeInvalidArgument
+//   - query.ErrAborted -> connect.CodeAborted (Phase 10 WR-01): a paged
+//     rpc's resume token was valid but the store changed underneath it
+//     since the previous page fetch; the caller should retry the whole
+//     walk from the first page rather than treat this as a permanent
+//     failure
 //   - graphstore.ErrStoreLocked -> connect.CodeUnavailable with a typed
 //     IndexingInProgress detail (SRV-04's degrade path, D-14/D-15) —
 //     errIndexingInProgress() builds the one shape every non-GetStatus
@@ -108,6 +113,8 @@ func mapEngineError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, query.ErrInvalidArgument):
 		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, query.ErrAborted):
+		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, graphstore.ErrStoreLocked):
 		return errIndexingInProgress()
 	default:
@@ -202,6 +209,11 @@ type uiService struct {
 	// (*query.Engine, graphstore.GraphStore, graphstore.Reader) does
 	// not name it, and it is not one of them.
 	publisher *livePublisher
+
+	// editorLink is GetEditorLink's frozen-at-startup server default
+	// (D-14/D-15/D-16), copied from Options.EditorLink at construction
+	// time (Listen) and never re-read per request (plan 09-01).
+	editorLink EditorLinkOptions
 }
 
 // statusToProto maps internal/query.StatusResult onto uiv1.GetStatusResponse
@@ -897,7 +909,10 @@ func (s *uiService) Explore(ctx context.Context, req *connect.Request[uiv1.Explo
 // supplied by the caller (GetHealth), computed through the SAME
 // schema.IndexedCommitSHA + schema.IsCommitSHA validation gate GetStatus
 // applies — never re-derived here (Task 1 checkpoint sub-decision 2).
-func healthToProto(result query.StatusResult, commitSHA string) *uiv1.GetHealthResponse {
+// coverage (Phase 10, plan 10-01) is likewise supplied by the caller,
+// computed via eng.CoverageSummary() inside the SAME withEngine closure
+// as eng.Status(ctx) — see GetHealth's own doc comment.
+func healthToProto(result query.StatusResult, commitSHA string, coverage query.CoverageSummary) *uiv1.GetHealthResponse {
 	return &uiv1.GetHealthResponse{
 		Initialized:     result.Initialized,
 		Version:         result.Version,
@@ -926,6 +941,7 @@ func healthToProto(result query.StatusResult, commitSHA string) *uiv1.GetHealthR
 		WorktreeMismatch: worktreeMismatchToProto(result.WorktreeMismatch),
 		Stale:            result.Stale,
 		CommitSha:        commitSHA,
+		Coverage:         coverageToProto(coverage),
 	}
 }
 
@@ -979,7 +995,15 @@ func (s *uiService) GetHealth(ctx context.Context, _ *connect.Request[uiv1.GetHe
 		if ok && !schema.IsCommitSHA(commitSHA) {
 			commitSHA = ""
 		}
-		resp = healthToProto(result, commitSHA)
+		// Phase 10 HLT-05/HLT-06: eng.CoverageSummary() is called inside
+		// this SAME withEngine closure as eng.Status(ctx) above, so the
+		// discovered-vs-indexed denominator is read from the SAME
+		// snapshot as every other GetHealth field.
+		coverage, err := eng.CoverageSummary()
+		if err != nil {
+			return err
+		}
+		resp = healthToProto(result, commitSHA, coverage)
 		return nil
 	})
 	if err != nil {
@@ -1010,6 +1034,7 @@ func fileGraphToProto(result query.FileGraphResult) *uiv1.FileGraphResponse {
 		ExcludedSelfEdgeCount:     result.ExcludedSelfEdges,
 		ExcludedContainsEdgeCount: result.ExcludedContainsEdges,
 		CycleCount:                int32(result.CycleCount),
+		CommunityCount:            int32(result.CommunityCount),
 	}
 }
 
@@ -1023,6 +1048,7 @@ func fileGraphNodeToProto(n query.FileGraphNode) *uiv1.FileGraphNode {
 		Language:    n.Language,
 		SymbolCount: n.SymbolCount,
 		CycleId:     int32(n.CycleID),
+		CommunityId: int32(n.CommunityID),
 	}
 }
 

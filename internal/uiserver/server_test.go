@@ -341,18 +341,19 @@ func TestUIServerHoldsNoStoreHandleBetweenCalls(t *testing.T) {
 }
 
 func TestUIServiceHoldsNoStoreTypedField(t *testing.T) {
-	// uiserver.Options carries EXACTLY RepoPath and Addr — asserted here
-	// (rather than as a separate function/subtest) to keep this task's
-	// PASS-line floor at exactly 6, zero headroom by design. A reflected
-	// field-NAME set equality with a length-2 check, so a reintroduced
-	// browser field (review MEDIUM 01-06: ownership of the browser
-	// launch) fails this assertion.
+	// uiserver.Options carries EXACTLY RepoPath, Addr and EditorLink
+	// (plan 09-01 added EditorLink) — asserted here (rather than as a
+	// separate function/subtest) to keep this task's PASS-line floor at
+	// exactly 6, zero headroom by design. A reflected field-NAME set
+	// equality with a length-3 check, so a reintroduced browser field
+	// (review MEDIUM 01-06: ownership of the browser launch) fails this
+	// assertion.
 	optsTyp := reflect.TypeOf(Options{})
 	gotOptsFields := make(map[string]struct{}, optsTyp.NumField())
 	for i := 0; i < optsTyp.NumField(); i++ {
 		gotOptsFields[optsTyp.Field(i).Name] = struct{}{}
 	}
-	wantOptsFields := map[string]struct{}{"RepoPath": {}, "Addr": {}}
+	wantOptsFields := map[string]struct{}{"RepoPath": {}, "Addr": {}, "EditorLink": {}}
 	if len(gotOptsFields) != len(wantOptsFields) {
 		t.Fatalf("Options field set = %v, want %v", gotOptsFields, wantOptsFields)
 	}
@@ -369,7 +370,7 @@ func TestUIServiceHoldsNoStoreTypedField(t *testing.T) {
 		got[typ.Field(i).Type.String()] = struct{}{}
 	}
 
-	want := map[string]struct{}{"string": {}, "*uiserver.livePublisher": {}}
+	want := map[string]struct{}{"string": {}, "*uiserver.livePublisher": {}, "uiserver.EditorLinkOptions": {}}
 	if len(got) != len(want) {
 		t.Fatalf("uiService field type set = %v, want %v", got, want)
 	}

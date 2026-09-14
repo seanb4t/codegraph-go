@@ -82,10 +82,14 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		workers = runtime.NumCPU()
 	}
 
-	files, modulePath, err := Discover(repoRoot)
+	// Phase 10 D-07: DiscoverAll's exclusion-reason list (discovery.Excluded)
+	// feeds the c/ namespace diff below (loadStoredExclusions +
+	// diffExclusions), the same walk result Files/ModulePath come from.
+	discovery, err := DiscoverAll(repoRoot)
 	if err != nil {
 		return Stats{}, err
 	}
+	files, modulePath := discovery.Files, discovery.ModulePath
 
 	discovered := make(map[string]DiscoveredFile, len(files))
 	for _, f := range files {
@@ -148,9 +152,25 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	fit.Close()
 
+	// Phase 10 D-07: diff the c/ namespace exactly like the `deleted`
+	// diff above compares stored File records against the freshly
+	// discovered file set — upsert what is absent/changed, prune what is
+	// gone. coverageDirty extends the no-op gate below so an
+	// exclusion-only change (a new excluded file appears; an excluded
+	// file disappears) is never mistaken for "nothing changed", and so a
+	// pre-Phase-10 graph (has_coverage unset) is backfilled by the very
+	// next Sync even when no file on disk changed at all.
+	storedExcl, err := loadStoredExclusions(r0)
+	if err != nil {
+		return Stats{}, err
+	}
+	exclUpserts, exclPrunes := diffExclusions(storedExcl, discovery.Excluded)
+	coverageDirty := len(exclUpserts) > 0 || len(exclPrunes) > 0 || !meta.GetHasCoverage()
+
 	if len(added) == 0 && len(modified) == 0 && len(deleted) == 0 {
-		if len(mtimeRefresh) == 0 {
-			// Fully no-op sync: nothing changed on disk.
+		if len(mtimeRefresh) == 0 && !coverageDirty {
+			// Fully no-op sync: nothing changed on disk AND coverage is
+			// already recorded.
 			return Stats{
 				Files:    len(files),
 				Nodes:    int(meta.GetNodeCount()),
@@ -158,11 +178,13 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 				Duration: time.Since(start),
 			}, nil
 		}
-		// WR-03: no content actually changed, but at least one File
-		// record's stored mtime/size is stale relative to disk — persist
-		// the refresh in its own small commit so the stat pre-filter's
-		// fast path is restored on the next Sync. NodeCount/EdgeCount are
-		// untouched (nothing was reparsed or pruned).
+		// WR-03 / Phase 10 D-07: no content actually changed, but either
+		// at least one File record's stored mtime/size is stale relative
+		// to disk, or the c/ namespace has upserts/prunes to stage, or
+		// coverage was never recorded — persist the refresh/diff in its
+		// own small commit so the stat pre-filter's fast path is
+		// restored on the next Sync. NodeCount/EdgeCount are untouched
+		// (nothing was reparsed or pruned).
 		w, err := store.NewWriter()
 		if err != nil {
 			return Stats{}, err
@@ -173,12 +195,29 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 				return Stats{}, err
 			}
 		}
+		if err := stageExclusionDiff(w, exclUpserts, exclPrunes); err != nil {
+			w.Close()
+			return Stats{}, err
+		}
 		newMeta := schema.NewMeta()
 		newMeta.HasFileIndex = true
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
 		newMeta.CommitSha = syncCommitSHA(headCommitSHA, meta)
+		// Phase 10 D-07: every meta-write site stamps HasCoverage
+		// independently (Pitfall 3) — this commit's batch always
+		// includes the exclusion diff computed above (even an empty
+		// one, when the only reason we are here is coverage never having
+		// been recorded), so it genuinely HAS coverage by the time this
+		// Commit lands.
+		newMeta.HasCoverage = true
+		// WR-01 (iteration 2): read-modify-write the prior generation from
+		// the SAME meta this function already read (r0.GetMeta() at the
+		// top of Sync), incrementing by exactly 1 — a monotonic counter
+		// cannot alias within the same wall-clock millisecond the way
+		// LastSyncUnixMs can.
+		newMeta.CoverageGeneration = meta.GetCoverageGeneration() + 1
 		if err := w.PutMeta(newMeta); err != nil {
 			w.Close()
 			return Stats{}, err
@@ -402,12 +441,28 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 
+	if err := stageExclusionDiff(w, exclUpserts, exclPrunes); err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+
 	newMeta := schema.NewMeta()
 	newMeta.HasFileIndex = true
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
 	newMeta.CommitSha = syncCommitSHA(headCommitSHA, meta)
+	// Phase 10 D-07: every meta-write site stamps HasCoverage
+	// independently (Pitfall 3) — this commit's batch always stages the
+	// exclusion diff computed above (via stageExclusionDiff, just before
+	// this write), so it genuinely HAS coverage by the time this Commit
+	// lands, mirroring HasFileIndex's own precedent (D-06).
+	newMeta.HasCoverage = true
+	// WR-01 (iteration 2): read-modify-write the prior generation from the
+	// SAME meta this function already read (r0.GetMeta() at the top of
+	// Sync), incrementing by exactly 1 — see the sibling small-commit
+	// write site above for the full rationale.
+	newMeta.CoverageGeneration = meta.GetCoverageGeneration() + 1
 	if err := w.PutMeta(newMeta); err != nil {
 		w.Close()
 		return Stats{}, err

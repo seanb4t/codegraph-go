@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 14
+open_count: 16
 waived_count: 2
 fixed_count: 18
-total_count: 34
-last_updated: 2026-09-10T15:34:00.889Z
+total_count: 36
+last_updated: 2026-09-13T14:04:31.589Z
 ---
 
 # Broken Windows Ledger
@@ -49,6 +49,8 @@ last_updated: 2026-09-10T15:34:00.889Z
 | 32 | 08 | deviation | test/tmux/install_cancel_test.go |  | TTY-05's positive-control assertion uses the picker title, not the help footer text — the footer never renders in the default 100x30 pane with all 8 registered agent targets (bubbles v2 list pagination padding overflows its allocated height before the footer is appended); verified via temporary reverted debug instrumentation, see 08-02-SUMMARY.md | open |  | 2026-09-10T14:50:53.595Z |  |
 | 33 | 08 | unrun-verify | .planning/phases/08-tmux-real-pty-harness/08-03-PLAN.md |  | Task 2's human-check (confirm the tmux-e2e job's version assertion and executed-count=5 line actually fired on a real CI run, then commit the observed tmux -V string) cannot run until a PR opens on this branch and a real ci.yml run exists | open |  | 2026-09-10T15:16:04.814Z |  |
 | 34 | 08 | unmet-truth | test/tmux/frame_stability_test.go |  | TTY-06 family (d) mutation-log finding: the D-06-specified v.AltScreen=false mutation on agentpicker.go's View() does not fail TestInstallPickerFrameStableWhileIdle — the assertion measures post-settle idle stability, which pollUntilStable already converges past the AltScreen-driven settling-transient scroll this mutation targets. Confirmed applied and reproduced twice; documented honestly in 08-MUTATION-LOG.md family (d) rather than forced. | open |  | 2026-09-10T15:34:00.889Z |  |
+| 35 | 09 | unrun-verify | web/src/lib/components/browse/EditorLinkPicker.svelte |  | Cursor and JetBrains editor-link URI templates are community-sourced (09-RESEARCH.md A1/A2), never officially documented like VS Code's — the picker carries a visible [ASSUMED] note under both buttons pending an end-of-phase human check (09-05) against a real install | open |  | 2026-09-12T19:05:59.598Z |  |
+| 36 | 10 | unrun-verify | internal/cli/index.go |  | priorCoverageGeneration (index.go:30-48) collapses 'store locked/corrupt' into the same floor-0 result as 'never indexed', so a live holder surviving graphstore.Open's ~400ms retry during a --force rebuild silently re-admits the CR-01 page-token aliasing shape (10-REVIEW.md WR-01, iteration 4). Fix: distinguish errors.Is(ErrNotFound) from ErrStoreLocked/other — hard-error before RemoveAll or at least warn — and add a hold-the-lock-across-index regression test per open_lock_test.go. Severity low/medium; window narrow; recorded in 10-SECURITY.md T-10-16. | open |  | 2026-09-13T14:04:31.589Z |  |
 
 ````json
 [
@@ -458,6 +460,30 @@ last_updated: 2026-09-10T15:34:00.889Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-10T15:34:00.889Z",
+    "resolved_at": null
+  },
+  {
+    "id": 35,
+    "kind": "unrun-verify",
+    "phase": "09",
+    "file": "web/src/lib/components/browse/EditorLinkPicker.svelte",
+    "line": null,
+    "description": "Cursor and JetBrains editor-link URI templates are community-sourced (09-RESEARCH.md A1/A2), never officially documented like VS Code's — the picker carries a visible [ASSUMED] note under both buttons pending an end-of-phase human check (09-05) against a real install",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-12T19:05:59.598Z",
+    "resolved_at": null
+  },
+  {
+    "id": 36,
+    "kind": "unrun-verify",
+    "phase": "10",
+    "file": "internal/cli/index.go",
+    "line": null,
+    "description": "priorCoverageGeneration (index.go:30-48) collapses 'store locked/corrupt' into the same floor-0 result as 'never indexed', so a live holder surviving graphstore.Open's ~400ms retry during a --force rebuild silently re-admits the CR-01 page-token aliasing shape (10-REVIEW.md WR-01, iteration 4). Fix: distinguish errors.Is(ErrNotFound) from ErrStoreLocked/other — hard-error before RemoveAll or at least warn — and add a hold-the-lock-across-index regression test per open_lock_test.go. Severity low/medium; window narrow; recorded in 10-SECURITY.md T-10-16.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-13T14:04:31.589Z",
     "resolved_at": null
   }
 ]

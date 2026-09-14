@@ -7,6 +7,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // TestPipelineRun proves Run orchestrates Discover -> Extract -> Resolve
@@ -92,7 +93,7 @@ var errInjectedResolveFailure = errors.New("indexer: injected resolve failure fo
 // with a Pebble lock-contention error.
 func TestPipelineRun_ClosesStoreOnResolveError(t *testing.T) {
 	storeDir := t.TempDir()
-	failingResolve := func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string) (int, error) {
+	failingResolve := func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error) {
 		return 0, errInjectedResolveFailure
 	}
 

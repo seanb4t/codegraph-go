@@ -11,33 +11,33 @@
     {
       "number": "8",
       "name": "tmux Real-PTY Harness",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "9",
       "name": "Source View Follow-Through — Breadcrumb & Editor Handoff",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "10",
       "name": "Index Health — The Coverage Denominator",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "11",
       "name": "Graph View — Community Clustering",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "12",
       "name": "CLI Reference & Docs Tail",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 08 of 6 · 0% · executing"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-11T21:58:59.870Z"
+  "updated_at": "2026-09-13T22:47:12.589Z"
 }

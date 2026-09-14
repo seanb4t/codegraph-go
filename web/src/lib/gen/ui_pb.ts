@@ -45,7 +45,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file internal/uiproto/uiv1/ui.proto.
  */
 export const file_internal_uiproto_uiv1_ui: GenFile = /*@__PURE__*/
-  fileDesc("Ch5pbnRlcm5hbC91aXByb3RvL3VpdjEvdWkucHJvdG8SD2NvZGVncmFwaC51aS52MSKZAgoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEgwKBG5hbWUYAyABKAkSFgoOcXVhbGlmaWVkX25hbWUYBCABKAkSEQoJZmlsZV9wYXRoGAUgASgJEhAKCGxhbmd1YWdlGAYgASgJEhIKCnN0YXJ0X2xpbmUYByABKAUSEAoIZW5kX2xpbmUYCCABKAUSEQoJc3RhcnRfY29sGAkgASgFEg8KB2VuZF9jb2wYCiABKAUSEQoJc2lnbmF0dXJlGAsgASgJEhEKCWRvY3N0cmluZxgMIAEoCRISCgp2aXNpYmlsaXR5GA0gASgJEhMKC2lzX2V4cG9ydGVkGA4gASgIEhMKC3JldHVybl90eXBlGA8gASgJIk0KCExvY2F0aW9uEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIRCglmaWxlX3BhdGgYAyABKAkSEgoKc3RhcnRfbGluZRgEIAEoBSIgChBHZXRTdGF0dXNSZXF1ZXN0EgwKBHBhdGgYASABKAkizAEKEUdldFN0YXR1c1Jlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKbm9kZV9jb3VudBgDIAEoAxISCgplZGdlX2NvdW50GAQgASgDEhIKCmZpbGVfY291bnQYBSABKAMSDQoFc3RhbGUYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCRIUCgxzdG9yZV9leGlzdHMYCCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYCSABKAgiOgoNU2VhcmNoUmVxdWVzdBIMCgR0ZXJtGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGltaXQYAyABKAUiPgoOU2VhcmNoUmVzcG9uc2USLAoJbG9jYXRpb25zGAEgAygLMhkuY29kZWdyYXBoLnVpLnYxLkxvY2F0aW9uIlMKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhIKCm5vZGVfY291bnQYAyABKAMSEgoKZWRnZV9jb3VudBgEIAEoAyJ9CgxGaWxlVHJlZU5vZGUSDAoEbmFtZRgBIAEoCRIOCgZpc19kaXIYAiABKAgSDAoEcGF0aBgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIvCghjaGlsZHJlbhgFIAMoCzIdLmNvZGVncmFwaC51aS52MS5GaWxlVHJlZU5vZGUiWwoMRmlsZXNSZXF1ZXN0Eg8KB3BhdHRlcm4YASABKAkSDgoGZmlsdGVyGAIgASgJEgsKA2RpchgDIAEoCRINCgVkZXB0aBgEIAEoBRIOCgZmb3JtYXQYBSABKAkidwoNRmlsZXNSZXNwb25zZRIOCgZmb3JtYXQYASABKAkSKQoFZmlsZXMYAiADKAsyGi5jb2RlZ3JhcGgudWkudjEuRmlsZUVudHJ5EisKBHRyZWUYAyADKAsyHS5jb2RlZ3JhcGgudWkudjEuRmlsZVRyZWVOb2RlIi8KDkNhbGxlcnNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVsaW1pdBgCIAEoBSJNCg9DYWxsZXJzUmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEioKB2NhbGxlcnMYAiADKAsyGS5jb2RlZ3JhcGgudWkudjEuTG9jYXRpb24iLwoOQ2FsbGVlc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEg0KBWxpbWl0GAIgASgFIk0KD0NhbGxlZXNSZXNwb25zZRIOCgZzeW1ib2wYASABKAkSKgoHY2FsbGVlcxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIuCg1JbXBhY3RSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVkZXB0aBgCIAEoBSKEAQoOSW1wYWN0UmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEg0KBWRlcHRoGAIgASgFEhIKCm5vZGVfY291bnQYAyABKAUSEgoKZWRnZV9jb3VudBgEIAEoBRIrCghhZmZlY3RlZBgFIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIvCg9BZmZlY3RlZFJlcXVlc3QSDQoFZmlsZXMYASADKAkSDQoFZGVwdGgYAiABKAUiVAoQQWZmZWN0ZWRSZXNwb25zZRINCgVmaWxlcxgBIAMoCRIxCg5hZmZlY3RlZF90ZXN0cxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiJQChRHZXROb2RlRGV0YWlsUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSDAoEZmlsZRgCIAEoCRIRCgRsaW5lGAMgASgFSACIAQFCBwoFX2xpbmUikAEKClNvdXJjZUJsb2ISDwoHY29udGVudBgBIAEoDBIRCgl0cnVuY2F0ZWQYAiABKAgSEwoLdG90YWxfbGluZXMYAyABKAUSEwoLdG90YWxfYnl0ZXMYBCABKAUSFgoOcmV0dXJuZWRfbGluZXMYBSABKAUSFgoOcmV0dXJuZWRfYnl0ZXMYBiABKAVKBAgyEDwiywEKDk5vZGVEZWZpbml0aW9uEiMKBG5vZGUYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIkCgVjYWxscxgCIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEigKCWNhbGxlZF9ieRgDIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhcKD2RldGFpbF9nYXRoZXJlZBgEIAEoCBIrCgZzb3VyY2UYBSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiLWAgoVR2V0Tm9kZURldGFpbFJlc3BvbnNlEi0KBG1vZGUYASABKA4yHy5jb2RlZ3JhcGgudWkudjEuTm9kZURldGFpbE1vZGUSDAoEcGF0aBgCIAEoCRIjCgRub2RlGAMgASgLMhUuY29kZWdyYXBoLnVpLnYxLk5vZGUSJAoFY2FsbHMYBCADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIoCgljYWxsZWRfYnkYBSADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIOCgZzeW1ib2wYBiABKAkSNAoLZGVmaW5pdGlvbnMYByADKAsyHy5jb2RlZ3JhcGgudWkudjEuTm9kZURlZmluaXRpb24SGAoQdG90YWxfY2FuZGlkYXRlcxgIIAEoBRIrCgZzb3VyY2UYCSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiIyCg5FeHBsb3JlUmVxdWVzdBINCgVxdWVyeRgBIAEoCRIRCgltYXhfZmlsZXMYAiABKAUihwEKDEV4cGxvcmVHcm91cBIMCgRwYXRoGAEgASgJEiYKB3N5bWJvbHMYAiADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxza2VsZXRvbml6ZWQYAyABKAgSKwoGc291cmNlGAQgASgLMhsuY29kZWdyYXBoLnVpLnYxLlNvdXJjZUJsb2IiXQoKQmxhc3RFbnRyeRIlCgZzeW1ib2wYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxjYWxsZXJfY291bnQYAiABKAUSEgoKdGVzdF9maWxlcxgDIAMoCSKwAQoPRXhwbG9yZVJlc3BvbnNlEg0KBXF1ZXJ5GAEgASgJEg0KBWVtcHR5GAIgASgIEg0KBXN0YWxlGAMgASgIEhQKDHN5bWJvbF9jb3VudBgEIAEoBRItCgZncm91cHMYBSADKAsyHS5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZUdyb3VwEisKBmJsYXN0cxgGIAMoCzIbLmNvZGVncmFwaC51aS52MS5CbGFzdEVudHJ5IiUKEkluZGV4aW5nSW5Qcm9ncmVzcxIPCgdtZXNzYWdlGAEgASgJImMKE0dldFBlcm1hbGlua1JlcXVlc3QSDAoEcGF0aBgBIAEoCRIRCgRsaW5lGAIgASgFSACIAQESFQoIZW5kX2xpbmUYAyABKAVIAYgBAUIHCgVfbGluZUILCglfZW5kX2xpbmUicQoUR2V0UGVybWFsaW5rUmVzcG9uc2USCwoDdXJsGAEgASgJEjwKDGF2YWlsYWJpbGl0eRgCIAEoDjImLmNvZGVncmFwaC51aS52MS5QZXJtYWxpbmtBdmFpbGFiaWxpdHkSDgoGcmVhc29uGAMgASgJIiAKEEdldEhlYWx0aFJlcXVlc3QSDAoEcGF0aBgBIAEoCSI9ChBXb3JrdHJlZU1pc21hdGNoEhUKDXdvcmt0cmVlX3Jvb3QYASABKAkSEgoKaW5kZXhfcm9vdBgCIAEoCSJCCg5QZW5kaW5nQ2hhbmdlcxINCgVhZGRlZBgBIAEoBRIQCghtb2RpZmllZBgCIAEoBRIPCgdyZW1vdmVkGAMgASgFIrYBCgtJbmRleEhlYWx0aBIaChJidWlsdF93aXRoX3ZlcnNpb24YASABKAkSJQodYnVpbHRfd2l0aF9leHRyYWN0aW9uX3ZlcnNpb24YAiABKA0SIgoaY3VycmVudF9leHRyYWN0aW9uX3ZlcnNpb24YAyABKA0SGwoTcmVpbmRleF9yZWNvbW1lbmRlZBgEIAEoCBINCgVzdGF0ZRgFIAEoCRIUCgxwZW5kaW5nX3JlZnMYBiABKAUiiwYKEUdldEhlYWx0aFJlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKZmlsZV9jb3VudBgDIAEoAxISCgpub2RlX2NvdW50GAQgASgDEhIKCmVkZ2VfY291bnQYBSABKAMSFQoNZGJfc2l6ZV9ieXRlcxgGIAEoAxIPCgdiYWNrZW5kGAcgASgJElIKEWZpbGVzX2J5X2xhbmd1YWdlGAggAygLMjcuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLkZpbGVzQnlMYW5ndWFnZUVudHJ5EhEKCWxhbmd1YWdlcxgJIAMoCRJKCg1ub2Rlc19ieV9raW5kGAogAygLMjMuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLk5vZGVzQnlLaW5kRW50cnkSSgoNZWRnZXNfYnlfa2luZBgLIAMoCzIzLmNvZGVncmFwaC51aS52MS5HZXRIZWFsdGhSZXNwb25zZS5FZGdlc0J5S2luZEVudHJ5EjgKD3BlbmRpbmdfY2hhbmdlcxgMIAEoCzIfLmNvZGVncmFwaC51aS52MS5QZW5kaW5nQ2hhbmdlcxIyCgxpbmRleF9oZWFsdGgYDSABKAsyHC5jb2RlZ3JhcGgudWkudjEuSW5kZXhIZWFsdGgSPAoRd29ya3RyZWVfbWlzbWF0Y2gYDiABKAsyIS5jb2RlZ3JhcGgudWkudjEuV29ya3RyZWVNaXNtYXRjaBINCgVzdGFsZRgPIAEoCBISCgpjb21taXRfc2hhGBAgASgJGjYKFEZpbGVzQnlMYW5ndWFnZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMgoQTm9kZXNCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBGjIKEEVkZ2VzQnlLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASIgChBGaWxlR3JhcGhSZXF1ZXN0EgwKBHBhdGgYASABKAkiVwoNRmlsZUdyYXBoTm9kZRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhQKDHN5bWJvbF9jb3VudBgDIAEoAxIQCghjeWNsZV9pZBgEIAEoBSLYAQoNRmlsZUdyYXBoRWRnZRITCgtzb3VyY2VfZmlsZRgBIAEoCRITCgt0YXJnZXRfZmlsZRgCIAEoCRJDCgtraW5kX2NvdW50cxgDIAMoCzIuLmNvZGVncmFwaC51aS52MS5GaWxlR3JhcGhFZGdlLktpbmRDb3VudHNFbnRyeRITCgt0b3RhbF9jb3VudBgEIAEoAxIQCghpbl9jeWNsZRgFIAEoCBoxCg9LaW5kQ291bnRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASLzAQoRRmlsZUdyYXBoUmVzcG9uc2USLQoFbm9kZXMYASADKAsyHi5jb2RlZ3JhcGgudWkudjEuRmlsZUdyYXBoTm9kZRItCgVlZGdlcxgCIAMoCzIeLmNvZGVncmFwaC51aS52MS5GaWxlR3JhcGhFZGdlEiMKG2V4Y2x1ZGVkX3BhY2thZ2Vfbm9kZV9jb3VudBgDIAEoAxIgChhleGNsdWRlZF9zZWxmX2VkZ2VfY291bnQYBCABKAMSJAocZXhjbHVkZWRfY29udGFpbnNfZWRnZV9jb3VudBgFIAEoAxITCgtjeWNsZV9jb3VudBgGIAEoBSIiChJGaWxlU3ltYm9sc1JlcXVlc3QSDAoEcGF0aBgBIAEoCSJlChNGaWxlU3ltYm9sc1Jlc3BvbnNlEiYKB3N5bWJvbHMYASADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRITCgt0b3RhbF9jb3VudBgCIAEoBRIRCgl0cnVuY2F0ZWQYAyABKAgiLQoRV2F0Y2hHcmFwaFJlcXVlc3QSGAoQc2luY2VfZ2VuZXJhdGlvbhgBIAEoAyKRAQoPV2F0Y2hHcmFwaEV2ZW50EhIKCmdlbmVyYXRpb24YASABKAMSEwoLaW5pdGlhbGl6ZWQYAiABKAgSDQoFc3RhbGUYAyABKAgSFAoMc3RvcmVfZXhpc3RzGAQgASgIEhwKFGluZGV4aW5nX2luX3Byb2dyZXNzGAUgASgIEhIKCmNvbW1pdF9zaGEYBiABKAkqjgEKDk5vZGVEZXRhaWxNb2RlEiAKHE5PREVfREVUQUlMX01PREVfVU5TUEVDSUZJRUQQABIZChVOT0RFX0RFVEFJTF9NT0RFX0ZJTEUQARIfChtOT0RFX0RFVEFJTF9NT0RFX1NJTkdMRV9ERUYQAhIeChpOT0RFX0RFVEFJTF9NT0RFX01VTFRJX0RFRhADKrgBChVQZXJtYWxpbmtBdmFpbGFiaWxpdHkSJgoiUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9VTlNQRUNJRklFRBAAEiMKH1BFUk1BTElOS19BVkFJTEFCSUxJVFlfTElOS0FCTEUQARIuCipQRVJNQUxJTktfQVZBSUxBQklMSVRZX0xJTktBQkxFX1VOVkVSSUZJRUQQAhIiCh5QRVJNQUxJTktfQVZBSUxBQklMSVRZX05PX0xJTksQAzKNCQoJVUlTZXJ2aWNlElIKCUdldFN0YXR1cxIhLmNvZGVncmFwaC51aS52MS5HZXRTdGF0dXNSZXF1ZXN0GiIuY29kZWdyYXBoLnVpLnYxLkdldFN0YXR1c1Jlc3BvbnNlEkkKBlNlYXJjaBIeLmNvZGVncmFwaC51aS52MS5TZWFyY2hSZXF1ZXN0Gh8uY29kZWdyYXBoLnVpLnYxLlNlYXJjaFJlc3BvbnNlEkYKBUZpbGVzEh0uY29kZWdyYXBoLnVpLnYxLkZpbGVzUmVxdWVzdBoeLmNvZGVncmFwaC51aS52MS5GaWxlc1Jlc3BvbnNlEkwKB0NhbGxlcnMSHy5jb2RlZ3JhcGgudWkudjEuQ2FsbGVyc1JlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuQ2FsbGVyc1Jlc3BvbnNlEkwKB0NhbGxlZXMSHy5jb2RlZ3JhcGgudWkudjEuQ2FsbGVlc1JlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuQ2FsbGVlc1Jlc3BvbnNlEkkKBkltcGFjdBIeLmNvZGVncmFwaC51aS52MS5JbXBhY3RSZXF1ZXN0Gh8uY29kZWdyYXBoLnVpLnYxLkltcGFjdFJlc3BvbnNlEk8KCEFmZmVjdGVkEiAuY29kZWdyYXBoLnVpLnYxLkFmZmVjdGVkUmVxdWVzdBohLmNvZGVncmFwaC51aS52MS5BZmZlY3RlZFJlc3BvbnNlEl4KDUdldE5vZGVEZXRhaWwSJS5jb2RlZ3JhcGgudWkudjEuR2V0Tm9kZURldGFpbFJlcXVlc3QaJi5jb2RlZ3JhcGgudWkudjEuR2V0Tm9kZURldGFpbFJlc3BvbnNlEkwKB0V4cGxvcmUSHy5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZVJlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZVJlc3BvbnNlElsKDEdldFBlcm1hbGluaxIkLmNvZGVncmFwaC51aS52MS5HZXRQZXJtYWxpbmtSZXF1ZXN0GiUuY29kZWdyYXBoLnVpLnYxLkdldFBlcm1hbGlua1Jlc3BvbnNlElIKCUdldEhlYWx0aBIhLmNvZGVncmFwaC51aS52MS5HZXRIZWFsdGhSZXF1ZXN0GiIuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlElIKCUZpbGVHcmFwaBIhLmNvZGVncmFwaC51aS52MS5GaWxlR3JhcGhSZXF1ZXN0GiIuY29kZWdyYXBoLnVpLnYxLkZpbGVHcmFwaFJlc3BvbnNlElgKC0ZpbGVTeW1ib2xzEiMuY29kZWdyYXBoLnVpLnYxLkZpbGVTeW1ib2xzUmVxdWVzdBokLmNvZGVncmFwaC51aS52MS5GaWxlU3ltYm9sc1Jlc3BvbnNlElQKCldhdGNoR3JhcGgSIi5jb2RlZ3JhcGgudWkudjEuV2F0Y2hHcmFwaFJlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuV2F0Y2hHcmFwaEV2ZW50MAFCPFo6Z2l0aHViLmNvbS9zZWFuYjR0L2NvZGVncmFwaC1nby9pbnRlcm5hbC91aXByb3RvL3VpdjE7dWl2MWIGcHJvdG8z");
+  fileDesc("Ch5pbnRlcm5hbC91aXByb3RvL3VpdjEvdWkucHJvdG8SD2NvZGVncmFwaC51aS52MSKZAgoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEgwKBG5hbWUYAyABKAkSFgoOcXVhbGlmaWVkX25hbWUYBCABKAkSEQoJZmlsZV9wYXRoGAUgASgJEhAKCGxhbmd1YWdlGAYgASgJEhIKCnN0YXJ0X2xpbmUYByABKAUSEAoIZW5kX2xpbmUYCCABKAUSEQoJc3RhcnRfY29sGAkgASgFEg8KB2VuZF9jb2wYCiABKAUSEQoJc2lnbmF0dXJlGAsgASgJEhEKCWRvY3N0cmluZxgMIAEoCRISCgp2aXNpYmlsaXR5GA0gASgJEhMKC2lzX2V4cG9ydGVkGA4gASgIEhMKC3JldHVybl90eXBlGA8gASgJIk0KCExvY2F0aW9uEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIRCglmaWxlX3BhdGgYAyABKAkSEgoKc3RhcnRfbGluZRgEIAEoBSIgChBHZXRTdGF0dXNSZXF1ZXN0EgwKBHBhdGgYASABKAkizAEKEUdldFN0YXR1c1Jlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKbm9kZV9jb3VudBgDIAEoAxISCgplZGdlX2NvdW50GAQgASgDEhIKCmZpbGVfY291bnQYBSABKAMSDQoFc3RhbGUYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCRIUCgxzdG9yZV9leGlzdHMYCCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYCSABKAgiOgoNU2VhcmNoUmVxdWVzdBIMCgR0ZXJtGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGltaXQYAyABKAUiPgoOU2VhcmNoUmVzcG9uc2USLAoJbG9jYXRpb25zGAEgAygLMhkuY29kZWdyYXBoLnVpLnYxLkxvY2F0aW9uIlMKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhIKCm5vZGVfY291bnQYAyABKAMSEgoKZWRnZV9jb3VudBgEIAEoAyJ9CgxGaWxlVHJlZU5vZGUSDAoEbmFtZRgBIAEoCRIOCgZpc19kaXIYAiABKAgSDAoEcGF0aBgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIvCghjaGlsZHJlbhgFIAMoCzIdLmNvZGVncmFwaC51aS52MS5GaWxlVHJlZU5vZGUiWwoMRmlsZXNSZXF1ZXN0Eg8KB3BhdHRlcm4YASABKAkSDgoGZmlsdGVyGAIgASgJEgsKA2RpchgDIAEoCRINCgVkZXB0aBgEIAEoBRIOCgZmb3JtYXQYBSABKAkidwoNRmlsZXNSZXNwb25zZRIOCgZmb3JtYXQYASABKAkSKQoFZmlsZXMYAiADKAsyGi5jb2RlZ3JhcGgudWkudjEuRmlsZUVudHJ5EisKBHRyZWUYAyADKAsyHS5jb2RlZ3JhcGgudWkudjEuRmlsZVRyZWVOb2RlIi8KDkNhbGxlcnNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVsaW1pdBgCIAEoBSJNCg9DYWxsZXJzUmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEioKB2NhbGxlcnMYAiADKAsyGS5jb2RlZ3JhcGgudWkudjEuTG9jYXRpb24iLwoOQ2FsbGVlc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEg0KBWxpbWl0GAIgASgFIk0KD0NhbGxlZXNSZXNwb25zZRIOCgZzeW1ib2wYASABKAkSKgoHY2FsbGVlcxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIuCg1JbXBhY3RSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVkZXB0aBgCIAEoBSKEAQoOSW1wYWN0UmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEg0KBWRlcHRoGAIgASgFEhIKCm5vZGVfY291bnQYAyABKAUSEgoKZWRnZV9jb3VudBgEIAEoBRIrCghhZmZlY3RlZBgFIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIvCg9BZmZlY3RlZFJlcXVlc3QSDQoFZmlsZXMYASADKAkSDQoFZGVwdGgYAiABKAUiVAoQQWZmZWN0ZWRSZXNwb25zZRINCgVmaWxlcxgBIAMoCRIxCg5hZmZlY3RlZF90ZXN0cxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiJQChRHZXROb2RlRGV0YWlsUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSDAoEZmlsZRgCIAEoCRIRCgRsaW5lGAMgASgFSACIAQFCBwoFX2xpbmUikAEKClNvdXJjZUJsb2ISDwoHY29udGVudBgBIAEoDBIRCgl0cnVuY2F0ZWQYAiABKAgSEwoLdG90YWxfbGluZXMYAyABKAUSEwoLdG90YWxfYnl0ZXMYBCABKAUSFgoOcmV0dXJuZWRfbGluZXMYBSABKAUSFgoOcmV0dXJuZWRfYnl0ZXMYBiABKAVKBAgyEDwiywEKDk5vZGVEZWZpbml0aW9uEiMKBG5vZGUYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIkCgVjYWxscxgCIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEigKCWNhbGxlZF9ieRgDIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhcKD2RldGFpbF9nYXRoZXJlZBgEIAEoCBIrCgZzb3VyY2UYBSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiLWAgoVR2V0Tm9kZURldGFpbFJlc3BvbnNlEi0KBG1vZGUYASABKA4yHy5jb2RlZ3JhcGgudWkudjEuTm9kZURldGFpbE1vZGUSDAoEcGF0aBgCIAEoCRIjCgRub2RlGAMgASgLMhUuY29kZWdyYXBoLnVpLnYxLk5vZGUSJAoFY2FsbHMYBCADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIoCgljYWxsZWRfYnkYBSADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIOCgZzeW1ib2wYBiABKAkSNAoLZGVmaW5pdGlvbnMYByADKAsyHy5jb2RlZ3JhcGgudWkudjEuTm9kZURlZmluaXRpb24SGAoQdG90YWxfY2FuZGlkYXRlcxgIIAEoBRIrCgZzb3VyY2UYCSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiIyCg5FeHBsb3JlUmVxdWVzdBINCgVxdWVyeRgBIAEoCRIRCgltYXhfZmlsZXMYAiABKAUihwEKDEV4cGxvcmVHcm91cBIMCgRwYXRoGAEgASgJEiYKB3N5bWJvbHMYAiADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxza2VsZXRvbml6ZWQYAyABKAgSKwoGc291cmNlGAQgASgLMhsuY29kZWdyYXBoLnVpLnYxLlNvdXJjZUJsb2IiXQoKQmxhc3RFbnRyeRIlCgZzeW1ib2wYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxjYWxsZXJfY291bnQYAiABKAUSEgoKdGVzdF9maWxlcxgDIAMoCSKwAQoPRXhwbG9yZVJlc3BvbnNlEg0KBXF1ZXJ5GAEgASgJEg0KBWVtcHR5GAIgASgIEg0KBXN0YWxlGAMgASgIEhQKDHN5bWJvbF9jb3VudBgEIAEoBRItCgZncm91cHMYBSADKAsyHS5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZUdyb3VwEisKBmJsYXN0cxgGIAMoCzIbLmNvZGVncmFwaC51aS52MS5CbGFzdEVudHJ5IiUKEkluZGV4aW5nSW5Qcm9ncmVzcxIPCgdtZXNzYWdlGAEgASgJImMKE0dldFBlcm1hbGlua1JlcXVlc3QSDAoEcGF0aBgBIAEoCRIRCgRsaW5lGAIgASgFSACIAQESFQoIZW5kX2xpbmUYAyABKAVIAYgBAUIHCgVfbGluZUILCglfZW5kX2xpbmUicQoUR2V0UGVybWFsaW5rUmVzcG9uc2USCwoDdXJsGAEgASgJEjwKDGF2YWlsYWJpbGl0eRgCIAEoDjImLmNvZGVncmFwaC51aS52MS5QZXJtYWxpbmtBdmFpbGFiaWxpdHkSDgoGcmVhc29uGAMgASgJIiAKEEdldEhlYWx0aFJlcXVlc3QSDAoEcGF0aBgBIAEoCSI9ChBXb3JrdHJlZU1pc21hdGNoEhUKDXdvcmt0cmVlX3Jvb3QYASABKAkSEgoKaW5kZXhfcm9vdBgCIAEoCSJCCg5QZW5kaW5nQ2hhbmdlcxINCgVhZGRlZBgBIAEoBRIQCghtb2RpZmllZBgCIAEoBRIPCgdyZW1vdmVkGAMgASgFIrYBCgtJbmRleEhlYWx0aBIaChJidWlsdF93aXRoX3ZlcnNpb24YASABKAkSJQodYnVpbHRfd2l0aF9leHRyYWN0aW9uX3ZlcnNpb24YAiABKA0SIgoaY3VycmVudF9leHRyYWN0aW9uX3ZlcnNpb24YAyABKA0SGwoTcmVpbmRleF9yZWNvbW1lbmRlZBgEIAEoCBINCgVzdGF0ZRgFIAEoCRIUCgxwZW5kaW5nX3JlZnMYBiABKAUiuAYKEUdldEhlYWx0aFJlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKZmlsZV9jb3VudBgDIAEoAxISCgpub2RlX2NvdW50GAQgASgDEhIKCmVkZ2VfY291bnQYBSABKAMSFQoNZGJfc2l6ZV9ieXRlcxgGIAEoAxIPCgdiYWNrZW5kGAcgASgJElIKEWZpbGVzX2J5X2xhbmd1YWdlGAggAygLMjcuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLkZpbGVzQnlMYW5ndWFnZUVudHJ5EhEKCWxhbmd1YWdlcxgJIAMoCRJKCg1ub2Rlc19ieV9raW5kGAogAygLMjMuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLk5vZGVzQnlLaW5kRW50cnkSSgoNZWRnZXNfYnlfa2luZBgLIAMoCzIzLmNvZGVncmFwaC51aS52MS5HZXRIZWFsdGhSZXNwb25zZS5FZGdlc0J5S2luZEVudHJ5EjgKD3BlbmRpbmdfY2hhbmdlcxgMIAEoCzIfLmNvZGVncmFwaC51aS52MS5QZW5kaW5nQ2hhbmdlcxIyCgxpbmRleF9oZWFsdGgYDSABKAsyHC5jb2RlZ3JhcGgudWkudjEuSW5kZXhIZWFsdGgSPAoRd29ya3RyZWVfbWlzbWF0Y2gYDiABKAsyIS5jb2RlZ3JhcGgudWkudjEuV29ya3RyZWVNaXNtYXRjaBINCgVzdGFsZRgPIAEoCBISCgpjb21taXRfc2hhGBAgASgJEisKCGNvdmVyYWdlGBEgASgLMhkuY29kZWdyYXBoLnVpLnYxLkNvdmVyYWdlGjYKFEZpbGVzQnlMYW5ndWFnZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMgoQTm9kZXNCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBGjIKEEVkZ2VzQnlLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASIgChBGaWxlR3JhcGhSZXF1ZXN0EgwKBHBhdGgYASABKAkibQoNRmlsZUdyYXBoTm9kZRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhQKDHN5bWJvbF9jb3VudBgDIAEoAxIQCghjeWNsZV9pZBgEIAEoBRIUCgxjb21tdW5pdHlfaWQYBSABKAUi2AEKDUZpbGVHcmFwaEVkZ2USEwoLc291cmNlX2ZpbGUYASABKAkSEwoLdGFyZ2V0X2ZpbGUYAiABKAkSQwoLa2luZF9jb3VudHMYAyADKAsyLi5jb2RlZ3JhcGgudWkudjEuRmlsZUdyYXBoRWRnZS5LaW5kQ291bnRzRW50cnkSEwoLdG90YWxfY291bnQYBCABKAMSEAoIaW5fY3ljbGUYBSABKAgaMQoPS2luZENvdW50c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEijAIKEUZpbGVHcmFwaFJlc3BvbnNlEi0KBW5vZGVzGAEgAygLMh4uY29kZWdyYXBoLnVpLnYxLkZpbGVHcmFwaE5vZGUSLQoFZWRnZXMYAiADKAsyHi5jb2RlZ3JhcGgudWkudjEuRmlsZUdyYXBoRWRnZRIjChtleGNsdWRlZF9wYWNrYWdlX25vZGVfY291bnQYAyABKAMSIAoYZXhjbHVkZWRfc2VsZl9lZGdlX2NvdW50GAQgASgDEiQKHGV4Y2x1ZGVkX2NvbnRhaW5zX2VkZ2VfY291bnQYBSABKAMSEwoLY3ljbGVfY291bnQYBiABKAUSFwoPY29tbXVuaXR5X2NvdW50GAcgASgFIiIKEkZpbGVTeW1ib2xzUmVxdWVzdBIMCgRwYXRoGAEgASgJImUKE0ZpbGVTeW1ib2xzUmVzcG9uc2USJgoHc3ltYm9scxgBIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhMKC3RvdGFsX2NvdW50GAIgASgFEhEKCXRydW5jYXRlZBgDIAEoCCItChFXYXRjaEdyYXBoUmVxdWVzdBIYChBzaW5jZV9nZW5lcmF0aW9uGAEgASgDIpEBCg9XYXRjaEdyYXBoRXZlbnQSEgoKZ2VuZXJhdGlvbhgBIAEoAxITCgtpbml0aWFsaXplZBgCIAEoCBINCgVzdGFsZRgDIAEoCBIUCgxzdG9yZV9leGlzdHMYBCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYBSABKAgSEgoKY29tbWl0X3NoYRgGIAEoCSJ+ChRHZXRFZGl0b3JMaW5rUmVxdWVzdBIMCgRwYXRoGAEgASgJEhEKBGxpbmUYAiABKAVIAIgBARIQCgNjb2wYAyABKAVIAYgBARIVCgh0ZW1wbGF0ZRgEIAEoCUgCiAEBQgcKBV9saW5lQgYKBF9jb2xCCwoJX3RlbXBsYXRlIjoKDEVkaXRvclByZXNldBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhAKCHRlbXBsYXRlGAMgASgJIpQCChVHZXRFZGl0b3JMaW5rUmVzcG9uc2USCwoDdXJsGAEgASgJEj0KDGF2YWlsYWJpbGl0eRgCIAEoDjInLmNvZGVncmFwaC51aS52MS5FZGl0b3JMaW5rQXZhaWxhYmlsaXR5Eg4KBnJlYXNvbhgDIAEoCRI9Cg5kZWZhdWx0X3NvdXJjZRgEIAEoDjIlLmNvZGVncmFwaC51aS52MS5FZGl0b3JUZW1wbGF0ZVNvdXJjZRIWCg5kZWZhdWx0X2VkaXRvchgFIAEoCRIYChBvdmVycmlkZV9hcHBsaWVkGAYgASgIEi4KB3ByZXNldHMYByADKAsyHS5jb2RlZ3JhcGgudWkudjEuRWRpdG9yUHJlc2V0IvEBCghDb3ZlcmFnZRINCgVrbm93bhgBIAEoCBISCgpkaXNjb3ZlcmVkGAIgASgDEg8KB2luZGV4ZWQYAyABKAMSEAoIZXhjbHVkZWQYBCABKAMSGQoRZXh0cmFjdGlvbl9mYWlsZWQYBSABKAMSSwoSZXhjbHVkZWRfYnlfcmVhc29uGAYgAygLMi8uY29kZWdyYXBoLnVpLnYxLkNvdmVyYWdlLkV4Y2x1ZGVkQnlSZWFzb25FbnRyeRo3ChVFeGNsdWRlZEJ5UmVhc29uRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASJtChJHZXRDb3ZlcmFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkSMAoGcmVhc29uGAMgASgOMiAuY29kZWdyYXBoLnVpLnYxLkV4Y2x1c2lvblJlYXNvbiKNAQoLQ292ZXJhZ2VSb3cSDAoEcGF0aBgBIAEoCRIuCgRraW5kGAIgASgOMiAuY29kZWdyYXBoLnVpLnYxLkNvdmVyYWdlUm93S2luZBIwCgZyZWFzb24YAyABKA4yIC5jb2RlZ3JhcGgudWkudjEuRXhjbHVzaW9uUmVhc29uEg4KBmRldGFpbBgEIAEoCSJpChNHZXRDb3ZlcmFnZVJlc3BvbnNlEioKBHJvd3MYASADKAsyHC5jb2RlZ3JhcGgudWkudjEuQ292ZXJhZ2VSb3cSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEg0KBWtub3duGAMgASgIKo4BCg5Ob2RlRGV0YWlsTW9kZRIgChxOT0RFX0RFVEFJTF9NT0RFX1VOU1BFQ0lGSUVEEAASGQoVTk9ERV9ERVRBSUxfTU9ERV9GSUxFEAESHwobTk9ERV9ERVRBSUxfTU9ERV9TSU5HTEVfREVGEAISHgoaTk9ERV9ERVRBSUxfTU9ERV9NVUxUSV9ERUYQAyq4AQoVUGVybWFsaW5rQXZhaWxhYmlsaXR5EiYKIlBFUk1BTElOS19BVkFJTEFCSUxJVFlfVU5TUEVDSUZJRUQQABIjCh9QRVJNQUxJTktfQVZBSUxBQklMSVRZX0xJTktBQkxFEAESLgoqUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9MSU5LQUJMRV9VTlZFUklGSUVEEAISIgoeUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9OT19MSU5LEAMqwwEKFkVkaXRvckxpbmtBdmFpbGFiaWxpdHkSKAokRURJVE9SX0xJTktfQVZBSUxBQklMSVRZX1VOU1BFQ0lGSUVEEAASJgoiRURJVE9SX0xJTktfQVZBSUxBQklMSVRZX0JVSUxEQUJMRRABEigKJEVESVRPUl9MSU5LX0FWQUlMQUJJTElUWV9OT19URU1QTEFURRACEi0KKUVESVRPUl9MSU5LX0FWQUlMQUJJTElUWV9URU1QTEFURV9JTlZBTElEEAMq7AEKFEVkaXRvclRlbXBsYXRlU291cmNlEiYKIkVESVRPUl9URU1QTEFURV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIfChtFRElUT1JfVEVNUExBVEVfU09VUkNFX0ZMQUcQARIeChpFRElUT1JfVEVNUExBVEVfU09VUkNFX0VOVhACEiUKIUVESVRPUl9URU1QTEFURV9TT1VSQ0VfRElTQ09WRVJFRBADEh8KG0VESVRPUl9URU1QTEFURV9TT1VSQ0VfTk9ORRAEEiMKH0VESVRPUl9URU1QTEFURV9TT1VSQ0VfRElTQUJMRUQQBSrlAQoPRXhjbHVzaW9uUmVhc29uEiAKHEVYQ0xVU0lPTl9SRUFTT05fVU5TUEVDSUZJRUQQABIfChtFWENMVVNJT05fUkVBU09OX0RJUl9WRU5ET1IQARIiCh5FWENMVVNJT05fUkVBU09OX0RJUl9ET1RQUkVGSVgQAhIqCiZFWENMVVNJT05fUkVBU09OX1VOU1VQUE9SVEVEX0VYVEVOU0lPThADEh4KGkVYQ0xVU0lPTl9SRUFTT05fQlVJTERfVEFHEAQSHwobRVhDTFVTSU9OX1JFQVNPTl9TSVpFX0xJTUlUEAUqfQoPQ292ZXJhZ2VSb3dLaW5kEiEKHUNPVkVSQUdFX1JPV19LSU5EX1VOU1BFQ0lGSUVEEAASHgoaQ09WRVJBR0VfUk9XX0tJTkRfRVhDTFVERUQQARInCiNDT1ZFUkFHRV9ST1dfS0lORF9FWFRSQUNUSU9OX0ZBSUxFRBACMscKCglVSVNlcnZpY2USUgoJR2V0U3RhdHVzEiEuY29kZWdyYXBoLnVpLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuR2V0U3RhdHVzUmVzcG9uc2USSQoGU2VhcmNoEh4uY29kZWdyYXBoLnVpLnYxLlNlYXJjaFJlcXVlc3QaHy5jb2RlZ3JhcGgudWkudjEuU2VhcmNoUmVzcG9uc2USRgoFRmlsZXMSHS5jb2RlZ3JhcGgudWkudjEuRmlsZXNSZXF1ZXN0Gh4uY29kZWdyYXBoLnVpLnYxLkZpbGVzUmVzcG9uc2USTAoHQ2FsbGVycxIfLmNvZGVncmFwaC51aS52MS5DYWxsZXJzUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5DYWxsZXJzUmVzcG9uc2USTAoHQ2FsbGVlcxIfLmNvZGVncmFwaC51aS52MS5DYWxsZWVzUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5DYWxsZWVzUmVzcG9uc2USSQoGSW1wYWN0Eh4uY29kZWdyYXBoLnVpLnYxLkltcGFjdFJlcXVlc3QaHy5jb2RlZ3JhcGgudWkudjEuSW1wYWN0UmVzcG9uc2USTwoIQWZmZWN0ZWQSIC5jb2RlZ3JhcGgudWkudjEuQWZmZWN0ZWRSZXF1ZXN0GiEuY29kZWdyYXBoLnVpLnYxLkFmZmVjdGVkUmVzcG9uc2USXgoNR2V0Tm9kZURldGFpbBIlLmNvZGVncmFwaC51aS52MS5HZXROb2RlRGV0YWlsUmVxdWVzdBomLmNvZGVncmFwaC51aS52MS5HZXROb2RlRGV0YWlsUmVzcG9uc2USTAoHRXhwbG9yZRIfLmNvZGVncmFwaC51aS52MS5FeHBsb3JlUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5FeHBsb3JlUmVzcG9uc2USWwoMR2V0UGVybWFsaW5rEiQuY29kZWdyYXBoLnVpLnYxLkdldFBlcm1hbGlua1JlcXVlc3QaJS5jb2RlZ3JhcGgudWkudjEuR2V0UGVybWFsaW5rUmVzcG9uc2USUgoJR2V0SGVhbHRoEiEuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuR2V0SGVhbHRoUmVzcG9uc2USUgoJRmlsZUdyYXBoEiEuY29kZWdyYXBoLnVpLnYxLkZpbGVHcmFwaFJlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuRmlsZUdyYXBoUmVzcG9uc2USWAoLRmlsZVN5bWJvbHMSIy5jb2RlZ3JhcGgudWkudjEuRmlsZVN5bWJvbHNSZXF1ZXN0GiQuY29kZWdyYXBoLnVpLnYxLkZpbGVTeW1ib2xzUmVzcG9uc2USVAoKV2F0Y2hHcmFwaBIiLmNvZGVncmFwaC51aS52MS5XYXRjaEdyYXBoUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5XYXRjaEdyYXBoRXZlbnQwARJeCg1HZXRFZGl0b3JMaW5rEiUuY29kZWdyYXBoLnVpLnYxLkdldEVkaXRvckxpbmtSZXF1ZXN0GiYuY29kZWdyYXBoLnVpLnYxLkdldEVkaXRvckxpbmtSZXNwb25zZRJYCgtHZXRDb3ZlcmFnZRIjLmNvZGVncmFwaC51aS52MS5HZXRDb3ZlcmFnZVJlcXVlc3QaJC5jb2RlZ3JhcGgudWkudjEuR2V0Q292ZXJhZ2VSZXNwb25zZUI8WjpnaXRodWIuY29tL3NlYW5iNHQvY29kZWdyYXBoLWdvL2ludGVybmFsL3VpcHJvdG8vdWl2MTt1aXYxYgZwcm90bzM");
 
 /**
  * Node is the shared wire projection of a graph symbol record — the
@@ -1590,6 +1590,18 @@ export type GetHealthResponse = Message<"codegraph.ui.v1.GetHealthResponse"> & {
    * @generated from field: string commit_sha = 16;
    */
   commitSha: string;
+
+  /**
+   * coverage is plan 10-01's addition (Phase 10 HLT-05/HLT-06, D-09 as
+   * corrected — field 16 above is already commit_sha): the
+   * discovered-vs-indexed denominator, populated in the SAME withEngine
+   * call as every other GetHealth field so the health page shows it on
+   * its existing poll with no second rpc. known is false for a graph
+   * that predates this field (D-06) — never 0/0, never an error.
+   *
+   * @generated from field: codegraph.ui.v1.Coverage coverage = 17;
+   */
+  coverage?: Coverage | undefined;
 };
 
 /**
@@ -1662,6 +1674,16 @@ export type FileGraphNode = Message<"codegraph.ui.v1.FileGraphNode"> & {
    * @generated from field: int32 cycle_id = 4;
    */
   cycleId: number;
+
+  /**
+   * community_id mirrors FileGraphNode.CommunityID: a 1-based canonical
+   * community identifier assigned by AssignCommunities, computed fresh
+   * on every FileGraph() call. 0 only when not computed (GRF-06, D-03,
+   * D-09).
+   *
+   * @generated from field: int32 community_id = 5;
+   */
+  communityId: number;
 };
 
 /**
@@ -1792,6 +1814,15 @@ export type FileGraphResponse = Message<"codegraph.ui.v1.FileGraphResponse"> & {
    * @generated from field: int32 cycle_count = 6;
    */
   cycleCount: number;
+
+  /**
+   * community_count mirrors FileGraphResult.CommunityCount: the number
+   * of distinct community ids assigned over nodes (singletons counted),
+   * so the UI reports the count without recounting (GRF-06, D-12a).
+   *
+   * @generated from field: int32 community_count = 7;
+   */
+  communityCount: number;
 };
 
 /**
@@ -1973,6 +2004,297 @@ export const WatchGraphEventSchema: GenMessage<WatchGraphEvent> = /*@__PURE__*/
   messageDesc(file_internal_uiproto_uiv1_ui, 41);
 
 /**
+ * GetEditorLinkRequest carries the repo-relative path and optional
+ * line/col GetEditorLink needs to build an editor URI (D-05, D-08).
+ * path is confined by the same gate GetNodeDetailRequest.file,
+ * GetPermalinkRequest.path and FileSymbolsRequest.path use
+ * ((*query.Engine).ValidateRepoRelativePath, SRV-05 — no second
+ * confinement implementation). line and col are both `optional` (proto3
+ * presence) so the wire can distinguish "unset" (substituted with 1)
+ * from an explicit 0, which is refused. template is `optional` so an
+ * absent per-request override is distinguishable from an explicit empty
+ * string — when set, it replaces the server's effective default for
+ * this one call only (D-06) and is validated by the SAME validator the
+ * server's own flag/env value uses.
+ *
+ * @generated from message codegraph.ui.v1.GetEditorLinkRequest
+ */
+export type GetEditorLinkRequest = Message<"codegraph.ui.v1.GetEditorLinkRequest"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: optional int32 line = 2;
+   */
+  line?: number | undefined;
+
+  /**
+   * @generated from field: optional int32 col = 3;
+   */
+  col?: number | undefined;
+
+  /**
+   * @generated from field: optional string template = 4;
+   */
+  template?: string | undefined;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.GetEditorLinkRequest.
+ * Use `create(GetEditorLinkRequestSchema)` to create a new message.
+ */
+export const GetEditorLinkRequestSchema: GenMessage<GetEditorLinkRequest> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 42);
+
+/**
+ * EditorPreset is one of the three fixed editor choices the picker
+ * offers (D-18): VS Code, Cursor, JetBrains. The browser never holds a
+ * second copy of a template it constructs itself — presets ride on
+ * every GetEditorLinkResponse so the server remains the one place a
+ * template is ever interpreted.
+ *
+ * @generated from message codegraph.ui.v1.EditorPreset
+ */
+export type EditorPreset = Message<"codegraph.ui.v1.EditorPreset"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string template = 3;
+   */
+  template: string;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.EditorPreset.
+ * Use `create(EditorPresetSchema)` to create a new message.
+ */
+export const EditorPresetSchema: GenMessage<EditorPreset> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 43);
+
+/**
+ * GetEditorLinkResponse answers honestly in every configuration state
+ * (D-07): NO_TEMPLATE and TEMPLATE_INVALID are SUCCESSFUL responses,
+ * never errors. url is populated only when availability is BUILDABLE;
+ * reason is populated whenever it is not.
+ *
+ * @generated from message codegraph.ui.v1.GetEditorLinkResponse
+ */
+export type GetEditorLinkResponse = Message<"codegraph.ui.v1.GetEditorLinkResponse"> & {
+  /**
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * @generated from field: codegraph.ui.v1.EditorLinkAvailability availability = 2;
+   */
+  availability: EditorLinkAvailability;
+
+  /**
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+
+  /**
+   * default_source and default_editor report the SERVER DEFAULT's
+   * provenance (D-07) — populated on every response, whether or not
+   * this call's answer used an override.
+   *
+   * @generated from field: codegraph.ui.v1.EditorTemplateSource default_source = 4;
+   */
+  defaultSource: EditorTemplateSource;
+
+  /**
+   * @generated from field: string default_editor = 5;
+   */
+  defaultEditor: string;
+
+  /**
+   * override_applied is true when GetEditorLinkRequest.template was
+   * set and non-empty and was the template actually used to build (or
+   * attempt to build) this response's url (D-06).
+   *
+   * @generated from field: bool override_applied = 6;
+   */
+  overrideApplied: boolean;
+
+  /**
+   * presets carries exactly the picker's three choices (D-18) so the
+   * browser never holds a second copy of a template.
+   *
+   * @generated from field: repeated codegraph.ui.v1.EditorPreset presets = 7;
+   */
+  presets: EditorPreset[];
+};
+
+/**
+ * Describes the message codegraph.ui.v1.GetEditorLinkResponse.
+ * Use `create(GetEditorLinkResponseSchema)` to create a new message.
+ */
+export const GetEditorLinkResponseSchema: GenMessage<GetEditorLinkResponse> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 44);
+
+/**
+ * Coverage (Phase 10, plan 10-01) is the discovered-vs-indexed
+ * denominator: discovered == indexed + extraction_failed + (excluded
+ * minus directory-level records). known == false means UNKNOWN — a
+ * graph that predates this field (D-06) — never 0/0.
+ *
+ * @generated from message codegraph.ui.v1.Coverage
+ */
+export type Coverage = Message<"codegraph.ui.v1.Coverage"> & {
+  /**
+   * @generated from field: bool known = 1;
+   */
+  known: boolean;
+
+  /**
+   * @generated from field: int64 discovered = 2;
+   */
+  discovered: bigint;
+
+  /**
+   * @generated from field: int64 indexed = 3;
+   */
+  indexed: bigint;
+
+  /**
+   * @generated from field: int64 excluded = 4;
+   */
+  excluded: bigint;
+
+  /**
+   * @generated from field: int64 extraction_failed = 5;
+   */
+  extractionFailed: bigint;
+
+  /**
+   * excluded_by_reason keys are ExclusionReason's full generated names
+   * (e.g. "EXCLUSION_REASON_BUILD_TAG") — the generated TS client
+   * resolves numbers to these same full names via
+   * ExclusionReasonSchema.values (D-09 discretion).
+   *
+   * @generated from field: map<string, int64> excluded_by_reason = 6;
+   */
+  excludedByReason: { [key: string]: bigint };
+};
+
+/**
+ * Describes the message codegraph.ui.v1.Coverage.
+ * Use `create(CoverageSchema)` to create a new message.
+ */
+export const CoverageSchema: GenMessage<Coverage> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 45);
+
+/**
+ * GetCoverageRequest (Phase 10, plan 10-01, D-10 verbatim): page_size <= 0
+ * defaults to 200, > 1000 is clamped to 1000; page_token is opaque,
+ * server-issued, validated on the way in — malformed input is
+ * INVALID_ARGUMENT (T-10-04). reason, when set to a value other than
+ * UNSPECIFIED, restricts rows to that one exclusion reason.
+ *
+ * @generated from message codegraph.ui.v1.GetCoverageRequest
+ */
+export type GetCoverageRequest = Message<"codegraph.ui.v1.GetCoverageRequest"> & {
+  /**
+   * @generated from field: int32 page_size = 1;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 2;
+   */
+  pageToken: string;
+
+  /**
+   * @generated from field: codegraph.ui.v1.ExclusionReason reason = 3;
+   */
+  reason: ExclusionReason;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.GetCoverageRequest.
+ * Use `create(GetCoverageRequestSchema)` to create a new message.
+ */
+export const GetCoverageRequestSchema: GenMessage<GetCoverageRequest> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 46);
+
+/**
+ * CoverageRow is one per-file (or per-directory) coverage-gap row.
+ *
+ * @generated from message codegraph.ui.v1.CoverageRow
+ */
+export type CoverageRow = Message<"codegraph.ui.v1.CoverageRow"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: codegraph.ui.v1.CoverageRowKind kind = 2;
+   */
+  kind: CoverageRowKind;
+
+  /**
+   * @generated from field: codegraph.ui.v1.ExclusionReason reason = 3;
+   */
+  reason: ExclusionReason;
+
+  /**
+   * @generated from field: string detail = 4;
+   */
+  detail: string;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.CoverageRow.
+ * Use `create(CoverageRowSchema)` to create a new message.
+ */
+export const CoverageRowSchema: GenMessage<CoverageRow> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 47);
+
+/**
+ * GetCoverageResponse. known is additive to D-10's original shape and
+ * required by D-06's never-0/0 rule: an old graph must be
+ * distinguishable from a known graph with zero rows.
+ *
+ * @generated from message codegraph.ui.v1.GetCoverageResponse
+ */
+export type GetCoverageResponse = Message<"codegraph.ui.v1.GetCoverageResponse"> & {
+  /**
+   * @generated from field: repeated codegraph.ui.v1.CoverageRow rows = 1;
+   */
+  rows: CoverageRow[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * @generated from field: bool known = 3;
+   */
+  known: boolean;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.GetCoverageResponse.
+ * Use `create(GetCoverageResponseSchema)` to create a new message.
+ */
+export const GetCoverageResponseSchema: GenMessage<GetCoverageResponse> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 48);
+
+/**
  * NodeDetailMode discriminates which of GetNodeDetailResponse's three
  * shapes is populated, mirroring internal/query.NodeDetailMode's three
  * constants exactly (D-02). NODE_DETAIL_MODE_UNSPECIFIED is the required
@@ -2062,6 +2384,182 @@ export enum PermalinkAvailability {
  */
 export const PermalinkAvailabilitySchema: GenEnum<PermalinkAvailability> = /*@__PURE__*/
   enumDesc(file_internal_uiproto_uiv1_ui, 1);
+
+/**
+ * EditorLinkAvailability is a CLOSED, four-valued classification of
+ * whether GetEditorLink could build a URL (D-07) — deliberately never a
+ * boolean and never an open string. EDITOR_LINK_AVAILABILITY_UNSPECIFIED
+ * is the required proto3 zero value and is never a state GetEditorLink
+ * itself produces.
+ *
+ *   - BUILDABLE: url is populated.
+ *   - NO_TEMPLATE: no effective template is configured — either nothing
+ *     was ever set (flag, env, or discovery all came up empty) or the
+ *     operator explicitly disabled editor links (D-16). reason
+ *     distinguishes the two cases with two different strings.
+ *   - TEMPLATE_INVALID: the effective template (server default or a
+ *     per-request override) failed validation. reason names the cause.
+ *
+ * Configuration states are ANSWERS, never errors (D-07) — the same
+ * "empty is a successful response" discipline GetPermalink already
+ * follows. The ONE error case is a rejected path.
+ *
+ * @generated from enum codegraph.ui.v1.EditorLinkAvailability
+ */
+export enum EditorLinkAvailability {
+  /**
+   * @generated from enum value: EDITOR_LINK_AVAILABILITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: EDITOR_LINK_AVAILABILITY_BUILDABLE = 1;
+   */
+  BUILDABLE = 1,
+
+  /**
+   * @generated from enum value: EDITOR_LINK_AVAILABILITY_NO_TEMPLATE = 2;
+   */
+  NO_TEMPLATE = 2,
+
+  /**
+   * @generated from enum value: EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID = 3;
+   */
+  TEMPLATE_INVALID = 3,
+}
+
+/**
+ * Describes the enum codegraph.ui.v1.EditorLinkAvailability.
+ */
+export const EditorLinkAvailabilitySchema: GenEnum<EditorLinkAvailability> = /*@__PURE__*/
+  enumDesc(file_internal_uiproto_uiv1_ui, 2);
+
+/**
+ * EditorTemplateSource reports the SERVER DEFAULT's provenance,
+ * regardless of any per-request override (D-07) — so the browser's
+ * picker (D-18) can show where the current default came from even when
+ * an override is active for this browser only.
+ *
+ * @generated from enum codegraph.ui.v1.EditorTemplateSource
+ */
+export enum EditorTemplateSource {
+  /**
+   * @generated from enum value: EDITOR_TEMPLATE_SOURCE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: EDITOR_TEMPLATE_SOURCE_FLAG = 1;
+   */
+  FLAG = 1,
+
+  /**
+   * @generated from enum value: EDITOR_TEMPLATE_SOURCE_ENV = 2;
+   */
+  ENV = 2,
+
+  /**
+   * @generated from enum value: EDITOR_TEMPLATE_SOURCE_DISCOVERED = 3;
+   */
+  DISCOVERED = 3,
+
+  /**
+   * @generated from enum value: EDITOR_TEMPLATE_SOURCE_NONE = 4;
+   */
+  NONE = 4,
+
+  /**
+   * @generated from enum value: EDITOR_TEMPLATE_SOURCE_DISABLED = 5;
+   */
+  DISABLED = 5,
+}
+
+/**
+ * Describes the enum codegraph.ui.v1.EditorTemplateSource.
+ */
+export const EditorTemplateSourceSchema: GenEnum<EditorTemplateSource> = /*@__PURE__*/
+  enumDesc(file_internal_uiproto_uiv1_ui, 3);
+
+/**
+ * ExclusionReason (Phase 10, plan 10-01) is a UI-LOCAL closed enum with
+ * the same six values, numbered IDENTICALLY to
+ * internal/schema/graph.proto's codegraph.v1.ExclusionReason (D-08).
+ * ui.proto imports nothing today and its TS generator is scoped to this
+ * one file (buf.gen.ts.yaml) — importing graph.proto would break
+ * web/src/lib/gen/ui_pb.ts's generation. TestExclusionReasonEnumsAgree
+ * pins the two enums to each other in both directions, so the wire
+ * mapper (exclusionReasonToProto) is a plain numeric cast that cannot
+ * silently skew.
+ *
+ * @generated from enum codegraph.ui.v1.ExclusionReason
+ */
+export enum ExclusionReason {
+  /**
+   * @generated from enum value: EXCLUSION_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: EXCLUSION_REASON_DIR_VENDOR = 1;
+   */
+  DIR_VENDOR = 1,
+
+  /**
+   * @generated from enum value: EXCLUSION_REASON_DIR_DOTPREFIX = 2;
+   */
+  DIR_DOTPREFIX = 2,
+
+  /**
+   * @generated from enum value: EXCLUSION_REASON_UNSUPPORTED_EXTENSION = 3;
+   */
+  UNSUPPORTED_EXTENSION = 3,
+
+  /**
+   * @generated from enum value: EXCLUSION_REASON_BUILD_TAG = 4;
+   */
+  BUILD_TAG = 4,
+
+  /**
+   * @generated from enum value: EXCLUSION_REASON_SIZE_LIMIT = 5;
+   */
+  SIZE_LIMIT = 5,
+}
+
+/**
+ * Describes the enum codegraph.ui.v1.ExclusionReason.
+ */
+export const ExclusionReasonSchema: GenEnum<ExclusionReason> = /*@__PURE__*/
+  enumDesc(file_internal_uiproto_uiv1_ui, 4);
+
+/**
+ * CoverageRowKind (Phase 10, plan 10-01) distinguishes a CoverageRow's
+ * origin: a pre-extraction exclusion, or a File record with a non-empty
+ * errors list.
+ *
+ * @generated from enum codegraph.ui.v1.CoverageRowKind
+ */
+export enum CoverageRowKind {
+  /**
+   * @generated from enum value: COVERAGE_ROW_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: COVERAGE_ROW_KIND_EXCLUDED = 1;
+   */
+  EXCLUDED = 1,
+
+  /**
+   * @generated from enum value: COVERAGE_ROW_KIND_EXTRACTION_FAILED = 2;
+   */
+  EXTRACTION_FAILED = 2,
+}
+
+/**
+ * Describes the enum codegraph.ui.v1.CoverageRowKind.
+ */
+export const CoverageRowKindSchema: GenEnum<CoverageRowKind> = /*@__PURE__*/
+  enumDesc(file_internal_uiproto_uiv1_ui, 5);
 
 /**
  * UIService is codegraph ui's RPC surface. Plan 01-01 (the phase's tracer)
@@ -2250,6 +2748,46 @@ export const UIService: GenService<{
     methodKind: "server_streaming";
     input: typeof WatchGraphRequestSchema;
     output: typeof WatchGraphEventSchema;
+  },
+  /**
+   * GetEditorLink is plan 09-01's fifteenth rpc (D-05): it turns a
+   * repo-relative path plus an optional line/col into an editor URI
+   * built from a {path}/{line}/{col} template. It is a NEW rpc rather
+   * than an extension of GetPermalink: GetPermalink runs git
+   * introspection with a timeout and its PermalinkAvailability enum
+   * encodes remote trust, while an editor link has no remote and no
+   * commit at all. Read-only: it performs no network operation,
+   * launches nothing and mutates nothing (SRV-03) — its name was
+   * verified clean against the live mutatingVerbs fixture before being
+   * written here. path is confined by the SAME
+   * (*query.Engine).ValidateRepoRelativePath gate GetNodeDetail,
+   * GetPermalink and FileSymbols already use (SRV-05) — no second
+   * confinement implementation.
+   *
+   * @generated from rpc codegraph.ui.v1.UIService.GetEditorLink
+   */
+  getEditorLink: {
+    methodKind: "unary";
+    input: typeof GetEditorLinkRequestSchema;
+    output: typeof GetEditorLinkResponseSchema;
+  },
+  /**
+   * GetCoverage is plan 10-01's sixteenth rpc (Phase 10 HLT-05/HLT-06,
+   * D-10): it pages the per-file coverage-gap row list (extraction
+   * failures and pre-extraction exclusions) that GetHealthResponse.coverage
+   * deliberately omits to stay bounded on a polled call (the v0.12.0
+   * Phase 1 transport-cap lesson). Read-only: it performs no network
+   * operation and mutates nothing (SRV-03) — its name was verified clean
+   * against the live mutatingVerbs fixture before being written here
+   * (no "Index", the exact trap GetIndexHealth/WatchIndex/IndexEvents/
+   * StreamIndex were each rejected for).
+   *
+   * @generated from rpc codegraph.ui.v1.UIService.GetCoverage
+   */
+  getCoverage: {
+    methodKind: "unary";
+    input: typeof GetCoverageRequestSchema;
+    output: typeof GetCoverageResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_internal_uiproto_uiv1_ui, 0);

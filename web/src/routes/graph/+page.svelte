@@ -570,6 +570,16 @@
 			This repository has no dependency cycles.
 		{/if}
 	</p>
+	<p class="mt-1 text-xs text-muted-foreground" data-testid="graph-community-summary">
+		{#if graphState.response.communityCount > 0}
+			Files fall into {graphState.response.communityCount} communit{graphState.response
+				.communityCount === 1
+				? 'y'
+				: 'ies'}, shown as node colours on the same layout.
+		{:else}
+			No communities computed.
+		{/if}
+	</p>
 	{#if graphState.response.cycleCount > 0}
 		<button
 			type="button"

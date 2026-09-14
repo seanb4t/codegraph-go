@@ -80,7 +80,9 @@ upgrades work under a brew-managed install. Upgrade with `brew upgrade codegraph
 not `codegraph upgrade` — running `codegraph upgrade` against a brew-managed
 install refuses with a pointer to that command and exits non-zero, rather
 than mutating the install behind Homebrew's bookkeeping; `codegraph upgrade
---check` reports the same pointer and exits zero.
+--check` reports the same pointer and exits zero. The full command and
+flag reference, generated from the binary's own command tree, is
+[`docs/CLI-REFERENCE.md`](docs/CLI-REFERENCE.md).
 
 ## Quick start
 

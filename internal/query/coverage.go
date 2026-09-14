@@ -1,0 +1,426 @@
+package query
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/binary"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/schema"
+)
+
+// This file is the D-14 target of a file-scoped source scan
+// (TestCoverageSourceNeverWalksDisk): every count and every row below is
+// READ BACK through graphstore.Reader's IterateFiles/IterateExcludedFiles
+// — never reconstructed by a filesystem walk at query time. A disk-scan
+// call here would let a query-time re-walk silently disagree with what
+// Discover actually recorded (D-14/T-10-07); it must never appear.
+//
+// CoverageSummary/CoverageRows read from whatever snapshot the caller's
+// Engine holds; two consecutive CoverageRows page calls against a live
+// server may be answered from different snapshots (each request opens
+// its own Engine, SRV-04), so paging is a best-effort walk of a
+// changing graph, not a single consistent cursor across calls.
+
+// CoverageSummary is the discovered-vs-indexed denominator (Phase 10
+// HLT-05): Known is false for a graph that predates this phase's
+// Meta.has_coverage field (D-06/D-15) — never 0/0, never an error.
+// Discovered == Indexed + ExtractionFailed + (Excluded minus
+// directory-level records) — asserted as an invariant by callers, never
+// hard-coded, since later plans add more exclusion reasons to the same
+// walk (D-01).
+type CoverageSummary struct {
+	Known bool
+
+	Discovered       int64
+	Indexed          int64
+	Excluded         int64
+	ExtractionFailed int64
+
+	// ExcludedByReason keys are schema.ExclusionReason.String()'s full
+	// generated names (e.g. "EXCLUSION_REASON_BUILD_TAG") — the
+	// generated TS client resolves numbers to these same full names via
+	// ExclusionReasonSchema.values, so full names are the easiest to
+	// display and cannot collide (D-09 discretion).
+	ExcludedByReason map[string]int64
+}
+
+// CoverageRowKind distinguishes a CoverageRow's origin: an ExcludedFile
+// record or a File record with a non-empty Errors list. Numbered to
+// match uiv1.CoverageRowKind exactly (0 reserved/unspecified) so
+// internal/uiserver's mapper is a plain numeric cast.
+type CoverageRowKind uint8
+
+const (
+	_ CoverageRowKind = iota
+	// CoverageRowExcluded is a pre-extraction exclusion (an ExcludedFile
+	// record).
+	CoverageRowExcluded
+	// CoverageRowExtractionFailed is a File record with a non-empty
+	// Errors list.
+	CoverageRowExtractionFailed
+)
+
+// CoverageRow is one per-file (or per-directory) coverage gap.
+type CoverageRow struct {
+	Path   string
+	Kind   CoverageRowKind
+	Reason schema.ExclusionReason // zero value (UNSPECIFIED) for CoverageRowExtractionFailed
+	Detail string
+}
+
+// CoverageRowsOptions configures one CoverageRows page request.
+type CoverageRowsOptions struct {
+	PageSize  int
+	PageToken string
+	// Reason, when non-UNSPECIFIED, restricts rows to ExcludedFile
+	// records with exactly this reason — extraction-failed rows are
+	// never returned when a reason filter is active.
+	Reason schema.ExclusionReason
+}
+
+// CoveragePage is one CoverageRows result page.
+type CoveragePage struct {
+	Known         bool
+	Rows          []CoverageRow
+	NextPageToken string
+}
+
+// CoverageDefaultPageSize and CoverageMaxPageSize bound CoverageRows'
+// PageSize the same way every other paged rpc in this codebase clamps a
+// caller-supplied size (T-10-03's transport-cap lesson).
+const (
+	CoverageDefaultPageSize = 200
+	CoverageMaxPageSize     = 1000
+
+	// coverageDetailMaxBytes bounds an extraction-failure detail string
+	// (T-10-05): an absolute host path replaced by "." still leaves the
+	// rest of a long parser error message, which is cut here on a rune
+	// boundary rather than left unbounded.
+	coverageDetailMaxBytes = 256
+)
+
+// CoverageSummary reports the discovered-vs-indexed denominator for the
+// graph e reads (Phase 10 HLT-05). A graph whose Meta lacks has_coverage
+// (a pre-Phase-10 graph, or a store with no Meta record at all) returns
+// CoverageSummary{Known:false} with every count zero and a nil
+// ExcludedByReason map — the D-06/D-15 unknown short-circuit runs BEFORE
+// any scan.
+func (e *Engine) CoverageSummary() (CoverageSummary, error) {
+	meta, err := e.IndexMeta()
+	if err != nil {
+		return CoverageSummary{}, err
+	}
+	if meta == nil || !meta.GetHasCoverage() {
+		return CoverageSummary{Known: false}, nil
+	}
+
+	fit, err := e.reader.IterateFiles()
+	if err != nil {
+		return CoverageSummary{}, err
+	}
+	var indexed, extractionFailed int64
+	for fit.Next() {
+		if len(fit.File().GetErrors()) == 0 {
+			indexed++
+		} else {
+			extractionFailed++
+		}
+	}
+	ferr := fit.Err()
+	fit.Close()
+	if ferr != nil {
+		return CoverageSummary{}, ferr
+	}
+
+	xit, err := e.reader.IterateExcludedFiles()
+	if err != nil {
+		return CoverageSummary{}, err
+	}
+	var excludedTotal, fileLevel int64
+	byReason := make(map[string]int64)
+	for xit.Next() {
+		x := xit.ExcludedFile()
+		excludedTotal++
+		byReason[x.GetReason().String()]++
+		if !schema.IsDirectoryExclusion(x.GetReason()) {
+			fileLevel++
+		}
+	}
+	xerr := xit.Err()
+	xit.Close()
+	if xerr != nil {
+		return CoverageSummary{}, xerr
+	}
+
+	return CoverageSummary{
+		Known:            true,
+		Discovered:       indexed + extractionFailed + fileLevel,
+		Indexed:          indexed,
+		Excluded:         excludedTotal,
+		ExtractionFailed: extractionFailed,
+		ExcludedByReason: byReason,
+	}, nil
+}
+
+// CoverageRows returns one page of per-file coverage-gap rows: every
+// extraction-failed File record (segment 'f'), then every ExcludedFile
+// record (segment 'x', optionally filtered by opts.Reason), each segment
+// walked in the store's own key order. A graph with no recorded coverage
+// returns CoveragePage{Known:false} (the same D-06/D-15 contract as
+// CoverageSummary).
+func (e *Engine) CoverageRows(opts CoverageRowsOptions) (CoveragePage, error) {
+	meta, err := e.IndexMeta()
+	if err != nil {
+		return CoveragePage{}, err
+	}
+	if meta == nil || !meta.GetHasCoverage() {
+		return CoveragePage{Known: false}, nil
+	}
+	// WR-01 (iteration 2): CoverageGeneration is a monotonic counter
+	// stamped at every coverage-bearing write site, replacing
+	// LastSyncUnixMs as the page-token generation marker — a wall-clock,
+	// millisecond-resolution value can alias two distinct commits onto the
+	// same generation, silently defeating this check (see coverage.go's
+	// token doc comments below for the full rationale).
+	generation := meta.GetCoverageGeneration()
+
+	pageSize := opts.PageSize
+	if pageSize <= 0 {
+		pageSize = CoverageDefaultPageSize
+	}
+	if pageSize > CoverageMaxPageSize {
+		pageSize = CoverageMaxPageSize
+	}
+
+	cursorSeg, cursorGeneration, cursorPath, err := decodeCoverageToken(opts.PageToken)
+	if err != nil {
+		return CoveragePage{}, err
+	}
+	// WR-01: a non-empty token whose embedded generation disagrees with
+	// the store's CURRENT CoverageGeneration means a Sync committed between
+	// the previous page fetch and this one. CR-01's position-based
+	// resume no longer risks dropping rows in that case, but the walk's
+	// cross-page consistency is no longer guaranteed either (rows may
+	// have been added, removed, or reclassified), so the honest answer
+	// is to refuse and let the caller restart the whole walk rather than
+	// silently return a page from a different index generation than the
+	// one the caller has been accumulating.
+	if opts.PageToken != "" && cursorGeneration != generation {
+		return CoveragePage{}, abortedf("coverage: index changed since the previous page was fetched; retry from the first page")
+	}
+
+	filterByReason := opts.Reason != schema.ExclusionReason_EXCLUSION_REASON_UNSPECIFIED
+	if filterByReason && cursorSeg == 'f' {
+		return CoveragePage{}, invalidArgumentf("coverage: page token from the extraction-failed segment is invalid when filtering by reason")
+	}
+
+	var rows []CoverageRow
+
+	// CR-01 fix: the two segments are walked in the STORE's own key
+	// order (a length-prefixed encoding, keys.go's appendSegment — see
+	// CoverageRow's own doc comment), never plain lexical path order.
+	// The resume cursor therefore cannot use a lexical "path <=
+	// cursorPath" comparison, NOR value-equality against the cursor's
+	// decoded path, to decide "already returned": both break the
+	// instant the cursor's own record is mutated or deleted by a
+	// concurrent Sync between two page fetches (each GetCoverage call
+	// opens its own Engine/snapshot, SRV-04 — this file's own header
+	// comment), leaving a value-equality "skipping" flag stuck true for
+	// the rest of that segment and silently dropping every remaining
+	// row.
+	//
+	// Instead, resume by POSITION: graphstore.FileKey(cursorPath) /
+	// graphstore.ExcludedFileKey(cursorPath) recompute the cursor's own
+	// key bytes purely from its path — independent of whether that
+	// record still exists — and each row's RawKey() is compared against
+	// it with bytes.Compare, which reflects the store's actual key
+	// order regardless of any mutation. Once a row's key sorts strictly
+	// after the cursor's key, skipping ends and emission resumes from
+	// there: a deleted cursor row resumes at the very next row after
+	// its position; a cursor row that still exists is skipped exactly
+	// once, exactly as before. A cursor sitting in the later 'x'
+	// segment additionally means the earlier 'f' segment is already
+	// fully consumed and must be skipped in its entirety, not re-walked
+	// from its own start.
+	if !filterByReason && cursorSeg != 'x' {
+		fit, err := e.reader.IterateFiles()
+		if err != nil {
+			return CoveragePage{}, err
+		}
+		skipping := cursorSeg == 'f'
+		var cursorKey []byte
+		if skipping {
+			cursorKey = graphstore.FileKey(cursorPath)
+		}
+		for len(rows) <= pageSize && fit.Next() {
+			if skipping {
+				if bytes.Compare(fit.RawKey(), cursorKey) > 0 {
+					skipping = false
+				} else {
+					continue
+				}
+			}
+			f := fit.File()
+			if len(f.GetErrors()) == 0 {
+				continue
+			}
+			rows = append(rows, CoverageRow{
+				Path:   f.GetPath(),
+				Kind:   CoverageRowExtractionFailed,
+				Detail: coverageExtractionDetail(f, e.repoRoot),
+			})
+		}
+		ferr := fit.Err()
+		fit.Close()
+		if ferr != nil {
+			return CoveragePage{}, ferr
+		}
+	}
+
+	if len(rows) <= pageSize {
+		xit, err := e.reader.IterateExcludedFiles()
+		if err != nil {
+			return CoveragePage{}, err
+		}
+		skipping := cursorSeg == 'x'
+		var cursorKey []byte
+		if skipping {
+			cursorKey = graphstore.ExcludedFileKey(cursorPath)
+		}
+		for len(rows) <= pageSize && xit.Next() {
+			if skipping {
+				if bytes.Compare(xit.RawKey(), cursorKey) > 0 {
+					skipping = false
+				} else {
+					continue
+				}
+			}
+			x := xit.ExcludedFile()
+			if filterByReason && x.GetReason() != opts.Reason {
+				continue
+			}
+			rows = append(rows, CoverageRow{
+				Path:   x.GetPath(),
+				Kind:   CoverageRowExcluded,
+				Reason: x.GetReason(),
+				Detail: x.GetDetail(),
+			})
+		}
+		xerr := xit.Err()
+		xit.Close()
+		if xerr != nil {
+			return CoveragePage{}, xerr
+		}
+	}
+
+	var nextToken string
+	if len(rows) > pageSize {
+		rows = rows[:pageSize]
+		last := rows[pageSize-1]
+		seg := byte('f')
+		if last.Kind == CoverageRowExcluded {
+			seg = 'x'
+		}
+		nextToken = encodeCoverageToken(seg, generation, last.Path)
+	}
+
+	return CoveragePage{Known: true, Rows: rows, NextPageToken: nextToken}, nil
+}
+
+// coverageExtractionDetail joins f's Errors into one display string,
+// replacing repoRoot (when non-empty) with "." (T-10-05: never leak the
+// absolute host checkout path onto the wire) and cutting the result at
+// coverageDetailMaxBytes on a rune boundary.
+func coverageExtractionDetail(f *schema.File, repoRoot string) string {
+	detail := strings.Join(f.GetErrors(), "; ")
+	if repoRoot != "" {
+		detail = strings.ReplaceAll(detail, repoRoot, ".")
+	}
+	return truncateAtRuneBoundary(detail, coverageDetailMaxBytes)
+}
+
+// truncateAtRuneBoundary cuts s to at most maxBytes bytes, never splitting
+// a multi-byte rune.
+func truncateAtRuneBoundary(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	b := s[:maxBytes]
+	for len(b) > 0 {
+		r, size := utf8.DecodeLastRuneInString(b)
+		if r != utf8.RuneError || size != 1 {
+			break
+		}
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
+// coverageTokenGenerationLen is the fixed width (bytes) of a page token's
+// embedded generation marker (WR-01) — a big-endian encoding of
+// schema.Meta's CoverageGeneration at the moment the page carrying this
+// token was produced.
+const coverageTokenGenerationLen = 8
+
+// encodeCoverageToken frames a resume cursor as [kind byte][generation,
+// 8 bytes big-endian][path bytes], base64url-encoded. The token is OPAQUE
+// to the caller and is used ONLY as an in-memory byte comparison (T-10-04)
+// — never as a Pebble bound, never as a filesystem path.
+//
+// generation is meta.GetCoverageGeneration() read in the SAME CoverageRows
+// call that produced this token (WR-01, revised at 10-REVIEW.md iteration
+// 2): CoverageGeneration is a monotonically-incrementing counter, bumped
+// by exactly 1 at every one of the three commit sites a coverage-bearing
+// graph can be written from (indexer.Run's from-scratch write and Sync's
+// two commit paths) — see graph.proto's own doc comment on the field for
+// why a counter replaced the original LastSyncUnixMs-based marker (a
+// wall-clock, millisecond-resolution value can alias two distinct commits
+// onto the same generation, silently defeating this check; a counter
+// cannot). The NEXT CoverageRows call re-reads the store's current
+// CoverageGeneration and rejects a token whose embedded generation
+// disagrees as ErrAborted: a Sync committed between the two page fetches,
+// so the walk is no longer guaranteed to be over the same key-order
+// snapshot family CR-01's position-based resume assumes, and the honest
+// answer is "retry from the first page" rather than silently returning a
+// page that might disagree with what the caller already collected.
+func encodeCoverageToken(kind byte, generation int64, path string) string {
+	buf := make([]byte, 0, 1+coverageTokenGenerationLen+len(path))
+	buf = append(buf, kind)
+	var genBuf [coverageTokenGenerationLen]byte
+	binary.BigEndian.PutUint64(genBuf[:], uint64(generation))
+	buf = append(buf, genBuf[:]...)
+	buf = append(buf, path...)
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+// decodeCoverageToken decodes a token produced by encodeCoverageToken. An
+// empty token means "first page" (kind 0, generation 0, path ""). Any
+// malformed value — bad base64, a payload too short to hold the kind byte
+// and generation field, an unrecognized kind byte, invalid UTF-8, or a
+// path over 4096 bytes — is rejected as ErrInvalidArgument (T-10-04);
+// never a filesystem path, never a Pebble bound. generation is returned
+// undecoded (the caller compares it against the store's current
+// CoverageGeneration — WR-01) so this function stays a pure decode with no
+// store dependency.
+func decodeCoverageToken(tok string) (kind byte, generation int64, path string, err error) {
+	if tok == "" {
+		return 0, 0, "", nil
+	}
+	data, decErr := base64.RawURLEncoding.DecodeString(tok)
+	if decErr != nil || len(data) < 1+coverageTokenGenerationLen {
+		return 0, 0, "", invalidArgumentf("coverage: malformed page token")
+	}
+	kind = data[0]
+	if kind != 'f' && kind != 'x' {
+		return 0, 0, "", invalidArgumentf("coverage: malformed page token")
+	}
+	generation = int64(binary.BigEndian.Uint64(data[1 : 1+coverageTokenGenerationLen]))
+	path = string(data[1+coverageTokenGenerationLen:])
+	if !utf8.ValidString(path) || len(path) > 4096 {
+		return 0, 0, "", invalidArgumentf("coverage: malformed page token")
+	}
+	return kind, generation, path, nil
+}

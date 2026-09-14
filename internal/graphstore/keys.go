@@ -34,6 +34,14 @@ const (
 	// additive-only-no-bump rule; a new key namespace is not a
 	// record-format break).
 	prefixFileIndex byte = 'x'
+
+	// prefixExcludedFile is the Phase-10 coverage-denominator namespace
+	// (HLT-05, D-05): c/<path> holds one ExcludedFile record per path the
+	// walker visited but did not index, or one per pruned directory
+	// (D-02) — distinguished by the record's reason enum, no sub-prefix.
+	// Chosen because m n e f a x are already taken and 'c' reads as
+	// "coverage".
+	prefixExcludedFile byte = 'c'
 )
 
 // fileIndexKindNode and fileIndexKindEdge are fixed, code-controlled marker
@@ -191,6 +199,33 @@ func fileIndexEdgeKey(path, src, kind, dst string) []byte {
 	buf = appendSegment(buf, kind)
 	return appendSegment(buf, dst)
 }
+
+// excludedFileKey encodes an ExcludedFile record (path, reason, detail,
+// size_bytes — Phase 10's ExcludedFile message) under the c/ namespace,
+// copying fileKey's exact length-prefixed shape (appendSegment, never
+// string concatenation — T-01-02) so distinct paths never alias and a
+// crafted path cannot bleed into an adjacent record or namespace.
+func excludedFileKey(path string) []byte {
+	buf := make([]byte, 0, 1+binary.MaxVarintLen64+len(path))
+	buf = append(buf, prefixExcludedFile)
+	buf = appendSegment(buf, path)
+	return buf
+}
+
+// FileKey exports fileKey's byte-comparable encoding of path (Phase 10
+// CR-01): the key IS a pure function of path alone, independent of whether
+// a File record for path currently exists in the store, so a caller
+// holding a cursor path from an earlier page can always recompute the
+// SAME key bytes to resume a FileIterator walk by bytes.Compare position
+// — see FileIterator.RawKey's doc comment. This is the one sanctioned way
+// for code outside this file to obtain File-namespace key bytes; it does
+// not create a second key-construction path (this file's own top-of-file
+// comment), it just exports the existing one.
+func FileKey(path string) []byte { return fileKey(path) }
+
+// ExcludedFileKey is FileKey's ExcludedFile-namespace counterpart (Phase
+// 10 CR-01).
+func ExcludedFileKey(path string) []byte { return excludedFileKey(path) }
 
 // metaKey encodes a store-wide metadata entry (e.g. schema version) under
 // the m/ namespace.

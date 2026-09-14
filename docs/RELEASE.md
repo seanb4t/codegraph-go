@@ -521,15 +521,21 @@ specific to this cask:
 
 ```
 Error: Refusing to load cask seanb4t/tap/codegraph from untrusted tap seanb4t/tap.
-Run `brew trust --cask seanb4t/tap/codegraph` or `brew trust seanb4t/tap` to trust it.
+Run `brew trust --cask seanb4t/tap/codegraph` … to trust it.
 ```
 
-Run the command the error names, then re-run `brew install codegraph`:
+Homebrew refuses because a third-party cask runs arbitrary Ruby on your
+machine at install time — this cask's post-install hook does — so `brew trust`
+is a security control you are opting out of; `--cask` limits that opt-out to
+this one cask. Trust this cask alone, then re-run `brew install codegraph`:
 
 ```sh
-brew trust --tap seanb4t/tap
+brew trust --cask seanb4t/tap/codegraph
 brew install codegraph
 ```
+
+Homebrew also offers a tap-wide grant that trusts every current and future
+cask and command in the tap; this project does not recommend it.
 
 **Upgrading.** A brew-managed install is upgraded with `brew upgrade
 codegraph`, not `codegraph upgrade`. `codegraph upgrade` detects a
@@ -578,11 +584,11 @@ longer on disk.
 > of any cask from a newly-tapped, non-official tap is refused
 > (`Error: Refusing to load cask seanb4t/tap/codegraph from untrusted tap
 > seanb4t/tap.`) until the tap is explicitly trusted
-> (`brew trust --tap seanb4t/tap` or `brew trust --cask
-> seanb4t/tap/codegraph`) — a real, general Homebrew mechanism, not a defect
-> in this cask or tap, but one this document did not previously mention. If
-> `brew install codegraph` refuses with that message, run the `brew trust`
-> command it names, then re-run `brew install codegraph`.
+> (`brew trust --cask seanb4t/tap/codegraph` — Homebrew's error also offers a
+> tap-wide form) — a real, general Homebrew mechanism, not a defect in this
+> cask or tap, but one this document did not previously mention. If `brew
+> install codegraph` refuses with that message, run `brew trust --cask
+> seanb4t/tap/codegraph`, then re-run `brew install codegraph`.
 >
 > **One release only was cut for this verification, not two.** GoReleaser's
 > tap-push *update* path (writing a second commit to an already-existing

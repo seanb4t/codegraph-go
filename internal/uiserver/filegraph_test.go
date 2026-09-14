@@ -62,6 +62,13 @@ func TestFileGraphProjectsEngineResult(t *testing.T) {
 	if int(got.GetCycleCount()) != want.CycleCount {
 		t.Errorf("cycle_count = %d, want %d", got.GetCycleCount(), want.CycleCount)
 	}
+	if int(got.GetCommunityCount()) != want.CommunityCount {
+		t.Errorf("community_count = %d, want %d", got.GetCommunityCount(), want.CommunityCount)
+	}
+	if got.GetCommunityCount() < 1 {
+		t.Errorf("community_count = %d, want >= 1 (positive control: the gofixture yields at least one community)", got.GetCommunityCount())
+	}
+	t.Logf("communities on the wire: %d over %d nodes", got.GetCommunityCount(), len(got.GetNodes()))
 
 	if len(want.Nodes) == 0 {
 		t.Fatal("test fixture assumption broken: eng.FileGraph's Nodes is empty")
@@ -82,6 +89,12 @@ func TestFileGraphProjectsEngineResult(t *testing.T) {
 		}
 		if int(gn.GetCycleId()) != wn.CycleID {
 			t.Errorf("nodes[%d].cycle_id = %d, want %d", i, gn.GetCycleId(), wn.CycleID)
+		}
+		if gn.GetCommunityId() != int32(wn.CommunityID) {
+			t.Errorf("nodes[%d].community_id = %d, want %d", i, gn.GetCommunityId(), wn.CommunityID)
+		}
+		if gn.GetCommunityId() < 1 {
+			t.Errorf("nodes[%d].community_id = %d, want >= 1", i, gn.GetCommunityId())
 		}
 	}
 

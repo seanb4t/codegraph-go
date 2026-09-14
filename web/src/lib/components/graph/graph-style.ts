@@ -37,6 +37,19 @@
 // confirmed live against a real browser this task: `[isDirectory = true]`
 // logs "The selector ... is invalid" to the console and the rule never
 // matches, silently leaving every node under cytoscape's default style.
+//
+// The 12 node[!isDirectory].graph-community-{0..11} rules generated below
+// from COMMUNITY_PALETTE colour file nodes by the wire community id
+// (GRF-06, D-10). They are placed AFTER the file base rule so they
+// override its `background-color: #2563eb`, and BEFORE the cycle rules so
+// a community-coloured cycle member still gets the cycle border (a
+// community-8 cycle node ends up red-border-on-its-own-colour, but the
+// dashed 4px border still reads on top of it — the sheet's existing two-
+// channel distinction is preserved). Symbols never carry the class. No
+// `[?isDirectory]` variant exists by design (D-11) — directory compounds
+// stay neutral regardless of what communities their files belong to.
+import { COMMUNITY_PALETTE, COMMUNITY_CLASS_PREFIX } from './community-palette';
+
 export const fileGraphStyle: unknown[] = [
 	{
 		selector: 'node[?isDirectory]',
@@ -126,6 +139,12 @@ export const fileGraphStyle: unknown[] = [
 			'text-margin-x': 4
 		}
 	},
+	...COMMUNITY_PALETTE.map((hex, i) => ({
+		selector: `node[!isDirectory].${COMMUNITY_CLASS_PREFIX}${i}`,
+		style: {
+			'background-color': hex
+		}
+	})),
 	{
 		selector: 'edge',
 		style: {

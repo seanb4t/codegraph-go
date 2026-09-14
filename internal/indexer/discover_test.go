@@ -6,7 +6,10 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 const fixtureRoot = "testdata/gofixture"
@@ -123,6 +126,47 @@ func TestDiscover_SkipsVendorAndDotDirs(t *testing.T) {
 	want := []string{"real.go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RelPaths = %v, want %v (vendor/.hidden must be excluded)", got, want)
+	}
+}
+
+// TestDiscoverAll_SkipsVendorAndDotDirsWithOneRecordEach is
+// TestDiscover_SkipsVendorAndDotDirs's DiscoverAll-level sibling: the same
+// tree must yield exactly one DIR_VENDOR and one DIR_DOTPREFIX record —
+// never a phantom per-file row for anything under either pruned directory
+// (Phase 10 D-02). go.mod itself also produces its own
+// UNSUPPORTED_EXTENSION record (decision point 2) — this test only pins
+// the directory-level records' cardinality and the phantom-row absence,
+// not the walk's total record count.
+func TestDiscoverAll_SkipsVendorAndDotDirsWithOneRecordEach(t *testing.T) {
+	root := t.TempDir()
+
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example.com/tmp\n\ngo 1.26\n")
+	mustWrite(t, filepath.Join(root, "real.go"), "package tmp\n")
+	mustWrite(t, filepath.Join(root, "vendor", "ignored.go"), "package vendored\n")
+	mustWrite(t, filepath.Join(root, ".hidden", "x.go"), "package hidden\n")
+
+	d, err := DiscoverAll(root)
+	if err != nil {
+		t.Fatalf("DiscoverAll: %v", err)
+	}
+
+	var vendorCount, dotPrefixCount int
+	for _, x := range d.Excluded {
+		switch {
+		case x.GetPath() == "vendor" && x.GetReason() == schema.ExclusionReason_EXCLUSION_REASON_DIR_VENDOR:
+			vendorCount++
+		case x.GetPath() == ".hidden" && x.GetReason() == schema.ExclusionReason_EXCLUSION_REASON_DIR_DOTPREFIX:
+			dotPrefixCount++
+		}
+		if strings.HasPrefix(x.GetPath(), "vendor/") || strings.HasPrefix(x.GetPath(), ".hidden/") {
+			t.Errorf("phantom per-file record under a pruned directory: %s", x.GetPath())
+		}
+	}
+	if vendorCount != 1 {
+		t.Errorf("DIR_VENDOR records for %q = %d, want exactly 1", "vendor", vendorCount)
+	}
+	if dotPrefixCount != 1 {
+		t.Errorf("DIR_DOTPREFIX records for %q = %d, want exactly 1", ".hidden", dotPrefixCount)
 	}
 }
 

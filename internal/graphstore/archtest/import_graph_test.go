@@ -43,6 +43,20 @@ func TestNoPackageBypassesGraphStore(t *testing.T) {
 	if len(pkgs) == 0 {
 		t.Fatal("packages.Load returned no packages — the module import graph did not resolve")
 	}
+	// packages.Load reports a per-package failure (an unresolvable import, a
+	// build error anywhere under the module pattern) in pkg.Errors, NOT in its
+	// top-level error return. A broken subtree is then absent from, or has an
+	// incomplete Imports map in, the returned graph, so the pebble-importer scan
+	// below looks for members that were never added. The positive control
+	// narrows but does not close that hole: a failure in a package other than
+	// internal/graphstore leaves the control satisfied while the bypass check
+	// silently skips the broken package. PrintErrors both surfaces each error
+	// on stderr and returns the count; a non-zero count means this test cannot
+	// verify anything about the affected package(s) and must refuse (CR-01
+	// sibling of the internal/query archtest fix, a90b5457).
+	if n := packages.PrintErrors(pkgs); n > 0 {
+		t.Fatalf("packages.Load reported %d package error(s) — the import graph did not fully resolve, so this test cannot verify anything about the affected package(s); see the errors above", n)
+	}
 
 	foundGraphstoreImporter := false
 	for _, pkg := range pkgs {

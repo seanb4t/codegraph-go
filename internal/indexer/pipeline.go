@@ -6,6 +6,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // Options configures one Run invocation.
@@ -21,6 +22,24 @@ type Options struct {
 	// these flags); Run itself does no logging.
 	Verbose bool
 	Quiet   bool
+
+	// CoverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is a lower
+	// bound writeGraph must respect when it stamps the from-scratch
+	// commit's Meta.CoverageGeneration. writeGraph already reads the
+	// TARGET store's own prior generation via a pre-commit Snapshot — but
+	// a caller that wiped storeDir (`codegraph index`'s
+	// RemoveAll+MkdirAll, internal/cli/index.go) makes that read see a
+	// genuinely empty store (ErrNotFound), which resets the counter to 0
+	// even though a deleted store may have carried it much higher — the
+	// exact value a live client's outstanding page token may still be
+	// pinned to. A caller that reads the PRIOR store's generation before
+	// wiping it can pass it here so writeGraph stamps
+	// max(priorGeneration, CoverageGenerationFloor)+1 instead, keeping
+	// the counter monotonic across the wipe. Zero (the default) is a
+	// no-op — writeGraph's own store-read generation is used unchanged,
+	// which is exactly right for a genuinely fresh store (`codegraph
+	// init`, no prior store to alias against).
+	CoverageGenerationFloor int64
 }
 
 // Stats summarizes one Run invocation: how many files were discovered, how
@@ -63,7 +82,16 @@ type Stats struct {
 // top of this operation, threaded through rather than re-resolved inside
 // Resolve — see run's own doc comment on why resolution happens exactly
 // once per operation, here, before Resolve is ever called.
-type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string) (int, error)
+//
+// excluded (Phase 10 D-01/D-07) is DiscoverAll's exclusion-reason list —
+// the same walk that produced results' files — threaded through
+// unchanged so writeGraph can stage it in the SAME commit batch as every
+// other record kind.
+// coverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is threaded
+// down from Options.CoverageGenerationFloor — see that field's doc
+// comment for why writeGraph needs a floor independent of its own
+// store-read generation.
+type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error)
 
 // Run executes the full from-scratch indexing pipeline (D-04, D-01a):
 // Discover walks repoRoot for every source file whose extension is claimed
@@ -97,10 +125,12 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 	start := time.Now()
 	headCommitSHA := resolveHeadCommitSHA(repoRoot)
 
-	files, modulePath, err := Discover(repoRoot)
+	discovery, err := DiscoverAll(repoRoot)
 	if err != nil {
 		return Stats{}, err
 	}
+	files := discovery.Files
+	modulePath := discovery.ModulePath
 
 	workers := opts.Workers
 	if workers <= 0 {
@@ -133,7 +163,7 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 	}
 	defer store.Close()
 
-	unresolved, err := resolve(store, results, modulePath, headCommitSHA)
+	unresolved, err := resolve(store, results, modulePath, headCommitSHA, discovery.Excluded, opts.CoverageGenerationFloor)
 	if err != nil {
 		return Stats{Files: len(files), Unresolved: unresolved, Duration: time.Since(start)}, err
 	}

@@ -700,6 +700,10 @@ func (r *globRefusingReader) IterateFileIndex(string) (graphstore.FileIndexItera
 	return nil, errors.New("globRefusingReader: IterateFileIndex not implemented")
 }
 
+func (r *globRefusingReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	return nil, errors.New("globRefusingReader: IterateExcludedFiles not implemented")
+}
+
 func (r *globRefusingReader) IterateNodes() (graphstore.NodeIterator, error) {
 	return nil, errors.New("globRefusingReader: IterateNodes not implemented")
 }

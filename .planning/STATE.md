@@ -2,37 +2,36 @@
 gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
-current_phase: 08
-current_phase_name: tmux Real-PTY Harness
-status: executing
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-09-11T21:59:38.323Z"
-last_activity: 2026-09-11
-last_activity_desc: Phase 08 execution started
-state_head: 21063a2e40cca0d455075c0d84a93e86cfd79c57
+status: Awaiting next milestone
+stopped_at: Phase 12 complete — all phases complete
+last_updated: "2026-09-13T22:47:12.517Z"
+last_activity: 2026-09-13
+last_activity_desc: Milestone v0.13.0 completed and archived
+state_head: d15f45af45e27978d1618309b53db1b63c0e6ece
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 9
-  completed_plans: 9
-  percent: 0
+  completed_phases: 6
+  total_plans: 29
+  completed_plans: 29
+  percent: 100
+current_phase: 12
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
+See: .planning/PROJECT.md (updated 2026-09-13 after v0.13.0 milestone)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 08 — tmux Real-PTY Harness
+**Current focus:** Planning next milestone (v0.13.0 shipped 2026-09-13, verified closeout)
 
 ## Current Position
 
-Phase: 08 (tmux Real-PTY Harness) — EXECUTING
-Plan: 2 of 5
-Status: Ready to execute
-Last activity: 2026-09-11 — Phase 08 execution started
+Phase: Milestone v0.13.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-13 — Milestone v0.13.0 completed and archived
 
 ## Performance Metrics
 
@@ -51,6 +50,11 @@ Last activity: 2026-09-11 — Phase 08 execution started
 | 5 | 8 | - | - |
 | 6 | 8 | - | - |
 | 7 | 4 | - | - |
+| 08 | 5 | - | - |
+| 09 | 6 | - | - |
+| 10 | 6 | - | - |
+| 11 | 5 | - | - |
+| 12 | 3 | - | - |
 
 **Velocity (v0.11.0 — archived, shipped 2026-08-16):** 6 phases, 30 plans, 60 tasks over 4 days.
 
@@ -118,6 +122,18 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 08 P03 | ~20min | 2 tasks | 2 files |
 | Phase 08 P04 | ~25min | 3 tasks | 5 files |
 | Phase 08 P05 | 25 min | 3 tasks | 8 files |
+| Phase 09 P01 | 30min | 2 tasks | 15 files |
+| Phase 09 P02 | 14min | 2 tasks | 4 files |
+| Phase 09 P03 | 35min | 3 tasks | 45 files |
+| Phase 09 P04 | 25min | 3 tasks | 34 files |
+| Phase 09 P05 | 30min | 3 tasks | 2 files |
+| Phase 09 P06 | 20min | 2 tasks | 14 files |
+| Phase 10 P01 | 1h 5min | 2 tasks | 37 files |
+| Phase 10 P02 | ~50min | 2 tasks | 13 files |
+| Phase 10 P03 | 35min | 2 tasks | 4 files |
+| Phase 10 P04 | 55min | 2 tasks | 5 files |
+| Phase 10-index-health-the-coverage-denominator P05 | 55min | 2 tasks | 3 files |
+| Phase 10 P06 | 50min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -250,8 +266,30 @@ Standing decisions that outlive every milestone:
 - [Phase 08]: [Phase 08]: [Phase 08-03]: tmux-e2e CI job lands on ubuntu-latest with the TMUX_EXPECTED_VERSION sentinel deliberately unresolved — no real ci.yml run exists for this branch yet (gh run list returned empty), so D-11's bootstrap stays in its designed deferred state rather than guessing a version
 - [Phase 08]: [Phase 08]: [Phase 08-03]: own comment prose in the new tmux-e2e job tripped the plan's own continue-on-error substring-count gate — reworded to describe the same no-soft-fail property without the literal token, third instance of this phase's recurring substring-proxy gate defect (after time.Sleep in 08-01, sha256sum in 08-02)
 - [Phase 08]: [Phase 08-04]: Family (d)'s D-06-specified v.AltScreen=false mutation does NOT fail TestInstallPickerFrameStableWhileIdle — the test converges past the settling transient before its idle-stability loop begins, and the AltScreen-driven scroll this mutation targets is confined to that transient. Confirmed reproducibly (two runs); reported honestly in 08-MUTATION-LOG.md and WINDOWS.md (unmet-truth) rather than forced. — Following the plan's own explicit contingency instruction ("stop and report it... do not adjust the test") and Phase 7's D-07 precedent against adding a second guard/test for a property one assertion already covers.
+- [Phase 08]: [Phase 08-05]: G-08-1 (TTY-03 cold-start poll race, found by verify-work re-executing the covering check at HEAD: FAILED 3/3 cold, PASSED ~13/13 warm) closed by giving pollUntilStable a REQUIRED readiness predicate — convergence is ready(capture) && capture == predecessor — rather than warming the binary in TestMain or raising stabilityPollInterval; a deterministic self-test commanding a fixed shell delay reproduces the race without depending on machine coldness (RED e994b0a5 → GREEN b9dfc849); TMUX_EXPECTED_TESTS 5→6 in the same commit as the sixth test.
+- [Phase 08]: verify-work 2026-09-11: 21/21 UAT pass, 0 issues. Family (d) checkpoint asked for "a decision recorded"; the user's "defer" IS that decision, so it is recorded as pass with the deferred follow-up kept under 08-UAT.md → Deferred Follow-Ups (gsd-core's uat-predicate blocks on any `skipped`, contradicting #1921 — see Tooling gaps). 08-VERIFICATION.md status canonicalized to passed after the TTY-07 backstop fired at HEAD 5ffdc2a0 (CI run 34658987243: executed=6 skipped=0 expected=6, tmux 3.4).
 - [Phase 08]: Fixed pollUntilStable's G-08-1 cold-start race by giving it a required readiness predicate (ready(capture) && capture == predecessor) rather than warming the binary or raising the poll interval.
 - [Phase 08]: Cold-arm evidence runs all showed K<=1 (machine warm); did not re-run chasing K>=2 per the plan's own interpretation rule — relied on the deterministic self-test's RED/GREEN transcripts as proof instead.
+- [Phase 09]: GetEditorLink shares GetPermalink's validator/answer-not-error discipline; field-number fixture extended additively (uiProtoFieldFixtureLenAtPlan0901)
+- [Phase 09]: [Phase 09]: 09-02: gofmt's struct-literal column alignment padded discover: with extra spaces, defeating the plan's own single-space literal verify grep -- fixed by adding an explanatory comment above the field to break gofmt's alignment group, satisfying both gofmt and the check without touching either
+- [Phase 09]: [Phase 09]: 09-02: templateForLauncher never restates the vscode/cursor template strings -- it looks them up from uiserver.EditorPresets() by ID, so both presets have exactly one source of truth across plans 09-01 and 09-02
+- [Phase 09]: 09-03: innermostSymbolAt/firstFullyVisibleLine kept pure and DOM-free in breadcrumb.ts, unit-tested independently of SourcePane
+- [Phase 09]: 09-03: gutter renders plain digits this plan (D-10) — 09-04 turns cells into links, no link markup added here
+- [Phase 09]: 09-03: breadcrumb symbol is a button, never a hash-fragment <a>, to avoid colliding with the browse route's own URL-driven navigation identity
+- [Phase 09]: 09-03: breadcrumb-check.mjs's oracle independently re-implements innermost-range derivation (sort-based) and fetches FileSymbols directly over HTTP, never importing the SPA's own module
+- [Phase 09]: editor-prefs.ts is the SPA's first localStorage consumer: try/catch every access, degrade to no-override on any failure; templateForRequest is the one seam both the probe and a gutter click resolve through
+- [Phase 09]: [Rule 3] Node >=26's built-in global Web Storage API shadows jsdom's real localStorage and no-ops silently without --localstorage-file; fixed with a probe-and-replace in-memory Storage shim in web/tests/setup.ts, test-infra only
+- [Phase 09]: Family (b)'s live-gate demonstration needed a different --file target (internal/cli/editorurl.go) than the script's default, since the default's structure lets the scroll loop's own break condition fire before reaching the exposing gap
+- [Phase 09]: 09-SECURITY.md records Cursor/JetBrains preset templates as still [ASSUMED] rather than confirmed — no real IDE was available to click through in this autonomous session; WINDOWS.md #35 stays open
+- [Phase 09]: [Phase 09] 09-06: Closed the svelte-check gap (2 errors at SourcePane.svelte:446:31, introduced by CR-01 commit 28d5d795) by capturing the guard-narrowed getEditorLink once and calling it from both the initial probe and the corrective re-probe -- no behavioral change, gate restored to 0 errors, task web:build/web:drift both MATCH.
+- [Phase 10]: prefixExcludedFile='c'; ExcludedByReason keyed by full enum name; Export Open Question 1 decided as implement (exportKindExcludedFile=5).
+- [Phase 10]: [Phase 10] Assumption A1 (dangling .py symlink for extraction-failure fixture) VERIFIED on first probe run — no chmod fallback needed
+- [Phase 10]: [Phase 10] Coverage-index test fixtures must never pre-create repoRoot/.codegraph/store before indexer.Run — DiscoverAll's walk runs before graphstore.Open creates it on a real first index, and pre-creating it produces a phantom DIR_DOTPREFIX exclusion
+- [Phase 10]: fabricatePreCoverageStore forces HasCoverage=false as a direct literal (no bool param) to satisfy the plan's structural verify gate and keep the fabrication unambiguous
+- [Phase 10]: Task 2's three backfill/preservation tests were written directly against Task 1's implementation and passed on first run — Task 1's coverageDirty gate and Plan 01's writeGraph range-delete were both already correct, no third write site needed
+- [Phase 10]: Open Question 3 decided: /health Coverage verification stays at vitest level (health-page.test.ts / health-view.test.ts) — no Playwright gate added.
+- [Phase 10]: Fixed CoverageRows pagination cursor to skip-until-seen-cursor-path per segment (was comparing paths lexically against the store's non-lexical length-prefixed key order). — The store's real iteration order for ExcludedFile/File records is length-prefixed (keys.go appendSegment), not lexical path order; a lexical <= cursor comparison silently broke once paging crossed segments, causing infinite duplicate rows.
+- [Phase 10]: Merged colliding threat ids across Plans 01-05 (T-10-01/03/04/05/06/07/08/10/15) into single 10-SECURITY.md rows citing every contributing plan's mitigation — The read_first instructions required deduplicating by id and merging mitigation text rather than dropping or inventing ids
 
 ### Pending Todos
 
@@ -261,8 +299,6 @@ Standing decisions that outlive every milestone:
 |---------|------|----------|-------|
 | 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
 | 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
-| 2026-08-10 | docs | — | `brew trust` instructions recommend broader tap grant with no security framing |
-| 2026-09-08 | testing | — | `internal/graphstore/archtest` ignores per-package `go/packages` load errors — sibling of the blindness fixed in `internal/query/archtest` (P7 CR-01); filed by code review after the Phase 7 plans closed |
 | 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces |
 | — | mcp | major | **CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications. NOW IN SCOPE as v0.12.0 `FIX-01`, Phase 1.** |
 
@@ -277,6 +313,8 @@ Resolved and filed to `.planning/todos/completed/`:
 | 2026-09-08 | release | `dry-run-signed` additions-only diff guard passes vacuously — closed by Phase 7 `GRD-03` (`scripts/inject-cosign-key.sh` asserts exactly one injected `--key=` line) |
 | 2026-09-08 | ci | post-release-verify event-aware conclusion guard has no regression assertion — closed by Phase 7 `GRD-04` (`TestPostReleaseJobsDeclareConclusionGuard`) |
 | 2026-09-08 | ci | Tap App secret distinctness test is tautological and reads no workflow — closed by Phase 7 `GRD-05` by deleting the test, per maintainer decision |
+| 2026-09-13 | docs | `brew trust` instructions recommend broader tap grant with no security framing — closed by Phase 12 DOCS-07 (docs/RELEASE.md recommends the narrow `--cask` grant with one sentence of security framing; no test by decision D-12) |
+| 2026-09-13 | testing | `internal/graphstore/archtest` ignored per-package `go/packages` load errors — closed by quick task 260913-pkp (`packages.PrintErrors` guard in `TestNoPackageBypassesGraphStore`, demonstrated RED against an unresolvable import planted outside `internal/graphstore`; sibling of Phase 7 CR-01) |
 
 ### Blockers/Concerns
 
@@ -291,8 +329,20 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling.** goreleaser's binary reaches `golang.org/x/crypto/openpgp` (110 vulnerable symbols) via pipe/ko → google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A). The advisory `tool-vuln` job surfaces it — reported, not resolved. **Relevant to `BLD-06`:** `pnpm audit` adds a second, disjoint scanner covering the JS tree neither `govulncheck` nor Syft can see; `SECURITY.md` must state both scanners' actual scope rather than implying one covers everything.
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
-- **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
+- **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode. `uat-predicate.cjs` accepts only `pass`/`passed` per test item, so a `skipped`-with-reason deferred follow-up blocks `phase uat-passed` even though the verify-work template calls that state `complete` and #1921 says a deferred follow-up must never block (P8 test 3). `gsd-verifier` declared every file in the phase dir — including `08-UAT.md` and `08-VALIDATION.md`, which verify-work and validate-phase WRITE — in `covered_files`, so the verification went `stale` by construction the moment its own downstream hooks ran; resolved by dropping those two outputs from the set and recomputing via `verification.fingerprint` (the verifier contract at `gsd-verifier.md:673` is PLAN/SUMMARY + requirements + impl files, not workflow outputs).
 - [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
+- ⚠️ [Phase 10] `priorCoverageGeneration` (`internal/cli/index.go:30-48`) collapses "store locked/corrupt at this instant" into the same floor-0 result as "never indexed": a live holder outlasting `graphstore.Open`'s ~400 ms retry during `codegraph index --force` re-admits the page-token aliasing shape in a narrow window. Accepted below the `high` gate; fix named in WINDOWS.md #36 / 10-SECURITY.md T-10-16.
+- ⚠️ [Phase 10] Phases 7 and 8 read `verification_status: stale` since Phase 9 completed: their `covered_files` include `.planning/REQUIREMENTS.md` (verifier contract #4155 — "mapped requirement"), which every later `phase.complete` rewrites. ROADMAP still shows them `[x]`; the tool-sanctioned repair is `/gsd-verify-work 07` / `08` re-verification. Will surface at the milestone audit.
+- ⚠️ [Phase 11] `check:gonum` and `check:no-force-layout` exist as Taskfile targets (GRF-10, GRF-06 D-12b) and pass locally, but are NOT wired into `ci.yml` — recorded as a follow-up in `11-SECURITY.md`; the CI govulncheck job still covers the main module, so the SBOM-name and cgo-closure halves are local-only until wired.
+- ⚠️ [Phase 11] `web/scripts/check-no-force-layout.mjs` proves only that no forbidden layout name appears as a string literal at the `name:` option position or as a `cytoscape-<x>` import/dependency specifier; a string-built or variable layout name is not detected. `GraphCanvas.svelte:374` spreads `LAYOUT_OPTIONS` (declared with literal `name: 'elk'`) and is reported as the one advisory `unresolvedLayoutNames` entry — non-fatal by design (WR-03).
+- ⚠️ [Phase 11] `gonum.org/v1/gonum` package legitimacy is `[ASSUMED]` (long-lived, already transitive via sigstore in `go.sum`; `package-legitimacy check` has no Go ecosystem support) — recorded in `11-SECURITY.md`, not a gap.
+- ⚠️ [Phase 11] The graph page's console shows four entries at load (CSP-blocked svelte-logo data-URI image; 2× cytoscape `text-valign: right` warning; a cytoscape `Cannot read properties of null (reading 'notify')` TypeError from `layoutPositions`) — all reproduced identically by a pre-phase build (`18ef2434`), so pre-existing and out of Phase 11 scope; unowned by any phase yet.
+- ⚠️ [Phase 11] Phases 7, 8, 9 AND 10 all read `verification_status: stale` after Phase 11's `phase.complete` by the #4155 mechanism (each `covered_files` list includes `.planning/REQUIREMENTS.md`, which every later `phase.complete` rewrites); only Phase 11's report was written without `REQUIREMENTS.md` in `covered_files` (its plans/summaries + implementation files only) and stays `passed`. Repair for 7–10 remains `/gsd-verify-work <phase>`; surfaces at the milestone audit.
+- ⚠️ [Phase 12] The DOCS-06 guard matches `--name` as a whole-document substring of the generated reference (anchored on the flag's own `--` prefix and a trailing delimiter); a future flag whose name is a strict prefix of another's is the one shape that could read as documented when it is not — recorded in 12-SECURITY.md as accepted residual, re-checked by the guard's own counts on every run.
+- ⚠️ [Phase 12] DOCS-07 has no ongoing gate by decision (D-12): nothing stops a future edit from re-introducing a copy-pasteable tap-wide `brew trust` instruction in `docs/RELEASE.md`; review of that file's diffs is the control.
+- ⚠️ [Phase 12] `DisableAutoGenTag = true` is set on the tree `NewRootCmd()` returns; `codegraph man` builds its own tree in `man.go` and still emits cobra's auto-gen date line — unchanged behaviour, noted so nobody expects the man pages to be byte-stable across days.
+- ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
+- ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
 
 ### Quick Tasks Completed
 
@@ -300,6 +350,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 |---|-------------|------|--------|-----------|
 | 260807-gho | Drop native Windows support — WSL2 only | 2026-08-07 | 085b7a3 | [260807-gho-drop-native-windows-support-wsl2-only](./quick/260807-gho-drop-native-windows-support-wsl2-only/) |
 | 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
+| 260913-pkp | Fix graphstore archtest to fail closed on per-package go/packages load errors (CR-01 sibling of a90b5457); todo 2026-09-08 resolved | 2026-09-13 | 2b553b62 | [260913-pkp-fix-graphstore-archtest-to-fail-closed-o](./quick/260913-pkp-fix-graphstore-archtest-to-fail-closed-o/) |
 
 ## Deferred Items
 
@@ -399,9 +450,9 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-11T21:59:38.302Z
-Stopped at: Completed 08-05-PLAN.md
-  NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
+Last session: 2026-09-13T14:17:49.000Z
+Stopped at: v0.13.0 milestone complete and archived (verified closeout); no milestone scoped
+  NEXT: `/gsd-cleanup` (autonomous run's last lifecycle step), then push the branch + open the phases 9–12 PR, then `/gsd-new-milestone`
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
@@ -410,11 +461,14 @@ Stopped at: Completed 08-05-PLAN.md
     - **`GRF-09`'s threshold is committed BEFORE its measurement, in its own commit** — `GRF-01`'s precedent, where the threshold file has exactly one commit that is an ancestor of both observation commits, so the ordering is checkable rather than assertable. A failing measurement triggers the documented index-time-persistence fallback into the reserved 50-59 field range, never a raised bar.
     - **Every guard in this milestone carries a positive assertion that it did its work** (rule `84d1gfpywd`) and is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation before it is trusted green. `GRD-06` is that proof committed rather than asserted.
     - **The tmux harness (Phase 8) lands before the UI work** so that work has a real-terminal rung. `TTY-02`'s capture-twice-and-compare stability poll is the single highest flake risk in the milestone; no assertion may run against one capture.
-    - **`branching_strategy: milestone`** — this milestone lives on one branch and is not incrementally merged.
+    - **`branching_strategy: milestone`** — this milestone lives on one branch. Amended 2026-09-12: the maintainer merged phases 7-8 mid-milestone as PR #69 (squash `3da59354`, title `test(tmux): …`, so release-please cut no release); the branch was rebased onto that squash commit (`git rebase --onto origin/main 5ffdc2a0`, the 4 post-merge `.planning/` commits replayed conflict-free) and continues for phases 9-12. Any later PR from this branch diffs against `3da59354`.
     - **No `v0.13.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline. The label is a prediction that holds because the UI follow-through lands `feat:` commits.
     - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
 
 ## Operator Next Steps
 
-- Phase 7 is verified and closed; Phases 8-12 of v0.13.0 remain
-- Discuss the next phase with /gsd-discuss-phase 8 (tmux Real-PTY Harness)
+- v0.13.0 SHIPPED 2026-09-13 as a `verified_closeout` — 6/6 phases canonical `passed` after re-verification, 26/26 requirements, both pre-close open artefacts resolved (tty03 debug session; graphstore archtest vacuity fixed as quick task `260913-pkp`); archived under `milestones/v0.13.0-*`
+- Push the branch (~180 commits ahead of origin) and open the phases 9–12 PR with a `feat:` title and `Resolves #N`; CI will run `docs:cli:drift` and the tmux `expected=6` gate at HEAD for the first time
+- Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go`
+- Cheap follow-ups: wire `task check:gonum` and `task check:no-force-layout` into `ci.yml`; run `/gsd-validate-phase` against the archived 09–12 VALIDATION files if a `validated` record is wanted; reconcile the Pending Todos table; inspect and remove the stale `.claude/worktrees/agent-aebfa7de95041ec86` worktree
+- Start the next milestone with /gsd-new-milestone (Phase numbering continues from 13)

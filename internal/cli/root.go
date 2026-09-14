@@ -68,3 +68,13 @@ func newRootCmd() *cobra.Command {
 func Execute() error {
 	return newRootCmd().Execute()
 }
+
+// NewRootCmd returns a freshly built root command tree, identical to what
+// Execute() runs. It exists so tools/clidoc (DOCS-05's out-of-package CLI
+// reference generator) can obtain the same command tree without this
+// package importing cobra/doc or anything new; it changes no behavior of
+// the shipped binary. newRootCmd itself is not renamed — every existing
+// intra-package and cmd/codegraph call site keeps working untouched.
+func NewRootCmd() *cobra.Command {
+	return newRootCmd()
+}

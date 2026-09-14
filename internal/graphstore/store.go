@@ -25,8 +25,9 @@ type GraphStore interface {
 	// for one engine write per symbol (D-04).
 	NewWriter() (Writer, error)
 
-	// Export streams every record (meta, nodes, edges, files) in
-	// schema-versioned form from a consistent snapshot (ARCH-01).
+	// Export streams every record (meta, nodes, edges, files, excluded
+	// files) in schema-versioned form from a consistent snapshot
+	// (ARCH-01).
 	Export(w io.Writer) error
 
 	// Close releases the underlying engine handle.
@@ -71,6 +72,13 @@ type Reader interface {
 	// to find the exact n/e keys to point-delete via DeleteNode/
 	// DeleteEdge for a changed/deleted file's scattered subgraph.
 	IterateFileIndex(path string) (FileIndexIterator, error)
+
+	// IterateExcludedFiles returns an ExcludedFileIterator over every
+	// record under the c/ namespace — a single contiguous range scan
+	// (Phase 10 D-05) — the ONLY read path internal/query's coverage
+	// summary uses; reasons are never reconstructed by a query-time walk
+	// (D-14).
+	IterateExcludedFiles() (ExcludedFileIterator, error)
 
 	// Close releases the Reader's underlying snapshot.
 	Close() error
@@ -126,6 +134,18 @@ type FileIterator interface {
 	// valid after a call to Next that returned true.
 	File() *schema.File
 
+	// RawKey returns the store's own key bytes for the record at the
+	// iterator's current position (Phase 10 CR-01): a paged walk that
+	// resumes by comparing RawKey against FileKey(cursorPath) via
+	// bytes.Compare tracks POSITION in the store's key order, not the
+	// mutable record VALUE — so a cursor row that was deleted or changed
+	// between two page fetches still resumes at the next row after its
+	// position instead of silently truncating the rest of the walk. The
+	// returned slice is only valid until the next call to Next or Close;
+	// a caller that needs it afterward must copy it. Only valid after a
+	// call to Next that returned true.
+	RawKey() []byte
+
 	// Err returns the first error encountered during iteration, if any.
 	Err() error
 
@@ -165,6 +185,30 @@ type FileIndexIterator interface {
 	Close() error
 }
 
+// ExcludedFileIterator walks a contiguous range of ExcludedFile records
+// (Phase 10 D-05). Callers must call Next before the first call to
+// ExcludedFile, and check Err after Next returns false to distinguish
+// end-of-range from an error.
+type ExcludedFileIterator interface {
+	// Next advances the iterator and reports whether a record is
+	// available.
+	Next() bool
+
+	// ExcludedFile returns the record at the iterator's current
+	// position. Only valid after a call to Next that returned true.
+	ExcludedFile() *schema.ExcludedFile
+
+	// RawKey is FileIterator.RawKey's ExcludedFileIterator counterpart —
+	// compare against ExcludedFileKey(cursorPath) (Phase 10 CR-01).
+	RawKey() []byte
+
+	// Err returns the first error encountered during iteration, if any.
+	Err() error
+
+	// Close releases the iterator's resources.
+	Close() error
+}
+
 // Writer batches graph mutations for one file-change / debounce window. A
 // Writer commits atomically: either every staged Put/Delete is applied, or
 // none is (D-04).
@@ -186,6 +230,24 @@ type Writer interface {
 
 	// PutMeta stages the store-wide Meta record for write.
 	PutMeta(m *schema.Meta) error
+
+	// PutExcludedFile stages x for write under the c/ namespace
+	// (Phase 10 D-05). x.Path determines its key.
+	PutExcludedFile(x *schema.ExcludedFile) error
+
+	// DeleteExcludedFile stages a point-delete of the ExcludedFile
+	// record identified by path (Phase 10 D-07) — Plan 03's Sync prune
+	// primitive.
+	DeleteExcludedFile(path string) error
+
+	// DeleteAllExcludedFiles stages a range-delete of the WHOLE c/
+	// namespace (Phase 10 D-07) — the "full index range-deletes the
+	// namespace then rewrites" primitive a from-scratch writeGraph run
+	// uses before staging the fresh set, so a rewrite over an EXISTING
+	// store (Sync's D-02b backfill path) never layers on top of stale
+	// records. Bounded by the prefixExcludedFile byte; cannot reach
+	// m/n/e/f/a/x.
+	DeleteAllExcludedFiles() error
 
 	// DeleteNode stages a point-delete of the node record identified by
 	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after

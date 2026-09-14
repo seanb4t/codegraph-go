@@ -107,6 +107,16 @@ var knownMetaFieldNumbers = []knownMetaFieldNumber{
 	{"health_message", 6},
 	{"has_file_index", 7},
 	{"commit_sha", 8},
+	// UPDATED at plan 10-01: has_coverage = 9 (Phase 10 HLT-05, D-06),
+	// the has_file_index precedent extended to the coverage-denominator
+	// namespace.
+	{"has_coverage", 9},
+	// ADDED at 10-REVIEW.md iteration-2 fix (WR-01): coverage_generation =
+	// 10, a monotonic counter replacing the wall-clock LastSyncUnixMs as
+	// CoverageRows' page-token generation marker — a millisecond-resolution
+	// clock can alias two distinct writes onto the same value, silently
+	// defeating the "index changed since the last page" check.
+	{"coverage_generation", 10},
 }
 
 // TestKnownMetaFieldNumbersAreStable is D-02a's guard against exactly the

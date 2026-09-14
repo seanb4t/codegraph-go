@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "file": "internal/query/node.go",
+  "binaryPath": "/Volumes/Code/github.com/seanb4t/codegraph-go/codegraph",
+  "repoPath": "/Volumes/Code/github.com/seanb4t/codegraph-go",
+  "editorUrl": "vscode://file/{path}:{line}:{col}",
+  "symbolCount": 13,
+  "breadcrumbPresent": true,
+  "observations": [
+    {
+      "line": 1,
+      "shown": null,
+      "expected": null,
+      "empty": true,
+      "agrees": true
+    },
+    {
+      "line": 1,
+      "shown": null,
+      "expected": null,
+      "empty": true,
+      "agrees": true
+    },
+    {
+      "line": 11,
+      "shown": null,
+      "expected": null,
+      "empty": true,
+      "agrees": true
+    },
+    {
+      "line": 26,
+      "shown": null,
+      "expected": null,
+      "empty": true,
+      "agrees": true
+    },
+    {
+      "line": 41,
+      "shown": "resolveSourcePath",
+      "expected": "resolveSourcePath",
+      "empty": false,
+      "agrees": true
+    }
+  ],
+  "nonEmptyObservations": 1,
+  "emptyObservations": 4,
+  "editorLinkHref": "vscode://file//Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:1:1",
+  "gutterLinkCount": 418,
+  "gutterClickIssuedRpc": true,
+  "notes": [
+    "Chromium observed the gutter click issuing a GetEditorLink rpc (line:3) and the subsequent window.location.assign call; the resulting custom-scheme navigation itself cannot be followed by headless Chromium and is not asserted here. Safari behavior for this sequence is unverified — see 09-SECURITY.md."
+  ],
+  "pageErrorCount": 0,
+  "pageErrors": [],
+  "browserIdentity": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  },
+  "error": null,
+  "success": true
+}

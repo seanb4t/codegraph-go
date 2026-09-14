@@ -17,6 +17,16 @@ import (
 // same normalization determinism_test.go's indexAndExport applies (INDX-02),
 // factored out here since this test compares two ALREADY-BUILT stores
 // (one via Sync, one via a fresh Run) rather than building both itself.
+//
+// Meta.coverage_generation (WR-01, iteration 2) is normalized alongside it
+// for the same reason: it is a monotonic counter over each store's OWN
+// write history, not the graph's content, so storeDirA (seeded via one
+// Sync backfill, then advanced by a second incremental Sync — two
+// meta-write events) and storeDirB (built via a single from-scratch Run —
+// one meta-write event) legitimately land on different counter VALUES
+// even when their graph CONTENT is byte-identical. Comparing the counter
+// here would fail this determinism gate for a reason that has nothing to
+// do with determinism.
 func exportNormalized(t *testing.T, storeDir string) []byte {
 	t.Helper()
 
@@ -41,6 +51,7 @@ func exportNormalized(t *testing.T, storeDir string) []byte {
 			t.Fatalf("unmarshal meta frame: %v", err)
 		}
 		m.LastSyncUnixMs = 0
+		m.CoverageGeneration = 0
 		normalized, err := proto.Marshal(&m)
 		if err != nil {
 			t.Fatalf("marshal normalized meta frame: %v", err)

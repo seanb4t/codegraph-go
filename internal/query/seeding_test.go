@@ -36,6 +36,9 @@ func (f *seedingFakeReader) GetMeta() (*schema.Meta, error) {
 func (f *seedingFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("seedingFakeReader: IterateFiles not implemented")
 }
+func (f *seedingFakeReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, error) {
+	return nil, errors.New("seedingFakeReader: IterateExcludedFiles not implemented")
+}
 func (f *seedingFakeReader) IterateFileIndex(string) (graphstore.FileIndexIterator, error) {
 	return nil, errors.New("seedingFakeReader: IterateFileIndex not implemented")
 }
