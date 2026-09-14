@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/seanb4t/codegraph-go/compare/v0.12.0...v0.13.0) (2026-09-14)
+
+
+### Features
+
+* **ui:** editor handoff, coverage denominator, community clustering, generated CLI reference — v0.13.0 (phases 9–12) ([#71](https://github.com/seanb4t/codegraph-go/issues/71)) ([fe1cd77](https://github.com/seanb4t/codegraph-go/commit/fe1cd7774d0def56f720e10d21e7fc1dfa4ea869))
+
 ## [0.12.0](https://github.com/seanb4t/codegraph-go/compare/v0.11.0...v0.12.0) (2026-09-08)
 
 
