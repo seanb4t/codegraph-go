@@ -34,7 +34,7 @@ Closed as `override_closeout`: 10 pre-existing open artifacts (1 debug session, 
 
 **Carried out, recorded in the audit and STATE.md:** the branch's 155 post-PR-#69 commits are unpushed, so the `docs:cli:drift` CI step and the tmux gate at HEAD have not yet run on GitHub; the required-status-check for `tmux e2e` is still a repository-settings action; Phase 11's `check:gonum` / `check:no-force-layout` targets pass locally but are not wired into `ci.yml`; WINDOWS.md #35 (Cursor/JetBrains URI templates `[ASSUMED]`) and #36 (`priorCoverageGeneration` lock window) stay open; four pre-existing `/graph` console entries are unowned; `09`–`12-VALIDATION.md` are `draft` (never promoted by validate-phase).
 
-**Next milestone: not yet scoped.** Candidates are the Deferred list under Requirements — GRF-07's opt-in whole-symbol graph (still parked on the guava non-convergence evidence), Team Scale, SEED-003, the CI wiring and settings actions above.
+**Next milestone: v0.14.0 Polish & Agent Reach, scoped 2026-09-14** — see `## Current Milestone` below. The carried-out CI wiring above is in its burn-down scope; the `tmux e2e` required-check remains a repository-settings action. GRF-07, Team Scale and SEED-003 stay parked.
 
 **v0.12.0 — Local Graph UI: SHIPPED 2026-09-07.** All 6 phases independently verified *and* validated, 51/51 requirements, 51 plans over 498 commits in 17 days (293 hand-written source files, +52,388/−1,001, excluding the generated bundle and planning docs). The graph now has a human face: `codegraph ui` serves a read-only, loopback-bound, ConnectRPC-backed Svelte SPA embedded in the binary — browse and inspect symbols with verbatim source and blast radius, a deep-linkable navigation model, an interactive query workbench, a visual index-health verdict, a file/package graph view, and live push from the watcher. The UI is a **third consumer** of `internal/query.Engine`, never a second implementation: the cross-phase integration check found no duplicated traversal logic in `internal/uiserver`, every handler routing through one `withEngine` seam. The read-only guarantee is structural and provably unweakened — `mutatingVerbs`'s 19-verb set is **byte-identical from its introduction to the milestone's last commit**, with the method set pinned at exactly 14 by set-equality in both directions, and the 14th (`WatchGraph`, the first streaming method) added additively.
 
@@ -74,6 +74,26 @@ The artifact line at v1.0's close was `v0.2.0` (signed, SBOM'd, SLSA-attested, c
 - **First signed `v1.0.0` release** — closes v0.1's still-pending DIST-02 (real `v*` tag) and PERF-01 (published numbers); audits the new Charm deps via govulncheck/SBOM.
 
 </details>
+
+## Current Milestone: v0.14.0 Polish & Agent Reach
+
+**Scoped 2026-09-14.** A general polish milestone, gathered from a survey of `WINDOWS.md` (16 open), the 8 open GitHub issues, the v0.13.0 carried-out list, and the state of the CLI styling seam and the 8 agent-install targets.
+
+**Goal:** Burn down every known defect, vacuous guard, flake and doc drift; give the CLI a colour-and-structure glow-up on a streamlined verb surface; and make the codegraph skill, instructions and nudge present and discoverable in every supported agent harness, with Codex brought to parity with Claude Code.
+
+**Why this shape.** Three milestones of feature work (v0.12.0 UI, v0.13.0 follow-through) left a ledger of small, known, individually-cheap defects that no phase owned — a stock Svelte favicon that also violates CSP, a picker footer that never renders with all 8 targets, a drift gate whose two halves enumerate different sets. The CLI's styling seam (`internal/cli/present`, the sole lipgloss home by archtest) has exactly three monochrome styles and is used by three of 24 verbs; two of those verbs (`query`, `search`) share one ranking function and print byte-identical human lines, differing only in `--json` shape. And the agent-reach work every prior milestone deferred — AGENT-04…07, GUARD-HOOK-01/02 — was gated on evidence that never got collected, while Codex (a harness the maintainer actually uses) is a global-only MCP+`AGENTS.md` target with no skill and no nudge.
+
+**Target features:**
+- **Bug & window burn-down, four buckets** — (1) user-facing defects: favicon + CSP (WINDOWS #30), install-picker footer overflow under bubbles v2 pagination (#32), the `/graph` console errors — cytoscape-elk `notify` null TypeError (#26) and invalid-endpoint warnings at guava scale (#28) — and `priorCoverageGeneration` collapsing store-locked into never-indexed (#36); (2) guards + flakes: `web:drift`'s `find`-vs-`git ls-files` blind spot (#29), the vendored `button.svelte` drift isolated under Corepack (#31), the daemon watchdog full-suite flake and getppid race (#12, GH #13/#17); (3) docs + CI wiring: `docs/RELEASE.md` dependency counts and MCP attribution (#13), SLSA provenance wording (GH #14), `check:gonum`/`check:no-force-layout` into `ci.yml`, `requiredCheckNames` against the live ruleset (GRD-07), root `SECURITY.md`'s govulncheck claim (GRD-08); (4) GH #15 fixed heredoc delimiter over fork-controlled paths in `pull_request_target`, #16 `CheckRegression` never compares `Metrics.Repo`, #20 perf-gate measurement-frame follow-ups. Stale-open #16/#33 closed by verification; #20/#21/#34 stay record-only. Planning bookkeeping reconciled: the Pending Todos table, SEED-001's `status: dormant` despite consumption.
+- **CLI glow-up** — a real lipgloss palette (colour, not only bold/faint/underline) across every human-output verb, delivered through `present` only, TTY-gated with `NO_COLOR` honoured, the agent/MCP path byte-unchanged; `--help` grouped into titled sections via `cobra.Group`; short-flag consistency (`query` has `-j/-l/-k`, `search` does not); `charmbracelet/fang` evaluated for help/error/version styling before any help template is hand-rolled. **Verb fold, hard rename:** `query` → `search --full` (same `matchNodes`, the flag selects record-vs-location shape and the human `--full` branch finally shows what it discards today); `unlock` → `daemon unlock`; removed verbs exit non-zero with "renamed to X" for one release, then vanish. MCP tool names are frozen — the wire oracle's transcripts pin them.
+- **Agent reach** — the skill package, instructions block and session nudge delivered to every harness that has a mechanism for each (AGENT-04…07 un-deferred; per-harness hook/skill schemas verified against current docs rather than assumed); a PreToolUse **nudge** hook for Claude Code — GUARD-HOOK-01/02 reframed from "redirect" to "add context": on grep/find/Read in an indexed repo it points at `codegraph_explore` and never denies; each harness verified in a genuinely fresh live session, the v0.10.0 evidence standard.
+- **Codex parity with Claude Code** — the skill into Codex's skill directory, project-local scope (re-verifying the v1.0-era "Codex has no per-project config" claim in `codex.go`), a repo-root `AGENTS.md` block, Codex's nudge/hook mechanism if one exists, `install`/`uninstall` idempotent at both scopes; done means a real Codex session reaches for it unprompted.
+
+**Deliberately parked:** GRF-07 (whole-symbol graph, still on the guava evidence), Team Scale, SEED-003, DIST-06, BREW-07, MRTR-01, GH #23 (gsd-pi target) and #9 (workflow chore) — none are polish.
+
+**Version label:** v0.14.0 is a prediction, not a tag (D-06R). `release-please-config.json` sets `bump-minor-pre-major`, so the `feat!:` verb rename still cuts a minor, not a major.
+
+**Phase numbering restarts at 1** (`--reset-phase-numbers`); v0.13.0's Phases 7–12 are archived under `milestones/v0.13.0-phases/`.
 
 ## Shipped Milestone: v0.13.0 Guard Hardening & UI Follow-through
 
@@ -321,7 +341,18 @@ stapling-impossibility findings remain live constraints for DIST-06.
 
 ### Active
 
-No milestone is scoped (v0.13.0 shipped 2026-09-13). The next milestone's Active list is written by `/gsd-new-milestone`; candidates are the Remaining backlog and Deferred lists below.
+v0.14.0 Polish & Agent Reach (scoped 2026-09-14). Requirement IDs are defined in `REQUIREMENTS.md` and mapped to phases in `ROADMAP.md`; the shape of the work:
+
+- [ ] Every user-facing defect in the survey closed: favicon replaced with a codegraph mark that loads under the unchanged CSP (#30); install-picker footer renders with all 8 targets (#32); `/graph` loads with zero uncaught errors and the guava-scale endpoint warnings understood or silenced (#26, #28); `priorCoverageGeneration` distinguishes locked/corrupt from never-indexed with a hold-the-lock regression test (#36)
+- [ ] Every guard-that-cannot-fire and flake in the survey closed with a RED demonstration: `web:drift` enumerates both halves from the git tree (#29); `button.svelte` drift isolated under Corepack and re-vendored or waived on evidence (#31); the daemon watchdog test deterministic under full-suite load, the getppid seam race fixed (#12, GH #13/#17)
+- [ ] Docs and CI wiring current: `docs/RELEASE.md` counts and MCP attribution, SLSA wording in three places (GH #14), `check:gonum`/`check:no-force-layout` in `ci.yml`, `requiredCheckNames` compared against the live ruleset, root `SECURITY.md` states both scanners' real scope
+- [ ] GH #15, #16, #20 resolved; stale-open windows #16/#33 closed by verification; Pending Todos table and SEED-001 status reconciled
+- [ ] Every human-output verb styled through `present` with a colour palette, TTY-gated and `NO_COLOR`-aware; the agent/MCP path byte-identical before and after (archtest + golden oracle)
+- [ ] `--help` grouped into titled sections; short flags consistent across the query verbs; `fang` evaluated with a recorded verdict
+- [ ] `query` folded into `search --full`, `unlock` into `daemon unlock`; removed verbs stub-exit non-zero naming their replacement; `docs/CLI-REFERENCE.md` regenerated under its drift gate; MCP tool set unchanged
+- [ ] Skill package, instructions block and session nudge installed for every harness that supports each, with a per-harness capability table backed by verified current docs
+- [ ] Claude Code PreToolUse nudge hook — adds context on grep/find/Read in an indexed repo, never denies — shipped opt-in and verified in a fresh live session
+- [ ] Codex at parity: skill in Codex's skill dir, project-local scope, repo-root `AGENTS.md`, nudge mechanism if one exists, idempotent install/uninstall at both scopes, verified in a real Codex session
 
 <details>
 <summary>v0.13.0's Active list as it stood during the milestone — all items delivered</summary>
@@ -384,8 +415,8 @@ Deferred to later releases:
 - [ ] Graph annotations the v0.1 schema reserved space for — embedding vectors, community assignments, bulk export for visualization
 - [ ] Local Svelte web UI for browsing/querying the graph (SEED-001 — a future extension beyond the current CLI/MCP query surface; the v1.0 bubbletea TUI is a distinct terminal surface)
 - [ ] Worktree support beyond detect-and-warn — auto-init or `git-common-dir` index sharing (v1.0 ships borrowed-index detection with a CLI warning + inline MCP notice only; going further is a deliberate later call)
-- [ ] PreToolUse/UserPromptSubmit guard hook (GUARD-HOOK-01/02) — redirects grep/find/Read toward `codegraph_explore`; the fallback if v0.10.0's skill + resources + nudge alone prove insufficient, and that evidence doesn't exist yet
-- [ ] Multi-agent skill/hooks porting (AGENT-04…07) — Cursor/Codex CLI/Antigravity/opencode; blocked on per-agent hook-schema differences not yet verified (SKILL.md itself is already portable via shared `agentskills.io` frontmatter)
+- [ ] PreToolUse/UserPromptSubmit guard hook (GUARD-HOOK-01/02) — redirects grep/find/Read toward `codegraph_explore`; the fallback if v0.10.0's skill + resources + nudge alone prove insufficient, and that evidence doesn't exist yet — **promoted into v0.14.0 on 2026-09-14, reframed as a nudge that adds context and never denies**
+- [ ] Multi-agent skill/hooks porting (AGENT-04…07) — Cursor/Codex CLI/Antigravity/opencode; blocked on per-agent hook-schema differences not yet verified (SKILL.md itself is already portable via shared `agentskills.io` frontmatter) — **promoted into v0.14.0 on 2026-09-14; the schema differences are verified there rather than assumed**
 - [ ] `docs/CLI-REFERENCE.md` (DOCS-05) — a self-authored CLI reference. v0.11.0 deleted the comparison matrix; authoring a replacement is separate work with its own scope — **promoted into v0.13.0 on 2026-09-08**
 - [ ] MEM-02's store half — closed by *acceptance*, not demonstration (`accepted-by-d15-evidence-standard`). No session was ever both genuinely fresh and engram-tooled, so spine recall was never observed. Cheapest discharge: a fresh session probing recall as its **first** action
 
@@ -487,4 +518,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-13 after v0.13.0 milestone (Guard Hardening & UI Follow-through) — shipped as a verified closeout: six phases re-verified to canonical `passed`, 26/26 requirements, two pre-close open artefacts resolved rather than acknowledged (tty03 debug session; graphstore archtest vacuity fixed as quick task `260913-pkp`). Current State carries the milestone summary and the carried-out list; Validated gained six entries; the v0.13.0 Active list is collapsed; Key Decisions gained the Phase 7 guard-discipline row. No milestone is scoped next.*
+*Last updated: 2026-09-14 after scoping milestone v0.14.0 (Polish & Agent Reach) — a `## Current Milestone` section added above the v0.13.0 record from a survey of WINDOWS.md, open GitHub issues, the carried-out list, the `present` styling seam and the 8 agent-install targets; Active rewritten with the ten-item shape of the work; GUARD-HOOK-01/02 and AGENT-04…07 annotated as promoted from Deferred. Phase numbering restarts at 1.*

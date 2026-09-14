@@ -1,37 +1,33 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.13.0
-milestone_name: Guard Hardening & UI Follow-through
-status: Awaiting next milestone
-stopped_at: Phase 12 complete — all phases complete
-last_updated: "2026-09-13T22:47:12.517Z"
-last_activity: 2026-09-13
-last_activity_desc: Milestone v0.13.0 completed and archived
-state_head: d15f45af45e27978d1618309b53db1b63c0e6ece
+milestone: v0.14.0
+milestone_name: Polish & Agent Reach
+status: planning
+last_updated: "2026-09-14T17:03:28.956Z"
+last_activity: 2026-09-14
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 29
-  completed_plans: 29
-  percent: 100
-current_phase: 12
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-13 after v0.13.0 milestone)
+See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Planning next milestone (v0.13.0 shipped 2026-09-13, verified closeout)
+**Current focus:** Milestone v0.14.0 Polish & Agent Reach — defining requirements
 
 ## Current Position
 
-Phase: Milestone v0.13.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-13 — Milestone v0.13.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-09-14 — Milestone v0.14.0 started
 
 ## Performance Metrics
 
