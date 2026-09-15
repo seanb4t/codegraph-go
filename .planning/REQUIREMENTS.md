@@ -24,7 +24,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **FIX-08**: The getppid test seam is race-free — `go test -race ./internal/daemon/...` clean, the seam per-instance or explicitly synchronized (GH #13)
 - [x] **FIX-09**: `CheckRegression` compares `Metrics.Repo` and refuses a baseline/current corpus-identity mismatch, the key chosen from what the write sites actually populate so a legitimate corpus rename does not go red (GH #16)
 - [x] **FIX-10**: Neither `pull_request_target` workflow expands fork-controlled file paths through a fixed heredoc delimiter; the fix is exercised against a path containing the old delimiter (GH #15)
-- [ ] **FIX-11**: GH #20's two perf-gate follow-ups (Namespace cache volume on 8×16; the unexplained +44.8% baseline drift) each end in a recorded decision — fixed, or closed with the measurement that justifies closing
+- [x] **FIX-11**: GH #20's two perf-gate follow-ups (Namespace cache volume on 8×16; the unexplained +44.8% baseline drift) each end in a recorded decision — fixed, or closed with the measurement that justifies closing
 
 ### Guards & CI
 
@@ -143,7 +143,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIX-08 | Phase 1 | Complete |
 | FIX-09 | Phase 1 | Complete |
 | FIX-10 | Phase 1 | Complete |
-| FIX-11 | Phase 1 | Pending |
+| FIX-11 | Phase 1 | Complete |
 | GRD-09 | Phase 2 | Pending |
 | GRD-10 | Phase 2 | Pending |
 | GRD-11 | Phase 2 | Pending |

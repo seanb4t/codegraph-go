@@ -5,11 +5,11 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-09-15T15:09:47.558Z"
+stopped_at: Completed 01-05-PLAN.md (resumed after checkpoint)
+last_updated: "2026-09-15T15:19:13.281Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: fb697292657ae21cd79a9929a82fbf19ae77e051
+state_head: 177d9fce35a0f3a36b57dbb58e76d58d92f71916
 progress:
   total_phases: 7
   completed_phases: 0
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 01 execution started
 
@@ -141,6 +141,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P04 | 20min | 2 tasks | 2 files |
 | Phase 01 P06 | ~30min | 2 tasks | 21 files |
 | Phase 01 P07 | 20 min | 2 tasks | 4 files |
+| Phase 01 P05 | 40min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -309,6 +310,7 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: 01-06: rsvg-convert used for PNG rendering (no new devDependency); 16px legibility human-check deferred to end-of-phase per human_verify_mode, no autonomous geometry change made
 - [Phase 01]: FIX-10: per-run PRFILES_$(openssl rand -hex 16) delimiter inline in both pull_request_target workflows, not the researched shared-script extraction — require-issue-link.yml deliberately performs no checkout under pull_request_target; a shared script would need one, trading a narrow injection defect for a broader one
 - [Phase 01]: check-workflow-output-delimiter.sh compares $GITHUB_OUTPUT via diff against a file, not bash array iteration — bash 3.2 (macOS default /bin/bash, also env bash's resolution) raises unbound-variable on ${arr[@]} expansion of an empty array under set -euo pipefail
+- [Phase 01]: GH #20 baseline drift attributed to FLEET (+46.90% hardware vs +3.15% code, inside DefaultThroughputTolerance); Namespace cache volume follow-up closed won't-do; both recorded in tools/bench/BASELINE.md and GH #20 closed
 
 ### Pending Todos
 
@@ -470,8 +472,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-15T15:09:47.537Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-09-15T15:19:13.262Z
+Stopped at: Completed 01-05-PLAN.md (resumed after checkpoint)
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
