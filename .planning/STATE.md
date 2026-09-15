@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: "Halted at 01-05 Task 2 checkpoint:human-action (GH #20 discriminator dispatch requires explicit push/gh-write authorization)"
-last_updated: "2026-09-15T12:32:59.399Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-09-15T14:37:41.258Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: 7d5815e0d984f02255ddcf600f7bf22f3469ff7c
+state_head: a367e62738795227d5b0ce89de5e8dbb849b3216
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 01 execution started
 
@@ -139,6 +139,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P02 | 35 min | 3 tasks | 6 files |
 | Phase 01 P03 | 7min | 2 tasks | 2 files |
 | Phase 01 P04 | 20min | 2 tasks | 2 files |
+| Phase 01 P06 | ~30min | 2 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -304,6 +305,7 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: FIX-06: index --force now classifies prior-store errors three ways (ErrNotFound=silent floor 0, ErrStoreLocked=refuse before RemoveAll, other=warn+rebuild) via graphstore's exported sentinels, closing WINDOWS #36.
 - [Phase 01]: GH #20 follow-up 1 (Namespace cache volume, 8x16) closed WON'T-DO on the record: ubuntu-latest is free and 28.6x more stable than Namespace 4x8, matching the issue's own adoption bar; a cache volume cannot reach host-placement variance, the leading unrefuted explanation.
 - [Phase 01]: GH #20 follow-up 2's drift discriminator is fully specified in tools/bench/BASELINE.md (ref d4672cf5..., job rebless, -seed 42 -count 120000 -trials 7, ubuntu-latest) but NOT dispatched — dispatching requires pushing a temp branch and triggering CI, both outward-facing actions this session was not authorized to perform.
+- [Phase 01]: 01-06: rsvg-convert used for PNG rendering (no new devDependency); 16px legibility human-check deferred to end-of-phase per human_verify_mode, no autonomous geometry change made
 
 ### Pending Todos
 
@@ -463,10 +465,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/01-defect-flake-burn-down/01-05-SUMMARY.md
+**Resume file:** None
 
-Last session: 2026-09-15T12:31:45.747Z
-Stopped at: Halted at 01-05 Task 2 checkpoint:human-action (GH #20 discriminator dispatch requires explicit push/gh-write authorization)
+Last session: 2026-09-15T14:37:41.230Z
+Stopped at: Completed 01-06-PLAN.md
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
