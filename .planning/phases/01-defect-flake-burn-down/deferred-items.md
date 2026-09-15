@@ -1,0 +1,7 @@
+## Deferred Items
+
+- `TestDaemonFlushLockRequeueGivesUpPerEpisode` (internal/daemon/daemon_test.go) timed out twice during 01-02's full-suite `-race` verification runs, on an unrelated mechanism (the WR-01/IN-03 lock-lost requeue backoff, not the watchdog/getppid seam this plan touches).
+  status: open
+  **What:** `awaitEpisode`'s `testBudget(10 * time.Second)` deadline was exceeded waiting for a lock-lost sync attempt, under this session's unusually high local machine load (`uptime` reported load averages 7.23/11.61/19.50 with 1248 processes and 11 users at the time). A third full-suite run (non-verbose) passed cleanly with zero FAIL/DATA RACE lines across all ~55 packages, and a subsequent verbose run failed on the SAME test again while `TestRunWatchdogCancelsRunOnSimulatedReparent` (this plan's target) passed in 0.19s both times — confirming the failure is unrelated to 01-02's changes.
+  **Why deferred, not fixed:** out of scope (Scope Boundary rule — this task touches only FIX-07/FIX-08's watchdog seam) and D-14 explicitly forbids widening any timeout or interval constant under `internal/daemon` as a fix for anything in this phase. This matches the pre-existing, already-accepted "Daemon extreme-load tail" class recorded in `.planning/STATE.md`'s Blockers/Concerns (CI load, not local session load, is the governing standard per maintainer ruling 2026-08-06).
+  **Where:** `internal/daemon/daemon_test.go:586` (`TestDaemonFlushLockRequeueGivesUpPerEpisode`), `awaitEpisode`'s `testBudget(10 * time.Second)` deadline.

@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-09-15T04:04:32.319Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-09-15T04:32:49.357Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: 2c69b3ba71b49ddca7429ac5b544b507db8fe40a
+state_head: 943096f2fd225681a42b8959a229c6502b289d38
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 01 execution started
 
@@ -136,6 +136,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 10-index-health-the-coverage-denominator P05 | 55min | 2 tasks | 3 files |
 | Phase 10 P06 | 50min | 2 tasks | 3 files |
 | Phase 01 P01 | 45min | 2 tasks | 20 files |
+| Phase 01 P02 | 35 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -294,6 +295,9 @@ Standing decisions that outlive every milestone:
 - [Phase 10]: Merged colliding threat ids across Plans 01-05 (T-10-01/03/04/05/06/07/08/10/15) into single 10-SECURITY.md rows citing every contributing plan's mitigation — The read_first instructions required deduplicating by id and merging mitigation text rather than dropping or inventing ids
 - [Phase 01]: 01-01: Added window.__codegraphFileGraphCy debug seam to GraphCanvas.svelte (Rule 2 deviation) — no existing seam exposed live cytoscape edge/node state needed for the FIX-05 overlap diagnosis.
 - [Phase 01]: 01-01: Guava's invalid-endpoints warnings trace to one directory pair whose settled bounding boxes do not overlap, suggesting the warning fires during an earlier render pass before ELK's async write-back lands — recorded for plan 01-09 to investigate.
+- [Phase 01]: 01-02: getppid seam made per-instance (unexported Daemon fields getppid/watchdogTicks) per RESEARCH.md's correction of D-13's literal wording, matching onSync/onSyncStart/syncFn/onWatchOpen rather than a new exported Option
+- [Phase 01]: 01-02: GH #13's leaked-goroutine half REFUTED (both RunWithRetry spawn sites in soak_test.go already joined via joinDaemonRun; 5x -race iterations zero leak/race) — recorded as absence-of-symptom evidence (RESEARCH A5), not positive falsification, no test changed
+- [Phase 01]: 01-02: unrelated pre-existing flake TestDaemonFlushLockRequeueGivesUpPerEpisode surfaced under this session's high local machine load during full-suite -race verification — logged to deferred-items.md, not fixed (out of scope; D-14 forbids widening any internal/daemon timeout constant)
 
 ### Pending Todos
 
@@ -454,8 +458,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-15T04:04:32.299Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-09-15T04:32:49.340Z
+Stopped at: Completed 01-02-PLAN.md
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
