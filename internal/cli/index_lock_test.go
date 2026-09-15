@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -12,9 +11,12 @@ import (
 )
 
 // storeDirEntryNames returns the sorted list of entry names directly under
-// storeDir — used to prove a refused `index --force` left the store
-// directory's own contents untouched, which an exit-code assertion alone
-// cannot show (WINDOWS #36 / T-10-16).
+// storeDir. This is informational only (logged, never asserted on for
+// exact equality): a live pebble handle performs its own background
+// housekeeping (WAL rotation, memtable flush to a new SST, manifest
+// rotation) independently of anything the CLI does, so the file SET
+// legitimately churns even when os.RemoveAll never runs. The load-bearing
+// proof that RemoveAll never ran is storeDirIdentity below.
 func storeDirEntryNames(t *testing.T, storeDir string) []string {
 	t.Helper()
 
@@ -27,6 +29,25 @@ func storeDirEntryNames(t *testing.T, storeDir string) []string {
 		names = append(names, e.Name())
 	}
 	return names
+}
+
+// storeDirIdentity returns storeDir's own os.FileInfo, to be compared
+// with os.SameFile across a call. `index --force`'s wipe is
+// os.RemoveAll(storeDir) followed by os.MkdirAll(storeDir, ...) — that
+// sequence necessarily replaces the directory's own inode with a fresh
+// one, even though pebble's routine internal file churn inside an
+// UNCHANGED directory (see storeDirEntryNames) never does. Comparing the
+// directory's identity, not its listing, is therefore the assertion that
+// actually isolates "did RemoveAll run" from "did pebble's background
+// janitor do its normal job".
+func storeDirIdentity(t *testing.T, storeDir string) os.FileInfo {
+	t.Helper()
+
+	info, err := os.Stat(storeDir)
+	if err != nil {
+		t.Fatalf("stat storeDir %s: %v", storeDir, err)
+	}
+	return info
 }
 
 // readGenerationThroughHandle reads Meta.CoverageGeneration through an
@@ -74,6 +95,7 @@ func TestIndexForceRefusesWhileStoreIsHeld(t *testing.T) {
 	storeDir := filepath.Join(codegraphDir, storeDirName)
 
 	beforeNames := storeDirEntryNames(t, storeDir)
+	beforeIdentity := storeDirIdentity(t, storeDir)
 
 	holder, err := graphstore.Open(storeDir)
 	if err != nil {
@@ -105,12 +127,19 @@ func TestIndexForceRefusesWhileStoreIsHeld(t *testing.T) {
 		t.Fatalf("index --force error = %q; must NOT name `daemon unlock` — that verb does not exist until Phase 3", err.Error())
 	}
 
-	// The refusal must precede os.RemoveAll: the store directory's own
-	// contents, read independently of the held handle, must be
-	// byte-identical to what they were before the refused call.
+	// The refusal must precede os.RemoveAll+os.MkdirAll: the store
+	// directory's own identity (its inode, via os.SameFile) — not its
+	// file listing, which legitimately churns from pebble's own
+	// background housekeeping on the still-open held handle — must be
+	// unchanged across the refused call. A wipe replaces the directory
+	// itself with a fresh one; routine internal file rotation inside an
+	// unchanged directory does not.
 	afterNames := storeDirEntryNames(t, storeDir)
-	if !slices.Equal(beforeNames, afterNames) {
-		t.Fatalf("storeDir contents changed across a refused call: before=%v after=%v", beforeNames, afterNames)
+	t.Logf("storeDir listing before=%v after=%v (informational only — churn from pebble's own housekeeping on the held handle is expected and not a failure)", beforeNames, afterNames)
+
+	afterIdentity := storeDirIdentity(t, storeDir)
+	if !os.SameFile(beforeIdentity, afterIdentity) {
+		t.Fatalf("storeDir's own directory identity changed across a refused call — RemoveAll+MkdirAll ran despite the refusal: before=%v after=%v", beforeIdentity, afterIdentity)
 	}
 
 	// And the coverage generation, read back through the SAME held
