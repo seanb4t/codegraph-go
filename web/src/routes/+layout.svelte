@@ -4,7 +4,6 @@
 	// app.css that is generated but never imported produces a build with
 	// no CSS output at all.
 	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { setContext } from 'svelte';
 	import { uiClient } from '$lib/client';
@@ -88,7 +87,13 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<!-- SVG-first order is deliberate (D-04): a browser picks the first icon
+	     link whose type it supports, so listing the SVG before the PNG
+	     fallback and the apple-touch-icon makes the shipped icon
+	     deterministic rather than user-agent-incidental. -->
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </svelte:head>
 
 <div class="flex min-h-screen flex-col bg-background text-foreground">
