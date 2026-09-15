@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-current_phase: 1
+current_phase: 01
 current_phase_name: Defect & Flake Burn-down
-status: Roadmap created — awaiting approval
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-15T03:22:35.570Z"
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-15T04:04:32.319Z"
 last_activity: 2026-09-14
-last_activity_desc: Phase 1 planning complete
-state_head: e5069b46de4bf88debf2e62c2f8f2b808217cfad
+last_activity_desc: Phase 01 execution started
+state_head: 2c69b3ba71b49ddca7429ac5b544b507db8fe40a
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Milestone v0.14.0 Polish & Agent Reach — roadmap created (7 phases, 55/55 requirements mapped); awaiting roadmap approval, then Phase 1 discuss/plan
+**Current focus:** Phase 01 — Defect & Flake Burn-down
 
 ## Current Position
 
-Phase: 1 (Defect & Flake Burn-down) — READY TO EXECUTE
-Plan: — (none until Phase 1 is planned)
-Status: Roadmap created — awaiting approval
-Last activity: 2026-09-14 — Phase 1 planning complete
+Phase: 01 (Defect & Flake Burn-down) — EXECUTING
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-09-14 — Phase 01 execution started
 
 ## Performance Metrics
 
@@ -135,6 +135,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 10 P04 | 55min | 2 tasks | 5 files |
 | Phase 10-index-health-the-coverage-denominator P05 | 55min | 2 tasks | 3 files |
 | Phase 10 P06 | 50min | 2 tasks | 3 files |
+| Phase 01 P01 | 45min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -291,6 +292,8 @@ Standing decisions that outlive every milestone:
 - [Phase 10]: Open Question 3 decided: /health Coverage verification stays at vitest level (health-page.test.ts / health-view.test.ts) — no Playwright gate added.
 - [Phase 10]: Fixed CoverageRows pagination cursor to skip-until-seen-cursor-path per segment (was comparing paths lexically against the store's non-lexical length-prefixed key order). — The store's real iteration order for ExcludedFile/File records is length-prefixed (keys.go appendSegment), not lexical path order; a lexical <= cursor comparison silently broke once paging crossed segments, causing infinite duplicate rows.
 - [Phase 10]: Merged colliding threat ids across Plans 01-05 (T-10-01/03/04/05/06/07/08/10/15) into single 10-SECURITY.md rows citing every contributing plan's mitigation — The read_first instructions required deduplicating by id and merging mitigation text rather than dropping or inventing ids
+- [Phase 01]: 01-01: Added window.__codegraphFileGraphCy debug seam to GraphCanvas.svelte (Rule 2 deviation) — no existing seam exposed live cytoscape edge/node state needed for the FIX-05 overlap diagnosis.
+- [Phase 01]: 01-01: Guava's invalid-endpoints warnings trace to one directory pair whose settled bounding boxes do not overlap, suggesting the warning fires during an earlier render pass before ELK's async write-back lands — recorded for plan 01-09 to investigate.
 
 ### Pending Todos
 
@@ -449,10 +452,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/01-defect-flake-burn-down/01-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-15T01:59:57.322Z
-Stopped at: Phase 1 context gathered
+Last session: 2026-09-15T04:04:32.299Z
+Stopped at: Completed 01-01-PLAN.md
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 

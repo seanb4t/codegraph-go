@@ -160,13 +160,13 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
   5. `CheckRegression` refuses a baseline/current corpus-identity mismatch without going red on a legitimate corpus rename; neither `pull_request_target` workflow expands fork-controlled paths through a fixed heredoc delimiter, exercised against a path containing the old delimiter; and GH #20's two perf-gate follow-ups each end in a recorded fixed-or-closed decision (FIX-09, FIX-10, FIX-11)
 
 **Notes**: Research pitfalls attached: 14 (watchdog flake — WINDOWS #12 already diagnosed load-sensitivity, so a wider constant is the failure mode; the fix touches the time source or test isolation and the comment cites #12), 15 (`var getppid = os.Getppid` is a package-level mutable global — the race is inherent to the pattern, not incidental), 16 (`Metrics.Repo` — investigate what the write sites actually populate before choosing the key, or a path-representation difference reads as a mismatch), 17 (GH #15 — the vulnerability class is multi-line-output injection; the delimiter is per-run generated, not a longer literal, and the fix lands in *both* `require-issue-link.yml` and `pr-template-format.yml`), 18 (the favicon fix touches the asset, never `spa.go`'s CSP string — `img-src data:` is the out-of-scope entry). FIX-06 is WINDOWS #36 / T-10-16, accepted below the `high` gate at v0.13.0 Phase 10 with the fix named; the regression test is the lock-collision shape it describes. FIX-04/05 are the four pre-existing `/graph` console entries v0.13.0 Phase 11 reproduced on a pre-phase build and left unowned; a live Chromium pass is the gate, per v0.12.0's lesson. `FIX-03` is deliberately *not* here — see Phase 7.
-**Plans**: 9 plans
+**Plans**: 1/9 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Live-Chromium `/graph` console gate (tracer): `graph-console-check.mjs`, Taskfile target, pre-fix RED verdict and the guava overlap diagnosis (FIX-04, FIX-05)
+- [x] 01-01-PLAN.md — Live-Chromium `/graph` console gate (tracer): `graph-console-check.mjs`, Taskfile target, pre-fix RED verdict and the guava overlap diagnosis (FIX-04, FIX-05)
 - [ ] 01-02-PLAN.md — Per-instance watchdog parent-pid seam and injected tick source, with an AST shape guard and GH #13's second half settled (FIX-07, FIX-08)
 - [ ] 01-03-PLAN.md — `CheckRegression` corpus-identity guard on `Metrics.Repo`, strict equality, empty means unrecorded (FIX-09)
 - [ ] 01-04-PLAN.md — `index --force` refuses a held store before `RemoveAll`, warns on a corrupt one, with the hold-the-lock regression test (FIX-06)
@@ -310,7 +310,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Defect & Flake Burn-down | 0/TBD | Not started | - |
+| 1. Defect & Flake Burn-down | 1/9 | In Progress|  |
 | 2. Guards, CI Wiring & Docs Burn-down | 0/TBD | Not started | - |
 | 3. Verb Fold | 0/TBD | Not started | - |
 | 4. CLI Glow-up | 0/TBD | Not started | - |
