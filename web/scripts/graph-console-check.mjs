@@ -1,29 +1,36 @@
 #!/usr/bin/env node
-// graph-console-check.mjs — 01-01 Task 1 (FIX-04/FIX-05, D-09): the permanent
-// live-Chromium `/graph` console gate. Boots the real `codegraph ui` binary,
-// loads `/graph`, and asserts D-08's bar — zero uncaught page errors AND zero
-// `console.warn`/`console.error` originating from our code — on every pinned
-// corpus. This is the FIRST script in web/scripts/ to register
-// `page.on('console', ...)` (01-PATTERNS.md: no sibling script needs this
-// half); `page.on('pageerror', ...)` follows the same convention every
-// sibling already uses.
+// graph-console-check.mjs — 01-01 Tasks 1+2 (FIX-04/FIX-05, D-09): the
+// permanent live-Chromium `/graph` console gate. Boots the real
+// `codegraph ui` binary, loads `/graph`, and asserts D-08's bar — zero
+// uncaught page errors AND zero `console.warn`/`console.error` originating
+// from our code — on both this repo's own index (`self`) and the pinned
+// guava corpus (`guava`). This is the FIRST script in web/scripts/ to
+// register `page.on('console', ...)` (01-PATTERNS.md: no sibling script
+// needs this half); `page.on('pageerror', ...)` follows the same
+// convention every sibling already uses.
 //
-// This task wires the `self` corpus only (this repository's own index).
-// Task 2 (01-01) extends the run loop with the pinned `guava` corpus and the
-// invalid-endpoints overlap diagnostic that plan 01-09's FIX-05 fix consumes.
+// Task 2 additionally diagnoses cytoscape's "invalid endpoints" warning at
+// guava scale (01-RESEARCH.md Investigation 2): every captured warning
+// matching that text is traced back, via `window.__codegraphFileGraphCy`
+// (GraphCanvas.svelte's debug-only diagnostic seam this task adds — see
+// that file's own comment), to its edge's source/target ids, positions and
+// bounding boxes — the FIX-05 diagnosis plan 01-09's layout fix is derived
+// from.
 //
 // The script is ALSO this gate's own RED instrument: run against the
 // CURRENT, unmodified embedded build, it must exit non-zero and its
 // committed verdict at corpora/graph-console-check.json must record the
-// `notify` TypeError (pageerror) and the two `text-valign: right` style
-// warnings (console.warn) — the pre-fix evidence plans 01-04/01-08 close
-// against. `--self-test` is the positive control every real run depends on:
-// a capture harness that cannot see a PLANTED console.warn, console.error
-// and uncaught pageerror can never be trusted to see a REAL one (rule
-// 84d1gfpywd).
+// `notify` TypeError (pageerror), the two `text-valign: right` style
+// warnings (console.warn), and the guava-scale invalid-endpoints warnings
+// with a named overlapping pair — the pre-fix evidence plans 01-04/01-08/
+// 01-09 close against. `--self-test` is the positive control every real
+// run depends on: a capture harness that cannot see a PLANTED console.warn,
+// console.error and uncaught pageerror can never be trusted to see a REAL
+// one (rule 84d1gfpywd).
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as url from 'node:url';
@@ -121,6 +128,56 @@ function stopChild(child) {
 			if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
 		}, 3000);
 	});
+}
+
+/**
+ * corpusRoot mirrors graph-live-update-check.mjs's function of the same
+ * name (itself mirroring internal/corpora/manifest.go's CorpusRoot()):
+ * CODEGRAPH_CORPUS_DIR verbatim when set, else XDG_CACHE_HOME/codegraph/
+ * corpora, else ~/.cache/codegraph/corpora.
+ * @returns {string}
+ */
+function corpusRoot() {
+	if (process.env.CODEGRAPH_CORPUS_DIR) return process.env.CODEGRAPH_CORPUS_DIR;
+	if (process.env.XDG_CACHE_HOME) return path.join(process.env.XDG_CACHE_HOME, 'codegraph', 'corpora');
+	const home = process.env.HOME;
+	if (!home) throw new Error('graph-console-check: HOME is not set and no cache override is configured');
+	return path.join(home, '.cache', 'codegraph', 'corpora');
+}
+
+/**
+ * corpusDir mirrors graph-live-update-check.mjs's function of the same
+ * name, verbatim: a readable slug (repo with "/" replaced by "-"), a
+ * hyphen, the first 8 hex characters of sha256(repo), "@", the pinned sha.
+ * @param {string} repo
+ * @param {string} sha
+ * @returns {string}
+ */
+function corpusDir(repo, sha) {
+	const slug = repo.replace(/\//g, '-');
+	const digest = crypto.createHash('sha256').update(repo).digest('hex').slice(0, 8);
+	return path.join(corpusRoot(), `${slug}-${digest}@${sha}`);
+}
+
+/**
+ * resolveLockedGuavaEntry — reads the pinned google/guava repo/sha pair from
+ * corpora/selection.json's own lockedSet (the sole pin authority, D-09),
+ * rather than hard-coding a second copy of the sha. Fails loudly, naming
+ * both the file and the entry it looked for, if the entry is absent.
+ * @returns {{repo: string, sha: string}}
+ */
+function resolveLockedGuavaEntry() {
+	const selectionPath = path.join(repoRoot(), 'corpora', 'selection.json');
+	/** @type {{lockedSet?: string[]}} */
+	const selection = JSON.parse(fs.readFileSync(selectionPath, 'utf8'));
+	const entry = (selection.lockedSet ?? []).find((e) => e.startsWith('google/guava@'));
+	if (!entry) {
+		throw new Error(
+			`graph-console-check: no "google/guava@..." entry found in ${selectionPath}'s lockedSet`
+		);
+	}
+	const [repo, sha] = entry.split('@');
+	return { repo, sha };
 }
 
 // allowlist — EMPTY as shipped (D-08's bar is zero; pre-populating this to
@@ -293,6 +350,102 @@ async function waitForGraphSettled(page, settleTimeoutMs, quiescenceMs) {
 	await page.waitForTimeout(quiescenceMs);
 }
 
+// Cytoscape's own emission text (01-RESEARCH.md Investigation 2,
+// verbatim): "Edge `<id>` has invalid endpoints and so it is impossible to
+// draw. ...". Anchored on the backtick-quoted id at the start of the
+// message — the only thing this script needs to extract.
+const INVALID_ENDPOINTS_RE = /^Edge `([^`]+)` has invalid endpoints/;
+
+/**
+ * extractInvalidEndpointEdgeIds — the DISTINCT edge ids named by any
+ * captured console entry matching cytoscape's invalid-endpoints wording.
+ * Deduplicated: the warning is a per-edge, not per-occurrence signal (it
+ * can fire more than once per edge across relayouts, and diagnosing the
+ * same edge twice would be redundant, not additional evidence).
+ * @param {ConsoleEntry[]} consoleMessages
+ * @returns {string[]}
+ */
+function extractInvalidEndpointEdgeIds(consoleMessages) {
+	/** @type {Set<string>} */
+	const ids = new Set();
+	for (const m of consoleMessages) {
+		const match = INVALID_ENDPOINTS_RE.exec(m.text);
+		if (match) ids.add(match[1]);
+	}
+	return [...ids];
+}
+
+/**
+ * diagnoseInvalidEndpoint — page.evaluate() back into the live instance
+ * (via GraphCanvas.svelte's `window.__codegraphFileGraphCy` debug seam) to
+ * read the named edge's source/target ids, positions, bounding boxes,
+ * parent status and child counts, plus the edge's own rendered scratch
+ * coordinates if reachable. Never throws: a missing seam, a missing
+ * element, or an API shape the instance does not expose all yield a
+ * recorded `{ edgeId, error }` entry — a diagnostic that crashes would lose
+ * the whole verdict, not just this one edge's evidence.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} edgeId
+ */
+async function diagnoseInvalidEndpoint(page, edgeId) {
+	return page.evaluate((id) => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const cy = /** @type {any} */ (window).__codegraphFileGraphCy;
+		if (!cy) return { edgeId: id, error: 'window.__codegraphFileGraphCy is not available' };
+		try {
+			const edge = cy.getElementById(id);
+			if (!edge || edge.empty()) return { edgeId: id, error: 'edge not found in live instance' };
+			const source = edge.source();
+			const target = edge.target();
+			const rs = edge[0] && edge[0]._private && edge[0]._private.rscratch;
+			return {
+				edgeId: id,
+				sourceId: source.id(),
+				targetId: target.id(),
+				sourcePosition: source.position(),
+				targetPosition: target.position(),
+				sourceBoundingBox: source.boundingBox(),
+				targetBoundingBox: target.boundingBox(),
+				sourceIsParent: source.isParent(),
+				targetIsParent: target.isParent(),
+				sourceChildCount: source.isParent() ? source.children().length : 0,
+				targetChildCount: target.isParent() ? target.children().length : 0,
+				scratch: rs ? { startX: rs.startX, startY: rs.startY, endX: rs.endX, endY: rs.endY } : null
+			};
+		} catch (err) {
+			return { edgeId: id, error: err instanceof Error ? err.message : String(err) };
+		}
+	}, edgeId);
+}
+
+/**
+ * assertCorpusIndexed — the precondition each corpus run needs before
+ * booting the binary. `guava`'s message names `task corpora:fetch` and
+ * `./codegraph index --force <corpusPath>` explicitly (this task's own
+ * requirement); `self` uses the generic "<precondition>" pointer every
+ * other check script in this repo already uses for its own repo.
+ * @param {string} corpus
+ * @param {string} repoPath
+ */
+function assertCorpusIndexed(corpus, repoPath) {
+	if (corpus === 'guava') {
+		if (!fs.existsSync(repoPath)) {
+			throw new Error(`graph-console-check: guava corpus not fetched at ${repoPath} — run \`task corpora:fetch\` first`);
+		}
+		if (!fs.existsSync(path.join(repoPath, '.codegraph', 'store'))) {
+			throw new Error(
+				`graph-console-check: corpus not indexed at ${repoPath} — run \`./codegraph index --force ${repoPath}\` first`
+			);
+		}
+		return;
+	}
+	if (!fs.existsSync(path.join(repoPath, '.codegraph', 'store'))) {
+		throw new Error(
+			`graph-console-check: no index at ${path.join(repoPath, '.codegraph', 'store')} — see this task's <precondition>`
+		);
+	}
+}
+
 /**
  * runCorpusCheck — boots the real binary against `repoPath`, loads `/graph`
  * in a fresh page on the SHARED `browser`, and returns this run's verdict
@@ -305,11 +458,7 @@ async function runCorpusCheck(browser, { corpus, repoPath, repo, sha, binaryPath
 	if (!fs.existsSync(binaryPath)) {
 		throw new Error(`graph-console-check: binary not found at ${binaryPath} — run \`task build:release\` first`);
 	}
-	if (!fs.existsSync(path.join(repoPath, '.codegraph', 'store'))) {
-		throw new Error(
-			`graph-console-check: no index at ${path.join(repoPath, '.codegraph', 'store')} — see this task's <precondition>`
-		);
-	}
+	assertCorpusIndexed(corpus, repoPath);
 
 	/** @type {import('node:child_process').ChildProcess | undefined} */
 	let child;
@@ -344,6 +493,33 @@ async function runCorpusCheck(browser, { corpus, repoPath, repo, sha, binaryPath
 			pageErrors.filter((e) => isAllowlisted(e)).length +
 			consoleMessages.filter((m) => isAllowlisted(m.text)).length;
 
+		// nodeCount/edgeCount come from the same metrics seam
+		// waitForGraphSettled already polled; collapsedNodeCount is derived
+		// from the geometry seam's own `expandable` flag (isDirectory &&
+		// collapsed, per GraphCanvas.svelte's computeGeometry).
+		const { nodeCount, edgeCount, collapsedNodeCount } = await page.evaluate(() => {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const metrics = /** @type {any} */ (window).__codegraphFileGraphMetrics;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const geometry = /** @type {any} */ (window).__codegraphFileGraphGeometry ?? [];
+			return {
+				nodeCount: metrics ? metrics.nodeCount : null,
+				edgeCount: metrics ? metrics.edgeCount : null,
+				collapsedNodeCount: geometry.filter((g) => g.expandable).length
+			};
+		});
+
+		// invalidEndpointDiagnostics: the FIX-05 diagnosis. Computed for
+		// every corpus (not just guava) — the extraction/diagnosis logic is
+		// corpus-agnostic; a corpus with no such warnings simply yields an
+		// empty array.
+		const edgeIds = extractInvalidEndpointEdgeIds(consoleMessages);
+		/** @type {any[]} */
+		const invalidEndpointDiagnostics = [];
+		for (const edgeId of edgeIds) {
+			invalidEndpointDiagnostics.push(await diagnoseInvalidEndpoint(page, edgeId));
+		}
+
 		await context.close();
 
 		return {
@@ -356,7 +532,11 @@ async function runCorpusCheck(browser, { corpus, repoPath, repo, sha, binaryPath
 			consoleWarnCount,
 			consoleErrorCount,
 			consoleMessages,
-			allowlistedCount
+			allowlistedCount,
+			nodeCount,
+			edgeCount,
+			collapsedNodeCount,
+			invalidEndpointDiagnostics
 		};
 	} finally {
 		await stopChild(child);
@@ -409,11 +589,12 @@ async function main() {
 					`graph-console-check: corpus=self pageErrors=${run.pageErrorCount} consoleWarn=${run.consoleWarnCount} consoleError=${run.consoleErrorCount}`
 				);
 			} else if (corpusName === 'guava') {
-				// Task 2 (01-01) implements this corpus and its overlap
-				// diagnostic. Not yet wired — fail loudly rather than
-				// silently skipping (rule 84d1gfpywd).
-				throw new Error(
-					'graph-console-check: --corpus guava is not yet implemented (see plan 01-01 Task 2)'
+				const { repo, sha } = resolveLockedGuavaEntry();
+				const repoPath = corpusDir(repo, sha);
+				const run = await runCorpusCheck(browser, { corpus: 'guava', repoPath, repo, sha, binaryPath: args.binary });
+				runs.push(run);
+				console.log(
+					`graph-console-check: corpus=guava pageErrors=${run.pageErrorCount} consoleWarn=${run.consoleWarnCount} consoleError=${run.consoleErrorCount} invalidEndpointDiagnostics=${run.invalidEndpointDiagnostics.length}`
 				);
 			} else {
 				throw new Error(`graph-console-check: unknown --corpus value "${corpusName}"`);

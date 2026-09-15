@@ -1831,9 +1831,16 @@ tasks:
         msg: "./codegraph not found or not executable — run `task build:release` first."
       - sh: test -d .codegraph/store
         msg: "no index at .codegraph/store — run `./codegraph index --force .` first."
+      - sh: |
+          REPO=google/guava
+          SHA=$(jq -r '.lockedSet[] | select(startswith("google/guava@")) | split("@")[1]' corpora/selection.json)
+          DIGEST=$(printf '%s' "$REPO" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-8)
+          if [ -n "${CODEGRAPH_CORPUS_DIR:-}" ]; then ROOT="$CODEGRAPH_CORPUS_DIR"; elif [ -n "${XDG_CACHE_HOME:-}" ]; then ROOT="$XDG_CACHE_HOME/codegraph/corpora"; else ROOT="$HOME/.cache/codegraph/corpora"; fi
+          test -d "$ROOT/${REPO/\//-}-${DIGEST}@${SHA}"
+        msg: "pinned guava corpus not fetched — run `task corpora:fetch` first."
     cmds:
       - node web/scripts/graph-console-check.mjs --self-test
-      - node web/scripts/graph-console-check.mjs --corpus self --out corpora/graph-console-check.json
+      - node web/scripts/graph-console-check.mjs --out corpora/graph-console-check.json
 
   check:darwin-toolchain:
     desc: >-

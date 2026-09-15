@@ -879,6 +879,27 @@
 		lastAppliedElements = initialElements;
 		renderer.start();
 
+		// window.__codegraphFileGraphCy — DEBUG-ONLY diagnostic seam (01-01
+		// Task 2, FIX-05's overlap diagnosis). Mirrors the existing
+		// __codegraphFileGraphMetrics/__codegraphFileGraphGeometry
+		// convention above: additive, read-only telemetry a real renderer
+		// always provides, never something the paint path depends on.
+		// Unlike those two (published on every layout settle), this is the
+		// live cytoscape instance itself — the only way graph-console-
+		// check.mjs's page.evaluate() can resolve an invalid-endpoints
+		// warning's edge id back to its source/target positions and
+		// bounding boxes (01-RESEARCH.md Investigation 2 has no other seam
+		// to read this from: canvas rendering leaves no per-node DOM
+		// element, and the warning text carries only the edge id).
+		// Assigning to `window` emits no console output and does not touch
+		// the CSP directives at internal/uiserver/spa.go (D-05). Cleared on
+		// teardown, before cy.destroy(), so a stale reference is never left
+		// dangling — the same "extra safe" discipline cytoscape's own
+		// destroyRenderer() applies to its internal renderer reference.
+		if (typeof window !== 'undefined') {
+			window.__codegraphFileGraphCy = cy;
+		}
+
 		// Cytoscape does not observe arbitrary container resize, only the
 		// `window` resize event (cytoscape.js core/resize.md) — an
 		// explicit ResizeObserver on the container is required so the
@@ -895,6 +916,9 @@
 		return () => {
 			resizeObserver?.disconnect();
 			renderer = undefined;
+			if (typeof window !== 'undefined' && window.__codegraphFileGraphCy === cy) {
+				window.__codegraphFileGraphCy = undefined;
+			}
 			cy.destroy();
 		};
 	});

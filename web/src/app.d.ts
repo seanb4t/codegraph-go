@@ -24,7 +24,20 @@ declare global {
 // DOM element per graph node; this is what lets a real browser click a
 // SPECIFIC node by its own reported position.
 //
-// A THIRD global — the live-push observation seam — is populated by
+// A THIRD global (01-01 Task 2) — __codegraphFileGraphCy — is DEBUG-ONLY:
+// the live cytoscape instance itself, set once the mount effect's cy is
+// constructed and cleared on teardown before cy.destroy(). Typed `unknown`
+// here (this ambient .d.ts has no import of cytoscape's `Core` type) —
+// GraphCanvas.svelte casts it at both the assignment and read sites, the
+// same `as any` discipline this file already applies to every other
+// cytoscape-shaped value it cannot express without importing the library
+// into a file whose whole point is to stay cytoscape-free. It exists
+// solely so a real-browser harness (graph-console-check.mjs) can resolve
+// an invalid-endpoints console warning's edge id back to its source/target
+// positions and bounding boxes — canvas rendering leaves no per-node DOM
+// element, so this is the only path from a warning string to that data.
+//
+// A FOURTH global — the live-push observation seam — is populated by
 // web/src/lib/live/live-client.ts (the reconnecting stream consumer) and
 // web/src/lib/live/live-store.ts (the epoch-scoped generation gate, the
 // only place that can know whether an event was ever ADMITTED). Its
@@ -54,6 +67,7 @@ declare global {
 			expandable: boolean;
 			fileCount?: number;
 		}>;
+		__codegraphFileGraphCy?: unknown;
 		__codegraphLiveObservations?: {
 			events: Array<{
 				generation: number;
