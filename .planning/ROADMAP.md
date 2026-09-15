@@ -164,14 +164,25 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
 **UI hint**: yes
 
 Plans:
+**Wave 1**
+
 - [ ] 01-01-PLAN.md — Live-Chromium `/graph` console gate (tracer): `graph-console-check.mjs`, Taskfile target, pre-fix RED verdict and the guava overlap diagnosis (FIX-04, FIX-05)
 - [ ] 01-02-PLAN.md — Per-instance watchdog parent-pid seam and injected tick source, with an AST shape guard and GH #13's second half settled (FIX-07, FIX-08)
 - [ ] 01-03-PLAN.md — `CheckRegression` corpus-identity guard on `Metrics.Repo`, strict equality, empty means unrecorded (FIX-09)
 - [ ] 01-04-PLAN.md — `index --force` refuses a held store before `RemoveAll`, warns on a corrupt one, with the hold-the-lock regression test (FIX-06)
 - [ ] 01-05-PLAN.md — GH #20's two perf-gate follow-ups each end in a recorded decision; the issue is closed (FIX-11)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-06-PLAN.md — codegraph mark shipped as static `web/static/` icons under the unchanged CSP; Svelte logo deleted (FIX-02)
 - [ ] 01-07-PLAN.md — Per-run `$GITHUB_OUTPUT` delimiter in both `pull_request_target` workflows, with a harness over the shipped shell (FIX-10)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-08-PLAN.md — Stylesheet alignment fix and the deferred-`cy.destroy()` teardown guard, after a live reproduction (FIX-04, FIX-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-09-PLAN.md — ELK option change separating the coincident collapsed pair, plus the committed green two-corpus verdict (FIX-05, FIX-04)
 
 #### Phase 2: Guards, CI Wiring & Docs Burn-down
@@ -191,6 +202,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
+
 - [ ] TBD
 
 #### Phase 3: Verb Fold
@@ -210,6 +222,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
+
 - [ ] TBD
 
 #### Phase 4: CLI Glow-up
@@ -229,6 +242,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
+
 - [ ] TBD
 
 #### Phase 5: Agent Reach — Capability Model & Skill in Every Harness
@@ -247,6 +261,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
+
 - [ ] TBD
 
 #### Phase 6: Claude Code PreToolUse Nudge
@@ -265,6 +280,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
+
 - [ ] TBD
 
 #### Phase 7: Codex Parity
@@ -284,6 +300,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
+
 - [ ] TBD
 
 ## Progress
