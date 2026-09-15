@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-15T04:41:25.160Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-15T05:01:17.902Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: e2b3bc54080bec09f5bb471d8941daf30663b693
+state_head: 2bd660b354c70f9c2171bf597df86da2ededade8
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 01 execution started
 
@@ -138,6 +138,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P01 | 45min | 2 tasks | 20 files |
 | Phase 01 P02 | 35 min | 3 tasks | 6 files |
 | Phase 01 P03 | 7min | 2 tasks | 2 files |
+| Phase 01 P04 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -300,6 +301,7 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: 01-02: GH #13's leaked-goroutine half REFUTED (both RunWithRetry spawn sites in soak_test.go already joined via joinDaemonRun; 5x -race iterations zero leak/race) — recorded as absence-of-symptom evidence (RESEARCH A5), not positive falsification, no test changed
 - [Phase 01]: 01-02: unrelated pre-existing flake TestDaemonFlushLockRequeueGivesUpPerEpisode surfaced under this session's high local machine load during full-suite -race verification — logged to deferred-items.md, not fixed (out of scope; D-14 forbids widening any internal/daemon timeout constant)
 - [Phase 01]: 01-03: CheckRegression's Repo guard closes GH #16 — strict equality per D-16, no normalisation; GREEN commit uses fix(01-03) not feat(01-03) per the plan's own instruction since this closes a missing-guard bug
+- [Phase 01]: FIX-06: index --force now classifies prior-store errors three ways (ErrNotFound=silent floor 0, ErrStoreLocked=refuse before RemoveAll, other=warn+rebuild) via graphstore's exported sentinels, closing WINDOWS #36.
 
 ### Pending Todos
 
@@ -460,8 +462,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-15T04:41:25.141Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-09-15T05:01:17.885Z
+Stopped at: Completed 01-04-PLAN.md
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
