@@ -17,8 +17,8 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 - [x] **FIX-02**: Every UI route serves a codegraph favicon that loads under the unchanged `default-src 'self'` CSP — shipped as a static file, not a `data:` URI and not a widened `img-src` (WINDOWS #30)
 - [ ] **FIX-03**: The install/uninstall agent picker renders its help footer in a 100×30 pane with every registered target listed, with the height budget accounting for bubbles v2 list pagination — asserted by the tmux harness, re-run after the milestone's last target-count change (WINDOWS #32)
-- [ ] **FIX-04**: `/graph` loads with zero uncaught page errors on this repo's index and on guava — the cytoscape-elk `notify` null TypeError fixed, or isolated with its root cause recorded (WINDOWS #26)
-- [ ] **FIX-05**: The cytoscape "invalid endpoints" warnings at guava scale are root-caused (which collapsed pair overlaps under ELK) and either fixed or waived with the cause on record (WINDOWS #28)
+- [x] **FIX-04**: `/graph` loads with zero uncaught page errors on this repo's index and on guava — the cytoscape-elk `notify` null TypeError fixed, or isolated with its root cause recorded (WINDOWS #26)
+- [x] **FIX-05**: The cytoscape "invalid endpoints" warnings at guava scale are root-caused (which collapsed pair overlaps under ELK) and either fixed or waived with the cause on record (WINDOWS #28)
 - [x] **FIX-06**: `priorCoverageGeneration` distinguishes `ErrStoreLocked`/corrupt from `ErrNotFound` and refuses (or warns) before `RemoveAll`, with a hold-the-lock-across-`index --force` regression test (WINDOWS #36 / T-10-16)
 - [x] **FIX-07**: `TestRunWatchdogCancelsRunOnSimulatedReparent` passes deterministically under full-suite parallel load, fixed at the load-sensitivity cause (time-source injection or isolation), not by a wider timeout (WINDOWS #12 / GH #17)
 - [x] **FIX-08**: The getppid test seam is race-free — `go test -race ./internal/daemon/...` clean, the seam per-instance or explicitly synchronized (GH #13)
@@ -136,8 +136,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | FIX-02 | Phase 1 | Complete |
 | FIX-03 | Phase 7 | Pending |
-| FIX-04 | Phase 1 | Pending |
-| FIX-05 | Phase 1 | Pending |
+| FIX-04 | Phase 1 | Complete |
+| FIX-05 | Phase 1 | Complete |
 | FIX-06 | Phase 1 | Complete |
 | FIX-07 | Phase 1 | Complete |
 | FIX-08 | Phase 1 | Complete |

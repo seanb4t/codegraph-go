@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: "Phase 1: 8/9 plans complete; paused before re-dispatching 01-09 (FIX-05). Context cleared."
-last_updated: "2026-09-15T18:05:07.221Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-09-15T19:01:58.531Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 01 execution started
-state_head: 50f6a5acfafc53d7c2ab917832642d09bf6948e2
+state_head: db22645a209e4e26ca24a9057b7b921cde135209
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 01
+Plan: 2 of 9
+Status: Ready to execute
 Last activity: 2026-09-15 — Phase 01 execution started
 
 ## Performance Metrics
@@ -143,6 +143,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P07 | 20 min | 2 tasks | 4 files |
 | Phase 01 P05 | 40min | 3 tasks | 1 files |
 | Phase 01 P08 | 55min | 3 tasks | 2 files |
+| Phase 01 P09 | ~40min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -313,6 +314,7 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: check-workflow-output-delimiter.sh compares $GITHUB_OUTPUT via diff against a file, not bash array iteration — bash 3.2 (macOS default /bin/bash, also env bash's resolution) raises unbound-variable on ${arr[@]} expansion of an empty array under set -euo pipefail
 - [Phase 01]: GH #20 baseline drift attributed to FLEET (+46.90% hardware vs +3.15% code, inside DefaultThroughputTolerance); Namespace cache volume follow-up closed won't-do; both recorded in tools/bench/BASELINE.md and GH #20 closed
 - [Phase 01]: 01-08: cytoscape teardown fix required TWO closures, not one — deferring GraphCanvas's own cy.destroy() alone was insufficient because cytoscape's Core constructor auto-destroys a prior instance registered on a reused container element (container._cyreg), bypassing this component's own teardown timing entirely. Fixed by giving every mount a dedicated, never-reused cytoscape container element in addition to the deferred-destroy gate. — Live reproduction (instance/generation tracing) proved cy.destroyed() was already true before this component's own destroyNow() ever ran, tracing to cytoscape's own container-reuse auto-destroy path in its Core constructor.
+- [Phase 01]: 01-09: guava invalid-endpoints race root-caused to cytoscape's own implicit default construction-time 'grid' layout (not an ELK option), fixed via layout:{name:'null'} on the Core constructor plus edge-hide/reveal defense-in-depth around ELK's real layout
 
 ### Pending Todos
 
@@ -472,10 +474,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/01-defect-flake-burn-down/01-09-PLAN.md
+**Resume file:** None
 
-Last session: 2026-09-15T16:20:15.148Z
-Stopped at: Phase 1: 8/9 plans complete; paused before re-dispatching 01-09 (FIX-05). Context cleared.
+Last session: 2026-09-15T19:01:50.711Z
+Stopped at: Completed 01-09-PLAN.md
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
