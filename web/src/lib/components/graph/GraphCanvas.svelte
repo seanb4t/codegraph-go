@@ -139,6 +139,16 @@
 	const LAYOUT_OPTIONS = {
 		name: 'elk',
 		fit: true,
+		// FIX-05 (plan 01-09) turned out to be a first-render-tick race in
+		// OUR OWN mount flow, not a layout-option lever at all — see the
+		// FIX-05 comment on createFileGraphRenderer's start()/runLayout()
+		// below for the actual mechanism and fix, and .planning/STATE.md's
+		// Blockers/Concerns entry for the falsified-LAYOUT_OPTIONS
+		// investigation this superseded. `nodeDimensionsIncludeLabels` is
+		// kept here on its own merits — ELK should see these nodes' TRUE
+		// rendered size, not the pre-overflow style box — independent of
+		// that fix.
+		nodeDimensionsIncludeLabels: true,
 		elk: {
 			algorithm: 'layered',
 			'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
@@ -304,6 +314,16 @@
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		let pendingLayoutSettledCallback: (() => void) | undefined;
 
+		// FIX-05 (plan 01-09): whether this renderer's very first layout
+		// (start() below, which hides every edge before running it) has
+		// already revealed those edges — set true exactly once, inside the
+		// SAME generation-checked layoutstop callback runLayout already
+		// gates on below, so a superseded first run never reveals and
+		// whichever generation actually settles first does so exactly
+		// once. Irrelevant to every later replace()/add()/liveUpdate()
+		// layout, which never hides anything in the first place.
+		let firstPaintRevealed = false;
+
 		// runLayout always uses the SAME layered/hierarchyHandling elk
 		// algorithm configuration — never a different layout. Only `fit`
 		// varies between the initial paint and a later replace: fitting
@@ -359,6 +379,16 @@
 				// If the mount effect's cleanup deferred cy.destroy() waiting
 				// on exactly this, run it now — the whole reason it deferred.
 				layoutInFlight = false;
+				// FIX-05 (plan 01-09): reveal the hidden edges the FIRST
+				// time any generation of this renderer's layout settles —
+				// every node now holds its real, ELK-settled position, so
+				// no edge can any longer observe an unresolved endpoint.
+				// Gated by the SAME token check above: a superseded run
+				// returns before ever reaching here.
+				if (!firstPaintRevealed) {
+					firstPaintRevealed = true;
+					opts.cy.edges().removeStyle('display');
+				}
 				if (pendingLayoutSettledCallback) {
 					const settled = pendingLayoutSettledCallback;
 					pendingLayoutSettledCallback = undefined;
@@ -461,6 +491,32 @@
 			// by a synthetic first "replace") — so the very first layout
 			// is not preceded by a remove/add cycle.
 			start() {
+				// FIX-05 (plan 01-09, .planning/STATE.md's Blockers/Concerns
+				// entry has the falsified-LAYOUT_OPTIONS investigation this
+				// supersedes): the guava
+				// android/guava-tests/.../util/concurrent <->
+				// android/guava/src/.../util/concurrent pair's edges trip
+				// cytoscape's own once-per-edge checkForInvalidEdgeWarning on
+				// the FIRST render tick after construction — before ELK's
+				// async layout Promise (cytoscape-elk/src/layout.js only
+				// ever calls nodes.layoutPositions(), never touching edge
+				// geometry) has written back real node positions, that
+				// pair's rscratch.endX/endY is still null. Hiding every edge
+				// via cytoscape's own `display` bypass (NOT css visibility
+				// on the container — cytoscape computes rscratch geometry
+				// independent of the container's paint visibility, so a
+				// css-only hide would not stop the warning) skips them
+				// entirely from findEdgeControlPoints' per-pair loop
+				// (takesUpSpace() is false once display !== 'element'), so
+				// no edge is ever drawn — or warned about — before this
+				// generation's first layoutstop reveals them below with
+				// every node's real, settled position (see the reveal in
+				// runLayout's layoutstop callback above). NODES are left
+				// untouched: layoutDimensions() zeroes a HIDDEN NODE's own
+				// width/height (used by ELK's own sizing), but never an
+				// edge's — hiding only edges cannot perturb what ELK lays
+				// out.
+				opts.cy.edges().style('display', 'none');
 				runLayout(performance.now(), true);
 			},
 			// replace swaps the live instance's element set in ONE batch
@@ -907,7 +963,34 @@
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			elements: initialElements as any,
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			style: untrack(() => style) as any
+			style: untrack(() => style) as any,
+			// FIX-05 (plan 01-09): the ACTUAL first-render-tick race — found
+			// by instrumenting checkForInvalidEdgeWarning's own call site
+			// live and correlating its timestamp against this effect's own
+			// code, not by inspecting settled state after the fact. cytoscape
+			// core's OWN constructor runs a layout of its own before this
+			// call ever returns control to us (Core's setElesAndLayout:
+			// `options.layout = extend({name: head ? 'grid' : 'null'}, ...)`
+			// then `cy.layout(layoutOpts).run()`) — when no `layout` option
+			// is passed, that default is `'grid'`, which assigns every node
+			// a DISTINCT position and, for this guava pair specifically,
+			// produces a genuinely degenerate edge-endpoint computation
+			// during that grid layout's own construction-time
+			// getFitViewport()/boundingBox() call — entirely BEFORE
+			// createFileGraphRenderer's start() (below) ever runs, so no
+			// amount of hiding or gating inside start()/runLayout() can
+			// reach it. `layout: { name: 'null' }` replaces that default:
+			// cytoscape's own NullLayout (cytoscape.esm.mjs) puts every node
+			// at the SAME (0, 0) point rather than computing distinct grid
+			// positions, so every edge's nodesOverlap is true and
+			// checkForInvalidEdgeWarning's own overlap short-circuit
+			// (rs.nodesOverlap || ...) suppresses the warning outright —
+			// this is cytoscape's OWN sanctioned no-op state for "no layout
+			// has run yet", not a hack. start() below still hides every edge
+			// before running the REAL (elk) layout and reveals them on its
+			// first layoutstop, as defense in depth for the same class of
+			// race during ELK's own async completion.
+			layout: { name: 'null' }
 		});
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
