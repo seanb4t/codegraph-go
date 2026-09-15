@@ -94,7 +94,11 @@ class FakeCore {
 		};
 	}
 	edges() {
-		return { length: this.els.filter((e) => 'source' in e.data).length };
+		return {
+			length: this.els.filter((e) => 'source' in e.data).length,
+			style: () => {},
+			removeStyle: () => {}
+		};
 	}
 	resize() {}
 	destroy() {
