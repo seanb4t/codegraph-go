@@ -6,10 +6,10 @@ current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
 stopped_at: Completed 01-05-PLAN.md (resumed after checkpoint)
-last_updated: "2026-09-15T15:19:13.281Z"
+last_updated: "2026-09-15T15:20:15.379Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: 177d9fce35a0f3a36b57dbb58e76d58d92f71916
+state_head: f86e86b5b2920e8ba8d4f64a558d89a0f2ce2485
 progress:
   total_phases: 7
   completed_phases: 0
@@ -364,7 +364,6 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 12] `DisableAutoGenTag = true` is set on the tree `NewRootCmd()` returns; `codegraph man` builds its own tree in `man.go` and still emits cobra's auto-gen date line — unchanged behaviour, noted so nobody expects the man pages to be byte-stable across days.
 - ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
-- 01-05 halted at Task 2 checkpoint:human-action — GH #20 discriminator dispatch (temp-ref push + workflow_dispatch + issue close) requires explicit human authorization not granted in this dispatch. FIX-11 NOT complete; GH #20 still OPEN. Same completed_plans miscount as the already-documented tooling gap above: state.record-session/sync counted this halted-status SUMMARY as a completed plan — the true count is 4/9, not 5/9, and Current Position 'Plan: 5 of 9' below means 'currently on plan 5', not 'plan 5 done'.
 
 ### Quick Tasks Completed
 
