@@ -6,10 +6,10 @@ current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
 stopped_at: "Phase 1: 8/9 plans complete; paused before re-dispatching 01-09 (FIX-05). Context cleared."
-last_updated: "2026-09-15T16:20:15.268Z"
-last_activity: 2026-09-14
+last_updated: "2026-09-15T18:05:07.221Z"
+last_activity: 2026-09-15
 last_activity_desc: Phase 01 execution started
-state_head: cf0e183d302894f9542452f167d6098e0a579cb3
+state_head: 50f6a5acfafc53d7c2ab917832642d09bf6948e2
 progress:
   total_phases: 7
   completed_phases: 0
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 9 of 9
-Status: Ready to execute
-Last activity: 2026-09-14 — Phase 01 execution started
+Plan: 1 of 9
+Status: Executing Phase 01
+Last activity: 2026-09-15 — Phase 01 execution started
 
 ## Performance Metrics
 
@@ -366,6 +366,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 12] `DisableAutoGenTag = true` is set on the tree `NewRootCmd()` returns; `codegraph man` builds its own tree in `man.go` and still emits cobra's auto-gen date line — unchanged behaviour, noted so nobody expects the man pages to be byte-stable across days.
 - ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
+- Plan 01-09 Task 1 (FIX-05 guava invalid-endpoints warning) BLOCKED at a Rule-4 architectural checkpoint: exhaustively tested every D-07-sanctioned LAYOUT_OPTIONS lever (explicit elk.spacing.nodeNode/nodeNodeBetweenLayers at 4x default; nodeDimensionsIncludeLabels; elk.nodeSize.constraints=MINIMUM_SIZE with an explicit minimum; disabling all three interactive strategies; toggling fit true/false) across 5 independent rebuild-and-verify cycles — the same bidirectional android/guava-tests<->android/guava util/concurrent pair (the corpus's two highest-degree nodes, 24/31, longest labels) still warns identically every time. Read cytoscape-elk@2.3.0's own source (src/layout.js): it only ever calls nodes.layoutPositions() to move NODE positions — it never touches edge geometry/bend-points at all, so no ELK option can structurally influence what triggers cytoscape's own checkForInvalidEdgeWarning. A synchronous console.warn probe proved the warning fires on the first post-write-back render tick with the edge's own rscratch.endX/endY still null (a cytoscape-internal render-timing artifact, self-healing by settle — not a final-layout overlap). Closing this appears to require touching graph-style.ts (edge curve-style), which this plan's Task 1 explicitly prohibits, or a GraphCanvas.svelte rendering-flow restructuring beyond "a layout, spacing, or sizing change" — outside this plan's authorized scope. Full investigation log in the executor's final report. Working tree left uncommitted with the one defensible, harmless LAYOUT_OPTIONS change kept (nodeDimensionsIncludeLabels: true) for reviewer convenience; it does not close the warning.
 
 ### Quick Tasks Completed
 
