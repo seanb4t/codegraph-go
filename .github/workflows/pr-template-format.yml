@@ -39,10 +39,22 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          # Per-run delimiter, not a fixed literal: this step writes
+          # fork-controlled PR file paths (pull_request_target) into a
+          # multi-line $GITHUB_OUTPUT heredoc. A fork PR that adds a file
+          # path equal to a FIXED delimiter closes the heredoc early and
+          # lets the remaining paths be read as further $GITHUB_OUTPUT
+          # assignments — GH #15. A longer fixed literal is the same
+          # defect with more characters, since the workflow file is
+          # public. 128 bits of per-run entropy is unguessable by a fork
+          # authoring paths ahead of time. See also require-issue-link.yml,
+          # which has the byte-identical shape, and
+          # `task check:workflow-output-delimiter`.
+          DELIM="PRFILES_$(openssl rand -hex 16)"
           {
-            echo "files<<PRFILES_EOF"
+            echo "files<<${DELIM}"
             gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json files --jq '.files[].path'
-            echo "PRFILES_EOF"
+            echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Evaluate template policy
