@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-15T05:01:17.902Z"
+stopped_at: "Halted at 01-05 Task 2 checkpoint:human-action (GH #20 discriminator dispatch requires explicit push/gh-write authorization)"
+last_updated: "2026-09-15T12:32:59.399Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: 2bd660b354c70f9c2171bf597df86da2ededade8
+state_head: 7d5815e0d984f02255ddcf600f7bf22f3469ff7c
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -302,6 +302,8 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: 01-02: unrelated pre-existing flake TestDaemonFlushLockRequeueGivesUpPerEpisode surfaced under this session's high local machine load during full-suite -race verification — logged to deferred-items.md, not fixed (out of scope; D-14 forbids widening any internal/daemon timeout constant)
 - [Phase 01]: 01-03: CheckRegression's Repo guard closes GH #16 — strict equality per D-16, no normalisation; GREEN commit uses fix(01-03) not feat(01-03) per the plan's own instruction since this closes a missing-guard bug
 - [Phase 01]: FIX-06: index --force now classifies prior-store errors three ways (ErrNotFound=silent floor 0, ErrStoreLocked=refuse before RemoveAll, other=warn+rebuild) via graphstore's exported sentinels, closing WINDOWS #36.
+- [Phase 01]: GH #20 follow-up 1 (Namespace cache volume, 8x16) closed WON'T-DO on the record: ubuntu-latest is free and 28.6x more stable than Namespace 4x8, matching the issue's own adoption bar; a cache volume cannot reach host-placement variance, the leading unrefuted explanation.
+- [Phase 01]: GH #20 follow-up 2's drift discriminator is fully specified in tools/bench/BASELINE.md (ref d4672cf5..., job rebless, -seed 42 -count 120000 -trials 7, ubuntu-latest) but NOT dispatched — dispatching requires pushing a temp branch and triggering CI, both outward-facing actions this session was not authorized to perform.
 
 ### Pending Todos
 
@@ -355,6 +357,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 12] `DisableAutoGenTag = true` is set on the tree `NewRootCmd()` returns; `codegraph man` builds its own tree in `man.go` and still emits cobra's auto-gen date line — unchanged behaviour, noted so nobody expects the man pages to be byte-stable across days.
 - ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
+- 01-05 halted at Task 2 checkpoint:human-action — GH #20 discriminator dispatch (temp-ref push + workflow_dispatch + issue close) requires explicit human authorization not granted in this dispatch. FIX-11 NOT complete; GH #20 still OPEN. Same completed_plans miscount as the already-documented tooling gap above: state.record-session/sync counted this halted-status SUMMARY as a completed plan — the true count is 4/9, not 5/9, and Current Position 'Plan: 5 of 9' below means 'currently on plan 5', not 'plan 5 done'.
 
 ### Quick Tasks Completed
 
@@ -460,10 +463,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** None
+**Resume file:** .planning/phases/01-defect-flake-burn-down/01-05-SUMMARY.md
 
-Last session: 2026-09-15T05:01:17.885Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-09-15T12:31:45.747Z
+Stopped at: Halted at 01-05 Task 2 checkpoint:human-action (GH #20 discriminator dispatch requires explicit push/gh-write authorization)
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
