@@ -134,7 +134,10 @@ export const fileGraphStyle: unknown[] = [
 			label: 'data(label)',
 			'font-size': 7,
 			color: '#404040',
-			'text-valign': 'right',
+			// Removed the invalid `text-valign: 'right'` (text-valign only
+			// accepts top/center/bottom; 'right' is a text-halign value,
+			// FIX-05/D-08). No replacement needed — cytoscape's default
+			// text-valign is already 'center'.
 			'text-halign': 'right',
 			'text-margin-x': 4
 		}
