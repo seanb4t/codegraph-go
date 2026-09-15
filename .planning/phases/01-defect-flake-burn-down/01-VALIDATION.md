@@ -3,9 +3,9 @@ phase: "1"
 slug: "defect-flake-burn-down"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-14"
 ---
 
@@ -45,15 +45,15 @@ created: "2026-09-14"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | FIX-02 | — | Favicon loads under the unchanged `default-src 'self'` CSP; no CSP-blocked console entry | unit + live-browser | `go test ./internal/uiserver/... -run TestSPA` (negative control — must stay green and unedited) + live `/` + `/graph` load asserting no CSP violation for the icon | ✅ `internal/uiserver/spa_test.go`; ❌ favicon-content check — W0 | ⬜ pending |
-| TBD | TBD | TBD | FIX-04 | — | Zero uncaught page errors on `/graph`, both corpora | live-browser | `node web/scripts/graph-console-check.mjs` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | FIX-05 | — | Zero `console.warn`/`console.error` from our code, both corpora | live-browser | `node web/scripts/graph-console-check.mjs` (same script) | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | FIX-06 | T-10-16 | `index --force` refuses before `RemoveAll` on a held store; warns and rebuilds on a corrupt one | integration | `go test ./internal/cli/... -run TestIndexForce` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | FIX-07 | — | Watchdog test passes deterministically under full-suite parallel load | integration | `GOTOOLCHAIN=go1.26.6 go test -race -count=1 ./...` | ✅ test exists, **currently RED** under this command | ⬜ pending |
-| TBD | TBD | TBD | FIX-08 | — | `getppid` seam is per-instance; race structurally impossible | unit + code-shape | `GOTOOLCHAIN=go1.26.6 go test -race -count=1 ./internal/daemon/...` **and** `rg -n '^var getppid' internal/daemon/watchdog.go` returning no match | ✅ race test; ❌ code-shape assertion — W0 | ⬜ pending |
-| TBD | TBD | TBD | FIX-09 | — | `CheckRegression` refuses a `Repo` mismatch with a rebless-pointing message | unit | `go test ./internal/bench/... -run TestCheckRegression` | ✅ `internal/bench/regression_test.go` | ⬜ pending |
-| TBD | TBD | TBD | FIX-10 | GH #15 | Neither workflow's heredoc is terminable by a fork-controlled `PRFILES_EOF` path | shell/script | new script test + Taskfile target | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | FIX-11 | — | Both GH #20 follow-ups end in a recorded decision | process/doc | `git log -S'11279' -- tools/bench/baseline.json`, a `workflow_dispatch` bench run, a `tools/bench/BASELINE.md` entry, `gh issue close 20` | N/A — process gate | ⬜ pending |
+| 01-06.1–2 | 01-06 | 2 | FIX-02 | T-01-06-01 | Favicon loads under the unchanged `default-src 'self'` CSP; no CSP-blocked console entry | unit + live-browser | `GOTOOLCHAIN=go1.26.6 go test ./internal/uiserver/ -run TestFavicon -count=1` + `task check:graph-console` | ✅ `internal/uiserver/favicon_test.go` (added by validate-phase, d2aaab2d); ✅ `internal/uiserver/spa_test.go` negative control unedited | ✅ green |
+| 01-01.1–2, 01-08.1–3, 01-09.1–2 | 01-01, 01-08, 01-09 | 1, 3, 4 | FIX-04 | — | Zero uncaught page errors on `/graph`, both corpora | live-browser + unit | `task check:graph-console` (self-test, then both corpora) + `cd web && pnpm vitest run tests/graph-live-update.test.ts` | ✅ `web/scripts/graph-console-check.mjs`, ✅ `corpora/graph-console-check.json` (success: true), ✅ `web/tests/graph-live-update.test.ts` (teardown-guard + CR-01 bubble regression) | ✅ green |
+| 01-01.1–2, 01-09.1–2 | 01-01, 01-09 | 1, 4 | FIX-05 | — | Zero `console.warn`/`console.error` from our code, both corpora, allowlist empty | live-browser | `task check:graph-console` (same script; RED/GREEN toggle recorded in 01-09-SUMMARY) | ✅ same script + verdict; allowlist array empty | ✅ green |
+| 01-04.1–2 | 01-04 | 1 | FIX-06 | T-10-16 | `index --force` refuses before `RemoveAll` on a held store; warns and rebuilds on a corrupt one | integration | `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/... -run TestIndexForce -count=1` | ✅ `internal/cli/index_lock_test.go` (4 tests) | ✅ green |
+| 01-02.1–3 | 01-02 | 1 | FIX-07 | — | Watchdog test passes deterministically under parallel load (injected ticker, no timeout widening) | integration | `GOTOOLCHAIN=go1.26.6 go test -race -count=1 ./internal/daemon/...` | ✅ `internal/daemon/watchdog_test.go`, `daemon_test.go` | ✅ green |
+| 01-02.1–3 | 01-02 | 1 | FIX-08 | — | `getppid` seam is per-instance; race structurally impossible | unit + code-shape | `GOTOOLCHAIN=go1.26.6 go test -race -count=1 ./internal/daemon/... -run TestWatchdogSeamShape` **and** `rg -n '^var getppid' internal/daemon/watchdog.go` returning no match | ✅ `internal/daemon/watchdog_shape_test.go` | ✅ green |
+| 01-03.1–2 | 01-03 | 1 | FIX-09 | — | `CheckRegression` refuses a `Repo` mismatch with a rebless-pointing message | unit | `GOTOOLCHAIN=go1.26.6 go test ./internal/bench/... -run TestCheckRegression -count=1` | ✅ `internal/bench/regression_test.go` (37 subtests) | ✅ green |
+| 01-07.1–2 | 01-07 | 2 | FIX-10 | GH #15 | Neither workflow's heredoc is terminable by a fork-controlled `PRFILES_EOF` path (per-run random delimiter) | shell/script | `task check:workflow-output-delimiter` (self-test RED, then real run) | ✅ `scripts/check-workflow-output-delimiter.sh` + Taskfile target | ✅ green |
+| 01-05.1–3 | 01-05 | 1 | FIX-11 | — | Both GH #20 follow-ups end in a recorded decision | process/doc | `gh issue view 20 --json state` = CLOSED; `tools/bench/BASELINE.md` entry (drift = fleet +46.90%, code +3.15%) | N/A — process gate (manual-only by design) | ✅ closed |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -79,12 +79,12 @@ pasted into the plan's `<verify>` evidence. A guard carrying only a negative ass
 
 ## Wave 0 Requirements
 
-- [ ] `internal/cli/index_lock_test.go` — FIX-06, modeled on `internal/graphstore/open_lock_test.go`
-- [ ] `web/scripts/graph-console-check.mjs` — FIX-04 and FIX-05 together (D-09 names one script)
-- [ ] A shell/script test exercising the `$GITHUB_OUTPUT` heredoc block + its Taskfile target — FIX-10
-- [ ] A code-shape assertion that `internal/daemon/watchdog.go` has no package-level `var getppid` — FIX-08's "structurally impossible" bar (a passing `-race` run proves only that no race happened *this run*, never that one is impossible)
-- [ ] A favicon-content check that fails on the Svelte logo — FIX-02
-- [ ] No framework install needed — every gap is a new file inside the existing Go / `.mjs` conventions
+- [x] `internal/cli/index_lock_test.go` — FIX-06, modeled on `internal/graphstore/open_lock_test.go`
+- [x] `web/scripts/graph-console-check.mjs` — FIX-04 and FIX-05 together (D-09 names one script)
+- [x] `scripts/check-workflow-output-delimiter.sh` + `task check:workflow-output-delimiter` — a shell/script test exercising the `$GITHUB_OUTPUT` heredoc block + its Taskfile target — FIX-10
+- [x] `internal/daemon/watchdog_shape_test.go` — a code-shape assertion that `internal/daemon/watchdog.go` has no package-level `var getppid` — FIX-08's "structurally impossible" bar (a passing `-race` run proves only that no race happened *this run*, never that one is impossible)
+- [x] `internal/uiserver/favicon_test.go` — a favicon-content check that fails on the Svelte logo — FIX-02 (added by validate-phase 2026-09-15, RED-proven)
+- [x] No framework install needed — every gap is a new file inside the existing Go / `.mjs` conventions
 
 ---
 
@@ -100,11 +100,20 @@ pasted into the plan's `<verify>` evidence. A guard carrying only a negative ass
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 250s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags (`pnpm vitest run` one-shot; `go test -count=1`)
+- [x] Feedback latency < 250s (`task check:graph-console` ~90 s; unit gates < 80 s)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-15 by /gsd-validate-phase (autonomous run, maintainer chose "Fix the gap")
+
+## Validation Audit 2026-09-15
+| Metric | Count |
+|--------|-------|
+| Gaps found | 1 (FIX-02: favicon checks existed only as plan 01-06's one-shot `<automated>` commands) |
+| Resolved | 1 (`internal/uiserver/favicon_test.go`, commit d2aaab2d — 4 tests, RED-proven by inverting the `svelte` assertion) |
+| Escalated | 0 |
+
+Post-execution note: FIX-04/05's web coverage was tightened after execution by the code-review fix loop (CR-01 bubble-scoping regression in `graph-live-update.test.ts`; WR-01 fake-completeness across 7 test files) — `cd web && pnpm vitest run` must be judged by exit code 0 plus zero "unhandled errors" lines, not by the pass count.
