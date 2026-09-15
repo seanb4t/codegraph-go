@@ -1813,6 +1813,28 @@ tasks:
       - node web/scripts/check-no-force-layout.mjs --self-test
       - node web/scripts/check-no-force-layout.mjs
 
+  check:workflow-output-delimiter:
+    desc: >-
+      D-17's local, BLOCKING, positive-controlled proof (FIX-10, GH #15) that
+      neither pull_request_target workflow's multi-line $GITHUB_OUTPUT write
+      is terminable by a fork-authored file path matching the heredoc
+      delimiter. Extracts and runs the shell block each of
+      require-issue-link.yml and pr-template-format.yml actually ships (not
+      a hand-copied duplicate), against a payload containing a path named
+      after the old fixed delimiter, and asserts the round trip is intact.
+      Runs --self-test FIRST: a harness that can no longer observe the OLD
+      fixed-delimiter form corrupting the payload, or that cannot show two
+      generated delimiters differ, must never be trusted. Not wired into
+      any workflow — CI wiring is a later phase's scope.
+    preconditions:
+      - sh: command -v openssl
+        msg: "openssl not found — both workflows and this harness's --self-test entropy check derive the per-run delimiter via openssl rand -hex 16."
+      - sh: command -v awk
+        msg: "awk not found — check-workflow-output-delimiter.sh extracts each workflow's run: body with awk, not a YAML parser dependency."
+    cmds:
+      - bash scripts/check-workflow-output-delimiter.sh --self-test
+      - bash scripts/check-workflow-output-delimiter.sh
+
   check:graph-console:
     desc: >-
       D-09's permanent, self-tested, live-Chromium `/graph` console gate
