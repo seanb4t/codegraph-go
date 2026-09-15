@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "success": false,
-  "generatedAt": "2026-09-15T03:59:24.728Z",
+  "success": true,
+  "generatedAt": "2026-09-15T18:52:28.309Z",
   "browserIdentity": {
     "name": "chromium",
     "version": "151.0.7922.34"
@@ -10,49 +10,13 @@
     {
       "corpus": "self",
       "repo": "seanb4t/codegraph-go",
-      "sha": "c01eff7ddbebeadbab990d59fe9dae5dede501c5",
-      "url": "http://127.0.0.1:58354/graph",
-      "pageErrorCount": 1,
-      "pageErrors": [
-        "Cannot read properties of null (reading 'notify')"
-      ],
-      "consoleWarnCount": 2,
-      "consoleErrorCount": 1,
-      "consoleMessages": [
-        {
-          "type": "error",
-          "text": "Loading the image 'data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='107'%20height='128'%20viewBox='0%200%20107%20128'%3e%3ctitle%3esvelte-logo%3c/title%3e%3cpath%20d='M94.157%2022.819c-10.4-14.885-30.94-19.297-45.792-9.835L22.282%2029.608A29.92%2029.92%200%200%200%208.764%2049.65a31.5%2031.5%200%200%200%203.108%2020.231%2030%2030%200%200%200-4.477%2011.183%2031.9%2031.9%200%200%200%205.448%2024.116c10.402%2014.887%2030.942%2019.297%2045.791%209.835l26.083-16.624A29.92%2029.92%200%200%200%2098.235%2078....052-3.878%206.24%206.24%200%200%200-6.696-2.485%205.8%205.8%200%200%200-1.602.704L37.73%2051.72a5.42%205.42%200%200%200-2.449%203.63%205.79%205.79%200%200%200%20.986%204.372%206.24%206.24%200%200%200%206.698%202.486%205.8%205.8%200%200%200%201.602-.704l9.952-6.342a19%2019%200%200%201%205.295-2.328%2020.72%2020.72%200%200%201%2022.237%208.242%2019.17%2019.17%200%200%201%203.277%2014.503%2018%2018%200%200%201-8.13%2012.053l-26.081%2016.622a19%2019%200%200%201-5.3%202.328'%20style='fill:%23fff'/%3e%3c/svg%3e' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked.",
-          "location": {
-            "url": "http://127.0.0.1:58354/_app/immutable/chunks/D4wYvzMg.js",
-            "line": 0,
-            "column": 0,
-            "lineNumber": 0,
-            "columnNumber": 0
-          }
-        },
-        {
-          "type": "warning",
-          "text": "The style property `text-valign: right` is invalid",
-          "location": {
-            "url": "http://127.0.0.1:58354/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        },
-        {
-          "type": "warning",
-          "text": "The style property `text-valign: right` is invalid",
-          "location": {
-            "url": "http://127.0.0.1:58354/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        }
-      ],
+      "sha": "676b2540c4802eb966bc940191c456fbef9d68c1",
+      "url": "http://127.0.0.1:53756/graph",
+      "pageErrorCount": 0,
+      "pageErrors": [],
+      "consoleWarnCount": 0,
+      "consoleErrorCount": 0,
+      "consoleMessages": [],
       "allowlistedCount": 0,
       "nodeCount": 111,
       "edgeCount": 159,
@@ -63,176 +27,17 @@
       "corpus": "guava",
       "repo": "google/guava",
       "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
-      "url": "http://127.0.0.1:58605/graph",
-      "pageErrorCount": 1,
-      "pageErrors": [
-        "Cannot read properties of null (reading 'notify')"
-      ],
-      "consoleWarnCount": 6,
-      "consoleErrorCount": 1,
-      "consoleMessages": [
-        {
-          "type": "error",
-          "text": "Loading the image 'data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='107'%20height='128'%20viewBox='0%200%20107%20128'%3e%3ctitle%3esvelte-logo%3c/title%3e%3cpath%20d='M94.157%2022.819c-10.4-14.885-30.94-19.297-45.792-9.835L22.282%2029.608A29.92%2029.92%200%200%200%208.764%2049.65a31.5%2031.5%200%200%200%203.108%2020.231%2030%2030%200%200%200-4.477%2011.183%2031.9%2031.9%200%200%200%205.448%2024.116c10.402%2014.887%2030.942%2019.297%2045.791%209.835l26.083-16.624A29.92%2029.92%200%200%200%2098.235%2078....052-3.878%206.24%206.24%200%200%200-6.696-2.485%205.8%205.8%200%200%200-1.602.704L37.73%2051.72a5.42%205.42%200%200%200-2.449%203.63%205.79%205.79%200%200%200%20.986%204.372%206.24%206.24%200%200%200%206.698%202.486%205.8%205.8%200%200%200%201.602-.704l9.952-6.342a19%2019%200%200%201%205.295-2.328%2020.72%2020.72%200%200%201%2022.237%208.242%2019.17%2019.17%200%200%201%203.277%2014.503%2018%2018%200%200%201-8.13%2012.053l-26.081%2016.622a19%2019%200%200%201-5.3%202.328'%20style='fill:%23fff'/%3e%3c/svg%3e' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked.",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/chunks/D4wYvzMg.js",
-            "line": 0,
-            "column": 0,
-            "lineNumber": 0,
-            "columnNumber": 0
-          }
-        },
-        {
-          "type": "warning",
-          "text": "The style property `text-valign: right` is invalid",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        },
-        {
-          "type": "warning",
-          "text": "Edge `4be72473-e59a-4887-9185-432eee9e7fd8` has invalid endpoints and so it is impossible to draw.  Adjust your edge style (e.g. control points) accordingly or use an alternative edge type.  This is expected behaviour when the source node and the target node overlap.",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        },
-        {
-          "type": "warning",
-          "text": "Edge `a963dbd8-0957-4eb3-b848-eae8d83c27f1` has invalid endpoints and so it is impossible to draw.  Adjust your edge style (e.g. control points) accordingly or use an alternative edge type.  This is expected behaviour when the source node and the target node overlap.",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        },
-        {
-          "type": "warning",
-          "text": "The style property `text-valign: right` is invalid",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        },
-        {
-          "type": "warning",
-          "text": "Edge `4be72473-e59a-4887-9185-432eee9e7fd8` has invalid endpoints and so it is impossible to draw.  Adjust your edge style (e.g. control points) accordingly or use an alternative edge type.  This is expected behaviour when the source node and the target node overlap.",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        },
-        {
-          "type": "warning",
-          "text": "Edge `a963dbd8-0957-4eb3-b848-eae8d83c27f1` has invalid endpoints and so it is impossible to draw.  Adjust your edge style (e.g. control points) accordingly or use an alternative edge type.  This is expected behaviour when the source node and the target node overlap.",
-          "location": {
-            "url": "http://127.0.0.1:58605/_app/immutable/nodes/4.DiRfpLFZ.js",
-            "line": 3,
-            "column": 14299,
-            "lineNumber": 3,
-            "columnNumber": 14299
-          }
-        }
-      ],
+      "url": "http://127.0.0.1:53765/graph",
+      "pageErrorCount": 0,
+      "pageErrors": [],
+      "consoleWarnCount": 0,
+      "consoleErrorCount": 0,
+      "consoleMessages": [],
       "allowlistedCount": 0,
       "nodeCount": 134,
       "edgeCount": 819,
       "collapsedNodeCount": 134,
-      "invalidEndpointDiagnostics": [
-        {
-          "edgeId": "4be72473-e59a-4887-9185-432eee9e7fd8",
-          "sourceId": "android/guava-tests/test/com/google/common/util/concurrent",
-          "targetId": "android/guava/src/com/google/common/util/concurrent",
-          "sourcePosition": {
-            "x": 1308,
-            "y": 6011.958757763976
-          },
-          "targetPosition": {
-            "x": 990,
-            "y": 6742.43032967033
-          },
-          "sourceBoundingBox": {
-            "x1": 1166,
-            "y1": 5966.958757763976,
-            "x2": 1450,
-            "y2": 6056.958757763976,
-            "w": 284,
-            "h": 90
-          },
-          "targetBoundingBox": {
-            "x1": 862.5,
-            "y1": 6697.43032967033,
-            "x2": 1117.5,
-            "y2": 6787.43032967033,
-            "w": 255,
-            "h": 90
-          },
-          "sourceIsParent": false,
-          "targetIsParent": false,
-          "sourceChildCount": 0,
-          "targetChildCount": 0,
-          "scratch": {
-            "startX": 1291.4168563260419,
-            "startY": 6055.958757763976,
-            "endX": 1014.509045285473,
-            "endY": 6693.056034499589
-          }
-        },
-        {
-          "edgeId": "a963dbd8-0957-4eb3-b848-eae8d83c27f1",
-          "sourceId": "android/guava/src/com/google/common/util/concurrent",
-          "targetId": "android/guava-tests/test/com/google/common/util/concurrent",
-          "sourcePosition": {
-            "x": 990,
-            "y": 6742.43032967033
-          },
-          "targetPosition": {
-            "x": 1308,
-            "y": 6011.958757763976
-          },
-          "sourceBoundingBox": {
-            "x1": 862.5,
-            "y1": 6697.43032967033,
-            "x2": 1117.5,
-            "y2": 6787.43032967033,
-            "w": 255,
-            "h": 90
-          },
-          "targetBoundingBox": {
-            "x1": 1166,
-            "y1": 5966.958757763976,
-            "x2": 1450,
-            "y2": 6056.958757763976,
-            "w": 284,
-            "h": 90
-          },
-          "sourceIsParent": false,
-          "targetIsParent": false,
-          "sourceChildCount": 0,
-          "targetChildCount": 0,
-          "scratch": {
-            "startX": 1006.5831436739581,
-            "startY": 6698.43032967033,
-            "endX": 1283.490954714527,
-            "endY": 6061.333052934717
-          }
-        }
-      ]
+      "invalidEndpointDiagnostics": []
     }
   ],
   "error": null
