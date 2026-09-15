@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 01
 current_phase_name: Defect & Flake Burn-down
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-09-15T14:37:41.258Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-09-15T15:09:47.558Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 01 execution started
-state_head: a367e62738795227d5b0ce89de5e8dbb849b3216
+state_head: fb697292657ae21cd79a9929a82fbf19ae77e051
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-14 after scoping v0.14.0)
 ## Current Position
 
 Phase: 01 (Defect & Flake Burn-down) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 01 execution started
 
@@ -140,6 +140,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P03 | 7min | 2 tasks | 2 files |
 | Phase 01 P04 | 20min | 2 tasks | 2 files |
 | Phase 01 P06 | ~30min | 2 tasks | 21 files |
+| Phase 01 P07 | 20 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -306,6 +307,8 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: GH #20 follow-up 1 (Namespace cache volume, 8x16) closed WON'T-DO on the record: ubuntu-latest is free and 28.6x more stable than Namespace 4x8, matching the issue's own adoption bar; a cache volume cannot reach host-placement variance, the leading unrefuted explanation.
 - [Phase 01]: GH #20 follow-up 2's drift discriminator is fully specified in tools/bench/BASELINE.md (ref d4672cf5..., job rebless, -seed 42 -count 120000 -trials 7, ubuntu-latest) but NOT dispatched — dispatching requires pushing a temp branch and triggering CI, both outward-facing actions this session was not authorized to perform.
 - [Phase 01]: 01-06: rsvg-convert used for PNG rendering (no new devDependency); 16px legibility human-check deferred to end-of-phase per human_verify_mode, no autonomous geometry change made
+- [Phase 01]: FIX-10: per-run PRFILES_$(openssl rand -hex 16) delimiter inline in both pull_request_target workflows, not the researched shared-script extraction — require-issue-link.yml deliberately performs no checkout under pull_request_target; a shared script would need one, trading a narrow injection defect for a broader one
+- [Phase 01]: check-workflow-output-delimiter.sh compares $GITHUB_OUTPUT via diff against a file, not bash array iteration — bash 3.2 (macOS default /bin/bash, also env bash's resolution) raises unbound-variable on ${arr[@]} expansion of an empty array under set -euo pipefail
 
 ### Pending Todos
 
@@ -467,8 +470,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-15T14:37:41.230Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-09-15T15:09:47.537Z
+Stopped at: Completed 01-07-PLAN.md
   NEXT: orchestrator presents the v0.14.0 roadmap for approval (revision = roadmapper re-run); on approval commit the planning docs, then `/gsd-discuss-phase 1` / `/gsd-plan-phase 1` (Defect & Flake Burn-down)
   CARRY-OVER:
 
