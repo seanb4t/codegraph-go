@@ -86,7 +86,11 @@ class FakeCore {
 		};
 	}
 	edges() {
-		return { length: this.elements.filter((e) => 'source' in e.data).length };
+		return {
+			length: this.elements.filter((e) => 'source' in e.data).length,
+			style: () => {},
+			removeStyle: () => {}
+		};
 	}
 	resize() {}
 	destroy() {}

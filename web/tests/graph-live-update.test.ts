@@ -486,10 +486,14 @@ function makeGuardFakeCy(initialIds: string[]) {
 		edges() {
 			return {
 				length: elements.filter((e) => 'source' in e.data).length,
-				// FIX-05's reveal call (`opts.cy.edges().removeStyle('display')`)
-				// runs on every renderer's first layout settle, regardless of
-				// which call path (start/replace/add/liveUpdate) triggered it —
-				// a no-op here, since this fake never actually hides anything.
+				// FIX-05's edge-hide call (`opts.cy.edges().style('display',
+				// 'none')`) runs unconditionally in start(), and its reveal
+				// call (`opts.cy.edges().removeStyle('display')`) runs on
+				// every renderer's first layout settle, regardless of which
+				// call path (start/replace/add/liveUpdate) triggered it —
+				// both are no-ops here, since this fake never actually
+				// hides anything.
+				style: () => {},
 				removeStyle: () => {}
 			};
 		},
@@ -733,10 +737,14 @@ function makeBubblingFakeCy(initialIds: string[]) {
 		edges() {
 			return {
 				length: elements.filter((e) => 'source' in e.data).length,
-				// FIX-05's reveal call (`opts.cy.edges().removeStyle('display')`)
-				// runs on every renderer's first layout settle, regardless of
-				// which call path (start/replace/add/liveUpdate) triggered it —
-				// a no-op here, since this fake never actually hides anything.
+				// FIX-05's edge-hide call (`opts.cy.edges().style('display',
+				// 'none')`) runs unconditionally in start(), and its reveal
+				// call (`opts.cy.edges().removeStyle('display')`) runs on
+				// every renderer's first layout settle, regardless of which
+				// call path (start/replace/add/liveUpdate) triggered it —
+				// both are no-ops here, since this fake never actually
+				// hides anything.
+				style: () => {},
 				removeStyle: () => {}
 			};
 		},
@@ -950,7 +958,11 @@ class RouteFakeCore {
 		};
 	}
 	edges() {
-		return { length: this.els.filter((e) => 'source' in e.data).length };
+		return {
+			length: this.els.filter((e) => 'source' in e.data).length,
+			style: () => {},
+			removeStyle: () => {}
+		};
 	}
 	resize() {}
 	destroy() {}
