@@ -378,7 +378,7 @@ gate needs a staleness check, not just a one-time refresh" is a **deferred
 capability**, tracked separately (01-CONTEXT.md Deferred Ideas), not part of
 this decision. Closing GH #20 is not a rejection of that idea.
 
-### Follow-up 2 — the unexplained baseline drift: discriminator specified here, attributed in Task 3
+### Follow-up 2 — the unexplained baseline drift: attributed to FLEET
 
 **Located commit:** `git log -S'11279' -- tools/bench/baseline.json` finds
 `d4672cf5c72a1e83f56e09181ae5b4a7fa3e1ba8`, dated 2026-07-31. Confirmed by
@@ -435,9 +435,46 @@ same seed/count as always. Concretely:
 - **Runner class:** `ubuntu-latest` — the historical `rebless` job's
   `runs-on`, matching the class both the gate and today's committed
   baseline spend on. Same hardware as today's gate; only the code varies.
-- **Measured `files_per_sec`:** PENDING — recorded by Task 3 once the Task 2
-  checkpoint is approved and the dispatched run completes.
-- **Attribution (fleet vs code):** PENDING — recorded by Task 3.
+- **Measured `files_per_sec`:** `16569.160272289788`, from the `rebless`
+  job's `baseline-candidate` artifact ([run 34980422924][gh20-run],
+  2026-09-15T14:15:41Z → 14:30:10Z, `ubuntu-latest`). Same commit
+  (`d4672cf5`), same `-seed 42 -count 120000`, 7 trials, as the historical
+  `11279.591291175333` — only the runner changed underneath it.
+- **Attribution: FLEET.** Three comparisons, each holding one variable
+  constant:
+
+  | Comparison | Held constant | Varied | Result |
+  |---|---|---|---|
+  | July vs today, same commit `d4672cf5` | the code | hardware / fleet | **+46.90%** (`11279.591291175333` → `16569.160272289788`) |
+  | Today, same runner, old vs current code | hardware | the code | **+3.15%** (`16569.160272289788` → `17090.87527197409`, the committed baseline) |
+  | Total (July baseline → committed baseline) | — | both | **+51.52%** |
+
+  The code contribution is **+3.15%** — inside `DefaultThroughputTolerance`
+  (`internal/bench/regression.go`, 10%), indistinguishable from noise.
+  Essentially the entire drift is GitHub runner hardware, consistent with
+  the AMD EPYC 9V74 current-generation part this issue's own A/B already
+  observed. This is the same fleet-vs-code vocabulary "The staleness
+  finding itself" above uses — a control run separating hardware from code
+  is exactly what resolves an ambiguous drift there, and it resolves this
+  one the same way.
+
+**What this does — and does NOT — resolve.** GH #20's own closing
+observation, "if GitHub's fleet can shift ~45% in two days, any baseline
+goes stale fast and the gate needs a staleness check, not just a one-time
+refresh," is now confirmed with a number (~47%, mechanism identified: fleet
+hardware, not code) — but the underlying capability gap is still open.
+While the baseline sat stale at `11279.591291175333`,
+`DefaultThroughputTolerance`'s 10% budget could only fire below
+`11279.591291175333 * 0.9 = 10151.63` files/s. Real performance over that
+window was ~`16569.16` files/s. That means **a regression of up to ~38.7%**
+(`(16569.160272289788 - 10151.6321620577997) / 16569.160272289788 =
+0.3873`) **would have passed the gate green** for as long as the baseline
+stayed stale. Closing GH #20 records the attribution; it does not add a
+staleness check — that remains a **deferred gate capability**, tracked in
+the roadmap backlog (see the "won't-do" section above and 01-CONTEXT.md
+Deferred Ideas), not a defect this closure fixes.
+
+[gh20-run]: https://github.com/seanb4t/codegraph-go/actions/runs/34980422924
 
 ## Measurement procedure
 
