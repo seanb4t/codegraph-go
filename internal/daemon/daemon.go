@@ -136,6 +136,27 @@ type Daemon struct {
 	// the ctx being cancelled. Production callers leave it nil.
 	onWatchOpen func(*watch.Watcher)
 
+	// getppid, when non-nil, replaces os.Getppid as the watchdog's
+	// parent-pid reader. It is a test-only control seam (unexported, no
+	// exported setter — mirrors onSync/onSyncStart/syncFn/onWatchOpen)
+	// that makes D-13's parent-pid seam per-instance rather than a
+	// package-level mutable binding, so two Daemon instances (or two
+	// tests) injecting different readers can never race each other
+	// structurally — the FIX-08 data race is impossible by construction,
+	// not merely serialized by test join discipline. Production callers
+	// leave it nil; Run resolves it to os.Getppid.
+	getppid func() int
+
+	// watchdogTicks, when non-nil, replaces startWatchdog's internally
+	// constructed time.Ticker as the source of "check parent liveness
+	// now" signals. It is a test-only control seam (unexported, no
+	// exported setter — mirrors getppid above) that lets a test drive the
+	// watchdog's poll deterministically by sending on a channel it owns,
+	// instead of racing a real 1s wall-clock ticker under load (D-14;
+	// WINDOWS #12; GH #17). Production callers leave it nil, and
+	// startWatchdog constructs a real ticker at watchdogInterval.
+	watchdogTicks <-chan time.Time
+
 	// probe carries the flag-derived watch.Probe inputs (D-01..D-04's
 	// NoWatch/ForceWatch) that Run's policy gate (WATCH-03/D-11) checks
 	// before ever touching the lockfile. Env/IsWSL are left nil here so
@@ -259,7 +280,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// path, including watch.Open failing below before the watch loop ever
 	// starts.
 	ctx, cancel := context.WithCancel(ctx)
-	stop := startWatchdog(ctx, cancel, watchdogInterval)
+	ppid := d.getppid
+	if ppid == nil {
+		ppid = os.Getppid
+	}
+	stop := startWatchdog(ctx, cancel, watchdogInterval, ppid, d.watchdogTicks)
 	defer func() {
 		cancel()
 		stop()

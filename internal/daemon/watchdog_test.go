@@ -7,32 +7,21 @@ import (
 	"time"
 )
 
-// TestWatchdogCancelsOnReparent drives a synthetic reparent through the
-// injectable getppid seam (no forking required) and asserts cancel() fires
-// within a bounded time, and that stop() returns promptly afterward —
-// proving the poll goroutine actually joined (RESEARCH Pitfall 4).
+// TestWatchdogCancelsOnReparent drives a synthetic reparent through
+// startWatchdog's injected ppid func and tick channel (no forking, no real
+// ticker required) and asserts cancel() fires within a bounded time, and
+// that stop() returns promptly afterward — proving the poll goroutine
+// actually joined (RESEARCH Pitfall 4).
 func TestWatchdogCancelsOnReparent(t *testing.T) {
-	origGetppid := getppid
-	// t.Cleanup (not defer): a defer positioned here would still run on
-	// the runtime.Goexit() unwind a failing t.Fatalf takes, but ONLY a
-	// t.Cleanup registered AFTER the join below is guaranteed by LIFO to
-	// run AFTER that join's cleanup — see joinDaemonRun's ordering
-	// contract (MAINT-01).
-	t.Cleanup(func() { getppid = origGetppid })
-
 	const original = 12345
 	var current int32 = original
-	getppid = func() int { return int(atomic.LoadInt32(&current)) }
+	ppid := func() int { return int(atomic.LoadInt32(&current)) }
+	ticks := make(chan time.Time)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := startWatchdog(ctx, cancel, 5*time.Millisecond)
-	// joinDaemonRun's t.Cleanup, registered AFTER the getppid restore
-	// above, runs FIRST on LIFO unwind: stop() — bounded by the shared
-	// budget, not left to block the whole run indefinitely — is guaranteed
-	// to complete before getppid is restored, regardless of which
-	// statement in this test triggers a Goexit-driven unwind (MAINT-01).
+	stop := startWatchdog(ctx, cancel, 5*time.Millisecond, ppid, ticks)
 	stopErr := make(chan error, 1)
 	go func() {
 		stop()
@@ -41,8 +30,14 @@ func TestWatchdogCancelsOnReparent(t *testing.T) {
 	}()
 	joinDaemonRun(t, cancel, stopErr)
 
-	// Simulate a reparent shortly after start.
+	// Simulate a reparent, then drive the watchdog's next poll directly —
+	// no real ticker is involved anywhere in this path.
 	atomic.StoreInt32(&current, original+1)
+	select {
+	case ticks <- time.Now():
+	case <-time.After(testBudget(2 * time.Second)):
+		t.Fatal("could not send a tick to the watchdog goroutine")
+	}
 
 	select {
 	case <-ctx.Done():
@@ -67,13 +62,9 @@ func TestWatchdogCancelsOnReparent(t *testing.T) {
 // OTHER than the watchdog itself, and that in that path the watchdog never
 // calls cancel a second time.
 func TestWatchdogJoinsOnCtxCancelWithoutFiringCancel(t *testing.T) {
-	origGetppid := getppid
-	// t.Cleanup, not defer — see TestWatchdogCancelsOnReparent's comment;
-	// registered before the join below so LIFO makes the join run first.
-	t.Cleanup(func() { getppid = origGetppid })
-
 	const original = 54321
-	getppid = func() int { return original } // parent never changes
+	ppid := func() int { return original } // parent never changes
+	ticks := make(chan time.Time)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -83,7 +74,7 @@ func TestWatchdogJoinsOnCtxCancelWithoutFiringCancel(t *testing.T) {
 		cancel()
 	}
 
-	stop := startWatchdog(ctx, wrappedCancel, 5*time.Millisecond)
+	stop := startWatchdog(ctx, wrappedCancel, 5*time.Millisecond, ppid, ticks)
 	stopErr := make(chan error, 1)
 	go func() {
 		stop()
