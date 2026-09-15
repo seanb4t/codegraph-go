@@ -432,11 +432,15 @@ function wrapFakeEl(el: FakeEl): any {
 // createFileGraphRenderer uses (per this file's own module comment on
 // "a MINIMAL cytoscape test double... is a legitimate mock"), with two
 // deliberate additions no production code needs: `__handlerAt`/
-// `__handlerCount` expose every `cy.one('layoutstop', ...)` registration
-// so a test can invoke ANY of them directly, in ANY order — reproducing
-// cytoscape's own confirmed bubble-to-`cy` semantics (multiple pending
-// 'one' listeners can each be invoked independently) with full
-// determinism, which real asynchronous ELK cannot give.
+// `__handlerCount` expose every `layoutstop` registration runLayout makes
+// on the layout INSTANCE it just created (CR-01 fix: no longer on `cy`
+// itself — see GraphCanvas.svelte's own comment above `layoutGeneration`)
+// so a test can invoke ANY of them directly, in ANY order — modeling "the
+// stale listener eventually fires on its own, independently" with full
+// determinism, which real asynchronous ELK cannot give. This fake does
+// NOT model cytoscape's bubble-to-`cy` semantics itself (a single real
+// `emit()` invoking multiple listeners in one synchronous pass) — see
+// makeBubblingFakeCy below, which exists specifically for that shape.
 function makeGuardFakeCy(initialIds: string[]) {
 	let elements: FakeEl[] = initialIds.map((id) => ({ data: { id }, pos: { x: 0, y: 0 }, parentFlag: false }));
 	const registeredHandlers: Array<() => void> = [];
@@ -480,14 +484,35 @@ function makeGuardFakeCy(initialIds: string[]) {
 			};
 		},
 		edges() {
-			return { length: elements.filter((e) => 'source' in e.data).length };
+			return {
+				length: elements.filter((e) => 'source' in e.data).length,
+				// FIX-05's reveal call (`opts.cy.edges().removeStyle('display')`)
+				// runs on every renderer's first layout settle, regardless of
+				// which call path (start/replace/add/liveUpdate) triggered it —
+				// a no-op here, since this fake never actually hides anything.
+				removeStyle: () => {}
+			};
 		},
 		resize() {},
 		one(_event: string, handler: () => void) {
+			// CR-01: production code no longer registers 'layoutstop' here
+			// (that would be the exact bug this fix closes) — kept only so
+			// this fake still satisfies the same duck-typed surface real
+			// cytoscape's `cy` exposes, and so any accidental regression
+			// back to `opts.cy.one(...)` would still be captured somewhere
+			// observable rather than silently dropped.
 			registeredHandlers.push(handler);
 		},
 		layout(_opts: unknown) {
-			return { run: () => {}, stop: () => {} };
+			return {
+				// CR-01 fix: runLayout registers its completion listener on
+				// THIS instance, not on `cy` — see comment above.
+				one(_event: string, handler: () => void) {
+					registeredHandlers.push(handler);
+				},
+				run: () => {},
+				stop: () => {}
+			};
 		},
 		__handlerAt(i: number) {
 			return registeredHandlers[i];
@@ -638,6 +663,176 @@ describe('graph live update: layout generation guard (serialization)', () => {
 	});
 });
 
+// --- CR-01 regression: a single real `emit()` bubble must not satisfy
+// two generations' pending listeners in one synchronous pass ---
+//
+// makeGuardFakeCy above (and its `__handlerAt`/`__handlerCount` model)
+// proves the generation-TOKEN check works when a stale listener fires ON
+// ITS OWN, independently, in whatever order a test chooses to invoke
+// them. It cannot reproduce the actual defect CR-01 found: cytoscape's
+// own `emit()` bubbles a layout's `layoutstop` to `cy` and invokes EVERY
+// listener registered on `cy` for that event in ONE synchronous call —
+// so if two generations' callbacks were both registered on `cy` (the
+// pre-fix shape), the OLDER instance's own real completion would invoke
+// BOTH listeners in that single pass, incorrectly settling the newer,
+// still-genuinely-outstanding generation.
+//
+// makeBubblingFakeCy models this precisely: `cy.one(...)` registers on
+// `cy`'s OWN pending-listener list (what the pre-fix code used), while
+// each `cy.layout(...)` call returns an INSTANCE with its own SEPARATE
+// pending-listener list (what the fix uses). Triggering an instance's
+// completion fires that instance's own listeners first, then bubbles by
+// firing whatever is STILL pending on `cy` — exactly cytoscape's
+// `bubble: true` + `emit()` semantics, confirmed against the installed
+// cytoscape@3.34.2 source (see this file's header comment and
+// GraphCanvas.svelte's own comment above `layoutGeneration`).
+function makeBubblingFakeCy(initialIds: string[]) {
+	let elements: FakeEl[] = initialIds.map((id) => ({ data: { id }, pos: { x: 0, y: 0 }, parentFlag: false }));
+	const cyLevelListeners: Array<() => void> = [];
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const layoutInstances: any[] = [];
+
+	const cy = {
+		startBatch() {},
+		endBatch() {},
+		elements() {
+			return {
+				remove: () => {
+					elements = [];
+				},
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				forEach: (fn: (e: any) => void) => elements.forEach((e) => fn(wrapFakeEl(e)))
+			};
+		},
+		add(newEls: Array<{ data: Record<string, unknown> }>) {
+			for (const el of newEls) {
+				elements.push({ data: { ...el.data }, pos: { x: 0, y: 0 }, parentFlag: false });
+			}
+		},
+		getElementById(id: string) {
+			const el = elements.find((e) => e.data.id === id);
+			if (!el) return { length: 0 };
+			return {
+				length: 1,
+				...wrapFakeEl(el),
+				remove: () => {
+					elements = elements.filter((e) => e !== el);
+				}
+			};
+		},
+		nodes() {
+			const nodeEls = elements.filter((e) => !('source' in e.data));
+			return {
+				length: nodeEls.length,
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				map: (fn: (n: any) => unknown) => nodeEls.map((e) => fn(wrapFakeEl(e))),
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				forEach: (fn: (n: any) => void) => nodeEls.forEach((e) => fn(wrapFakeEl(e)))
+			};
+		},
+		edges() {
+			return {
+				length: elements.filter((e) => 'source' in e.data).length,
+				// FIX-05's reveal call (`opts.cy.edges().removeStyle('display')`)
+				// runs on every renderer's first layout settle, regardless of
+				// which call path (start/replace/add/liveUpdate) triggered it —
+				// a no-op here, since this fake never actually hides anything.
+				removeStyle: () => {}
+			};
+		},
+		resize() {},
+		// Pre-fix production code registered its 'layoutstop' listener
+		// HERE, on `cy` itself — this is what let a bubble from any
+		// instance invoke every generation's callback in one pass.
+		one(_event: string, handler: () => void) {
+			cyLevelListeners.push(handler);
+		},
+		layout(_opts: unknown) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const instanceListeners: Array<() => void> = [];
+			const instance = {
+				// Fixed production code registers HERE, on the instance
+				// `runLayout` just created — a listener here can only ever
+				// be invoked by THIS instance's own emit(), before any
+				// bubbling occurs.
+				one(_event: string, handler: () => void) {
+					instanceListeners.push(handler);
+				},
+				run() {
+					return instance;
+				},
+				stop() {},
+				// Test-only: simulate this SPECIFIC layout instance's real
+				// ELK completion. Fires this instance's own listeners
+				// first (self-unregistering, per `.one()` semantics), then
+				// bubbles: fires whatever is STILL pending on `cy` itself
+				// (also self-unregistering) — matching real cytoscape's
+				// `emit()` exactly.
+				__triggerRealLayoutStop() {
+					for (const h of instanceListeners.splice(0)) h();
+					for (const h of cyLevelListeners.splice(0)) h();
+				}
+			};
+			layoutInstances.push(instance);
+			return instance;
+		},
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		__layoutInstanceAt(i: number): any {
+			return layoutInstances[i];
+		},
+		__layoutInstanceCount() {
+			return layoutInstances.length;
+		}
+	};
+	return cy;
+}
+
+describe('graph live update: CR-01 regression (real emit() bubble scoping)', () => {
+	it("an OLDER layout instance's real completion must not settle a NEWER, still-outstanding generation", async () => {
+		const cy = makeBubblingFakeCy(['n1', 'n2']);
+		const { createFileGraphRenderer } = await realRendererModule();
+		let geometryCalls = 0;
+		const renderer = createFileGraphRenderer({
+			cy,
+			requestIssuedAt: performance.now(),
+			onMetrics: () => {},
+			onGeometry: () => {
+				geometryCalls++;
+			}
+		});
+
+		// Generation N: a live update starts (its own ELK computation is
+		// still outstanding in this model).
+		renderer.liveUpdate([{ data: { id: 'n1' } }, { data: { id: 'n3' } }]);
+		// Generation N+1: a user-driven expand races it before N settles —
+		// exactly FIX-04/D-06's documented overlapping-layout hazard.
+		renderer.add([{ data: { id: 'sym1', parent: 'n1' } }]);
+
+		expect(cy.__layoutInstanceCount()).toBe(2);
+		expect(renderer.isLayoutInFlight()).toBe(true);
+
+		// The OLDER (generation N) instance's real ELK computation
+		// resolves and fires ITS OWN 'layoutstop'. Per cytoscape's actual
+		// bubble semantics this is a SINGLE emit() call — it must be
+		// scoped to generation N alone, never able to satisfy N+1.
+		cy.__layoutInstanceAt(0).__triggerRealLayoutStop();
+
+		// Generation N+1 must still be genuinely outstanding: no settle,
+		// no geometry publish, layoutInFlight still true. (Against the
+		// pre-fix `opts.cy.one(...)` registration this assertion is RED:
+		// both generations' callbacks live in the same `cy`-level list,
+		// so the older instance's bubble invokes N+1's callback too,
+		// clearing layoutInFlight and publishing geometry prematurely.)
+		expect(geometryCalls).toBe(0);
+		expect(renderer.isLayoutInFlight()).toBe(true);
+
+		// Only the NEWER instance's own real completion may settle N+1.
+		cy.__layoutInstanceAt(1).__triggerRealLayoutStop();
+		expect(geometryCalls).toBe(1);
+		expect(renderer.isLayoutInFlight()).toBe(false);
+	});
+});
+
 // --- 06-05 Task 2: the graph ROUTE's own live subscription ---
 //
 // A fuller fake cytoscape core than Part 2's guard fake above — this one
@@ -726,10 +921,19 @@ class RouteFakeCore {
 		};
 	}
 	layout(_opts: unknown) {
+		// CR-01 fix: production code registers 'layoutstop' on THIS layout
+		// instance (via `.one()` below), not on the route's own `cy` — so
+		// this instance tracks its own listener locally rather than going
+		// through `this.listeners` (which now only ever sees cy-level
+		// events like 'tap').
+		const layoutstopListeners: Array<() => void> = [];
 		return {
+			one(event: string, handler: () => void) {
+				if (event === 'layoutstop') layoutstopListeners.push(handler);
+			},
 			run: () => {
 				queueMicrotask(() => {
-					for (const h of this.listeners.get('layoutstop') ?? []) h();
+					for (const h of layoutstopListeners.splice(0)) h();
 				});
 			},
 			stop: () => {}

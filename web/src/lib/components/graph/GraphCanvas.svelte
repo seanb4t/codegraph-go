@@ -281,14 +281,31 @@
 		// NO geometry: without this, a live refresh arriving while a user
 		// expansion's layout is still running leaves two pending
 		// callbacks, each holding a DIFFERENT captured survivor map, each
-		// racing to restore positions and republish geometry — and
-		// cytoscape's layout events bubble from the LAYOUT instance up to
-		// `cy` (confirmed by reading the installed cytoscape's own
-		// extension.mjs this task: `bubble: function(){ return true; }`),
-		// so a `cy.one('layoutstop', ...)` registered by an OLDER call can
-		// genuinely be invoked by a NEWER layout's completion event —
-		// whichever lands last wins, and it may be the older one, which is
-		// exactly the movement this guard exists to prevent.
+		// racing to restore positions and republish geometry.
+		//
+		// The token check alone is NOT sufficient, though: cytoscape's
+		// layout events bubble from the LAYOUT instance up to `cy`
+		// (confirmed by reading the installed cytoscape's own
+		// extension.mjs: `bubble: function(){ return true; }`), and `cy`'s
+		// `emit()` invokes EVERY currently-registered listener for an
+		// event in one synchronous pass. A `cy.one('layoutstop', ...)`
+		// registered against `cy` itself — rather than against the layout
+		// instance — would therefore be invoked by ANY pending layout's
+		// completion, not just the one that registered it: an OLDER run's
+		// real completion could satisfy a NEWER run's callback (whose
+		// token check trivially passes, since it IS the current
+		// generation) before the newer run's own ELK computation has
+		// actually finished, self-unregister via `.one()`, and leave the
+		// newer generation's genuine completion with no listener left to
+		// catch it. That is why runLayout below registers its listener
+		// directly on the LAYOUT INSTANCE it just created (each layout is
+		// its own emitter, per `layoutProto.createEmitter()`), BEFORE
+		// calling `.run()` on it — only that instance's own `emit()` call,
+		// prior to any bubbling, can invoke it. The generation token
+		// remains as defense in depth for the other half of this hazard
+		// (a stale listener firing on its own, independently, after being
+		// superseded), but per-instance scoping is what actually prevents
+		// the bubble from crossing generations.
 		let layoutGeneration = 0;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		let activeLayoutRun: any;
@@ -370,10 +387,18 @@
 			if (activeLayoutRun && typeof activeLayoutRun.stop === 'function') {
 				activeLayoutRun.stop();
 			}
-			opts.cy.one('layoutstop', () => {
-				// The token check is FIRST and unconditional: a superseded
-				// run does no resize, no metrics, no survivor restoration,
-				// and no geometry publish — it returns immediately.
+			// CR-01 fix: register the completion handler on the LAYOUT
+			// INSTANCE this call is about to run, not on `cy` — see the
+			// comment above `layoutGeneration`'s declaration for why a
+			// `cy`-level listener is not scoped to the run that registered
+			// it. Registered BEFORE `.run()` below so a synchronously-
+			// completing layout cannot fire before the listener exists.
+			const thisLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit });
+			thisLayoutRun.one('layoutstop', () => {
+				// The token check is FIRST and unconditional, kept as
+				// defense in depth: a superseded run does no resize, no
+				// metrics, no survivor restoration, and no geometry
+				// publish — it returns immediately.
 				if (myGeneration !== layoutGeneration) return;
 				// FIX-04: this generation's layout is no longer outstanding.
 				// If the mount effect's cleanup deferred cy.destroy() waiting
@@ -435,7 +460,7 @@
 			// this is the promise that, per 01-RESEARCH.md Investigation 1,
 			// can resolve after this component has already unmounted.
 			layoutInFlight = true;
-			activeLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit }).run();
+			activeLayoutRun = thisLayoutRun.run();
 		}
 
 		// swapElements is the ONE element-swap implementation replace()
