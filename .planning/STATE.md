@@ -331,28 +331,7 @@ Standing decisions that outlive every milestone:
 
 ### Pending Todos
 
-5 listed — `/gsd-capture --list` to review. Phase 7 resolved three (dry-run-signed, post-release-verify, tap-secret distinctness) and code review filed one new. **This table has drifted from `.planning/todos/pending/`, which holds only 2 files** (brew-trust, graphstore archtest): the mcp flake, golangci-lint, `bench pinnedAt` and `CR-01` rows predate v0.13.0 and were never reconciled when their files moved or were folded into a milestone. Reconciling those four is out of Phase 7's scope and is left for a deliberate pass. None block v0.13.0.
-
-| Created | Area | Severity | Title |
-|---------|------|----------|-------|
-| 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
-| 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
-| 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces |
-| — | mcp | major | **CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications. NOW IN SCOPE as v0.12.0 `FIX-01`, Phase 1.** |
-
-Resolved and filed to `.planning/todos/completed/`:
-
-| Resolved | Area | Title |
-|----------|------|-------|
-| 2026-07-28 | docs | Document release procedures (maintainer runbook) — closed by 09-04's `docs/RELEASE-PROCEDURES.md` rewrite |
-| 2026-07-31 | perf | Bisect the indexer throughput regression — **REFUTED**; the regression did not exist (cross-platform baseline comparison) |
-| 2026-07-31 | perf | Rebless perf baseline on ubuntu-latest — **DONE**; gate green on main |
-| 2026-08-13 | agents | Author a codegraph usage skill for agents — closed by v0.10.0 Phases 6–8 |
-| 2026-09-08 | release | `dry-run-signed` additions-only diff guard passes vacuously — closed by Phase 7 `GRD-03` (`scripts/inject-cosign-key.sh` asserts exactly one injected `--key=` line) |
-| 2026-09-08 | ci | post-release-verify event-aware conclusion guard has no regression assertion — closed by Phase 7 `GRD-04` (`TestPostReleaseJobsDeclareConclusionGuard`) |
-| 2026-09-08 | ci | Tap App secret distinctness test is tautological and reads no workflow — closed by Phase 7 `GRD-05` by deleting the test, per maintainer decision |
-| 2026-09-13 | docs | `brew trust` instructions recommend broader tap grant with no security framing — closed by Phase 12 DOCS-07 (docs/RELEASE.md recommends the narrow `--cask` grant with one sentence of security framing; no test by decision D-12) |
-| 2026-09-13 | testing | `internal/graphstore/archtest` ignored per-package `go/packages` load errors — closed by quick task 260913-pkp (`packages.PrintErrors` guard in `TestNoPackageBypassesGraphStore`, demonstrated RED against an unresolvable import planted outside `internal/graphstore`; sibling of Phase 7 CR-01) |
+- [2026-08-14] [bench] tools/bench/runner pinnedAt() validates a checkout by git rev-parse HEAD alone — the HEAD-only anti… — [todo file](.planning/todos/pending/2026-08-14-bench-pinnedat-validates-a-checkout-by-git-rev-parse-head-alone.md)
 
 ### Blockers/Concerns
 

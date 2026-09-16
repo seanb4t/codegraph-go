@@ -1,8 +1,10 @@
 ---
 id: SEED-001
-status: dormant
+status: implemented
 planted: 2026-07-14
 planted_during: v0.1 (Initial Release) milestone
+consumed_by: v0.12.0 — Local Graph UI (Phases 1–6)
+consumed_on: 2026-09-07
 trigger_when: when CLI-surface parity with TS CodeGraph is reached (the path to 1.0)
 scope: large
 audit_acknowledged:
