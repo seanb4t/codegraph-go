@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 02
 current_phase_name: Guards, CI Wiring & Docs Burn-down
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-09-16T01:51:28.140Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-09-16T02:04:35.843Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 02 execution started
-state_head: d7b7a986b4a25158c97b65b50c7c7295f9ceb7ef
+state_head: 75f5633cc76cdffcec1e7b4af46661c5be38908e
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 16
-  completed_plans: 11
+  completed_plans: 12
   percent: 14
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-15 after Phase 1)
 ## Current Position
 
 Phase: 02 (Guards, CI Wiring & Docs Burn-down) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-09-15 — Phase 02 execution started
 
@@ -146,6 +146,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P09 | ~40min | 2 tasks | 2 files |
 | Phase 02 P01 | 7min | 2 tasks | 3 files |
 | Phase 02 P03 | 25min | 2 tasks | 4 files |
+| Phase 02 P05 | 15min | 2 tasks | 45 files |
 
 ## Accumulated Context
 
@@ -320,6 +321,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: No change to Taskfile.yml (D-01): web:drift already RED against 98cd41dd's exact incident shape on a clean checkout — Live replay confirmed CI's clean-checkout find enumeration already fails on the incident; a find-vs-git-ls-files paired assertion would only test staging hygiene, not close a real gate blind spot
 - [Phase 02]: [Phase 02]: GRD-12: requiredStatusChecksPath is a standalone top-level const, not folded into the existing multi-const block, so the plan's literal grep for the const declaration matches exactly.
 - [Phase 02]: [Phase 02]: GRD-12: left ci.yml's pre-existing goreleaser-check job name field untouched despite matching the plan's D-07 negative-grep verify gate -- that occurrence predates this plan and is structurally required for GitHub's ruleset job-name matching and for TestRequiredCheckNamesPreserved; fixed only the one true duplication this plan introduced (the script's own header comment).
+- [Phase 02]: GRD-10 re-vendor: regenerated directly in the real web/ tree (not a scratch copy), since pnpm's own packageManager self-management resolves the pinned 11.23.0 inside web/ without Corepack — D-09's fallback rule permits a local run whenever cd web && pnpm --version prints 11.23.0
+- [Phase 02]: pnpm dlx shadcn-svelte@1.5.1 add itself runs under bare pnpm v12.4.1 (dlx does not inherit the project's packageManager pin the way pnpm install does) — pre-existing Taskfile target behavior, not changed by this plan — The differing-file set produced was byte-for-byte identical to the Corepack-pinned CI run from 2026-09-14, confirming the drift is registry-side, not a toolchain artifact
 
 ### Pending Todos
 
@@ -480,8 +483,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-16T01:51:28.109Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-09-16T02:04:35.816Z
+Stopped at: Completed 02-05-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
