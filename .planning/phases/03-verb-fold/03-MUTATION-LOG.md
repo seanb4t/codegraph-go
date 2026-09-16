@@ -697,3 +697,151 @@ binary's own `Hidden` field — no regeneration step, no committed artefact, `ma
 hidden-command exclusion as the positive control throughout. The 8-tool MCP set and the wire
 oracle's transcripts are a zero-diff git fact across the entire phase, not merely a test that
 would have passed either way.
+
+---
+
+## Family (c) — VERB-05: positive-controlled census AFTER the fold
+
+**Test/guard:** the identical census instrument Family (a) used, byte-for-byte, re-run on the
+tree after the fold has landed (03-02) and after Family (b)'s RED/revert cycle (03-03):
+
+```
+rg -nU -w --hidden 'codegraph\s+(query|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .
+```
+
+**What are we testing, and why?** Whether every consumer of the old verb names that the fold was
+supposed to retarget actually was retargeted — i.e. that VERB-05's "before" (Family (a), 14 lines
+across 6 files) and "after" counts are only comparable because the instrument itself did not
+change — and that the only surviving hits are the stub declaration itself (`internal/cli/renamed.go`'s
+doc comment naming the old invocations, and the two D-12 allowlist lines whose keys are
+`codegraph query` / `codegraph unlock`, required because `cli_reference_test.go`'s allowlist
+grammar keys on cobra's `CommandPath()` and accepts no other spelling). This is D-08's "zero
+old-verb references outside the stubs", read as outside the stub declaration — a planner
+interpretation surfaced for the maintainer's end-of-phase review (D-13), not re-derived here.
+
+**Pre-mutation gate:** `git status --porcelain .github` — empty; `test ! -e .github/__census_control__.md` — true.
+
+**Mutation applied:** created the UNTRACKED file `.github/__census_control__.md` with the
+identical three lines Family (a) used:
+
+```
+run codegraph unlock now
+and also run codegraph
+query now
+```
+
+Never `git add`ed; the step ran inside `trap 'rm -f .github/__census_control__.md' EXIT`.
+
+**Observed result** (verbatim, the planted-tree run):
+
+```
+./.github/__census_control__.md:1:run codegraph unlock now
+./.github/__census_control__.md:2:and also run codegraph
+./.github/__census_control__.md:3:query now
+./internal/cli/renamed.go:10:// this phase folds away (Phase 3 VERB-03/VERB-04): `codegraph query <term>`
+./internal/cli/renamed.go:11:// into `codegraph search --full <term>`, and `codegraph unlock [path]` into
+./internal/cli/testdata/cli-reference-allowlist.txt:8:codegraph query	hidden rename stub for `search --full` (VERB-03); removed in v0.15.0
+./internal/cli/testdata/cli-reference-allowlist.txt:9:codegraph unlock	hidden rename stub for `daemon unlock` (VERB-04); removed in v0.15.0
+exit=0
+```
+
+The control was found on `:1:` and `:3:` exactly as required (line 2's wrapped `codegraph` alone
+does not match the two-token pattern; the control's design only guarantees hits on lines 1 and 3 —
+identical to what Family (a)'s own verify gate asserts). Had the control not been reported, the
+plan would have stopped here; it was reported, so the real census below is trusted.
+
+**Revert:** `rm -f .github/__census_control__.md`.
+
+**Byte-clean proof:** `git status --porcelain .github` — empty; `test ! -e
+.github/__census_control__.md` — true. The control was never tracked or staged.
+
+**Real census** (verbatim, the clean-tree run — the identical instrument, no control present):
+
+```
+./internal/cli/renamed.go:10:// this phase folds away (Phase 3 VERB-03/VERB-04): `codegraph query <term>`
+./internal/cli/renamed.go:11:// into `codegraph search --full <term>`, and `codegraph unlock [path]` into
+./internal/cli/testdata/cli-reference-allowlist.txt:8:codegraph query	hidden rename stub for `search --full` (VERB-03); removed in v0.15.0
+./internal/cli/testdata/cli-reference-allowlist.txt:9:codegraph unlock	hidden rename stub for `daemon unlock` (VERB-04); removed in v0.15.0
+```
+
+`after: 4 lines across 2 files (renamed.go=2, allowlist=2)`
+
+Every reported path is one of the two expected files; no hit under `docs/`, `README`, `.claude/`,
+`.github/` (beyond the removed control), `internal/mcp/`, `internal/daemon/`, `internal/cli/index.go`,
+`Taskfile.yml`, or any `_test.go` file. Compared against Family (a)'s 14-line/6-file "before":
+`docs/CLI-REFERENCE.md` (6 lines, regenerated clean by the fold), `internal/cli/index.go` (2),
+`internal/cli/index_lock_test.go` (2), and `internal/cli/unlock.go` (1, the file was deleted) all
+dropped to zero; `internal/daemon/lock.go` (2) dropped to zero; `internal/cli/query.go` (1, deleted)
+is gone. The only lines that persisted are the two the stub declaration is expected to carry
+forward under its new name (`renamed.go`, `renamed_test.go` contributes zero — its own doc/test
+content does not repeat the two-token phrase) plus the two allowlist lines that D-12 requires to
+exist for exactly this reason.
+
+**Commit-history audit (D-15 / VERB-08):**
+
+```
+$ F=$(git log --format=%H --grep='^feat(cli)!: fold query into search --full and unlock into daemon unlock$' -1)
+$ echo "$F"
+5d69ee2ea3c6276ed73c946b24be93612fae1698
+$ git log --format=%s "$F^..HEAD"
+docs(03-04): add backlog row 999.5 for the v0.15.0 removal of the query/unlock stubs (D-09)
+docs(03-03): complete Family (b) RED demonstration and generated-surface/MCP proofs plan
+docs(03-03): declare no external API integration; record completions/man/MCP/wire-oracle proofs (VERB-06, VERB-07)
+docs(03-03): record the VERB-07 RED demonstration against a re-visible query stub (Family b)
+docs(03): record the pre-existing internal/daemon load flake seen at the wave-2 gate (WINDOWS #37)
+docs(03-02): complete verb-fold search/daemon-unlock/stubs plan
+feat(cli)!: fold query into search --full and unlock into daemon unlock
+```
+
+`commit audit: 7 commits, one feat(cli)!:, rest test/docs/chore, no CI-skip`. Every subject matches
+`pr-title.yml`'s `^(feat|fix|perf|refactor|docs|chore|ci|test|build|revert)(\([a-z0-9_-]+\))?!?: .+`
+regex; exactly one `feat(` subject, exactly one `!:` (the same commit); its body carries a
+`BREAKING CHANGE: ` footer naming `search --full`, `daemon unlock`, and the v0.15.0 removal; every
+other subject in range is `docs(` (this phase's non-feat commits are all `docs:` — its RED commits
+from 03-02 predate `F^` and are not part of this range); no subject or body contains `ci skip` /
+`skip ci` anywhere in `F^..HEAD`.
+
+**Final gate (pinned toolchain, `GOTOOLCHAIN=go1.26.6`):**
+
+```
+$ go build ./...
+(clean, no output)
+
+$ go test ./internal/cli/... -count=1
+ok  	github.com/seanb4t/codegraph-go/internal/cli	23.049s
+ok  	github.com/seanb4t/codegraph-go/internal/cli/archtest	4.001s
+ok  	github.com/seanb4t/codegraph-go/internal/cli/present	2.012s
+ok  	github.com/seanb4t/codegraph-go/internal/cli/present/archtest	1.769s
+ok  	github.com/seanb4t/codegraph-go/internal/cli/tui	0.355s
+
+$ go test ./internal/daemon/ -count=1 -run 'TestUnlock|TestAcquire|TestIsStale'
+ok  	github.com/seanb4t/codegraph-go/internal/daemon	1.097s
+
+$ task docs:cli:drift
+docs:cli:drift: compared 1 generated file
+docs:cli:drift: docs/CLI-REFERENCE.md byte-identical to a fresh regeneration (temporary file only — source tree untouched)
+
+$ task test:wireoracle
+task: [test:wireoracle] go test ./test/wireoracle/...
+ok  	github.com/seanb4t/codegraph-go/test/wireoracle	(cached)
+```
+
+Build clean, 5 `internal/cli/...` packages green (no `TestDaemonSharedWriter` invocation in this
+run — the plan's own final-gate command scopes the daemon leg to the three lock-focused tests
+named above, not the full `internal/daemon` suite, so the known load flake (recorded in Baseline
+above) did not need to be re-run in isolation this time), `docs:cli:drift` reports exactly
+`compared 1 generated file` and is byte-identical, `task test:wireoracle` reports `ok` (cached from
+Family (b)'s uncached 51.787s run earlier in this session — the tree has not changed since). Source
+tree clean at the end (`git status --porcelain -- internal docs cmd testdata` empty).
+
+**Verdict:** The "after" half of VERB-05 used the byte-identical instrument and the byte-identical
+positive control as the "before" (Family (a)), so the two counts are genuinely comparable rather
+than measuring two different questions. Every one of the 14 pre-fold hits either disappeared
+(docs/CLI-REFERENCE.md regenerated clean, the two message sites fixed, the two now-deleted source
+files) or was subsumed into the two files the stub declaration is expected to carry (`renamed.go`'s
+doc comment, ≥1 hit; the allowlist's two D-12 lines, exactly 2) — nothing survived outside that
+declaration. The phase's own commit history from the `feat(cli)!:` commit's parent to HEAD has
+exactly D-15's shape: one breaking-change commit with its footer, everything else a `docs:` commit,
+no CI-skip marker anywhere. The full gate — build, the CLI package group, the daemon lock tests,
+the generated-reference drift gate, and the wire oracle — is green at HEAD under the pinned
+`go1.26.6` toolchain, with the tree left clean.
