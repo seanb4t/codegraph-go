@@ -509,3 +509,191 @@ revert. The re-freeze underlying that green state is a real, non-empty, determin
 (28+/49− at the feat commit; two regenerations `cmp`-identical), and neither gate's positive
 counts (`compared 1 generated file`, `walked 37 commands`) were ever zero or assumed. Neither gate
 was vacuous.
+
+---
+
+## Generated-surface and MCP proofs (03-03 Task 2)
+
+These are not mutations; they are the "after" half of 03-01's Baseline, run against the HEAD
+binary once the fold has landed, with `man`'s pre-existing hidden precedent as the positive
+control that `Hidden: true` is what removes a command from completions/man.
+
+### Completions (VERB-06)
+
+Binary built at HEAD: `GOTOOLCHAIN=go1.26.6 go build -o /tmp/03-03-bin ./cmd/codegraph`.
+
+```
+$ /tmp/03-03-bin __complete ""
+affected	List test symbols impacted by changes to the given files
+callees	List a symbol's forward call targets
+callers	List a symbol's reverse callers
+completion	Generate the autocompletion script for the specified shell
+daemon	List and manage running codegraph daemons
+explore	Explore relevant symbols: verbatim source, call paths, blast radius
+files	Browse the indexed file structure
+githooks	Manage git sync hooks (post-commit/post-merge/post-checkout)
+help	Help about any command
+impact	Depth-bounded reverse blast radius of a symbol
+index	Deterministically rebuild the graph from scratch
+init	Create .codegraph/ and build the full graph in one step
+install	Configure coding agents to use this codegraph binary as their MCP server
+node	Show a symbol's signature, calls, and callers, or a line-numbered file read
+search	Lexically search symbol names/qualified names
+serve	Run the codegraph MCP server
+status	Report index health and counts
+sync	Incrementally update the graph from changed files
+telemetry	Print this build's telemetry/network-behavior statement
+ui	Run a local, read-only web UI over the repository's own index
+uninit	Remove .codegraph/
+uninstall	Remove codegraph's configuration from coding agents
+upgrade	Download, verify, and install a new codegraph release
+version	Print build version information
+:4
+```
+
+24 entries (excluding the trailing `:4` directive). `search`/`daemon` present; `query`, `unlock`
+gone (Baseline had 26 with both present); `man` absent as the positive control — the pre-existing
+hidden command has always been missing from completions for the same `Hidden: true` reason the
+stubs now are.
+
+```
+$ /tmp/03-03-bin __complete daemon ""
+start	Run the shared watch/index server in the foreground
+stop	Stop the current-repo daemon, or every running daemon (--all)
+unlock	Clear a stale daemon lock
+:4
+```
+
+3 entries (Baseline had 2): `start`, `stop`, `unlock`.
+
+**Script-vs-`__complete` control (the honest probe is `__complete`, not a grep of the script):**
+
+```
+$ /tmp/03-03-bin completion bash | rg -c -w 'query|unlock'
+0
+$ /tmp/03-03-bin completion bash | rg -c -w 'search|daemon'
+0
+```
+
+Both zero — the generated completion script names NO commands at all (it calls back into
+`codegraph __complete <args…>` at completion time, per RESEARCH Pattern 4). The first zero is
+not evidence on its own; only paired with the second zero (a command everyone agrees is present
+also reads 0) does it establish that the script's silence proves nothing either way, which is
+why `__complete` is the probe recorded above rather than this grep.
+
+### Man pages (VERB-06)
+
+```
+$ /tmp/03-03-bin man <tmpdir> && ls <tmpdir> | sort
+codegraph-affected.1
+codegraph-callees.1
+codegraph-callers.1
+codegraph-daemon-start.1
+codegraph-daemon-stop.1
+codegraph-daemon-unlock.1
+codegraph-daemon.1
+codegraph-explore.1
+codegraph-files.1
+codegraph-githooks-install.1
+codegraph-githooks-remove.1
+codegraph-githooks-status.1
+codegraph-githooks.1
+codegraph-impact.1
+codegraph-index.1
+codegraph-init.1
+codegraph-install.1
+codegraph-node.1
+codegraph-search.1
+codegraph-serve.1
+codegraph-status.1
+codegraph-sync.1
+codegraph-telemetry.1
+codegraph-ui.1
+codegraph-uninit.1
+codegraph-uninstall.1
+codegraph-upgrade.1
+codegraph-version.1
+codegraph.1
+```
+
+29 pages (Baseline had 30: −2 for `query`/`unlock`, +1 for `daemon-unlock`).
+`codegraph-daemon-unlock.1` is present; `codegraph-query.1` and `codegraph-unlock.1` are absent;
+`codegraph-man.1` is absent (positive control, unchanged from Baseline).
+
+**No committed completion/man artefact (nothing to regenerate — RESEARCH Pattern 4):**
+
+```
+$ git ls-files | rg '(\.1|\.bash|\.zsh|\.fish)$|(^|/)completions?/'
+(no output)
+$ git ls-files | rg -c '^docs/CLI-REFERENCE\.md$'
+1
+```
+
+The empty listing is a real query, not a broken one — paired with the positive control
+(`docs/CLI-REFERENCE.md`, which IS a committed generated file, found exactly once).
+
+### MCP set and wire oracle (VERB-07, D-14)
+
+```
+$ F=$(git log --format=%H --grep='^feat(cli)!: fold query into search --full and unlock into daemon unlock$' -1)
+$ echo "$F"
+5d69ee2ea3c6276ed73c946b24be93612fae1698
+$ git diff --quiet "$F^" HEAD -- internal/mcp testdata/wireoracle test/wireoracle
+(exit 0 — holds)
+```
+
+Zero diff across the whole phase (feat commit's parent → HEAD) on `internal/mcp`,
+`testdata/wireoracle`, and `test/wireoracle`.
+
+```
+$ rg -o 'Name:\s+"codegraph_[a-z]+"' internal/mcp/tools.go | rg -o 'codegraph_[a-z]+' | sort -u
+codegraph_callees
+codegraph_callers
+codegraph_explore
+codegraph_files
+codegraph_impact
+codegraph_node
+codegraph_search
+codegraph_status
+```
+
+Exactly the eight names from 03-01's Baseline — unchanged.
+
+```
+$ rg -c 'eng\.Search\(' internal/mcp/tools.go
+1
+$ rg -c 'eng\.Query\(' internal/mcp/tools.go
+0
+```
+
+`codegraph_search`'s handler still calls `eng.Search` exactly once; `eng.Query` is never called
+from `internal/mcp/tools.go` — `search --full`'s new CLI-side use of `eng.Query` did not leak
+into the MCP surface.
+
+```
+$ GOTOOLCHAIN=go1.26.6 go test ./test/wireoracle/... -count=1
+ok  	github.com/seanb4t/codegraph-go/test/wireoracle	51.787s
+?   	github.com/seanb4t/codegraph-go/test/wireoracle/cmd/wireoracle	[no test files]
+```
+
+51.787s wall time (well above any cache-hit floor) confirms a real, uncached run.
+
+```
+$ GOTOOLCHAIN=go1.26.6 task test:wireoracle
+task: [test:wireoracle] go test ./test/wireoracle/...
+ok  	github.com/seanb4t/codegraph-go/test/wireoracle	(cached)
+```
+
+Exit 0. `git status --porcelain testdata/wireoracle` — empty (byte-identical by the oracle's own
+comparison).
+
+**Cheap cross-check:** `git diff --quiet F^ HEAD -- .goreleaser.yaml` holds — the cask's
+`generate_completions_from_executable` stanza and its `codegraph man` post-install hook are
+unchanged by this phase, so Pattern 4's live-binary-at-install-time generation still invokes the
+same commands against the new (folded) surface.
+
+**Verdict:** Completions and man pages already reflect the new verb surface purely from the live
+binary's own `Hidden` field — no regeneration step, no committed artefact, `man`'s pre-existing
+hidden-command exclusion as the positive control throughout. The 8-tool MCP set and the wire
+oracle's transcripts are a zero-diff git fact across the entire phase, not merely a test that
+would have passed either way.
