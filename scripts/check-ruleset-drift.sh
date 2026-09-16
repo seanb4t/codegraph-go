@@ -88,7 +88,7 @@ fi
 
 # --- Fetch the live ruleset once. Split the trailing HTTP status line
 # from the body via a newline delimiter that cannot appear inside it.
-CURL_ARGS=(-sS -w '\n%{http_code}' -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+CURL_ARGS=(-sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   CURL_ARGS+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
 fi
