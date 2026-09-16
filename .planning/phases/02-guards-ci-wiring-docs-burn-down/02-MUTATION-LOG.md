@@ -196,5 +196,42 @@ PASS after a byte-clean revert — the wiring is not vacuous. `check:gonum`'s ow
 
 ---
 
-*Family (c) — GRD-12 (`protect-main` ruleset-drift comparison) is appended to this file by plan
-02-04.*
+## Family (c) — GRD-12: ruleset-drift step RED against the live 6-vs-7 divergence
+
+**Test/guard:** `ci.yml` step `Ruleset drift check (GRD-12)` → `scripts/check-ruleset-drift.sh`,
+run exactly as CI runs it (unauthenticated works; a `GITHUB_TOKEN` only raises the rate limit).
+
+**What are we testing, and why?** Whether the shared fixture (`.github/required-status-checks.txt`,
+7 entries) and the live `protect-main` ruleset (6 entries) genuinely disagree today, so the step's
+RED is watched on the record immediately before the maintainer's D-08 change resolves it — not
+asserted from 02-03's own transcript.
+
+**Pre-mutation gate:** `git diff --quiet -- .github/required-status-checks.txt` — clean (fixture
+untouched by this plan so far).
+
+**Mutation applied:** None — the RED condition is the live ruleset's own divergence from the
+fixture, the same "historical/external state" shape as Family (a). Nothing in this repository was
+mutated to produce it.
+
+**Observed failure** (verbatim, `bash scripts/check-ruleset-drift.sh`, run this session):
+
+```
+ruleset-drift: fixture .github/required-status-checks.txt lists 7 contexts
+ruleset-drift: live has 6 contexts, fixture has 7 contexts
+ruleset-drift: self-check PASS — planted context detected
+ruleset-drift: diff (< live-only, > fixture-only):
+1a2
+> goreleaser check (config validation, DIST-01)
+::error::ruleset-drift: live ruleset 20157557 and .github/required-status-checks.txt disagree (exact set equality both directions, D-05)
+```
+
+Exit code: **1**.
+
+**Verdict:** The step is genuinely RED today, naming `goreleaser check (config validation,
+DIST-01)` as fixture-only, exactly as 02-03 left it and exactly as `02-RESEARCH.md`'s live-fetch
+predicted. The fixture was NOT edited to close this gap — Task 1 only builds the maintainer's
+review package (`02-04-ruleset-put-body.json`) from an authenticated `gh api` read; the fixture
+stays at 7 lines until Task 2 confirms the live set has actually reached 8.
+
+**Green re-run (after D-08):** _pending — filled in by Task 2 once the maintainer's ruleset change
+has landed and the live set reads 8 contexts._
