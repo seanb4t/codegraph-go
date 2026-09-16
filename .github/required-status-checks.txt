@@ -1,0 +1,7 @@
+test
+govulncheck (DIST-03, blocking)
+reproducibility (double-build hash-diff, DIST-04)
+perf regression gate (PERF-02, INDX-06)
+actionlint (workflow static analysis)
+goreleaser check (config validation, DIST-01)
+pr-title

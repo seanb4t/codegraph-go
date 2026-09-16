@@ -202,6 +202,24 @@ jobs:
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
+      # GRD-12 (D-05/D-06): proves the required-status-check fixture this
+      # repo maintains (.github/required-status-checks.txt, D-07) still
+      # matches what GitHub ruleset 20157557 (protect-main) ACTUALLY
+      # requires, in both directions — a context required live but absent
+      # from the fixture under-asserts; a context in the fixture but not
+      # required live asserts a requirement that does not exist. This is
+      # deliberately CI-only (no Taskfile target, no Go test performs the
+      # live fetch, D-06): the "ground truth" side lives outside the git
+      # tree, at GitHub's ruleset API, so a local target could be invoked
+      # offline and misread as PASS — exactly the "skip-clean offline"
+      # clause GRD-07 was declined for at v0.13.0. Every API failure
+      # (non-200, empty body, unparseable JSON, non-active enforcement) is
+      # a named `::error::` and a hard exit 1, never a skip.
+      - name: Ruleset drift check (GRD-12)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/check-ruleset-drift.sh
+
       # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
       # by `go list ./...` above (it's a normal package, not testdata/), but
       # an explicit named step guards against a future refactor of that

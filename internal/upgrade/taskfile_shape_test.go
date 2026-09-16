@@ -190,12 +190,25 @@ type runBodyException struct {
 // longer exists, and the loop at the bottom of
 // TestWorkflowRunStepsInvokeTaskTargets fails any exception that matches
 // no real step, so a stale entry cannot silently widen this allowlist.
+//
+// A third entry, "Ruleset drift check (GRD-12)" (job test, D-06,
+// v0.14.0 Phase 2): reads the LIVE GitHub ruleset over the REST API at CI
+// time — a network-dependent comparison against a source of truth
+// outside the git tree. Deliberately not a Taskfile target, so it can
+// never be invoked offline and read as PASS (the "skip-clean offline"
+// clause GRD-07 was declined for at v0.13.0).
 var runBodyExceptions = []runBodyException{
 	{
 		Workflow: "ci.yml",
 		Job:      "reproducibility",
 		Step:     "Compute determinism inputs",
 		Reason:   "writes to the CI step-output file ($GITHUB_OUTPUT) via id: repro; has no meaning outside a runner",
+	},
+	{
+		Workflow: "ci.yml",
+		Job:      "test",
+		Step:     "Ruleset drift check (GRD-12)",
+		Reason:   "reads the live GitHub ruleset over the REST API at CI time (D-06, v0.14.0 Phase 2) — a network-dependent comparison against a source of truth outside the git tree, deliberately not a Taskfile target so it can never run offline and read as PASS",
 	},
 }
 
