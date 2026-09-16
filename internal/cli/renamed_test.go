@@ -4,20 +4,25 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
 
-// TestQueryStub covers VERB-03/D-05/D-06: the hidden `query` rename stub
-// executes nothing, writes only to stderr, and returns a non-nil error —
-// regardless of flags/args, which are ignored entirely.
+// TestQueryStub covers VERB-03/D-05/D-06/WR-01: the hidden `query` rename
+// stub executes nothing, writes nothing directly to stderr, and returns a
+// non-nil error whose Error() text carries the whole two-line D-06 message
+// — regardless of flags/args, which are ignored entirely.
 func TestQueryStub(t *testing.T) {
 	dir := setupIndexedFixture(t)
 
-	wantErrSubstring := `renamed to "search --full"`
-	wantStderr := "\"query\" has been renamed to \"search --full\" — run: codegraph search --full <term>\n" +
-		"the \"query\" stub is removed in the next minor release (v0.15.0)\n"
+	// wantErrText is the whole D-06 two-line message, joined by a single
+	// newline, with no trailing newline and no "codegraph: " prefix — this
+	// is now the ENTIRE Error() text (see renamed.go's doc comment): RunE
+	// itself writes nothing to stderr, so cmd/codegraph/main.go's single
+	// fmt.Fprintln(os.Stderr, err) is the only place these two lines are
+	// ever printed, exactly once (WR-01).
+	wantErrText := `"query" has been renamed to "search --full" — run: codegraph search --full <term>` + "\n" +
+		`the "query" stub is removed in the next minor release (v0.15.0)`
 
 	cases := []struct {
 		name string
@@ -34,14 +39,14 @@ func TestQueryStub(t *testing.T) {
 			if err == nil {
 				t.Fatalf("the query stub (%s): expected a non-nil error, got nil", tc.name)
 			}
-			if !strings.Contains(err.Error(), wantErrSubstring) {
-				t.Fatalf("the query stub (%s) error = %q, want it to contain %q", tc.name, err.Error(), wantErrSubstring)
+			if err.Error() != wantErrText {
+				t.Fatalf("the query stub (%s) error = %q, want %q", tc.name, err.Error(), wantErrText)
 			}
 			if out != "" {
 				t.Fatalf("the query stub (%s): expected empty stdout, got %q", tc.name, out)
 			}
-			if errOut != wantStderr {
-				t.Fatalf("the query stub (%s) stderr = %q, want %q", tc.name, errOut, wantStderr)
+			if errOut != "" {
+				t.Fatalf("the query stub (%s): expected empty direct stderr (the message now travels solely via the returned error), got %q", tc.name, errOut)
 			}
 		})
 	}
@@ -64,9 +69,11 @@ func TestQueryStub(t *testing.T) {
 	})
 }
 
-// TestUnlockStub covers VERB-04/D-05/D-06: the hidden `unlock` rename stub
-// executes nothing (a stale lockfile it would otherwise clear is left
-// untouched), writes only to stderr, and returns a non-nil error.
+// TestUnlockStub covers VERB-04/D-05/D-06/WR-01: the hidden `unlock`
+// rename stub executes nothing (a stale lockfile it would otherwise clear
+// is left untouched), writes nothing directly to stderr, and returns a
+// non-nil error whose Error() text carries the whole two-line D-06
+// message.
 func TestUnlockStub(t *testing.T) {
 	dir := t.TempDir()
 	codegraphDir := filepath.Join(dir, codegraphDirName)
@@ -85,9 +92,11 @@ func TestUnlockStub(t *testing.T) {
 		t.Fatalf("write lockfile: %v", err)
 	}
 
-	wantErrSubstring := `renamed to "daemon unlock"`
-	wantStderr := "\"unlock\" has been renamed to \"daemon unlock\" — run: codegraph daemon unlock [path]\n" +
-		"the \"unlock\" stub is removed in the next minor release (v0.15.0)\n"
+	// wantErrText: see TestQueryStub's identical rationale (WR-01) — the
+	// whole D-06 message is now the Error() text, and direct stderr is
+	// empty.
+	wantErrText := `"unlock" has been renamed to "daemon unlock" — run: codegraph daemon unlock [path]` + "\n" +
+		`the "unlock" stub is removed in the next minor release (v0.15.0)`
 
 	cases := []struct {
 		name string
@@ -103,14 +112,14 @@ func TestUnlockStub(t *testing.T) {
 			if err == nil {
 				t.Fatalf("the unlock stub (%s): expected a non-nil error, got nil", tc.name)
 			}
-			if !strings.Contains(err.Error(), wantErrSubstring) {
-				t.Fatalf("the unlock stub (%s) error = %q, want it to contain %q", tc.name, err.Error(), wantErrSubstring)
+			if err.Error() != wantErrText {
+				t.Fatalf("the unlock stub (%s) error = %q, want %q", tc.name, err.Error(), wantErrText)
 			}
 			if out != "" {
 				t.Fatalf("the unlock stub (%s): expected empty stdout, got %q", tc.name, out)
 			}
-			if errOut != wantStderr {
-				t.Fatalf("the unlock stub (%s) stderr = %q, want %q", tc.name, errOut, wantStderr)
+			if errOut != "" {
+				t.Fatalf("the unlock stub (%s): expected empty direct stderr (the message now travels solely via the returned error), got %q", tc.name, errOut)
 			}
 			if _, statErr := os.Stat(lockPath); statErr != nil {
 				t.Fatalf("the unlock stub (%s): expected the lockfile to still exist (nothing executed), stat err: %v", tc.name, statErr)

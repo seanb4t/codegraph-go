@@ -13,10 +13,14 @@ import (
 // from the commands they replace — root.go's AddCommand list still calls
 // newQueryCmd()/newUnlockCmd() and needed no registration edit.
 //
-// Each stub's RunE does exactly two things: write the two-line rename
-// notice (D-06, verbatim, em dash U+2014 included) to cmd.ErrOrStderr(),
-// and return a non-nil error. Nothing else — no index or lock store is
-// ever touched, and no arg/flag is inspected or forwarded to the new verb.
+// Each stub's RunE does exactly one thing: return a non-nil error whose
+// Error() text IS the two-line rename notice (D-06, verbatim, em dash
+// U+2014 included, joined by a single newline). RunE itself writes
+// nothing to cmd.ErrOrStderr() — cmd/codegraph/main.go's single
+// error-reporting exit path is the only place that ever prints it, so the
+// two lines reach the user's real stderr exactly once. Nothing else — no
+// index or lock store is ever touched, and no arg/flag is inspected or
+// forwarded to the new verb.
 //
 // Both fields below are set to true on the returned command (VERB-06,
 // mirroring man.go's Hidden precedent for the first one):
@@ -59,9 +63,10 @@ func newQueryCmd() *cobra.Command {
 		Hidden:             true,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.ErrOrStderr(), `"query" has been renamed to "search --full" — run: codegraph search --full <term>`)
-			fmt.Fprintln(cmd.ErrOrStderr(), `the "query" stub is removed in the next minor release (v0.15.0)`)
-			return fmt.Errorf(`codegraph: "query" has been renamed to "search --full"`)
+			return fmt.Errorf("%s\n%s",
+				`"query" has been renamed to "search --full" — run: codegraph search --full <term>`,
+				`the "query" stub is removed in the next minor release (v0.15.0)`,
+			)
 		},
 	}
 }
@@ -73,9 +78,10 @@ func newUnlockCmd() *cobra.Command {
 		Hidden:             true,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.ErrOrStderr(), `"unlock" has been renamed to "daemon unlock" — run: codegraph daemon unlock [path]`)
-			fmt.Fprintln(cmd.ErrOrStderr(), `the "unlock" stub is removed in the next minor release (v0.15.0)`)
-			return fmt.Errorf(`codegraph: "unlock" has been renamed to "daemon unlock"`)
+			return fmt.Errorf("%s\n%s",
+				`"unlock" has been renamed to "daemon unlock" — run: codegraph daemon unlock [path]`,
+				`the "unlock" stub is removed in the next minor release (v0.15.0)`,
+			)
 		},
 	}
 }
