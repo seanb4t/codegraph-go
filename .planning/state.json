@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Guards, CI Wiring & Docs Burn-down",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 02 of 7 · 14% · ready to verify"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 7 — needs a plan"
   },
-  "updated_at": "2026-09-16T11:35:44.904Z"
+  "updated_at": "2026-09-16T14:48:36.137Z"
 }

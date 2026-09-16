@@ -139,7 +139,7 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
 - **`v0.14.0` carries no git tag** (D-06R). The `feat!:` verb rename cuts a *minor* under `release-please-config.json`'s `bump-minor-pre-major`, so the label holds; the stubs' removal in the following minor is recorded in the release notes and `docs/CLI-REFERENCE.md`, never scheduled as a tag.
 
 - [x] **Phase 1: Defect & Flake Burn-down** - Every known user-facing defect, store-lock hole, race and load-sensitive flake is fixed at its cause or closed with the measurement that justifies closing (completed 2026-09-15)
-- [ ] **Phase 2: Guards, CI Wiring & Docs Burn-down** - Every guard that could pass vacuously fails against its incident shape, CI runs the checks that exist only locally, and every doc claim about dependencies, provenance, scanners and planning state matches what ships
+- [x] **Phase 2: Guards, CI Wiring & Docs Burn-down** - Every guard that could pass vacuously fails against its incident shape, CI runs the checks that exist only locally, and every doc claim about dependencies, provenance, scanners and planning state matches what ships (completed 2026-09-16)
 - [ ] **Phase 3: Verb Fold** - `query` folds into `search --full` and `unlock` into `daemon unlock`, every consumer of the old names found, the removed verbs failing loudly for one release
 - [ ] **Phase 4: CLI Glow-up** - Every human-output verb renders through one shared semantic palette, adaptive to the terminal and the user's colour preferences, with the agent/MCP, `--json` and piped paths byte-identical
 - [ ] **Phase 5: Agent Reach — Capability Model & Skill in Every Harness** - One capability table drives all eight targets, and every harness with a skill mechanism receives the codegraph skill, verified live, with every write exact-identity-owned and reversible
@@ -324,7 +324,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Defect & Flake Burn-down | 9/9 | Complete    | 2026-09-15 |
-| 2. Guards, CI Wiring & Docs Burn-down | 7/7 | In Progress|  |
+| 2. Guards, CI Wiring & Docs Burn-down | 7/7 | Complete    | 2026-09-16 |
 | 3. Verb Fold | 0/TBD | Not started | - |
 | 4. CLI Glow-up | 0/TBD | Not started | - |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 0/TBD | Not started | - |
