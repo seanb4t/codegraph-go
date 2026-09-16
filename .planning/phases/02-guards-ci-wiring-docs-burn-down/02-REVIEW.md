@@ -1,99 +1,64 @@
 ---
 phase: 02-guards-ci-wiring-docs-burn-down
-reviewed: 2026-09-16T00:00:00Z
+reviewed: 2026-09-16T12:00:00Z
 depth: deep
-files_reviewed: 30
+files_reviewed: 8
 files_reviewed_list:
-  - .github/required-status-checks.txt
+  - scripts/check-ruleset-drift.sh
   - .github/workflows/ci.yml
-  - SECURITY.md
-  - docs/RELEASE.md
+  - .github/required-status-checks.txt
+  - internal/upgrade/taskfile_shape_test.go
   - go.mod
   - go.sum
-  - internal/upgrade/taskfile_shape_test.go
-  - scripts/check-ruleset-drift.sh
-  - web/src/lib/components/ui/button/button.svelte
-  - web/src/lib/components/ui/command/command-group.svelte
-  - web/src/lib/components/ui/command/command-input.svelte
-  - web/src/lib/components/ui/command/command-item.svelte
-  - web/src/lib/components/ui/command/command-link-item.svelte
-  - web/src/lib/components/ui/command/command-separator.svelte
-  - web/src/lib/components/ui/command/command-shortcut.svelte
-  - web/src/lib/components/ui/command/command.svelte
-  - web/src/lib/components/ui/dialog/dialog-content.svelte
-  - web/src/lib/components/ui/dialog/dialog-description.svelte
-  - web/src/lib/components/ui/dialog/dialog-overlay.svelte
-  - web/src/lib/components/ui/input-group/input-group-addon.svelte
-  - web/src/lib/components/ui/input-group/input-group-button.svelte
-  - web/src/lib/components/ui/input-group/input-group-text.svelte
-  - web/src/lib/components/ui/input-group/input-group.svelte
-  - web/src/lib/components/ui/input/input.svelte
-  - web/src/lib/components/ui/table/table-caption.svelte
-  - web/src/lib/components/ui/table/table-footer.svelte
-  - web/src/lib/components/ui/table/table-head.svelte
-  - web/src/lib/components/ui/table/table-row.svelte
-  - web/src/lib/components/ui/tabs/tabs-list.svelte
-  - web/src/lib/components/ui/tabs/tabs-trigger.svelte
-  - web/src/lib/components/ui/tabs/tabs.svelte
-  - web/src/lib/components/ui/textarea/textarea.svelte
+  - docs/RELEASE.md
+  - SECURITY.md
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 2
-  total: 3
-status: issues_found
+  total: 2
+status: clean
 ---
 
 # Phase 2: Code Review Report
 
-**Reviewed:** 2026-09-16T00:00:00Z
+**Reviewed:** 2026-09-16T12:00:00Z
 **Depth:** deep
-**Files Reviewed:** 30
-**Status:** issues_found
+**Files Reviewed:** 8
+**Status:** clean
 
 ## Summary
 
-Reviewed the full Phase 2 file set at deep depth: the new `scripts/check-ruleset-drift.sh` guard and its `ci.yml`/`taskfile_shape_test.go` wiring, the `go.mod`/`go.sum` grpc/x-net/x-crypto/x-text bump, the `docs/RELEASE.md` and `SECURITY.md` doc edits, and the 24 regenerated shadcn-svelte UI components.
+This is iteration 2 of `--auto` re-review. Per orchestrator instructions, the 24 regenerated `web/src/lib/components/ui/**` files reviewed in iteration 1 (`02-REVIEW.iter2.md`, preserved) were not touched by the intervening commit and are not re-reviewed here; their prior verdict (clean, IN-02 carried forward) stands. Only `97bb6a13` landed since iteration 1, touching exactly `scripts/check-ruleset-drift.sh` (1 line changed). All 8 files listed in this iteration's config were re-examined; the 7 files other than the script are byte-identical to iteration 1's review and their findings are carried forward unchanged.
 
-**Authored guard surface** (`scripts/check-ruleset-drift.sh`, the `taskfile_shape_test.go` diff, the three new `ci.yml` steps): sound. Verified independently, not just read:
-- `shellcheck scripts/check-ruleset-drift.sh` — clean, zero findings.
-- `actionlint .github/workflows/ci.yml` — clean, zero findings.
-- Traced every failure path by hand (missing/empty fixture, non-200/empty body, unparseable JSON via `jq -e`, wrong ruleset name, non-active enforcement, zero live contexts, real mismatch) — each is a named `::error::` and hard `exit 1`, in the correct order (fixture emptiness is checked *before* the network call, per the script's own stated invariant). `set -euo pipefail` is in effect and the two places that need to defeat it (`curl ... || true`, `diff ... || true`) do so deliberately and only where needed; the `jq | sort` pipelines correctly propagate a `jq` failure to the caller under `pipefail` (verified this isn't a false green — `sort` alone would otherwise mask a `jq` error).
-- The built-in positive control (plant an extra context, assert the comparator reports drift) runs *after* the zero-live-contexts guard, so it can't itself pass vacuously against an empty live set.
-- `.github/required-status-checks.txt`'s 8 lines match `ci.yml`/`pr-title.yml` job `name:` strings byte-for-byte (checked with `rg`), and the new `readRequiredCheckNames` loader/duplicate-detection/exception-list changes in `taskfile_shape_test.go` are covered by dedicated new tests (missing file, blank file, CRLF trimming, duplicate detection). The new `runBodyExceptions` entry is a single step in a single job with a real, matched reason, exactly as required.
-- `go.mod`/`go.sum`: confirmed the diff is scoped to exactly `golang.org/x/crypto`, `x/net`, `x/text`, `google.golang.org/genproto/googleapis/rpc`, and `google.golang.org/grpc` (the GO-2026-6348 bump chain) — no unrelated requires moved. `GOTOOLCHAIN=go1.26.6 go build ./...` passes clean.
-- `docs/RELEASE.md`: no raw dependency counts remain (grepped for the old `134`/`107`/`27 direct`/`13 direct` figures — gone), and every package named in the rewritten prose (`modelcontextprotocol/go-sdk`, `gonum.org/v1/gonum`, the `charm.land/*` TUI stack, `google.golang.org/protobuf`) is confirmed present as a direct `require` in `go.mod`. `SECURITY.md` gained exactly the one described sentence, names no specific CVE/exposure.
-- The 24 `web/src/lib/components/ui/**` files: diffed each against `diff_base`. All 24 are explainable as Tailwind v4 class-string reordering/arbitrary-value spacing normalization (`calc(100%-1px)` → `calc(100%_-_1px)`, `group-data-[orientation=horizontal]` → `group-data-horizontal`) or removal of unused internal `cn-*` marker classes (confirmed zero references anywhere else in `web/`, including CSS/tests). The three changes 02-05-SUMMARY.md names as behavioral (`button.svelte` hover color-mix, `command-link-item.svelte` selected-state scheme, `table-row.svelte`'s additive `has-aria-expanded:bg-muted/50`) are the only ones with rendered effect, and none has any live caller that would be broken by it (`table-row` addition is dormant — no caller sets `aria-expanded` on a row; `command-link-item` is exported but has no current caller in `web/src` outside its own registry index).
+**WR-01 fix verified, independently, not just read:**
+- Source diff confirms the fix is exactly what the fix report claims: `CURL_ARGS` on `scripts/check-ruleset-drift.sh:91` gained `--connect-timeout 10 --max-time 30`, with no other line touched.
+- `shellcheck scripts/check-ruleset-drift.sh` — reran it myself: exit 0, zero findings.
+- Re-ran the RED case myself (not just trusting the fix report): `RULESET_URL_BASE=http://10.255.255.1 bash scripts/check-ruleset-drift.sh` under `time` — failed at `curl: (28) Failed to connect ... after 10073 ms: Timeout was reached`, printed the script's own `::error::...GET rulesets/20157557 returned HTTP 000 (or an empty body)...` line, and exited 1 in 10.099s wall time. Matches the fix report's claimed RED exactly.
+- Traced the control flow by hand for the failure-mode the reviewer instructions specifically asked to check: `RESPONSE="$(curl "${CURL_ARGS[@]}" ... || true)"` is a command substitution assigned to a variable, not a pipeline — `pipefail` (which only affects pipeline exit-status propagation) does not apply to it, and the explicit `|| true` independently prevents `set -e` from firing on a non-zero `curl` exit status inside the substitution. On a hard connection failure (as reproduced above), `curl` writes nothing to stdout, so `RESPONSE` is empty, `HTTP_CODE` (`tail -n1`) is empty, and `BODY` (`sed '$d'`) is empty — both arms of `[ "${HTTP_CODE}" != "200" ] || [ -z "${BODY}" ]` are satisfied and the script takes its named hard-fail branch, never falling through to treat an empty/timed-out response as a valid (and vacuously matching or non-matching) body. On a mid-transfer `--max-time` abort, `curl` exits nonzero before writing its `-w` suffix, so `RESPONSE` ends up as a body fragment with no trailing `200` line; `HTTP_CODE` then equals the last (partial) body line rather than `200`, so the `!= "200"` arm alone still routes it to the same hard-fail branch. No path silently reads a stalled/incomplete fetch as pass or as a vacuous set match.
+- `GREEN` (no test double needed — a live GitHub API call is legitimate here since this is an unauthenticated read of a public repo's ruleset, no secret involved): `GOTOOLCHAIN=go1.26.6 go build ./...` passes, and `go test ./internal/upgrade/...` (which reads `ci.yml`, not the script) is green, confirming the fix didn't regress anything the taskfile-shape tests cover.
+- No new issue introduced by the fix: the two-character flag addition doesn't change argument order in a way that affects `-w`'s placement or output, doesn't touch the `GITHUB_TOKEN` conditional append, and doesn't affect the trap/self-check/comparator logic below it.
 
-Two minor, non-blocking issues found in the authored guard script and the dependency bump; details below.
+WR-01 is resolved. No new Critical or Warning findings surfaced in this iteration, in the script or the other 7 unchanged files (re-verified: `go build`, `.github/required-status-checks.txt` still lists 8 contexts matching `ci.yml`'s job names, `check-ruleset-drift.sh` is still wired into `ci.yml:243` as a CI-only step with no Taskfile wrapper).
 
-## Warnings
-
-### WR-01: `check-ruleset-drift.sh`'s live-ruleset fetch has no timeout
-
-**File:** `scripts/check-ruleset-drift.sh:91-96`
-**Issue:** The `curl` invocation that fetches the live ruleset carries `-sS` and a `-w` format but no `--max-time`/`--connect-timeout`. A network stall (e.g., a GitHub API hang or a routing black-hole from the runner) blocks this step for however long the job-level timeout allows, rather than failing fast the way every other failure path in this script is designed to (every other branch is a named `::error::` within milliseconds). This is a robustness gap in a script whose entire stated design goal is "never a skip, never a silent pass, hard-fail loud" — an indefinite hang is a softer failure mode than the ones this script otherwise refuses to allow, and it burns CI minutes on the shared `test` job rather than the isolated `Ruleset drift check` step alone.
-**Fix:**
-```bash
-CURL_ARGS=(-sS --connect-timeout 10 --max-time 30 -w '\n%{http_code}' -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
-```
+The two Info items from iteration 1 are unresolved (both explicitly out of the `critical_warning` fix scope per the fix report) and are carried forward below.
 
 ## Info
 
 ### IN-01: Orphaned go.sum checksums left over from the targeted grpc bump
 
-**File:** `go.sum:491-559`
-**Issue:** The bump replaced `golang.org/x/crypto v0.54.0`, `x/net v0.57.0`, `x/text v0.40.0`, `google.golang.org/grpc v1.82.1`, and the old-dated `google.golang.org/genproto/googleapis/rpc` pseudo-version with their new versions in `go.mod`, but `go.sum` still carries both the old and new `h1:`/`go.mod h1:` pairs for all five modules (10 leftover lines no longer referenced by any `require` line). `go build`/`go mod verify` succeed either way, so this isn't a correctness defect, but it's a sign `go mod tidy` wasn't run after the targeted `go get` bump — a future contributor diffing `go.sum` may wonder why the pre-bump versions still verify.
-**Fix:** Run `go mod tidy` (network access to the module proxy required — this could not be verified in this sandbox because an unrelated pre-existing `tree-sitter-swift` test-only import path fails to resolve via `go mod tidy` here) and re-commit the pruned `go.sum`.
+**File:** `go.sum:489-558`
+**Issue:** Re-confirmed present and unchanged: `go.sum` still carries `h1:`/`go.mod h1:` pairs for the pre-bump versions (`golang.org/x/crypto v0.54.0`, `x/net v0.57.0`, `x/text v0.40.0`, `google.golang.org/grpc v1.82.1`, and the older-dated `google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-...` pseudo-version) alongside the new versions actually required by `go.mod` (`v0.55.0`, `v0.58.0`, `v0.41.0`, `v1.83.2`, `v0.0.0-20260526163538-...`). `go build`/`go mod verify` succeed either way — not a correctness defect — but it indicates `go mod tidy` wasn't run after the targeted `go get` bump.
+**Fix:** Run `go mod tidy` (requires module-proxy network access) and re-commit the pruned `go.sum`.
 
 ### IN-02: `command-link-item.svelte` selected-state styling now depends on an attribute with no confirmed caller
 
 **File:** `web/src/lib/components/ui/command/command-link-item.svelte:16`
-**Issue:** Already disclosed and functionally verified in 02-05-SUMMARY.md, noted here only for completeness: this file's selected-state classes were switched from `aria-selected:*` to the identical `data-selected:*` block `command-item.svelte` uses. `CommandLinkItem` has no caller anywhere in `web/src` outside its own registry `index.ts` export today, so this behavioral change is currently dormant in the shipped app — it will only matter the first time something actually renders a `<Command.LinkItem>`. Not a blocker; flagging so the dormant coupling is visible if/when a caller is added.
-**Fix:** None required now. When `CommandLinkItem` gains its first real caller, re-verify the selected-state highlight renders (bits-ui's `CommandPrimitive.LinkItem` should set the same `data-selected` attribute `CommandPrimitive.Item` does, but this repo has no rendered proof of that yet).
+**Issue:** Unchanged since iteration 1 (file not touched by the intervening commit); carried forward for completeness only. Already disclosed in 02-05-SUMMARY.md: the selected-state classes were switched from `aria-selected:*` to `data-selected:*`. `CommandLinkItem` has no caller anywhere in `web/src` outside its own registry `index.ts` export today, so the change is currently dormant.
+**Fix:** None required now. Re-verify the selected-state highlight renders correctly the first time `<Command.LinkItem>` gains a real caller.
 
 ---
 
-_Reviewed: 2026-09-16T00:00:00Z_
+_Reviewed: 2026-09-16T12:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
