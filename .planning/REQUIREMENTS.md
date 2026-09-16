@@ -31,7 +31,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **GRD-09**: `web:drift` is demonstrated RED against commit `98cd41dd`'s exact incident shape (build output present on disk but unstaged) on a clean checkout, closing WINDOWS #29 with the recorded cause — the CI path was never vacuous — and the local `find` enumeration of `web/build` is retained by design (WINDOWS #29)
 - [x] **GRD-10**: The vendored `button.svelte` drift is isolated by a `workflow_dispatch` run under Corepack-pinned pnpm 11.23.0; the component is re-vendored or the window waived with the cause recorded (WINDOWS #31)
 - [x] **GRD-11**: `check:gonum` and `check:no-force-layout` run in `ci.yml` on every pull request
-- [ ] **GRD-12**: `requiredCheckNames` is compared against the live `protect-main` ruleset and fails when they diverge — the `tmux e2e` context is added once the maintainer's repository-settings action lands (promotes GRD-07)
+- [x] **GRD-12**: `requiredCheckNames` is compared against the live `protect-main` ruleset and fails when they diverge — the `tmux e2e` context is added once the maintainer's repository-settings action lands (promotes GRD-07)
 - [ ] **GRD-13**: The `present` archtest catches every charm-family import path added this milestone (`colorprofile`, `fang/v2`, `x/ansi`, …) — prefix match or exact paths added in the same commit as the `go.mod` change — demonstrated RED against a planted import
 - [x] **GRD-14**: Stale-open windows #16 (bench TS framing, resolved v0.11.0 Phase 6) and #33 (tmux CI human-check, PR #71 merged) are closed by recorded verification via `gsd-tools windows fixed`; #20/#21/#34 stay open as record-only deviations with that status noted
 
@@ -147,7 +147,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRD-09 | Phase 2 | Complete |
 | GRD-10 | Phase 2 | Complete |
 | GRD-11 | Phase 2 | Complete |
-| GRD-12 | Phase 2 | Pending |
+| GRD-12 | Phase 2 | Complete |
 | GRD-13 | Phase 4 | Pending |
 | GRD-14 | Phase 2 | Complete |
 | DOCS-08 | Phase 2 | Complete |
