@@ -5,3 +5,4 @@ perf regression gate (PERF-02, INDX-06)
 actionlint (workflow static analysis)
 goreleaser check (config validation, DIST-01)
 pr-title
+tmux e2e (real-pty harness, TTY-01..TTY-07)

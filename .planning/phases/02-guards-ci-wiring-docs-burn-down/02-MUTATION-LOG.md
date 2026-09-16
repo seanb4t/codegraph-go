@@ -233,5 +233,38 @@ predicted. The fixture was NOT edited to close this gap — Task 1 only builds t
 review package (`02-04-ruleset-put-body.json`) from an authenticated `gh api` read; the fixture
 stays at 7 lines until Task 2 confirms the live set has actually reached 8.
 
-**Green re-run (after D-08):** _pending — filled in by Task 2 once the maintainer's ruleset change
-has landed and the live set reads 8 contexts._
+**Green re-run (after D-08):** The maintainer reviewed Task 1's package
+(`02-04-ruleset-put-body.json`, the two exact context strings, the UI path, and the exact
+`gh api --method PUT` command) and authorised running the prepared command. It was applied:
+`gh api --method PUT repos/seanb4t/codegraph-go/rulesets/20157557 --input
+.planning/phases/02-guards-ci-wiring-docs-burn-down/02-04-ruleset-put-body.json` — response
+confirmed `protect-main`, `enforcement: active`, 8 contexts. Task 2's own read-only precondition
+`curl` re-check (unauthenticated, matching how CI runs it) confirmed the live set at 8 contexts
+including both `goreleaser check (config validation, DIST-01)` and `tmux e2e (real-pty harness,
+TTY-01..TTY-07)` before the fixture was touched — only then was
+`.github/required-status-checks.txt` grown to 8 lines (the eighth being the tmux context).
+
+`bash scripts/check-ruleset-drift.sh` (verbatim, run this session):
+
+```
+ruleset-drift: fixture .github/required-status-checks.txt lists 8 contexts
+ruleset-drift: live has 8 contexts, fixture has 8 contexts
+ruleset-drift: self-check PASS — planted context detected
+ruleset-drift: PASS — 8 contexts identical
+```
+
+Exit code: **0**.
+
+`GOTOOLCHAIN=go1.26.6 go test ./internal/upgrade/ -count=1 -run 'TestRequiredCheckNamesPreserved$' -v` (verbatim):
+
+```
+taskfile_shape_test.go:801: TestRequiredCheckNamesPreserved: read 8 required contexts from ../../.github/required-status-checks.txt
+--- PASS: TestRequiredCheckNamesPreserved (0.00s)
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.239s
+```
+
+**Verdict:** The step went RED (6 vs 7, exit 1) to GREEN (8 vs 8, `PASS`, exit 0) by changing the
+world — the maintainer's ruleset change — to match the claim, never the reverse. The fixture edit
+happened strictly after the live-set precondition was independently confirmed. Family (c)'s
+discriminating power (a comparator proven able to fail via the script's own planted-context
+self-check) is on the record for both halves.

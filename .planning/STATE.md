@@ -6,10 +6,10 @@ current_phase: 02
 current_phase_name: Guards, CI Wiring & Docs Burn-down
 status: executing
 stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-09-16T02:49:53.937Z"
+last_updated: "2026-09-16T11:32:24.419Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 02 execution started
-state_head: ff500512047e5c74091b6715fef34d578e670787
+state_head: 6025f848211c7e60003be9acfaadcbeeffcaf2af
 progress:
   total_phases: 7
   completed_phases: 1
@@ -350,7 +350,6 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode. `uat-predicate.cjs` accepts only `pass`/`passed` per test item, so a `skipped`-with-reason deferred follow-up blocks `phase uat-passed` even though the verify-work template calls that state `complete` and #1921 says a deferred follow-up must never block (P8 test 3). `gsd-verifier` declared every file in the phase dir — including `08-UAT.md` and `08-VALIDATION.md`, which verify-work and validate-phase WRITE — in `covered_files`, so the verification went `stale` by construction the moment its own downstream hooks ran; resolved by dropping those two outputs from the set and recomputing via `verification.fingerprint` (the verifier contract at `gsd-verifier.md:673` is PLAN/SUMMARY + requirements + impl files, not workflow outputs).
-- [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
 - ⚠️ [Phase 10] Phases 7 and 8 read `verification_status: stale` since Phase 9 completed: their `covered_files` include `.planning/REQUIREMENTS.md` (verifier contract #4155 — "mapped requirement"), which every later `phase.complete` rewrites. ROADMAP still shows them `[x]`; the tool-sanctioned repair is `/gsd-verify-work 07` / `08` re-verification. Will surface at the milestone audit.
 - ⚠️ [Phase 11] `check:gonum` and `check:no-force-layout` exist as Taskfile targets (GRF-10, GRF-06 D-12b) and pass locally, but are NOT wired into `ci.yml` — recorded as a follow-up in `11-SECURITY.md`; the CI govulncheck job still covers the main module, so the SBOM-name and cgo-closure halves are local-only until wired.
 - ⚠️ [Phase 11] `web/scripts/check-no-force-layout.mjs` proves only that no forbidden layout name appears as a string literal at the `name:` option position or as a `cytoscape-<x>` import/dependency specifier; a string-built or variable layout name is not detected. `GraphCanvas.svelte:374` spreads `LAYOUT_OPTIONS` (declared with literal `name: 'elk'`) and is reported as the one advisory `unresolvedLayoutNames` entry — non-fatal by design (WR-03).
