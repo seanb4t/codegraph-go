@@ -6,10 +6,10 @@ current_phase: 02
 current_phase_name: Guards, CI Wiring & Docs Burn-down
 status: executing
 stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-09-16T02:35:02.535Z"
+last_updated: "2026-09-16T02:41:14.850Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 02 execution started
-state_head: ea1adc96a1097254bd18032090237dce35672816
+state_head: 9f6603a24a4a239a267b87e3ac82411a3e1e6469
 progress:
   total_phases: 7
   completed_phases: 1
@@ -381,6 +381,8 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
 - ⚠️ [Phase 1] `tools/bench/BASELINE.md` (lines ~439/477) links a specific CI run as the FIX-11 in-flight discriminator; GitHub prunes run logs/artifacts under its retention policy, so the link will rot — the conclusion is recorded inline, the link is convenience only (01-REVIEW.md IN-01, Info, left open by scope).
 - ⚠️ [Phase 1] Plan-level `<verify>` gates for web plans ran `pnpm check` but never `pnpm vitest run`; the FIX-05 reveal broke seven test fakes and only the deep code review caught it (exit 1 with 11 unhandled errors behind a 585-passed count). Phase 2's guard work should add the vitest exit-code assertion to the plan template or the Taskfile gate.
+- [Phase 2] WINDOWS #20, #21, #34 are open by decision, not pending work: #20 and #21 are Phase-2 (v0.12.0) deviations by design (no `svelte.config.js` in this SvelteKit toolchain; TypeScript pinned at 6.0.3 by the scaffold), #34 is a TTY-06 mutation-log finding whose assertion measures post-settle stability by design; the ledger has no annotate/record-only verb or status, so they stay `open` rather than being waived (a waiver reads as a deferred defect) or fixed (nothing was fixed). Plan 02-07, GRD-14.
+- Tooling gaps (GRD-14/DOCS-11, 02-07): (a) `gsd-tools windows` has no annotate/record-only verb or status; (b) `windows fixed <id>` accepts no note (`broken-windows.cjs` `markFixed`/`cmdWindowsMarkFixed`, lines 286-293/1068-1088: one positional, zero flags), so verification evidence can only live in plan SUMMARYs; (c) no CLI verb creates a pending-todo file (the add-todo workflow is agent-authored, not a `gsd-tools` command); (d) STATE.md's Pending Todos renderer (`init.cjs` `renderPendingTodosMarkdown`, line 2024) emits bullets, so the previous hand-authored table was not a tool shape and was replaced by the rendered body in 02-07. Filing on open-gsd/gsd-core is the maintainer's call; the drafted issue body is in 02-07-SUMMARY.md.
 
 ### Quick Tasks Completed
 
