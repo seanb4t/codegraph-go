@@ -120,11 +120,8 @@ func TestIndexForceRefusesWhileStoreIsHeld(t *testing.T) {
 	if !strings.Contains(err.Error(), "codegraph daemon stop") {
 		t.Fatalf("index --force error = %q; want it to name `codegraph daemon stop`", err.Error())
 	}
-	if !strings.Contains(err.Error(), "codegraph unlock") {
-		t.Fatalf("index --force error = %q; want it to name `codegraph unlock` (the verb live today, not `daemon unlock`)", err.Error())
-	}
-	if strings.Contains(err.Error(), "daemon unlock") {
-		t.Fatalf("index --force error = %q; must NOT name `daemon unlock` — that verb does not exist until Phase 3", err.Error())
+	if !strings.Contains(err.Error(), "codegraph daemon unlock") {
+		t.Fatalf("index --force error = %q; want it to name `codegraph daemon unlock` (VERB-04/D-08 — the live verb after the fold)", err.Error())
 	}
 
 	// The refusal must precede os.RemoveAll+os.MkdirAll: the store

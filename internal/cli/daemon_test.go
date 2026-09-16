@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -326,4 +330,88 @@ func TestDaemonStopCmd_AllAndPath_MutuallyExclusive(t *testing.T) {
 	if _, _, err := execCmd("daemon", "stop", "--all", "--path", "/repo"); err == nil {
 		t.Fatal("expected daemon stop --all --path <p> to return a non-nil error (mutually exclusive flags)")
 	}
+}
+
+// deadPID returns a pid that was valid a moment ago but is now guaranteed
+// dead: it re-execs this test binary with a run filter matching nothing,
+// so the child process starts and exits immediately (portable,
+// dependency-free). Mirrors internal/daemon/lock_test.go's own deadPID —
+// a package-local copy since Go test helpers are not importable across
+// packages (Task 2, 03-02).
+func deadPID(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("spawning throwaway process: %v", err)
+	}
+	return cmd.Process.Pid
+}
+
+// TestDaemonUnlockCmd covers VERB-04/D-07: `codegraph daemon unlock [path]`
+// behaves exactly as the old top-level `unlock` verb did — an absent lock
+// is a clean no-op, a dead-pid lock is removed, it accepts at most one
+// positional arg, and it has no flags of its own (the parent `daemon`'s
+// `-p` is non-persistent and does not leak in).
+func TestDaemonUnlockCmd(t *testing.T) {
+	t.Run("absent lock is a clean no-op", func(t *testing.T) {
+		dir := t.TempDir()
+		out, _, err := execCmd("daemon", "unlock", dir)
+		if err != nil {
+			t.Fatalf("daemon unlock: unexpected error: %v", err)
+		}
+		want := "no lock present at " + filepath.Join(dir, codegraphDirName, "daemon.lock") + " — nothing to do"
+		if strings.TrimSpace(out) != want {
+			t.Fatalf("daemon unlock (absent lock) = %q, want %q", strings.TrimSpace(out), want)
+		}
+	})
+
+	t.Run("dead-pid lock is removed", func(t *testing.T) {
+		dir := t.TempDir()
+		codegraphDir := filepath.Join(dir, codegraphDirName)
+		if err := os.MkdirAll(codegraphDir, 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		pid := deadPID(t)
+		lockPath := filepath.Join(codegraphDir, "daemon.lock")
+		data, err := json.Marshal(map[string]any{
+			"pid":       pid,
+			"startedAt": time.Now().Format(time.RFC3339),
+		})
+		if err != nil {
+			t.Fatalf("marshal lock payload: %v", err)
+		}
+		if err := os.WriteFile(lockPath, data, 0o644); err != nil {
+			t.Fatalf("write lockfile: %v", err)
+		}
+
+		out, _, err := execCmd("daemon", "unlock", dir)
+		if err != nil {
+			t.Fatalf("daemon unlock: unexpected error: %v", err)
+		}
+		want := fmt.Sprintf("removed stale lock (pid=%d)", pid)
+		if strings.TrimSpace(out) != want {
+			t.Fatalf("daemon unlock (dead-pid lock) = %q, want %q", strings.TrimSpace(out), want)
+		}
+		if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+			t.Fatalf("expected lockfile to be removed, stat err: %v", err)
+		}
+	})
+
+	t.Run("at most one positional arg", func(t *testing.T) {
+		_, _, err := execCmd("daemon", "unlock", "a", "b")
+		if err == nil {
+			t.Fatal("daemon unlock a b: expected an error, got nil")
+		}
+	})
+
+	t.Run("no flags of its own (identical to the old verb)", func(t *testing.T) {
+		dir := t.TempDir()
+		_, _, err := execCmd("daemon", "unlock", "-p", dir)
+		if err == nil {
+			t.Fatal("daemon unlock -p <dir>: expected an error, got nil")
+		}
+		if !strings.Contains(err.Error(), "unknown shorthand flag") {
+			t.Fatalf("daemon unlock -p <dir> error = %q, want it to contain %q", err.Error(), "unknown shorthand flag")
+		}
+	})
 }
