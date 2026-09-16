@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Guards, CI Wiring & Docs Burn-down",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 02 of 7 · 14% · executing"
   },
-  "updated_at": "2026-09-16T01:34:07.836Z"
+  "updated_at": "2026-09-16T01:51:00.239Z"
 }

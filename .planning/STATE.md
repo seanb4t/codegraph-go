@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 02
 current_phase_name: Guards, CI Wiring & Docs Burn-down
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-16T01:34:08.377Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-09-16T01:51:28.140Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 02 execution started
-state_head: cd8b4bc95715753ae8e723e75cce47eb30d1bf54
+state_head: d7b7a986b4a25158c97b65b50c7c7295f9ceb7ef
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 16
-  completed_plans: 10
+  completed_plans: 11
   percent: 14
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-15 after Phase 1)
 ## Current Position
 
 Phase: 02 (Guards, CI Wiring & Docs Burn-down) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-09-15 — Phase 02 execution started
 
@@ -145,6 +145,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P08 | 55min | 3 tasks | 2 files |
 | Phase 01 P09 | ~40min | 2 tasks | 2 files |
 | Phase 02 P01 | 7min | 2 tasks | 3 files |
+| Phase 02 P03 | 25min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -317,6 +318,8 @@ Standing decisions that outlive every milestone:
 - [Phase 01]: 01-08: cytoscape teardown fix required TWO closures, not one — deferring GraphCanvas's own cy.destroy() alone was insufficient because cytoscape's Core constructor auto-destroys a prior instance registered on a reused container element (container._cyreg), bypassing this component's own teardown timing entirely. Fixed by giving every mount a dedicated, never-reused cytoscape container element in addition to the deferred-destroy gate. — Live reproduction (instance/generation tracing) proved cy.destroyed() was already true before this component's own destroyNow() ever ran, tracing to cytoscape's own container-reuse auto-destroy path in its Core constructor.
 - [Phase 01]: 01-09: guava invalid-endpoints race root-caused to cytoscape's own implicit default construction-time 'grid' layout (not an ELK option), fixed via layout:{name:'null'} on the Core constructor plus edge-hide/reveal defense-in-depth around ELK's real layout
 - [Phase 02]: No change to Taskfile.yml (D-01): web:drift already RED against 98cd41dd's exact incident shape on a clean checkout — Live replay confirmed CI's clean-checkout find enumeration already fails on the incident; a find-vs-git-ls-files paired assertion would only test staging hygiene, not close a real gate blind spot
+- [Phase 02]: [Phase 02]: GRD-12: requiredStatusChecksPath is a standalone top-level const, not folded into the existing multi-const block, so the plan's literal grep for the const declaration matches exactly.
+- [Phase 02]: [Phase 02]: GRD-12: left ci.yml's pre-existing goreleaser-check job name field untouched despite matching the plan's D-07 negative-grep verify gate -- that occurrence predates this plan and is structurally required for GitHub's ruleset job-name matching and for TestRequiredCheckNamesPreserved; fixed only the one true duplication this plan introduced (the script's own header comment).
 
 ### Pending Todos
 
@@ -477,8 +480,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-16T01:34:08.349Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-09-16T01:51:28.109Z
+Stopped at: Completed 02-03-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

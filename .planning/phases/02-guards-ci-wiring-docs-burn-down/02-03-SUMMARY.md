@@ -42,7 +42,7 @@ key-decisions:
 patterns-established:
   - "Pattern: when a plan's own <verify> grep is provably over-broad against a pre-existing, structurally-necessary occurrence (verified via git show HEAD against the plan's own start commit), fix what you actually introduced and document the false-positive rather than mutating unrelated, correct, pre-existing code to force a literal grep to pass"
 
-requirements-completed: [GRD-12]
+requirements-completed: []  # GRD-12 is shared with 02-04 (requirements.ready-ids reported 0/1 ready) — not marked complete by this plan; 02-04's D-08 ruleset PUT is the other half of this requirement's closure
 
 coverage:
   - id: D1
@@ -191,7 +191,7 @@ None - no external service configuration required. (D-08's ruleset PUT — the m
 ## Next Phase Readiness
 - `.github/required-status-checks.txt`, `scripts/check-ruleset-drift.sh`, and the `Ruleset drift check (GRD-12)` CI step are all in place and will run on the next push/PR, honestly RED until 02-04 lands D-08.
 - `internal/upgrade/taskfile_shape_test.go` no longer hardcodes the required-check list; 02-04 can add `tmux e2e (real-pty harness, TTY-01..TTY-07)` to the shared data file alone once the maintainer's ruleset PUT lands, with no Go-side change needed.
-- GRD-12 is marked complete in `REQUIREMENTS.md` by this plan (single-plan requirement, no sibling declares it in this phase per `requirements.ready-ids`).
+- GRD-12 is declared by both this plan and 02-04 (`requirements.ready-ids` reported `0/1 requirement(s) ready to mark complete`), so it stays open in `REQUIREMENTS.md` until 02-04 also completes — no blocker, expected per the shared-ID gate (same pattern as 02-01/02-07's GRD-09).
 
 ---
 *Phase: 02-guards-ci-wiring-docs-burn-down*
