@@ -317,3 +317,195 @@ during this planning/execution session and passed in isolation in 0.23s — a pr
 flake, already recorded in STATE.md's deferred_items, unrelated to the verb fold. If it recurs
 during 03-02's or later plans' full-suite runs, it should be reported separately rather than
 treated as a fold regression.
+
+---
+
+## Family (b) — VERB-07: a re-visible query command turns docs:cli:drift and TestEveryRegisteredFlagIsAccountedFor RED
+
+**Test/guard:** the two committed gates that freeze the generated CLI reference —
+`task docs:cli:drift` (`docs/CLI-REFERENCE.md` against a fresh `tools/clidoc` regeneration) and
+`TestEveryRegisteredFlagIsAccountedFor` (`internal/cli/cli_reference_test.go`, walking every
+registered command/flag against the reference plus `testdata/cli-reference-allowlist.txt`).
+
+**What are we testing, and why?** Whether these two gates actually catch the exact regression
+they exist to catch — a hidden rename stub becoming visible again — or whether the 03-02 re-freeze
+was a vacuous pass (rule `84d1gfpywd`). We are testing the gate pair, not cobra's `Hidden`
+semantics or `tools/clidoc`'s generator itself (v0.13.0 Phase 12 ruling: never reimplement the
+generator).
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/renamed.go docs/CLI-REFERENCE.md internal/cli/testdata/cli-reference-allowlist.txt` — clean.
+
+**Mutation applied:** in `internal/cli/renamed.go`, on the `query` stub ONLY, changed `Hidden: true`
+to `Hidden: false` (one token via `perl -0pi`; confirmed by grep count before/after: 2 → 1
+`Hidden:\s+true` occurrences, exactly 1 `Hidden:\s+false`). The `unlock` stub's `Hidden: true` was
+left untouched. Diff:
+
+```diff
+--- a/internal/cli/renamed.go
++++ b/internal/cli/renamed.go
+@@ -56,7 +56,7 @@ func newQueryCmd() *cobra.Command {
+ 	return &cobra.Command{
+ 		Use:                "query",
+ 		Short:              `Renamed to "search --full" — stub removed in v0.15.0`,
+-		Hidden:             true,
++		Hidden:             false,
+ 		DisableFlagParsing: true,
+ 		RunE: func(cmd *cobra.Command, args []string) error {
+ 			fmt.Fprintln(cmd.ErrOrStderr(), `"query" has been renamed to "search --full" — run: codegraph search --full <term>`)
+```
+
+This is D-11's "reintroduce a visible `query` command" — chosen over "remove `--full`" because it
+turns BOTH gates red (removing `--full` would only trip the drift gate; the flag-accounting test
+does not check for flags the doc mentions but the tree lacks).
+
+**Observed failure — `task docs:cli:drift`** (verbatim, exit code appended):
+
+```
+task: [docs:cli:drift] set -euo pipefail
+scratch=$(mktemp -d)
+trap 'rm -rf "${scratch}"' EXIT
+
+files=$(git ls-files -- 'docs/CLI-REFERENCE.md')
+ndocs=0
+if [ -n "${files}" ]; then
+  ndocs=$(printf '%s\n' "${files}" | wc -l | tr -d ' ')
+fi
+echo "docs:cli:drift: compared ${ndocs} generated file"
+if [ "${ndocs}" -lt 1 ]; then
+  echo "::error::docs:cli:drift: enumerated only ${ndocs} committed generated file at docs/CLI-REFERENCE.md (expected exactly 1) — a broken enumeration must fail loud, never read as a clean pass"
+  exit 1
+fi
+
+GOTOOLCHAIN=go1.26.6 go run ./tools/clidoc -out "${scratch}/CLI-REFERENCE.md"
+
+if ! cmp -s docs/CLI-REFERENCE.md "${scratch}/CLI-REFERENCE.md"; then
+  echo "::error::docs:cli:drift: docs/CLI-REFERENCE.md differs from a fresh regeneration by the pinned toolchain — run \`task docs:cli\` and commit the result"
+  diff -u docs/CLI-REFERENCE.md "${scratch}/CLI-REFERENCE.md" | head -40 || true
+  exit 1
+fi
+
+echo "docs:cli:drift: docs/CLI-REFERENCE.md byte-identical to a fresh regeneration (temporary file only — source tree untouched)"
+
+docs:cli:drift: compared 1 generated file
+::error::docs:cli:drift: docs/CLI-REFERENCE.md differs from a fresh regeneration by the pinned toolchain — run `task docs:cli` and commit the result
+--- docs/CLI-REFERENCE.md	2026-09-16 15:10:06
++++ /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.NHm0oPbVhA/CLI-REFERENCE.md	2026-09-16 17:51:39
+@@ -34,6 +34,7 @@
+ * [codegraph init](#codegraph-init)	 - Create .codegraph/ and build the full graph in one step
+ * [codegraph install](#codegraph-install)	 - Configure coding agents to use this codegraph binary as their MCP server
+ * [codegraph node](#codegraph-node)	 - Show a symbol's signature, calls, and callers, or a line-numbered file read
++* [codegraph query](#codegraph-query)	 - Renamed to "search --full" — stub removed in v0.15.0
+ * [codegraph search](#codegraph-search)	 - Lexically search symbol names/qualified names
+ * [codegraph serve](#codegraph-serve)	 - Run the codegraph MCP server
+ * [codegraph status](#codegraph-status)	 - Report index health and counts
+@@ -618,7 +619,25 @@
+ ### SEE ALSO
+ 
+ * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
++
++## codegraph query
+ 
++Renamed to "search --full" — stub removed in v0.15.0
++
++```
++codegraph query [flags]
++```
++
++### Options
++
++```
++  -h, --help   help for query
++```
++
++### SEE ALSO
++
++* [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
++
+ ## codegraph search
+ 
+ Lexically search symbol names/qualified names
+task: Failed to run task "docs:cli:drift": exit status 1
+exit=201
+```
+
+**Observed failure — `TestEveryRegisteredFlagIsAccountedFor`** (verbatim, exit code appended):
+
+```
+=== RUN   TestEveryRegisteredFlagIsAccountedFor
+    cli_reference_test.go:254: walked 37 commands (hidden included), inspected 113 flags: 111 accepted via ../../docs/CLI-REFERENCE.md, 2 accepted via testdata/cli-reference-allowlist.txt
+    cli_reference_test.go:274: 1 problem(s):
+        stale allowlist entry: codegraph query (matches no registered command or flag)
+--- FAIL: TestEveryRegisteredFlagIsAccountedFor (0.08s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.558s
+FAIL
+exit=1
+```
+
+The `query` stub's now-visible state makes `documentedByReference(cmd)` true for it, which closes
+the command-level allowlist loophole (`cli_reference_test.go` D-08 review WR-01: a command-level
+entry only covers a hidden command) — the allowlist line for `codegraph query` is no longer
+honored, and is reported as stale rather than the `--help` flag being reported unaccounted; both
+gates independently detect the same regression via different mechanisms.
+
+**Revert:** `git checkout -- internal/cli/renamed.go`.
+
+**Byte-clean proof:** `git diff --quiet -- internal/cli/renamed.go` — holds; `test "$(rg -c 'Hidden:\s+true' internal/cli/renamed.go)" = "2"` — both stubs' `Hidden: true` restored; `git status --porcelain internal/ docs/` — empty.
+
+**Green re-run — `task docs:cli:drift`** (verbatim, exit code appended):
+
+```
+docs:cli:drift: compared 1 generated file
+docs:cli:drift: docs/CLI-REFERENCE.md byte-identical to a fresh regeneration (temporary file only — source tree untouched)
+exit=0
+```
+
+**Green re-run — `TestEveryRegisteredFlagIsAccountedFor`** (verbatim):
+
+```
+=== RUN   TestEveryRegisteredFlagIsAccountedFor
+    cli_reference_test.go:254: walked 37 commands (hidden included), inspected 113 flags: 110 accepted via ../../docs/CLI-REFERENCE.md, 3 accepted via testdata/cli-reference-allowlist.txt
+--- PASS: TestEveryRegisteredFlagIsAccountedFor (0.02s)
+ok  	github.com/seanb4t/codegraph-go/internal/cli	0.451s
+```
+
+**Adjacency proof (VERB-07/adjacency — the re-freeze was a real, non-empty diff):**
+
+```
+$ F=$(git log --format=%H --grep='^feat(cli)!: fold query into search --full and unlock into daemon unlock$' -1)
+$ echo "$F"
+5d69ee2ea3c6276ed73c946b24be93612fae1698
+$ git show --format= --numstat "$F" -- docs/CLI-REFERENCE.md
+28	49	docs/CLI-REFERENCE.md
+```
+
+28 lines added, 49 deleted at the feat commit — the drift gate's GREEN state on HEAD is a property
+of a real, reviewed re-freeze, not a no-op regeneration that never touched anything.
+
+**Empty-enumeration proof (VERB-07/empty — the gates cannot pass on a broken enumeration):**
+`task docs:cli:drift` prints `compared 1 generated file` in both the RED and GREEN transcripts
+above (never 0); `TestEveryRegisteredFlagIsAccountedFor` logs `walked 37 commands` (above its
+26-command floor) with `3 accepted via testdata/cli-reference-allowlist.txt` on green HEAD —
+both counts observed, not assumed.
+
+**Ordering proof (VERB-07/ordering — regeneration is deterministic):**
+
+```
+$ GOTOOLCHAIN=go1.26.6 go run ./tools/clidoc -out /tmp/03-03-gen-a.md
+$ GOTOOLCHAIN=go1.26.6 go run ./tools/clidoc -out /tmp/03-03-gen-b.md
+$ cmp /tmp/03-03-gen-a.md /tmp/03-03-gen-b.md
+$ cmp /tmp/03-03-gen-a.md docs/CLI-REFERENCE.md
+```
+
+Both `cmp` invocations exited 0 (no output, no diff) — two consecutive `tools/clidoc` runs are
+byte-identical to each other and to the committed `docs/CLI-REFERENCE.md`; the generator's
+traversal order is stable across runs.
+
+**Verdict:** Both committed gates that freeze the generated CLI reference were watched fail on the
+exact regression they exist to catch — a rename stub's `Hidden` flag flipping back to visible —
+with named, specific output (`+## codegraph query` in the drift diff; `stale allowlist entry:
+codegraph query` in the flag test), and both returned to green after a single-token, byte-clean
+revert. The re-freeze underlying that green state is a real, non-empty, deterministic diff
+(28+/49− at the feat commit; two regenerations `cmp`-identical), and neither gate's positive
+counts (`compared 1 generated file`, `walked 37 commands`) were ever zero or assumed. Neither gate
+was vacuous.
