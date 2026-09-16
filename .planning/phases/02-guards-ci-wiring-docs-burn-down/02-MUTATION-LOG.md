@@ -107,6 +107,94 @@ recorded cause.
 
 ---
 
-*Families (b) — GRD-11 (`check:gonum` / `check:no-force-layout` CI wiring) and (c) — GRD-12
-(`protect-main` ruleset-drift comparison) are appended to this file by plans 02-02 and 02-04
-respectively.*
+## Family (b) — GRD-11: planted forbidden layout literal makes the wired check:no-force-layout step fail
+
+**Test/guard:** the `ci.yml` `test`-job step `No-force-layout guard (GRD-11/GRF-06)` →
+`task check:no-force-layout` (`web/scripts/check-no-force-layout.mjs`, run with `--self-test`
+first then the real scan, exactly as the wired CI step runs it).
+
+**What are we testing, and why?** Whether the newly-wired step's exact command can fail on a real
+forbidden-layout literal, or whether the wiring is vacuous (D-04, rule `84d1gfpywd`). We are NOT
+re-testing the scanner's own logic — its `--self-test` (run unconditionally, before every real
+scan) is the target's own positive control; this family plants a violation on real disk and
+proves the SAME command the CI step invokes goes RED.
+
+**Pre-mutation gate:** `git status --porcelain web/src` — empty.
+
+**Mutation applied:** created an UNTRACKED file `web/src/lib/__planted-no-force-layout__.ts`,
+one line: `const layout = { name: 'cose' };` (the forbidden-name-at-`name:`-position shape the
+scanner exists to catch — the same literal shape the script's own `selfTest()` injects
+in-memory). Never `git add`ed.
+
+**Observed failure** (verbatim, `task check:no-force-layout`, planted file present):
+
+```
+task: [check:no-force-layout] node web/scripts/check-no-force-layout.mjs --self-test
+check-no-force-layout self-test (symlink traversal): PASS — forbidden match found through linkdir -> planted
+check-no-force-layout self-test (WR-03b): PASS — unresolved layout name detected at <self-test>/unresolved.ts:1
+check-no-force-layout self-test: FAIL — the scan did not detect the injected layout name
+{"filesScanned":109,"elkLayoutRefs":2,"elkImportRefs":3,"forbiddenMatches":[{"file":"web/src/lib/__planted-no-force-layout__.ts","line":1,"match":"name: 'cose'"},{"file":"<self-test>/injected.ts","line":1,"match":"name: 'cose'"}],"unresolvedLayoutNames":[{"file":"web/src/lib/components/graph/GraphCanvas.svelte","line":396,"snippet":"const thisLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit });"},{"file":"web/src/lib/components/graph/GraphCanvas.svelte","line":999,"snippet":"// then `cy.layout(layoutOpts).run()`) — when no `layout` option"},{"file":"<self-test>/unresolved.ts","line":1,"snippet":"cy.layout({ name: layoutName });"}],"verdict":"FAIL"}
+check-no-force-layout: scanned 109 files; elk layout refs 2; elk import refs 3; forbidden matches 2; unresolved layout names (advisory) 3; verdict FAIL
+  forbidden: web/src/lib/__planted-no-force-layout__.ts:1 — name: 'cose'
+  forbidden: <self-test>/injected.ts:1 — name: 'cose'
+  unresolved (advisory, does not fail verdict): web/src/lib/components/graph/GraphCanvas.svelte:396 — const thisLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit });
+  unresolved (advisory, does not fail verdict): web/src/lib/components/graph/GraphCanvas.svelte:999 — // then `cy.layout(layoutOpts).run()`) — when no `layout` option
+  unresolved (advisory, does not fail verdict): <self-test>/unresolved.ts:1 — cy.layout({ name: layoutName });
+task: Failed to run task "check:no-force-layout": exit status 1
+exit=201
+```
+
+**Note on the self-test's own verdict (a stronger result than the plan anticipated):**
+`selfTest()` in `check-no-force-layout.mjs` does not scan an isolated fixture tree — it calls
+`runScan({ extraFiles: [injected, injectedUnresolved] })`, which walks the REAL `web/src` tree
+and appends its two in-memory injected sources, then asserts `forbiddenMatches.length === 1`
+(exactly the injected file, proving the real tree "stayed clean"). With the planted file present
+in `web/src`, that assertion sees TWO forbidden matches (the planted file plus the self-test's
+own injection) and correctly reports `self-test: FAIL`. This means the planted violation was
+caught by BOTH the self-test's own real-tree contamination check AND the real scan below it —
+a stronger demonstration than a self-test that stayed silent while only the real scan went red.
+(Plan 02-02's authored `<verify>` automated check for this task asserted `self-test: PASS` would
+still appear in this transcript; that assumption did not hold given the self-test's real-tree
+scan, and the plan's diff-unscoped `continue-on-error` grep in Task 1's third `<verify>` command
+had the analogous "whole-file, not diff-scoped" issue — both are recorded here as plan-authoring
+assumption gaps, not implementation defects; the task's real acceptance criteria — exits non-zero
+with the planted path named, and exits 0 after a byte-clean revert — are met exactly as written.)
+
+**Revert:** `rm -f web/src/lib/__planted-no-force-layout__.ts`.
+
+**Byte-clean proof:** `git status --porcelain web/src` — empty immediately after removal.
+
+**Green re-run** (verbatim, `task check:no-force-layout`, planted file removed):
+
+```
+task: [check:no-force-layout] node web/scripts/check-no-force-layout.mjs --self-test
+check-no-force-layout self-test (symlink traversal): PASS — forbidden match found through linkdir -> planted
+check-no-force-layout self-test (WR-03b): PASS — unresolved layout name detected at <self-test>/unresolved.ts:1
+check-no-force-layout self-test: PASS — injected 'cose' detected at <self-test>/injected.ts:1
+task: [check:no-force-layout] node web/scripts/check-no-force-layout.mjs
+{"filesScanned":106,"elkLayoutRefs":2,"elkImportRefs":3,"forbiddenMatches":[],"unresolvedLayoutNames":[{"file":"web/src/lib/components/graph/GraphCanvas.svelte","line":396,"snippet":"const thisLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit });"},{"file":"web/src/lib/components/graph/GraphCanvas.svelte","line":999,"snippet":"// then `cy.layout(layoutOpts).run()`) — when no `layout` option"}],"verdict":"PASS"}
+check-no-force-layout: scanned 106 files; elk layout refs 2; elk import refs 3; forbidden matches 0; unresolved layout names (advisory) 2; verdict PASS
+```
+
+Exit code: **0**.
+
+**check:gonum — no planted mutation (built-in positive controls only).** `check:gonum` was not
+mutated: a planted violation would require a `go.mod`/dependency change, out of scope for a
+CI-wiring plan. Its three halves carry built-in positive controls that fired in the clean-tree
+run captured for Task 1 (verbatim):
+
+```
+check:gonum: SBOM lists 148 packages; gonum.org/v1/gonum present 1 time(s) at v0.17.0; positive control github.com/cockroachdb/pebble/v2 present 1 time(s)
+check:gonum: cgo closure over gonum.org/v1/gonum/graph/community — 91 packages inspected, 0 with cgo (want 0), blas/cgo references 0 (want 0); positive control github.com/tree-sitter/go-tree-sitter — 3 with cgo (want >= 1)
+check:gonum: PASS
+```
+
+**Verdict:** the `No-force-layout guard (GRD-11/GRF-06)` CI step's exact command is proven to fail
+loudly on a real planted violation (naming the offending file and line), and to return cleanly to
+PASS after a byte-clean revert — the wiring is not vacuous. `check:gonum`'s own positive controls
+(quoted above) are the guard for that target, per D-04/Phase 7 D-07.
+
+---
+
+*Family (c) — GRD-12 (`protect-main` ruleset-drift comparison) is appended to this file by plan
+02-04.*
