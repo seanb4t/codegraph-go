@@ -371,3 +371,14 @@ Plans:
 Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.5: remove the query/unlock rename stubs
+
+**Goal:** Remove the hidden `query` and `unlock` rename stubs registered by Phase 3 (VERB-03/VERB-04, D-05/D-09; feat commit 5d69ee2ea3c6276ed73c946b24be93612fae1698) in v0.15.0, the minor after the fold: delete `internal/cli/renamed.go` and `internal/cli/renamed_test.go`, drop `newQueryCmd()` and `newUnlockCmd()` from `internal/cli/root.go`'s AddCommand list, remove the two `codegraph query` / `codegraph unlock` lines from `internal/cli/testdata/cli-reference-allowlist.txt`, run `task docs:cli` (no reference change expected — the stubs are hidden), and re-run the Phase 3 census instrument (03-MUTATION-LOG.md Family (c)) expecting zero hits.
+**Requirements**: TBD
+**Depends on:** Phase TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 999.5 to break down)
