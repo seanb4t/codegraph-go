@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-15 after Phase 1)
+See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 02 — Guards, CI Wiring & Docs Burn-down
+**Current focus:** Phase 3 — Verb Fold
 
 ## Current Position
 
@@ -345,7 +345,6 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **CR-01 is no longer just carried — it is scoped.** `internal/mcp/server.go:225-349`'s `pendingWriter` "pending response" counter increments only on accepted client requests but decrements on every stdout `Write()`, including server-initiated notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that SPEC-09 routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable, not theoretical. Predates v0.10.0 (introduced in `13f2875`). Full trace and proposed fix in `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md` (archived under `milestones/`). Now `FIX-01`, Phase 1.
 - **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` and `999.6` were both promoted into v0.3.0, but all `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. Decide whether the promoted entries should be struck or annotated; nothing was removed pending that call. (`999.5` has since been consumed by v0.5.0; `999.2` and `999.4` remain.)
 - **Client-side `tools/list` caching bugs are a known confound.** Real, primary-source GitHub issues exist against Claude Code itself (anthropics/claude-code #41123, #40025, #50515; claude-ai-mcp #45).
-- **Open GitHub issues:** #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity).
 - **Advisory, unregistered surfaces** from the v1.0 Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
 - **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing. Native Windows support was dropped in `v0.4.0` (WSL2 only).
 - **GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling.** goreleaser's binary reaches `golang.org/x/crypto/openpgp` (110 vulnerable symbols) via pipe/ko → google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A). The advisory `tool-vuln` job surfaces it — reported, not resolved. **Relevant to `BLD-06`:** `pnpm audit` adds a second, disjoint scanner covering the JS tree neither `govulncheck` nor Syft can see; `SECURITY.md` must state both scanners' actual scope rather than implying one covers everything.
@@ -353,7 +352,6 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode. `uat-predicate.cjs` accepts only `pass`/`passed` per test item, so a `skipped`-with-reason deferred follow-up blocks `phase uat-passed` even though the verify-work template calls that state `complete` and #1921 says a deferred follow-up must never block (P8 test 3). `gsd-verifier` declared every file in the phase dir — including `08-UAT.md` and `08-VALIDATION.md`, which verify-work and validate-phase WRITE — in `covered_files`, so the verification went `stale` by construction the moment its own downstream hooks ran; resolved by dropping those two outputs from the set and recomputing via `verification.fingerprint` (the verifier contract at `gsd-verifier.md:673` is PLAN/SUMMARY + requirements + impl files, not workflow outputs).
 - ⚠️ [Phase 10] Phases 7 and 8 read `verification_status: stale` since Phase 9 completed: their `covered_files` include `.planning/REQUIREMENTS.md` (verifier contract #4155 — "mapped requirement"), which every later `phase.complete` rewrites. ROADMAP still shows them `[x]`; the tool-sanctioned repair is `/gsd-verify-work 07` / `08` re-verification. Will surface at the milestone audit.
-- ⚠️ [Phase 11] `check:gonum` and `check:no-force-layout` exist as Taskfile targets (GRF-10, GRF-06 D-12b) and pass locally, but are NOT wired into `ci.yml` — recorded as a follow-up in `11-SECURITY.md`; the CI govulncheck job still covers the main module, so the SBOM-name and cgo-closure halves are local-only until wired.
 - ⚠️ [Phase 11] `web/scripts/check-no-force-layout.mjs` proves only that no forbidden layout name appears as a string literal at the `name:` option position or as a `cytoscape-<x>` import/dependency specifier; a string-built or variable layout name is not detected. `GraphCanvas.svelte:374` spreads `LAYOUT_OPTIONS` (declared with literal `name: 'elk'`) and is reported as the one advisory `unresolvedLayoutNames` entry — non-fatal by design (WR-03).
 - ⚠️ [Phase 11] `gonum.org/v1/gonum` package legitimacy is `[ASSUMED]` (long-lived, already transitive via sigstore in `go.sum`; `package-legitimacy check` has no Go ecosystem support) — recorded in `11-SECURITY.md`, not a gap.
 - ⚠️ [Phase 11] Phases 7, 8, 9 AND 10 all read `verification_status: stale` after Phase 11's `phase.complete` by the #4155 mechanism (each `covered_files` list includes `.planning/REQUIREMENTS.md`, which every later `phase.complete` rewrites); only Phase 11's report was written without `REQUIREMENTS.md` in `covered_files` (its plans/summaries + implementation files only) and stays `passed`. Repair for 7–10 remains `/gsd-verify-work <phase>`; surfaces at the milestone audit.
@@ -474,7 +472,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-16T11:36:06.835Z
-Stopped at: Phase 02 complete, ready to plan Phase 3
+Stopped at: Phase 2 complete (verified 9/9, human review accepted, review clean), ready to discuss/plan Phase 3 — autonomous run `--from 1 --to 3 --interactive` continuing into Phase 3
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
