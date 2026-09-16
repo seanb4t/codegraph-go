@@ -205,7 +205,7 @@ func acquire(codegraphDir string) error {
 		// process's release() raced us) — nothing to remove; fall through
 		// to the retry create below.
 	} else if !isStale(info) {
-		return fmt.Errorf("%w: pid=%d — stop it first, or run `codegraph unlock` once it has exited", ErrLockLive, info.PID)
+		return fmt.Errorf("%w: pid=%d — stop it first, or run `codegraph daemon unlock` once it has exited", ErrLockLive, info.PID)
 	} else if err := os.Remove(lockPath(codegraphDir)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -271,8 +271,9 @@ func release(codegraphDir string) error {
 	return err
 }
 
-// Unlock implements `codegraph unlock`'s engine (SYNC-05): it removes the
-// daemon lockfile at codegraphDir ONLY when it is genuinely stale
+// Unlock implements `codegraph daemon unlock`'s engine (SYNC-05; moved
+// under daemon in Phase 3 VERB-04): it removes the daemon lockfile at
+// codegraphDir ONLY when it is genuinely stale
 // (T-04-07-01). An absent lockfile is a clean no-op; a live lock is left
 // untouched and reported via ErrLockLive. The returned message is a
 // human-readable summary of what happened, for a thin CLI layer (Plan

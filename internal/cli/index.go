@@ -123,9 +123,9 @@ func newIndexCmd() *cobra.Command {
 			case errors.Is(priorErr, graphstore.ErrStoreLocked):
 				// Another process holds the store open (D-10): refuse
 				// BEFORE RemoveAll, naming the holder and the two live
-				// remedies. `codegraph unlock` is the verb live today;
-				// `daemon unlock` does not exist until Phase 3.
-				return fmt.Errorf("%w: another process holds %s open — stop it first with `codegraph daemon stop`, or run `codegraph unlock` once it has exited", priorErr, storeDir)
+				// remedies. `codegraph daemon unlock` is the live verb
+				// (Phase 3 VERB-04, D-08).
+				return fmt.Errorf("%w: another process holds %s open — stop it first with `codegraph daemon stop`, or run `codegraph daemon unlock` once it has exited", priorErr, storeDir)
 			default:
 				// Corrupt or otherwise unreadable (D-11): warn that the
 				// prior coverage generation could not be read, so the

@@ -53,8 +53,9 @@ func newDaemonCmd() *cobra.Command {
 		Long: "With no subcommand: on a TTY, open an interactive picker of every\n" +
 			"running daemon (current project first) to stop one, stop all, or\n" +
 			"cancel; off a TTY, print the same list and exit 0. Use `daemon start`\n" +
-			"to run the shared watch/index server in the foreground, and\n" +
-			"`daemon stop [--all]` to stop it non-interactively.",
+			"to run the shared watch/index server in the foreground,\n" +
+			"`daemon stop [--all]` to stop it non-interactively, and\n" +
+			"`daemon unlock [path]` to clear a stale lock left by a crash.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			start, err := resolveStartPath(path)
@@ -88,7 +89,7 @@ func newDaemonCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path for current-project-first ordering (default: cwd)")
-	cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd())
+	cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd(), newDaemonUnlockCmd())
 
 	return cmd
 }
@@ -254,4 +255,40 @@ func printStoppedDaemons(out io.Writer, stopped []daemon.Record) {
 	for _, rec := range stopped {
 		fmt.Fprintf(out, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
 	}
+}
+
+// newDaemonUnlockCmd builds `daemon unlock [path]` (D-05, SYNC-05; moved
+// verbatim under daemon, Phase 3 VERB-04, D-07): clears a stale daemon
+// lockfile left behind by a crash. Mirrors newUninitCmd's guarded shape
+// (targetRoot(args) positional-arg resolution), but delegates the
+// stale-vs-live decision to daemon.Unlock — the CLI never force-removes
+// the lockfile itself (T-04-07-01). daemon.Unlock already treats an
+// absent lockfile as a clean no-op (its own human-readable message) and
+// refuses a live lock via ErrLockLive, so there is no separate guard here
+// and no confirm prompt: unlock only ever removes a genuinely stale lock.
+// It registers no flags of its own — the parent `daemon`'s `-p` is
+// registered via the non-persistent Flags() accessor, so it does not
+// leak in.
+func newDaemonUnlockCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unlock [path]",
+		Short: "Clear a stale daemon lock",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := targetRoot(args)
+			if err != nil {
+				return err
+			}
+
+			codegraphDir := filepath.Join(root, codegraphDirName)
+			msg, err := daemon.Unlock(codegraphDir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), msg)
+			return nil
+		},
+	}
+
+	return cmd
 }

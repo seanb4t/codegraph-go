@@ -5,3 +5,5 @@
 # only. A flag on a documented (visible) command always requires its own
 # per-flag entry: "<command path> --<flag>"<TAB><reason>.
 codegraph man	hidden by v0.5.0 D-02 — the Homebrew cask post-install hook's man-page generator, never an interactive command; its only flag is cobra's --help (12-CONTEXT D-05)
+codegraph query	hidden rename stub for `search --full` (VERB-03); removed in v0.15.0
+codegraph unlock	hidden rename stub for `daemon unlock` (VERB-04); removed in v0.15.0

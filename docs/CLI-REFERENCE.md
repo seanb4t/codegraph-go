@@ -34,8 +34,7 @@ codegraph builds and maintains a local knowledge graph of a repository's symbols
 * [codegraph init](#codegraph-init)	 - Create .codegraph/ and build the full graph in one step
 * [codegraph install](#codegraph-install)	 - Configure coding agents to use this codegraph binary as their MCP server
 * [codegraph node](#codegraph-node)	 - Show a symbol's signature, calls, and callers, or a line-numbered file read
-* [codegraph query](#codegraph-query)	 - Search full node records by name/qualifiedName
-* [codegraph search](#codegraph-search)	 - Lexically search symbol names/qualified names (locations only)
+* [codegraph search](#codegraph-search)	 - Lexically search symbol names/qualified names
 * [codegraph serve](#codegraph-serve)	 - Run the codegraph MCP server
 * [codegraph status](#codegraph-status)	 - Report index health and counts
 * [codegraph sync](#codegraph-sync)	 - Incrementally update the graph from changed files
@@ -43,7 +42,6 @@ codegraph builds and maintains a local knowledge graph of a repository's symbols
 * [codegraph ui](#codegraph-ui)	 - Run a local, read-only web UI over the repository's own index
 * [codegraph uninit](#codegraph-uninit)	 - Remove .codegraph/
 * [codegraph uninstall](#codegraph-uninstall)	 - Remove codegraph's configuration from coding agents
-* [codegraph unlock](#codegraph-unlock)	 - Clear a stale daemon lock
 * [codegraph upgrade](#codegraph-upgrade)	 - Download, verify, and install a new codegraph release
 * [codegraph version](#codegraph-version)	 - Print build version information
 
@@ -299,8 +297,9 @@ List and manage running codegraph daemons
 With no subcommand: on a TTY, open an interactive picker of every
 running daemon (current project first) to stop one, stop all, or
 cancel; off a TTY, print the same list and exit 0. Use `daemon start`
-to run the shared watch/index server in the foreground, and
-`daemon stop [--all]` to stop it non-interactively.
+to run the shared watch/index server in the foreground,
+`daemon stop [--all]` to stop it non-interactively, and
+`daemon unlock [path]` to clear a stale lock left by a crash.
 
 ```
 codegraph daemon [flags]
@@ -318,6 +317,7 @@ codegraph daemon [flags]
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
 * [codegraph daemon start](#codegraph-daemon-start)	 - Run the shared watch/index server in the foreground
 * [codegraph daemon stop](#codegraph-daemon-stop)	 - Stop the current-repo daemon, or every running daemon (--all)
+* [codegraph daemon unlock](#codegraph-daemon-unlock)	 - Clear a stale daemon lock
 
 ## codegraph daemon start
 
@@ -355,6 +355,24 @@ codegraph daemon stop [flags]
       --all           stop every running daemon, not just the current repo's
   -h, --help          help for stop
   -p, --path string   repo path to stop (default: cwd)
+```
+
+### SEE ALSO
+
+* [codegraph daemon](#codegraph-daemon)	 - List and manage running codegraph daemons
+
+## codegraph daemon unlock
+
+Clear a stale daemon lock
+
+```
+codegraph daemon unlock [path] [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for unlock
 ```
 
 ### SEE ALSO
@@ -601,31 +619,9 @@ codegraph node [symbol] [flags]
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
 
-## codegraph query
-
-Search full node records by name/qualifiedName
-
-```
-codegraph query <term> [flags]
-```
-
-### Options
-
-```
-  -h, --help          help for query
-  -j, --json          emit JSON output
-  -k, --kind string   restrict to one node kind
-  -l, --limit int     cap on results returned
-  -p, --path string   repo path (default: cwd)
-```
-
-### SEE ALSO
-
-* [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
-
 ## codegraph search
 
-Lexically search symbol names/qualified names (locations only)
+Lexically search symbol names/qualified names
 
 ```
 codegraph search <term> [flags]
@@ -634,10 +630,11 @@ codegraph search <term> [flags]
 ### Options
 
 ```
+      --full          return full node records (signature, qualified name) instead of locations
   -h, --help          help for search
-      --json          emit JSON output
-      --kind string   restrict to one node kind
-      --limit int     cap on results returned
+  -j, --json          emit JSON output
+  -k, --kind string   restrict to one node kind
+  -l, --limit int     cap on results returned
   -p, --path string   repo path (default: cwd)
 ```
 
@@ -844,24 +841,6 @@ codegraph uninstall [flags]
   -l, --location string   config scope: global|local (default "global")
   -t, --target string     which agents to reverse: auto|all|none|<comma-separated ids> (default "all")
   -y, --yes               skip the interactive picker; use the non-interactive default set (all)
-```
-
-### SEE ALSO
-
-* [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
-
-## codegraph unlock
-
-Clear a stale daemon lock
-
-```
-codegraph unlock [path] [flags]
-```
-
-### Options
-
-```
-  -h, --help   help for unlock
 ```
 
 ### SEE ALSO
