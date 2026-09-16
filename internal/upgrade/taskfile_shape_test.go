@@ -67,21 +67,52 @@ const (
 	releasePathRepoRoot = "../.."
 )
 
-// requiredCheckNames is the literal fixture of GitHub ruleset 20157557's
-// six required-status-check contexts plus pr-title (a seventh required
-// context enforced by the same ruleset but living in its own workflow
-// file). Source: `gh api repos/seanb4t/codegraph-go/rulesets/20157557`,
-// re-verified live 2026-08-01 (10-01-PLAN.md Task 1). Re-verify the same
-// way before editing this fixture — a stale fixture here would make this
-// guard assert the wrong thing rather than fail loudly.
-var requiredCheckNames = []string{
-	"test",
-	"govulncheck (DIST-03, blocking)",
-	"reproducibility (double-build hash-diff, DIST-04)",
-	"perf regression gate (PERF-02, INDX-06)",
-	"actionlint (workflow static analysis)",
-	"goreleaser check (config validation, DIST-01)",
-	"pr-title",
+// requiredStatusChecksPath is the shared required-status-check data file
+// (D-07, GRD-12): the single source of truth for GitHub ruleset
+// 20157557's (protect-main) required context set, read by both this test
+// (via readRequiredCheckNames below) and scripts/check-ruleset-drift.sh's
+// CI-only comparison against the live ruleset. The CI step — not this
+// test — checks it against the live ruleset.
+const requiredStatusChecksPath = "../../.github/required-status-checks.txt"
+
+// readRequiredCheckNames loads the shared required-status-check context
+// list from requiredStatusChecksPath (D-07) — one list, read by both this
+// test and scripts/check-ruleset-drift.sh's CI-only comparison against
+// the live GitHub ruleset (GRD-12); no bash parsing of Go source, no
+// duplication. The list used to be a hardcoded Go literal here, re-verified
+// by hand against `gh api repos/seanb4t/codegraph-go/rulesets/20157557`
+// each time it needed updating; it now lives in the data file so both
+// consumers read the same bytes.
+//
+// Returns a non-nil error — never a usable empty slice, the CR-01 defect
+// class every parser in this file guards against — when: the file cannot
+// be read, it contains zero non-blank lines after trimming (rule
+// 84d1gfpywd: an emptied or truncated fixture must fail loudly, never
+// pass vacuously), or it contains a duplicated context (a duplicate would
+// let the shell side's sorted-set diff and this slice's length disagree
+// on set size).
+func readRequiredCheckNames(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("readRequiredCheckNames: read %s: %w", path, err)
+	}
+	seen := make(map[string]bool)
+	var names []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if seen[line] {
+			return nil, fmt.Errorf("readRequiredCheckNames: %s: duplicated context %q", path, line)
+		}
+		seen[line] = true
+		names = append(names, line)
+	}
+	if len(names) == 0 {
+		return nil, fmt.Errorf("readRequiredCheckNames: %s: found zero non-blank lines — a missing or emptied fixture must fail loudly, never pass vacuously (rule 84d1gfpywd)", path)
+	}
+	return names, nil
 }
 
 // forbiddenToolPackages are the build-tool import paths that must live
@@ -755,11 +786,20 @@ func parseGateStanceWord(text string) (string, error) {
 
 // TestRequiredCheckNamesPreserved is the T-10-01-05 information-disclosure
 // guard: it reads every real, on-disk workflow file and asserts each of
-// GitHub ruleset 20157557's required-context strings is present as a job
+// GitHub ruleset 20157557's required-context strings — loaded from the
+// shared data file requiredStatusChecksPath (D-07) — is present as a job
 // `name:` field somewhere in the set. A renamed required check silently
 // un-gates `main` — this test fails the build on any such rename, naming
-// the specific missing context.
+// the specific missing context. This test does NOT check the fixture
+// against the LIVE ruleset — that comparison is
+// scripts/check-ruleset-drift.sh's CI-only job (GRD-12, D-06).
 func TestRequiredCheckNamesPreserved(t *testing.T) {
+	requiredCheckNames, err := readRequiredCheckNames(requiredStatusChecksPath)
+	if err != nil {
+		t.Fatalf("TestRequiredCheckNamesPreserved: %v", err)
+	}
+	t.Logf("TestRequiredCheckNamesPreserved: read %d required contexts from %s", len(requiredCheckNames), requiredStatusChecksPath)
+
 	entries, err := os.ReadDir(workflowsDir)
 	if err != nil {
 		t.Fatalf("read %s: %v", workflowsDir, err)
@@ -1596,10 +1636,13 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 // comment) and are deliberately excluded from this population check too,
 // for the identical reason.
 //
-// WR-03: this list is itself hand-enumerated, and — unlike
-// requiredCheckNames (deliberately hand-written; it mirrors a GitHub
-// ruleset outside this repo, and stays that way) — it names only 3 of the
-// 14 files actually under workflowsDir, with no disk binding of its own.
+// WR-03: this list is itself hand-enumerated, and — unlike the
+// required-status-check context list (D-07, GRD-12: it now lives in the
+// shared data file requiredStatusChecksPath, loaded by
+// readRequiredCheckNames and consumed by both this test and
+// scripts/check-ruleset-drift.sh's CI-only comparison against the live
+// GitHub ruleset) — it names only 3 of the 14 files actually under
+// workflowsDir, with no disk binding of its own.
 // Before TestWorkflowFilePopulationMatchesDisk below, a new workflow file
 // added anywhere under .github/workflows/ was invisible to BOTH this list
 // and workflowFileExceptions: it passed every guard in this file by being
