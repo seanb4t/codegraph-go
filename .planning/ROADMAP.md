@@ -232,11 +232,24 @@ Plans:
   5. Every golden the fold touches is re-frozen in a reviewed diff with a RED demonstration against a reintroduced old verb name; the 8-tool MCP set and the wire oracle's transcripts are unchanged; the rename lands as a `feat!:` conventional commit with the stubs' removal in the following minor recorded in the release notes and `docs/CLI-REFERENCE.md` (VERB-07, VERB-08)
 
 **Notes**: Research pitfalls attached: 4 (the merge loses flags or changes shape — keep the superset, gate the JSON envelope behind `--full`; `search.go`'s `json.Marshal(locs)` and `query.go`'s `MarshalQueryJSON` are *not* the same shape today and both must survive), 5 (the census is whole-repo and word-boundary, excluding the unrelated `internal/query` package identifier — the positive control is a planted old-verb string that the census must find), 6 (`feat!:` under `bump-minor-pre-major` cuts a minor, not a major; the CHANGELOG's BREAKING CHANGES section is inspected post-merge), 7 (the re-freeze is a deliberate reviewed diff, never a blanket regenerate). The stubs need one command-level allowlist line each in `testdata/cli-reference-allowlist.txt` because every hidden command still registers a `help` flag. `daemon unlock` is `unlock.go`'s body moved verbatim — the same move `daemon start` already made once. Neither verb ever had an MCP tool, so the fold has zero wire surface; SKILL.md and the MCP resources name neither today, and the census proves it rather than assuming it.
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD
+- [ ] 03-01-PLAN.md — Positive-controlled VERB-05 census BEFORE any `internal/cli/` edit (control planted under `.github/`, `--hidden` correction to RESEARCH's invocation, 14-line/6-file baseline as `03-MUTATION-LOG.md` Family (a)) plus the pre-fold baseline: `search` output digests, `__complete`/man listings, 8 MCP tool names, green wire oracle (VERB-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — The single `feat(cli)!:` commit: `search --full` (tracer; `eng.Query`, `MarshalQueryJSON` envelope, two-line render, WORK-02 notice, `-k/-l/-j`), `daemon unlock` moved verbatim with the D-08 message retargets, the two hidden `DisableFlagParsing` stubs in `renamed.go`, every test RED-first, the two allowlist lines and the reviewed `docs/CLI-REFERENCE.md` regeneration in the same green commit, `BREAKING CHANGE:` footer, before/after byte-identity of default `search` (VERB-01, VERB-02, VERB-03, VERB-04, VERB-06, VERB-08)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-03-PLAN.md — Family (b): a re-visible `query` stub turns `task docs:cli:drift` and `TestEveryRegisteredFlagIsAccountedFor` RED, byte-clean revert, green control, adjacency/empty/ordering proofs; completions (`__complete`) and man pages reflect the new surface from the live binary with hidden `man` as positive control; zero diff under `internal/mcp`/`testdata/wireoracle` across the phase; `COVERAGE.md` no-external-API declaration (VERB-06, VERB-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-04-PLAN.md — ROADMAP `## Backlog` row `999.5` for the v0.15.0 stub removal written by `gsd-tools phase add --id` (D-09); VERB-05 census AFTER the last `internal/cli/` edit with the same instrument and control (hits only inside the stub declaration) as Family (c); phase commit-history audit (one `feat(cli)!:`, rest test/docs/chore, no CI-skip); final gate green (VERB-05, VERB-08)
 
 #### Phase 4: CLI Glow-up
 
