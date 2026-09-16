@@ -122,3 +122,9 @@ None - no external service configuration required.
 ---
 *Phase: 02-guards-ci-wiring-docs-burn-down*
 *Completed: 2026-09-16*
+
+## Self-Check: PASSED
+
+- `.planning/phases/02-guards-ci-wiring-docs-burn-down/02-MUTATION-LOG.md` exists on disk.
+- Commits `0e925685`, `cd8b4bc9`, and `4236794b` all found in `git log --oneline --all`.
+- `git status --short` is clean; `git worktree list` shows only the main working tree.
