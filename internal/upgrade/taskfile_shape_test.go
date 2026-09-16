@@ -810,6 +810,75 @@ func TestRequiredCheckNamesPreserved_ZeroJobsIsError(t *testing.T) {
 	}
 }
 
+// TestReadRequiredCheckNames_MissingFileIsError asserts readRequiredCheckNames
+// returns a non-nil error naming the path when the fixture does not exist —
+// never a silently-empty slice (D-07, rule 84d1gfpywd).
+func TestReadRequiredCheckNames_MissingFileIsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "absent.txt")
+	if _, err := readRequiredCheckNames(path); err == nil {
+		t.Fatalf("readRequiredCheckNames(%q): expected a non-nil error for a missing file, got nil", path)
+	} else if !strings.Contains(err.Error(), path) {
+		t.Fatalf("readRequiredCheckNames(%q): expected the error to mention the path, got %q", path, err.Error())
+	}
+}
+
+// TestReadRequiredCheckNames_EmptyOrBlankFileIsError asserts a file with
+// zero non-blank lines (whether zero-byte or whitespace-only) is a hard
+// error, never a vacuously-empty required-check set.
+func TestReadRequiredCheckNames_EmptyOrBlankFileIsError(t *testing.T) {
+	cases := map[string]string{
+		"blank-only": "\n \n\t\n",
+		"zero-byte":  "",
+	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "fixture.txt")
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatalf("write %s: %v", path, err)
+			}
+			if _, err := readRequiredCheckNames(path); err == nil {
+				t.Fatalf("readRequiredCheckNames(%q): expected a non-nil error for zero non-blank lines, got nil", path)
+			}
+		})
+	}
+}
+
+// TestReadRequiredCheckNames_TrimsAndSkipsBlankLines asserts each line is
+// trimmed (including a trailing \r for CRLF tolerance), blank lines are
+// skipped, and order is preserved.
+func TestReadRequiredCheckNames_TrimsAndSkipsBlankLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.txt")
+	if err := os.WriteFile(path, []byte("test\n\n  pr-title  \r\n"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	got, err := readRequiredCheckNames(path)
+	if err != nil {
+		t.Fatalf("readRequiredCheckNames(%q): unexpected error: %v", path, err)
+	}
+	want := []string{"test", "pr-title"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("readRequiredCheckNames(%q) = %v, want %v", path, got, want)
+	}
+}
+
+// TestReadRequiredCheckNames_DuplicateIsError asserts a duplicated context
+// is a hard error naming the duplicate — a duplicate would let the shell
+// side's sorted-set diff and the Go side's slice length disagree on set
+// size.
+func TestReadRequiredCheckNames_DuplicateIsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.txt")
+	if err := os.WriteFile(path, []byte("test\ntest\n"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	_, err := readRequiredCheckNames(path)
+	if err == nil {
+		t.Fatalf("readRequiredCheckNames(%q): expected a non-nil error for a duplicated context, got nil", path)
+	}
+	if !strings.Contains(err.Error(), "test") {
+		t.Fatalf("readRequiredCheckNames(%q): expected the error to name the duplicated context, got %q", path, err.Error())
+	}
+}
+
 // TestGoreleaserPinParity is the MAINT-03 pin-parity guard: go.tool.mod's
 // goreleaser require line and release.yml's workflow-level
 // GORELEASER_VERSION must name the same version. Two independent pin sites
