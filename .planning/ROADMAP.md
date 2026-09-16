@@ -199,7 +199,7 @@ Plans:
   5. WINDOWS #16 and #33 read fixed via `gsd-tools windows fixed` with the verification recorded and #20/#21/#34 annotated record-only; STATE.md's Pending Todos table matches `.planning/todos/`, and SEED-001's frontmatter records its consumption by v0.12.0 — every write through a tool-sanctioned writer where one exists, the SEED-002 precedent where none does (GRD-14, DOCS-11)
 
 **Notes**: Research pitfall 13 is the whole of `GRD-09`: the paired-assertion form pitfall 13 proposed (unifying both halves onto git-tree enumeration, or asserting `find` equals `git ls-files`) was declined at discuss time (D-01) once CI's clean-checkout `find` was established to already fail on the incident — the mutation log replays it instead. `GRD-12` promotes GRD-07 and `DOCS-10` promotes GRD-08, both *declined* at v0.13.0 rather than forgotten; `GRD-14` closes the stale-open windows the v0.13.0 audit listed and leaves #20/#21/#34 open as record-only deviations, in the same pass. `DOCS-11` is bounded by the planning-artifacts rule: `STATE.md`'s todo table and `ROADMAP.md` are tool-owned, so values are filled in existing shapes and no heading is invented; the `pendingWriter`/CR-01 row and three others predate v0.13.0 and were never reconciled when their files moved. `DOCS-09` is GH #14; the two docs carrying the claim are located by census, not assumed.
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -212,7 +212,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 02-02-PLAN.md — `Install syft` + `check:gonum` + `check:no-force-layout` steps in `ci.yml`'s `test` job (tracer), proven able to fail by a planted layout literal recorded as Family (b) (GRD-11)
-- [ ] 02-07-PLAN.md — WINDOWS #13/#16/#29/#31/#33 closed through `gsd-tools windows fixed` with recorded evidence; #20/#21/#34 record-only; STATE.md Pending Todos regenerated from `init todos` with the bench `pinnedAt` todo filed; SEED-001 consumption fields; tool gaps reported (GRD-14, DOCS-11)
+- [x] 02-07-PLAN.md — WINDOWS #13/#16/#29/#31/#33 closed through `gsd-tools windows fixed` with recorded evidence; #20/#21/#34 record-only; STATE.md Pending Todos regenerated from `init todos` with the bench `pinnedAt` todo filed; SEED-001 consumption fields; tool gaps reported (GRD-14, DOCS-11)
 
 **Wave 3** *(blocked on Wave 2 completion; halts `blocking-human` for the D-08 ruleset change)*
 
@@ -324,7 +324,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Defect & Flake Burn-down | 9/9 | Complete    | 2026-09-15 |
-| 2. Guards, CI Wiring & Docs Burn-down | 5/7 | In Progress|  |
+| 2. Guards, CI Wiring & Docs Burn-down | 6/7 | In Progress|  |
 | 3. Verb Fold | 0/TBD | Not started | - |
 | 4. CLI Glow-up | 0/TBD | Not started | - |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 0/TBD | Not started | - |

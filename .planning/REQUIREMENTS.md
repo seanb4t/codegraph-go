@@ -28,19 +28,19 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Guards & CI
 
-- [ ] **GRD-09**: `web:drift` is demonstrated RED against commit `98cd41dd`'s exact incident shape (build output present on disk but unstaged) on a clean checkout, closing WINDOWS #29 with the recorded cause — the CI path was never vacuous — and the local `find` enumeration of `web/build` is retained by design (WINDOWS #29)
-- [ ] **GRD-10**: The vendored `button.svelte` drift is isolated by a `workflow_dispatch` run under Corepack-pinned pnpm 11.23.0; the component is re-vendored or the window waived with the cause recorded (WINDOWS #31)
+- [x] **GRD-09**: `web:drift` is demonstrated RED against commit `98cd41dd`'s exact incident shape (build output present on disk but unstaged) on a clean checkout, closing WINDOWS #29 with the recorded cause — the CI path was never vacuous — and the local `find` enumeration of `web/build` is retained by design (WINDOWS #29)
+- [x] **GRD-10**: The vendored `button.svelte` drift is isolated by a `workflow_dispatch` run under Corepack-pinned pnpm 11.23.0; the component is re-vendored or the window waived with the cause recorded (WINDOWS #31)
 - [x] **GRD-11**: `check:gonum` and `check:no-force-layout` run in `ci.yml` on every pull request
 - [ ] **GRD-12**: `requiredCheckNames` is compared against the live `protect-main` ruleset and fails when they diverge — the `tmux e2e` context is added once the maintainer's repository-settings action lands (promotes GRD-07)
 - [ ] **GRD-13**: The `present` archtest catches every charm-family import path added this milestone (`colorprofile`, `fang/v2`, `x/ansi`, …) — prefix match or exact paths added in the same commit as the `go.mod` change — demonstrated RED against a planted import
-- [ ] **GRD-14**: Stale-open windows #16 (bench TS framing, resolved v0.11.0 Phase 6) and #33 (tmux CI human-check, PR #71 merged) are closed by recorded verification via `gsd-tools windows fixed`; #20/#21/#34 stay open as record-only deviations with that status noted
+- [x] **GRD-14**: Stale-open windows #16 (bench TS framing, resolved v0.11.0 Phase 6) and #33 (tmux CI human-check, PR #71 merged) are closed by recorded verification via `gsd-tools windows fixed`; #20/#21/#34 stay open as record-only deviations with that status noted
 
 ### Docs & Bookkeeping
 
-- [ ] **DOCS-08**: `docs/RELEASE.md`'s dependency paragraph states counts derived from `go.mod` at the time of writing and credits `modelcontextprotocol/go-sdk`, not `mark3labs/mcp-go` (WINDOWS #13)
+- [x] **DOCS-08**: `docs/RELEASE.md`'s dependency paragraph states counts derived from `go.mod` at the time of writing and credits `modelcontextprotocol/go-sdk`, not `mark3labs/mcp-go` (WINDOWS #13)
 - [x] **DOCS-09**: SLSA provenance is described as attested over the binaries, not the checksums file, in `release.yml` and both docs that carry the claim (GH #14)
 - [x] **DOCS-10**: Root `SECURITY.md` states govulncheck's and `pnpm audit`'s actual, disjoint scope with the advisory caveat (promotes GRD-08)
-- [ ] **DOCS-11**: Planning bookkeeping reconciled through tool-sanctioned writers where one exists: STATE.md's Pending Todos table matches `.planning/todos/`, and SEED-001's frontmatter records its consumption by v0.12.0 (the SEED-002 precedent applies where no writer verb exists)
+- [x] **DOCS-11**: Planning bookkeeping reconciled through tool-sanctioned writers where one exists: STATE.md's Pending Todos table matches `.planning/todos/`, and SEED-001's frontmatter records its consumption by v0.12.0 (the SEED-002 precedent applies where no writer verb exists)
 
 ### CLI Glow-up
 
@@ -144,16 +144,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIX-09 | Phase 1 | Complete |
 | FIX-10 | Phase 1 | Complete |
 | FIX-11 | Phase 1 | Complete |
-| GRD-09 | Phase 2 | Pending |
-| GRD-10 | Phase 2 | Pending |
+| GRD-09 | Phase 2 | Complete |
+| GRD-10 | Phase 2 | Complete |
 | GRD-11 | Phase 2 | Complete |
 | GRD-12 | Phase 2 | Pending |
 | GRD-13 | Phase 4 | Pending |
-| GRD-14 | Phase 2 | Pending |
-| DOCS-08 | Phase 2 | Pending |
+| GRD-14 | Phase 2 | Complete |
+| DOCS-08 | Phase 2 | Complete |
 | DOCS-09 | Phase 2 | Complete |
 | DOCS-10 | Phase 2 | Complete |
-| DOCS-11 | Phase 2 | Pending |
+| DOCS-11 | Phase 2 | Complete |
 | CLI-01 | Phase 4 | Pending |
 | CLI-02 | Phase 4 | Pending |
 | CLI-03 | Phase 4 | Pending |

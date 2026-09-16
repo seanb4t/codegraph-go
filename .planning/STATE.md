@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 02
 current_phase_name: Guards, CI Wiring & Docs Burn-down
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-09-16T02:41:14.850Z"
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-09-16T02:49:53.937Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 02 execution started
-state_head: 9f6603a24a4a239a267b87e3ac82411a3e1e6469
+state_head: ff500512047e5c74091b6715fef34d578e670787
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 14
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-15 after Phase 1)
 ## Current Position
 
 Phase: 02 (Guards, CI Wiring & Docs Burn-down) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-09-15 — Phase 02 execution started
 
@@ -149,6 +149,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P05 | 15min | 2 tasks | 45 files |
 | Phase 02 P06 | 20 min | 3 tasks | 2 files |
 | Phase 02 P02 | 55min | 2 tasks | 4 files |
+| Phase 02 P07 | ~25min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -328,6 +329,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: DOCS-09 census proved zero live "provenance over checksums file" claims via a planted positive control (rule 84d1gfpywd); GH #14 closed on that evidence with no rewrite needed.
 - [Phase 02]: docs/RELEASE.md § 2 dropped all raw dependency counts and now credits modelcontextprotocol/go-sdk (D-13); SECURITY.md gained one sentence on the advisory tool-vuln job's scope (D-15). DOCS-08 stays unmarked pending 02-07 (shared-ID gate, #2388).
 - [Phase 02]: Fixed pre-existing grpc CVE (GO-2026-6348) via indirect dependency bump v1.82.1->v1.83.2, in a separate commit ahead of the ci.yml wiring commit, discovered because check:gonum had to pass locally before being wired into CI.
+- [Phase 02]: WINDOWS #13/#16/#29/#31/#33 closed via `gsd-tools windows fixed <id>` with evidence recorded in 02-07-SUMMARY.md (the verb accepts no note); #20/#21/#34 stay open as record-only deviations since the ledger has no annotate/record-only status.
+- [Phase 02]: STATE.md's Pending Todos table (17 stale rows) replaced wholesale with gsd-tools init todos' literal pending_todos_markdown render; the one genuinely open row (bench pinnedAt) filed as a real pending-todo file.
 
 ### Pending Todos
 
@@ -469,8 +472,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-16T02:35:02.504Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-09-16T02:49:53.907Z
+Stopped at: Completed 02-07-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
