@@ -7,7 +7,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
+
+// renderFullLine renders the D-01 second line for a --full hit (RED placeholder; GREEN below).
+func renderFullLine(n *schema.Node) string { return "" }
 
 // newSearchCmd builds `codegraph search <term>` (QRY-01 sibling): the
 // lightweight locations-only projection of query (D-06) — name/kind/
