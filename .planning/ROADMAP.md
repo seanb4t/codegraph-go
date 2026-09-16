@@ -199,7 +199,7 @@ Plans:
   5. WINDOWS #16 and #33 read fixed via `gsd-tools windows fixed` with the verification recorded and #20/#21/#34 annotated record-only; STATE.md's Pending Todos table matches `.planning/todos/`, and SEED-001's frontmatter records its consumption by v0.12.0 — every write through a tool-sanctioned writer where one exists, the SEED-002 precedent where none does (GRD-14, DOCS-11)
 
 **Notes**: Research pitfall 13 is the whole of `GRD-09`: the paired-assertion form pitfall 13 proposed (unifying both halves onto git-tree enumeration, or asserting `find` equals `git ls-files`) was declined at discuss time (D-01) once CI's clean-checkout `find` was established to already fail on the incident — the mutation log replays it instead. `GRD-12` promotes GRD-07 and `DOCS-10` promotes GRD-08, both *declined* at v0.13.0 rather than forgotten; `GRD-14` closes the stale-open windows the v0.13.0 audit listed and leaves #20/#21/#34 open as record-only deviations, in the same pass. `DOCS-11` is bounded by the planning-artifacts rule: `STATE.md`'s todo table and `ROADMAP.md` are tool-owned, so values are filled in existing shapes and no heading is invented; the `pendingWriter`/CR-01 row and three others predate v0.13.0 and were never reconciled when their files moved. `DOCS-09` is GH #14; the two docs carrying the claim are located by census, not assumed.
-**Plans**: 3/7 plans executed
+**Plans**: 4/7 plans executed
 
 Plans:
 **Wave 1**
@@ -207,7 +207,7 @@ Plans:
 - [x] 02-01-PLAN.md — `web:drift` replayed RED against a clean worktree of `98cd41dd` (tracer) with a green control on HEAD, recorded as `02-MUTATION-LOG.md` Family (a); GRD-09 requirement and criterion 1 reworded to the proof statement (GRD-09)
 - [x] 02-03-PLAN.md — Shared `.github/required-status-checks.txt`, the hard-failing CI-only ruleset-drift script/step wired RED against today's 6-vs-7 divergence (tracer), and the TDD data-file loader replacing the `requiredCheckNames` literal (GRD-12)
 - [x] 02-05-PLAN.md — Fresh drift measurement under pinned pnpm 11.23.0 (tracer), then all eight shadcn-svelte families re-vendored to one registry snapshot with every D-12 gate green and `web/build/**` in the same commit (GRD-10)
-- [ ] 02-06-PLAN.md — Positive-controlled provenance census closing GH #14 (tracer); count-free `docs/RELEASE.md` dependency paragraph crediting `modelcontextprotocol/go-sdk`; one `tool-vuln` sentence in `SECURITY.md` (DOCS-08, DOCS-09, DOCS-10)
+- [x] 02-06-PLAN.md — Positive-controlled provenance census closing GH #14 (tracer); count-free `docs/RELEASE.md` dependency paragraph crediting `modelcontextprotocol/go-sdk`; one `tool-vuln` sentence in `SECURITY.md` (DOCS-08, DOCS-09, DOCS-10)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -324,7 +324,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Defect & Flake Burn-down | 9/9 | Complete    | 2026-09-15 |
-| 2. Guards, CI Wiring & Docs Burn-down | 3/7 | In Progress|  |
+| 2. Guards, CI Wiring & Docs Burn-down | 4/7 | In Progress|  |
 | 3. Verb Fold | 0/TBD | Not started | - |
 | 4. CLI Glow-up | 0/TBD | Not started | - |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 0/TBD | Not started | - |

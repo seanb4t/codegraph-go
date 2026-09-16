@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 02
 current_phase_name: Guards, CI Wiring & Docs Burn-down
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-09-16T02:04:35.843Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-09-16T02:13:50.097Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 02 execution started
-state_head: 75f5633cc76cdffcec1e7b4af46661c5be38908e
+state_head: 62e8b2991eab259f2ce1d2e10e9d2c82a8e43260
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
   percent: 14
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-15 after Phase 1)
 ## Current Position
 
 Phase: 02 (Guards, CI Wiring & Docs Burn-down) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-09-15 — Phase 02 execution started
 
@@ -147,6 +147,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P01 | 7min | 2 tasks | 3 files |
 | Phase 02 P03 | 25min | 2 tasks | 4 files |
 | Phase 02 P05 | 15min | 2 tasks | 45 files |
+| Phase 02 P06 | 20 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -323,6 +324,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: [Phase 02]: GRD-12: left ci.yml's pre-existing goreleaser-check job name field untouched despite matching the plan's D-07 negative-grep verify gate -- that occurrence predates this plan and is structurally required for GitHub's ruleset job-name matching and for TestRequiredCheckNamesPreserved; fixed only the one true duplication this plan introduced (the script's own header comment).
 - [Phase 02]: GRD-10 re-vendor: regenerated directly in the real web/ tree (not a scratch copy), since pnpm's own packageManager self-management resolves the pinned 11.23.0 inside web/ without Corepack — D-09's fallback rule permits a local run whenever cd web && pnpm --version prints 11.23.0
 - [Phase 02]: pnpm dlx shadcn-svelte@1.5.1 add itself runs under bare pnpm v12.4.1 (dlx does not inherit the project's packageManager pin the way pnpm install does) — pre-existing Taskfile target behavior, not changed by this plan — The differing-file set produced was byte-for-byte identical to the Corepack-pinned CI run from 2026-09-14, confirming the drift is registry-side, not a toolchain artifact
+- [Phase 02]: DOCS-09 census proved zero live "provenance over checksums file" claims via a planted positive control (rule 84d1gfpywd); GH #14 closed on that evidence with no rewrite needed.
+- [Phase 02]: docs/RELEASE.md § 2 dropped all raw dependency counts and now credits modelcontextprotocol/go-sdk (D-13); SECURITY.md gained one sentence on the advisory tool-vuln job's scope (D-15). DOCS-08 stays unmarked pending 02-07 (shared-ID gate, #2388).
 
 ### Pending Todos
 
@@ -483,8 +486,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-16T02:04:35.816Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-09-16T02:13:40.351Z
+Stopped at: Completed 02-06-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

@@ -38,8 +38,8 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Docs & Bookkeeping
 
 - [ ] **DOCS-08**: `docs/RELEASE.md`'s dependency paragraph states counts derived from `go.mod` at the time of writing and credits `modelcontextprotocol/go-sdk`, not `mark3labs/mcp-go` (WINDOWS #13)
-- [ ] **DOCS-09**: SLSA provenance is described as attested over the binaries, not the checksums file, in `release.yml` and both docs that carry the claim (GH #14)
-- [ ] **DOCS-10**: Root `SECURITY.md` states govulncheck's and `pnpm audit`'s actual, disjoint scope with the advisory caveat (promotes GRD-08)
+- [x] **DOCS-09**: SLSA provenance is described as attested over the binaries, not the checksums file, in `release.yml` and both docs that carry the claim (GH #14)
+- [x] **DOCS-10**: Root `SECURITY.md` states govulncheck's and `pnpm audit`'s actual, disjoint scope with the advisory caveat (promotes GRD-08)
 - [ ] **DOCS-11**: Planning bookkeeping reconciled through tool-sanctioned writers where one exists: STATE.md's Pending Todos table matches `.planning/todos/`, and SEED-001's frontmatter records its consumption by v0.12.0 (the SEED-002 precedent applies where no writer verb exists)
 
 ### CLI Glow-up
@@ -151,8 +151,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRD-13 | Phase 4 | Pending |
 | GRD-14 | Phase 2 | Pending |
 | DOCS-08 | Phase 2 | Pending |
-| DOCS-09 | Phase 2 | Pending |
-| DOCS-10 | Phase 2 | Pending |
+| DOCS-09 | Phase 2 | Complete |
+| DOCS-10 | Phase 2 | Complete |
 | DOCS-11 | Phase 2 | Pending |
 | CLI-01 | Phase 4 | Pending |
 | CLI-02 | Phase 4 | Pending |
