@@ -202,6 +202,28 @@ jobs:
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
+      # GRD-11: check:gonum's SBOM half shells out to `syft` exactly as
+      # .goreleaser.yaml's sboms: block does; GitHub-hosted runners do not
+      # ship it. Same pin already trusted by release.yml and
+      # linux-cross-canary.yml — reused rather than re-derived.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      # GRD-11/GRF-10: this target's three positive-controlled halves
+      # (govulncheck source mode over the main module, syft SBOM by
+      # name+version, cgo-closure walk) ran only locally since v0.13.0
+      # Phase 11. `test` is already a required context, so this blocks
+      # merges the moment it lands — no ruleset edit needed (D-04). Needs
+      # `node` (Set up Node above) and `syft` (the step above).
+      - name: Gonum dependency-shape guard (GRD-11/GRF-10)
+        run: task check:gonum
+
+      # GRD-11/GRF-06: runs the script's --self-test first, then the real
+      # scan over web/src for forbidden force-directed layout names. Needs
+      # only `node`, no pnpm install.
+      - name: No-force-layout guard (GRD-11/GRF-06)
+        run: task check:no-force-layout
+
       # GRD-12 (D-05/D-06): proves the required-status-check fixture this
       # repo maintains (.github/required-status-checks.txt, D-07) still
       # matches what GitHub ruleset 20157557 (protect-main) ACTUALLY
