@@ -46,7 +46,7 @@ The maintainer's phase-wide test carries forward from Phases 1–2: **"what are 
 - The census script's exact `rg` invocation and exclusion list (subject to D-10's bars); whether it lives inline in the plan's `<verify>` or as a small `scripts/` file — a one-time census does **not** need a Taskfile target.
 - How completions and man pages are regenerated and whether they are committed artefacts or generated at release (follow whatever `Taskfile.yml`/`release.yml` already do; do not introduce a new committed artefact).
 - The `999.x` backlog row's number and wording (via the roadmap verb).
-- Ordering of the ordinary commits around the single `feat!:` commit, as long as every commit leaves `task docs:cli:drift` and `go test ./internal/cli/...` green.
+- Ordering of the ordinary commits around the single `feat!:` commit, as long as every commit leaves `task docs:cli:drift` green and `go build ./...` green; the `test(03-02): add failing …` RED commits the TDD runtime gate requires (`workflow.tdd_mode: true`, the Phases 1–2 shape) are the sanctioned exception to `go test ./internal/cli/...` being green at every commit — GREEN lands only in the `feat!:` commit. (Clarified at plan time: the original wording contradicted the TDD gate.)
 
 </decisions>
 
