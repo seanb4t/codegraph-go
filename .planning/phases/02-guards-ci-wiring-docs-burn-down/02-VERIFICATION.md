@@ -1,13 +1,14 @@
 ---
 phase: 02-guards-ci-wiring-docs-burn-down
 verified: 2026-09-16T08:15:00Z
-status: human_needed
+status: passed
 score: 9/9 must-haves verified
 covered_files: [".github/required-status-checks.txt", ".github/workflows/ci.yml", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-01-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-01-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-02-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-02-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-03-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-03-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-04-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-04-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-04-ruleset-put-body.json", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-05-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-05-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-06-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-06-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-07-PLAN.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-07-SUMMARY.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-MUTATION-LOG.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-REVIEW-FIX.md", ".planning/phases/02-guards-ci-wiring-docs-burn-down/02-REVIEW.md", ".planning/seeds/SEED-001-local-svelte-shadcn-graph-browsing-ui.md", ".planning/todos/pending/2026-08-14-bench-pinnedat-validates-a-checkout-by-git-rev-parse-head-alone.md", "SECURITY.md", "docs/RELEASE.md", "go.mod", "go.sum", "internal/upgrade/taskfile_shape_test.go", "scripts/check-ruleset-drift.sh"]
 covered_digest: "v1:sha256:cdcc8cc73a03a173b2722451a864f1f41b75a293f4cc547e22392dbc61bd5586"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Review the three named visual/API changes in the re-vendored shadcn-svelte components: button.svelte's secondary-hover switch from `hover:bg-secondary/80` to `hover:bg-[color-mix(...)]`; command-link-item.svelte's selected-state color scheme now matching command-item.svelte (dropped `aria-selected:bg-accent`/icon-color rule); table-row.svelte's new additive `has-aria-expanded:bg-muted/50` utility."
     expected: "The maintainer confirms these three visual deltas are acceptable UI changes, per D-12's explicit deferral of visual/API judgment to end-of-phase review (\"the maintainer reviews at end of phase\" — CONTEXT D-12). Automated gates (pnpm check, vitest, live graph-console/breadcrumb checks) only prove the rebuilt UI still functions; they cannot judge whether a visual change is desired."
     why_human: "Visual/rendering acceptability is not something a grep or test-pass can certify — it is the exact judgment D-12 named as reserved for the maintainer, not the executor."
