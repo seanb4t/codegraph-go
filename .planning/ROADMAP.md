@@ -199,11 +199,24 @@ Plans:
   5. WINDOWS #16 and #33 read fixed via `gsd-tools windows fixed` with the verification recorded and #20/#21/#34 annotated record-only; STATE.md's Pending Todos table matches `.planning/todos/`, and SEED-001's frontmatter records its consumption by v0.12.0 — every write through a tool-sanctioned writer where one exists, the SEED-002 precedent where none does (GRD-14, DOCS-11)
 
 **Notes**: Research pitfall 13 is the whole of `GRD-09`: a delimiter rename or unifying both halves onto git-tree enumeration is a "fix" that still cannot fail — the paired-assertion form is required and the mutation log replays the incident. `GRD-12` promotes GRD-07 and `DOCS-10` promotes GRD-08, both *declined* at v0.13.0 rather than forgotten; `GRD-14` closes the stale-open windows the v0.13.0 audit listed and leaves #20/#21/#34 open as record-only deviations, in the same pass. `DOCS-11` is bounded by the planning-artifacts rule: `STATE.md`'s todo table and `ROADMAP.md` are tool-owned, so values are filled in existing shapes and no heading is invented; the `pendingWriter`/CR-01 row and three others predate v0.13.0 and were never reconciled when their files moved. `DOCS-09` is GH #14; the two docs carrying the claim are located by census, not assumed.
-**Plans**: TBD
+**Plans**: 7 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD
+- [ ] 02-01-PLAN.md — `web:drift` replayed RED against a clean worktree of `98cd41dd` (tracer) with a green control on HEAD, recorded as `02-MUTATION-LOG.md` Family (a); GRD-09 requirement and criterion 1 reworded to the proof statement (GRD-09)
+- [ ] 02-03-PLAN.md — Shared `.github/required-status-checks.txt`, the hard-failing CI-only ruleset-drift script/step wired RED against today's 6-vs-7 divergence (tracer), and the TDD data-file loader replacing the `requiredCheckNames` literal (GRD-12)
+- [ ] 02-05-PLAN.md — Fresh drift measurement under pinned pnpm 11.23.0 (tracer), then all eight shadcn-svelte families re-vendored to one registry snapshot with every D-12 gate green and `web/build/**` in the same commit (GRD-10)
+- [ ] 02-06-PLAN.md — Positive-controlled provenance census closing GH #14 (tracer); count-free `docs/RELEASE.md` dependency paragraph crediting `modelcontextprotocol/go-sdk`; one `tool-vuln` sentence in `SECURITY.md` (DOCS-08, DOCS-09, DOCS-10)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — `Install syft` + `check:gonum` + `check:no-force-layout` steps in `ci.yml`'s `test` job (tracer), proven able to fail by a planted layout literal recorded as Family (b) (GRD-11)
+- [ ] 02-07-PLAN.md — WINDOWS #13/#16/#29/#31/#33 closed through `gsd-tools windows fixed` with recorded evidence; #20/#21/#34 record-only; STATE.md Pending Todos regenerated from `init todos` with the bench `pinnedAt` todo filed; SEED-001 consumption fields; tool gaps reported (GRD-14, DOCS-11)
+
+**Wave 3** *(blocked on Wave 2 completion; halts `blocking-human` for the D-08 ruleset change)*
+
+- [ ] 02-04-PLAN.md — Maintainer's one-glance ruleset update package (tracer, RED re-captured), then — after the live `protect-main` set reads 8 — the fixture grows to 8, the step goes GREEN as Family (c), and the Phase 08-03 blocker is resolved by verb (GRD-12)
 
 #### Phase 3: Verb Fold
 
