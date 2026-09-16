@@ -28,7 +28,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Guards & CI
 
-- [ ] **GRD-09**: `web:drift` enumerates both halves from the git tree (or asserts the `find` set equals the `git ls-files` set in both directions with a non-zero floor) and is demonstrated RED against commit `98cd41dd`'s exact incident shape — an unstaged build output (WINDOWS #29)
+- [ ] **GRD-09**: `web:drift` is demonstrated RED against commit `98cd41dd`'s exact incident shape (build output present on disk but unstaged) on a clean checkout, closing WINDOWS #29 with the recorded cause — the CI path was never vacuous — and the local `find` enumeration of `web/build` is retained by design (WINDOWS #29)
 - [ ] **GRD-10**: The vendored `button.svelte` drift is isolated by a `workflow_dispatch` run under Corepack-pinned pnpm 11.23.0; the component is re-vendored or the window waived with the cause recorded (WINDOWS #31)
 - [ ] **GRD-11**: `check:gonum` and `check:no-force-layout` run in `ci.yml` on every pull request
 - [ ] **GRD-12**: `requiredCheckNames` is compared against the live `protect-main` ruleset and fails when they diverge — the `tmux e2e` context is added once the maintainer's repository-settings action lands (promotes GRD-07)
