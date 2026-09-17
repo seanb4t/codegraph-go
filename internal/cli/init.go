@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
@@ -106,13 +108,48 @@ func writeGitignoreHint(codegraphDir string) error {
 
 // printSummary prints the concise end-of-run summary (files, nodes,
 // edges, duration) that init/index report by default (D-01a). --quiet
-// suppresses it entirely; --verbose adds unresolved/skipped counts on top
-// of the default line.
+// suppresses it entirely (checked BEFORE any colour resolution — a quiet
+// run never pays even colorprofile.Detect's cost, let alone the
+// dark-background query); --verbose adds unresolved/skipped counts on top
+// of the default line. Delegates the actual printing to printSummaryMode
+// so a caller that needs to print a SECOND styled line right after this
+// one (sync.go's printSyncSummary) can resolve colour itself ONCE and
+// reuse that mode instead of this function resolving it again (D-11: the
+// dark-background query fires at most once per RunE).
 func printSummary(cmd *cobra.Command, stats indexer.Stats, quiet, verbose bool) {
 	if quiet {
 		return
 	}
+	printSummaryMode(cmd, resolveColor(cmd), stats, quiet, verbose)
+}
+
+// printSummaryMode is printSummary's implementation, taking an
+// already-resolved colorMode.
+func printSummaryMode(cmd *cobra.Command, mode colorMode, stats indexer.Stats, quiet, verbose bool) {
+	if quiet {
+		return
+	}
 	out := cmd.OutOrStdout()
+
+	if mode.Styled {
+		w := mode.Writer(out)
+		pal := present.NewPalette(mode.Dark)
+		d := stats.Duration.Round(time.Millisecond)
+		fmt.Fprintf(w, "%s%s %s%s %s%s %s%s\n",
+			pal.Label.Render("files="), pal.Count.Render(strconv.Itoa(stats.Files)),
+			pal.Label.Render("nodes="), pal.Count.Render(strconv.Itoa(stats.Nodes)),
+			pal.Label.Render("edges="), pal.Count.Render(strconv.Itoa(stats.Edges)),
+			pal.Label.Render("duration="), pal.Value.Render(d.String()),
+		)
+		if verbose {
+			fmt.Fprintf(w, "%s%s %s%s\n",
+				pal.Label.Render("unresolved="), pal.Count.Render(strconv.Itoa(stats.Unresolved)),
+				pal.Label.Render("skipped="), pal.Count.Render(strconv.Itoa(stats.Skipped)),
+			)
+		}
+		return
+	}
+
 	fmt.Fprintf(out, "files=%d nodes=%d edges=%d duration=%s\n",
 		stats.Files, stats.Nodes, stats.Edges, stats.Duration.Round(time.Millisecond))
 	if verbose {
@@ -148,6 +185,35 @@ func printWatchFallbackAdvisory(cmd *cobra.Command, root string) {
 	}
 
 	out := cmd.OutOrStdout()
+
+	mode := resolveColor(cmd)
+	if mode.Styled {
+		w := mode.Writer(out)
+		pal := present.NewPalette(mode.Dark)
+		_ = present.Line(w, pal, present.RoleWarning, "Live file watching is disabled here — "+reason+".")
+		_ = present.Line(w, pal, present.RoleValue, "Until you re-sync, the CodeGraph index stays frozen — it will not pick up edits on its own.")
+
+		if !gitmeta.IsGitRepo(cmd.Context(), root) {
+			_ = present.Line(w, pal, present.RoleValue, "Run `codegraph sync` after changing files to refresh the index.")
+			return
+		}
+
+		status := githooks.Status(cmd.Context(), root)
+		installed := false
+		for _, h := range status.Hooks {
+			if h.Installed {
+				installed = true
+				break
+			}
+		}
+		if installed {
+			_ = present.Line(w, pal, present.RoleValue, "Git sync hooks are already installed — the index refreshes after commit / pull / checkout.")
+			return
+		}
+		_ = present.Line(w, pal, present.RoleValue, "Run `codegraph githooks install` to keep the index fresh automatically.")
+		return
+	}
+
 	fmt.Fprintf(out, "Live file watching is disabled here — %s.\n", reason)
 	fmt.Fprintln(out, "Until you re-sync, the CodeGraph index stays frozen — it will not pick up edits on its own.")
 

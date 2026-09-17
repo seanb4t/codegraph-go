@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
@@ -71,10 +73,28 @@ func newSyncCmd() *cobra.Command {
 // than forking a second summary printer — --quiet suppresses both lines
 // identically via printSummary's own guard.
 func printSyncSummary(cmd *cobra.Command, stats indexer.Stats, quiet, verbose bool) {
-	printSummary(cmd, stats, quiet, verbose)
 	if quiet {
 		return
 	}
+	// Resolved ONCE here and reused for both lines via printSummaryMode
+	// (D-11: the dark-background query fires at most once per RunE) —
+	// calling the public printSummary would resolve colour a second time.
+	mode := resolveColor(cmd)
+	printSummaryMode(cmd, mode, stats, quiet, verbose)
+
+	if mode.Styled {
+		w := mode.Writer(cmd.OutOrStdout())
+		pal := present.NewPalette(mode.Dark)
+		fmt.Fprintf(w, "%s%s %s%s %s%s %s%s %s%s\n",
+			pal.Label.Render("reparsed="), pal.Count.Render(strconv.Itoa(stats.FilesReparsed)),
+			pal.Label.Render("pruned="), pal.Count.Render(strconv.Itoa(stats.FilesPruned)),
+			pal.Label.Render("nodesRemoved="), pal.Count.Render(strconv.Itoa(stats.NodesRemoved)),
+			pal.Label.Render("edgesRemoved="), pal.Count.Render(strconv.Itoa(stats.EdgesRemoved)),
+			pal.Label.Render("dependentsRecomputed="), pal.Count.Render(strconv.Itoa(stats.DependentsRecomputed)),
+		)
+		return
+	}
+
 	fmt.Fprintf(cmd.OutOrStdout(), "reparsed=%d pruned=%d nodesRemoved=%d edgesRemoved=%d dependentsRecomputed=%d\n",
 		stats.FilesReparsed, stats.FilesPruned, stats.NodesRemoved, stats.EdgesRemoved, stats.DependentsRecomputed)
 }

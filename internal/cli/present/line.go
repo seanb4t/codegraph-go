@@ -1,6 +1,11 @@
 package present
 
-import "io"
+import (
+	"io"
+	"strings"
+
+	lipgloss "charm.land/lipgloss/v2"
+)
 
 // Line writes one styled, sanitized line (D-08): pal.Style(role).Render(
 // sanitizeControl(text)) followed by a single trailing newline. text is
@@ -9,12 +14,18 @@ import "io"
 // (CR-01); an empty text renders to a bare "\n", matching
 // fmt.Fprintln(out, "").
 func Line(w io.Writer, pal Palette, role Role, text string) error {
-	return nil
+	_, err := io.WriteString(w, pal.Style(role).Render(sanitizeControl(text))+"\n")
+	return err
 }
 
 // Lines calls Line once per entry in texts, in order. Zero texts writes
 // nothing.
 func Lines(w io.Writer, pal Palette, role Role, texts ...string) error {
+	for _, t := range texts {
+		if err := Line(w, pal, role, t); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -23,7 +34,14 @@ func Lines(w io.Writer, pal Palette, role Role, texts ...string) error {
 // never sanitized (callers pass a fixed literal, never user data, exactly
 // like present/status.go's writeStatLine convention).
 func KV(w io.Writer, pal Palette, label, value string) error {
-	return nil
+	_, err := io.WriteString(w, pal.Label.Render(label)+" "+pal.Value.Render(sanitizeControl(value))+"\n")
+	return err
+}
+
+// lineWriter is NewLineWriter's implementation.
+type lineWriter struct {
+	w     io.Writer
+	style lipgloss.Style
 }
 
 // NewLineWriter returns an io.Writer that styles each complete
@@ -34,5 +52,36 @@ func KV(w io.Writer, pal Palette, label, value string) error {
 // stderr banners and pass-through writers that control write granularity
 // themselves.
 func NewLineWriter(w io.Writer, pal Palette, role Role) io.Writer {
-	return io.Discard
+	return &lineWriter{w: w, style: pal.Style(role)}
+}
+
+// Write implements io.Writer: p is split on "\n"; every complete segment
+// (all but the last) is sanitized, styled, and written with a trailing
+// "\n"; the final segment — the partial tail, possibly empty — is
+// sanitized and written verbatim, unstyled, with no buffering across
+// calls (D-08). An empty p writes nothing and returns (0, nil).
+func (lw *lineWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	segs := strings.Split(string(p), "\n")
+	last := len(segs) - 1
+	for i, seg := range segs {
+		clean := sanitizeControl(seg)
+		if i < last {
+			if _, err := io.WriteString(lw.w, lw.style.Render(clean)+"\n"); err != nil {
+				return 0, err
+			}
+			continue
+		}
+		if clean == "" {
+			continue
+		}
+		if _, err := io.WriteString(lw.w, clean); err != nil {
+			return 0, err
+		}
+	}
+
+	return len(p), nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/version"
 )
 
@@ -28,6 +29,20 @@ func newVersionCmd() *cobra.Command {
 			if asJSON {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(info)
 			}
+
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				w := mode.Writer(cmd.OutOrStdout())
+				pal := present.NewPalette(mode.Dark)
+				fmt.Fprintf(w, "%s %s %s %s\n",
+					pal.Header.Render("codegraph "+info.Version),
+					pal.Label.Render(fmt.Sprintf("(commit %s, built %s)", info.Commit, info.Date)),
+					pal.Value.Render(info.GoVersion),
+					pal.Value.Render(fmt.Sprintf("%s/%s", info.OS, info.Arch)),
+				)
+				return nil
+			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "codegraph %s (commit %s, built %s) %s %s/%s\n",
 				info.Version, info.Commit, info.Date, info.GoVersion, info.OS, info.Arch)
 			return nil

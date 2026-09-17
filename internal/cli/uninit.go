@@ -3,12 +3,15 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 )
 
@@ -31,9 +34,24 @@ func newUninitCmd() *cobra.Command {
 				return err
 			}
 
+			// Resolved once at the top of RunE (D-08) — the confirm()
+			// prompt below stays plain regardless; only the four output
+			// lines below branch on it.
+			mode := resolveColor(cmd)
+			var pal present.Palette
+			var w io.Writer
+			if mode.Styled {
+				pal = present.NewPalette(mode.Dark)
+				w = mode.Writer(cmd.OutOrStdout())
+			}
+
 			codegraphDir := filepath.Join(root, codegraphDirName)
 			if _, err := os.Stat(codegraphDir); os.IsNotExist(err) {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s does not exist — nothing to do\n", codegraphDir)
+				if mode.Styled {
+					fmt.Fprintf(w, "%s does not exist — nothing to do\n", pal.Path.Render(sanitizePathForDisplay(codegraphDir)))
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s does not exist — nothing to do\n", codegraphDir)
+				}
 				return nil
 			} else if err != nil {
 				return err
@@ -45,7 +63,11 @@ func newUninitCmd() *cobra.Command {
 					return err
 				}
 				if !ok {
-					fmt.Fprintln(cmd.OutOrStdout(), "aborted (pass --force to remove without confirming)")
+					if mode.Styled {
+						_ = present.Line(w, pal, present.RoleValue, "aborted (pass --force to remove without confirming)")
+					} else {
+						fmt.Fprintln(cmd.OutOrStdout(), "aborted (pass --force to remove without confirming)")
+					}
 					return nil
 				}
 			}
@@ -66,10 +88,19 @@ func newUninitCmd() *cobra.Command {
 			result := githooks.Remove(cmd.Context(), root)
 			printHookErrors(cmd, result.Errors)
 			if len(result.Removed) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "Removed git %s sync hook%s\n",
-					strings.Join(result.Removed, ", "), plural(len(result.Removed)))
+				if mode.Styled {
+					_ = present.Line(w, pal, present.RoleValue, fmt.Sprintf("Removed git %s sync hook%s",
+						strings.Join(result.Removed, ", "), plural(len(result.Removed))))
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "Removed git %s sync hook%s\n",
+						strings.Join(result.Removed, ", "), plural(len(result.Removed)))
+				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", codegraphDir)
+			if mode.Styled {
+				fmt.Fprintf(w, "removed %s\n", pal.Path.Render(sanitizePathForDisplay(codegraphDir)))
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", codegraphDir)
+			}
 			return nil
 		},
 	}
@@ -103,4 +134,26 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// sanitizePathForDisplay strips control runes (including any embedded
+// ANSI/OSC escape byte) from codegraphDir before it reaches a styled
+// pal.Path.Render call — codegraphDir derives from the caller's own
+// --path/root argument, the same class of value present/status.go's
+// projectPath sanitizes before styling (CR-01). A package-local duplicate
+// of present's unexported sanitizeControl, matching this codebase's
+// existing convention of small helpers duplicated across the cli/present
+// boundary rather than exporting internal-only logic (e.g.
+// present/status.go's kindCount/formatNumber duplicating internal/query's
+// unexported equivalents).
+func sanitizePathForDisplay(s string) string {
+	if !strings.ContainsFunc(s, unicode.IsControl) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }

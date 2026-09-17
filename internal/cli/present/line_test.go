@@ -38,8 +38,11 @@ func TestLineSanitizesAndStyles(t *testing.T) {
 		if err := Line(&b, pal, RoleValue, ""); err != nil {
 			t.Fatalf("Line: unexpected error: %v", err)
 		}
-		if got := b.String(); got != "\n" {
-			t.Errorf("Line(..., \"\") = %q, want %q (matching fmt.Fprintln(out, \"\"))", got, "\n")
+		// lipgloss.Style.Render("") still wraps the empty content in its
+		// own prefix/reset ESC codes — stripped, it strips back to a bare
+		// "\n", matching fmt.Fprintln(out, "")'s plain-path byte shape.
+		if got := stripANSI(b.String()); got != "\n" {
+			t.Errorf("stripANSI(Line(..., \"\")) = %q, want %q (matching fmt.Fprintln(out, \"\"))", got, "\n")
 		}
 	})
 }
