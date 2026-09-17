@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -47,6 +48,21 @@ func newCalleesCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
+
+			// Styled branch (D-08/D-09/D-10, CLI-01): lives strictly after
+			// the --json early return above and before the frozen plain
+			// path below. present.RenderNotice + RenderCallees strip back
+			// byte-for-byte to that plain path's output.
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				w := mode.Writer(out)
+				pal := present.NewPalette(mode.Dark)
+				if err := present.RenderNotice(query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())), pal, w); err != nil {
+					return err
+				}
+				return present.RenderCallees(result, pal, w)
+			}
+
 			// Compact worktree notice (WORK-02, D-12): lives strictly inside
 			// the human-output branch, AFTER the --json early return above —
 			// see explore.go's call site for the full rationale.

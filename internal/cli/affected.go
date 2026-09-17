@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -125,6 +126,21 @@ func newAffectedCmd() *cobra.Command {
 					fmt.Fprintf(out, "%s\n", l.FilePath)
 				}
 				return nil
+			}
+
+			// Styled branch (D-08/D-09/D-10, CLI-01): lives strictly after
+			// the --json and --quiet early returns above (the quiet branch
+			// is never styled) and before the frozen plain path below.
+			// present.RenderNotice + RenderAffected strip back byte-for-byte
+			// to that plain path's output.
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				w := mode.Writer(out)
+				pal := present.NewPalette(mode.Dark)
+				if err := present.RenderNotice(query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())), pal, w); err != nil {
+					return err
+				}
+				return present.RenderAffected(result, pal, w)
 			}
 
 			// Compact worktree notice (WORK-02, D-12): lives strictly inside
