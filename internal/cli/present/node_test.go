@@ -32,17 +32,33 @@ func plainNumbered(content []byte) string {
 	return b.String()
 }
 
+// sanitizeLines applies sanitizeControl per-line (splitting on the raw
+// "\n" first, exactly as writeNumberedSource/writeNumberedSourceRange do)
+// so the "\n" delimiters themselves survive — sanitizeControl alone would
+// also strip them, since a newline is itself a control rune.
+func sanitizeLines(content []byte) []byte {
+	lines := strings.Split(string(content), "\n")
+	for i, l := range lines {
+		lines[i] = sanitizeControl(l)
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 // synthNode builds a synthetic *schema.Node plus a source file body of
 // exactly bodyLines filler lines — used to control a multi-def section's
 // rendered length precisely enough to cross the BODY_BUDGET/LIST_CAP
-// boundaries deliberately.
+// boundaries deliberately. Body lines carry no control bytes (no literal
+// tab) deliberately — sanitizeControl (CR-01) legitimately strips those
+// from the styled path only, which the dedicated "File" and
+// "ControlBytesStrippedFromStyled" fixtures exercise on purpose; these
+// budget fixtures test byte-count arithmetic, not sanitization.
 func synthNode(i, bodyLines int) (*schema.Node, []byte) {
 	name := fmt.Sprintf("Sym%d", i)
 	filePath := fmt.Sprintf("pkg/file%d.go", i)
 	var b strings.Builder
 	fmt.Fprintf(&b, "func %s() {\n", name)
 	for j := 0; j < bodyLines; j++ {
-		fmt.Fprintf(&b, "\tline%04d\n", j)
+		fmt.Fprintf(&b, "  line%04d\n", j)
 	}
 	b.WriteString("}\n")
 	source := []byte(b.String())
@@ -109,6 +125,13 @@ func (f *multiDefFixture) fetchForDetail(counter *int) func(*schema.Node) (*quer
 // BODY_BUDGET, LIST_CAP), plus a targeted control-byte-drop check.
 func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 	t.Run("File", func(t *testing.T) {
+		// Deliberately carries a tab, a trailing newline and a non-ASCII
+		// identifier. sanitizeControl (CR-01) strips control bytes —
+		// including the tab — on the styled path only (the plain path is
+		// frozen and unsanitized, TUI-02); per D-07 this is a content
+		// transform CR-01 mandates, not a markdown-syntax drift, so the
+		// expectation is built from the SAME sanitized-per-line content
+		// the styled renderer actually consumes, not the raw source.
 		content := []byte("func\tFaçade() {}\n// comment\n")
 		d := query.NodeDetail{Mode: query.NodeDetailModeFile, File: &query.FileDetail{Path: "pkg/x.go", Source: content}}
 		var buf bytes.Buffer
@@ -116,7 +139,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 			t.Fatalf("RenderNode: %v", err)
 		}
 		got := stripANSI(buf.String())
-		want := markdownToPlainContract(plainNumbered(content))
+		want := markdownToPlainContract(plainNumbered(sanitizeLines(content)))
 		if got != want {
 			t.Errorf("File mode stripped =\n%q\nwant\n%q", got, want)
 		}

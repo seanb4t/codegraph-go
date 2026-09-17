@@ -90,8 +90,8 @@ func TestRenderExploreStrippedEqualsMarkdownContract(t *testing.T) {
 	}
 	blasts := []query.ExploreBlast{
 		{Symbol: nodeA, CallerCount: 2, TestFiles: []string{"pkg/a_test.go"}}, // covering tests
-		{Symbol: nodeB, CallerCount: 1},                                      // no covering tests found
-		{Symbol: nodeC, CallerCount: 0},                                      // zero callers → no clause
+		{Symbol: nodeB, CallerCount: 1},                                       // no covering tests found
+		{Symbol: nodeC, CallerCount: 0},                                       // zero callers → no clause
 	}
 	sources := map[string][]byte{
 		"pkg/a.go": []byte("package pkg\n\nfunc Alpha() {}\n\nfunc Gamma() {}\n"),
