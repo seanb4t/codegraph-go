@@ -3,11 +3,13 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/cli/tui"
 )
 
@@ -138,26 +140,68 @@ func installStatus(result agents.WriteResult) string {
 // means every touched file's write/remove actually completed.
 func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) error {
 	out := cmd.OutOrStdout()
+	mode := resolveColor(cmd)
+	var pal present.Palette
+	var w io.Writer
+	if mode.Styled {
+		pal = present.NewPalette(mode.Dark)
+		w = mode.Writer(out)
+	}
+
 	if len(targets) == 0 {
-		fmt.Fprintln(out, "no agents selected")
+		if mode.Styled {
+			_ = present.Line(w, pal, present.RoleLabel, "no agents selected")
+		} else {
+			fmt.Fprintln(out, "no agents selected")
+		}
 		return nil
 	}
 	var errs []error
 	for _, t := range targets {
 		if !t.SupportsLocation(loc) {
-			fmt.Fprintf(out, "%s: unsupported (%s not supported)\n", t.DisplayName(), loc)
+			if mode.Styled {
+				_, _ = io.WriteString(w, pal.Value.Render(t.DisplayName()+":")+" "+
+					pal.Warning.Render(fmt.Sprintf("unsupported (%s not supported)", loc))+"\n")
+			} else {
+				fmt.Fprintf(out, "%s: unsupported (%s not supported)\n", t.DisplayName(), loc)
+			}
 			continue
 		}
 		result := do(t)
-		fmt.Fprintf(out, "%s: %s\n", t.DisplayName(), statusOf(result))
+		if mode.Styled {
+			_, _ = io.WriteString(w, pal.Header.Render(t.DisplayName()+":")+" "+pal.Value.Render(statusOf(result))+"\n")
+		} else {
+			fmt.Fprintf(out, "%s: %s\n", t.DisplayName(), statusOf(result))
+		}
 		for _, f := range result.Files {
-			fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
+			if mode.Styled {
+				// CR-01/T-04-24: f.Path is filesystem-derived (a resolved
+				// config location) — sanitized before pal.Path.Render like
+				// every other adversarial-capable path this phase styles.
+				actionRole := present.RoleWarning
+				switch f.Action {
+				case agents.ActionUnchanged, agents.ActionKept, agents.ActionNotFound:
+					actionRole = present.RoleLabel
+				}
+				_, _ = io.WriteString(w, "  "+pal.Style(actionRole).Render(string(f.Action)+":")+" "+
+					pal.Path.Render(sanitizePathForDisplay(f.Path))+"\n")
+			} else {
+				fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
+			}
 		}
 		for _, note := range result.Notes {
-			fmt.Fprintf(out, "  note: %s\n", note)
+			if mode.Styled {
+				_, _ = io.WriteString(w, "  "+pal.Label.Render("note:")+" "+pal.Value.Render(note)+"\n")
+			} else {
+				fmt.Fprintf(out, "  note: %s\n", note)
+			}
 		}
 		for _, e := range result.Errors {
-			fmt.Fprintf(out, "  error: %v\n", e)
+			if mode.Styled {
+				_, _ = io.WriteString(w, "  "+pal.Error.Render("error: "+sanitizePathForDisplay(e.Error()))+"\n")
+			} else {
+				fmt.Fprintf(out, "  error: %v\n", e)
+			}
 			errs = append(errs, fmt.Errorf("%s: %w", t.DisplayName(), e))
 		}
 	}

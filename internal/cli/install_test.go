@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -11,6 +12,17 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
 )
+
+// installSGRSequence is a local copy of present/ansistrip_test.go's SGR
+// stripper — a _test.go helper cannot be imported across packages, so
+// every package with its own styled-output test carries this one-line
+// regexp rather than exporting it out of present.
+var installSGRSequence = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// stripInstallSGR removes every SGR escape sequence from s.
+func stripInstallSGR(s string) string {
+	return installSGRSequence.ReplaceAllString(s, "")
+}
 
 // fakeHome points HOME (and every home-derived env var codegraph's agent
 // targets consult — XDG_CONFIG_HOME for opencode, HERMES_HOME for Hermes)
@@ -268,6 +280,71 @@ func TestInstall_WriteFailure_ReportsErrorAndNonZeroExit(t *testing.T) {
 	}
 	if !strings.Contains(out, "error:") {
 		t.Fatalf("expected install output to include an 'error:' line, got:\n%s", out)
+	}
+}
+
+// TestInstall_StyledOutputStripsToPlain asserts printAgentResults' styled
+// branch (--color=always) strips back to byte-identical plain output —
+// both for a normal two-target install (TestInstall_TargetCSV_
+// SelectsExactlyThose's shape) and for the write-failure/non-zero-exit
+// shape (TestInstall_WriteFailure_ReportsErrorAndNonZeroExit's fixture) —
+// without weakening errors.Join's non-nil-error contract (CR-01). Each
+// comparison runs plain and styled against their OWN fresh fakeHome (two
+// independent t.TempDir()s), so the two absolute home paths embedded in
+// the output are normalized away before comparing; everything else must
+// match byte-for-byte once ANSI is stripped.
+func TestInstall_StyledOutputStripsToPlain(t *testing.T) {
+	plainHome := fakeHome(t)
+	plain, _, err := execCmd("install", "--target", "claude,cursor", "--location", "global")
+	if err != nil {
+		t.Fatalf("install --target claude,cursor (plain): %v", err)
+	}
+	plainNorm := strings.ReplaceAll(plain, plainHome, "<HOME>")
+
+	styledHome := fakeHome(t)
+	styled, _, err := execCmd("install", "--target", "claude,cursor", "--location", "global", "--color=always")
+	if err != nil {
+		t.Fatalf("install --target claude,cursor (styled): %v", err)
+	}
+	if !strings.Contains(styled, "\x1b[") {
+		t.Fatalf("expected styled output to contain an ESC byte, got:\n%q", styled)
+	}
+	styledNorm := strings.ReplaceAll(stripInstallSGR(styled), styledHome, "<HOME>")
+	if styledNorm != plainNorm {
+		t.Fatalf("stripped+normalized styled output does not equal plain:\nplain:  %q\nstyled: %q", plainNorm, styledNorm)
+	}
+
+	// Write-failure shape: a non-nil error, in both plain and styled, with
+	// a stripped "  error:" line equal once normalized.
+	plainFailHome := fakeHome(t)
+	plainFailConfig := filepath.Join(plainFailHome, ".claude.json")
+	if err := os.Mkdir(plainFailConfig, 0o755); err != nil {
+		t.Fatalf("seed directory-in-place-of-file (plain): %v", err)
+	}
+	plainFail, _, plainFailErr := execCmd("install", "--target", "claude", "--location", "global")
+	if plainFailErr == nil {
+		t.Fatalf("expected plain write-failure run to return a non-nil error; output:\n%s", plainFail)
+	}
+	plainFailNorm := strings.ReplaceAll(plainFail, plainFailHome, "<HOME>")
+
+	styledFailHome := fakeHome(t)
+	styledFailConfig := filepath.Join(styledFailHome, ".claude.json")
+	if err := os.Mkdir(styledFailConfig, 0o755); err != nil {
+		t.Fatalf("seed directory-in-place-of-file (styled): %v", err)
+	}
+	styledFail, _, styledFailErr := execCmd("install", "--target", "claude", "--location", "global", "--color=always")
+	if styledFailErr == nil {
+		t.Fatalf("expected styled write-failure run to return a non-nil error; output:\n%s", styledFail)
+	}
+	if !strings.Contains(styledFail, "\x1b[") {
+		t.Fatalf("expected styled write-failure output to contain an ESC byte, got:\n%q", styledFail)
+	}
+	styledFailNorm := strings.ReplaceAll(stripInstallSGR(styledFail), styledFailHome, "<HOME>")
+	if styledFailNorm != plainFailNorm {
+		t.Fatalf("stripped+normalized styled write-failure output does not equal plain:\nplain:  %q\nstyled: %q", plainFailNorm, styledFailNorm)
+	}
+	if !strings.Contains(styledFailNorm, "error:") {
+		t.Fatalf("expected normalized styled write-failure output to include an 'error:' line, got:\n%s", styledFailNorm)
 	}
 }
 
