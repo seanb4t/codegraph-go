@@ -2,10 +2,14 @@
 
 **Phase:** 04-cli-glow-up
 **Date:** 2026-09-17
-**Scope:** Two demonstration families for plan 04-01's plain-golden-freeze work — (a) D-16/
-CLI-05: a planted ESC byte in `status.go`'s plain branch turns `TestPlainGolden` and
-`TestNoColorNonTTYRegression` RED; (b) D-12/CLI-07: a long-only `--limit` flag on `callers`
-turns `TestShortFlagsConsistent` RED, naming `callers --limit`.
+**Scope:** Demonstration families across this phase's plans — (a) D-16/CLI-05 (plan 04-01): a
+planted ESC byte in `status.go`'s plain branch turns `TestPlainGolden` and
+`TestNoColorNonTTYRegression` RED; (b) D-12/CLI-07 (plan 04-01): a long-only `--limit` flag on
+`callers` turns `TestShortFlagsConsistent` RED, naming `callers --limit`; (c) D-15/GRD-13 (plan
+04-02): a planted `colorprofile` import in an untracked `internal/query` file turns
+`TestNoCharmInServeReachablePackages` RED, naming both the package and the import. (Family (d),
+the analogous proof for `charm.land/fang/v2`, does not apply — the 04-02 fang spike verdict is
+`declined`; no fang line ever reaches `go.mod`.)
 
 ## Pre-mutation cleanliness gate — the convention this log follows
 
@@ -172,16 +176,86 @@ then returned to green after a single-token, byte-clean revert. The walk is not 
 
 ---
 
+## Family (c) — D-15/GRD-13: a planted `colorprofile` import turns TestNoCharmInServeReachablePackages RED
+
+**Test/guard:** `TestNoCharmInServeReachablePackages`
+(`internal/cli/present/archtest/import_graph_test.go`) — widened this plan (04-02) from an
+exact-match `forbiddenImportPaths` literal list to a `forbiddenImportPathPrefixes` prefix walk
+over `charm.land/` and `github.com/charmbracelet/`, in the same commit as `go.mod`'s promotion
+of `github.com/charmbracelet/colorprofile` from `// indirect` to direct.
+
+**What are we testing, and why?** Whether the widened prefix-match guard actually catches a
+newly-required module (`colorprofile`) hosted under the second, newly-added prefix
+(`github.com/charmbracelet/`) reaching a serve-reachable package — not merely that the guard
+returns green on today's tree, which a walk with a typo'd or unreachable prefix would also do
+(rule `84d1gfpywd`). This is the D-15 discipline: the denylist widening and the `go.mod` change
+land in the same commit, and each newly-required module is proven RED before that commit exists.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/query` — clean; `git status --porcelain
+internal/query` — empty (no untracked files).
+
+**Mutation applied:** created an UNTRACKED file `internal/query/zz_planted_charm_probe.go`:
+
+```go
+package query
+
+import _ "github.com/charmbracelet/colorprofile"
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/present/archtest/
+-count=1 -run 'TestNoCharmInServeReachablePackages$' -v`, exit code appended):
+
+```
+    import_graph_test.go:202: package github.com/seanb4t/codegraph-go/internal/query imports github.com/charmbracelet/colorprofile — charm styling must never reach the serve-reachable closure (TUI-01); charm-family usage must be confined to internal/cli/present
+--- FAIL: TestNoCharmInServeReachablePackages (0.19s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli/present/archtest	0.253s
+FAIL
+exit=1
+```
+
+The failure names both the offending package (`internal/query`) and the exact forbidden import
+(`github.com/charmbracelet/colorprofile`) — the prefix walk correctly matched an import under the
+newly-added `github.com/charmbracelet/` root, which the pre-widening exact-match list (scoped
+only to three `charm.land/...` literals) could never have caught.
+
+**Revert:** `rm -f internal/query/zz_planted_charm_probe.go` (untracked file — no `git checkout`
+needed).
+
+**Byte-clean proof:** `git status --porcelain internal/query` — empty.
+
+**Green re-run** (verbatim):
+
+```
+$ GOTOOLCHAIN=go1.26.6 go test ./internal/cli/present/archtest/... -count=1 -run 'TestNoCharmInServeReachablePackages$' -v
+--- PASS: TestNoCharmInServeReachablePackages (0.17s)
+ok  	github.com/seanb4t/codegraph-go/internal/cli/present/archtest	0.240s
+```
+
+**Verdict:** The widened prefix-match guard is live and discriminating for the
+`github.com/charmbracelet/` root specifically — a planted `colorprofile` import in a guarded
+package was caught, named precisely, and the plant reverted byte-clean before the D-15 commit.
+
+**Family (d) — not applicable this plan.** D-15 also calls for the same proof against
+`charm.land/fang/v2` "if adopted." The 04-02 fang spike (`04-FANG-VERDICT.md`) concluded
+**declined** (`fang.Execute`'s `DefaultErrorHandler` cannot satisfy D-03's exact-once plain
+stderr contract on a non-TTY pipe). No `charm.land/fang/v2` line ever reaches `go.mod`, so there
+is no newly-required fang module for a Family (d) proof to cover.
+
+---
+
 ## Summary
 
-Both guards this plan introduces were demonstrated RED against a confirmed-applied,
-byte-cleanly-reverted mutation before being trusted:
+Every guard this phase has introduced or widened so far was demonstrated RED against a
+confirmed-applied, byte-cleanly-reverted mutation before being trusted:
 
 | Family | Guard | Mutation | RED confirmed | Reverted clean |
 |---|---|---|---|---|
 | (a) | `TestPlainGolden` / `TestNoColorNonTTYRegression` | ESC byte in `status.go` | yes (3 subtests, 2 assertions each) | yes |
 | (b) | `TestShortFlagsConsistent` | long-only `--limit` on `callers.go` | yes (names `callers --limit`) | yes |
+| (c) | `TestNoCharmInServeReachablePackages` | untracked `colorprofile` import in `internal/query` | yes (names `internal/query` and `github.com/charmbracelet/colorprofile`) | yes |
 
-`git status --porcelain internal/ cmd/ docs/ go.mod` is empty at the end of this plan — no
-production source file was left modified; the only production-file edits were the two planted
-mutations above, each reverted byte-clean before the plan's single commit.
+`git status --porcelain internal/ cmd/ docs/ go.mod` is empty at the end of plan 04-01 and,
+after Family (c)'s revert, immediately before plan 04-02's D-15 commit — no production source
+file was left modified by any planted mutation; every plant above was reverted byte-clean before
+its respective plan's commit.

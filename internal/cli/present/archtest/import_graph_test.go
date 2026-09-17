@@ -2,15 +2,20 @@
 // packages (the MCP transport itself, the read-only query engine it
 // delegates to, the storage layer it reads through, and the background
 // daemon/watch/indexer machinery a live session can trigger) may ever
-// import charm.land/lipgloss/v2, charm.land/bubbletea/v2, or
-// charm.land/bubbles/v2 — the agent/MCP surface must stay ANSI-free
-// forever (D-01, D-11).
+// import any package under either charm vanity root — charm.land/... or
+// github.com/charmbracelet/... — the agent/MCP surface must stay ANSI-free
+// forever (D-01, D-11; widened by 04-02/D-15/GRD-13).
 //
-// Forbidden paths are the /v2-suffixed charm vanity import paths, NOT the
-// bare (non-/v2) paths: charm.land/lipgloss (no suffix) resolves to a
-// real, different, WRONG module (the old v0/v1 API line, also re-hosted
-// at the same vanity domain) per RESEARCH Finding 1. Every literal below
-// must carry the /v2 suffix.
+// Forbidden paths are matched by PREFIX on the two charm vanity roots, not
+// by an exact-match literal list: some charm-family packages
+// (colorprofile, x/ansi) are hosted at github.com/charmbracelet/... rather
+// than charm.land/..., so an exact list or a charm.land/-only prefix would
+// silently miss them (04-RESEARCH.md Pitfall 4). charm.land/lipgloss (no
+// /v2 suffix) resolving to a real, different, WRONG module (the old v0/v1
+// API line, also re-hosted at the same vanity domain, RESEARCH Finding 1)
+// is unaffected by this widening — the prefix still only matches actual
+// charm.land/... or github.com/charmbracelet/... import paths, and the
+// self-defeat probe below stays pinned to the exact /v2-suffixed path.
 //
 // Build order (D-12): this file lands FIRST, before internal/cli/present
 // exists or any Charm dependency enters go.mod. Until a real charm
@@ -45,13 +50,15 @@ var guardedPackages = []string{
 	"github.com/seanb4t/codegraph-go/internal/query",
 }
 
-// forbiddenImportPaths are the three /v2-suffixed charm vanity import
-// paths (D-11, RESEARCH Finding 1). The bare (non-/v2) paths resolve to
-// a DIFFERENT, wrong v1 module and must never appear in this list.
-var forbiddenImportPaths = []string{
-	"charm.land/lipgloss/v2",
-	"charm.land/bubbletea/v2",
-	"charm.land/bubbles/v2",
+// forbiddenImportPathPrefixes are the two charm vanity import-path roots
+// (D-15/GRD-13, widened from the original three-literal exact-match list).
+// Both roots are forbidden by PREFIX, not by an exact-match list, because
+// colorprofile and x/ansi live under github.com/charmbracelet/... while
+// lipgloss/bubbletea/bubbles live under charm.land/... — a prefix on
+// charm.land/ alone would miss the former (04-RESEARCH.md Pitfall 4).
+var forbiddenImportPathPrefixes = []string{
+	"charm.land/",
+	"github.com/charmbracelet/",
 }
 
 // charmImporterProbePath is the specific forbidden path the self-defeat
@@ -181,16 +188,19 @@ func assertCharmImporterExists(t *testing.T) {
 // import closure of the six guardedPackages via go/packages (D-10: never
 // regex/source scanning — that misses aliased imports, build-tag-gated
 // files, and test variants) and fails if any package in that closure
-// imports any of the three /v2-suffixed forbidden charm paths. It also
-// runs the D-12 self-defeat guard, so this test cannot go green for the
-// wrong reason (nothing imports charm at all).
+// imports a path under either forbidden charm vanity root (D-15/GRD-13),
+// reporting EVERY hit rather than stopping at the first. It also runs the
+// D-12 self-defeat guard, so this test cannot go green for the wrong
+// reason (nothing imports charm at all).
 func TestNoCharmInServeReachablePackages(t *testing.T) {
 	reachable := closeOverServeReachableImports(t)
 
 	for _, pkg := range reachable {
-		for _, forbidden := range forbiddenImportPaths {
-			if _, imports := pkg.Imports[forbidden]; imports {
-				t.Errorf("package %s imports %s — charm styling must never reach the serve-reachable closure (TUI-01); charm.land/lipgloss/v2 usage must be confined to internal/cli/present", pkg.PkgPath, forbidden)
+		for path := range pkg.Imports {
+			for _, prefix := range forbiddenImportPathPrefixes {
+				if strings.HasPrefix(path, prefix) {
+					t.Errorf("package %s imports %s — charm styling must never reach the serve-reachable closure (TUI-01); charm-family usage must be confined to internal/cli/present", pkg.PkgPath, path)
+				}
 			}
 		}
 	}
