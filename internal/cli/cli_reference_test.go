@@ -335,6 +335,19 @@ func TestEveryCommandHasGroupID(t *testing.T) {
 	visibleCount := 0
 	for _, c := range root.Commands() {
 		visible := c.IsAvailableCommand() && !c.IsAdditionalHelpTopicCommand()
+		// cobra's own default help command is deliberately excluded from
+		// IsAvailableCommand() (command.go:1612's `c.Parent().helpCommand
+		// == c` check) so it is never double-counted alongside cobra's
+		// separate, hardcoded help-command print — but cobra's own usage
+		// template still lists it as a real, visible command (`sub.
+		// IsAvailableCommand() || sub == c.helpCommand`, command.go:1285/
+		// 1378/1996). Treat it as visible here to match that behavior;
+		// this is citing cobra's own documented split, not testing it
+		// (D-00) — our assertion is only that OUR help command carries
+		// GroupID "maintenance".
+		if c.Name() == "help" {
+			visible = true
+		}
 		if !visible {
 			if c.GroupID != "" {
 				t.Errorf("hidden command %q has GroupID %q, want \"\" (hidden commands stay groupless — D-13)", c.Name(), c.GroupID)
