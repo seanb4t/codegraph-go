@@ -264,12 +264,35 @@ Plans:
   4. The golden oracle, the wire oracle and the TUI-01 archtest are unchanged; a regression test pins `NO_COLOR` + non-TTY plain output; and the `present` archtest goes RED against a planted import of every charm-family path added this milestone (`colorprofile`, `fang/v2`, `x/ansi`, …), the denylist updated in the same commit as the `go.mod` change (CLI-05, GRD-13)
 
 **Notes**: Research pitfalls attached: 1 (lipgloss v2 removed the renderer — nothing downsamples automatically; route through `colorprofile` at the RunE boundary and check manually in a non-256-colour `TERM` and over SSH), 2 (this repo honours neither `CLICOLOR` nor `CLICOLOR_FORCE` today; `NO_COLOR` any-non-empty wins), 3 (`forbiddenImportPaths` is a fixed literal list — prefix-match on `charm.land/` or exact paths in the same commit, proven RED). Architecture anti-patterns: never widen `present.ChoosePresentation`'s two-arg signature — resolve `--color` + TTY + `NO_COLOR` into it from one shared `internal/cli` helper, with `--color` a persistent flag on root (the `inheritedFromAncestor` guard in `cli_reference_test.go` already handles it); and never colourise `Engine.Explore`/`Engine.Node`'s markdown strings — the styled branch calls `ExploreDetail`/`NodeDetail`, the same plain structs the UI consumes. `install`/`uninstall` branch inside `printAgentResults` over `agents.WriteResult`. Fang is a process-level wrapper at the `Execute()` boundary and `internal/cli` is outside the TUI-01 closure by design, so the `serve --mcp` transcript proof is a *new* guard, not an archtest amendment. The gh #13335 lesson is the `NO_COLOR` + non-TTY regression test. `progress_cli.go`'s stderr-fd variant has different TTY semantics and is not unified with the stdout resolver.
-**Plans**: TBD
+**Plans**: 8 plans
 **UI hint**: yes
 
 Plans:
+**Wave 1**
 
-- [ ] TBD
+- [ ] 04-01-PLAN.md — Plain-output goldens for all 28 verb shapes frozen BEFORE any renderer (D-16), `NO_COLOR` + non-TTY regression incl. `NO_COLOR=banana`, CLI-07 short-flag pinning walk (D-12); Families (a)/(b) RED in `04-MUTATION-LOG.md` (CLI-05, CLI-07)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-02-PLAN.md — Fang spike against the corrected call set (no `WithoutCompletions()`), `04-FANG-VERDICT.md` committed alone; then the D-15 commit: `present` archtest prefix-matched on both charm roots + `colorprofile` promoted to direct (+ fang wrap if adopted), Family (c)/(d) planted-import RED (CLI-08, GRD-13)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-03-PLAN.md — Tracer: shared `colorflag.go` resolver (`--color` persistent flag, environ rewrite with the D-09 correction and amendments A1/A2, one `colorprofile.Detect`, gated at-most-once `HasDarkBackground`), `colorprofile.Writer` at the RunE boundary, seven-role `present.Palette`; `status` and `files` restyled end to end, plain path byte-identical (CLI-01…CLI-05)
+
+**Wave 4** *(blocked on Wave 3 completion; 04-04, 04-05, 04-06 run in parallel)*
+
+- [ ] 04-04-PLAN.md — `present/results.go` renderers for search (default + `--full`), callers, callees, impact, affected + `RenderNotice`, pinned by stripped-styled == plain; five RunE styled branches (CLI-01, CLI-05)
+- [ ] 04-05-PLAN.md — `present.RenderExplore`/`RenderNode` over `ExploreDetail`/`NodeDetail` (D-07: same sections, hue replaces markdown syntax; multi-def budgets reproduced), pinned to the exported query renderers; explore/node wired (CLI-01, CLI-05)
+- [ ] 04-06-PLAN.md — `present.Line`/`Lines`/`KV`/`NewLineWriter` (D-08); init/index/sync summaries + watch advisory, uninit, version, telemetry through the palette (CLI-01)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 04-07-PLAN.md — githooks, daemon, ui, serve's stderr banners (stderr-resolved, never the MCP stdout), upgrade's CLI-owned lines, and install/uninstall inside `printAgentResults` (CLI-01)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 04-08-PLAN.md — Four cobra groups from one table (D-13) with the RED-first GroupID guard + Family (e); help styled per the verdict (fang chrome honouring `--color`, or `present.RenderHelp` behind the resolver, D-14); `docs/CLI-REFERENCE.md` regenerated through the drift gate; PROJECT.md Key Decisions row; full phase gates and the CLI-02/CLI-04 human UAT items (CLI-06, CLI-01, CLI-02, CLI-04)
 
 #### Phase 5: Agent Reach — Capability Model & Skill in Every Harness
 
