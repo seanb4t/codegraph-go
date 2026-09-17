@@ -11,18 +11,18 @@ import (
 // writeFileTree writes a styled rendering of a query.FileTreeNode slice —
 // the same shape internal/cli/files.go's printFileTree walks (directory
 // nodes get a trailing slash, leaf nodes get "Name (Language)"), with
-// headerStyle/labelStyle applied as structural chrome only. Never
-// recomputes or re-sorts the tree (D-02) — nodes arrive already built and
-// sorted by query.Engine.Files.
-func writeFileTree(b *strings.Builder, nodes []*query.FileTreeNode, indent string) {
+// pal.Path/pal.Label applied as structural chrome only. Never recomputes
+// or re-sorts the tree (D-02) — nodes arrive already built and sorted by
+// query.Engine.Files.
+func writeFileTree(b *strings.Builder, pal Palette, nodes []*query.FileTreeNode, indent string) {
 	for _, n := range nodes {
 		if n.IsDir {
 			// n.Name is filesystem-derived and may be adversarial — strip
 			// control characters before it reaches the terminal (CR-01).
-			fmt.Fprintf(b, "%s%s\n", indent, headerStyle.Render(sanitizeControl(n.Name)+"/"))
-			writeFileTree(b, n.Children, indent+"  ")
+			fmt.Fprintf(b, "%s%s\n", indent, pal.Path.Render(sanitizeControl(n.Name)+"/"))
+			writeFileTree(b, pal, n.Children, indent+"  ")
 		} else {
-			fmt.Fprintf(b, "%s%s (%s)\n", indent, sanitizeControl(n.Name), labelStyle.Render(n.Language))
+			fmt.Fprintf(b, "%s%s (%s)\n", indent, pal.Path.Render(sanitizeControl(n.Name)), pal.Label.Render(n.Language))
 		}
 	}
 }
@@ -32,17 +32,18 @@ func writeFileTree(b *strings.Builder, nodes []*query.FileTreeNode, indent strin
 // "tree" walks the FileTreeNode slice via writeFileTree; otherwise each
 // FileEntry is rendered as a styled "Path (Language)" line. r is consumed
 // read-only — the tree structure and file ordering are never recomputed
-// here (D-02). Callers gate this behind ChoosePresentation (D-03);
-// RenderFiles itself never reads a TTY/env value.
-func RenderFiles(r query.FilesResult, w io.Writer) error {
+// here (D-02). Callers gate this behind ChoosePresentation (D-03) and
+// build pal via NewPalette(mode.Dark) at the RunE boundary; RenderFiles
+// itself never reads a TTY/env value.
+func RenderFiles(r query.FilesResult, pal Palette, w io.Writer) error {
 	var b strings.Builder
 	if r.Format == "tree" {
-		writeFileTree(&b, r.Tree, "")
+		writeFileTree(&b, pal, r.Tree, "")
 	} else {
 		for _, f := range r.Files {
 			// f.Path is filesystem-derived and may be adversarial — strip
 			// control characters before it reaches the terminal (CR-01).
-			fmt.Fprintf(&b, "%s (%s)\n", sanitizeControl(f.Path), labelStyle.Render(f.Language))
+			fmt.Fprintf(&b, "%s (%s)\n", pal.Path.Render(sanitizeControl(f.Path)), pal.Label.Render(f.Language))
 		}
 	}
 	_, err := io.WriteString(w, b.String())

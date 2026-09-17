@@ -83,7 +83,7 @@ func newStatusCmd() *cobra.Command {
 
 			mode := resolveColor(cmd)
 			if mode.Styled {
-				return present.RenderStatus(result, start, mode.Writer(cmd.OutOrStdout()))
+				return present.RenderStatus(result, start, present.NewPalette(mode.Dark), mode.Writer(cmd.OutOrStdout()))
 			}
 
 			// RenderStatusText already embeds the verbose worktree warning

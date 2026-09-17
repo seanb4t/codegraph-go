@@ -3,10 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -69,8 +67,9 @@ func newFilesCmd() *cobra.Command {
 			notice := query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context()))
 			fmt.Fprint(out, notice)
 
-			if present.ChoosePresentation(term.IsTerminal(int(os.Stdout.Fd())), os.Getenv("NO_COLOR")) {
-				return present.RenderFiles(result, out)
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				return present.RenderFiles(result, present.NewPalette(mode.Dark), mode.Writer(out))
 			}
 
 			if result.Format == "tree" {

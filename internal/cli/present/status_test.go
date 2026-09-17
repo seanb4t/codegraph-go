@@ -2,7 +2,6 @@ package present
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -11,14 +10,8 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
-// ansiRE strips SGR escape sequences (\x1b[...m) so section-order and
-// content assertions can run against the human-readable text without the
-// pretty branch's ANSI bytes getting in the way.
-var ansiRE = regexp.MustCompile("\x1b\\[[0-9;]*m")
-
-func stripANSI(s string) string {
-	return ansiRE.ReplaceAllString(s, "")
-}
+// stripANSI is defined in ansistrip_test.go — the one shared ANSI
+// stripper every renderer contract test in this package reuses.
 
 func fixtureStatusResult() query.StatusResult {
 	return query.StatusResult{
@@ -50,7 +43,7 @@ func fixtureStatusResult() query.StatusResult {
 // something — output must contain a raw ANSI escape byte sequence.
 func TestRenderStatus_ContainsANSI(t *testing.T) {
 	var buf bytes.Buffer
-	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", &buf); err != nil {
+	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("\x1b[")) {
@@ -62,7 +55,7 @@ func TestRenderStatus_ContainsANSI(t *testing.T) {
 // headers appear in the same order as query.RenderStatusText.
 func TestRenderStatus_SectionOrder(t *testing.T) {
 	var buf bytes.Buffer
-	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", &buf); err != nil {
+	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	stripped := stripANSI(buf.String())
@@ -87,7 +80,7 @@ func TestRenderStatus_SectionOrder(t *testing.T) {
 func TestRenderStatus_NumericFormatting(t *testing.T) {
 	r := fixtureStatusResult()
 	var buf bytes.Buffer
-	if err := RenderStatus(r, "/tmp/proj", &buf); err != nil {
+	if err := RenderStatus(r, "/tmp/proj", NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	stripped := stripANSI(buf.String())
@@ -105,7 +98,7 @@ func TestRenderStatus_WorktreeWarning(t *testing.T) {
 	r := fixtureStatusResult()
 	r.WorktreeMismatch = &gitmeta.Mismatch{WorktreeRoot: "/a/main", IndexRoot: "/a/main/.claude/worktrees/probe"}
 	var buf bytes.Buffer
-	if err := RenderStatus(r, "/tmp/proj", &buf); err != nil {
+	if err := RenderStatus(r, "/tmp/proj", NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	stripped := stripANSI(buf.String())
@@ -123,8 +116,8 @@ func TestRenderStatus_WorktreeWarning(t *testing.T) {
 // WorktreeMismatch path fields (both of which embed host filesystem paths)
 // are passed through sanitizeControl before reaching the pretty sink
 // (WR-01) — mirroring sanitize_test.go's ESC/control-byte fixtures. Note
-// RenderStatus's own lipgloss styling legitimately emits many unrelated
-// ESC sequences (headerStyle, labelStyle, sectionStyle), so this test
+// RenderStatus's own lipgloss styling (the palette's Header/Label roles)
+// legitimately emits many unrelated ESC sequences, so this test
 // checks for absence of the SPECIFIC injected escape sequences rather than
 // absence of ESC bytes generally. The warning's own literal newlines (from
 // Warning()'s message template, not attacker-controlled) must survive —
@@ -138,7 +131,7 @@ func TestRenderStatus_SanitizesControlChars(t *testing.T) {
 	dirtyPath := "/tmp/proj\x1b]0;pwned\x07"
 
 	var buf bytes.Buffer
-	if err := RenderStatus(r, dirtyPath, &buf); err != nil {
+	if err := RenderStatus(r, dirtyPath, NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	out := buf.String()
@@ -166,7 +159,7 @@ func TestRenderStatus_SanitizesControlChars(t *testing.T) {
 // does on the piped path.
 func TestRenderStatus_EdgesByKindSection(t *testing.T) {
 	var buf bytes.Buffer
-	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", &buf); err != nil {
+	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	stripped := stripANSI(buf.String())
@@ -197,7 +190,7 @@ func TestRenderStatus_MatchesPipedSectionOrder(t *testing.T) {
 	r := fixtureStatusResult()
 
 	var buf bytes.Buffer
-	if err := RenderStatus(r, "/tmp/proj", &buf); err != nil {
+	if err := RenderStatus(r, "/tmp/proj", NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderStatus: %v", err)
 	}
 	ttyOut := stripANSI(buf.String())

@@ -7,22 +7,12 @@
 // present must NOT read the process environment or probe terminal state
 // itself — real fd/env values are read only at the RunE call sites in
 // internal/cli (D-03).
+//
+// The shared style palette used to live here as three unexported
+// package-level lipgloss.Style variables. It now folds into palette.go's
+// Palette, built per call by NewPalette(dark bool) from the resolver's
+// single background-detection answer (D-05) — no mutable package-level
+// style, no setter. Section headings that used to render via a dedicated
+// underlined variable now render via Palette.Header; there is no eighth
+// role.
 package present
-
-import lipgloss "charm.land/lipgloss/v2"
-
-// Shared lipgloss style palette used by present's renderers. lipgloss v2
-// removed the renderer-construction API present in v1 — Style.Render()
-// always emits full-fidelity ANSI; downsampling is an explicit, separate
-// concern this package does not need since the plain branch already
-// bypasses lipgloss entirely on a non-TTY (D-04).
-var (
-	// headerStyle renders section titles (e.g. "CodeGraph Status").
-	headerStyle = lipgloss.NewStyle().Bold(true)
-
-	// labelStyle renders a stat/field key (e.g. "Files", "Nodes").
-	labelStyle = lipgloss.NewStyle().Faint(true)
-
-	// sectionStyle renders a section heading (e.g. "Index Statistics:").
-	sectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
-)
