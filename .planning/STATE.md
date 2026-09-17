@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 4
 current_phase_name: CLI Glow-up
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-09-17T20:40:03.144Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-09-17T21:02:47.328Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 4 execution started
-state_head: 71494af3d67341a6bce55f2053e56e736b351667
+state_head: 53205c24406c91109422f33b7896697ddb90783d
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 21
+  completed_plans: 22
   percent: 43
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 ## Current Position
 
 Phase: 4 (CLI Glow-up) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-09-17 — Phase 4 execution started
 
@@ -152,6 +152,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P07 | ~25min | 3 tasks | 4 files |
 | Phase 02 P04 | 12min | 2 tasks | 4 files |
 | Phase 04 P01 | 22min | 3 tasks | 32 files |
+| Phase 04 P02 | ~20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -338,6 +339,7 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: 03-02/review: rename stubs return ONE error whose text IS the two-line D-06 message (no direct Fprintln, no 'codegraph:' prefix) so cmd/codegraph/main.go's single exit path prints it exactly once (WR-01, fa81672c); pinned end-to-end by test/integration/renamed_stubs_test.go against the real binary — the plan's literal 'two Fprintln + error' printed a duplicated third line that only the compiled binary showed — SilenceErrors on every command makes main.go the one place a returned error is printed; a stub that prints AND returns duplicates
 - [Phase 03]: 03-04: Backlog row 999.5 'remove the query/unlock rename stubs' (v0.15.0) written by gsd-tools phase add --id 999.5 (additions only, no version token in the heading, milestone phase filter unchanged) with the feat SHA and the exact files/lines to delete in its Goal value; check tdd-red-evidence returned INVALID_RED/zero_tests_discovered for all three Go RED records (TAP-only parser) — Go RED verified by --- FAIL transcript per the repo's documented precedent — planning-artifacts rule: tool-owned files get value edits in shapes the tool writes; the TDD evidence verb has no go test support (upstream gap)
 - [Phase 04]: Phase 4 P01: 29 plain-output goldens frozen (D-16); >=28 floors used throughout since D-16's own verb enumeration counts to 29. install-local/uninstall-local use --target claude (the real agents.TargetID), not the plan's literal claude-code. serve-mcp-stderr runs the real serve --mcp exactly once per test binary via sync.Once, working around internal/mcp's process-global os.Stdin close on session end. — Both TestPlainGolden/TestNoColorNonTTYRegression and TestShortFlagsConsistent demonstrated RED against confirmed mutations (04-MUTATION-LOG.md Families a/b) and reverted byte-clean; no production file touched.
+- [Phase 04]: [Phase 4]: 04-02: fang/v2 v2.0.1 declined - fang.Execute's DefaultErrorHandler wraps stderr in a *colorprofile.Writer with no Fd() method, so its own TTY-detection type assertion always fails and the plain non-TTY stderr branch is unreachable; every error renders styled, breaking D-03's exact-once stub contract (TestRenamedStubsPrintExactlyOnce failed under the real wrap). D-01/D-02/D-04 passed in isolation; the four criteria are conjunctive. Help stays hand-rolled per D-14.
 
 ### Pending Todos
 
@@ -478,8 +480,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-17T20:40:03.109Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-09-17T21:02:47.296Z
+Stopped at: Completed 04-02-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

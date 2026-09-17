@@ -32,7 +32,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **GRD-10**: The vendored `button.svelte` drift is isolated by a `workflow_dispatch` run under Corepack-pinned pnpm 11.23.0; the component is re-vendored or the window waived with the cause recorded (WINDOWS #31)
 - [x] **GRD-11**: `check:gonum` and `check:no-force-layout` run in `ci.yml` on every pull request
 - [x] **GRD-12**: `requiredCheckNames` is compared against the live `protect-main` ruleset and fails when they diverge — the `tmux e2e` context is added once the maintainer's repository-settings action lands (promotes GRD-07)
-- [ ] **GRD-13**: The `present` archtest catches every charm-family import path added this milestone (`colorprofile`, `fang/v2`, `x/ansi`, …) — prefix match or exact paths added in the same commit as the `go.mod` change — demonstrated RED against a planted import
+- [x] **GRD-13**: The `present` archtest catches every charm-family import path added this milestone (`colorprofile`, `fang/v2`, `x/ansi`, …) — prefix match or exact paths added in the same commit as the `go.mod` change — demonstrated RED against a planted import
 - [x] **GRD-14**: Stale-open windows #16 (bench TS framing, resolved v0.11.0 Phase 6) and #33 (tmux CI human-check, PR #71 merged) are closed by recorded verification via `gsd-tools windows fixed`; #20/#21/#34 stay open as record-only deviations with that status noted
 
 ### Docs & Bookkeeping
@@ -51,7 +51,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [ ] **CLI-05**: The agent/MCP path, `--json` output and non-TTY (piped) output are byte-identical before and after the glow-up — golden oracle and wire oracle unchanged, the TUI-01 archtest holding, and a regression test pins `NO_COLOR` + non-TTY plain output (the gh #13335 lesson)
 - [ ] **CLI-06**: `codegraph --help` groups commands into titled sections via `cobra.Group` (Query the graph / Build the index / Agents & serving / Maintenance), files `help` and `completion` into a group, and `<verb> --help` is styled consistently with root help
 - [x] **CLI-07**: Short flags are consistent across the query verbs — `-j`, `-l`, `-k`, `-p` present wherever the long form exists
-- [ ] **CLI-08**: `charm.land/fang/v2` is spiked first with a recorded verdict; it is adopted when `WithoutManpage()`/`WithoutCompletions()` compose with the existing hidden `man` and cobra completions, `serve --mcp`'s transcript is byte-identical under the wrapper, and the SBOM/govulncheck delta is acceptable — otherwise the help template is hand-rolled; either way the decision precedes any renderer landing
+- [x] **CLI-08**: `charm.land/fang/v2` is spiked first with a recorded verdict; it is adopted when `WithoutManpage()`/`WithoutCompletions()` compose with the existing hidden `man` and cobra completions, `serve --mcp`'s transcript is byte-identical under the wrapper, and the SBOM/govulncheck delta is acceptable — otherwise the help template is hand-rolled; either way the decision precedes any renderer landing
 
 ### Verb Fold
 
@@ -148,7 +148,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRD-10 | Phase 2 | Complete |
 | GRD-11 | Phase 2 | Complete |
 | GRD-12 | Phase 2 | Complete |
-| GRD-13 | Phase 4 | Pending |
+| GRD-13 | Phase 4 | Complete |
 | GRD-14 | Phase 2 | Complete |
 | DOCS-08 | Phase 2 | Complete |
 | DOCS-09 | Phase 2 | Complete |
@@ -161,7 +161,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-05 | Phase 4 | Pending |
 | CLI-06 | Phase 4 | Pending |
 | CLI-07 | Phase 4 | Complete |
-| CLI-08 | Phase 4 | Pending |
+| CLI-08 | Phase 4 | Complete |
 | VERB-01 | Phase 3 | Complete |
 | VERB-02 | Phase 3 | Complete |
 | VERB-03 | Phase 3 | Complete |
