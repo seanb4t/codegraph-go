@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 4
 current_phase_name: CLI Glow-up
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-09-17T22:25:17.199Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-09-17T22:58:15.786Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 4 execution started
-state_head: 8332f659962d56d3a1d84f664b52d7e1d57096de
+state_head: 864566dc2de787857fda7f42da94401cbaa81389
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 25
+  completed_plans: 26
   percent: 43
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 ## Current Position
 
 Phase: 4 (CLI Glow-up) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-09-17 — Phase 4 execution started
 
@@ -156,6 +156,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P03 | 32min | 2 tasks | 15 files |
 | Phase 4 P04 | 15min | 2 tasks | 7 files |
 | Phase 04 P05 | 38min | 2 tasks | 6 files |
+| Phase 04 P06 | 42min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -347,6 +348,8 @@ Standing decisions that outlive every milestone:
 - [Phase 04]: 04-03: Task 2's literal whole-package verify cannot show zero FAIL lines because of the plan's own pre-announced --color-undocumented RED window (TestEveryRegisteredFlagIsAccountedFor, scheduled for plan 08) -- every other assertion in Task 2's chain was confirmed individually.
 - [Phase 4]: RenderNotice styles a multi-line worktree notice line-by-line, preserving trailing-newline structure — Matches query.WorktreeNotice's exact byte shape (possibly multi-line) rather than assuming a single line, so the stripped-styled == plain contract holds for any notice content
 - [Phase 4]: explore/node gain a styled branch consuming ExploreDetail/NodeDetail, pinned by a syntax-only markdown contract against the exported query renderers; NODE-02 multi-def budget constants (16/12000/20) duplicated in present, internal/query left at zero diff
+- [Phase 4]: [Phase 4] 04-06: printSummary/printSummaryMode split so printSyncSummary resolves colour exactly once per RunE (D-11) instead of double-querying the dark background when reused for a second styled line
+- [Phase 4]: [Phase 4] 04-06: uninit.go's codegraphDir sanitized via a package-local sanitizePathForDisplay before styling (CR-01), matching present/status.go's projectPath precedent though not spelled out in the plan text
 
 ### Pending Todos
 
@@ -487,8 +490,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-17T22:25:17.156Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-09-17T22:58:15.752Z
+Stopped at: Completed 04-06-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

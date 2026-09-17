@@ -264,7 +264,7 @@ Plans:
   4. The golden oracle, the wire oracle and the TUI-01 archtest are unchanged; a regression test pins `NO_COLOR` + non-TTY plain output; and the `present` archtest goes RED against a planted import of every charm-family path added this milestone (`colorprofile`, `fang/v2`, `x/ansi`, …), the denylist updated in the same commit as the `go.mod` change (CLI-05, GRD-13)
 
 **Notes**: Research pitfalls attached: 1 (lipgloss v2 removed the renderer — nothing downsamples automatically; route through `colorprofile` at the RunE boundary and check manually in a non-256-colour `TERM` and over SSH), 2 (this repo honours neither `CLICOLOR` nor `CLICOLOR_FORCE` today; `NO_COLOR` any-non-empty wins), 3 (`forbiddenImportPaths` is a fixed literal list — prefix-match on `charm.land/` or exact paths in the same commit, proven RED). Architecture anti-patterns: never widen `present.ChoosePresentation`'s two-arg signature — resolve `--color` + TTY + `NO_COLOR` into it from one shared `internal/cli` helper, with `--color` a persistent flag on root (the `inheritedFromAncestor` guard in `cli_reference_test.go` already handles it); and never colourise `Engine.Explore`/`Engine.Node`'s markdown strings — the styled branch calls `ExploreDetail`/`NodeDetail`, the same plain structs the UI consumes. `install`/`uninstall` branch inside `printAgentResults` over `agents.WriteResult`. Fang is a process-level wrapper at the `Execute()` boundary and `internal/cli` is outside the TUI-01 closure by design, so the `serve --mcp` transcript proof is a *new* guard, not an archtest amendment. The gh #13335 lesson is the `NO_COLOR` + non-TTY regression test. `progress_cli.go`'s stderr-fd variant has different TTY semantics and is not unified with the stdout resolver.
-**Plans**: 5/8 plans executed
+**Plans**: 6/8 plans executed
 **UI hint**: yes
 
 Plans:
@@ -284,7 +284,7 @@ Plans:
 
 - [x] 04-04-PLAN.md — `present/results.go` renderers for search (default + `--full`), callers, callees, impact, affected + `RenderNotice`, pinned by stripped-styled == plain; five RunE styled branches (CLI-01, CLI-05)
 - [x] 04-05-PLAN.md — `present.RenderExplore`/`RenderNode` over `ExploreDetail`/`NodeDetail` (D-07: same sections, hue replaces markdown syntax; multi-def budgets reproduced), pinned to the exported query renderers; explore/node wired (CLI-01, CLI-05)
-- [ ] 04-06-PLAN.md — `present.Line`/`Lines`/`KV`/`NewLineWriter` (D-08); init/index/sync summaries + watch advisory, uninit, version, telemetry through the palette (CLI-01)
+- [x] 04-06-PLAN.md — `present.Line`/`Lines`/`KV`/`NewLineWriter` (D-08); init/index/sync summaries + watch advisory, uninit, version, telemetry through the palette (CLI-01)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -362,7 +362,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | 1. Defect & Flake Burn-down | 9/9 | Complete    | 2026-09-15 |
 | 2. Guards, CI Wiring & Docs Burn-down | 7/7 | Complete    | 2026-09-16 |
 | 3. Verb Fold | 4/4 | Complete    | 2026-09-16 |
-| 4. CLI Glow-up | 5/8 | In Progress|  |
+| 4. CLI Glow-up | 6/8 | In Progress|  |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 0/TBD | Not started | - |
 | 6. Claude Code PreToolUse Nudge | 0/TBD | Not started | - |
 | 7. Codex Parity | 0/TBD | Not started | - |
