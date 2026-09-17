@@ -4,7 +4,7 @@ verified: 2026-09-16T23:59:00Z
 status: passed
 score: 8/8 must-haves verified
 covered_files: [".planning/REQUIREMENTS.md", ".planning/ROADMAP.md", ".planning/phases/03-verb-fold/03-01-PLAN.md", ".planning/phases/03-verb-fold/03-01-SUMMARY.md", ".planning/phases/03-verb-fold/03-02-PLAN.md", ".planning/phases/03-verb-fold/03-02-SUMMARY.md", ".planning/phases/03-verb-fold/03-03-PLAN.md", ".planning/phases/03-verb-fold/03-03-SUMMARY.md", ".planning/phases/03-verb-fold/03-04-PLAN.md", ".planning/phases/03-verb-fold/03-04-SUMMARY.md", ".planning/phases/03-verb-fold/03-MUTATION-LOG.md", ".planning/phases/03-verb-fold/03-REVIEW-FIX.md", ".planning/phases/03-verb-fold/03-REVIEW.md", ".planning/phases/03-verb-fold/COVERAGE.md", "docs/CLI-REFERENCE.md", "internal/cli/daemon.go", "internal/cli/daemon_test.go", "internal/cli/index.go", "internal/cli/index_lock_test.go", "internal/cli/notice_test.go", "internal/cli/query_cli_test.go", "internal/cli/renamed.go", "internal/cli/renamed_test.go", "internal/cli/root.go", "internal/cli/search.go", "internal/cli/testdata/cli-reference-allowlist.txt", "internal/daemon/lock.go", "test/integration/renamed_stubs_test.go"]
-covered_digest: "v1:sha256:0c1312572f63c8a709842872ddcbb1e5ba2dc3e4c0b6d6ede52040163e9089b2"
+covered_digest: "v1:sha256:ca9e54028ee5c683d9e4a738ffec96b62786245fe5db1456b8efc774f77401e8"
 behavior_unverified: 0
 overrides_applied: 0
 ---
