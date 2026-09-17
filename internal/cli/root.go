@@ -36,6 +36,56 @@ var ErrAlreadyInitialized = errors.New("cli: already initialized")
 // at the target root (D-01a) — the caller must run `codegraph init` first.
 var ErrNotInitialized = errors.New("cli: not initialized")
 
+// The four cobra command groups D-13 assigns every visible command to
+// (CLI-06) — registered on root via AddGroup in this exact order (query,
+// build, agents, maintenance) so both cobra's own help template and, when
+// fang is declined (D-14), present.RenderHelp render the same four
+// titled sections in the same order. Hidden commands (man, the query/
+// unlock rename stubs) are deliberately absent from commandGroups below
+// and stay groupless.
+const (
+	groupQuery       = "query"
+	groupBuild       = "build"
+	groupAgents      = "agents"
+	groupMaintenance = "maintenance"
+)
+
+// commandGroups is the ONE table mapping a command's Name() to its D-13
+// group — applied to root's direct children after AddCommand (CLI-06).
+// Only root's direct children are grouped: cobra groups are per-parent,
+// so daemon start|stop and githooks install|remove|status are never
+// grouped. man, query and unlock are deliberately absent (hidden, stay
+// groupless); help and completion are set separately via
+// SetHelpCommandGroupID/SetCompletionCommandGroupID since cobra creates
+// them lazily, after this map is applied.
+var commandGroups = map[string]string{
+	"explore":  groupQuery,
+	"search":   groupQuery,
+	"node":     groupQuery,
+	"callers":  groupQuery,
+	"callees":  groupQuery,
+	"impact":   groupQuery,
+	"affected": groupQuery,
+	"files":    groupQuery,
+	"status":   groupQuery,
+
+	"init":     groupBuild,
+	"index":    groupBuild,
+	"sync":     groupBuild,
+	"daemon":   groupBuild,
+	"githooks": groupBuild,
+	"uninit":   groupBuild,
+
+	"serve":     groupAgents,
+	"ui":        groupAgents,
+	"install":   groupAgents,
+	"uninstall": groupAgents,
+
+	"version":   groupMaintenance,
+	"upgrade":   groupMaintenance,
+	"telemetry": groupMaintenance,
+}
+
 // newRootCmd builds the "codegraph" root command and attaches the
 // init/index/uninit subcommands (D-01), plus sync/daemon (D-01/D-05) — the
 // incremental-update surface: sync updates the graph in one shot, and
@@ -51,6 +101,12 @@ var ErrNotInitialized = errors.New("cli: not initialized")
 // than by an interactive user. Usage/error text is printed by the
 // caller (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
 // SilenceErrors are set on every command in the tree.
+//
+// The tree is grouped into D-13's four titled sections (CLI-06): Query
+// the graph, Build the index, Agents & serving, and Maintenance — every
+// visible command's GroupID is applied from the one commandGroups table
+// above right after AddCommand, and help/completion are filed under
+// Maintenance via SetHelpCommandGroupID/SetCompletionCommandGroupID.
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:     "codegraph",
@@ -70,6 +126,21 @@ func newRootCmd() *cobra.Command {
 		newDaemonCmd(), newUnlockCmd(), newVersionCmd(), newTelemetryCmd(),
 		newUpgradeCmd(), newInstallCmd(), newUninstallCmd(),
 		newGithooksCmd(), newManCmd(), newUiCmd())
+
+	root.AddGroup(
+		&cobra.Group{ID: groupQuery, Title: "Query the graph:"},
+		&cobra.Group{ID: groupBuild, Title: "Build the index:"},
+		&cobra.Group{ID: groupAgents, Title: "Agents & serving:"},
+		&cobra.Group{ID: groupMaintenance, Title: "Maintenance:"},
+	)
+	for _, c := range root.Commands() {
+		if id, ok := commandGroups[c.Name()]; ok {
+			c.GroupID = id
+		}
+	}
+	root.SetHelpCommandGroupID(groupMaintenance)
+	root.SetCompletionCommandGroupID(groupMaintenance)
+
 	return root
 }
 
