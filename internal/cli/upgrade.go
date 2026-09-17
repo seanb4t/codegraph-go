@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/upgrade"
 	"github.com/seanb4t/codegraph-go/internal/version"
 )
@@ -126,7 +127,16 @@ func newUpgradeCmd() *cobra.Command {
 				return nil
 			}
 
-			if refreshErr := refreshInstalledSkillsFunc(target, cmd.OutOrStdout()); refreshErr != nil {
+			out := cmd.OutOrStdout()
+			mode := resolveColor(cmd)
+			refreshOut := out
+			var pal present.Palette
+			if mode.Styled {
+				pal = present.NewPalette(mode.Dark)
+				refreshOut = present.NewLineWriter(mode.Writer(out), pal, present.RoleValue)
+			}
+
+			if refreshErr := refreshInstalledSkillsFunc(target, refreshOut); refreshErr != nil {
 				// D-07: the swap already succeeded and is independently
 				// verified/atomic — a refresh failure is reported as a
 				// separate warning, not as a failed upgrade. Conflating a
@@ -135,7 +145,14 @@ func newUpgradeCmd() *cobra.Command {
 				// did update, and would likely send the user to re-run
 				// upgrade rather than the one command that actually fixes
 				// it, so the warning names that command explicitly.
-				fmt.Fprintf(cmd.OutOrStdout(), "warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v\nRun `codegraph install` to refresh it manually.\n", refreshErr)
+				if mode.Styled {
+					w := mode.Writer(out)
+					_ = present.Line(w, pal, present.RoleWarning, fmt.Sprintf(
+						"warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v", refreshErr))
+					_ = present.Line(w, pal, present.RoleWarning, "Run `codegraph install` to refresh it manually.")
+				} else {
+					fmt.Fprintf(out, "warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v\nRun `codegraph install` to refresh it manually.\n", refreshErr)
+				}
 			}
 			return nil
 		},

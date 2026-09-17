@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/uiserver"
 )
 
@@ -95,7 +96,11 @@ func newUiCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), srv.URL())
+			if mode := resolveColor(cmd); mode.Styled {
+				_ = present.Line(mode.Writer(cmd.OutOrStdout()), present.NewPalette(mode.Dark), present.RolePath, srv.URL())
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), srv.URL())
+			}
 
 			if shouldOpenBrowser(noOpen, cmd) {
 				if err := openBrowser(srv.URL()); err != nil {

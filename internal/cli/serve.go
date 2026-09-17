@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
@@ -258,9 +259,18 @@ tools appear on the next request, with no client restart.`,
 			// it lives inside serveWatchStart itself so this call site stays
 			// unconditional. WR-04's Quiet mirrors the reconcile Sync call
 			// above.
+			//
+			// The watcher's stderr banners are the ONLY writer this file
+			// ever wraps — stdout (the MCP JSON-RPC stream) is never
+			// touched, and resolveColorStderr never queries the terminal
+			// (T-04-22, T-04-25).
+			var watchStderr io.Writer = cmd.ErrOrStderr()
+			if mode := resolveColorStderr(cmd); mode.Styled {
+				watchStderr = present.NewLineWriter(mode.Writer(cmd.ErrOrStderr()), present.NewPalette(true), present.RoleWarning)
+			}
 			cancelWatchStart, watchStartDone := serveWatchStart(
 				repoPath, hasIndex, noWatch, forceWatch,
-				indexer.Options{Quiet: true}, cmd.ErrOrStderr(), nil,
+				indexer.Options{Quiet: true}, watchStderr, nil,
 			)
 			defer func() {
 				cancelWatchStart()

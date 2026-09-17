@@ -6,11 +6,13 @@ import (
 	"io"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/cli/tui"
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
@@ -100,11 +102,38 @@ func newDaemonCmd() *cobra.Command {
 // Never an error; the caller always returns nil after calling this.
 func printDaemonList(cmd *cobra.Command, currentRepo string, records []daemon.Record) {
 	out := cmd.OutOrStdout()
+	mode := resolveColor(cmd)
+	var pal present.Palette
+	var w io.Writer
+	if mode.Styled {
+		pal = present.NewPalette(mode.Dark)
+		w = mode.Writer(out)
+	}
+
 	if len(records) == 0 {
-		fmt.Fprintln(out, "no running daemons")
+		if mode.Styled {
+			_ = present.Line(w, pal, present.RoleLabel, "no running daemons")
+		} else {
+			fmt.Fprintln(out, "no running daemons")
+		}
 		return
 	}
 	sorted := tui.SortRecordsCurrentFirst(records, currentRepo)
+	if mode.Styled {
+		// The header and each record's tabs are literal separators between
+		// independently-styled fields, never passed through present.Line
+		// (which would sanitizeControl away the tab bytes — CR-01's control-
+		// char strip targets adversarial data, not this package's own
+		// hardcoded formatting).
+		_, _ = io.WriteString(w, pal.Header.Render("pid\trepo\tstarted")+"\n")
+		for _, r := range sorted {
+			fmt.Fprintf(w, "%s\t%s\t%s\n",
+				pal.Count.Render(strconv.Itoa(r.PID)),
+				pal.Path.Render(sanitizePathForDisplay(r.RepoRoot)),
+				pal.Value.Render(r.StartedAt.Format(time.RFC3339)))
+		}
+		return
+	}
 	fmt.Fprintln(out, "pid\trepo\tstarted")
 	for _, r := range sorted {
 		fmt.Fprintf(out, "%d\t%s\t%s\n", r.PID, r.RepoRoot, r.StartedAt.Format(time.RFC3339))
@@ -209,12 +238,22 @@ func newDaemonStopCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
+			// Resolved ONCE per RunE (D-11) — printStoppedDaemons below
+			// reuses this same mode rather than re-resolving, so a styled
+			// `daemon stop` never fires the OSC-11 dark-background query
+			// twice in one invocation (the printSyncSummary precedent,
+			// 04-06-SUMMARY.md Deviation 1).
+			mode := resolveColor(cmd)
 
 			if all {
 				stopped, err := daemonStopAll()
-				printStoppedDaemons(out, stopped)
+				printStoppedDaemons(mode, out, stopped)
 				if len(stopped) == 0 {
-					fmt.Fprintln(out, "no running daemons")
+					if mode.Styled {
+						_ = present.Line(mode.Writer(out), present.NewPalette(mode.Dark), present.RoleValue, "no running daemons")
+					} else {
+						fmt.Fprintln(out, "no running daemons")
+					}
 				}
 				return err
 			}
@@ -229,9 +268,14 @@ func newDaemonStopCmd() *cobra.Command {
 			}
 
 			stopped, err := daemonStopMatching(repoRoot)
-			printStoppedDaemons(out, stopped)
+			printStoppedDaemons(mode, out, stopped)
 			if len(stopped) == 0 {
-				fmt.Fprintf(out, "no running daemon for %s\n", repoRoot)
+				if mode.Styled {
+					pal := present.NewPalette(mode.Dark)
+					_, _ = io.WriteString(mode.Writer(out), pal.Value.Render("no running daemon for")+" "+pal.Path.Render(sanitizePathForDisplay(repoRoot))+"\n")
+				} else {
+					fmt.Fprintf(out, "no running daemon for %s\n", repoRoot)
+				}
 			}
 			return err
 		},
@@ -250,8 +294,21 @@ func newDaemonStopCmd() *cobra.Command {
 }
 
 // printStoppedDaemons prints one "stopped pid N (repo)" line per record
-// daemonStopMatching/daemonStopAll actually signaled.
-func printStoppedDaemons(out io.Writer, stopped []daemon.Record) {
+// daemonStopMatching/daemonStopAll actually signaled. mode is resolved ONCE
+// by the caller (newDaemonStopCmd's RunE) and passed in here rather than
+// re-resolved, so a styled `daemon stop` never queries the dark background
+// twice in one invocation (D-11).
+func printStoppedDaemons(mode colorMode, out io.Writer, stopped []daemon.Record) {
+	if mode.Styled {
+		pal := present.NewPalette(mode.Dark)
+		w := mode.Writer(out)
+		for _, rec := range stopped {
+			fmt.Fprintf(w, "stopped pid %s (%s)\n",
+				pal.Count.Render(strconv.Itoa(rec.PID)),
+				pal.Path.Render(sanitizePathForDisplay(rec.RepoRoot)))
+		}
+		return
+	}
 	for _, rec := range stopped {
 		fmt.Fprintf(out, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
 	}
@@ -285,7 +342,12 @@ func newDaemonUnlockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), msg)
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				_ = present.Line(mode.Writer(cmd.OutOrStdout()), present.NewPalette(mode.Dark), present.RoleValue, msg)
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), msg)
+			}
 			return nil
 		},
 	}

@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 )
 
@@ -35,19 +37,43 @@ func newGithooksInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			out := cmd.OutOrStdout()
+			mode := resolveColor(cmd)
+			var pal present.Palette
+			var w io.Writer
+			if mode.Styled {
+				pal = present.NewPalette(mode.Dark)
+				w = mode.Writer(out)
+			}
+
 			result := githooks.Install(cmd.Context(), root)
 			if result.Skipped != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Skipped: %s\n", result.Skipped)
+				if mode.Styled {
+					_ = present.KV(w, pal, "Skipped:", result.Skipped)
+				} else {
+					fmt.Fprintf(out, "Skipped: %s\n", result.Skipped)
+				}
 				return nil
 			}
 			printHookErrors(cmd, result.Errors)
 			if len(result.Installed) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "Could not install git hooks. Run `codegraph sync` after changes instead.")
+				if mode.Styled {
+					_ = present.Line(w, pal, present.RoleWarning, "Could not install git hooks. Run `codegraph sync` after changes instead.")
+				} else {
+					fmt.Fprintln(out, "Could not install git hooks. Run `codegraph sync` after changes instead.")
+				}
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Installed git %s hooks — the index refreshes in the background after each.\n",
-				strings.Join(result.Installed, ", "))
-			fmt.Fprintln(cmd.OutOrStdout(), "Run `codegraph sync` anytime to refresh immediately.")
+			if mode.Styled {
+				_ = present.Line(w, pal, present.RoleValue, fmt.Sprintf(
+					"Installed git %s hooks — the index refreshes in the background after each.",
+					strings.Join(result.Installed, ", ")))
+				_ = present.Line(w, pal, present.RoleValue, "Run `codegraph sync` anytime to refresh immediately.")
+			} else {
+				fmt.Fprintf(out, "Installed git %s hooks — the index refreshes in the background after each.\n",
+					strings.Join(result.Installed, ", "))
+				fmt.Fprintln(out, "Run `codegraph sync` anytime to refresh immediately.")
+			}
 			return nil
 		},
 	}
@@ -64,18 +90,40 @@ func newGithooksRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			out := cmd.OutOrStdout()
+			mode := resolveColor(cmd)
+			var pal present.Palette
+			var w io.Writer
+			if mode.Styled {
+				pal = present.NewPalette(mode.Dark)
+				w = mode.Writer(out)
+			}
+
 			result := githooks.Remove(cmd.Context(), root)
 			if result.Skipped != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Skipped: %s\n", result.Skipped)
+				if mode.Styled {
+					_ = present.KV(w, pal, "Skipped:", result.Skipped)
+				} else {
+					fmt.Fprintf(out, "Skipped: %s\n", result.Skipped)
+				}
 				return nil
 			}
 			printHookErrors(cmd, result.Errors)
 			if len(result.Removed) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No git sync hooks were installed — nothing to remove.")
+				if mode.Styled {
+					_ = present.Line(w, pal, present.RoleValue, "No git sync hooks were installed — nothing to remove.")
+				} else {
+					fmt.Fprintln(out, "No git sync hooks were installed — nothing to remove.")
+				}
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Removed git %s sync hook%s\n",
-				strings.Join(result.Removed, ", "), plural(len(result.Removed)))
+			if mode.Styled {
+				_ = present.Line(w, pal, present.RoleValue, fmt.Sprintf("Removed git %s sync hook%s",
+					strings.Join(result.Removed, ", "), plural(len(result.Removed))))
+			} else {
+				fmt.Fprintf(out, "Removed git %s sync hook%s\n",
+					strings.Join(result.Removed, ", "), plural(len(result.Removed)))
+			}
 			return nil
 		},
 	}
@@ -103,12 +151,29 @@ func newGithooksStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			out := cmd.OutOrStdout()
+			mode := resolveColor(cmd)
+			var pal present.Palette
+			var w io.Writer
+			if mode.Styled {
+				pal = present.NewPalette(mode.Dark)
+				w = mode.Writer(out)
+			}
+
 			result := githooks.Status(cmd.Context(), root)
 			if result.Skipped != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Skipped: %s\n", result.Skipped)
+				if mode.Styled {
+					_ = present.KV(w, pal, "Skipped:", result.Skipped)
+				} else {
+					fmt.Fprintf(out, "Skipped: %s\n", result.Skipped)
+				}
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "hooks dir: %s\n", result.HooksDir)
+			if mode.Styled {
+				_, _ = io.WriteString(w, pal.Label.Render("hooks dir:")+" "+pal.Path.Render(sanitizePathForDisplay(result.HooksDir))+"\n")
+			} else {
+				fmt.Fprintf(out, "hooks dir: %s\n", result.HooksDir)
+			}
 			for _, h := range result.Hooks {
 				state := "not installed"
 				if h.Installed && !h.Executable {
@@ -118,7 +183,15 @@ func newGithooksStatusCmd() *cobra.Command {
 				} else if h.Installed {
 					state = "installed"
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", h.Name, state)
+				if mode.Styled {
+					stateRole := present.RoleValue
+					if state == "installed but not executable" {
+						stateRole = present.RoleWarning
+					}
+					_, _ = io.WriteString(w, pal.Label.Render(h.Name+":")+" "+pal.Style(stateRole).Render(state)+"\n")
+				} else {
+					fmt.Fprintf(out, "%s: %s\n", h.Name, state)
+				}
 			}
 			return nil
 		},
