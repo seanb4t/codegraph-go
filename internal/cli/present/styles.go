@@ -4,9 +4,9 @@
 // internal/query and internal/mcp never import charm — the boundary the
 // TUI-01 archtest (internal/cli/present/archtest) enforces at build time.
 //
-// present must NOT read os.Getenv or call term.IsTerminal itself — real
-// fd/env values are read only at the RunE call sites in internal/cli
-// (D-03).
+// present must NOT read the process environment or probe terminal state
+// itself — real fd/env values are read only at the RunE call sites in
+// internal/cli (D-03).
 package present
 
 import lipgloss "charm.land/lipgloss/v2"

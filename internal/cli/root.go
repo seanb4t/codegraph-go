@@ -62,6 +62,7 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	addColorFlag(root)
 	root.AddCommand(newInitCmd(), newIndexCmd(), newUninitCmd(),
 		newQueryCmd(), newSearchCmd(), newCallersCmd(), newCalleesCmd(),
 		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd(),

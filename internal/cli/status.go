@@ -2,10 +2,8 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -83,8 +81,9 @@ func newStatusCmd() *cobra.Command {
 				return writeJSONLine(cmd, data)
 			}
 
-			if present.ChoosePresentation(term.IsTerminal(int(os.Stdout.Fd())), os.Getenv("NO_COLOR")) {
-				return present.RenderStatus(result, start, cmd.OutOrStdout())
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				return present.RenderStatus(result, start, mode.Writer(cmd.OutOrStdout()))
 			}
 
 			// RenderStatusText already embeds the verbose worktree warning
