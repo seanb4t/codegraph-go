@@ -91,7 +91,7 @@ Cross-check: `go build ./...` ok; `gofmt -l` empty; `go vet` ok on `internal/cli
 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
-| 2026-09-16 | 26 | 26 | 0 | gsd-security-auditor (opus) via /gsd-secure-phase 3, autonomous run — HEAD `1dcfc021`; both RED reproductions ran in detached scratch worktrees, removed afterwards |
+| 2026-09-16 | 30 | 30 | 0 | gsd-security-auditor (opus) via /gsd-secure-phase 3, autonomous run — HEAD `1dcfc021`; both RED reproductions ran in detached scratch worktrees, removed afterwards |
 
 Informational observations from the audit (not threats): (1) `internal/graphstore/logger.go:50` carries a pre-existing `os.Exit(1)` in `Fatalf` — the plans' phrase "the tree's only error exit" is slightly overstated, but that path is unreachable from the stubs and untouched by the phase; (2) the WINDOWS #37 flake is `TestRunWatchdogCancelsRunOnSimulatedReparent`, not the 03-01 Baseline's named `TestDaemonSharedWriter`; (3) `fa81672c` is a `fix(` type outside 03-04's literal `test/docs/chore` audit list; (4) IN-01 (`search` lacks a `Long` description) remains open from `03-REVIEW.md` as an Info finding, out of security scope. No unregistered surface: the one post-plan code change (`fa81672c`, WR-01) shrinks the stub's behaviour and adds a test-only integration file.
 
