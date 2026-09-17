@@ -25,6 +25,8 @@ import (
 	"errors"
 
 	"github.com/spf13/cobra"
+
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 )
 
 // ErrAlreadyInitialized is returned by `init` when .codegraph/ already
@@ -141,7 +143,30 @@ func newRootCmd() *cobra.Command {
 	root.SetHelpCommandGroupID(groupMaintenance)
 	root.SetCompletionCommandGroupID(groupMaintenance)
 
+	installHelpFunc(root)
+
 	return root
+}
+
+// installHelpFunc wires D-14's hand-rolled help path: fang was declined
+// (04-FANG-VERDICT.md), so help is rendered via present.RenderHelp behind
+// the same resolveColor(cmd) gate every other verb uses, falling back to
+// cobra's own stock help func — captured BEFORE SetHelpFunc replaces it —
+// on every non-styled invocation (piped, NO_COLOR, --color=never). Cobra
+// propagates a command's HelpFunc() to every descendant that has none of
+// its own (the parent walk inside HelpFunc()), so a single call here at
+// root construction makes every `<verb> --help` inherit the same styling
+// with no per-verb wiring.
+func installHelpFunc(root *cobra.Command) {
+	stock := root.HelpFunc()
+	root.SetHelpFunc(func(c *cobra.Command, args []string) {
+		mode := resolveColor(c)
+		if !mode.Styled {
+			stock(c, args)
+			return
+		}
+		_ = present.RenderHelp(c, present.NewPalette(mode.Dark), mode.Writer(c.OutOrStdout()))
+	})
 }
 
 // Execute runs the codegraph root command against os.Args, returning any
