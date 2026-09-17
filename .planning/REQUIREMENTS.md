@@ -55,14 +55,14 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Verb Fold
 
-- [ ] **VERB-01**: `search --full` returns full node records — the `MarshalQueryJSON` envelope under `--json`, and a human branch that shows signature and qualified name — while default `search` output (locations) is unchanged
-- [ ] **VERB-02**: `search` accepts the flag superset of the removed `query` (`-j`, `-l`, `-k`, `-p` short forms) with a flag-parse test covering both forms
-- [ ] **VERB-03**: `codegraph query …` is a hidden dedicated stub that prints `"query" has been renamed to "search --full"` (or equivalent) to stderr and returns a non-nil error — exit non-zero, nothing executed; cobra's `Deprecated` field is not used
-- [ ] **VERB-04**: `unlock` becomes `daemon unlock` with identical flags and behaviour, and `codegraph unlock` is the same kind of stub naming `daemon unlock`
-- [ ] **VERB-05**: A positive-controlled, word-boundary, multiline census finds zero references to `codegraph query` / `codegraph unlock` outside the stubs across README, docs, SKILL.md, `internal/mcp/resources/*.md`, hook scripts, Taskfile, CI and tests — run before `internal/cli/` is edited and again after
-- [ ] **VERB-06**: `docs/CLI-REFERENCE.md` is regenerated with the stubs allowlisted by reason; `task docs:cli:drift` and `TestEveryRegisteredFlagIsAccountedFor` are green; shell completions and man pages reflect the new surface
-- [ ] **VERB-07**: Goldens affected by the fold are re-frozen in a reviewed diff with a RED demonstration; the 8-tool MCP set and the wire oracle's transcripts are unchanged
-- [ ] **VERB-08**: The rename lands as a `feat!:` conventional commit with the stubs' removal in the following minor recorded in the release notes and in `docs/CLI-REFERENCE.md`
+- [x] **VERB-01**: `search --full` returns full node records — the `MarshalQueryJSON` envelope under `--json`, and a human branch that shows signature and qualified name — while default `search` output (locations) is unchanged
+- [x] **VERB-02**: `search` accepts the flag superset of the removed `query` (`-j`, `-l`, `-k`, `-p` short forms) with a flag-parse test covering both forms
+- [x] **VERB-03**: `codegraph query …` is a hidden dedicated stub that prints `"query" has been renamed to "search --full"` (or equivalent) to stderr and returns a non-nil error — exit non-zero, nothing executed; cobra's `Deprecated` field is not used
+- [x] **VERB-04**: `unlock` becomes `daemon unlock` with identical flags and behaviour, and `codegraph unlock` is the same kind of stub naming `daemon unlock`
+- [x] **VERB-05**: A positive-controlled, word-boundary, multiline census finds zero references to `codegraph query` / `codegraph unlock` outside the stubs across README, docs, SKILL.md, `internal/mcp/resources/*.md`, hook scripts, Taskfile, CI and tests — run before `internal/cli/` is edited and again after
+- [x] **VERB-06**: `docs/CLI-REFERENCE.md` is regenerated with the stubs allowlisted by reason; `task docs:cli:drift` and `TestEveryRegisteredFlagIsAccountedFor` are green; shell completions and man pages reflect the new surface
+- [x] **VERB-07**: Goldens affected by the fold are re-frozen in a reviewed diff with a RED demonstration; the 8-tool MCP set and the wire oracle's transcripts are unchanged
+- [x] **VERB-08**: The rename lands as a `feat!:` conventional commit with the stubs' removal in the following minor recorded in the release notes and in `docs/CLI-REFERENCE.md`
 
 ### Agent Reach
 
@@ -162,14 +162,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-06 | Phase 4 | Pending |
 | CLI-07 | Phase 4 | Pending |
 | CLI-08 | Phase 4 | Pending |
-| VERB-01 | Phase 3 | Pending |
-| VERB-02 | Phase 3 | Pending |
-| VERB-03 | Phase 3 | Pending |
-| VERB-04 | Phase 3 | Pending |
-| VERB-05 | Phase 3 | Pending |
-| VERB-06 | Phase 3 | Pending |
-| VERB-07 | Phase 3 | Pending |
-| VERB-08 | Phase 3 | Pending |
+| VERB-01 | Phase 3 | Complete |
+| VERB-02 | Phase 3 | Complete |
+| VERB-03 | Phase 3 | Complete |
+| VERB-04 | Phase 3 | Complete |
+| VERB-05 | Phase 3 | Complete |
+| VERB-06 | Phase 3 | Complete |
+| VERB-07 | Phase 3 | Complete |
+| VERB-08 | Phase 3 | Complete |
 | AGENT-08 | Phase 5 | Pending |
 | AGENT-09 | Phase 5 | Pending |
 | AGENT-04 | Phase 5 | Pending |
