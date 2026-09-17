@@ -1,0 +1,7 @@
+**Alpha** (function)
+
+**Location:** pkga/pkga.go:13
+**Signature:** `() int`
+**Trail — codegraph_node any of these to follow it (no Read needed)**
+**Calls →** helper (pkga/pkga.go:18)
+**Called by ←** Run (pkgb/pkgb.go:8)

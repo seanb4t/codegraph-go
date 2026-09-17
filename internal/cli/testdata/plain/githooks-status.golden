@@ -1,0 +1,4 @@
+hooks dir: <FIXTURE>/.git/hooks
+post-commit: installed
+post-merge: installed
+post-checkout: installed

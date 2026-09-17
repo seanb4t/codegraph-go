@@ -1,0 +1,2 @@
+warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: simulated refresh failure
+Run `codegraph install` to refresh it manually.

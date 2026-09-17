@@ -1,0 +1,4 @@
+main.go (go)
+pkga/embed.go (go)
+pkga/pkga.go (go)
+pkgb/pkgb.go (go)
