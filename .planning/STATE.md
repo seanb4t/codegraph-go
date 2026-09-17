@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 4
 current_phase_name: CLI Glow-up
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-09-17T21:02:47.328Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-09-17T21:38:10.649Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 4 execution started
-state_head: 53205c24406c91109422f33b7896697ddb90783d
+state_head: 1054efef9bd6ad2b7df03a3957687d24cd87e9b8
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 22
+  completed_plans: 23
   percent: 43
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 ## Current Position
 
 Phase: 4 (CLI Glow-up) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-09-17 — Phase 4 execution started
 
@@ -153,6 +153,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P04 | 12min | 2 tasks | 4 files |
 | Phase 04 P01 | 22min | 3 tasks | 32 files |
 | Phase 04 P02 | ~20min | 2 tasks | 4 files |
+| Phase 04 P03 | 32min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -340,6 +341,8 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: 03-04: Backlog row 999.5 'remove the query/unlock rename stubs' (v0.15.0) written by gsd-tools phase add --id 999.5 (additions only, no version token in the heading, milestone phase filter unchanged) with the feat SHA and the exact files/lines to delete in its Goal value; check tdd-red-evidence returned INVALID_RED/zero_tests_discovered for all three Go RED records (TAP-only parser) — Go RED verified by --- FAIL transcript per the repo's documented precedent — planning-artifacts rule: tool-owned files get value edits in shapes the tool writes; the TDD evidence verb has no go test support (upstream gap)
 - [Phase 04]: Phase 4 P01: 29 plain-output goldens frozen (D-16); >=28 floors used throughout since D-16's own verb enumeration counts to 29. install-local/uninstall-local use --target claude (the real agents.TargetID), not the plan's literal claude-code. serve-mcp-stderr runs the real serve --mcp exactly once per test binary via sync.Once, working around internal/mcp's process-global os.Stdin close on session end. — Both TestPlainGolden/TestNoColorNonTTYRegression and TestShortFlagsConsistent demonstrated RED against confirmed mutations (04-MUTATION-LOG.md Families a/b) and reverted byte-clean; no production file touched.
 - [Phase 04]: [Phase 4]: 04-02: fang/v2 v2.0.1 declined - fang.Execute's DefaultErrorHandler wraps stderr in a *colorprofile.Writer with no Fd() method, so its own TTY-detection type assertion always fails and the plain non-TTY stderr branch is unreachable; every error renders styled, breaking D-03's exact-once stub contract (TestRenamedStubsPrintExactlyOnce failed under the real wrap). D-01/D-02/D-04 passed in isolation; the four criteria are conjunctive. Help stays hand-rolled per D-14.
+- [Phase 04]: 04-03: present/tty.go and present/styles.go doc comments reworded to drop the literal substrings os.Getenv/term.IsTerminal (same meaning) -- the D-03 env-blind grep gate was matching pre-existing prose describing the constraint, not code violating it (third instance of this project's own recurring substring-proxy gate defect).
+- [Phase 04]: 04-03: Task 2's literal whole-package verify cannot show zero FAIL lines because of the plan's own pre-announced --color-undocumented RED window (TestEveryRegisteredFlagIsAccountedFor, scheduled for plan 08) -- every other assertion in Task 2's chain was confirmed individually.
 
 ### Pending Todos
 
@@ -480,8 +483,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-17T21:02:47.296Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-09-17T21:38:10.617Z
+Stopped at: Completed 04-03-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
