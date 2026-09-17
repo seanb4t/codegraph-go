@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Verb Fold",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 3)",
-    "reason": "Phase 3 of 7 — needs a plan"
+    "label": "Advance to the next step (plan phase 4)",
+    "reason": "Phase 4 of 7 — needs a plan"
   },
-  "updated_at": "2026-09-16T14:48:36.137Z"
+  "updated_at": "2026-09-17T00:41:53.844Z"
 }

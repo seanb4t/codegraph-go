@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-current_phase: 03
-current_phase_name: Verb Fold
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-16T18:30:31.801Z"
+current_phase: 4
+current_phase_name: CLI Glow-up
+status: planning
+stopped_at: Phase 03 complete (verified 8/8, maintainer-reviewed, secured pending), ready to plan Phase 4 — /gsd-autonomous --from 4
+last_updated: "2026-09-17T00:44:11.379Z"
 last_activity: 2026-09-16
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: 58d140fe7592766114eb5ee5f5d9a38d573fd190
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
+state_head: 030ec8852231d2a0a022cd58ebd0a30c7553bd4c
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 20
-  completed_plans: 16
-  percent: 29
+  completed_plans: 20
+  percent: 43
 ---
 
 # Project State
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 3 — Verb Fold
+**Current focus:** Phase 03 — Verb Fold
 
 ## Current Position
 
-Phase: 03 (Verb Fold) — READY TO EXECUTE
+Phase: 4 — CLI Glow-up
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-16 — Phase 02 complete, transitioned to Phase 3
+Status: Ready to plan
+Last activity: 2026-09-16 — Phase 03 complete, transitioned to Phase 4
 
 ## Performance Metrics
 
@@ -46,7 +46,7 @@ Last activity: 2026-09-16 — Phase 02 complete, transitioned to Phase 3
 |-------|-------|-------|----------|
 | 01 | 9 | - | - |
 | 02 | 7 | - | - |
-| 03 | 10 | - | - |
+| 03 | 4 | - | - |
 | 04 | 7 | - | - |
 | 5 | 8 | - | - |
 | 6 | 8 | - | - |
@@ -333,6 +333,9 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: WINDOWS #13/#16/#29/#31/#33 closed via `gsd-tools windows fixed <id>` with evidence recorded in 02-07-SUMMARY.md (the verb accepts no note); #20/#21/#34 stay open as record-only deviations since the ledger has no annotate/record-only status.
 - [Phase 02]: STATE.md's Pending Todos table (17 stale rows) replaced wholesale with gsd-tools init todos' literal pending_todos_markdown render; the one genuinely open row (bench pinnedAt) filed as a real pending-todo file.
 - [Phase 02]: GRD-12 closed: maintainer authorized the prepared gh api PUT to grow protect-main's required contexts to 8; the continuation agent independently re-verified the live state read-only before growing the fixture — Precondition halts must never be satisfied on the orchestrator's word alone; the fixture must follow the live ruleset, never lead it
+- [Phase 03]: 03-02: the TDD runtime gate's RED commits were reconciled with D-15's one-feat!-commit decision at plan time — three test(03-02): RED commits (f6bd1ffb, 4215e42f, 4da74784; test files only, Task 1 plus a 4-line renderFullLine placeholder so the unit test compiles) precede the single GREEN feat(cli)!: commit 5d69ee2e; CONTEXT's Claude's-Discretion 'every commit go test-green' clause was clarified to exempt those RED commits (squash-merge collapses them on main) — workflow.tdd_mode=true halts any tdd="true" task without a prior test(NN-PP) commit; the planner's 'observe RED in the working tree, commit only GREEN' could not execute
+- [Phase 03]: 03-02/review: rename stubs return ONE error whose text IS the two-line D-06 message (no direct Fprintln, no 'codegraph:' prefix) so cmd/codegraph/main.go's single exit path prints it exactly once (WR-01, fa81672c); pinned end-to-end by test/integration/renamed_stubs_test.go against the real binary — the plan's literal 'two Fprintln + error' printed a duplicated third line that only the compiled binary showed — SilenceErrors on every command makes main.go the one place a returned error is printed; a stub that prints AND returns duplicates
+- [Phase 03]: 03-04: Backlog row 999.5 'remove the query/unlock rename stubs' (v0.15.0) written by gsd-tools phase add --id 999.5 (additions only, no version token in the heading, milestone phase filter unchanged) with the feat SHA and the exact files/lines to delete in its Goal value; check tdd-red-evidence returned INVALID_RED/zero_tests_discovered for all three Go RED records (TAP-only parser) — Go RED verified by --- FAIL transcript per the repo's documented precedent — planning-artifacts rule: tool-owned files get value edits in shapes the tool writes; the TDD evidence verb has no go test support (upstream gap)
 
 ### Pending Todos
 
@@ -364,6 +367,8 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 1] Plan-level `<verify>` gates for web plans ran `pnpm check` but never `pnpm vitest run`; the FIX-05 reveal broke seven test fakes and only the deep code review caught it (exit 1 with 11 unhandled errors behind a 585-passed count). Phase 2's guard work should add the vitest exit-code assertion to the plan template or the Taskfile gate.
 - [Phase 2] WINDOWS #20, #21, #34 are open by decision, not pending work: #20 and #21 are Phase-2 (v0.12.0) deviations by design (no `svelte.config.js` in this SvelteKit toolchain; TypeScript pinned at 6.0.3 by the scaffold), #34 is a TTY-06 mutation-log finding whose assertion measures post-settle stability by design; the ledger has no annotate/record-only verb or status, so they stay `open` rather than being waived (a waiver reads as a deferred defect) or fixed (nothing was fixed). Plan 02-07, GRD-14.
 - Tooling gaps (GRD-14/DOCS-11, 02-07): (a) `gsd-tools windows` has no annotate/record-only verb or status; (b) `windows fixed <id>` accepts no note (`broken-windows.cjs` `markFixed`/`cmdWindowsMarkFixed`, lines 286-293/1068-1088: one positional, zero flags), so verification evidence can only live in plan SUMMARYs; (c) no CLI verb creates a pending-todo file (the add-todo workflow is agent-authored, not a `gsd-tools` command); (d) STATE.md's Pending Todos renderer (`init.cjs` `renderPendingTodosMarkdown`, line 2024) emits bullets, so the previous hand-authored table was not a tool shape and was replaced by the rendered body in 02-07. Filing on open-gsd/gsd-core is the maintainer's call; the drafted issue body is in 02-07-SUMMARY.md.
+- ⚠️ [Phase 3] WINDOWS #37: internal/daemon is load-flaky under cross-package go test (TestRunWatchdogCancelsRunOnSimulatedReparent 250s 'Run did not return after a simulated reparent', TestConvergenceTwoSessions 130s) — reproduced on the PRE-fold commit 5bc10ed8 (1/2 runs) and post-fold (1/3), passes alone every time; not a Phase 3 regression (4 message lines in lock.go) but it contradicts #12's 'fixed' (FIX-07 removed the ticker race, not the budget miss under load). Same session: tests/browse-page.test.ts hit its 15s vitest timeout in 2 of 3 full web runs at machine load ~35 and passed alone 2/2 with web/ untouched — load-induced, unrecorded.
+- ⚠️ [Phase 3] Phase 1 reads verification_status: stale after Phase 3's phase.complete and the VERB-01..08 checkbox bookkeeping (#4155 mechanism — its covered_files list includes .planning/REQUIREMENTS.md; Phase 2 still reads passed); Phase 3's own report was re-stamped with 'gsd-tools verification fingerprint' over the verifier's unchanged 28-file list after confirming REQUIREMENTS.md was the only covered file that changed. IN-01 (search has no Long describing --full) left as an advisory docs: follow-up by maintainer choice.
 
 ### Quick Tasks Completed
 
@@ -469,10 +474,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/03-verb-fold/03-CONTEXT.md
+**Resume file:** .planning/ROADMAP.md
 
-Last session: 2026-09-16T16:57:22.480Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-09-17T00:44:11.339Z
+Stopped at: Phase 03 complete (verified 8/8, maintainer-reviewed, secured pending), ready to plan Phase 4 — /gsd-autonomous --from 4
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

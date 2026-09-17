@@ -140,7 +140,7 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
 
 - [x] **Phase 1: Defect & Flake Burn-down** - Every known user-facing defect, store-lock hole, race and load-sensitive flake is fixed at its cause or closed with the measurement that justifies closing (completed 2026-09-15)
 - [x] **Phase 2: Guards, CI Wiring & Docs Burn-down** - Every guard that could pass vacuously fails against its incident shape, CI runs the checks that exist only locally, and every doc claim about dependencies, provenance, scanners and planning state matches what ships (completed 2026-09-16)
-- [ ] **Phase 3: Verb Fold** - `query` folds into `search --full` and `unlock` into `daemon unlock`, every consumer of the old names found, the removed verbs failing loudly for one release
+- [x] **Phase 3: Verb Fold** - `query` folds into `search --full` and `unlock` into `daemon unlock`, every consumer of the old names found, the removed verbs failing loudly for one release (completed 2026-09-16)
 - [ ] **Phase 4: CLI Glow-up** - Every human-output verb renders through one shared semantic palette, adaptive to the terminal and the user's colour preferences, with the agent/MCP, `--json` and piped paths byte-identical
 - [ ] **Phase 5: Agent Reach — Capability Model & Skill in Every Harness** - One capability table drives all eight targets, and every harness with a skill mechanism receives the codegraph skill, verified live, with every write exact-identity-owned and reversible
 - [ ] **Phase 6: Claude Code PreToolUse Nudge** - In an indexed repo, Claude Code is pointed at `codegraph_explore` the first time it reaches for grep/find/Read — as added context, never a denial — and stays silent everywhere else
@@ -237,19 +237,19 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Positive-controlled VERB-05 census BEFORE any `internal/cli/` edit (control planted under `.github/`, `--hidden` correction to RESEARCH's invocation, 14-line/6-file baseline as `03-MUTATION-LOG.md` Family (a)) plus the pre-fold baseline: `search` output digests, `__complete`/man listings, 8 MCP tool names, green wire oracle (VERB-05)
+- [x] 03-01-PLAN.md — Positive-controlled VERB-05 census BEFORE any `internal/cli/` edit (control planted under `.github/`, `--hidden` correction to RESEARCH's invocation, 14-line/6-file baseline as `03-MUTATION-LOG.md` Family (a)) plus the pre-fold baseline: `search` output digests, `__complete`/man listings, 8 MCP tool names, green wire oracle (VERB-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — The single `feat(cli)!:` commit: `search --full` (tracer; `eng.Query`, `MarshalQueryJSON` envelope, two-line render, WORK-02 notice, `-k/-l/-j`), `daemon unlock` moved verbatim with the D-08 message retargets, the two hidden `DisableFlagParsing` stubs in `renamed.go`, every test RED-first, the two allowlist lines and the reviewed `docs/CLI-REFERENCE.md` regeneration in the same green commit, `BREAKING CHANGE:` footer, before/after byte-identity of default `search` (VERB-01, VERB-02, VERB-03, VERB-04, VERB-06, VERB-08)
+- [x] 03-02-PLAN.md — The single `feat(cli)!:` commit: `search --full` (tracer; `eng.Query`, `MarshalQueryJSON` envelope, two-line render, WORK-02 notice, `-k/-l/-j`), `daemon unlock` moved verbatim with the D-08 message retargets, the two hidden `DisableFlagParsing` stubs in `renamed.go`, every test RED-first, the two allowlist lines and the reviewed `docs/CLI-REFERENCE.md` regeneration in the same green commit, `BREAKING CHANGE:` footer, before/after byte-identity of default `search` (VERB-01, VERB-02, VERB-03, VERB-04, VERB-06, VERB-08)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-03-PLAN.md — Family (b): a re-visible `query` stub turns `task docs:cli:drift` and `TestEveryRegisteredFlagIsAccountedFor` RED, byte-clean revert, green control, adjacency/empty/ordering proofs; completions (`__complete`) and man pages reflect the new surface from the live binary with hidden `man` as positive control; zero diff under `internal/mcp`/`testdata/wireoracle` across the phase; `COVERAGE.md` no-external-API declaration (VERB-06, VERB-07)
+- [x] 03-03-PLAN.md — Family (b): a re-visible `query` stub turns `task docs:cli:drift` and `TestEveryRegisteredFlagIsAccountedFor` RED, byte-clean revert, green control, adjacency/empty/ordering proofs; completions (`__complete`) and man pages reflect the new surface from the live binary with hidden `man` as positive control; zero diff under `internal/mcp`/`testdata/wireoracle` across the phase; `COVERAGE.md` no-external-API declaration (VERB-06, VERB-07)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-04-PLAN.md — ROADMAP `## Backlog` row `999.5` for the v0.15.0 stub removal written by `gsd-tools phase add --id` (D-09); VERB-05 census AFTER the last `internal/cli/` edit with the same instrument and control (hits only inside the stub declaration) as Family (c); phase commit-history audit (one `feat(cli)!:`, rest test/docs/chore, no CI-skip); final gate green (VERB-05, VERB-08)
+- [x] 03-04-PLAN.md — ROADMAP `## Backlog` row `999.5` for the v0.15.0 stub removal written by `gsd-tools phase add --id` (D-09); VERB-05 census AFTER the last `internal/cli/` edit with the same instrument and control (hits only inside the stub declaration) as Family (c); phase commit-history audit (one `feat(cli)!:`, rest test/docs/chore, no CI-skip); final gate green (VERB-05, VERB-08)
 
 #### Phase 4: CLI Glow-up
 
@@ -338,7 +338,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 |-------|----------------|--------|-----------|
 | 1. Defect & Flake Burn-down | 9/9 | Complete    | 2026-09-15 |
 | 2. Guards, CI Wiring & Docs Burn-down | 7/7 | Complete    | 2026-09-16 |
-| 3. Verb Fold | 0/TBD | Not started | - |
+| 3. Verb Fold | 4/4 | Complete    | 2026-09-16 |
 | 4. CLI Glow-up | 0/TBD | Not started | - |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 0/TBD | Not started | - |
 | 6. Claude Code PreToolUse Nudge | 0/TBD | Not started | - |
