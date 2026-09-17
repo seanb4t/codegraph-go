@@ -63,3 +63,56 @@ func TestStatusFilesPlainByteIdentity(t *testing.T) {
 		})
 	}
 }
+
+// TestStatusColorFlagRealBinary covers the 04-03 tracer's live, real-binary
+// proof (D-09/D-11/CLI-02/CLI-03): --color drives ESC-byte presence
+// independently of the pipe's own non-TTY status. --color=always must
+// force ANSI even over a plain os/exec pipe (colorprofile floors a forced
+// profile at ANSI); --color=never must produce zero ESC bytes and be
+// byte-identical to the bare (flagless) invocation; --color=bogus must be
+// a usage error naming all three accepted values.
+func TestStatusColorFlagRealBinary(t *testing.T) {
+	dir := copyFixture(t)
+	if _, stderr, err := runBinary(t, dir, nil, "init", dir); err != nil {
+		t.Fatalf("init fixture via subprocess binary: %v: %s", err, stderr)
+	}
+
+	t.Run("--color=always emits ANSI on a pipe", func(t *testing.T) {
+		out, stderr, err := runBinary(t, dir, nil, "status", "--path", dir, "--color=always")
+		if err != nil {
+			t.Fatalf("status --color=always: %v: %s", err, stderr)
+		}
+		if !strings.Contains(out, "\x1b[") {
+			t.Errorf("status --color=always: expected an ANSI escape sequence on a pipe, got none:\n%s", out)
+		}
+	})
+
+	t.Run("--color=never emits no ANSI and equals the bare pipe output", func(t *testing.T) {
+		bareOut, bareErr, err := runBinary(t, dir, nil, "status", "--path", dir)
+		if err != nil {
+			t.Fatalf("status (bare): %v: %s", err, bareErr)
+		}
+		neverOut, neverErr, err := runBinary(t, dir, nil, "status", "--path", dir, "--color=never")
+		if err != nil {
+			t.Fatalf("status --color=never: %v: %s", err, neverErr)
+		}
+		if strings.Contains(neverOut, "\x1b[") {
+			t.Errorf("status --color=never: unexpected ANSI escape sequence:\n%s", neverOut)
+		}
+		if neverOut != bareOut {
+			t.Errorf("status --color=never output differs from the bare (flagless) pipe output\n--- bare ---\n%s\n--- never ---\n%s", bareOut, neverOut)
+		}
+	})
+
+	t.Run("--color=bogus is a usage error naming all three values", func(t *testing.T) {
+		_, stderr, err := runBinary(t, dir, nil, "status", "--path", dir, "--color=bogus")
+		if err == nil {
+			t.Fatalf("status --color=bogus: expected a non-zero exit, got none (stderr: %s)", stderr)
+		}
+		for _, want := range []string{"auto", "always", "never"} {
+			if !strings.Contains(stderr, want) {
+				t.Errorf("status --color=bogus: stderr missing %q:\n%s", want, stderr)
+			}
+		}
+	})
+}
