@@ -244,6 +244,76 @@ is no newly-required fang module for a Family (d) proof to cover.
 
 ---
 
+## Family (e) — CLI-06/D-13: a planted ungrouped command turns TestEveryCommandHasGroupID RED
+
+**Test/guard:** `TestEveryCommandHasGroupID` (`internal/cli/cli_reference_test.go`) — the
+positive-counted walk over `root.Commands()` asserting the four D-13 groups are registered in
+order and every visible command carries one of their IDs (hidden commands stay groupless).
+
+**What are we testing, and why?** Whether the walk actually inspects real GroupID data and would
+catch a regression that dropped a command's group assignment — not merely that it returns green
+on today's tree, which a walk with a typo'd map key or an early `return` would also do (rule
+`84d1gfpywd`). This is also the guard's own RED-first history: it failed on the ungrouped tree
+before `root.AddGroup`/`commandGroups` existed (`root.Groups() has 0 groups, want 4 [query build
+agents maintenance]`, captured in the `test(04-08):` commit) — this family proves the SECOND,
+narrower failure mode: a single command silently losing its group after the feature already
+ships.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/root.go` — clean.
+
+**Mutation applied:** via `perl -0pi -e 's/"telemetry": groupMaintenance,\n//'`, removing
+`telemetry`'s entry from the `commandGroups` map in `internal/cli/root.go`:
+
+```diff
+--- a/internal/cli/root.go
++++ b/internal/cli/root.go
+@@ -83,7 +83,6 @@ var commandGroups = map[string]string{
+ 	"version":   groupMaintenance,
+ 	"upgrade":   groupMaintenance,
+-	"telemetry": groupMaintenance,
+ }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1 -run
+'TestEveryCommandHasGroupID$' -v`, exit code appended):
+
+```
+cli_reference_test.go:360: visible command "telemetry" has GroupID "", which is not one of the four registered groups [query build agents maintenance]
+    cli_reference_test.go:378: inspected 24 visible commands across 4 groups
+--- FAIL: TestEveryCommandHasGroupID (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.459s
+FAIL
+exit=1
+```
+
+The failure names the exact command (`telemetry`) that lost its group assignment, and the
+`inspected 24 visible commands` line confirms the walk still traversed the full tree (not a
+silently-truncated one) even while one command failed its assertion.
+
+**Revert:** `git checkout -- internal/cli/root.go`.
+
+**Byte-clean proof:** `git diff --quiet -- internal/cli/root.go` — holds.
+
+**Green re-run** (verbatim):
+
+```
+$ GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1 -run 'TestEveryCommandHasGroupID$' -v
+    cli_reference_test.go:378: inspected 24 visible commands across 4 groups
+--- PASS: TestEveryCommandHasGroupID (0.00s)
+ok  	github.com/seanb4t/codegraph-go/internal/cli	0.417s
+```
+
+**Verdict:** The walk is live and discriminating for a single command silently losing its
+`commandGroups` entry — the planted removal of `telemetry`'s mapping was caught, named
+precisely, and the plant reverted byte-clean. Note (per this family's own design instruction):
+cobra's `checkCommandGroups` panics at `Execute()` on a `GroupID` that names an UNREGISTERED
+group — the opposite direction from this family's proof (a command with NO group at all) — and
+is cited here as the backstop for that other direction, not tested (D-00: never test cobra's own
+behavior).
+
+---
+
 ## Summary
 
 Every guard this phase has introduced or widened so far was demonstrated RED against a
@@ -254,8 +324,10 @@ confirmed-applied, byte-cleanly-reverted mutation before being trusted:
 | (a) | `TestPlainGolden` / `TestNoColorNonTTYRegression` | ESC byte in `status.go` | yes (3 subtests, 2 assertions each) | yes |
 | (b) | `TestShortFlagsConsistent` | long-only `--limit` on `callers.go` | yes (names `callers --limit`) | yes |
 | (c) | `TestNoCharmInServeReachablePackages` | untracked `colorprofile` import in `internal/query` | yes (names `internal/query` and `github.com/charmbracelet/colorprofile`) | yes |
+| (e) | `TestEveryCommandHasGroupID` | removed `telemetry`'s entry from `commandGroups` in `root.go` | yes (names `telemetry`) | yes |
 
 `git status --porcelain internal/ cmd/ docs/ go.mod` is empty at the end of plan 04-01 and,
 after Family (c)'s revert, immediately before plan 04-02's D-15 commit — no production source
 file was left modified by any planted mutation; every plant above was reverted byte-clean before
-its respective plan's commit.
+its respective plan's commit. Family (e) (plan 04-08) is likewise reverted byte-clean before the
+`feat(04-08): group the command tree...` commit's follow-on work.
