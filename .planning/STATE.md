@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 4
 current_phase_name: CLI Glow-up
 status: executing
-stopped_at: Phase 03 complete (verified 8/8, maintainer-reviewed, secured pending), ready to plan Phase 4 — /gsd-autonomous --from 4
-last_updated: "2026-09-17T17:29:14.822Z"
-last_activity: 2026-09-16
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: ffb5eebcda0ea12bd3b283157bd2733eb7e73ba2
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-09-17T20:40:03.144Z"
+last_activity: 2026-09-17
+last_activity_desc: Phase 4 execution started
+state_head: 71494af3d67341a6bce55f2053e56e736b351667
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 20
+  completed_plans: 21
   percent: 43
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 03 — Verb Fold
+**Current focus:** Phase 4 — CLI Glow-up
 
 ## Current Position
 
-Phase: 4 (CLI Glow-up) — READY TO EXECUTE
-Plan: Not started
+Phase: 4 (CLI Glow-up) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-09-16 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-09-17 — Phase 4 execution started
 
 ## Performance Metrics
 
@@ -151,6 +151,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P02 | 55min | 2 tasks | 4 files |
 | Phase 02 P07 | ~25min | 3 tasks | 4 files |
 | Phase 02 P04 | 12min | 2 tasks | 4 files |
+| Phase 04 P01 | 22min | 3 tasks | 32 files |
 
 ## Accumulated Context
 
@@ -336,6 +337,7 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: 03-02: the TDD runtime gate's RED commits were reconciled with D-15's one-feat!-commit decision at plan time — three test(03-02): RED commits (f6bd1ffb, 4215e42f, 4da74784; test files only, Task 1 plus a 4-line renderFullLine placeholder so the unit test compiles) precede the single GREEN feat(cli)!: commit 5d69ee2e; CONTEXT's Claude's-Discretion 'every commit go test-green' clause was clarified to exempt those RED commits (squash-merge collapses them on main) — workflow.tdd_mode=true halts any tdd="true" task without a prior test(NN-PP) commit; the planner's 'observe RED in the working tree, commit only GREEN' could not execute
 - [Phase 03]: 03-02/review: rename stubs return ONE error whose text IS the two-line D-06 message (no direct Fprintln, no 'codegraph:' prefix) so cmd/codegraph/main.go's single exit path prints it exactly once (WR-01, fa81672c); pinned end-to-end by test/integration/renamed_stubs_test.go against the real binary — the plan's literal 'two Fprintln + error' printed a duplicated third line that only the compiled binary showed — SilenceErrors on every command makes main.go the one place a returned error is printed; a stub that prints AND returns duplicates
 - [Phase 03]: 03-04: Backlog row 999.5 'remove the query/unlock rename stubs' (v0.15.0) written by gsd-tools phase add --id 999.5 (additions only, no version token in the heading, milestone phase filter unchanged) with the feat SHA and the exact files/lines to delete in its Goal value; check tdd-red-evidence returned INVALID_RED/zero_tests_discovered for all three Go RED records (TAP-only parser) — Go RED verified by --- FAIL transcript per the repo's documented precedent — planning-artifacts rule: tool-owned files get value edits in shapes the tool writes; the TDD evidence verb has no go test support (upstream gap)
+- [Phase 04]: Phase 4 P01: 29 plain-output goldens frozen (D-16); >=28 floors used throughout since D-16's own verb enumeration counts to 29. install-local/uninstall-local use --target claude (the real agents.TargetID), not the plan's literal claude-code. serve-mcp-stderr runs the real serve --mcp exactly once per test binary via sync.Once, working around internal/mcp's process-global os.Stdin close on session end. — Both TestPlainGolden/TestNoColorNonTTYRegression and TestShortFlagsConsistent demonstrated RED against confirmed mutations (04-MUTATION-LOG.md Families a/b) and reverted byte-clean; no production file touched.
 
 ### Pending Todos
 
@@ -474,10 +476,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/ROADMAP.md
+**Resume file:** None
 
-Last session: 2026-09-17T00:44:11.339Z
-Stopped at: Phase 03 complete (verified 8/8, maintainer-reviewed, secured pending), ready to plan Phase 4 — /gsd-autonomous --from 4
+Last session: 2026-09-17T20:40:03.109Z
+Stopped at: Completed 04-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

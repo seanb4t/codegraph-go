@@ -50,7 +50,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [ ] **CLI-04**: The palette is adaptive — `HasDarkBackground` read once at the call site — and every hue is readable on light and dark backgrounds, verified against a light theme (Solarized Light or macOS light Terminal) and a dark one
 - [ ] **CLI-05**: The agent/MCP path, `--json` output and non-TTY (piped) output are byte-identical before and after the glow-up — golden oracle and wire oracle unchanged, the TUI-01 archtest holding, and a regression test pins `NO_COLOR` + non-TTY plain output (the gh #13335 lesson)
 - [ ] **CLI-06**: `codegraph --help` groups commands into titled sections via `cobra.Group` (Query the graph / Build the index / Agents & serving / Maintenance), files `help` and `completion` into a group, and `<verb> --help` is styled consistently with root help
-- [ ] **CLI-07**: Short flags are consistent across the query verbs — `-j`, `-l`, `-k`, `-p` present wherever the long form exists
+- [x] **CLI-07**: Short flags are consistent across the query verbs — `-j`, `-l`, `-k`, `-p` present wherever the long form exists
 - [ ] **CLI-08**: `charm.land/fang/v2` is spiked first with a recorded verdict; it is adopted when `WithoutManpage()`/`WithoutCompletions()` compose with the existing hidden `man` and cobra completions, `serve --mcp`'s transcript is byte-identical under the wrapper, and the SBOM/govulncheck delta is acceptable — otherwise the help template is hand-rolled; either way the decision precedes any renderer landing
 
 ### Verb Fold
@@ -160,7 +160,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-04 | Phase 4 | Pending |
 | CLI-05 | Phase 4 | Pending |
 | CLI-06 | Phase 4 | Pending |
-| CLI-07 | Phase 4 | Pending |
+| CLI-07 | Phase 4 | Complete |
 | CLI-08 | Phase 4 | Pending |
 | VERB-01 | Phase 3 | Complete |
 | VERB-02 | Phase 3 | Complete |
