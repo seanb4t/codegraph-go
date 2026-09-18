@@ -6,10 +6,10 @@ current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: planning
 stopped_at: Phase 4 complete, ready to plan Phase 5
-last_updated: "2026-09-18T01:53:01.091Z"
+last_updated: "2026-09-18T01:58:22.319Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: b7079374e5dbc7bcd67db26ff5002862aeae6615
+state_head: e0b17a355c6b173329743bb6783491059b3f3ac9
 progress:
   total_phases: 7
   completed_phases: 4
@@ -392,6 +392,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - ⚠️ [Phase 3] Phase 1 reads verification_status: stale after Phase 3's phase.complete and the VERB-01..08 checkbox bookkeeping (#4155 mechanism — its covered_files list includes .planning/REQUIREMENTS.md; Phase 2 still reads passed); Phase 3's own report was re-stamped with 'gsd-tools verification fingerprint' over the verifier's unchanged 28-file list after confirming REQUIREMENTS.md was the only covered file that changed. IN-01 (search has no Long describing --full) left as an advisory docs: follow-up by maintainer choice.
 - [Phase 4] Advisory (not a defect): after CR-02, lipgloss's own tab→4-space conversion (maybeConvertTabs) still applies on the styled explore/node path, and node_test.go models it with a styledTabWidth=4 constant mirroring a lipgloss internal (D-00 tension). One-line fix available at v2.0.5: Style.TabWidth(lipgloss.NoTabConversion) on the palette styles, then drop the constant so stripped-styled == plain byte-exact on tab-indented source.
 - [Phase 4] Not verified: the D-11 ~2 s OSC-11 timeout on a non-answering terminal (tmux without allow-passthrough / SSH) — tmux is not installed locally and SSH was not attempted; every measured run in Herdr's terminal answered OSC 11 in ≤0.16 s. IN-01 (status 'Project:' value unstyled) left open as Info.
+- [Phase 4] Phases 1–3 read verification_status: stale after Phase 4 — a GENUINE signal, not #4155 bookkeeping: their covered_files name internal/cli/{root,search,daemon,index,renamed}.go and docs/CLI-REFERENCE.md, all legitimately modified by the glow-up (plus REQUIREMENTS/ROADMAP via phase.complete). Phase 4's regression gate (52/52 pkgs, wire oracle, real-binary renamed_stubs test) covered the risk for this run; the digest was NOT re-stamped. Repair = /gsd-verify-work 02 / 03 (and 01) — surfaces at the milestone audit.
 
 ### Quick Tasks Completed
 
