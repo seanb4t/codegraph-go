@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 func TestGemini_ID(t *testing.T) {
@@ -109,10 +111,102 @@ func TestGemini_RoundTrip_ByteInvariant(t *testing.T) {
 	}
 }
 
-func TestGemini_DescribePaths_ListsConfigAndInstructions(t *testing.T) {
+// TestGemini_DescribePaths supersedes TestGemini_DescribePaths_ListsConfigAndInstructions:
+// Gemini now declares SkillDirs: geminiSkillDirs (AGENT-10, D-06 correction
+// (a)), so DescribePaths grows from 2 paths to 4 — config, instructions,
+// the harness skill SKILL.md, and its sidecar manifest.
+func TestGemini_DescribePaths(t *testing.T) {
 	g := geminiTarget{}
 	paths := g.DescribePaths(LocationGlobal)
-	if len(paths) != 2 {
-		t.Fatalf("want exactly 2 paths (config + instructions), got %v", paths)
+	if len(paths) != 4 {
+		t.Fatalf("want exactly 4 paths (config + instructions + harness SKILL.md + manifest), got %v", paths)
+	}
+	var sawConfig, sawInstr, sawSkillMD, sawManifest bool
+	for _, p := range paths {
+		switch {
+		case strings.HasSuffix(p, filepath.Join(".gemini", "settings.json")):
+			sawConfig = true
+		case strings.HasSuffix(p, "GEMINI.md"):
+			sawInstr = true
+		case strings.HasSuffix(p, filepath.Join(".gemini", "skills", "codegraph", "SKILL.md")):
+			sawSkillMD = true
+		case strings.HasSuffix(p, filepath.Join(".gemini", "skills", "codegraph", ".codegraph-manifest.json")):
+			sawManifest = true
+		}
+	}
+	if !sawConfig || !sawInstr || !sawSkillMD || !sawManifest {
+		t.Fatalf("DescribePaths missing an expected entry (config=%v instr=%v skillmd=%v manifest=%v): %v", sawConfig, sawInstr, sawSkillMD, sawManifest, paths)
+	}
+}
+
+// TestGemini_Install_WritesHarnessSkillDir (AGENT-10, D-06 correction (a),
+// google-gemini/gemini-cli docs/cli/skills.md, fetched 2026-09-18): Gemini
+// CLI installs the codegraph skill at its OWN harness-specific directory
+// (.gemini/skills/codegraph) — index 0 of geminiSkillDirs — never the
+// shared .agents/skills/codegraph alias, which stays a documented read
+// path only. GEMINI.md instructions are still written alongside it.
+func TestGemini_Install_WritesHarnessSkillDir(t *testing.T) {
+	for _, loc := range []Location{LocationGlobal, LocationLocal} {
+		t.Run(string(loc), func(t *testing.T) {
+			home := fakeHome(t)
+			if loc == LocationLocal {
+				dir := t.TempDir()
+				t.Chdir(dir)
+			}
+			g := geminiTarget{}
+			g.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+			harnessDir, err := g.Capabilities().WrittenSkillDir(loc)
+			if err != nil {
+				t.Fatalf("WrittenSkillDir: %v", err)
+			}
+			skillPath := filepath.Join(harnessDir, "SKILL.md")
+			want, err := claudeassets.SkillMarkdown()
+			if err != nil {
+				t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+			}
+			if got := readFile(t, skillPath); got != string(want) {
+				t.Fatalf("harness SKILL.md at %s does not match the embed", skillPath)
+			}
+			m, present, err := readManifest(skillManifestPath(harnessDir))
+			if err != nil || !present {
+				t.Fatalf("expected a manifest at %s (present=%v err=%v)", harnessDir, present, err)
+			}
+			if len(m.Targets) != 1 || !containsTarget(m.Targets, Gemini) {
+				t.Fatalf("manifest targets = %v, want exactly [gemini]", m.Targets)
+			}
+
+			sharedDir, err := sharedSkillDirPath(loc)
+			if err != nil {
+				t.Fatalf("sharedSkillDirPath: %v", err)
+			}
+			if fileExists(sharedDir) {
+				t.Fatalf("gemini must not write the shared .agents/skills/codegraph alias, found %s", sharedDir)
+			}
+
+			var instrPath string
+			if loc == LocationLocal {
+				instrPath = "GEMINI.md"
+			} else {
+				instrPath = filepath.Join(home, ".gemini", "GEMINI.md")
+			}
+			if !fileExists(instrPath) {
+				t.Fatalf("GEMINI.md instructions were not written: %s", instrPath)
+			}
+
+			g.Uninstall(loc)
+			if fileExists(skillPath) {
+				t.Fatalf("harness SKILL.md not removed after uninstall")
+			}
+			if fileExists(skillManifestPath(harnessDir)) {
+				t.Fatalf("harness manifest not removed after uninstall")
+			}
+			if fileExists(harnessDir) {
+				t.Fatalf("harness skill dir not swept after uninstall")
+			}
+			if strings.Contains(readFileOrEmpty(instrPath), codegraphSectionStart) {
+				t.Fatalf("GEMINI.md still has codegraph's marker block after uninstall")
+			}
+		})
 	}
 }

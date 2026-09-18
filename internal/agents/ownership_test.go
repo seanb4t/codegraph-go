@@ -60,6 +60,16 @@ func ownershipWantSkillDir(id TargetID, loc Location, home string) string {
 			return filepath.Join(".agents", "skills", "codegraph")
 		}
 		return filepath.Join(home, ".agents", "skills", "codegraph")
+	case Gemini:
+		if loc == LocationLocal {
+			return filepath.Join(".gemini", "skills", "codegraph")
+		}
+		return filepath.Join(home, ".gemini", "skills", "codegraph")
+	case Kiro:
+		if loc == LocationLocal {
+			return filepath.Join(".kiro", "skills", "codegraph")
+		}
+		return filepath.Join(home, ".kiro", "skills", "codegraph")
 	default:
 		return ""
 	}
