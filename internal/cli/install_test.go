@@ -650,3 +650,40 @@ func TestInstallUninstallRoundTrip_TempHome_RestoresPreInstallState(t *testing.T
 		t.Fatalf("expected mcpServers removed entirely (was codegraph-only), got: %v", final)
 	}
 }
+
+// TestInstallStatus_KeptForeignIsNotAChange (D-14): a foreign skill
+// directory codegraph left untouched (agents.ActionKeptForeign) must not
+// flip install's per-agent headline to "configured" — it is not a change
+// codegraph made. A genuine change (agents.ActionCreated) alongside a
+// kept-foreign entry still reports "configured".
+func TestInstallStatus_KeptForeignIsNotAChange(t *testing.T) {
+	cases := []struct {
+		name   string
+		result agents.WriteResult
+		want   string
+	}{
+		{
+			name: "unchanged plus kept foreign",
+			result: agents.WriteResult{Files: []agents.FileResult{
+				{Path: "a", Action: agents.ActionUnchanged},
+				{Path: "b", Action: agents.ActionKeptForeign},
+			}},
+			want: "unchanged",
+		},
+		{
+			name: "created plus kept foreign",
+			result: agents.WriteResult{Files: []agents.FileResult{
+				{Path: "a", Action: agents.ActionCreated},
+				{Path: "b", Action: agents.ActionKeptForeign},
+			}},
+			want: "configured",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := installStatus(tc.result); got != tc.want {
+				t.Fatalf("installStatus(%+v) = %q, want %q", tc.result, got, tc.want)
+			}
+		})
+	}
+}

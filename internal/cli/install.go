@@ -134,10 +134,12 @@ func newInstallCmd() *cobra.Command {
 
 // installStatus rolls WriteResult's per-file actions up into one word for
 // install's per-agent summary line: "unchanged" only when every touched
-// file was already correct (D-07 idempotency), "configured" otherwise.
+// file was already correct (D-07 idempotency) or reports agents.ActionKeptForeign
+// (a foreign skill directory codegraph left untouched is not a change
+// codegraph made — D-14), "configured" otherwise.
 func installStatus(result agents.WriteResult) string {
 	for _, f := range result.Files {
-		if f.Action != agents.ActionUnchanged {
+		if f.Action != agents.ActionUnchanged && f.Action != agents.ActionKeptForeign {
 			return "configured"
 		}
 	}
