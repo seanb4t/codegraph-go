@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
@@ -422,4 +423,180 @@ func TestSymlinkedSkillDir_ForeignContentKeptForeign(t *testing.T) {
 	if afterContent != foreignContent {
 		t.Fatalf("foreign SKILL.md content changed after uninstall:\ngot=%q\nwant=%q", afterContent, foreignContent)
 	}
+}
+
+// TestConfiguredSkillLocations_RequiresClaudeInTargets is the direct
+// regression test for T-05-13: a manifest at Claude's own path is no
+// longer sufficient proof Claude was ever installed there — since D-17,
+// that path can belong to a shared directory another agent alone
+// requested. ConfiguredSkillLocations(Claude) must require Claude among
+// the manifest's requesters, while a legacy (no targets key) or corrupt
+// manifest — both of which read as owned by Claude via manifestRequesters'
+// D-07 rule — still count (WR-04 preserved).
+func TestConfiguredSkillLocations_RequiresClaudeInTargets(t *testing.T) {
+	t.Run("symlinked shared dir installed by another target only", func(t *testing.T) {
+		symlinkedClaudeLayout(t)
+		sharedDir, err := sharedSkillDirPath(LocationGlobal)
+		if err != nil {
+			t.Fatalf("sharedSkillDirPath: %v", err)
+		}
+		var r WriteResult
+		installSkillPackage(&r, sharedDir, LocationGlobal, Cursor, refuseUnmanifested)
+		if len(r.Errors) != 0 {
+			t.Fatalf("installSkillPackage(cursor) returned errors: %v", r.Errors)
+		}
+
+		locs := ConfiguredSkillLocations(Claude)
+		for _, l := range locs {
+			if l == LocationGlobal {
+				t.Fatalf("ConfiguredSkillLocations(Claude) contains global when only cursor requested the shared package: %v", locs)
+			}
+		}
+
+		c := claudeTarget{}
+		if ir := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"}); len(ir.Errors) != 0 {
+			t.Fatalf("claude Install returned errors: %v", ir.Errors)
+		}
+		locsAfter := ConfiguredSkillLocations(Claude)
+		found := false
+		for _, l := range locsAfter {
+			if l == LocationGlobal {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ConfiguredSkillLocations(Claude) does not contain global after claude Install: %v", locsAfter)
+		}
+	})
+
+	t.Run("manifest at claude's path naming only cursor is excluded", func(t *testing.T) {
+		home := fakeHome(t)
+		manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+		if _, err := writeManifest(manifestPath, skillManifest{
+			SchemaVersion:    manifestSchemaVersion,
+			CodegraphVersion: "v0.14.0",
+			Location:         string(LocationGlobal),
+			Files:            map[string]string{manifestKeySkillMD: "sha256:aaaa"},
+			Targets:          []TargetID{Cursor},
+		}); err != nil {
+			t.Fatalf("seed manifest: %v", err)
+		}
+
+		locs := ConfiguredSkillLocations(Claude)
+		for _, l := range locs {
+			if l == LocationGlobal {
+				t.Fatalf("ConfiguredSkillLocations(Claude) includes global for a manifest naming only cursor: %v", locs)
+			}
+		}
+	})
+
+	t.Run("legacy manifest with no targets key is included", func(t *testing.T) {
+		home := fakeHome(t)
+		manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+		if _, err := writeManifest(manifestPath, skillManifest{
+			SchemaVersion:    1,
+			CodegraphVersion: "v0.10.0",
+			Location:         string(LocationGlobal),
+			Files:            map[string]string{manifestKeySkillMD: "sha256:aaaa"},
+		}); err != nil {
+			t.Fatalf("seed legacy manifest: %v", err)
+		}
+
+		locs := ConfiguredSkillLocations(Claude)
+		found := false
+		for _, l := range locs {
+			if l == LocationGlobal {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ConfiguredSkillLocations(Claude) excludes global for a legacy (no targets key) manifest: %v", locs)
+		}
+	})
+
+	t.Run("corrupt manifest is included", func(t *testing.T) {
+		home := fakeHome(t)
+		manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+			t.Fatalf("mkdir skill dir: %v", err)
+		}
+		if err := os.WriteFile(manifestPath, []byte("{not valid json"), 0o644); err != nil {
+			t.Fatalf("seed corrupt manifest: %v", err)
+		}
+
+		locs := ConfiguredSkillLocations(Claude)
+		found := false
+		for _, l := range locs {
+			if l == LocationGlobal {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ConfiguredSkillLocations(Claude) excludes global for a corrupt manifest: %v", locs)
+		}
+	})
+}
+
+// TestSharedSkillWriter_NotesSameDirAsClaude is D-17's "both writers
+// compare" other direction: the shared writer itself (installSkillPackage
+// for a requester other than Claude) must also detect and surface a
+// symlinked shared directory, so the user sees that one package serves
+// both agents even when they only ever look at, say, Cursor's install
+// output.
+func TestSharedSkillWriter_NotesSameDirAsClaude(t *testing.T) {
+	t.Run("symlinked layout notes the shared directory", func(t *testing.T) {
+		symlinkedClaudeLayout(t)
+		sharedDir, err := sharedSkillDirPath(LocationGlobal)
+		if err != nil {
+			t.Fatalf("sharedSkillDirPath: %v", err)
+		}
+		claudeDir, err := claudeSkillDirPath(LocationGlobal)
+		if err != nil {
+			t.Fatalf("claudeSkillDirPath: %v", err)
+		}
+
+		var r WriteResult
+		installSkillPackage(&r, sharedDir, LocationGlobal, Cursor, refuseUnmanifested)
+		if len(r.Errors) != 0 {
+			t.Fatalf("installSkillPackage(cursor) returned errors: %v", r.Errors)
+		}
+		if len(r.Notes) != 1 {
+			t.Fatalf("Notes = %v, want exactly one entry", r.Notes)
+		}
+		if !strings.Contains(r.Notes[0], sharedDir) || !strings.Contains(r.Notes[0], claudeDir) {
+			t.Fatalf("Notes[0] = %q, want it to mention both %q and %q", r.Notes[0], sharedDir, claudeDir)
+		}
+	})
+
+	t.Run("plain (non-symlinked) layout has no notes", func(t *testing.T) {
+		fakeHome(t)
+		sharedDir, err := sharedSkillDirPath(LocationGlobal)
+		if err != nil {
+			t.Fatalf("sharedSkillDirPath: %v", err)
+		}
+		var r WriteResult
+		installSkillPackage(&r, sharedDir, LocationGlobal, Cursor, refuseUnmanifested)
+		if len(r.Errors) != 0 {
+			t.Fatalf("installSkillPackage(cursor) returned errors: %v", r.Errors)
+		}
+		if len(r.Notes) != 0 {
+			t.Fatalf("Notes = %v, want none", r.Notes)
+		}
+	})
+
+	t.Run("requester claude never notes itself", func(t *testing.T) {
+		symlinkedClaudeLayout(t)
+		sharedDir, err := sharedSkillDirPath(LocationGlobal)
+		if err != nil {
+			t.Fatalf("sharedSkillDirPath: %v", err)
+		}
+		var r WriteResult
+		installSkillPackage(&r, sharedDir, LocationGlobal, Claude, refuseUnmanifested)
+		if len(r.Errors) != 0 {
+			t.Fatalf("installSkillPackage(claude) returned errors: %v", r.Errors)
+		}
+		if len(r.Notes) != 0 {
+			t.Fatalf("Notes = %v, want none when requester is claude", r.Notes)
+		}
+	})
 }
