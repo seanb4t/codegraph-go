@@ -6,10 +6,10 @@ current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: executing
 stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-09-18T22:28:21.533Z"
+last_updated: "2026-09-18T22:40:51.220Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: a9c64a17b2f6b628aa5f1168f51e5054346da03b
+state_head: 7492fee29bd6d9157593e87ce2628de7966011a2
 progress:
   total_phases: 7
   completed_phases: 4
@@ -408,6 +408,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 4] Advisory (not a defect): after CR-02, lipgloss's own tab→4-space conversion (maybeConvertTabs) still applies on the styled explore/node path, and node_test.go models it with a styledTabWidth=4 constant mirroring a lipgloss internal (D-00 tension). One-line fix available at v2.0.5: Style.TabWidth(lipgloss.NoTabConversion) on the palette styles, then drop the constant so stripped-styled == plain byte-exact on tab-indented source.
 - [Phase 4] Not verified: the D-11 ~2 s OSC-11 timeout on a non-answering terminal (tmux without allow-passthrough / SSH) — tmux is not installed locally and SSH was not attempted; every measured run in Herdr's terminal answered OSC 11 in ≤0.16 s. IN-01 (status 'Project:' value unstyled) left open as Info.
 - [Phase 4] Phases 1–3 read verification_status: stale after Phase 4 — a GENUINE signal, not #4155 bookkeeping: their covered_files name internal/cli/{root,search,daemon,index,renamed}.go and docs/CLI-REFERENCE.md, all legitimately modified by the glow-up (plus REQUIREMENTS/ROADMAP via phase.complete). Phase 4's regression gate (52/52 pkgs, wire oracle, real-binary renamed_stubs test) covered the risk for this run; the digest was NOT re-stamped. Repair = /gsd-verify-work 02 / 03 (and 01) — surfaces at the milestone audit.
+- [Phase 5] One unidentified internal/cli test failure after 05-05 (2026-09-18): the package run took 53.6 s vs a normal ~18 s — the machine was under other load (likely the 05-05 executor's own full-suite run still finishing) — and the failing test's name was not captured (output piped through tail). Six reruns passed (2 standalone, 4 with internal/agents in parallel). Treat as a possible load-sensitive flake in internal/cli; next occurrence: capture the full output, then decide whether it is a WINDOWS.md row.
 
 ### Quick Tasks Completed
 
