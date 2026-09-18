@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-09-18T19:56:56.249Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-09-18T20:35:37.054Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: 102f88151d7c725f1e0f3108fd985eae71b23a4b
+state_head: d1011f55818da55f0565d0122ad5271758dc32d2
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 29
+  completed_plans: 30
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 ## Current Position
 
 Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-09-18 — Phase 5 execution started
 
@@ -160,6 +160,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P07 | 37min | 2 tasks | 7 files |
 | Phase 04 P08 | 20min | 3 tasks | 7 files |
 | Phase 05 P01 | 33min | 3 tasks | 21 files |
+| Phase 05 P02 | 55min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -361,6 +362,8 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: [Phase 05] 05-01: Narrowed antigravityConfigPath() to resolve unified path on a fresh machine (not just once migrated) — a real bug found by the D-03 test oracle
 - [Phase 5]: [Phase 05] 05-01: HookFiles hardcodes claude's settings/hooks paths for HooksClaudeJSON and errors loudly (errHookFilesUndeclared) for HooksCodexJSON rather than silently naming nothing
 - [Phase 5]: [Phase 05] 05-01: Split RED/GREEN across two commits — capabilities.go landed fully implemented in the RED commit while all eight targets' Capabilities() were zero-value placeholders, so the four named tests fail on assertion, never a build error
+- [Phase 05]: manifestRequesters reads BOTH an unreadable and a present-but-nil-Targets manifest as owned by [claude] (D-07 planner amendment) — never as unknown, since Claude was the sole writer before this phase
+- [Phase 05]: manifestSchemaVersion bumped 1->2 (costly, flagged for maintainer): a released binary older than 05-02 drops Targets on a schema-2 manifest, self-healed on the next new-binary install
 
 ### Pending Todos
 
@@ -504,8 +507,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-18T19:56:56.107Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-09-18T20:35:36.978Z
+Stopped at: Completed 05-02-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
