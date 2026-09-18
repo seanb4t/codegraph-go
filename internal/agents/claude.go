@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
-	"github.com/seanb4t/codegraph-go/internal/version"
 )
 
 // claudeAllowToken is the permission entry Claude's settings.json needs so
@@ -200,6 +199,44 @@ func claudeHooksScriptPath(loc Location) (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".claude", "hooks", "session-nudge.sh"), nil
+}
+
+// claudeSkillPolicy resolves Install/Uninstall's foreign-content policy for
+// loc's skill directory (D-17, RESEARCH Pitfall 2): the maintainer's own
+// `~/.claude/skills/codegraph -> ../../.agents/skills/codegraph` symlink
+// (the `npx skills` convention) makes Claude's skill directory and the
+// shared directory every other target writes into the SAME physical
+// directory. sameSkillDir (filepath.EvalSymlinks-based, dangling links
+// followed) is used rather than a literal path comparison because a
+// symlink is exactly the case a literal string comparison cannot see
+// through, and a dangling link (its target not yet created) must still
+// resolve identically to its eventual target so a fresh install through
+// the link lands on the shared package rather than a Claude-only one. When
+// the two paths coincide, refuseUnmanifested applies — D-14's
+// foreign-content rule governs the shared directory, and Claude must never
+// adopt content it does not uniquely own there. When they are genuinely
+// distinct directories, adoptUnmanifested preserves Claude's v0.10.0
+// non-shared behaviour byte-for-byte (D-05). A comparison error (e.g. a
+// symlink cycle) is returned to the caller, which records it and falls
+// back to the conservative refuseUnmanifested rather than ever adopting
+// content whose relationship to the shared dir could not be established.
+func claudeSkillPolicy(loc Location) (unmanifestedPolicy, error) {
+	claudeDir, err := claudeSkillDirPath(loc)
+	if err != nil {
+		return refuseUnmanifested, err
+	}
+	sharedDir, err := sharedSkillDirPath(loc)
+	if err != nil {
+		return refuseUnmanifested, err
+	}
+	same, err := sameSkillDir(claudeDir, sharedDir)
+	if err != nil {
+		return refuseUnmanifested, err
+	}
+	if same {
+		return refuseUnmanifested, nil
+	}
+	return adoptUnmanifested, nil
 }
 
 // claudeHookCommand returns the command string Phase 7 writes into
@@ -435,22 +472,23 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	// Phase 7: install the binary's own embedded Claude Code skill
-	// package (SKILL.md, executable session-nudge.sh, SessionStart
-	// registration) — follows --location with no special-casing (D-01),
-	// funnelled through recordFile like every step above (CR-01).
+	// Phase 7 (D-17 as of 05-03): install the binary's own embedded Claude
+	// Code skill package (SKILL.md, executable session-nudge.sh,
+	// SessionStart registration) — follows --location with no
+	// special-casing (D-01), funnelled through recordFile like every step
+	// above (CR-01).
 	//
-	// The three content values are captured here (skillMDContent,
-	// scriptContent, sessionStartBlocks) so Plan 03's manifest step below
-	// can hash exactly what this Install call intended to write, rather
-	// than re-reading the files back from disk — re-reading would make
-	// the manifest record what survived the write instead of what
-	// codegraph wrote, which would make D-05's drift check permanently
+	// The content values captured here (skillMDContent, scriptContent,
+	// sessionStartBlocks) let the recordSkillManifest step below hash
+	// exactly what this Install call intended to write, rather than
+	// re-reading the files back from disk — re-reading would make the
+	// manifest record what survived the write instead of what codegraph
+	// wrote, which would make D-05's drift check permanently
 	// self-satisfying. Each have* flag is set only after ITS OWN write
-	// succeeds (werr == nil), never merely on content resolution — a
-	// manifest recording a hash for an artifact whose disk write just
-	// failed would assert success that never happened (code review CR-01).
-	// Errors still surface via recordFile/result.Errors either way.
+	// succeeds, never merely on content resolution — a manifest recording
+	// a hash for an artifact whose disk write just failed would assert
+	// success that never happened (code review CR-01). Errors still
+	// surface via recordFile/result.Errors either way.
 	var (
 		skillMDContent     []byte
 		haveSkillMDContent bool
@@ -460,19 +498,27 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		haveSessionStart   bool
 	)
 
-	if skillFilePath, err := claudeSkillFilePath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill file path: %w", err))
+	// D-17: claudeSkillPolicy resolves whether Claude's own skill
+	// directory and the shared directory every other target writes into
+	// are the SAME physical directory (a symlink — 05-RESEARCH.md
+	// Pitfall 2) BEFORE any write. When they coincide the shared writer's
+	// foreign-content policy (D-14) governs; when they are distinct,
+	// Claude keeps its v0.10.0 non-shared adopt behaviour (D-05).
+	var claudeSkillDir string
+	skillPolicy := refuseUnmanifested
+	if dir, err := claudeSkillDirPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill dir path: %w", err))
 	} else {
-		content, rerr := claudeassets.SkillMarkdown()
-		if rerr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillFilePath, rerr))
+		claudeSkillDir = dir
+		if p, perr := claudeSkillPolicy(loc); perr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, perr))
 		} else {
-			fr, werr := writeEmbeddedFile(skillFilePath, string(content), false)
-			recordFile(&result, skillFilePath, fr, werr)
-			if werr == nil {
-				skillMDContent = content
-				haveSkillMDContent = true
-			}
+			skillPolicy = p
+		}
+		content, ok := writeSkillFile(&result, claudeSkillDir, skillPolicy)
+		if ok {
+			skillMDContent = content
+			haveSkillMDContent = true
 		}
 	}
 
@@ -508,30 +554,28 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	// Plan 03 (D-03/D-04): write the sidecar manifest describing exactly
-	// what the three steps above intended to write. Only proceeds if all
-	// three artifacts' content resolved — a manifest recording a hash for
-	// content that was never actually available would be worse than no
-	// manifest at all.
-	if manifestPath, err := claudeManifestPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude manifest path: %w", err))
-	} else if haveSkillMDContent && haveScriptContent && haveSessionStart {
+	// D-17 (Plan 03, superseding Plan 03's original hand-built manifest):
+	// record Claude's ownership through the manifest-owned writer (05-02)
+	// rather than a hand-built skillManifest — this is what makes a
+	// symlinked shared directory's manifest end up with targets containing
+	// BOTH claude and whichever other agent installed there, instead of
+	// Claude's own write silently clobbering theirs (D-05/D-07/D-08 all
+	// apply via recordSkillManifest). Only proceeds if all three
+	// artifacts' content resolved — recording a hash for content that was
+	// never actually written would be worse than no manifest at all
+	// (CR-01, unchanged posture). When writeSkillFile above kept a foreign
+	// directory untouched, haveSkillMDContent is false and this step is
+	// skipped entirely — every other Claude artifact above still wrote.
+	if claudeSkillDir != "" && haveSkillMDContent && haveScriptContent && haveSessionStart {
 		hooksHash, herr := hashOwnedHookBlocks(sessionStartBlocks)
 		if herr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", manifestPath, herr))
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeSkillDir, herr))
 		} else {
-			m := skillManifest{
-				SchemaVersion:    manifestSchemaVersion,
-				CodegraphVersion: version.Info().Version,
-				Location:         string(loc),
-				Files: map[string]string{
-					manifestKeySkillMD:   hashContent(skillMDContent),
-					manifestKeyScript:    hashContent(scriptContent),
-					manifestKeyHooksFrag: hooksHash,
-				},
-			}
-			fr, werr := writeManifest(manifestPath, m)
-			recordFile(&result, manifestPath, fr, werr)
+			recordSkillManifest(&result, claudeSkillDir, loc, Claude, map[string]string{
+				manifestKeySkillMD:   hashContent(skillMDContent),
+				manifestKeyScript:    hashContent(scriptContent),
+				manifestKeyHooksFrag: hooksHash,
+			})
 		}
 	}
 
@@ -568,35 +612,29 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		recordFile(&result, settingsPath, fr, err)
 	}
 
-	// Plan 03: remove the sidecar manifest before the SKILL.md removal
-	// below, so the removeSkillDirIfEmpty sweep that follows SKILL.md's
-	// removal sees an already manifest-free directory. A manifest that
-	// does not exist reports ActionNotFound and is not an error (D-08).
-	if manifestPath, err := claudeManifestPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude manifest path: %w", err))
+	// D-17 (Plan 03, superseding Plan 02/03's hand-rolled manifest+SKILL.md
+	// removal): remove Claude's ownership through the manifest-owned
+	// writer (05-02), using the same sameSkillDir-derived policy Install
+	// uses. In a symlinked layout this is D-08's last-requester rule: only
+	// when Claude is the LAST requester does the shared package actually
+	// get removed (manifest, then SKILL.md, then the directory-empty
+	// sweep — never a recursive delete, this plan's
+	// must_haves.prohibitions); otherwise Claude's own two exclusive
+	// manifest keys (script, hooks fragment) are dropped and the package
+	// is left intact for whichever other target still requests it
+	// (T-05-11). Claude's session-nudge script and SessionStart
+	// registration live outside the skill directory and are removed by
+	// the two steps below exactly as before, regardless of requester
+	// count.
+	if claudeDir, err := claudeSkillDirPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill dir path: %w", err))
 	} else {
-		fr, rerr := removeEmbeddedFile(manifestPath)
-		recordFile(&result, manifestPath, fr, rerr)
-	}
-
-	// Plan 02: remove exactly the three artifacts Phase 7's Install wrote
-	// — the skill file, the executable script, and codegraph's own
-	// SessionStart blocks — each funnelled through recordFile like every
-	// step above (CR-01). Never a recursive directory delete: the skill
-	// directory is only removed once emptying codegraph's own file
-	// leaves nothing else behind (this plan's must_haves.prohibitions).
-	if skillFilePath, err := claudeSkillFilePath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill file path: %w", err))
-	} else {
-		fr, rerr := removeEmbeddedFile(skillFilePath)
-		recordFile(&result, skillFilePath, fr, rerr)
-		if rerr == nil {
-			if skillDir, derr := claudeSkillDirPath(loc); derr == nil {
-				if cerr := removeSkillDirIfEmpty(skillDir); cerr != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillDir, cerr))
-				}
-			}
+		policy, perr := claudeSkillPolicy(loc)
+		if perr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeDir, perr))
+			policy = refuseUnmanifested
 		}
+		uninstallSkillPackage(&result, claudeDir, Claude, []string{manifestKeyScript, manifestKeyHooksFrag}, policy)
 	}
 
 	if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
