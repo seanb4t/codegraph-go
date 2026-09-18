@@ -210,7 +210,30 @@ func recordSkillManifest(result *WriteResult, dir string, loc Location, requeste
 // in the sidecar manifest. A write that did not happen never earns a
 // recorded hash (CR-01's have-flag rule, mirrored from claude.go's own
 // Install).
+//
+// D-17's "both writers compare" requirement, the shared-writer side: for
+// any requester other than Claude, dir may coincide with Claude's own
+// skill directory (a symlink — the `npx skills` convention). When it does,
+// a single advisory note is appended naming both paths, so a user who only
+// ever looks at (say) Cursor's install output still learns that one
+// physical package now serves both agents. This is purely informational —
+// it changes nothing about what gets written; claude.go's own
+// claudeSkillPolicy is what actually governs correctness on Claude's side
+// of the comparison. A comparison error is recorded in result.Errors
+// rather than silently dropped.
 func installSkillPackage(result *WriteResult, dir string, loc Location, requester TargetID, policy unmanifestedPolicy) {
+	if requester != Claude {
+		if claudeDir, err := claudeSkillDirPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, err))
+		} else if same, serr := sameSkillDir(dir, claudeDir); serr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, serr))
+		} else if same {
+			result.Notes = append(result.Notes, fmt.Sprintf(
+				"%s is the same directory as Claude Code's %s — one skill package, one manifest listing every agent that installed it",
+				dir, claudeDir))
+		}
+	}
+
 	content, ok := writeSkillFile(result, dir, policy)
 	if !ok {
 		return

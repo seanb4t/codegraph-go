@@ -236,20 +236,39 @@ func writeManifest(path string, m skillManifest) (FileResult, error) {
 }
 
 // ConfiguredSkillLocations reports every location that carries evidence of
-// a prior codegraph install for id — a readable manifest, OR one that
-// exists but failed to parse — by probing the two fixed candidate
-// manifest paths, never by walking the filesystem. A present-but-corrupted
-// manifest is proof the location was configured before, exactly as much
-// proof as a readable one; excluding it would let a corrupted manifest
-// silently drop that location from every future `codegraph upgrade`
-// refresh with no warning anywhere (code review WR-04), even though
-// writeManifest self-heals a corrupted manifest the moment Install() next
-// runs there. Only a genuinely absent manifest (no error, not present)
-// means "never configured" and is excluded. Exported because Plan 04's
-// CLI-layer upgrade refresh needs it. Returns nil for any target id other
-// than Claude, since this phase is Claude-only by scope: discovery is two
-// stat calls for a phase deliberately narrowed to one agent, and anything
-// more general is unneeded generality here.
+// a prior codegraph install FOR id — a readable manifest naming id among
+// its requesters, OR one that exists but failed to parse — by probing the
+// two fixed candidate manifest paths, never by walking the filesystem.
+//
+// D-17 changed what "a manifest exists at Claude's path" can mean: since a
+// symlinked shared skill directory makes Claude's path and another
+// target's shared directory the SAME physical file, a manifest can now
+// exist there because Cursor or opencode alone requested the shared
+// package — proof that THOSE agents were configured, not proof Claude
+// was. `codegraph upgrade`'s refresh step must never install Claude at a
+// location the user never asked it to configure (T-05-13), so manifest
+// presence alone is no longer sufficient: id must actually be among the
+// manifest's requesters (manifestRequesters).
+//
+// A present-but-corrupted manifest is still proof the location was
+// configured before, exactly as much proof as a readable one naming id —
+// excluding it would let a corrupted manifest silently drop that location
+// from every future refresh with no warning anywhere (code review WR-04),
+// even though writeManifest self-heals a corrupted manifest the moment
+// Install() next runs there. A legacy manifest (schema_version 1, no
+// targets key) reads as owned by [Claude] via manifestRequesters' D-07
+// rule, so it is included too — both are read-error/nil-Targets cases
+// manifestRequesters already folds into "assume Claude," and this
+// function trusts that folding rather than re-deriving it. Only a
+// genuinely absent manifest (no error, not present), or one present and
+// decodable but naming OTHER requesters without id, means "never
+// configured for id" and is excluded.
+//
+// Exported because Plan 04's CLI-layer upgrade refresh needs it. Returns
+// nil for any target id other than Claude, since this phase is
+// Claude-only by scope: discovery is two stat calls for a phase
+// deliberately narrowed to one agent, and anything more general is
+// unneeded generality here.
 func ConfiguredSkillLocations(id TargetID) []Location {
 	if id != Claude {
 		return nil
@@ -260,11 +279,19 @@ func ConfiguredSkillLocations(id TargetID) []Location {
 		if err != nil {
 			continue
 		}
-		_, present, rerr := readManifest(path)
-		if rerr == nil && !present {
+		m, present, rerr := readManifest(path)
+		if rerr != nil {
+			// WR-04: unreadable/corrupt is still proof of a prior
+			// configuration — never silently dropped.
+			locs = append(locs, loc)
 			continue
 		}
-		locs = append(locs, loc)
+		if !present {
+			continue
+		}
+		if containsTarget(manifestRequesters(m, present, rerr), id) {
+			locs = append(locs, loc)
+		}
 	}
 	return locs
 }
