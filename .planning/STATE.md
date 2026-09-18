@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-09-18T21:33:52.329Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-09-18T22:28:21.533Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: ee8ae1a90a6a154da27c9fdc1392a17a519b0eca
+state_head: a9c64a17b2f6b628aa5f1168f51e5054346da03b
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 32
+  completed_plans: 33
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 ## Current Position
 
 Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-09-18 — Phase 5 execution started
 
@@ -163,6 +163,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P02 | 55min | 2 tasks | 5 files |
 | Phase 5 P03 | 55min | 2 tasks | 5 files |
 | Phase 5 P04 | 38min | 2 tasks | 13 files |
+| Phase 05 P05 | ~40min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -369,6 +370,8 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: [Phase 05] 05-03: TestSymlinkedSkillDir_ClaudeAndSharedAreOnePackage passed even at RED — 05-02's D-07 legacy-manifest-reads-as-claude rule already produces the correct merged requester set on the read side; the write-side gaps (uninstall, foreign content, dangling link) are what GREEN actually closes.
 - [Phase 5]: [Phase 05] 05-03: internal/daemon's TestConvergenceTwoSessions failed once during the full-module run (pre-existing WINDOWS.md #37 flake, unrelated to internal/agents changes) then passed on immediate retry.
 - [Phase 5]: [Phase 05] 05-04: TestOwnershipExactIdentity (32-leaf D-13 ownership table, citing 242ec0a by SHA) wires Cursor and opencode onto the shared skill package through installDeclaredSkill/uninstallDeclaredSkill; Family (b1)/(b2) prove the guard fails against both historical shapes of the 242ec0a-class ownership vulnerability. Found the plan's own Task 1 verify script undercounts due to an rg substring-inclusion footgun (uninstallDeclaredSkill contains installDeclaredSkill); documented and worked around with a lookbehind-corrected check rather than altering the design.
+- [Phase 5]: [Phase 05] Gemini writes its own .gemini/skills/codegraph dir (D-06 correction (a)); shared .agents/skills alias stays a documented read path only, never written
+- [Phase 5]: [Phase 05] Kiro writes only .kiro/skills/codegraph (no shared alias, no AGENTS.md); Antigravity writes only the agy CLI global dir, the [ASSUMED] 2.0/IDE path stays documented-only
 
 ### Pending Todos
 
@@ -512,8 +515,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-18T21:33:52.287Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-09-18T22:27:22.555Z
+Stopped at: Completed 05-05-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

@@ -307,7 +307,7 @@ Plans:
   4. A planted-foreign-entry test per harness proves an unrelated sibling entry is never overwritten, and `uninstall` reverses every write leaving unrelated content byte-identical — with commit `242ec0a` cited in review (AGENT-13)
 
 **Notes**: Research pitfalls attached: 10 (shape/position ownership is a *reverted* vulnerability in this repo — write the ownership-identity test first per harness), 11 (per-harness paths and mechanisms are verified against current docs, not memory; every `[ASSUMED]` in research — Cursor `AGENTS.md` auto-pickup, opencode's plugin mechanism, Antigravity's hook location — is resolved by a live session or stays labelled), 12 (fresh-session evidence for CLI-only harnesses is a real transcript with the negative-space check, never a summary). `Capabilities()` is additive — one literal per target file, mirroring `SupportsLocation` — with no change to `Install`/`Uninstall` semantics. The skill content is the one embedded `SKILL.md`; no second skill file is authored. Hermes is out of scope (AGENT-12, v2): no public documentation was found, and nothing beyond the existing MCP config is claimed. Nudge hooks for these harnesses are v2 by maintainer decision (NUDGE-07…10); this phase ships skill and instructions only. `AGENT-14` (the published capability table) is deliberately in Phase 7 so it describes what actually ships after the last harness write.
-**Plans**: 4/7 plans executed
+**Plans**: 5/7 plans executed
 
 Plans:
 **Wave 1**
@@ -328,7 +328,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 05-05-PLAN.md — Harness-specific skill dirs: Gemini CLI `.gemini/skills/`, Kiro `.kiro/skills/`, Antigravity `~/.gemini/antigravity-cli/skills/` (2.0/IDE path documented `[ASSUMED]`, not written); no Kiro/Antigravity `AGENTS.md` write (AGENT-10, AGENT-11, AGENT-07, AGENT-13)
+- [x] 05-05-PLAN.md — Harness-specific skill dirs: Gemini CLI `.gemini/skills/`, Kiro `.kiro/skills/`, Antigravity `~/.gemini/antigravity-cli/skills/` (2.0/IDE path documented `[ASSUMED]`, not written); no Kiro/Antigravity `AGENTS.md` write (AGENT-10, AGENT-11, AGENT-07, AGENT-13)
 
 **Wave 6** *(blocked on Wave 5 completion; halts `blocking-human` for orchestrator-run live sessions)*
 
@@ -388,7 +388,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | 2. Guards, CI Wiring & Docs Burn-down | 7/7 | Complete    | 2026-09-16 |
 | 3. Verb Fold | 4/4 | Complete    | 2026-09-16 |
 | 4. CLI Glow-up | 8/8 | Complete    | 2026-09-17 |
-| 5. Agent Reach — Capability Model & Skill in Every Harness | 4/7 | In Progress|  |
+| 5. Agent Reach — Capability Model & Skill in Every Harness | 5/7 | In Progress|  |
 | 6. Claude Code PreToolUse Nudge | 0/TBD | Not started | - |
 | 7. Codex Parity | 0/TBD | Not started | - |
 
