@@ -33,6 +33,10 @@ func (opencodeTarget) ID() TargetID                   { return Opencode }
 func (opencodeTarget) DisplayName() string            { return "opencode" }
 func (opencodeTarget) SupportsLocation(Location) bool { return true }
 
+// Capabilities is opencode's capability table entry (D-01, D-02). RED
+// placeholder — GREEN replaces this zero-value body.
+func (opencodeTarget) Capabilities() Capabilities { return Capabilities{} }
+
 // resolveOpencodeConfigDir returns the base config directory opencode
 // itself resolves to: XDG_CONFIG_HOME if set and non-empty, else
 // ~/.config — unconditionally on every OS including Windows. opencode

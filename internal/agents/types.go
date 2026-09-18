@@ -157,4 +157,13 @@ type AgentTarget interface {
 	// target reads or writes at loc, for --print-config-style reporting
 	// and test assertions.
 	DescribePaths(loc Location) []string
+
+	// Capabilities returns this target's per-target capability table
+	// (D-01, D-02): the scopes it supports, its config file format, its
+	// hook mechanism, and per-location path resolvers for its MCP config,
+	// instructions file, and skill directories. SupportsLocation,
+	// DescribePaths, and Detect's path inputs are all derivations of this
+	// table — no target keeps a second hand-written copy of any path the
+	// table holds (D-03's guard enforces this in both directions).
+	Capabilities() Capabilities
 }

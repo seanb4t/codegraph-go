@@ -21,6 +21,10 @@ func (geminiTarget) ID() TargetID                   { return Gemini }
 func (geminiTarget) DisplayName() string            { return "Gemini CLI" }
 func (geminiTarget) SupportsLocation(Location) bool { return true }
 
+// Capabilities is Gemini's capability table entry (D-01, D-02). RED
+// placeholder — GREEN replaces this zero-value body.
+func (geminiTarget) Capabilities() Capabilities { return Capabilities{} }
+
 func geminiConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".gemini", "settings.json"), nil

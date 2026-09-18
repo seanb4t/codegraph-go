@@ -30,6 +30,10 @@ func (hermesTarget) ID() TargetID                       { return Hermes }
 func (hermesTarget) DisplayName() string                { return "Hermes Agent" }
 func (hermesTarget) SupportsLocation(loc Location) bool { return loc == LocationGlobal }
 
+// Capabilities is Hermes's capability table entry (D-01, D-02). RED
+// placeholder — GREEN replaces this zero-value body.
+func (hermesTarget) Capabilities() Capabilities { return Capabilities{} }
+
 // hermesConfigPath resolves $HERMES_HOME/config.yaml, defaulting
 // HERMES_HOME to ~/.hermes when unset.
 func hermesConfigPath() (string, error) {

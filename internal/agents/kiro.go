@@ -26,6 +26,10 @@ func (kiroTarget) ID() TargetID                   { return Kiro }
 func (kiroTarget) DisplayName() string            { return "Kiro" }
 func (kiroTarget) SupportsLocation(Location) bool { return true }
 
+// Capabilities is Kiro's capability table entry (D-01, D-02). RED
+// placeholder — GREEN replaces this zero-value body.
+func (kiroTarget) Capabilities() Capabilities { return Capabilities{} }
+
 func kiroConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".kiro", "settings", "mcp.json"), nil

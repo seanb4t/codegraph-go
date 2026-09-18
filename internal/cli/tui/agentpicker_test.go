@@ -31,6 +31,7 @@ func (f fakeAgentTarget) Uninstall(agents.Location) agents.WriteResult {
 	return agents.WriteResult{}
 }
 func (f fakeAgentTarget) DescribePaths(agents.Location) []string { return nil }
+func (f fakeAgentTarget) Capabilities() agents.Capabilities      { return agents.Capabilities{} }
 
 // fakeTargets builds a []agents.AgentTarget from bare ids, in the given
 // order — agentPickerModel's index space is this slice's index space.

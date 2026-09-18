@@ -51,6 +51,7 @@ func newInstallCmd() *cobra.Command {
 	var location string
 	var autoAllow bool
 	var yes bool
+	var printCfgStyle bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -108,6 +109,8 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&location, "location", "l", string(agents.LocationGlobal), "config scope: global|local")
 	cmd.Flags().BoolVar(&autoAllow, "auto-allow", false, "also add mcp__codegraph__* to Claude Code's permissions.allow list")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (auto)")
+	cmd.Flags().BoolVar(&printCfgStyle, "print-config-style", false, "print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything")
+	_ = printCfgStyle // RED placeholder: no branch reads this flag yet — GREEN adds the read-only RunE branch.
 
 	return cmd
 }

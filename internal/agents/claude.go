@@ -32,6 +32,11 @@ func (claudeTarget) ID() TargetID                   { return Claude }
 func (claudeTarget) DisplayName() string            { return "Claude Code" }
 func (claudeTarget) SupportsLocation(Location) bool { return true }
 
+// Capabilities is Claude's capability table entry (D-01, D-02).
+// RED placeholder — TestCapabilitiesDeclared fills in the real
+// expectation; GREEN replaces this zero-value body.
+func (claudeTarget) Capabilities() Capabilities { return Capabilities{} }
+
 // fileExists reports whether path exists (any file type), swallowing stat
 // errors that indicate genuine absence — every per-agent Detect
 // implementation uses this to check for an agent's own config/dir (D-03).

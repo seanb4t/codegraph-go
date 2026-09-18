@@ -24,6 +24,7 @@ func (f fakeTarget) Detect(Location) DetectionResult {
 func (f fakeTarget) Install(Location, InstallOptions) WriteResult { return WriteResult{} }
 func (f fakeTarget) Uninstall(Location) WriteResult               { return WriteResult{} }
 func (f fakeTarget) DescribePaths(Location) []string              { return nil }
+func (f fakeTarget) Capabilities() Capabilities                   { return Capabilities{} }
 
 // resetRegistryForTest swaps in a fresh, empty registry for the duration
 // of one test, restoring the previous global registry on cleanup — keeps

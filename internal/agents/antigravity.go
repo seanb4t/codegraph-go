@@ -26,6 +26,10 @@ func (antigravityTarget) SupportsLocation(loc Location) bool {
 	return loc == LocationGlobal
 }
 
+// Capabilities is Antigravity's capability table entry (D-01, D-02). RED
+// placeholder — GREEN replaces this zero-value body.
+func (antigravityTarget) Capabilities() Capabilities { return Capabilities{} }
+
 // antigravityUnifiedPath is the post-migration config location a current
 // Antigravity release reads/writes.
 func antigravityUnifiedPath() (string, error) {

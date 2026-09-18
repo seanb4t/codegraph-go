@@ -27,6 +27,11 @@ func (codexTarget) ID() TargetID                       { return Codex }
 func (codexTarget) DisplayName() string                { return "Codex CLI" }
 func (codexTarget) SupportsLocation(loc Location) bool { return loc == LocationGlobal }
 
+// Capabilities is Codex's capability table entry (D-01, D-02). RED
+// placeholder — GREEN replaces this zero-value body. Phase 7 (CODEX-01..04)
+// edits the GREEN literal to add per-project config, a skill, and hooks.
+func (codexTarget) Capabilities() Capabilities { return Capabilities{} }
+
 func codexConfigPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
