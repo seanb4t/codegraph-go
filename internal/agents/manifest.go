@@ -32,10 +32,20 @@ import (
 // Pitfall 5) — hashing the whole shared file would report drift on every
 // unrelated user edit.
 const (
-	manifestKeySkillMD    = "skills/codegraph/SKILL.md"
-	manifestKeyScript     = "hooks/session-nudge.sh"
-	manifestKeyHooksFrag  = "settings.json#hooks.SessionStart"
-	manifestSchemaVersion = 1
+	manifestKeySkillMD   = "skills/codegraph/SKILL.md"
+	manifestKeyScript    = "hooks/session-nudge.sh"
+	manifestKeyHooksFrag = "settings.json#hooks.SessionStart"
+	// manifestSchemaVersion history: 1 = v0.10.0 Phase 7 through v0.14.0
+	// Phase 4 — a single, Claude-only writer with no requester set. 2 =
+	// the requester set added by 05-02 (D-07): skillManifest.Targets, the
+	// ownership identity a shared skill directory needs once more than one
+	// target can request it. Bumping this is flagged `costly` in
+	// 05-02-PLAN.md: a released binary older than this change reads (and,
+	// if it writes, rewrites) a schema-2 manifest at schema 1, silently
+	// dropping Targets — self-healed on the next new-binary install via
+	// manifestRequesters' "nil Targets read as [claude]" rule below, with
+	// the loss mode confined to D-17's symlinked layouts.
+	manifestSchemaVersion = 2
 )
 
 // skillManifest is the on-disk shape of <skillDir>/.codegraph-manifest.json.
@@ -59,16 +69,58 @@ type skillManifest struct {
 	Targets []TargetID `json:"targets,omitempty"`
 }
 
-// manifestRequesters is a RED-phase compile placeholder (05-02 Task 1) —
-// real behavior lands in the GREEN commit.
+// manifestRequesters folds readManifest's three possible outcomes into the
+// single non-destructive reading D-07's planner amendment requires: an
+// unreadable manifest (readErr != nil) is read as owned solely by Claude,
+// because Claude's installer was the only writer of any manifest before
+// this phase (schema_version 1) and any other reading (e.g. "unknown,
+// treat as empty") would let a later uninstall delete a package Claude
+// still legitimately owns out from under it — exactly the risk D-17's
+// symlinked-layout groundwork exists to avoid. An absent manifest
+// (present == false) has no requesters at all — there is nothing to own.
+// A present, decodable manifest with a nil Targets field — a genuine
+// schema_version 1 write, or any hand-authored manifest predating D-07 —
+// is likewise read as [Claude] for the same reason. Only a present
+// manifest that already carries a Targets field returns that set, copied
+// so a caller mutating the returned slice can never corrupt the
+// manifest's own backing array.
 func manifestRequesters(m skillManifest, present bool, readErr error) []TargetID {
-	return nil
+	if readErr != nil {
+		return []TargetID{Claude}
+	}
+	if !present {
+		return nil
+	}
+	if m.Targets == nil {
+		return []TargetID{Claude}
+	}
+	out := make([]TargetID, len(m.Targets))
+	copy(out, m.Targets)
+	return out
 }
 
-// targetSetEqual is a RED-phase compile placeholder (05-02 Task 1) — real
-// behavior lands in the GREEN commit.
+// targetSetEqual reports whether a and b contain the same TargetIDs,
+// ignoring order and duplicate count (D-07: targets is written in
+// first-install order but compared as a SET, so a re-run in any install
+// order is a byte-level no-op).
 func targetSetEqual(a, b []TargetID) bool {
-	return false
+	setA := make(map[TargetID]bool, len(a))
+	for _, t := range a {
+		setA[t] = true
+	}
+	setB := make(map[TargetID]bool, len(b))
+	for _, t := range b {
+		setB[t] = true
+	}
+	if len(setA) != len(setB) {
+		return false
+	}
+	for t := range setA {
+		if !setB[t] {
+			return false
+		}
+	}
+	return true
 }
 
 // hashContent returns "sha256:" followed by the lowercase hex encoding of
@@ -163,7 +215,8 @@ func writeManifest(path string, m skillManifest) (FileResult, error) {
 		existing.SchemaVersion == m.SchemaVersion &&
 		existing.CodegraphVersion == m.CodegraphVersion &&
 		existing.Location == m.Location &&
-		stringMapEqual(existing.Files, m.Files) {
+		stringMapEqual(existing.Files, m.Files) &&
+		targetSetEqual(existing.Targets, m.Targets) {
 		return FileResult{Path: path, Action: ActionUnchanged}, nil
 	}
 
