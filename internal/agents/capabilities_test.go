@@ -112,8 +112,10 @@ func TestCapabilitiesDeclared(t *testing.T) {
 				LocationLocal:  "GEMINI.md",
 			},
 			skillDir: map[Location]string{
-				LocationGlobal: "",
-				LocationLocal:  "",
+				// AGENT-10 (05-05): Gemini writes its own harness-specific
+				// directory, not the shared .agents/skills/codegraph path.
+				LocationGlobal: filepath.Join(home, ".gemini", "skills", "codegraph"),
+				LocationLocal:  filepath.Join(".gemini", "skills", "codegraph"),
 			},
 		},
 		{
@@ -138,8 +140,10 @@ func TestCapabilitiesDeclared(t *testing.T) {
 				LocationLocal:  "",
 			},
 			skillDir: map[Location]string{
-				LocationGlobal: "",
-				LocationLocal:  "",
+				// AGENT-11 (05-05): Kiro writes its own harness-specific
+				// directory, not the shared .agents/skills/codegraph path.
+				LocationGlobal: filepath.Join(home, ".kiro", "skills", "codegraph"),
+				LocationLocal:  filepath.Join(".kiro", "skills", "codegraph"),
 			},
 		},
 		{

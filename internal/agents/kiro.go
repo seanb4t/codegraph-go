@@ -33,14 +33,38 @@ func (t kiroTarget) SupportsLocation(loc Location) bool {
 // Capabilities is Kiro's capability table entry (D-01, D-02): both
 // scopes, JSON config, no hooks. "AGENTS.md retained as a steering
 // source" is Kiro reading files it already reads — no instructions write
-// (D-06(d)). No skill directory this plan.
+// (D-06(d)). kiroSkillDirs supplies its skill directory (AGENT-11).
 func (kiroTarget) Capabilities() Capabilities {
 	return Capabilities{
 		Scopes:       []Location{LocationGlobal, LocationLocal},
 		ConfigFormat: ConfigFormatJSON,
 		Hooks:        HooksNone,
 		MCPConfig:    kiroConfigPath,
+		SkillDirs:    kiroSkillDirs,
 	}
+}
+
+// kiroSkillDirs resolves Kiro's skill directory (AGENT-11, D-06 correction
+// (d); [CITED: kiro.dev/docs/steering, fetched 2026-09-18]): harness-
+// specific only — `.kiro/skills/codegraph/` (local) /
+// `~/.kiro/skills/codegraph/` (global) — no shared `.agents/skills/`
+// alias is documented for Kiro's skill discovery, so this is the sole,
+// written entry. Per the cited doc, Kiro separately reads a literal
+// `AGENTS.md` at `./AGENTS.md` (local) and `~/.kiro/steering/AGENTS.md`
+// (global) on its own — a codegraph instructions block another target
+// (opencode, Codex, Cursor once probed) writes to either path may reach
+// Kiro a second time. That is an advisory only (D-06(d)): Kiro's own
+// instructions handling is unchanged by this plan; no new AGENTS.md write
+// is added here.
+func kiroSkillDirs(loc Location) ([]string, error) {
+	if loc == LocationLocal {
+		return []string{filepath.Join(".kiro", "skills", "codegraph")}, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{filepath.Join(home, ".kiro", "skills", "codegraph")}, nil
 }
 
 func kiroConfigPath(loc Location) (string, error) {
@@ -89,7 +113,7 @@ func (t kiroTarget) Detect(loc Location) DetectionResult {
 	}
 }
 
-func (kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
+func (t kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
 	if legacy, err := kiroLegacySteeringPath(loc); err != nil {
@@ -111,19 +135,28 @@ func (kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		recordFile(&result, configPath, fr, err)
 	}
 
+	installDeclaredSkill(&result, t, loc)
+
 	result.Notes = append(result.Notes, kiroDisabledByDefaultNote)
 	return result
 }
 
-func (kiroTarget) Uninstall(loc Location) WriteResult {
+// CR-01: Uninstall no longer returns early on a config-path resolution
+// error — every step records its own outcome independently (05-04
+// precedent), so the skill step below still runs even if the config path
+// step failed.
+func (t kiroTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
-	configPath, err := kiroConfigPath(loc)
-	if err != nil {
+
+	if configPath, err := kiroConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro config path: %w", err))
-		return result
+	} else {
+		fr, err := removeMcpEntry(configPath)
+		recordFile(&result, configPath, fr, err)
 	}
-	fr, err := removeMcpEntry(configPath)
-	recordFile(&result, configPath, fr, err)
+
+	uninstallDeclaredSkill(&result, t, loc)
+
 	return result
 }
 

@@ -2,7 +2,7 @@ antigravity: scopes=global (local not supported)
 claude: scopes=global,local mcp=.mcp.json format=json instructions=.claude/CLAUDE.md skill=.claude/skills/codegraph hooks=claude-json
 codex: scopes=global (local not supported)
 cursor: scopes=global,local mcp=.cursor/mcp.json format=json instructions=none skill=.agents/skills/codegraph hooks=none
-gemini: scopes=global,local mcp=.gemini/settings.json format=json instructions=GEMINI.md skill=none hooks=none
+gemini: scopes=global,local mcp=.gemini/settings.json format=json instructions=GEMINI.md skill=.gemini/skills/codegraph hooks=none
 hermes: scopes=global (local not supported)
-kiro: scopes=global,local mcp=.kiro/settings/mcp.json format=json instructions=none skill=none hooks=none
+kiro: scopes=global,local mcp=.kiro/settings/mcp.json format=json instructions=none skill=.kiro/skills/codegraph hooks=none
 opencode: scopes=global,local mcp=opencode.jsonc format=jsonc instructions=AGENTS.md skill=.agents/skills/codegraph hooks=none
