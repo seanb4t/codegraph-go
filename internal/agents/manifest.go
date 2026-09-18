@@ -50,6 +50,25 @@ type skillManifest struct {
 	InstalledAt      string            `json:"installed_at"`
 	Location         string            `json:"location"`
 	Files            map[string]string `json:"files"`
+	// Targets is the requester set that owns this manifest's skill
+	// directory (D-07, 05-02) — the ownership identity a shared skill
+	// package (AGENT-09) needs, since more than one target can request the
+	// same directory. omitempty keeps a manifest written by a target that
+	// never populates this field (none yet — 05-03 moves Claude onto the
+	// shared writer) byte-identical to schema_version 1's shape.
+	Targets []TargetID `json:"targets,omitempty"`
+}
+
+// manifestRequesters is a RED-phase compile placeholder (05-02 Task 1) —
+// real behavior lands in the GREEN commit.
+func manifestRequesters(m skillManifest, present bool, readErr error) []TargetID {
+	return nil
+}
+
+// targetSetEqual is a RED-phase compile placeholder (05-02 Task 1) — real
+// behavior lands in the GREEN commit.
+func targetSetEqual(a, b []TargetID) bool {
+	return false
 }
 
 // hashContent returns "sha256:" followed by the lowercase hex encoding of
