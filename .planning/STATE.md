@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-09-18T21:02:26.617Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-09-18T21:33:52.329Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: 0afc38f92890def3dc6e3a1d1fe759a4bd68eb0e
+state_head: ee8ae1a90a6a154da27c9fdc1392a17a519b0eca
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 31
+  completed_plans: 32
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 ## Current Position
 
 Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-09-18 — Phase 5 execution started
 
@@ -162,6 +162,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P01 | 33min | 3 tasks | 21 files |
 | Phase 05 P02 | 55min | 2 tasks | 5 files |
 | Phase 5 P03 | 55min | 2 tasks | 5 files |
+| Phase 5 P04 | 38min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -367,6 +368,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: manifestSchemaVersion bumped 1->2 (costly, flagged for maintainer): a released binary older than 05-02 drops Targets on a schema-2 manifest, self-healed on the next new-binary install
 - [Phase 5]: [Phase 05] 05-03: TestSymlinkedSkillDir_ClaudeAndSharedAreOnePackage passed even at RED — 05-02's D-07 legacy-manifest-reads-as-claude rule already produces the correct merged requester set on the read side; the write-side gaps (uninstall, foreign content, dangling link) are what GREEN actually closes.
 - [Phase 5]: [Phase 05] 05-03: internal/daemon's TestConvergenceTwoSessions failed once during the full-module run (pre-existing WINDOWS.md #37 flake, unrelated to internal/agents changes) then passed on immediate retry.
+- [Phase 5]: [Phase 05] 05-04: TestOwnershipExactIdentity (32-leaf D-13 ownership table, citing 242ec0a by SHA) wires Cursor and opencode onto the shared skill package through installDeclaredSkill/uninstallDeclaredSkill; Family (b1)/(b2) prove the guard fails against both historical shapes of the 242ec0a-class ownership vulnerability. Found the plan's own Task 1 verify script undercounts due to an rg substring-inclusion footgun (uninstallDeclaredSkill contains installDeclaredSkill); documented and worked around with a lookbehind-corrected check rather than altering the design.
 
 ### Pending Todos
 
@@ -510,8 +512,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-18T21:02:26.574Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-09-18T21:33:52.287Z
+Stopped at: Completed 05-04-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
