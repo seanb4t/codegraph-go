@@ -288,3 +288,15 @@ func uninstallSkillPackage(result *WriteResult, dir string, requester TargetID, 
 	recordFile(result, manifestPath, fr, werr)
 	result.Files = append(result.Files, FileResult{Path: skillPath, Action: ActionKept})
 }
+
+// resolveSkillDir is a RED-phase compile placeholder (05-02 Task 2) — real
+// behavior lands in this task's GREEN commit.
+func resolveSkillDir(dir string) (string, error) {
+	return dir, nil
+}
+
+// sameSkillDir is a RED-phase compile placeholder (05-02 Task 2) — real
+// behavior lands in this task's GREEN commit.
+func sameSkillDir(a, b string) (bool, error) {
+	return a == b, nil
+}

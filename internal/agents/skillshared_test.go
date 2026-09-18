@@ -629,6 +629,333 @@ func TestSharedSkillPackage_TargetsInvariantOverAllSequences(t *testing.T) {
 	t.Logf("executed exactly %d install/uninstall sequences", executed)
 }
 
+// TestRemoveSkillDirIfEmpty_NeverUnlinksSymlink (D-17, RESEARCH Pitfall 2):
+// removeSkillDirIfEmpty must never unlink a symlink passed as dir — a
+// user's own `.claude/skills/codegraph -> ../../.agents/skills/codegraph`
+// link is structure this package does not own. Pre-existing plain-dir
+// semantics (empty removed, non-empty kept) must survive unchanged.
+func TestRemoveSkillDirIfEmpty_NeverUnlinksSymlink(t *testing.T) {
+	t.Run("symlink to empty dir", func(t *testing.T) {
+		base := t.TempDir()
+		target := filepath.Join(base, "real-empty")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir target: %v", err)
+		}
+		link := filepath.Join(base, "link-empty")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		if err := removeSkillDirIfEmpty(link); err != nil {
+			t.Fatalf("removeSkillDirIfEmpty(link to empty dir): %v", err)
+		}
+		info, err := os.Lstat(link)
+		if err != nil {
+			t.Fatalf("Lstat(link) after removeSkillDirIfEmpty: %v", err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("link was replaced/removed — no longer a symlink")
+		}
+		if !fileExists(target) {
+			t.Fatalf("symlink target was removed")
+		}
+	})
+
+	t.Run("symlink to non-empty dir", func(t *testing.T) {
+		base := t.TempDir()
+		target := filepath.Join(base, "real-nonempty")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir target: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(target, "notes.md"), []byte("keep"), 0o644); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+		link := filepath.Join(base, "link-nonempty")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		if err := removeSkillDirIfEmpty(link); err != nil {
+			t.Fatalf("removeSkillDirIfEmpty(link to non-empty dir): %v", err)
+		}
+		info, err := os.Lstat(link)
+		if err != nil {
+			t.Fatalf("Lstat(link) after removeSkillDirIfEmpty: %v", err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("link was replaced/removed — no longer a symlink")
+		}
+		if !fileExists(filepath.Join(target, "notes.md")) {
+			t.Fatalf("symlink target's content was removed")
+		}
+	})
+
+	t.Run("plain empty dir still removed", func(t *testing.T) {
+		base := t.TempDir()
+		dir := filepath.Join(base, "plain-empty")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := removeSkillDirIfEmpty(dir); err != nil {
+			t.Fatalf("removeSkillDirIfEmpty(plain empty dir): %v", err)
+		}
+		if fileExists(dir) {
+			t.Fatalf("plain empty dir was not removed")
+		}
+	})
+
+	t.Run("plain non-empty dir still kept", func(t *testing.T) {
+		base := t.TempDir()
+		dir := filepath.Join(base, "plain-nonempty")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("keep"), 0o644); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+		if err := removeSkillDirIfEmpty(dir); err != nil {
+			t.Fatalf("removeSkillDirIfEmpty(plain non-empty dir): %v", err)
+		}
+		if !fileExists(dir) {
+			t.Fatalf("plain non-empty dir was removed")
+		}
+	})
+}
+
+// TestSameSkillDir_ResolvesSymlinksAndDanglingLinks (D-17): two paths are
+// the same skill directory when they resolve (through any chain of
+// symlinks, including a dangling one whose target does not exist yet) to
+// the same physical location.
+func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
+	t.Run("identical path", func(t *testing.T) {
+		base := t.TempDir()
+		dir := filepath.Join(base, "a")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		same, err := sameSkillDir(dir, dir)
+		if err != nil {
+			t.Fatalf("sameSkillDir: %v", err)
+		}
+		if !same {
+			t.Fatalf("sameSkillDir(a, a) = false, want true")
+		}
+	})
+
+	t.Run("relative vs absolute", func(t *testing.T) {
+		base := t.TempDir()
+		dir := filepath.Join(base, "b")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		oldwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("Getwd: %v", err)
+		}
+		if err := os.Chdir(base); err != nil {
+			t.Fatalf("Chdir: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+		same, err := sameSkillDir("b", dir)
+		if err != nil {
+			t.Fatalf("sameSkillDir: %v", err)
+		}
+		if !same {
+			t.Fatalf("sameSkillDir(relative, absolute) = false, want true")
+		}
+	})
+
+	t.Run("live symlink resolves to real target", func(t *testing.T) {
+		base := t.TempDir()
+		agentsDir := filepath.Join(base, "agents", "skills", "codegraph")
+		if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+			t.Fatalf("mkdir target: %v", err)
+		}
+		claudeParent := filepath.Join(base, "claude", "skills")
+		if err := os.MkdirAll(claudeParent, 0o755); err != nil {
+			t.Fatalf("mkdir claude parent: %v", err)
+		}
+		link := filepath.Join(claudeParent, "codegraph")
+		if err := os.Symlink(filepath.Join("..", "..", "agents", "skills", "codegraph"), link); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		same, err := sameSkillDir(link, agentsDir)
+		if err != nil {
+			t.Fatalf("sameSkillDir: %v", err)
+		}
+		if !same {
+			t.Fatalf("sameSkillDir(symlink, real target) = false, want true")
+		}
+	})
+
+	t.Run("dangling symlink resolves to same not-yet-created target", func(t *testing.T) {
+		base := t.TempDir()
+		agentsDir := filepath.Join(base, "agents", "skills", "codegraph")
+		claudeParent := filepath.Join(base, "claude", "skills")
+		if err := os.MkdirAll(claudeParent, 0o755); err != nil {
+			t.Fatalf("mkdir claude parent: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(agentsDir), 0o755); err != nil {
+			t.Fatalf("mkdir agents parent: %v", err)
+		}
+		link := filepath.Join(claudeParent, "codegraph")
+		if err := os.Symlink(filepath.Join("..", "..", "agents", "skills", "codegraph"), link); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		// agentsDir itself is deliberately never created — dangling link.
+		same, err := sameSkillDir(link, agentsDir)
+		if err != nil {
+			t.Fatalf("sameSkillDir(dangling): %v", err)
+		}
+		if !same {
+			t.Fatalf("sameSkillDir(dangling symlink, its not-yet-created target) = false, want true")
+		}
+	})
+
+	t.Run("unrelated dirs", func(t *testing.T) {
+		base := t.TempDir()
+		a := filepath.Join(base, "one")
+		b := filepath.Join(base, "two")
+		if err := os.MkdirAll(a, 0o755); err != nil {
+			t.Fatalf("mkdir a: %v", err)
+		}
+		if err := os.MkdirAll(b, 0o755); err != nil {
+			t.Fatalf("mkdir b: %v", err)
+		}
+		same, err := sameSkillDir(a, b)
+		if err != nil {
+			t.Fatalf("sameSkillDir: %v", err)
+		}
+		if same {
+			t.Fatalf("sameSkillDir(unrelated, unrelated) = true, want false")
+		}
+	})
+
+	t.Run("self-referential symlink is an error, not a hang", func(t *testing.T) {
+		base := t.TempDir()
+		link := filepath.Join(base, "self")
+		if err := os.Symlink("self", link); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		if _, err := sameSkillDir(link, link); err == nil {
+			t.Fatalf("sameSkillDir(self-referential symlink) returned no error")
+		}
+	})
+}
+
+// TestSkillPackage_DanglingSymlinkDirIsRecreated (D-17): installing through
+// a relative symlink whose target does not yet exist recreates the target
+// directory (rather than erroring) and writes the package into it, leaving
+// the link itself intact.
+func TestSkillPackage_DanglingSymlinkDirIsRecreated(t *testing.T) {
+	base := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(base); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+	if err := os.MkdirAll("claude/skills", 0o755); err != nil {
+		t.Fatalf("mkdir claude/skills: %v", err)
+	}
+	// The symlink's target tree (agents/skills/) is deliberately never
+	// created — a genuinely dangling relative link.
+	if err := os.Symlink(filepath.Join("..", "..", "agents", "skills", "codegraph"), "claude/skills/codegraph"); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	var result WriteResult
+	installSkillPackage(&result, "claude/skills/codegraph", LocationLocal, Cursor, refuseUnmanifested)
+	if len(result.Errors) != 0 {
+		t.Fatalf("installSkillPackage through dangling symlink: %v", result.Errors)
+	}
+
+	info, err := os.Lstat("claude/skills/codegraph")
+	if err != nil {
+		t.Fatalf("Lstat link after install: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("link was replaced — no longer a symlink")
+	}
+
+	resolved, err := resolveSkillDir("claude/skills/codegraph")
+	if err != nil {
+		t.Fatalf("resolveSkillDir: %v", err)
+	}
+	if !fileExists(filepath.Join(resolved, skillFileName)) {
+		t.Fatalf("SKILL.md not created at resolved target %s", resolved)
+	}
+	m, present, err := readManifest(skillManifestPath(resolved))
+	if err != nil || !present {
+		t.Fatalf("manifest not created at resolved target: present=%v err=%v", present, err)
+	}
+	if !targetSetEqual(m.Targets, []TargetID{Cursor}) {
+		t.Fatalf("Targets = %v, want [cursor]", m.Targets)
+	}
+}
+
+// TestSkillPackage_WritesThroughSymlinkedDirAsOnePackage (D-17): a symlink
+// L pointing at a real directory R is one physical location — installing
+// through either path accumulates onto the SAME manifest, and the package
+// is deleted (leaving L dangling) only once every requester has left.
+func TestSkillPackage_WritesThroughSymlinkedDirAsOnePackage(t *testing.T) {
+	base := t.TempDir()
+	r := filepath.Join(base, "agents", "skills", "codegraph")
+	if err := os.MkdirAll(filepath.Dir(r), 0o755); err != nil {
+		t.Fatalf("mkdir R parent: %v", err)
+	}
+	l := filepath.Join(base, "claude", "skills", "codegraph")
+	if err := os.MkdirAll(filepath.Dir(l), 0o755); err != nil {
+		t.Fatalf("mkdir L parent: %v", err)
+	}
+	if err := os.Symlink(r, l); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	var r1 WriteResult
+	installSkillPackage(&r1, r, LocationGlobal, Cursor, refuseUnmanifested)
+	if len(r1.Errors) != 0 {
+		t.Fatalf("install via R errors: %v", r1.Errors)
+	}
+	var r2 WriteResult
+	installSkillPackage(&r2, l, LocationGlobal, Opencode, refuseUnmanifested)
+	if len(r2.Errors) != 0 {
+		t.Fatalf("install via L errors: %v", r2.Errors)
+	}
+
+	m, present, err := readManifest(skillManifestPath(r))
+	if err != nil || !present {
+		t.Fatalf("manifest not present at R: present=%v err=%v", present, err)
+	}
+	if !targetSetEqual(m.Targets, []TargetID{Cursor, Opencode}) {
+		t.Fatalf("Targets = %v, want [cursor opencode]", m.Targets)
+	}
+
+	var u1 WriteResult
+	uninstallSkillPackage(&u1, l, Opencode, nil, refuseUnmanifested)
+	if len(u1.Errors) != 0 {
+		t.Fatalf("uninstall Opencode via L errors: %v", u1.Errors)
+	}
+	var u2 WriteResult
+	uninstallSkillPackage(&u2, r, Cursor, nil, refuseUnmanifested)
+	if len(u2.Errors) != 0 {
+		t.Fatalf("uninstall Cursor via R errors: %v", u2.Errors)
+	}
+
+	if fileExists(r) {
+		t.Fatalf("R still exists after package removed (should be swept by removeSkillDirIfEmpty)")
+	}
+	info, err := os.Lstat(l)
+	if err != nil {
+		t.Fatalf("Lstat(L) after package removed: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("L is no longer a symlink after package removed")
+	}
+}
+
 func runSkillSequence(t *testing.T, seq []skillSeqOp) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "codegraph")
