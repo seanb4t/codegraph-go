@@ -29,7 +29,6 @@ covered_files:
   - .planning/phases/04-cli-glow-up/04-REVIEW-FIX.md
   - .planning/phases/04-cli-glow-up/04-REVIEW.md
   - .planning/phases/04-cli-glow-up/04-VALIDATION.md
-  - .planning/PROJECT.md
   - docs/CLI-REFERENCE.md
   - go.mod
   - internal/cli/affected_newline_test.go
@@ -155,7 +154,7 @@ covered_files:
   - internal/cli/version_test.go
   - internal/cli/version.go
 
-covered_digest: "v1:sha256:1b187c6a239be9834376864ff49c69615bdec392a887019439335d206a574855"
+covered_digest: "v1:sha256:2412a1b09faae629480665aee154c1773ebb2c5e35aa0fb6b24b3b9189fc3c82"
 human_verification:
 
   - test: "CLI-04 palette readability: run `codegraph status`, `codegraph explore <term>`, `codegraph node <symbol>`, `codegraph search <term> --full`, `codegraph install --target claude-code --location local` (fake HOME), and `codegraph --help` on (a) Solarized Light or macOS light Terminal and (b) a dark-theme terminal."
