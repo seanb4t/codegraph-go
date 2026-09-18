@@ -166,8 +166,9 @@ func RenderStatus(r query.StatusResult, projectPath string, pal Palette, w io.Wr
 	// IndexRoot) that may be adversarial. Sanitize a copy of the two path
 	// fields — not the formatted Warning() string as a whole — so the
 	// literal newlines that structure the multi-line message survive
-	// (sanitizeControl also strips \n/\t/\r by design; running it over the
-	// whole message would collapse the warning onto one line).
+	// (sanitizeControl also strips \n/\r by design, though not \t since
+	// CR-02; running it over the whole message would collapse the warning
+	// onto one line).
 	if r.WorktreeMismatch != nil {
 		sanitizedMismatch := &gitmeta.Mismatch{
 			WorktreeRoot: sanitizeControl(r.WorktreeMismatch.WorktreeRoot),

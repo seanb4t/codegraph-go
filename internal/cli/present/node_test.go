@@ -32,14 +32,29 @@ func plainNumbered(content []byte) string {
 	return b.String()
 }
 
+// styledTabWidth mirrors lipgloss.Style's own tabWidthDefault
+// (charm.land/lipgloss/v2@v2.0.5, style.go maybeConvertTabs) — a lipgloss
+// concern entirely independent of sanitizeControl. pal.Value.Render, which
+// writeNumberedSource/writeNumberedSourceRange call on every source line,
+// converts any literal tab that survives sanitizeControl (CR-02) into this
+// many spaces before it reaches the terminal. This means CR-02's fix does
+// not make the styled path byte-identical to plain's raw tab; it upgrades
+// the styled path from "indentation silently deleted" to "indentation
+// preserved as spaces" — a lipgloss rendering convention, not a
+// sanitization decision.
+const styledTabWidth = 4
+
 // sanitizeLines applies sanitizeControl per-line (splitting on the raw
 // "\n" first, exactly as writeNumberedSource/writeNumberedSourceRange do)
 // so the "\n" delimiters themselves survive — sanitizeControl alone would
-// also strip them, since a newline is itself a control rune.
+// also strip them, since a newline is itself a control rune — then expands
+// any literal tab exactly as pal.Value.Render's own lipgloss tab-conversion
+// does (see styledTabWidth above), since that conversion runs on every
+// source line downstream of sanitizeControl in the real styled renderer.
 func sanitizeLines(content []byte) []byte {
 	lines := strings.Split(string(content), "\n")
 	for i, l := range lines {
-		lines[i] = sanitizeControl(l)
+		lines[i] = strings.ReplaceAll(sanitizeControl(l), "\t", strings.Repeat(" ", styledTabWidth))
 	}
 	return []byte(strings.Join(lines, "\n"))
 }
@@ -47,11 +62,12 @@ func sanitizeLines(content []byte) []byte {
 // synthNode builds a synthetic *schema.Node plus a source file body of
 // exactly bodyLines filler lines — used to control a multi-def section's
 // rendered length precisely enough to cross the BODY_BUDGET/LIST_CAP
-// boundaries deliberately. Body lines carry no control bytes (no literal
-// tab) deliberately — sanitizeControl (CR-01) legitimately strips those
-// from the styled path only, which the dedicated "File" and
-// "ControlBytesStrippedFromStyled" fixtures exercise on purpose; these
-// budget fixtures test byte-count arithmetic, not sanitization.
+// boundaries deliberately. Body lines carry no control bytes deliberately
+// — sanitizeControl (CR-01, narrowed by CR-02) legitimately strips
+// dangerous control bytes from the styled path only, which the dedicated
+// "File" and "ControlBytesStrippedFromStyled" fixtures exercise on
+// purpose; these budget fixtures test byte-count arithmetic, not
+// sanitization.
 func synthNode(i, bodyLines int) (*schema.Node, []byte) {
 	name := fmt.Sprintf("Sym%d", i)
 	filePath := fmt.Sprintf("pkg/file%d.go", i)
@@ -126,12 +142,19 @@ func (f *multiDefFixture) fetchForDetail(counter *int) func(*schema.Node) (*quer
 func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 	t.Run("File", func(t *testing.T) {
 		// Deliberately carries a tab, a trailing newline and a non-ASCII
-		// identifier. sanitizeControl (CR-01) strips control bytes —
-		// including the tab — on the styled path only (the plain path is
-		// frozen and unsanitized, TUI-02); per D-07 this is a content
-		// transform CR-01 mandates, not a markdown-syntax drift, so the
-		// expectation is built from the SAME sanitized-per-line content
-		// the styled renderer actually consumes, not the raw source.
+		// identifier. Per CR-02 (04-REVIEW.md), sanitizeControl no longer
+		// strips the literal tab — only genuinely dangerous control bytes
+		// (ESC, other C0/C1 controls) are dropped — so the tab's
+		// indentation survives on the styled path instead of being
+		// deleted outright. It still doesn't come out byte-identical to
+		// plain's raw tab: pal.Value.Render's own lipgloss tab-width
+		// conversion (independent of sanitizeControl, see styledTabWidth
+		// above sanitizeLines) expands the surviving tab to spaces before
+		// the terminal ever sees it. The expectation is built from the
+		// SAME sanitized-then-tab-expanded content the styled renderer
+		// actually produces (not the raw source), so this fixture also
+		// continues to cover any future non-tab control byte the
+		// renderer must strip.
 		content := []byte("func\tFaçade() {}\n// comment\n")
 		d := query.NodeDetail{Mode: query.NodeDetailModeFile, File: &query.FileDetail{Path: "pkg/x.go", Source: content}}
 		var buf bytes.Buffer
