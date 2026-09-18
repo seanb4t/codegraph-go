@@ -2,6 +2,8 @@ package present
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -155,4 +157,59 @@ func TestLineWriterStylesEachLine(t *testing.T) {
 			t.Errorf("Write(empty) wrote %q, want empty", got)
 		}
 	})
+}
+
+// failAfterWriter is an io.Writer stub that lets the first `after` Write
+// calls through to the wrapped writer, then fails every call after that —
+// simulating an underlying pipe (e.g. stderr) breaking partway through a
+// multi-line Write. It deliberately does NOT implement io.StringWriter, so
+// io.WriteString(w, s) always routes through Write([]byte(s)) exactly once
+// per call, matching lineWriter.Write's own io.WriteString usage.
+type failAfterWriter struct {
+	w     io.Writer
+	after int
+	calls int
+}
+
+func (f *failAfterWriter) Write(p []byte) (int, error) {
+	f.calls++
+	if f.calls > f.after {
+		return 0, errors.New("boom: pipe broke")
+	}
+	return f.w.Write(p)
+}
+
+// TestLineWriterPartialFailureReturnsBytesWritten is WR-02's positive
+// assertion (04-REVIEW.md): when an inner io.WriteString fails partway
+// through a multi-line Write (after earlier complete lines already wrote
+// successfully), Write must return the number of bytes of p actually
+// consumed by those earlier lines — never 0 — per io.Writer's general
+// contract (n should reflect real progress even when n < len(p) and err
+// != nil). Before the fix, this always returned (0, err), which could
+// make a caller that retries a short write from byte 0 duplicate the
+// already-emitted "one\n" line.
+func TestLineWriterPartialFailureReturnsBytesWritten(t *testing.T) {
+	pal := NewPalette(true)
+	var b bytes.Buffer
+	// Allow exactly one successful io.WriteString (the styled "one\n"
+	// line) through, then fail every subsequent write.
+	fw := &failAfterWriter{w: &b, after: 1}
+	w := NewLineWriter(fw, pal, RoleWarning)
+
+	p := []byte("one\ntwo\nthree\n")
+	n, err := w.Write(p)
+	if err == nil {
+		t.Fatalf("Write: expected an error from the second line's failed write, got nil (wrote %q)", b.String())
+	}
+
+	wantN := len("one\n") // bytes of p consumed by the one successfully-written segment
+	if n != wantN {
+		t.Errorf("Write returned n=%d after a partial failure, want %d (bytes of p actually consumed before the error)", n, wantN)
+	}
+	if n == 0 {
+		t.Fatalf("Write returned n=0 on a partial failure — violates io.Writer's contract that n reflect bytes actually written")
+	}
+	if got := stripANSI(b.String()); got != "one\n" {
+		t.Errorf("underlying writer received %q, want exactly the one successfully-written line %q", got, "one\n")
+	}
 }

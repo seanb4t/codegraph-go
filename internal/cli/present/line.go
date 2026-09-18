@@ -60,6 +60,14 @@ func NewLineWriter(w io.Writer, pal Palette, role Role) io.Writer {
 // "\n"; the final segment — the partial tail, possibly empty — is
 // sanitized and written verbatim, unstyled, with no buffering across
 // calls (D-08). An empty p writes nothing and returns (0, nil).
+//
+// On a partial failure (an inner io.WriteString for one segment errors
+// after earlier segments already wrote successfully), n reflects the
+// number of bytes of p actually consumed by the segments written so far
+// — never 0 — per io.Writer's general contract that n should account for
+// what was really written even when n < len(p) (WR-02, 04-REVIEW.md). A
+// caller that retries a short write from byte 0 would otherwise duplicate
+// the already-emitted lines.
 func (lw *lineWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -67,21 +75,25 @@ func (lw *lineWriter) Write(p []byte) (int, error) {
 
 	segs := strings.Split(string(p), "\n")
 	last := len(segs) - 1
+	n := 0
 	for i, seg := range segs {
 		clean := sanitizeControl(seg)
 		if i < last {
 			if _, err := io.WriteString(lw.w, lw.style.Render(clean)+"\n"); err != nil {
-				return 0, err
+				return n, err
 			}
+			n += len(seg) + 1 // the segment plus the "\n" separator consumed from p
 			continue
 		}
 		if clean == "" {
+			n += len(seg)
 			continue
 		}
 		if _, err := io.WriteString(lw.w, clean); err != nil {
-			return 0, err
+			return n, err
 		}
+		n += len(seg)
 	}
 
-	return len(p), nil
+	return n, nil
 }
