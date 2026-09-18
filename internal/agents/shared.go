@@ -487,7 +487,26 @@ func removeEmbeddedFile(path string) (FileResult, error) {
 // codegraph-named but not codegraph-exclusive, and losing a user's file
 // there is irreversible while leaving an empty directory behind is not
 // (this plan's must_haves.prohibitions).
+//
+// D-17 / RESEARCH Pitfall 2: dir may be a symlink a user manages
+// themselves — e.g. a `npx skills`-style
+// `~/.claude/skills/codegraph -> ../../.agents/skills/codegraph` link.
+// os.Remove on a symlink unlinks the LINK regardless of whether its
+// TARGET is empty (unlike a plain directory, whose removal genuinely
+// requires emptiness), so calling it here would silently destroy
+// user-owned structure this package does not own, breaking that link for
+// good the moment codegraph's own last requester leaves. Checking
+// os.Lstat first and returning early restores "only when empty" for the
+// case it was always meant to cover — removing a plain directory — without
+// changing D-08's semantics: a symlinked directory's package removal is
+// still correct (the writer functions operate on the manifest/SKILL.md
+// through the link, which the OS resolves transparently), only the
+// directory-empty SWEEP is skipped for a link, exactly as it already is
+// for a non-empty plain directory.
 func removeSkillDirIfEmpty(dir string) error {
+	if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
 	err := os.Remove(dir)
 	if err == nil || os.IsNotExist(err) {
 		return nil
