@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: executing
-stopped_at: Phase 4 complete, ready to plan Phase 5
-last_updated: "2026-09-18T19:20:08.560Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-18T19:56:56.249Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: d1df3064c4a77dc9a8ea200a35de77e81574cc41
+state_head: 102f88151d7c725f1e0f3108fd985eae71b23a4b
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 28
+  completed_plans: 29
   percent: 57
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 ## Current Position
 
 Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 5
+Plan: 2 of 7
+Status: Ready to execute
 Last activity: 2026-09-18 — Phase 5 execution started
 
 ## Performance Metrics
@@ -159,6 +159,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P06 | 42min | 2 tasks | 7 files |
 | Phase 04 P07 | 37min | 2 tasks | 7 files |
 | Phase 04 P08 | 20min | 3 tasks | 7 files |
+| Phase 05 P01 | 33min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -357,6 +358,9 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: [Phase 04] fang/v2 declined: DefaultErrorHandler wraps stderr in *colorprofile.Writer (no Fd()), so its plain non-TTY branch is dead and rename stubs box-render on a pipe; help hand-rolled via present.RenderHelp; verdict committed alone (d722804a) before any renderer
 - [Phase 5]: [Phase 04] Colour is resolved ONCE per RunE in internal/cli/colorflag.go (single colorprofile.Detect over a rewritten environ; HasDarkBackground at most once, only when styled AND both fds are TTYs) and downsampled by colorprofile.Writer at the RunE boundary; present stays env-blind and tests assert only our environ rewrite/branch/GroupIDs/plain goldens (D-00: never charm/cobra behaviour or go.mod)
 - [Phase 5]: [Phase 04] Phase-end UAT (colour legibility, TERM matrix, help, pager) validated by the orchestrating agent in a Herdr PTY at the maintainer's direction — light palette proven to engage via an OSC 11 background flip, WCAG ≥ AA proxy; residuals recorded in 04-UAT.md
+- [Phase 5]: [Phase 05] 05-01: Narrowed antigravityConfigPath() to resolve unified path on a fresh machine (not just once migrated) — a real bug found by the D-03 test oracle
+- [Phase 5]: [Phase 05] 05-01: HookFiles hardcodes claude's settings/hooks paths for HooksClaudeJSON and errors loudly (errHookFilesUndeclared) for HooksCodexJSON rather than silently naming nothing
+- [Phase 5]: [Phase 05] 05-01: Split RED/GREEN across two commits — capabilities.go landed fully implemented in the RED commit while all eight targets' Capabilities() were zero-value placeholders, so the four named tests fail on assertion, never a build error
 
 ### Pending Todos
 
@@ -500,8 +504,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-18T00:11:25.089Z
-Stopped at: Phase 4 complete, ready to plan Phase 5
+Last session: 2026-09-18T19:56:56.107Z
+Stopped at: Completed 05-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
