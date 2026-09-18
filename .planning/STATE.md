@@ -6,10 +6,10 @@ current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: planning
 stopped_at: Phase 4 complete, ready to plan Phase 5
-last_updated: "2026-09-18T01:51:21.711Z"
+last_updated: "2026-09-18T01:53:01.091Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: d93ebd47a6a2d82a2d56f91924ebeb0f57605943
+state_head: b7079374e5dbc7bcd67db26ff5002862aeae6615
 progress:
   total_phases: 7
   completed_phases: 4
@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
+See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 4 — CLI Glow-up
+**Current focus:** Phase 5 — Agent Reach — Capability Model & Skill in Every Harness
 
 ## Current Position
 
@@ -354,6 +354,9 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: [Phase 4] 04-06: uninit.go's codegraphDir sanitized via a package-local sanitizePathForDisplay before styling (CR-01), matching present/status.go's projectPath precedent though not spelled out in the plan text
 - [Phase 4]: install.go's per-file action role predicate treats ActionUnchanged/ActionKept/ActionNotFound as no-op (Label), everything else mutating (Warning)
 - [Phase 4]: Phase 4 complete: command tree grouped into D-13's four titled cobra.Groups, help hand-rolled via present.RenderHelp (fang declined per 04-02), docs/CLI-REFERENCE.md regenerated through the drift gate, fang verdict recorded in PROJECT.md Key Decisions
+- [Phase 5]: [Phase 04] fang/v2 declined: DefaultErrorHandler wraps stderr in *colorprofile.Writer (no Fd()), so its plain non-TTY branch is dead and rename stubs box-render on a pipe; help hand-rolled via present.RenderHelp; verdict committed alone (d722804a) before any renderer
+- [Phase 5]: [Phase 04] Colour is resolved ONCE per RunE in internal/cli/colorflag.go (single colorprofile.Detect over a rewritten environ; HasDarkBackground at most once, only when styled AND both fds are TTYs) and downsampled by colorprofile.Writer at the RunE boundary; present stays env-blind and tests assert only our environ rewrite/branch/GroupIDs/plain goldens (D-00: never charm/cobra behaviour or go.mod)
+- [Phase 5]: [Phase 04] Phase-end UAT (colour legibility, TERM matrix, help, pager) validated by the orchestrating agent in a Herdr PTY at the maintainer's direction — light palette proven to engage via an OSC 11 background flip, WCAG ≥ AA proxy; residuals recorded in 04-UAT.md
 
 ### Pending Todos
 
@@ -387,6 +390,8 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - Tooling gaps (GRD-14/DOCS-11, 02-07): (a) `gsd-tools windows` has no annotate/record-only verb or status; (b) `windows fixed <id>` accepts no note (`broken-windows.cjs` `markFixed`/`cmdWindowsMarkFixed`, lines 286-293/1068-1088: one positional, zero flags), so verification evidence can only live in plan SUMMARYs; (c) no CLI verb creates a pending-todo file (the add-todo workflow is agent-authored, not a `gsd-tools` command); (d) STATE.md's Pending Todos renderer (`init.cjs` `renderPendingTodosMarkdown`, line 2024) emits bullets, so the previous hand-authored table was not a tool shape and was replaced by the rendered body in 02-07. Filing on open-gsd/gsd-core is the maintainer's call; the drafted issue body is in 02-07-SUMMARY.md.
 - ⚠️ [Phase 3] WINDOWS #37: internal/daemon is load-flaky under cross-package go test (TestRunWatchdogCancelsRunOnSimulatedReparent 250s 'Run did not return after a simulated reparent', TestConvergenceTwoSessions 130s) — reproduced on the PRE-fold commit 5bc10ed8 (1/2 runs) and post-fold (1/3), passes alone every time; not a Phase 3 regression (4 message lines in lock.go) but it contradicts #12's 'fixed' (FIX-07 removed the ticker race, not the budget miss under load). Same session: tests/browse-page.test.ts hit its 15s vitest timeout in 2 of 3 full web runs at machine load ~35 and passed alone 2/2 with web/ untouched — load-induced, unrecorded.
 - ⚠️ [Phase 3] Phase 1 reads verification_status: stale after Phase 3's phase.complete and the VERB-01..08 checkbox bookkeeping (#4155 mechanism — its covered_files list includes .planning/REQUIREMENTS.md; Phase 2 still reads passed); Phase 3's own report was re-stamped with 'gsd-tools verification fingerprint' over the verifier's unchanged 28-file list after confirming REQUIREMENTS.md was the only covered file that changed. IN-01 (search has no Long describing --full) left as an advisory docs: follow-up by maintainer choice.
+- [Phase 4] Advisory (not a defect): after CR-02, lipgloss's own tab→4-space conversion (maybeConvertTabs) still applies on the styled explore/node path, and node_test.go models it with a styledTabWidth=4 constant mirroring a lipgloss internal (D-00 tension). One-line fix available at v2.0.5: Style.TabWidth(lipgloss.NoTabConversion) on the palette styles, then drop the constant so stripped-styled == plain byte-exact on tab-indented source.
+- [Phase 4] Not verified: the D-11 ~2 s OSC-11 timeout on a non-answering terminal (tmux without allow-passthrough / SSH) — tmux is not installed locally and SSH was not attempted; every measured run in Herdr's terminal answered OSC 11 in ≤0.16 s. IN-01 (status 'Project:' value unstyled) left open as Info.
 
 ### Quick Tasks Completed
 
