@@ -1,11 +1,12 @@
 ---
 phase: 04-cli-glow-up
 verified: 2026-09-17T22:00:00Z
-status: human_needed
+status: passed
 score: 8/8 goal-level truths verified (plus 79 plan-level must_haves cross-checked; 0 failed)
 behavior_unverified: 0
 overrides_applied: 0
 covered_files:
+
   - .planning/phases/04-cli-glow-up/04-01-PLAN.md
   - .planning/phases/04-cli-glow-up/04-01-SUMMARY.md
   - .planning/phases/04-cli-glow-up/04-02-PLAN.md
@@ -153,8 +154,10 @@ covered_files:
   - internal/cli/upgrade.go
   - internal/cli/version_test.go
   - internal/cli/version.go
+
 covered_digest: "v1:sha256:1b187c6a239be9834376864ff49c69615bdec392a887019439335d206a574855"
 human_verification:
+
   - test: "CLI-04 palette readability: run `codegraph status`, `codegraph explore <term>`, `codegraph node <symbol>`, `codegraph search <term> --full`, `codegraph install --target claude-code --location local` (fake HOME), and `codegraph --help` on (a) Solarized Light or macOS light Terminal and (b) a dark-theme terminal."
     expected: "Header, label, value, path, count, warning and error hues are visibly distinct and legible in both themes (no low-contrast pair)."
     why_human: "Colour legibility requires human eyes; styled output is deliberately never golden-frozen (D-00/D-06). Programmatic checks already confirm the mechanism — ESC bytes present under --color=always, absent under --color=never/plain, and the seven roles map to seven distinct hex pairs in palette.go — but cannot judge readability."
@@ -279,6 +282,8 @@ No orphaned requirements — REQUIREMENTS.md maps exactly these 9 IDs to Phase 4
 None. Scanned all 125 existing files touched by this phase's diff (`git diff --name-only 0e47d930..HEAD` filtered to `internal/cli`, `docs/CLI-REFERENCE.md`, `go.mod`, `.planning/PROJECT.md`) for `TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER` and stub-return patterns — zero matches. `04-REVIEW.md`/`04-REVIEW-FIX.md` (iteration 2) report `status: clean`, 0 critical, 0 warning, 1 info (IN-01, deliberately deferred, cosmetic — `RenderStatus`'s "Project:" value is sanitized but unstyled; not a functional defect, not a security issue).
 
 ### Human Verification Required
+
+> **UAT outcome (2026-09-17):** all four items validated by the orchestrating agent in a Herdr PTY at the maintainer's direction — evidence and residuals (no human eye on colour; tmux/SSH sub-checks not run, so the OSC-11 ~2 s pause was not observed) are recorded per item in `04-UAT.md`. Status set to `passed` via `frontmatter set`.
 
 See frontmatter `human_verification` — 4 items, all tracing back to the D-06 by-design human UAT (CLI-04 palette readability, CLI-02 terminal-capability rendering, help styling consistency, and pager/TTY colour behavior). These were explicitly flagged in `04-CONTEXT.md` and `04-VALIDATION.md` as expected `human_needed` outcomes, not defects, and are consolidated in plan 08's harvested `<human-check>` block.
 
