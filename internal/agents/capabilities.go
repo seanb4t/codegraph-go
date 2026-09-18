@@ -189,6 +189,44 @@ func globalOnlyPath(fn func() (string, error)) PathFunc {
 	}
 }
 
+// installDeclaredSkill resolves t's declared, written skill directory (the
+// D-01 derivation of Capabilities().SkillDirs via WrittenSkillDir) and, if
+// one is declared for loc, installs the shared skill package there through
+// installSkillPackage (AGENT-08): install and uninstall derive the skill
+// step from the ONE table. Every target except Claude — which has its own
+// symlink-aware policy via claudeSkillPolicy (D-17) — calls this instead of
+// hand-rolling its own skill-directory write. A resolution error is
+// recorded via result.Errors (CR-01); "" (no error) means t declares no
+// skill directory at loc and this is a silent no-op.
+func installDeclaredSkill(result *WriteResult, t AgentTarget, loc Location) {
+	dir, err := t.Capabilities().WrittenSkillDir(loc)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve %s skill dir path: %w", t.ID(), err))
+		return
+	}
+	if dir == "" {
+		return
+	}
+	installSkillPackage(result, dir, loc, t.ID(), refuseUnmanifested)
+}
+
+// uninstallDeclaredSkill mirrors installDeclaredSkill for Uninstall — every
+// skill-writing target other than Claude has no exclusive manifest keys of
+// its own (its only contribution to the shared manifest's Files map is the
+// SKILL.md hash every requester shares), so exclusiveKeys is always nil
+// here.
+func uninstallDeclaredSkill(result *WriteResult, t AgentTarget, loc Location) {
+	dir, err := t.Capabilities().WrittenSkillDir(loc)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve %s skill dir path: %w", t.ID(), err))
+		return
+	}
+	if dir == "" {
+		return
+	}
+	uninstallSkillPackage(result, dir, t.ID(), nil, refuseUnmanifested)
+}
+
 // describeDeclaredPaths is the shared DescribePaths body every target's
 // DescribePaths(loc Location) []string now delegates to as
 // `return describeDeclaredPaths(t, loc)` (D-02, D-03): nil for an

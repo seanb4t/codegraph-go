@@ -96,8 +96,10 @@ func TestCapabilitiesDeclared(t *testing.T) {
 				LocationLocal:  "",
 			},
 			skillDir: map[Location]string{
-				LocationGlobal: "",
-				LocationLocal:  "",
+				// D-06 (05-04): Cursor writes the SHARED skill package, not
+				// a Cursor-specific directory.
+				LocationGlobal: filepath.Join(home, ".agents", "skills", "codegraph"),
+				LocationLocal:  filepath.Join(".agents", "skills", "codegraph"),
 			},
 		},
 		{
@@ -150,8 +152,10 @@ func TestCapabilitiesDeclared(t *testing.T) {
 				LocationLocal:  "AGENTS.md",
 			},
 			skillDir: map[Location]string{
-				LocationGlobal: "",
-				LocationLocal:  "",
+				// D-06 (05-04): opencode writes the SHARED skill package,
+				// not an opencode-specific directory.
+				LocationGlobal: filepath.Join(home, ".agents", "skills", "codegraph"),
+				LocationLocal:  filepath.Join(".agents", "skills", "codegraph"),
 			},
 		},
 	}

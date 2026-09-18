@@ -38,7 +38,10 @@ func (t opencodeTarget) SupportsLocation(loc Location) bool {
 }
 
 // Capabilities is opencode's capability table entry (D-01, D-02): both
-// scopes, JSONC config, no hooks, no skill directory this plan.
+// scopes, JSONC config, no hooks. SkillDirs is the shared package (D-06:
+// opencode relies on the shared .agents/skills/codegraph path — a
+// opencode-specific directory is added only if a live session shows the
+// shared path is not read).
 func (opencodeTarget) Capabilities() Capabilities {
 	return Capabilities{
 		Scopes:       []Location{LocationGlobal, LocationLocal},
@@ -46,6 +49,7 @@ func (opencodeTarget) Capabilities() Capabilities {
 		Hooks:        HooksNone,
 		MCPConfig:    opencodeConfigPath,
 		Instructions: opencodeInstructionsPath,
+		SkillDirs:    sharedSkillDirs,
 	}
 }
 
@@ -290,7 +294,7 @@ func (t opencodeTarget) Detect(loc Location) DetectionResult {
 	}
 }
 
-func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
+func (t opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
 	if configPath, err := opencodeConfigPath(loc); err != nil {
@@ -307,6 +311,8 @@ func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		recordFile(&result, instrPath, fr, err)
 	}
 
+	installDeclaredSkill(&result, t, loc)
+
 	if loc == LocationGlobal {
 		if cfgDir, err := resolveOpencodeConfigDir(); err == nil {
 			opencodeSweepStaleAppData(cfgDir)
@@ -316,7 +322,7 @@ func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	return result
 }
 
-func (opencodeTarget) Uninstall(loc Location) WriteResult {
+func (t opencodeTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 
 	if configPath, err := opencodeConfigPath(loc); err != nil {
@@ -332,6 +338,8 @@ func (opencodeTarget) Uninstall(loc Location) WriteResult {
 		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
 		recordAction(&result, instrPath, action, err)
 	}
+
+	uninstallDeclaredSkill(&result, t, loc)
 
 	return result
 }
