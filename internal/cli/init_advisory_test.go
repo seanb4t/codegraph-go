@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -100,5 +101,62 @@ func TestInitAdvisory_WatcherDisabled_HooksAlreadyInstalled(t *testing.T) {
 	}
 	if strings.Contains(out, "codegraph githooks install") {
 		t.Fatalf("expected no install pointer when hooks are already installed, got:\n%s", out)
+	}
+}
+
+// TestInitAdvisory_ColorResolvedOnce is CR-01's positive assertion
+// (04-REVIEW.md): drives the real `init` RunE, with the watcher disabled so
+// printWatchFallbackAdvisory actually fires, and stubs the
+// fdIsTerminal/queryDarkBackground seam (colorflag_test.go's own pattern)
+// to count how many times the lipgloss.HasDarkBackground OSC-11 query
+// fires. Before the fix, printSummaryMode and printWatchFallbackAdvisory
+// each independently called resolveColor, so this scenario queried twice;
+// after the fix, colour is resolved once in RunE and threaded through
+// both helpers. execCmd's bytes.Buffer stdout can't exercise this gate at
+// all (resolveColorFrom requires a genuine *os.File on both ends), so this
+// test drives the command with real *os.File values instead.
+func TestInitAdvisory_ColorResolvedOnce(t *testing.T) {
+	origFdIsTerminal := fdIsTerminal
+	origQueryDarkBackground := queryDarkBackground
+	t.Cleanup(func() {
+		fdIsTerminal = origFdIsTerminal
+		queryDarkBackground = origQueryDarkBackground
+	})
+
+	fdIsTerminal = func(f *os.File) bool { return true }
+	calls := 0
+	queryDarkBackground = func(in, out *os.File) bool {
+		calls++
+		return false
+	}
+
+	dir := copyFixture(t)
+	runGit(t, dir, "init")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-m", "init")
+	t.Setenv("CODEGRAPH_NO_WATCH", "1")
+
+	outFile, err := os.CreateTemp(t.TempDir(), "init-stdout")
+	if err != nil {
+		t.Fatalf("create temp stdout: %v", err)
+	}
+	defer outFile.Close()
+	inFile, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+	defer inFile.Close()
+
+	root := newRootCmd()
+	root.SetOut(outFile)
+	root.SetErr(outFile)
+	root.SetIn(inFile)
+	root.SetArgs([]string{"init", dir, "--color=always"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("init: unexpected error: %v", err)
+	}
+
+	if calls != 1 {
+		t.Errorf("queryDarkBackground called %d times, want exactly 1 (CR-01: resolveColor must fire at most once per RunE)", calls)
 	}
 }

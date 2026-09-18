@@ -75,8 +75,15 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printSummary(cmd, stats, quiet, verbose)
-			printWatchFallbackAdvisory(cmd, root)
+			// D-11: resolve colour ONCE for this RunE and thread it through
+			// both print helpers below — printSummaryMode and
+			// printWatchFallbackAdvisory each used to call resolveColor
+			// independently, so a repo with the watcher disabled could
+			// trigger the lipgloss.HasDarkBackground OSC-11 query twice in
+			// one invocation (CR-01, 04-REVIEW.md).
+			mode := resolveColor(cmd)
+			printSummaryMode(cmd, mode, stats, quiet, verbose)
+			printWatchFallbackAdvisory(cmd, mode, root)
 			return nil
 		},
 	}
@@ -178,7 +185,15 @@ func printSummaryMode(cmd *cobra.Command, mode colorMode, stats indexer.Stats, q
 // via t.Setenv("CODEGRAPH_NO_WATCH", "1") — the same seam serve.go's own
 // --no-watch flag threads through, just driven by the env var side of the
 // OR instead of the flag side.
-func printWatchFallbackAdvisory(cmd *cobra.Command, root string) {
+//
+// Takes an already-resolved colorMode rather than calling resolveColor
+// itself (CR-01, 04-REVIEW.md): this advisory isn't gated by --quiet, so a
+// second independent resolveColor call here — on top of printSummaryMode's
+// — could fire the lipgloss.HasDarkBackground OSC-11 query twice in one
+// RunE, which D-11 requires happen at most once. The caller resolves once
+// and threads the result through, mirroring sync.go's printSummaryMode/
+// daemon.go's printStoppedDaemons(mode, …) pattern.
+func printWatchFallbackAdvisory(cmd *cobra.Command, mode colorMode, root string) {
 	reason := watch.WatchDisabledReason(root, watch.Probe{})
 	if reason == "" {
 		return
@@ -186,7 +201,6 @@ func printWatchFallbackAdvisory(cmd *cobra.Command, root string) {
 
 	out := cmd.OutOrStdout()
 
-	mode := resolveColor(cmd)
 	if mode.Styled {
 		w := mode.Writer(out)
 		pal := present.NewPalette(mode.Dark)
