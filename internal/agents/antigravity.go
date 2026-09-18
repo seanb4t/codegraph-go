@@ -28,16 +28,48 @@ func (t antigravityTarget) SupportsLocation(loc Location) bool {
 }
 
 // Capabilities is Antigravity's capability table entry (D-01, D-02):
-// global-only, JSON config, no hooks, no skill directory this plan. Its
-// instructions reach Antigravity only through Gemini's
-// ~/.gemini/GEMINI.md (D-06(c)) — it declares none of its own.
+// global-only, JSON config, no hooks, antigravitySkillDirs for its skill
+// directory (AGENT-07). Its instructions reach Antigravity only through
+// Gemini's ~/.gemini/GEMINI.md (D-06(c)) — it declares none of its own.
 func (antigravityTarget) Capabilities() Capabilities {
 	return Capabilities{
 		Scopes:       []Location{LocationGlobal},
 		ConfigFormat: ConfigFormatJSON,
 		Hooks:        HooksNone,
 		MCPConfig:    globalOnlyPath(antigravityConfigPath),
+		SkillDirs:    antigravitySkillDirs,
 	}
+}
+
+// antigravitySkillDirs resolves Antigravity's skill directories, GLOBAL
+// ONLY (AGENT-07, D-06 corrections (b)(c); [CITED: antigravity.google/
+// docs/skills.md, fetched 2026-09-18]): index 0 — the `agy` CLI's
+// documented global path, `~/.gemini/antigravity-cli/skills/codegraph/` —
+// is the one this target WRITES; it is the surface 05-06's live `agy`
+// session actually exercises. Index 1, the 2.0/IDE path
+// `~/.gemini/config/skills/codegraph/`, is `[ASSUMED]`, documented only,
+// and NEVER written here — this milestone's herdr-driven live-session
+// method drives a CLI, not a GUI IDE, so there is no live surface to
+// verify it (D-06(b)). Antigravity's own docs list `.agents/skills/` only
+// at WORKSPACE scope (never global), which this global-only target never
+// writes, and its instructions arrive solely through Gemini's own
+// `~/.gemini/GEMINI.md` write (D-06(c)) — no new AGENTS.md here. At
+// LocationLocal (unsupported — Antigravity is global-only) this returns
+// nil, nil: Capabilities.Supports/WrittenSkillDir/ReadOnlySkillDirs never
+// call it for local in normal use, but a caller error surfaces as "no skill
+// dirs" rather than a resolved local path.
+func antigravitySkillDirs(loc Location) ([]string, error) {
+	if loc != LocationGlobal {
+		return nil, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph"),
+		filepath.Join(home, ".gemini", "config", "skills", "codegraph"),
+	}, nil
 }
 
 // antigravityUnifiedPath is the post-migration config location a current
@@ -142,7 +174,7 @@ func (t antigravityTarget) Detect(loc Location) DetectionResult {
 	}
 }
 
-func (antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult {
+func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 	if loc != LocationGlobal {
 		return result
@@ -229,10 +261,12 @@ func (antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult 
 		}
 	}
 
+	installDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
-func (antigravityTarget) Uninstall(loc Location) WriteResult {
+func (t antigravityTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 	if loc != LocationGlobal {
 		return result
@@ -240,10 +274,13 @@ func (antigravityTarget) Uninstall(loc Location) WriteResult {
 	configPath, err := antigravityConfigPath()
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity config path: %w", err))
-		return result
+	} else {
+		fr, err := removeMcpEntry(configPath)
+		recordFile(&result, configPath, fr, err)
 	}
-	fr, err := removeMcpEntry(configPath)
-	recordFile(&result, configPath, fr, err)
+
+	uninstallDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
