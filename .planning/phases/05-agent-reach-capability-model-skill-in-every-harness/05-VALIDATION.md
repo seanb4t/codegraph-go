@@ -40,7 +40,22 @@ created: "2026-09-18"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| *(filled by the planner — one row per task, from the map below)* | | | | | | | | | |
+| 05-01-T1 | 05-01 | 1 | AGENT-08 | T-05-01 | `--print-config-style` writes nothing, opens no picker | unit + real binary | `go test ./internal/agents/ ./internal/cli/ -run 'TestCapabilitiesDeclared$\|TestInstallPrintConfigStyle'` | ❌ W0 | ⬜ pending |
+| 05-01-T2 | 05-01 | 1 | AGENT-08 | T-05-03 | table == DescribePaths == what Install writes | unit (guard) | `go test ./internal/agents/ -run 'TestCapabilitiesTableDrivesDerivations$\|TestCapabilitiesMatchInstallWrites$'` | ❌ W0 | ⬜ pending |
+| 05-01-T3 | 05-01 | 1 | AGENT-08 | T-05-02, T-05-03 | plain golden frozen; Family (a) RED | golden + drift + mutation | `go test ./internal/cli/ -run 'TestPlainGolden$\|TestInstallPrintConfigStyle_StyledStripsToPlain$' && task docs:cli:drift` | ❌ W0 | ⬜ pending |
+| 05-02-T1 | 05-02 | 2 | AGENT-09, AGENT-13 | T-05-05, T-05-06 | foreign dir kept; package deleted only when `targets` empties | unit (RED first) | `go test ./internal/agents/ -run 'TestSharedSkillPackage_\|TestManifest_'` | ❌ W0 | ⬜ pending |
+| 05-02-T2 | 05-02 | 2 | AGENT-09 | T-05-07, T-05-08 | never unlink a user symlink; dangling link healed | unit (RED first) | `go test ./internal/agents/ -run 'TestRemoveSkillDirIfEmpty_NeverUnlinksSymlink$\|TestSameSkillDir_\|TestSkillPackage_'` | ❌ W0 | ⬜ pending |
+| 05-03-T1 | 05-03 | 3 | AGENT-09, AGENT-13 | T-05-11, T-05-12 | symlinked Claude/shared dir = one package (D-17) | unit (RED first) | `go test ./internal/agents/ -run 'TestSymlinkedSkillDir_\|TestClaude_'` | ❌ W0 | ⬜ pending |
+| 05-03-T2 | 05-03 | 3 | AGENT-09 | T-05-13 | upgrade refresh only where claude ∈ targets | unit (RED first) | `go test ./internal/agents/ -run 'TestConfiguredSkillLocations_\|TestSharedSkillWriter_NotesSameDirAsClaude$'` | ✅ extend | ⬜ pending |
+| 05-04-T1 | 05-04 | 4 | AGENT-13, AGENT-04, AGENT-06, AGENT-09 | T-05-15, T-05-17, T-05-18 | 8 × 2 × 2 planted-foreign ownership table | unit (RED first) | `go test ./internal/agents/ -run 'TestOwnershipExactIdentity$\|TestCursor_\|TestOpencode_'` | ❌ W0 | ⬜ pending |
+| 05-04-T2 | 05-04 | 4 | AGENT-13, AGENT-06 | T-05-15, T-05-16 | Family (b1)/(b2) RED; frontmatter contract | unit + mutation | `go test ./internal/agents/ ./internal/cli/ -run 'TestSkillFrontmatterMatchesEveryWrittenDir$\|TestInstallStatus_KeptForeignIsNotAChange$'` | ❌ W0 | ⬜ pending |
+| 05-05-T1 | 05-05 | 5 | AGENT-10, AGENT-11 | T-05-20, T-05-21 | harness dirs; no Kiro AGENTS.md | unit (RED first) | `go test ./internal/agents/ -run 'TestGemini_\|TestKiro_\|TestOwnershipExactIdentity$'` | ✅ extend | ⬜ pending |
+| 05-05-T2 | 05-05 | 5 | AGENT-07 | T-05-20, T-05-21 | agy CLI dir; 2.0/IDE path never created | unit (RED first) | `go test ./internal/agents/ -run 'TestAntigravity_\|TestOwnershipExactIdentity$'` | ✅ extend | ⬜ pending |
+| 05-06-T1 | 05-06 | 6 | AGENT-09, AGENT-10, AGENT-11 | T-05-25 | scaffold + `[ASSUMED]` rows with URL + date | file checks | Task 1 verify in 05-06-PLAN.md | ❌ W0 | ⬜ pending |
+| 05-06-T2 | 05-06 | 6 | AGENT-04, AGENT-06, AGENT-09 | T-05-25 | live verdicts with negative controls; D-11; D-12 | manual (orchestrator) + verdict-line gate | Task 2 verify in 05-06-PLAN.md | ❌ W0 | ⬜ pending |
+| 05-06-T3 | 05-06 | 6 | AGENT-07 | T-05-23, T-05-24 | real `$HOME` byte-identical after cleanup | manual (orchestrator) + completeness gate | Task 3 verify in 05-06-PLAN.md | ❌ W0 | ⬜ pending |
+| 05-07-T1 | 05-07 | 7 | AGENT-04 | T-05-27, T-05-28 | D-11 applied as recorded; shared AGENTS.md kept until last requester | unit (conditional, RED first if observed) | `go test ./internal/agents/ ./internal/cli/ -run 'TestCapabilitiesDeclared$\|TestCursor\|TestOpencode_\|TestOwnershipExactIdentity$\|TestPlainGolden$'` | ✅ | ⬜ pending |
+| 05-07-T2 | 05-07 | 7 | AGENT-08 | T-05-29 | reference regenerated; full suite green | full suite + drift | full suite command above | ✅ | ⬜ pending |
 
 Requirement → test map (from `05-RESEARCH.md` Validation Architecture; tests assert only what the repo owns — D-00):
 
