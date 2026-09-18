@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-current_phase: 4
-current_phase_name: CLI Glow-up
-status: verifying
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-09-18T00:11:25.135Z"
+current_phase: 5
+current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
+status: planning
+stopped_at: Phase 4 complete, ready to plan Phase 5
+last_updated: "2026-09-18T01:51:21.711Z"
 last_activity: 2026-09-17
-last_activity_desc: Phase 4 execution started
-state_head: 56d9c889a0aa3bc8c876e878220c10b3777208bb
+last_activity_desc: Phase 4 complete, transitioned to Phase 5
+state_head: d93ebd47a6a2d82a2d56f91924ebeb0f57605943
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 28
   completed_plans: 28
-  percent: 43
+  percent: 57
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 
 ## Current Position
 
-Phase: 4 (CLI Glow-up) — EXECUTING
-Plan: 8 of 8
-Status: Phase complete — ready for verification
-Last activity: 2026-09-17 — Phase 4 execution started
+Phase: 5 — Agent Reach — Capability Model & Skill in Every Harness
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-17 — Phase 4 complete, transitioned to Phase 5
 
 ## Performance Metrics
 
@@ -47,7 +47,7 @@ Last activity: 2026-09-17 — Phase 4 execution started
 | 01 | 9 | - | - |
 | 02 | 7 | - | - |
 | 03 | 4 | - | - |
-| 04 | 7 | - | - |
+| 4 | 8 | - | - |
 | 5 | 8 | - | - |
 | 6 | 8 | - | - |
 | 7 | 4 | - | - |
@@ -495,7 +495,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-18T00:11:25.089Z
-Stopped at: Completed 04-08-PLAN.md
+Stopped at: Phase 4 complete, ready to plan Phase 5
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
