@@ -824,6 +824,9 @@ func TestClaude_Install_WritesManifest(t *testing.T) {
 	if m.Location != string(LocationGlobal) {
 		t.Fatalf("Location = %q, want %q", m.Location, LocationGlobal)
 	}
+	if !targetSetEqual(m.Targets, []TargetID{Claude}) {
+		t.Fatalf("Targets = %v, want [claude]", m.Targets)
+	}
 
 	skillPath := filepath.Join(home, ".claude", "skills", "codegraph", "SKILL.md")
 	scriptPath := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
