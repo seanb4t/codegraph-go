@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 func TestCursor_ID(t *testing.T) {
@@ -129,13 +131,77 @@ func TestCursor_RoundTrip_ByteInvariantWithSibling(t *testing.T) {
 	}
 }
 
-func TestCursor_DescribePaths_ListsOnlyMcpConfig(t *testing.T) {
+// TestCursor_DescribePaths_ListsMcpConfigAndSharedSkill supersedes
+// TestCursor_DescribePaths_ListsOnlyMcpConfig: Cursor now declares
+// SkillDirs: sharedSkillDirs (D-06), so DescribePaths grows from 1 path to
+// 3 — the MCP config, the shared SKILL.md, and its sidecar manifest.
+func TestCursor_DescribePaths_ListsMcpConfigAndSharedSkill(t *testing.T) {
 	c := cursorTarget{}
 	paths := c.DescribePaths(LocationGlobal)
-	if len(paths) != 1 {
-		t.Fatalf("want exactly 1 path (the MCP config), got %v", paths)
+	if len(paths) != 3 {
+		t.Fatalf("want exactly 3 paths (mcp config + shared SKILL.md + manifest), got %v", paths)
 	}
-	if !strings.HasSuffix(paths[0], filepath.Join(".cursor", "mcp.json")) {
-		t.Fatalf("unexpected DescribePaths entry: %v", paths)
+	var sawMCP, sawSkillMD, sawManifest bool
+	for _, p := range paths {
+		switch {
+		case strings.HasSuffix(p, filepath.Join(".cursor", "mcp.json")):
+			sawMCP = true
+		case strings.HasSuffix(p, filepath.Join(".agents", "skills", "codegraph", "SKILL.md")):
+			sawSkillMD = true
+		case strings.HasSuffix(p, filepath.Join(".agents", "skills", "codegraph", ".codegraph-manifest.json")):
+			sawManifest = true
+		}
+	}
+	if !sawMCP || !sawSkillMD || !sawManifest {
+		t.Fatalf("DescribePaths missing an expected entry (mcp=%v skillmd=%v manifest=%v): %v", sawMCP, sawSkillMD, sawManifest, paths)
+	}
+}
+
+// TestCursor_Install_WritesSharedSkillPackage (AGENT-04, D-06): Cursor
+// installs the codegraph skill through the shared .agents/skills/codegraph
+// package (installDeclaredSkill -> installSkillPackage), never a
+// Cursor-specific directory — and Uninstall reverses it completely.
+func TestCursor_Install_WritesSharedSkillPackage(t *testing.T) {
+	for _, loc := range []Location{LocationGlobal, LocationLocal} {
+		t.Run(string(loc), func(t *testing.T) {
+			fakeHome(t)
+			if loc == LocationLocal {
+				dir := t.TempDir()
+				t.Chdir(dir)
+			}
+			c := cursorTarget{}
+			c.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+			dir, err := sharedSkillDirPath(loc)
+			if err != nil {
+				t.Fatalf("sharedSkillDirPath: %v", err)
+			}
+			skillPath := filepath.Join(dir, "SKILL.md")
+			want, err := claudeassets.SkillMarkdown()
+			if err != nil {
+				t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+			}
+			if got := readFile(t, skillPath); got != string(want) {
+				t.Fatalf("shared SKILL.md at %s does not match the embed", skillPath)
+			}
+			m, present, err := readManifest(skillManifestPath(dir))
+			if err != nil || !present {
+				t.Fatalf("expected a manifest at %s (present=%v err=%v)", dir, present, err)
+			}
+			if len(m.Targets) != 1 || !containsTarget(m.Targets, Cursor) {
+				t.Fatalf("manifest targets = %v, want exactly [cursor]", m.Targets)
+			}
+
+			c.Uninstall(loc)
+			if fileExists(skillPath) {
+				t.Fatalf("shared SKILL.md not removed after uninstall")
+			}
+			if fileExists(skillManifestPath(dir)) {
+				t.Fatalf("shared manifest not removed after uninstall")
+			}
+			if fileExists(dir) {
+				t.Fatalf("shared skill dir not swept after uninstall")
+			}
+		})
 	}
 }

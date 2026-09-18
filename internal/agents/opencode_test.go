@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	claudeassets "github.com/seanb4t/codegraph-go"
 	"github.com/tailscale/hujson"
 )
 
@@ -253,10 +254,107 @@ func TestOpencode_Detect_AfterInstallReportsConfigured(t *testing.T) {
 	}
 }
 
+// TestOpencode_DescribePaths supersedes the former "at least 2 paths"
+// assertion: opencode now declares SkillDirs: sharedSkillDirs (D-06), so
+// DescribePaths grows to exactly 4 — config, AGENTS.md instructions, the
+// shared SKILL.md, and its sidecar manifest.
 func TestOpencode_DescribePaths(t *testing.T) {
 	o := opencodeTarget{}
 	paths := o.DescribePaths(LocationGlobal)
-	if len(paths) < 2 {
-		t.Fatalf("expected at least config + instructions paths, got %v", paths)
+	if len(paths) != 4 {
+		t.Fatalf("want exactly 4 paths (config + instructions + shared SKILL.md + manifest), got %v", paths)
+	}
+}
+
+// TestOpencode_Install_WritesSharedSkillPackage (AGENT-06, D-06): opencode
+// installs the codegraph skill through the shared .agents/skills/codegraph
+// package, and its pre-existing AGENTS.md instructions block is still
+// written alongside it (AGENT-06 "existing instructions block retained").
+func TestOpencode_Install_WritesSharedSkillPackage(t *testing.T) {
+	home := fakeHome(t)
+	o := opencodeTarget{}
+	o.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	dir, err := sharedSkillDirPath(LocationGlobal)
+	if err != nil {
+		t.Fatalf("sharedSkillDirPath: %v", err)
+	}
+	skillPath := filepath.Join(dir, "SKILL.md")
+	want, err := claudeassets.SkillMarkdown()
+	if err != nil {
+		t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+	}
+	if got := readFile(t, skillPath); got != string(want) {
+		t.Fatalf("shared SKILL.md does not match the embed")
+	}
+	m, present, err := readManifest(skillManifestPath(dir))
+	if err != nil || !present || !containsTarget(m.Targets, Opencode) {
+		t.Fatalf("expected a manifest naming opencode at %s (present=%v err=%v targets=%v)", dir, present, err, m.Targets)
+	}
+
+	instrPath := filepath.Join(home, ".config", "opencode", "AGENTS.md")
+	if !fileExists(instrPath) {
+		t.Fatalf("AGENTS.md block should still be written by Install")
+	}
+}
+
+// TestOpencode_CursorShareOnePackage (D-05, D-08): installing Cursor then
+// opencode at the same location yields ONE shared skill package with ONE
+// manifest naming both; opencode's own write reports SKILL.md unchanged
+// (raw-byte idempotency) and the manifest updated (new requester added);
+// uninstalling Cursor keeps the package for opencode; uninstalling
+// opencode (the last requester) removes it.
+func TestOpencode_CursorShareOnePackage(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	c := cursorTarget{}
+	o := opencodeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	c.Install(LocationLocal, opts)
+	sharedDir, err := sharedSkillDirPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("sharedSkillDirPath: %v", err)
+	}
+	m1, present1, err := readManifest(skillManifestPath(sharedDir))
+	if err != nil || !present1 || !targetSetEqual(m1.Targets, []TargetID{Cursor}) {
+		t.Fatalf("after cursor install: targets=%v present=%v err=%v, want [cursor]", m1.Targets, present1, err)
+	}
+
+	opencodeResult := o.Install(LocationLocal, opts)
+	m2, present2, err := readManifest(skillManifestPath(sharedDir))
+	if err != nil || !present2 || !targetSetEqual(m2.Targets, []TargetID{Cursor, Opencode}) {
+		t.Fatalf("after opencode install: targets=%v present=%v err=%v, want [cursor opencode]", m2.Targets, present2, err)
+	}
+	var sawUnchangedSkillMD, sawUpdatedManifest bool
+	for _, f := range opencodeResult.Files {
+		switch {
+		case f.Path == filepath.Join(sharedDir, "SKILL.md") && f.Action == ActionUnchanged:
+			sawUnchangedSkillMD = true
+		case f.Path == skillManifestPath(sharedDir) && f.Action == ActionUpdated:
+			sawUpdatedManifest = true
+		}
+	}
+	if !sawUnchangedSkillMD {
+		t.Fatalf("opencode's SKILL.md write should report unchanged: %+v", opencodeResult.Files)
+	}
+	if !sawUpdatedManifest {
+		t.Fatalf("manifest should report updated when opencode adds itself: %+v", opencodeResult.Files)
+	}
+
+	c.Uninstall(LocationLocal)
+	if !fileExists(filepath.Join(sharedDir, "SKILL.md")) {
+		t.Fatalf("SKILL.md should survive cursor's uninstall while opencode still requests it")
+	}
+	m3, present3, err := readManifest(skillManifestPath(sharedDir))
+	if err != nil || !present3 || !targetSetEqual(m3.Targets, []TargetID{Opencode}) {
+		t.Fatalf("after cursor uninstall: targets=%v present=%v err=%v, want [opencode]", m3.Targets, present3, err)
+	}
+
+	o.Uninstall(LocationLocal)
+	if fileExists(sharedDir) {
+		t.Fatalf("shared skill dir should be gone after opencode's uninstall (last requester)")
 	}
 }
