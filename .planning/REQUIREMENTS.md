@@ -44,12 +44,12 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### CLI Glow-up
 
-- [ ] **CLI-01**: Every human-output verb — `explore`, `search`, `node`, `callers`, `callees`, `impact`, `affected`, `files`, `status`, `init`, `index`, `sync`, `daemon`, `install`, `uninstall`, `upgrade`, `serve` (non-MCP output), `githooks`, `uninit`, `version`, `ui` — renders through a `present` renderer using one shared semantic palette (header, label, value, path, count, warning, error as distinct hues), consuming existing plain-struct seams (`NodeDetail`, `ExploreDetail`, `StatusResult`, …) with zero changes to `internal/query` or `internal/mcp`
-- [ ] **CLI-02**: Colour fidelity is downsampled via `colorprofile` at the RunE boundary, never inside `present`; `TERM=dumb`, 16-colour, 256-colour and truecolor terminals each render correctly
+- [x] **CLI-01**: Every human-output verb — `explore`, `search`, `node`, `callers`, `callees`, `impact`, `affected`, `files`, `status`, `init`, `index`, `sync`, `daemon`, `install`, `uninstall`, `upgrade`, `serve` (non-MCP output), `githooks`, `uninit`, `version`, `ui` — renders through a `present` renderer using one shared semantic palette (header, label, value, path, count, warning, error as distinct hues), consuming existing plain-struct seams (`NodeDetail`, `ExploreDetail`, `StatusResult`, …) with zero changes to `internal/query` or `internal/mcp`
+- [x] **CLI-02**: Colour fidelity is downsampled via `colorprofile` at the RunE boundary, never inside `present`; `TERM=dumb`, 16-colour, 256-colour and truecolor terminals each render correctly
 - [x] **CLI-03**: `--color=auto|always|never` exists on every styled verb with precedence `--color=always|never` > `NO_COLOR` (any non-empty value disables) > `CLICOLOR_FORCE` (forces) > `CLICOLOR=0` (disables) > TTY auto-detect, covered by a unit-test matrix over every combination
-- [ ] **CLI-04**: The palette is adaptive — `HasDarkBackground` read once at the call site — and every hue is readable on light and dark backgrounds, verified against a light theme (Solarized Light or macOS light Terminal) and a dark one
+- [x] **CLI-04**: The palette is adaptive — `HasDarkBackground` read once at the call site — and every hue is readable on light and dark backgrounds, verified against a light theme (Solarized Light or macOS light Terminal) and a dark one
 - [x] **CLI-05**: The agent/MCP path, `--json` output and non-TTY (piped) output are byte-identical before and after the glow-up — golden oracle and wire oracle unchanged, the TUI-01 archtest holding, and a regression test pins `NO_COLOR` + non-TTY plain output (the gh #13335 lesson)
-- [ ] **CLI-06**: `codegraph --help` groups commands into titled sections via `cobra.Group` (Query the graph / Build the index / Agents & serving / Maintenance), files `help` and `completion` into a group, and `<verb> --help` is styled consistently with root help
+- [x] **CLI-06**: `codegraph --help` groups commands into titled sections via `cobra.Group` (Query the graph / Build the index / Agents & serving / Maintenance), files `help` and `completion` into a group, and `<verb> --help` is styled consistently with root help
 - [x] **CLI-07**: Short flags are consistent across the query verbs — `-j`, `-l`, `-k`, `-p` present wherever the long form exists
 - [x] **CLI-08**: `charm.land/fang/v2` is spiked first with a recorded verdict; it is adopted when `WithoutManpage()`/`WithoutCompletions()` compose with the existing hidden `man` and cobra completions, `serve --mcp`'s transcript is byte-identical under the wrapper, and the SBOM/govulncheck delta is acceptable — otherwise the help template is hand-rolled; either way the decision precedes any renderer landing
 
@@ -154,12 +154,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-09 | Phase 2 | Complete |
 | DOCS-10 | Phase 2 | Complete |
 | DOCS-11 | Phase 2 | Complete |
-| CLI-01 | Phase 4 | Pending |
-| CLI-02 | Phase 4 | Pending |
+| CLI-01 | Phase 4 | Complete |
+| CLI-02 | Phase 4 | Complete |
 | CLI-03 | Phase 4 | Complete |
-| CLI-04 | Phase 4 | Pending |
+| CLI-04 | Phase 4 | Complete |
 | CLI-05 | Phase 4 | Complete |
-| CLI-06 | Phase 4 | Pending |
+| CLI-06 | Phase 4 | Complete |
 | CLI-07 | Phase 4 | Complete |
 | CLI-08 | Phase 4 | Complete |
 | VERB-01 | Phase 3 | Complete |

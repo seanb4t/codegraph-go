@@ -4,17 +4,17 @@ milestone: v0.14.0
 milestone_name: Polish & Agent Reach
 current_phase: 4
 current_phase_name: CLI Glow-up
-status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-09-17T23:36:51.508Z"
+status: verifying
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-09-18T00:11:25.135Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 4 execution started
-state_head: f1bb4aad089df2d06813659fd39908cf7fddf796
+state_head: 56d9c889a0aa3bc8c876e878220c10b3777208bb
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
   percent: 43
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-16 after Phase 2)
 
 Phase: 4 (CLI Glow-up) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-17 — Phase 4 execution started
 
 ## Performance Metrics
@@ -158,6 +158,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P05 | 38min | 2 tasks | 6 files |
 | Phase 04 P06 | 42min | 2 tasks | 7 files |
 | Phase 04 P07 | 37min | 2 tasks | 7 files |
+| Phase 04 P08 | 20min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -352,6 +353,7 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: [Phase 4] 04-06: printSummary/printSummaryMode split so printSyncSummary resolves colour exactly once per RunE (D-11) instead of double-querying the dark background when reused for a second styled line
 - [Phase 4]: [Phase 4] 04-06: uninit.go's codegraphDir sanitized via a package-local sanitizePathForDisplay before styling (CR-01), matching present/status.go's projectPath precedent though not spelled out in the plan text
 - [Phase 4]: install.go's per-file action role predicate treats ActionUnchanged/ActionKept/ActionNotFound as no-op (Label), everything else mutating (Warning)
+- [Phase 4]: Phase 4 complete: command tree grouped into D-13's four titled cobra.Groups, help hand-rolled via present.RenderHelp (fang declined per 04-02), docs/CLI-REFERENCE.md regenerated through the drift gate, fang verdict recorded in PROJECT.md Key Decisions
 
 ### Pending Todos
 
@@ -492,8 +494,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-17T23:36:51.476Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-09-18T00:11:25.089Z
+Stopped at: Completed 04-08-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
