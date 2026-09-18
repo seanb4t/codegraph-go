@@ -15,8 +15,9 @@ codegraph builds and maintains a local knowledge graph of a repository's symbols
 ### Options
 
 ```
-  -h, --help      help for codegraph
-  -v, --version   version for codegraph
+      --color string   colour output: auto (detect), always, or never (default "auto")
+  -h, --help           help for codegraph
+  -v, --version        version for codegraph
 ```
 
 ### SEE ALSO
@@ -65,6 +66,12 @@ codegraph affected [files...] [flags]
       --stdin           read changed file paths from stdin, one per line (union'd with positional args)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -84,6 +91,12 @@ codegraph callees <symbol> [flags]
   -j, --json          emit JSON output
   -l, --limit int     cap on results returned
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -107,6 +120,12 @@ codegraph callers <symbol> [flags]
   -p, --path string   repo path (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -125,6 +144,12 @@ See each sub-command's help for details on how to use the generated script.
 
 ```
   -h, --help   help for completion
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -174,6 +199,12 @@ codegraph completion bash
       --no-descriptions   disable completion descriptions
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph completion](#codegraph-completion)	 - Generate the autocompletion script for the specified shell
@@ -208,6 +239,12 @@ codegraph completion fish [flags]
       --no-descriptions   disable completion descriptions
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph completion](#codegraph-completion)	 - Generate the autocompletion script for the specified shell
@@ -237,6 +274,12 @@ codegraph completion powershell [flags]
 ```
   -h, --help              help for powershell
       --no-descriptions   disable completion descriptions
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -284,6 +327,12 @@ codegraph completion zsh [flags]
       --no-descriptions   disable completion descriptions
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph completion](#codegraph-completion)	 - Generate the autocompletion script for the specified shell
@@ -312,6 +361,12 @@ codegraph daemon [flags]
   -p, --path string   repo path for current-project-first ordering (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -337,6 +392,12 @@ codegraph daemon start [flags]
       --workers int   bound the daemon's extraction worker pool (default: number of CPUs)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph daemon](#codegraph-daemon)	 - List and manage running codegraph daemons
@@ -357,6 +418,12 @@ codegraph daemon stop [flags]
   -p, --path string   repo path to stop (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph daemon](#codegraph-daemon)	 - List and manage running codegraph daemons
@@ -373,6 +440,12 @@ codegraph daemon unlock [path] [flags]
 
 ```
   -h, --help   help for unlock
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -393,6 +466,12 @@ codegraph explore <query...> [flags]
   -h, --help            help for explore
       --max-files int   cap on distinct files returned (default 5)
   -p, --path string     repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -420,6 +499,12 @@ codegraph files [flags]
       --pattern string   shell glob narrowing the result set
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -432,6 +517,12 @@ Manage git sync hooks (post-commit/post-merge/post-checkout)
 
 ```
   -h, --help   help for githooks
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -455,6 +546,12 @@ codegraph githooks install [path] [flags]
   -h, --help   help for install
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph githooks](#codegraph-githooks)	 - Manage git sync hooks (post-commit/post-merge/post-checkout)
@@ -473,6 +570,12 @@ codegraph githooks remove [path] [flags]
   -h, --help   help for remove
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph githooks](#codegraph-githooks)	 - Manage git sync hooks (post-commit/post-merge/post-checkout)
@@ -489,6 +592,12 @@ codegraph githooks status [path] [flags]
 
 ```
   -h, --help   help for status
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -510,6 +619,12 @@ codegraph impact <symbol> [flags]
   -h, --help          help for impact
   -j, --json          emit JSON output
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -534,6 +649,12 @@ codegraph index [path] [flags]
       --workers int   bound the extraction worker pool (default: number of CPUs)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -553,6 +674,12 @@ codegraph init [path] [flags]
   -q, --quiet         suppress progress and summary output
   -v, --verbose       emit per-file/per-pass detail
       --workers int   bound the extraction worker pool (default: number of CPUs)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -594,6 +721,12 @@ codegraph install [flags]
   -y, --yes               skip the interactive picker; use the non-interactive default set (auto)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -613,6 +746,12 @@ codegraph node [symbol] [flags]
   -h, --help          help for node
   -l, --line int      line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -636,6 +775,12 @@ codegraph search <term> [flags]
   -k, --kind string   restrict to one node kind
   -l, --limit int     cap on results returned
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -691,6 +836,12 @@ codegraph serve [flags]
       --watch         Force the file watcher on, overriding the WSL2/slow-filesystem auto-off (the CLI twin of CODEGRAPH_FORCE_WATCH=1)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -712,6 +863,12 @@ codegraph status [flags]
   -p, --path string   repo path (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -731,6 +888,12 @@ codegraph sync [path] [flags]
   -q, --quiet         suppress progress and summary output
   -v, --verbose       emit per-file/per-pass detail
       --workers int   bound the extraction worker pool (default: number of CPUs)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -761,6 +924,12 @@ codegraph telemetry [flags]
   -h, --help   help for telemetry
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -787,6 +956,12 @@ codegraph ui [flags]
   -p, --path string         repo path (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -804,6 +979,12 @@ codegraph uninit [path] [flags]
 ```
   -f, --force   remove without prompting for confirmation
   -h, --help    help for uninit
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -841,6 +1022,12 @@ codegraph uninstall [flags]
   -l, --location string   config scope: global|local (default "global")
   -t, --target string     which agents to reverse: auto|all|none|<comma-separated ids> (default "all")
   -y, --yes               skip the interactive picker; use the non-interactive default set (all)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -886,6 +1073,12 @@ codegraph upgrade [version] [flags]
   -h, --help    help for upgrade
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -914,6 +1107,12 @@ codegraph version [flags]
 ```
   -h, --help   help for version
       --json   emit build identity as JSON
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
