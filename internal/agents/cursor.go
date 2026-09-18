@@ -20,9 +20,13 @@ func init() {
 	registerTarget(cursorTarget{})
 }
 
-func (cursorTarget) ID() TargetID                   { return Cursor }
-func (cursorTarget) DisplayName() string            { return "Cursor" }
-func (cursorTarget) SupportsLocation(Location) bool { return true }
+func (cursorTarget) ID() TargetID        { return Cursor }
+func (cursorTarget) DisplayName() string { return "Cursor" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t cursorTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is Cursor's capability table entry (D-01, D-02): both
 // scopes, JSON config, no hooks. Declares no instructions and no skill
@@ -63,8 +67,13 @@ func cursorLegacyRulesPath(loc Location) (string, error) {
 	return filepath.Join(home, ".cursor", "rules", "codegraph.mdc"), nil
 }
 
-func (cursorTarget) Detect(loc Location) DetectionResult {
-	configPath, err := cursorConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t cursorTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
@@ -126,9 +135,7 @@ func (cursorTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (cursorTarget) DescribePaths(loc Location) []string {
-	if p, err := cursorConfigPath(loc); err == nil {
-		return []string{p}
-	}
-	return nil
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t cursorTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

@@ -22,8 +22,9 @@ func init() {
 func (antigravityTarget) ID() TargetID        { return Antigravity }
 func (antigravityTarget) DisplayName() string { return "Antigravity" }
 
-func (antigravityTarget) SupportsLocation(loc Location) bool {
-	return loc == LocationGlobal
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t antigravityTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
 }
 
 // Capabilities is Antigravity's capability table entry (D-01, D-02):
@@ -118,19 +119,21 @@ func readMcpEntry(path string) (any, bool) {
 	return entry, ok
 }
 
-func (antigravityTarget) Detect(loc Location) DetectionResult {
-	if loc != LocationGlobal {
+// Detect is a derivation of the capability table (D-02, D-03): the
+// installed-evidence fallback is filepath.Dir(filepath.Dir(configPath)) —
+// ~/.gemini for both the unified and the legacy config path.
+func (t antigravityTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
 		return DetectionResult{}
 	}
-	configPath, err := antigravityConfigPath()
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
 	installed := fileExists(configPath)
 	if !installed {
-		if home, herr := os.UserHomeDir(); herr == nil {
-			installed = fileExists(filepath.Join(home, ".gemini"))
-		}
+		installed = fileExists(filepath.Dir(filepath.Dir(configPath)))
 	}
 	return DetectionResult{
 		Installed:         installed,
@@ -244,12 +247,7 @@ func (antigravityTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (antigravityTarget) DescribePaths(loc Location) []string {
-	if loc != LocationGlobal {
-		return nil
-	}
-	if p, err := antigravityConfigPath(); err == nil {
-		return []string{p}
-	}
-	return nil
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t antigravityTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

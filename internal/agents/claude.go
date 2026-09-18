@@ -28,9 +28,13 @@ func init() {
 	registerTarget(claudeTarget{})
 }
 
-func (claudeTarget) ID() TargetID                   { return Claude }
-func (claudeTarget) DisplayName() string            { return "Claude Code" }
-func (claudeTarget) SupportsLocation(Location) bool { return true }
+func (claudeTarget) ID() TargetID        { return Claude }
+func (claudeTarget) DisplayName() string { return "Claude Code" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t claudeTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is Claude's capability table entry (D-01, D-02): both
 // scopes, JSON config, a claude-json hooks mechanism (its files are
@@ -366,15 +370,23 @@ func removeClaudeAllowPermission(path string) (FileResult, error) {
 	return FileResult{Path: path, Action: ActionRemoved}, nil
 }
 
-func (claudeTarget) Detect(loc Location) DetectionResult {
-	configPath, err := claudeConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03): the
+// installed-evidence fallback is the ancestor of a table path
+// (filepath.Dir of the global instructions path, i.e. ~/.claude) rather
+// than a restated literal.
+func (t claudeTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
 	installed := fileExists(configPath)
 	if !installed && loc == LocationGlobal {
-		if home, herr := os.UserHomeDir(); herr == nil {
-			installed = fileExists(filepath.Join(home, ".claude"))
+		if instrPath, ierr := caps.InstructionsPath(loc); ierr == nil {
+			installed = fileExists(filepath.Dir(instrPath))
 		}
 	}
 	return DetectionResult{
@@ -609,25 +621,7 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (claudeTarget) DescribePaths(loc Location) []string {
-	var paths []string
-	if p, err := claudeConfigPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeInstructionsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeSettingsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeSkillFilePath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeHooksScriptPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeManifestPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t claudeTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

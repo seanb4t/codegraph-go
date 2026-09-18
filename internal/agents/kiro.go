@@ -22,9 +22,13 @@ func init() {
 	registerTarget(kiroTarget{})
 }
 
-func (kiroTarget) ID() TargetID                   { return Kiro }
-func (kiroTarget) DisplayName() string            { return "Kiro" }
-func (kiroTarget) SupportsLocation(Location) bool { return true }
+func (kiroTarget) ID() TargetID        { return Kiro }
+func (kiroTarget) DisplayName() string { return "Kiro" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t kiroTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is Kiro's capability table entry (D-01, D-02): both
 // scopes, JSON config, no hooks. "AGENTS.md retained as a steering
@@ -64,8 +68,13 @@ func kiroLegacySteeringPath(loc Location) (string, error) {
 	return filepath.Join(home, ".kiro", "steering", "codegraph.md"), nil
 }
 
-func (kiroTarget) Detect(loc Location) DetectionResult {
-	configPath, err := kiroConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t kiroTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
@@ -118,9 +127,7 @@ func (kiroTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (kiroTarget) DescribePaths(loc Location) []string {
-	if p, err := kiroConfigPath(loc); err == nil {
-		return []string{p}
-	}
-	return nil
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t kiroTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

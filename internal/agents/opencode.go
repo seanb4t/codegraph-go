@@ -29,9 +29,13 @@ func init() {
 	registerTarget(opencodeTarget{})
 }
 
-func (opencodeTarget) ID() TargetID                   { return Opencode }
-func (opencodeTarget) DisplayName() string            { return "opencode" }
-func (opencodeTarget) SupportsLocation(Location) bool { return true }
+func (opencodeTarget) ID() TargetID        { return Opencode }
+func (opencodeTarget) DisplayName() string { return "opencode" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t opencodeTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is opencode's capability table entry (D-01, D-02): both
 // scopes, JSONC config, no hooks, no skill directory this plan.
@@ -265,8 +269,13 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 	}
 }
 
-func (opencodeTarget) Detect(loc Location) DetectionResult {
-	configPath, err := opencodeConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t opencodeTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
@@ -327,13 +336,7 @@ func (opencodeTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (opencodeTarget) DescribePaths(loc Location) []string {
-	var paths []string
-	if p, err := opencodeConfigPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := opencodeInstructionsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t opencodeTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

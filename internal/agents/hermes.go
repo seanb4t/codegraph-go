@@ -26,9 +26,13 @@ func init() {
 	registerTarget(hermesTarget{})
 }
 
-func (hermesTarget) ID() TargetID                       { return Hermes }
-func (hermesTarget) DisplayName() string                { return "Hermes Agent" }
-func (hermesTarget) SupportsLocation(loc Location) bool { return loc == LocationGlobal }
+func (hermesTarget) ID() TargetID        { return Hermes }
+func (hermesTarget) DisplayName() string { return "Hermes Agent" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t hermesTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is Hermes's capability table entry (D-01, D-02):
 // global-only, YAML config, no hooks. No instructions by design
@@ -331,19 +335,19 @@ func hermesConfigured(content string) bool {
 	return childFound
 }
 
-func (hermesTarget) Detect(loc Location) DetectionResult {
-	if loc != LocationGlobal {
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t hermesTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
 		return DetectionResult{}
 	}
-	configPath, err := hermesConfigPath()
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
 	installed := fileExists(configPath)
 	if !installed {
-		if dir := filepath.Dir(configPath); fileExists(dir) {
-			installed = true
-		}
+		installed = fileExists(filepath.Dir(configPath))
 	}
 	return DetectionResult{
 		Installed:         installed,
@@ -417,13 +421,7 @@ func (hermesTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (hermesTarget) DescribePaths(loc Location) []string {
-	if loc != LocationGlobal {
-		return nil
-	}
-	configPath, err := hermesConfigPath()
-	if err != nil {
-		return nil
-	}
-	return []string{configPath}
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t hermesTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

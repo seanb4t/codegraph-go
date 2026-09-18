@@ -17,9 +17,13 @@ func init() {
 	registerTarget(geminiTarget{})
 }
 
-func (geminiTarget) ID() TargetID                   { return Gemini }
-func (geminiTarget) DisplayName() string            { return "Gemini CLI" }
-func (geminiTarget) SupportsLocation(Location) bool { return true }
+func (geminiTarget) ID() TargetID        { return Gemini }
+func (geminiTarget) DisplayName() string { return "Gemini CLI" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t geminiTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is Gemini's capability table entry (D-01, D-02): both
 // scopes, JSON config, no hooks, no skill directory this plan.
@@ -57,8 +61,13 @@ func geminiInstructionsPath(loc Location) (string, error) {
 	return filepath.Join(home, ".gemini", "GEMINI.md"), nil
 }
 
-func (geminiTarget) Detect(loc Location) DetectionResult {
-	configPath, err := geminiConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t geminiTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
@@ -115,13 +124,7 @@ func (geminiTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (geminiTarget) DescribePaths(loc Location) []string {
-	var paths []string
-	if p, err := geminiConfigPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := geminiInstructionsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t geminiTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

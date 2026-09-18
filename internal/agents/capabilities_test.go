@@ -5,6 +5,29 @@ import (
 	"testing"
 )
 
+// stringSetEqual reports whether a and b contain the same elements,
+// ignoring order — used by TestCapabilitiesTableDrivesDerivations to
+// compare an independently-built expected path set against
+// DescribePaths(loc)'s actual output.
+func stringSetEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	am := make(map[string]int, len(a))
+	for _, s := range a {
+		am[s]++
+	}
+	for _, s := range b {
+		am[s]--
+	}
+	for _, n := range am {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // TestCapabilitiesDeclared pins, per registered target, an explicit
 // expected row (D-01, D-02) — an independent oracle, not read back from
 // the code. Also asserts MCPConfig resolves without error at every
@@ -221,5 +244,176 @@ func TestCapabilitiesDeclared_AntigravityMigrationAware(t *testing.T) {
 	}
 	if got != wantLegacy {
 		t.Fatalf("MCPConfig(global) with only the legacy file present = %q, want legacy %q", got, wantLegacy)
+	}
+}
+
+// expectedDeclaredPaths independently builds the set of paths
+// TestCapabilitiesTableDrivesDerivations expects DescribePaths(loc) to
+// return, WITHOUT calling describeDeclaredPaths — it re-derives the same
+// property from Capabilities' own fields, so this test does not merely
+// re-run the code under test against itself (D-00/D-03).
+func expectedDeclaredPaths(t *testing.T, caps Capabilities, loc Location) []string {
+	t.Helper()
+	var want []string
+	if caps.MCPConfig != nil {
+		if p, err := caps.MCPConfig(loc); err == nil && p != "" {
+			want = append(want, p)
+		}
+	}
+	if caps.Instructions != nil {
+		if p, err := caps.Instructions(loc); err == nil && p != "" {
+			want = append(want, p)
+		}
+	}
+	if caps.Hooks == HooksClaudeJSON {
+		if settingsPath, err := claudeSettingsPath(loc); err == nil {
+			want = append(want, settingsPath)
+		}
+		if scriptPath, err := claudeHooksScriptPath(loc); err == nil {
+			want = append(want, scriptPath)
+		}
+	}
+	if caps.SkillDirs != nil {
+		if dirs, err := caps.SkillDirs(loc); err == nil && len(dirs) > 0 {
+			want = append(want, filepath.Join(dirs[0], skillFileName), filepath.Join(dirs[0], skillManifestFileName))
+		}
+	}
+	// Deduplicate, matching describeDeclaredPaths' own dedup contract.
+	seen := make(map[string]bool, len(want))
+	out := want[:0]
+	for _, p := range want {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
+}
+
+// TestCapabilitiesTableDrivesDerivations is the D-03 guard: for every
+// registered target x {global, local}, SupportsLocation, DescribePaths and
+// Detect's ConfigPath are all consistent with an independently-computed
+// expectation built from Capabilities() alone — never by calling
+// describeDeclaredPaths itself. Family (a1) in 05-MUTATION-LOG.md proves
+// this guard RED against a planted divergence.
+func TestCapabilitiesTableDrivesDerivations(t *testing.T) {
+	leaves := 0
+	for _, target := range AllTargets() {
+		for _, loc := range []Location{LocationGlobal, LocationLocal} {
+			target, loc := target, loc
+			t.Run(string(target.ID())+"/"+string(loc), func(t *testing.T) {
+				fakeHome(t)
+				t.Chdir(t.TempDir())
+				leaves++
+
+				caps := target.Capabilities()
+				wantSupported := caps.Supports(loc)
+				if got := target.SupportsLocation(loc); got != wantSupported {
+					t.Fatalf("SupportsLocation(%s) = %v, want %v (Scopes=%v)", loc, got, wantSupported, caps.Scopes)
+				}
+
+				if !wantSupported {
+					if paths := target.DescribePaths(loc); len(paths) != 0 {
+						t.Errorf("DescribePaths(%s) for an unsupported location = %v, want empty", loc, paths)
+					}
+					if got := target.Detect(loc); got != (DetectionResult{}) {
+						t.Errorf("Detect(%s) for an unsupported location = %+v, want the zero value", loc, got)
+					}
+					return
+				}
+
+				want := expectedDeclaredPaths(t, caps, loc)
+				got := target.DescribePaths(loc)
+				if !stringSetEqual(want, got) {
+					t.Errorf("DescribePaths(%s) = %v, want set-equal to %v", loc, got, want)
+				}
+				seen := make(map[string]bool, len(got))
+				for _, p := range got {
+					if seen[p] {
+						t.Errorf("DescribePaths(%s) has a duplicate entry %q: %v", loc, p, got)
+					}
+					seen[p] = true
+				}
+
+				wantConfigPath, err := caps.MCPConfig(loc)
+				if err != nil {
+					t.Fatalf("MCPConfig(%s): %v", loc, err)
+				}
+				if detected := target.Detect(loc); detected.ConfigPath != wantConfigPath {
+					t.Errorf("Detect(%s).ConfigPath = %q, want %q", loc, detected.ConfigPath, wantConfigPath)
+				}
+			})
+		}
+	}
+
+	if leaves < 16 {
+		t.Fatalf("executed %d leaf subtests, want at least 16 (8 targets x 2 locations)", leaves)
+	}
+}
+
+// TestCapabilitiesMatchInstallWrites is the D-03 guard's other direction:
+// after a real Install call, every path the table declares (DescribePaths,
+// evaluated AFTER install so Antigravity's migration-aware resolution
+// reflects what Install just wrote) must appear among the files Install
+// reported, and every created/updated/unchanged file Install reported must
+// be declared — the sole named exception is Antigravity's ".migrated"
+// marker, which is migration bookkeeping, not configuration. Family (a2)
+// in 05-MUTATION-LOG.md proves this guard RED against a planted omission.
+func TestCapabilitiesMatchInstallWrites(t *testing.T) {
+	leaves := 0
+	for _, target := range AllTargets() {
+		for _, loc := range []Location{LocationGlobal, LocationLocal} {
+			target, loc := target, loc
+			if !target.Capabilities().Supports(loc) {
+				continue
+			}
+			t.Run(string(target.ID())+"/"+string(loc), func(t *testing.T) {
+				fakeHome(t)
+				t.Chdir(t.TempDir())
+				leaves++
+
+				result := target.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+				if len(result.Errors) != 0 {
+					t.Fatalf("Install(%s) returned errors: %v", loc, result.Errors)
+				}
+
+				declared := make(map[string]bool)
+				for _, p := range target.DescribePaths(loc) {
+					declared[p] = true
+				}
+
+				written := make(map[string]bool)
+				for _, fr := range result.Files {
+					switch fr.Action {
+					case ActionCreated, ActionUpdated, ActionUnchanged:
+						written[fr.Path] = true
+					}
+				}
+
+				for p := range declared {
+					if !written[p] {
+						t.Errorf("declared path %q was not among Install's created/updated/unchanged files: %v", p, result.Files)
+					}
+				}
+				for p := range written {
+					if declared[p] {
+						continue
+					}
+					// Antigravity's ".migrated" marker is migration
+					// bookkeeping, never configuration the table declares
+					// (D-02) — the sole named exception both directions of
+					// this guard exempt.
+					if target.ID() == Antigravity && filepath.Base(p) == ".migrated" {
+						continue
+					}
+					t.Errorf("Install wrote/kept %q, which the table does not declare: declared=%v", p, target.DescribePaths(loc))
+				}
+			})
+		}
+	}
+
+	if leaves < 13 {
+		t.Fatalf("executed %d leaf subtests, want at least 13 (5 global+local targets x 2, 3 global-only targets x 1)", leaves)
 	}
 }

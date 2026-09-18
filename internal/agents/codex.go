@@ -23,9 +23,13 @@ func init() {
 	registerTarget(codexTarget{})
 }
 
-func (codexTarget) ID() TargetID                       { return Codex }
-func (codexTarget) DisplayName() string                { return "Codex CLI" }
-func (codexTarget) SupportsLocation(loc Location) bool { return loc == LocationGlobal }
+func (codexTarget) ID() TargetID        { return Codex }
+func (codexTarget) DisplayName() string { return "Codex CLI" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t codexTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
 
 // Capabilities is Codex's capability table entry (D-01, D-02): global-only,
 // TOML config, no hooks, no skill directory. Phase 7 (CODEX-01..04) edits
@@ -73,19 +77,19 @@ func readFileOrEmpty(path string) string {
 	return string(data)
 }
 
-func (codexTarget) Detect(loc Location) DetectionResult {
-	if loc != LocationGlobal {
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t codexTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
 		return DetectionResult{}
 	}
-	configPath, err := codexConfigPath()
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
 	installed := fileExists(configPath)
 	if !installed {
-		if home, herr := os.UserHomeDir(); herr == nil {
-			installed = fileExists(filepath.Join(home, ".codex"))
-		}
+		installed = fileExists(filepath.Dir(configPath))
 	}
 	_, _, already := findTOMLTableRange(readFileOrEmpty(configPath), codexTOMLTable)
 	return DetectionResult{
@@ -162,16 +166,7 @@ func (codexTarget) Uninstall(loc Location) WriteResult {
 	return result
 }
 
-func (codexTarget) DescribePaths(loc Location) []string {
-	if loc != LocationGlobal {
-		return nil
-	}
-	var paths []string
-	if p, err := codexConfigPath(); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := codexInstructionsPath(); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t codexTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }
