@@ -32,10 +32,26 @@ func (claudeTarget) ID() TargetID                   { return Claude }
 func (claudeTarget) DisplayName() string            { return "Claude Code" }
 func (claudeTarget) SupportsLocation(Location) bool { return true }
 
-// Capabilities is Claude's capability table entry (D-01, D-02).
-// RED placeholder — TestCapabilitiesDeclared fills in the real
-// expectation; GREEN replaces this zero-value body.
-func (claudeTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is Claude's capability table entry (D-01, D-02): both
+// scopes, JSON config, a claude-json hooks mechanism (its files are
+// hardcoded in Capabilities.HookFiles), and the one target whose
+// SkillDirs is populated — the shared writer's skill package.
+func (claudeTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksClaudeJSON,
+		MCPConfig:    claudeConfigPath,
+		Instructions: claudeInstructionsPath,
+		SkillDirs: func(loc Location) ([]string, error) {
+			dir, err := claudeSkillDirPath(loc)
+			if err != nil {
+				return nil, err
+			}
+			return []string{dir}, nil
+		},
+	}
+}
 
 // fileExists reports whether path exists (any file type), swallowing stat
 // errors that indicate genuine absence — every per-agent Detect

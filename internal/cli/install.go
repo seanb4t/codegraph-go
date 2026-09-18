@@ -72,6 +72,23 @@ func newInstallCmd() *cobra.Command {
 				return fmt.Errorf("codegraph install: %w", err)
 			}
 
+			// D-04: --print-config-style is read-only and short-circuits
+			// BEFORE os.Executable() and the target-resolution switch below
+			// — it never opens the interactive picker and never writes a
+			// byte. It still honours -t/--target and -l/--location like
+			// every other branch, resolving "all" when --target was not
+			// explicitly changed on this invocation.
+			if printCfgStyle {
+				targets := agents.AllTargets()
+				if cmd.Flags().Changed("target") {
+					targets, err = agents.ResolveTargetFlag(target, loc)
+					if err != nil {
+						return fmt.Errorf("codegraph install: %w", err)
+					}
+				}
+				return printConfigStyle(cmd, targets, loc)
+			}
+
 			execPath, err := os.Executable()
 			if err != nil {
 				return fmt.Errorf("codegraph install: resolve running binary path: %w", err)
@@ -110,7 +127,6 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&autoAllow, "auto-allow", false, "also add mcp__codegraph__* to Claude Code's permissions.allow list")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (auto)")
 	cmd.Flags().BoolVar(&printCfgStyle, "print-config-style", false, "print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything")
-	_ = printCfgStyle // RED placeholder: no branch reads this flag yet — GREEN adds the read-only RunE branch.
 
 	return cmd
 }

@@ -26,9 +26,18 @@ func (antigravityTarget) SupportsLocation(loc Location) bool {
 	return loc == LocationGlobal
 }
 
-// Capabilities is Antigravity's capability table entry (D-01, D-02). RED
-// placeholder — GREEN replaces this zero-value body.
-func (antigravityTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is Antigravity's capability table entry (D-01, D-02):
+// global-only, JSON config, no hooks, no skill directory this plan. Its
+// instructions reach Antigravity only through Gemini's
+// ~/.gemini/GEMINI.md (D-06(c)) — it declares none of its own.
+func (antigravityTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksNone,
+		MCPConfig:    globalOnlyPath(antigravityConfigPath),
+	}
+}
 
 // antigravityUnifiedPath is the post-migration config location a current
 // Antigravity release reads/writes.
@@ -61,11 +70,18 @@ func antigravityMigratedMarker() (string, error) {
 	return filepath.Join(home, ".gemini", "config", ".migrated"), nil
 }
 
-// antigravityConfigPath resolves the config path Detect/Uninstall target:
-// the unified path once migration has happened (marker present or the
-// unified file already exists), else the legacy path.
+// antigravityConfigPath resolves the config path Detect/Uninstall/the
+// capability table target: the unified path once migration has happened
+// (marker present or the unified file already exists) OR on a machine with
+// NO Antigravity config at all (the table must print the path Install
+// actually writes on a fresh machine — D-02); the legacy path ONLY for an
+// unmigrated machine whose legacy file exists.
 func antigravityConfigPath() (string, error) {
 	unified, err := antigravityUnifiedPath()
+	if err != nil {
+		return "", err
+	}
+	legacy, err := antigravityLegacyPath()
 	if err != nil {
 		return "", err
 	}
@@ -73,10 +89,10 @@ func antigravityConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if fileExists(marker) || fileExists(unified) {
+	if fileExists(marker) || fileExists(unified) || !fileExists(legacy) {
 		return unified, nil
 	}
-	return antigravityLegacyPath()
+	return legacy, nil
 }
 
 // antigravityEntry builds the entry shape WITHOUT a "type" field

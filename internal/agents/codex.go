@@ -27,10 +27,18 @@ func (codexTarget) ID() TargetID                       { return Codex }
 func (codexTarget) DisplayName() string                { return "Codex CLI" }
 func (codexTarget) SupportsLocation(loc Location) bool { return loc == LocationGlobal }
 
-// Capabilities is Codex's capability table entry (D-01, D-02). RED
-// placeholder — GREEN replaces this zero-value body. Phase 7 (CODEX-01..04)
-// edits the GREEN literal to add per-project config, a skill, and hooks.
-func (codexTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is Codex's capability table entry (D-01, D-02): global-only,
+// TOML config, no hooks, no skill directory. Phase 7 (CODEX-01..04) edits
+// this literal to add per-project config, a skill, and hooks.
+func (codexTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal},
+		ConfigFormat: ConfigFormatTOML,
+		Hooks:        HooksNone,
+		MCPConfig:    globalOnlyPath(codexConfigPath),
+		Instructions: globalOnlyPath(codexInstructionsPath),
+	}
+}
 
 func codexConfigPath() (string, error) {
 	home, err := os.UserHomeDir()

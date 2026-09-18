@@ -24,9 +24,18 @@ func (cursorTarget) ID() TargetID                   { return Cursor }
 func (cursorTarget) DisplayName() string            { return "Cursor" }
 func (cursorTarget) SupportsLocation(Location) bool { return true }
 
-// Capabilities is Cursor's capability table entry (D-01, D-02). RED
-// placeholder — GREEN replaces this zero-value body.
-func (cursorTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is Cursor's capability table entry (D-01, D-02): both
+// scopes, JSON config, no hooks. Declares no instructions and no skill
+// directory — Cursor's legacy .cursor/rules/codegraph.mdc (pre-#529) is
+// actively self-heal-deleted on install, never (re)written.
+func (cursorTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksNone,
+		MCPConfig:    cursorConfigPath,
+	}
+}
 
 func cursorConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {

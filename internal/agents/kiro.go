@@ -26,9 +26,18 @@ func (kiroTarget) ID() TargetID                   { return Kiro }
 func (kiroTarget) DisplayName() string            { return "Kiro" }
 func (kiroTarget) SupportsLocation(Location) bool { return true }
 
-// Capabilities is Kiro's capability table entry (D-01, D-02). RED
-// placeholder — GREEN replaces this zero-value body.
-func (kiroTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is Kiro's capability table entry (D-01, D-02): both
+// scopes, JSON config, no hooks. "AGENTS.md retained as a steering
+// source" is Kiro reading files it already reads — no instructions write
+// (D-06(d)). No skill directory this plan.
+func (kiroTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksNone,
+		MCPConfig:    kiroConfigPath,
+	}
+}
 
 func kiroConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {

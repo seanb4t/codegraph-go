@@ -21,9 +21,17 @@ func (geminiTarget) ID() TargetID                   { return Gemini }
 func (geminiTarget) DisplayName() string            { return "Gemini CLI" }
 func (geminiTarget) SupportsLocation(Location) bool { return true }
 
-// Capabilities is Gemini's capability table entry (D-01, D-02). RED
-// placeholder — GREEN replaces this zero-value body.
-func (geminiTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is Gemini's capability table entry (D-01, D-02): both
+// scopes, JSON config, no hooks, no skill directory this plan.
+func (geminiTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksNone,
+		MCPConfig:    geminiConfigPath,
+		Instructions: geminiInstructionsPath,
+	}
+}
 
 func geminiConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {

@@ -33,9 +33,17 @@ func (opencodeTarget) ID() TargetID                   { return Opencode }
 func (opencodeTarget) DisplayName() string            { return "opencode" }
 func (opencodeTarget) SupportsLocation(Location) bool { return true }
 
-// Capabilities is opencode's capability table entry (D-01, D-02). RED
-// placeholder — GREEN replaces this zero-value body.
-func (opencodeTarget) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities is opencode's capability table entry (D-01, D-02): both
+// scopes, JSONC config, no hooks, no skill directory this plan.
+func (opencodeTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSONC,
+		Hooks:        HooksNone,
+		MCPConfig:    opencodeConfigPath,
+		Instructions: opencodeInstructionsPath,
+	}
+}
 
 // resolveOpencodeConfigDir returns the base config directory opencode
 // itself resolves to: XDG_CONFIG_HOME if set and non-empty, else
