@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 func TestAntigravity_ID(t *testing.T) {
@@ -192,5 +194,96 @@ func TestAntigravity_DescribePaths_GlobalOnly(t *testing.T) {
 	a := antigravityTarget{}
 	if paths := a.DescribePaths(LocationLocal); len(paths) != 0 {
 		t.Fatalf("DescribePaths(local) should be empty for a global-only target, got %v", paths)
+	}
+}
+
+// TestAntigravity_Install_WritesCliSkillDir (AGENT-07, D-06 corrections
+// (b)(c); [CITED: antigravity.google/docs/skills.md, fetched 2026-09-18]):
+// Antigravity installs the codegraph skill at the `agy` CLI's documented
+// global skill directory — index 0 of antigravitySkillDirs, the surface
+// 05-06's live session exercises — never the [ASSUMED] 2.0/IDE path, the
+// shared .agents/skills alias (workspace-scope only for Antigravity, which
+// this global-only target never writes), or a new AGENTS.md (D-06(c):
+// Antigravity's instructions arrive only via Gemini's own
+// ~/.gemini/GEMINI.md write).
+func TestAntigravity_Install_WritesCliSkillDir(t *testing.T) {
+	home := fakeHome(t)
+	a := antigravityTarget{}
+	a.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	cliDir := filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph")
+	skillPath := filepath.Join(cliDir, "SKILL.md")
+	want, err := claudeassets.SkillMarkdown()
+	if err != nil {
+		t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+	}
+	if got := readFile(t, skillPath); got != string(want) {
+		t.Fatalf("CLI skill SKILL.md at %s does not match the embed", skillPath)
+	}
+	m, present, err := readManifest(skillManifestPath(cliDir))
+	if err != nil || !present {
+		t.Fatalf("expected a manifest at %s (present=%v err=%v)", cliDir, present, err)
+	}
+	if len(m.Targets) != 1 || !containsTarget(m.Targets, Antigravity) {
+		t.Fatalf("manifest targets = %v, want exactly [antigravity]", m.Targets)
+	}
+
+	ideDir := filepath.Join(home, ".gemini", "config", "skills", "codegraph")
+	if fileExists(ideDir) {
+		t.Fatalf("antigravity must not write the [ASSUMED] 2.0/IDE skill path, found %s", ideDir)
+	}
+	if fileExists(filepath.Join(home, ".agents", "skills")) {
+		t.Fatalf("antigravity must not write under the shared .agents/skills alias")
+	}
+	if fileExists(filepath.Join(home, ".gemini", "AGENTS.md")) {
+		t.Fatalf("antigravity must not write a new AGENTS.md")
+	}
+
+	a.Uninstall(LocationGlobal)
+	if fileExists(skillPath) {
+		t.Fatalf("CLI SKILL.md not removed after uninstall")
+	}
+	if fileExists(skillManifestPath(cliDir)) {
+		t.Fatalf("CLI manifest not removed after uninstall")
+	}
+	if fileExists(cliDir) {
+		t.Fatalf("CLI skill dir not swept after uninstall")
+	}
+}
+
+// TestAntigravity_ReadOnlySkillDirDocumented (D-06(b)): the 2.0/IDE skill
+// path is documented via Capabilities().ReadOnlySkillDirs but never
+// written by Install — an [ASSUMED] read path with no live surface this
+// milestone's herdr-driven method can verify (it drives the CLI, not a
+// GUI IDE).
+func TestAntigravity_ReadOnlySkillDirDocumented(t *testing.T) {
+	home := fakeHome(t)
+	a := antigravityTarget{}
+	got, err := a.Capabilities().ReadOnlySkillDirs(LocationGlobal)
+	if err != nil {
+		t.Fatalf("ReadOnlySkillDirs: %v", err)
+	}
+	want := filepath.Join(home, ".gemini", "config", "skills", "codegraph")
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("ReadOnlySkillDirs(global) = %v, want [%s]", got, want)
+	}
+}
+
+// TestAntigravity_Local_WritesNothing (D-06): Antigravity is global-only;
+// Install(local) and Uninstall(local) must be complete no-ops, creating
+// nothing on disk.
+func TestAntigravity_Local_WritesNothing(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	a := antigravityTarget{}
+	installResult := a.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	if len(installResult.Files) != 0 || len(installResult.Errors) != 0 {
+		t.Fatalf("Install(local) = %+v, want empty", installResult)
+	}
+	uninstallResult := a.Uninstall(LocationLocal)
+	if len(uninstallResult.Files) != 0 || len(uninstallResult.Errors) != 0 {
+		t.Fatalf("Uninstall(local) = %+v, want empty", uninstallResult)
 	}
 }

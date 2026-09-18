@@ -70,6 +70,11 @@ func ownershipWantSkillDir(id TargetID, loc Location, home string) string {
 			return filepath.Join(".kiro", "skills", "codegraph")
 		}
 		return filepath.Join(home, ".kiro", "skills", "codegraph")
+	case Antigravity:
+		if loc == LocationLocal {
+			return ""
+		}
+		return filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph")
 	default:
 		return ""
 	}

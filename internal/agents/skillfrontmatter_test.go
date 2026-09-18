@@ -102,7 +102,7 @@ func TestSkillFrontmatterMatchesEveryWrittenDir(t *testing.T) {
 			}
 		}
 	}
-	if checked < 6 {
-		t.Fatalf("checked %d written skill dirs, want at least 6 (claude, cursor, opencode x 2 scopes) — the floor rises as 05-05 wires more", checked)
+	if checked < 11 {
+		t.Fatalf("checked %d written skill dirs, want at least 11 (claude, cursor, opencode, gemini, kiro x 2 scopes + antigravity x 1)", checked)
 	}
 }
