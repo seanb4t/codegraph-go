@@ -172,6 +172,32 @@ func absCwd(t *testing.T) (string, error) {
 	return filepath.Abs(".")
 }
 
+// TestInstallPrintConfigStyle_StyledStripsToPlain mirrors
+// TestInstall_StyledOutputStripsToPlain (install_test.go): `--color=always`
+// output contains an ESC byte and, SGR-stripped, equals the
+// `--color=never` output byte for byte (D-04).
+func TestInstallPrintConfigStyle_StyledStripsToPlain(t *testing.T) {
+	plainHome := fakeHome(t)
+	plain, _, err := execCmd("install", "--print-config-style", "--color=never")
+	if err != nil {
+		t.Fatalf("install --print-config-style --color=never: %v", err)
+	}
+	plainNorm := strings.ReplaceAll(plain, plainHome, "<HOME>")
+
+	styledHome := fakeHome(t)
+	styled, _, err := execCmd("install", "--print-config-style", "--color=always")
+	if err != nil {
+		t.Fatalf("install --print-config-style --color=always: %v", err)
+	}
+	if !strings.Contains(styled, "\x1b[") {
+		t.Fatalf("expected styled output to contain an ESC byte, got:\n%q", styled)
+	}
+	styledNorm := strings.ReplaceAll(stripInstallSGR(styled), styledHome, "<HOME>")
+	if styledNorm != plainNorm {
+		t.Fatalf("stripped+normalized styled output does not equal plain:\nplain:  %q\nstyled: %q", plainNorm, styledNorm)
+	}
+}
+
 // TestInstallPrintConfigStyle_Filters asserts --print-config-style honours
 // -t/--target and -l/--location exactly like the rest of install: a
 // two-id CSV at local prints exactly those two lines (one of them

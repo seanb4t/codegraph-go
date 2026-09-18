@@ -208,9 +208,10 @@ func runServeMCPStderrOnce(t *testing.T) string {
 // lifecycle/agent/one-line verbs D-16 also names (version, telemetry,
 // init, index --force, sync, uninit --force, githooks install/status/
 // remove, install, uninstall, daemon list/stop/unlock, upgrade, ui,
-// serve --mcp) — 29 cases in total, above the >= 28 floor TestPlainGolden
-// asserts (D-16's own enumeration counts to 29; the floor is a minimum,
-// not an exact count, so the extra case is not a discrepancy).
+// serve --mcp) plus 05-01's read-only --print-config-style pair
+// (print-config-style, print-config-style-local) — 31 cases in total,
+// above the >= 28 floor TestPlainGolden asserts (D-16's own enumeration
+// counted to 29; the two added cases are not a discrepancy).
 func plainCases(_ *testing.T) []plainCase {
 	return []plainCase{
 		{name: "status", setup: func(t *testing.T) plainRun {
@@ -352,6 +353,27 @@ func plainCases(_ *testing.T) []plainCase {
 			}
 			return plainRun{
 				args: []string{"uninstall", "--target", "claude", "--location", "local"},
+				normalize: composeNormalize(
+					normalizeDir(home, "<HOME>"),
+					normalizeDir(project, "<PROJECT>"),
+				),
+			}
+		}},
+		{name: "print-config-style", setup: func(t *testing.T) plainRun {
+			home := fakeHome(t)
+			return plainRun{
+				args:      []string{"install", "--print-config-style"},
+				normalize: normalizeDir(home, "<HOME>"),
+			}
+		}},
+		{name: "print-config-style-local", setup: func(t *testing.T) plainRun {
+			home := fakeHome(t)
+			project, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("Getwd: %v", err)
+			}
+			return plainRun{
+				args: []string{"install", "--print-config-style", "--location", "local"},
 				normalize: composeNormalize(
 					normalizeDir(home, "<HOME>"),
 					normalizeDir(project, "<PROJECT>"),

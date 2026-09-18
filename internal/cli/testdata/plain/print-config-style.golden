@@ -1,0 +1,8 @@
+antigravity: scopes=global mcp=<HOME>/.gemini/config/mcp_config.json format=json instructions=none skill=none hooks=none
+claude: scopes=global,local mcp=<HOME>/.claude.json format=json instructions=<HOME>/.claude/CLAUDE.md skill=<HOME>/.claude/skills/codegraph hooks=claude-json
+codex: scopes=global mcp=<HOME>/.codex/config.toml format=toml instructions=<HOME>/.codex/AGENTS.md skill=none hooks=none
+cursor: scopes=global,local mcp=<HOME>/.cursor/mcp.json format=json instructions=none skill=none hooks=none
+gemini: scopes=global,local mcp=<HOME>/.gemini/settings.json format=json instructions=<HOME>/.gemini/GEMINI.md skill=none hooks=none
+hermes: scopes=global mcp=<HOME>/.hermes/config.yaml format=yaml instructions=none skill=none hooks=none
+kiro: scopes=global,local mcp=<HOME>/.kiro/settings/mcp.json format=json instructions=none skill=none hooks=none
+opencode: scopes=global,local mcp=<HOME>/.config/opencode/opencode.jsonc format=jsonc instructions=<HOME>/.config/opencode/AGENTS.md skill=none hooks=none

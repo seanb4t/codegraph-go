@@ -2,11 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 )
 
 // scopesCSV renders caps' declared Scopes as a comma-separated list in the
@@ -69,20 +71,40 @@ func configStyleFields(t agents.AgentTarget, loc agents.Location) (string, error
 // printConfigStyle renders every target in targets at loc, one line per
 // target, in the order given — the read-only body of `install
 // --print-config-style` (D-04). Zero targets prints "no agents selected".
-// Plain rendering only; Task 3 adds the styled branch behind
-// resolveColor(cmd).
+// Resolves the shared color mode exactly once, mirroring printAgentResults'
+// styled/plain split: styled renders each line via present.KV through
+// Phase 4's palette; plain (the default, and always on a non-TTY pipe)
+// prints the identical bytes with no ANSI at all.
 func printConfigStyle(cmd *cobra.Command, targets []agents.AgentTarget, loc agents.Location) error {
 	out := cmd.OutOrStdout()
+	mode := resolveColor(cmd)
 
 	if len(targets) == 0 {
+		if mode.Styled {
+			pal := present.NewPalette(mode.Dark)
+			return present.Line(mode.Writer(out), pal, present.RoleLabel, "no agents selected")
+		}
 		fmt.Fprintln(out, "no agents selected")
 		return nil
+	}
+
+	var pal present.Palette
+	var w io.Writer
+	if mode.Styled {
+		pal = present.NewPalette(mode.Dark)
+		w = mode.Writer(out)
 	}
 
 	for _, t := range targets {
 		fields, err := configStyleFields(t, loc)
 		if err != nil {
 			return fmt.Errorf("codegraph install: %w", err)
+		}
+		if mode.Styled {
+			if err := present.KV(w, pal, string(t.ID())+":", fields); err != nil {
+				return err
+			}
+			continue
 		}
 		fmt.Fprintf(out, "%s: %s\n", t.ID(), fields)
 	}

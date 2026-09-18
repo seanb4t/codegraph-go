@@ -64,7 +64,8 @@ func newInstallCmd() *cobra.Command {
 		Example: "  codegraph install\n" +
 			"  codegraph install --target all --location global\n" +
 			"  codegraph install --target claude,cursor\n" +
-			"  codegraph install --target none",
+			"  codegraph install --target none\n" +
+			"  codegraph install --print-config-style --location local",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loc, err := parseLocationFlag(location)

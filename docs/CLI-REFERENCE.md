@@ -709,16 +709,18 @@ codegraph install [flags]
   codegraph install --target all --location global
   codegraph install --target claude,cursor
   codegraph install --target none
+  codegraph install --print-config-style --location local
 ```
 
 ### Options
 
 ```
-      --auto-allow        also add mcp__codegraph__* to Claude Code's permissions.allow list
-  -h, --help              help for install
-  -l, --location string   config scope: global|local (default "global")
-  -t, --target string     which agents to configure: auto|all|none|<comma-separated ids> (default "auto")
-  -y, --yes               skip the interactive picker; use the non-interactive default set (auto)
+      --auto-allow           also add mcp__codegraph__* to Claude Code's permissions.allow list
+  -h, --help                 help for install
+  -l, --location string      config scope: global|local (default "global")
+      --print-config-style   print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything
+  -t, --target string        which agents to configure: auto|all|none|<comma-separated ids> (default "auto")
+  -y, --yes                  skip the interactive picker; use the non-interactive default set (auto)
 ```
 
 ### Options inherited from parent commands
