@@ -601,3 +601,205 @@ D-17 skill description as listed: "Use when asked where X is defined, how Y work
 Hooks.json runs behind features.hooks: yes (B5: marker 1->2 with hooks on, 1->1 with -c features.hooks=false; `hooks stable true` in features list)
 PreToolUse stdin fields (main thread): cwd, hook_event_name, model, permission_mode, session_id, tool_input, tool_name, tool_use_id, transcript_path, turn_id; tool_name "Bash"; tool_input.command is a string; no agent_id/agent_type on the main thread (B5)
 CODEX-01 verdict: PASS
+
+## CODEX-05 and CODEX-06 (after the scope flip and the nudge)
+
+### Method
+
+Per D-02/D-04, this evidence is gathered by the **orchestrator**, never by an executor
+subagent — a backgrounded subagent cannot reliably drive another pane's TTY (the 05-06/06-06
+precedent, carried into CODEX-01 above). Task 1 (this section's scaffold) is executor work: it
+builds the scratch, runs the real HEAD-binary installs, plants the A4/D-23 probe, and writes the
+16-line PENDING skeleton below — nothing here is a live-session claim yet. Tasks 2 and 3 are
+ORCHESTRATOR work in a sibling Herdr pane against a real Codex TUI plus scripted `codex exec
+--json -C <repo>` runs, all under the scratch environment `HOME=$S2/home CODEX_HOME=$S2/home/.codex`
+(plus `XDG_CONFIG_HOME=$S2/home/.config` for codegraph runs).
+
+Evidence is the session JSONL under `$S2/home/.codex/sessions/YYYY/MM/DD/*.jsonl` — never the
+model's own paraphrase of what it saw. Fire counting for L6 searches each session's JSONL for the
+pinned nudge substring `returns the matching symbols' source and call paths`
+(`additionalContext` delivery), with a positive control (the first expected fire) always shown
+before any zero-count claim. A4's evidence is the probe's captured **raw PreToolUse stdin**
+(`$S2/probes/a4-*.json`), not the model's report of it. Any hook error or block found in a
+session's JSONL or the TUI output is attributed to a specific hook by its exact `command` string
+in that repo's `hooks.json` — never assumed to be codegraph's guard without that match.
+
+**Negative-space rule (STATE standing rule, carried from CODEX-01).** A transcript or listing grep
+is a claim about the grep. Every absence claim (0 fires, no hook error, untrusted-hook-skipped)
+must be backed by a search first shown to FIND the thing when present in a positive-control case.
+
+**Never patch on a FAIL.** Per this plan's prohibitions, a FAIL or an A4 `no`/`not observed` is
+recorded and escalated as `Maintainer decision: …`, never silently worked around.
+
+### Pre-flight
+
+Recorded 2026-09-19 (read-only; nothing under the real `$HOME` written — the only real-HOME
+operations are the four `shasum -a 256` lines below):
+
+```
+$ codex --version
+codex-cli 0.155.0
+
+$ shasum -a 256 ~/.codex/config.toml
+b4077b8a786230575935c44cfa85c17da7ca2bf3f1386675c8c6b22d322dbb17  /Users/sean/.codex/config.toml
+
+$ shasum -a 256 ~/.codex/hooks.json
+e0ad2381a6b1bf7933438d7946914737be14ca398ae41090298183c21fb49a99  /Users/sean/.codex/hooks.json
+
+$ shasum -a 256 ~/.codex/AGENTS.md
+54e268bda66adfb9c0d17a0eb73235a452f390b68d83ba1eea1dceada5379982  /Users/sean/.codex/AGENTS.md
+
+$ shasum -a 256 ~/.agents/skills/codegraph/SKILL.md
+e711379d68094bffbd5d997cccd172bb43ec3c8fa9276e06c67a59b4ce647644  /Users/sean/.agents/skills/codegraph/SKILL.md
+```
+
+All four values are identical to the CODEX-01 pre-flight record above — nothing under the real
+`$HOME` changed between plans.
+
+```
+$ echo "$TMPDIR"
+/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/
+
+$ id -u
+501
+```
+
+tmux: not installed — local tmux evidence skipped by maintainer decision 2026-09-19 (#75). The
+`Picker tmux re-run after flip` line below is left `PENDING` for the orchestrator to fill with the
+not-run decision; follow-up tracked as GitHub issue #75.
+
+### Scaffold
+
+Built under `$S2=$(cd /tmp && pwd -P)/07-live2` (the real, non-symlinked `/private/tmp/07-live2`
+on this macOS host). Nothing under the real `$HOME` was written.
+
+```bash
+S2=$(cd /tmp && pwd -P)/07-live2
+rm -rf "$S2"; mkdir -p "$S2/home/.codex" "$S2/probes" "$S2/transcripts"
+GOTOOLCHAIN=go1.26.6 go build -o "$S2/codegraph" ./cmd/codegraph
+ln -s "$HOME/.codex/auth.json" "$S2/home/.codex/auth.json"   # symlink, never a copy (D-02)
+
+for n in indexed unindexed bare; do
+  mkdir -p "$S2/$n"
+  cp -R internal/indexer/testdata/gofixture/. "$S2/$n/"
+  git -C "$S2/$n" init -q
+done
+CODEGRAPH_NO_WATCH=1 "$S2/codegraph" init "$S2/indexed"   # files=4 nodes=20 edges=22
+
+for n in indexed unindexed; do
+  (cd "$S2/$n" && HOME="$S2/home" CODEX_HOME="$S2/home/.codex" XDG_CONFIG_HOME="$S2/home/.config" \
+    "$S2/codegraph" install --target codex --location local --pretool-nudge --yes)
+  # created: .codex/config.toml, AGENTS.md, .agents/skills/codegraph/SKILL.md,
+  #          .agents/skills/codegraph/.codegraph-manifest.json,
+  #          .codex/hooks/codegraph-pretooluse.sh, .codex/hooks.json
+  # note: Codex loads this project's MCP server only once trusted …
+  # note: Codex skips a new or changed hook until you trust it — open /hooks …
+done
+
+(cd "$S2/bare" && HOME="$S2/home" CODEX_HOME="$S2/home/.codex" XDG_CONFIG_HOME="$S2/home/.config" \
+  "$S2/codegraph" install --target codex --location global --yes)
+# created: $S2/home/.codex/config.toml, $S2/home/.codex/AGENTS.md,
+#          $S2/home/.agents/skills/codegraph/SKILL.md, .codegraph-manifest.json
+# (no nudge requested globally — no $S2/home/.codex/hooks.json written)
+
+# A4/D-23 probe, appended LAST via jq, after codegraph's own group:
+cat > "$S2/probes/a4-probe.sh" <<'SH'
+#!/bin/sh
+cat > "$S2/probes/a4-$(date +%s)-$$.json"
+exit 0
+SH
+chmod 0755 "$S2/probes/a4-probe.sh"
+for n in indexed unindexed; do
+  jq --arg cmd "'$S2/probes/a4-probe.sh'" \
+    '.hooks.PreToolUse += [{"matcher":"^Bash$","hooks":[{"type":"command","command":$cmd,"timeout":5}]}]' \
+    "$S2/$n/.codex/hooks.json" > "$S2/$n/.codex/hooks.json.tmp" && mv "$S2/$n/.codex/hooks.json.tmp" "$S2/$n/.codex/hooks.json"
+done
+```
+
+Positive assertions (verified by this plan's own `<verify>` gate, re-stated here):
+
+```
+-rwxr-xr-x  $S2/codegraph
+lrwxr-xr-x  $S2/home/.codex/auth.json -> /Users/sean/.codex/auth.json
+$S2/indexed/.codegraph:    dir (indexed, files=4 nodes=20 edges=22)
+$S2/unindexed/.codegraph:  absent
+$S2/bare/.codegraph:       absent
+$S2/bare/.codex:           absent
+$S2/indexed/.codex/hooks/codegraph-pretooluse.sh    present, mode 0755, codegraph_bin='/private/tmp/07-live2/codegraph'
+$S2/unindexed/.codex/hooks/codegraph-pretooluse.sh  present, mode 0755, codegraph_bin='/private/tmp/07-live2/codegraph'
+$S2/indexed/.codex/hooks.json    .hooks.PreToolUse[0] = codegraph group (command == "$(git rev-parse --show-toplevel)/.codex/hooks/codegraph-pretooluse.sh")
+$S2/indexed/.codex/hooks.json    .hooks.PreToolUse[1] = probe group (command matches a4-probe\.sh), length == 2
+$S2/unindexed/.codex/hooks.json  same two-group shape (codegraph first, probe last)
+$S2/home/.codex/config.toml      exactly 1 [mcp_servers.codegraph] table
+$S2/home/.codex/hooks.json       absent (no global nudge requested)
+$S2/indexed/AGENTS.md             contains <!-- CODEGRAPH_START --> (1 match)
+$S2/indexed/.agents/skills/codegraph/SKILL.md   present
+```
+
+### Protocol L1/L5 (Task 2) — ORCHESTRATOR
+
+1. Clear stale sentinels: `rm -rf "${TMPDIR}/codegraph-nudge-$(id -u)"`.
+2. Start the Codex TUI in a sibling Herdr pane in `$S2/indexed`; accept the folder trust prompt;
+   DO NOT open `/hooks` yet; quit. Same for `$S2/unindexed`.
+3. Untrusted-hook check: `codex exec --json -C "$S2/indexed" 'Run exactly this shell command and
+   nothing else: rg -n Alpha .'` → record whether the pinned nudge substring appears in that
+   session's JSONL and whether any `$S2/probes/a4-*.json` was written for the turn (the probe is
+   the positive control that would show a hook ran even though it isn't trusted yet).
+4. Reopen the TUI in each repo, run `/hooks`, trust codegraph's group and the probe group.
+5. L1 post-flip: `codex mcp list --json` in `$S2/bare` (global layer only) and in `$S2/indexed`
+   (project layer, trusted); confirm `[mcp_servers.codegraph]` in both `$S2/home/.codex/config.toml`
+   and `$S2/indexed/.codex/config.toml`.
+6. L5: `codex exec --json -C "$S2/indexed" 'Where is the function Alpha defined in this
+   repository, and what calls it? Give file:line references.'` (never names codegraph). From the
+   session JSONL: confirm the injected skill list includes `codegraph` and the agent made a call
+   to the codegraph MCP server's tool or ran `codegraph explore`.
+7. Record negative space (every grep/rg/find the L5 session ran) and uptake (what the agent did
+   first, whether a nudge fire preceded the codegraph call).
+
+### Protocol L6/A4/D-23/uninstall/tmux (Task 3) — ORCHESTRATOR
+
+1. L6 in ONE session (the Herdr TUI in `$S2/indexed`): `rg -n Alpha .` (expect one fire),
+   immediately `grep -rn Beta .` (expect none), after at least 65 s `find . -name '*.go'` (expect
+   one fire). Fill the Fire log table. Un-indexed control in `$S2/unindexed` (`rg -n Alpha .`):
+   expect 0 fires while a new `$S2/probes/a4-*.json` proves the hooks ran. Search both JSONLs and
+   the TUI output for a hook error or block attributable to `codegraph-pretooluse.sh`.
+2. A4: `Use a subagent to run exactly this shell command and report its output: rg -n Gamma .` in
+   the indexed TUI; inspect the probe's raw stdin files for the subagent's call.
+3. D-23: `codegraph install --target codex --location local --pretool-nudge=false --yes` in
+   `$S2/indexed` (the probe group becomes first); reopen `/hooks` and record whether later foreign
+   hooks are re-flagged.
+4. Uninstall: `codegraph uninstall --target codex --location local --yes` in `$S2/indexed` and
+   `--location global`; confirm the scratch repo is left clean (probe group intact).
+5. `GOTOOLCHAIN=go1.26.6 task test:tmux` at HEAD — **SKIPPED by maintainer decision 2026-09-19
+   (#75):** tmux is retired on this machine (replaced by herdr); local tmux evidence for FIX-03 is
+   deliberately not gathered here. The orchestrator records the not-run decision on the `Picker
+   tmux re-run after flip` line rather than a PASS/FAIL, with follow-up tracked as GitHub issue
+   #75.
+6. L7: re-run the four `shasum -a 256` lines against the real `$HOME`.
+7. Write `CODEX-05 live verdict` and `CODEX-06 verdict` per the locked pass bar (D-06), or FAIL
+   plus `Maintainer decision: …`.
+
+### Fire log
+
+| key | fire timestamps | gaps |
+|-----|------------------|------|
+| _(empty — filled by Task 2/3)_ | | |
+
+### CODEX-05/06 verdicts
+
+L1 post-flip both scopes (codegraph-installed): PENDING
+L5 fresh session reaches for codegraph unprompted: PENDING
+L6 nudge fires once then cools down; un-indexed 0 fires: PENDING
+L7 real HOME unchanged (CODEX-05/06): PENDING
+Untrusted hook skipped before /hooks trust: PENDING
+A4 PreToolUse stdin carries a subagent id: PENDING
+tool_input.command type: PENDING
+D-23 removing our group re-flags later foreign hooks: PENDING
+Negative space (grep/rg/find runs in the L5 session): PENDING
+Matched Bash search calls: PENDING
+Fires: PENDING
+Uptake: PENDING
+Uninstall leaves the scratch repo clean: PENDING
+Picker tmux re-run after flip: PENDING
+CODEX-05 live verdict: PENDING
+CODEX-06 verdict: PENDING
