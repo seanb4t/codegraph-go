@@ -1,0 +1,29 @@
+model = "gpt-test"
+approval_policy = "on-request"
+
+[features]
+hooks = true
+
+  [mcp_servers.alpha]
+  command = "/usr/bin/alpha"
+  args = ["a"]
+
+  [mcp_servers.context7]
+  command = "/usr/bin/context7"
+  startup_timeout_ms = 5000
+  args = [
+    "--flag-one",
+    "--flag-two",
+    "--flag-three",
+    "--flag-four",
+  ]
+
+  # engram: local memory
+  [mcp_servers.engram]
+  command = "/usr/bin/engram"
+  startup_timeout_ms = 3000
+  env = { MEMORY_DIR = "/tmp/m" }
+
+# memories
+[memories]
+enabled = true

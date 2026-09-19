@@ -1,6 +1,23 @@
 package agents
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// readTestdata reads a fixture file from internal/agents/testdata/toml,
+// failing the test on error.
+func readTestdata(t *testing.T, name string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join("testdata", "toml", name))
+	if err != nil {
+		t.Fatalf("readTestdata(%s): %v", name, err)
+	}
+	return string(data)
+}
 
 const tomlUnrelatedTable = `[some_other_table]
 key = "value"
@@ -77,6 +94,77 @@ func TestStripTOMLTable_MissingTableIsNoOp(t *testing.T) {
 	got := stripTOMLTable(tomlUnrelatedTable, "mcp_servers.codegraph")
 	if got != tomlUnrelatedTable {
 		t.Fatalf("stripTOMLTable on absent table should be a no-op:\ngot=%q\nwant=%q", got, tomlUnrelatedTable)
+	}
+}
+
+// D-07: the maintainer's real ~/.codex/config.toml has [mcp_servers.codegraph]
+// at 2-space indent with the next column-0 header ([memories]) far below —
+// the released-binary data-loss shape (07-CONTEXT.md, blocking finding).
+// codex-indented-layout.toml mirrors that shape synthetically; it is never
+// derived from the real file.
+
+func TestFindTOMLTableRange_MaintainerIndentedLayout(t *testing.T) {
+	content := readTestdata(t, "codex-indented-layout.toml")
+
+	start, end, found := findTOMLTableRange(content, "mcp_servers.codegraph")
+	if !found {
+		t.Fatalf("findTOMLTableRange: found = false, want true")
+	}
+
+	wantHeaderLine := "  [mcp_servers.codegraph]\n"
+	if got := content[start:]; !strings.HasPrefix(got, wantHeaderLine) {
+		t.Fatalf("content[start:] does not start with the indented header line:\ngot=%q\nwant prefix=%q", got, wantHeaderLine)
+	}
+
+	after := content[end:]
+	wantAfterPrefix := "\n  [mcp_servers.context7]"
+	if !strings.HasPrefix(after, wantAfterPrefix) {
+		t.Fatalf("content[end:] = %q, want to begin with %q (the blank line before the next indented sibling header, never [memories])", after, wantAfterPrefix)
+	}
+}
+
+func TestSpliceTOMLTable_MaintainerIndentedLayout(t *testing.T) {
+	input := readTestdata(t, "codex-indented-layout.toml")
+	want := readTestdata(t, "codex-indented-layout.installed.toml")
+
+	got := spliceTOMLTable(input, "mcp_servers.codegraph", codexBody())
+	if got != want {
+		t.Fatalf("spliceTOMLTable maintainer-layout mismatch:\ngot=%q\nwant=%q", got, want)
+	}
+}
+
+func TestStripTOMLTable_MaintainerIndentedLayout(t *testing.T) {
+	installed := readTestdata(t, "codex-indented-layout.installed.toml")
+	want := readTestdata(t, "codex-indented-layout.uninstalled.toml")
+
+	got := stripTOMLTable(installed, "mcp_servers.codegraph")
+	if got != want {
+		t.Fatalf("stripTOMLTable maintainer-layout mismatch:\ngot=%q\nwant=%q", got, want)
+	}
+}
+
+func TestCodexGlobal_MaintainerIndentedLayoutRoundTrip(t *testing.T) {
+	home := fakeHome(t)
+	input := readTestdata(t, "codex-indented-layout.toml")
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	writeFile(t, configPath, input)
+
+	installed := readTestdata(t, "codex-indented-layout.installed.toml")
+	installResult := codexTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	if len(installResult.Errors) != 0 {
+		t.Fatalf("Install errors: %v", installResult.Errors)
+	}
+	if got := readFile(t, configPath); got != installed {
+		t.Fatalf("post-install config.toml mismatch:\ngot=%q\nwant=%q", got, installed)
+	}
+
+	uninstalled := readTestdata(t, "codex-indented-layout.uninstalled.toml")
+	uninstallResult := codexTarget{}.Uninstall(LocationGlobal)
+	if len(uninstallResult.Errors) != 0 {
+		t.Fatalf("Uninstall errors: %v", uninstallResult.Errors)
+	}
+	if got := readFile(t, configPath); got != uninstalled {
+		t.Fatalf("post-uninstall config.toml mismatch:\ngot=%q\nwant=%q", got, uninstalled)
 	}
 }
 
