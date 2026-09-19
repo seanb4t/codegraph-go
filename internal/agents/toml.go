@@ -1,6 +1,20 @@
 package agents
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
+
+// errTOMLTableConflict is wrapped by tomlTableConflict's returned error
+// whenever content already defines tableName in a shape
+// spliceTOMLTable/stripTOMLTable cannot safely edit (D-07).
+var errTOMLTableConflict = errors.New("codegraph's TOML table conflicts with an existing entry")
+
+// tomlTableConflict is a RED-phase stub (Task 2 of 07-01) — the real
+// conflict scan lands in the matching fix(07-01) commit.
+func tomlTableConflict(content, tableName string) error {
+	return nil
+}
 
 // spliceTOMLTable and stripTOMLTable are a hand-rolled, ~100-line TOML
 // single-table-block editor that uses the same per-agent TOML-splicing
