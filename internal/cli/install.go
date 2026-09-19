@@ -59,8 +59,13 @@ func newInstallCmd() *cobra.Command {
 		Long: "Detect and configure the agent roster (Claude Code, Cursor, Codex CLI,\n" +
 			"opencode, Gemini CLI, Antigravity, Hermes, Kiro): write each agent's MCP\n" +
 			"server entry plus, for the agents that support it, a short marker-fenced\n" +
-			"instruction block. Idempotent — re-running install is a no-op when\n" +
-			"nothing changed.",
+			"instruction block. Install also writes the codegraph skill package\n" +
+			"(SKILL.md plus a sidecar manifest) into the skill directory each agent\n" +
+			"reads; a directory shared by several agents holds one package they own\n" +
+			"jointly, and a codegraph/ skill directory codegraph did not write is\n" +
+			"left untouched. --print-config-style prints what each agent receives\n" +
+			"without writing anything. Idempotent — re-running install is a no-op\n" +
+			"when nothing changed.",
 		Example: "  codegraph install\n" +
 			"  codegraph install --target all --location global\n" +
 			"  codegraph install --target claude,cursor\n" +

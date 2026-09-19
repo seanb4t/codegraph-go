@@ -695,8 +695,13 @@ Configure coding agents to use this codegraph binary as their MCP server
 Detect and configure the agent roster (Claude Code, Cursor, Codex CLI,
 opencode, Gemini CLI, Antigravity, Hermes, Kiro): write each agent's MCP
 server entry plus, for the agents that support it, a short marker-fenced
-instruction block. Idempotent — re-running install is a no-op when
-nothing changed.
+instruction block. Install also writes the codegraph skill package
+(SKILL.md plus a sidecar manifest) into the skill directory each agent
+reads; a directory shared by several agents holds one package they own
+jointly, and a codegraph/ skill directory codegraph did not write is
+left untouched. --print-config-style prints what each agent receives
+without writing anything. Idempotent — re-running install is a no-op
+when nothing changed.
 
 ```
 codegraph install [flags]
@@ -1002,7 +1007,10 @@ Remove codegraph's configuration from coding agents
 Reverse everything `codegraph install` wrote for the selected agents —
 the MCP server entry and, where present, the marker-fenced instruction
 block — while preserving every unrelated key, entry, and section in
-every file it touches. Reports removed / not-configured / unsupported
+every file it touches. It removes codegraph's skill package too; a
+shared skill directory's package is deleted only when no other agent
+that installed it remains, and a skill directory codegraph did not
+write is never touched. Reports removed / not-configured / unsupported
 per agent and never errors on an agent that was never installed.
 
 ```

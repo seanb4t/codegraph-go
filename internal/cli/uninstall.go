@@ -29,7 +29,10 @@ func newUninstallCmd() *cobra.Command {
 		Long: "Reverse everything `codegraph install` wrote for the selected agents —\n" +
 			"the MCP server entry and, where present, the marker-fenced instruction\n" +
 			"block — while preserving every unrelated key, entry, and section in\n" +
-			"every file it touches. Reports removed / not-configured / unsupported\n" +
+			"every file it touches. It removes codegraph's skill package too; a\n" +
+			"shared skill directory's package is deleted only when no other agent\n" +
+			"that installed it remains, and a skill directory codegraph did not\n" +
+			"write is never touched. Reports removed / not-configured / unsupported\n" +
 			"per agent and never errors on an agent that was never installed.",
 		Example: "  codegraph uninstall\n" +
 			"  codegraph uninstall --target all --location global\n" +
