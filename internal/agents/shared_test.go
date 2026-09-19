@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -677,4 +678,131 @@ func TestBlockOwnsAnyCommand(t *testing.T) {
 			t.Fatal("expected ownership to be determined by command identity alone, ignoring matcher/if")
 		}
 	})
+}
+
+// --- writeHookEntry (WR-01, 07-REVIEW.md: updating an owned block must
+// preserve its original array position, never reposition a foreign block
+// that follows it) ---
+
+// hookEventFromFile decodes path's hooks.<event> array for assertions.
+func hookEventFromFile(t *testing.T, path, event string) []any {
+	t.Helper()
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, path)), &decoded); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	hooks, ok := decoded["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s: hooks missing: %#v", path, decoded)
+	}
+	events, ok := hooks[event].([]any)
+	if !ok {
+		t.Fatalf("%s: hooks.%s is not an array: %#v", path, event, hooks[event])
+	}
+	return events
+}
+
+// blockCommand returns the sole handler's "command" field of a hooks.json
+// block, for assertions on block identity/order.
+func blockCommand(t *testing.T, block any) string {
+	t.Helper()
+	obj, ok := block.(map[string]any)
+	if !ok {
+		t.Fatalf("block is not an object: %#v", block)
+	}
+	handlers, ok := obj["hooks"].([]any)
+	if !ok || len(handlers) == 0 {
+		t.Fatalf("block has no hooks[]: %#v", block)
+	}
+	handler, ok := handlers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("handler is not an object: %#v", handlers[0])
+	}
+	cmd, _ := handler["command"].(string)
+	return cmd
+}
+
+// TestWriteHookEntry_UpdatePreservesForeignBlockPosition pins the exact
+// regression 07-REVIEW.md WR-01 verified live (07-LIVE-SESSIONS.md T3):
+// updating codegraph's own PreToolUse block in place must never reposition
+// a foreign block that already follows it, since Codex's hook trust is
+// keyed on array position (<path>:pre_tool_use:<groupIdx>:<handlerIdx>). A
+// naive rebuild that always appends the owned blocks last would swap the
+// two blocks' indices even though the foreign block's own bytes never
+// changed, spuriously re-flagging it for review.
+func TestWriteHookEntry_UpdatePreservesForeignBlockPosition(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hooks.json")
+	writeFile(t, path, `{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "codegraph hook pretooluse", "timeout": 5}]},
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "/foreign/hook.sh"}]}
+    ]
+  }
+}
+`)
+
+	newOwn := []any{
+		map[string]any{
+			"matcher": "Bash",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse", "timeout": float64(10)},
+			},
+		},
+	}
+	if _, err := writeHookEntry(path, "PreToolUse", newOwn, []string{"codegraph hook pretooluse"}); err != nil {
+		t.Fatalf("writeHookEntry: %v", err)
+	}
+
+	events := hookEventFromFile(t, path, "PreToolUse")
+	if len(events) != 2 {
+		t.Fatalf("want 2 PreToolUse blocks, got %d: %#v", len(events), events)
+	}
+	if got := blockCommand(t, events[0]); got != "codegraph hook pretooluse" {
+		t.Fatalf("expected codegraph's own (updated) block to stay at index 0, got command %q: %#v", got, events)
+	}
+	if got := blockCommand(t, events[1]); got != "/foreign/hook.sh" {
+		t.Fatalf("foreign block must stay at index 1 (its original position) across an update to codegraph's own block, got command %q: %#v", got, events)
+	}
+}
+
+// TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks is the control
+// alongside the fix above: D-23's "codegraph's group is appended last on
+// first install" guarantee must still hold when there is no prior owned
+// block to preserve the position of.
+func TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hooks.json")
+	writeFile(t, path, `{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "/foreign/hook.sh"}]}
+    ]
+  }
+}
+`)
+
+	newOwn := []any{
+		map[string]any{
+			"matcher": "Bash",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse"},
+			},
+		},
+	}
+	if _, err := writeHookEntry(path, "PreToolUse", newOwn, []string{"codegraph hook pretooluse"}); err != nil {
+		t.Fatalf("writeHookEntry: %v", err)
+	}
+
+	events := hookEventFromFile(t, path, "PreToolUse")
+	if len(events) != 2 {
+		t.Fatalf("want 2 PreToolUse blocks, got %d: %#v", len(events), events)
+	}
+	if got := blockCommand(t, events[0]); got != "/foreign/hook.sh" {
+		t.Fatalf("D-23: a first install must leave existing foreign blocks before codegraph's new group, got %q at index 0", got)
+	}
+	if got := blockCommand(t, events[1]); got != "codegraph hook pretooluse" {
+		t.Fatalf("D-23: codegraph's own new group must be appended last on first install, got %q at index 1", got)
+	}
 }
