@@ -59,7 +59,11 @@ func spliceTOMLTable(content, tableName string, bodyLines []string) string {
 // exact pre-splice bytes when applied after spliceTOMLTable (D-07/D-08). A
 // missing table is a no-op — content is returned unchanged. CRLF content
 // stays CRLF (tomlLineEnding). A conflicting definition of tableName
-// (tomlTableConflict) also leaves content completely unchanged.
+// (tomlTableConflict) also leaves content completely unchanged. A leading
+// UTF-8 BOM with no other surviving content before or after the stripped
+// table is dropped along with it (WR-03, 07-REVIEW-FIX.md pass 2) — see the
+// beforeIsEmptyOrBOMOnly comment below. A BOM is still preserved byte for
+// byte whenever real content survives either side (CR-01).
 func stripTOMLTable(content, tableName string) string {
 	if tomlTableConflict(content, tableName) != nil {
 		return content
@@ -74,8 +78,19 @@ func stripTOMLTable(content, tableName string) string {
 	before := strings.TrimRight(content[:start], "\r\n")
 	after := strings.TrimLeft(content[end:], "\r\n")
 
+	// A leading BOM with nothing else surviving on either side is
+	// "effectively empty": once codegraph's table — the BOM'd file's only
+	// real content — is gone, the BOM has no downstream reader left to
+	// preserve it for, so it is dropped along with the rest rather than
+	// left behind as a permanent BOM-plus-newline stub file. This keeps
+	// stripTOMLTable's "" return the single "file is now empty" sentinel
+	// every caller (today, only codexTarget.Uninstall) keys its
+	// keep-clean removal off of, instead of every caller having to
+	// separately special-case a BOM-only residual.
+	beforeIsEmptyOrBOMOnly := before == "" || before == tomlBOM
+
 	switch {
-	case before == "" && after == "":
+	case beforeIsEmptyOrBOMOnly && after == "":
 		return ""
 	case before == "":
 		if !strings.HasSuffix(after, ending) {
