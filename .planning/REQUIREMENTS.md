@@ -16,7 +16,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Bug & Window Burn-down
 
 - [x] **FIX-02**: Every UI route serves a codegraph favicon that loads under the unchanged `default-src 'self'` CSP — shipped as a static file, not a `data:` URI and not a widened `img-src` (WINDOWS #30)
-- [ ] **FIX-03**: The install/uninstall agent picker renders its help footer in a 100×30 pane with every registered target listed, with the height budget accounting for bubbles v2 list pagination — asserted by the tmux harness, re-run after the milestone's last target-count change (WINDOWS #32)
+- [x] **FIX-03**: The install/uninstall agent picker renders its help footer in a 100×30 pane with every registered target listed, with the height budget accounting for bubbles v2 list pagination — asserted by the tmux harness, re-run after the milestone's last target-count change (WINDOWS #32)
 - [x] **FIX-04**: `/graph` loads with zero uncaught page errors on this repo's index and on guava — the cytoscape-elk `notify` null TypeError fixed, or isolated with its root cause recorded (WINDOWS #26)
 - [x] **FIX-05**: The cytoscape "invalid endpoints" warnings at guava scale are root-caused (which collapsed pair overlaps under ELK) and either fixed or waived with the cause on record (WINDOWS #28)
 - [x] **FIX-06**: `priorCoverageGeneration` distinguishes `ErrStoreLocked`/corrupt from `ErrNotFound` and refuses (or warns) before `RemoveAll`, with a hold-the-lock-across-`index --force` regression test (WINDOWS #36 / T-10-16)
@@ -89,8 +89,8 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **CODEX-02**: `SupportsLocation(LocationLocal)` is true; project-local `install` writes `.codex/config.toml` through the TOML splice (existing tables, inline tables, comments and CRLF preserved) and tells the user the project must be trusted; `--target auto` detection and the agent picker reflect the new scope
 - [x] **CODEX-03**: The skill package is installed to the verified Codex skill path(s) at both scopes with its sidecar manifest, idempotently and byte-invariant against sibling content
 - [x] **CODEX-04**: Project-local install writes the marker-fenced instructions block into the repo-root `AGENTS.md` (global `~/.codex/AGENTS.md` behaviour unchanged) and `uninstall` removes it leaving the rest of the file byte-identical
-- [ ] **CODEX-05**: A Codex PreToolUse nudge in `hooks.json` carries the same additionalContext-only contract as NUDGE-03/04 (first matched call, then at most once a minute per session and per subagent — the 2026-09-19 amendment of NUDGE-04); it is installed only on the `--pretool-nudge` opt-in, skipped with a message when the user has explicitly disabled Codex hooks (`[features] hooks = false`), and the docs state that Codex skips a new or changed hook until it is trusted in `/hooks` (2026-09-19 maintainer decision: codex-cli 0.155.0 hooks are stable and on by default, so the "experimental, disabled by default" premise was stale)
-- [ ] **CODEX-06**: A genuinely fresh Codex session in an indexed repo reaches for codegraph unprompted — the skill is listed, and the MCP tool is called or `codegraph explore` is run — with the evidence recorded to the v0.10.0 live-session standard; `codex mcp list` shows the entry at both scopes
+- [x] **CODEX-05**: A Codex PreToolUse nudge in `hooks.json` carries the same additionalContext-only contract as NUDGE-03/04 (first matched call, then at most once a minute per session and per subagent — the 2026-09-19 amendment of NUDGE-04); it is installed only on the `--pretool-nudge` opt-in, skipped with a message when the user has explicitly disabled Codex hooks (`[features] hooks = false`), and the docs state that Codex skips a new or changed hook until it is trusted in `/hooks` (2026-09-19 maintainer decision: codex-cli 0.155.0 hooks are stable and on by default, so the "experimental, disabled by default" premise was stale)
+- [x] **CODEX-06**: A genuinely fresh Codex session in an indexed repo reaches for codegraph unprompted — the skill is listed, and the MCP tool is called or `codegraph explore` is run — with the evidence recorded to the v0.10.0 live-session standard; `codex mcp list` shows the entry at both scopes
 
 ## v2 Requirements
 
@@ -135,7 +135,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FIX-02 | Phase 1 | Complete |
-| FIX-03 | Phase 7 | Pending |
+| FIX-03 | Phase 7 | Complete |
 | FIX-04 | Phase 1 | Complete |
 | FIX-05 | Phase 1 | Complete |
 | FIX-06 | Phase 1 | Complete |
@@ -187,8 +187,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CODEX-02 | Phase 7 | Complete |
 | CODEX-03 | Phase 7 | Complete |
 | CODEX-04 | Phase 7 | Complete |
-| CODEX-05 | Phase 7 | Pending |
-| CODEX-06 | Phase 7 | Pending |
+| CODEX-05 | Phase 7 | Complete |
+| CODEX-06 | Phase 7 | Complete |
 
 **Coverage:**
 

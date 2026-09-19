@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Completed 07-08-PLAN.md
-last_updated: "2026-09-19T21:01:23.209Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-09-19T21:28:48.117Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: 32ba6aa49255f0c1afc7391d0d912919e9bf2e22
+state_head: 4ef6374c4cd92639009db465978659ce813c1bf6
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 50
+  completed_plans: 51
   percent: 86
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 ## Current Position
 
 Phase: 7 (Codex Parity) — EXECUTING
-Plan: 9 of 11
+Plan: 10 of 11
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 7 execution started
 
@@ -181,6 +181,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P06 | ~25min | 3 tasks | 7 files |
 | Phase 07 P07 | ~40min | 3 tasks | 14 files |
 | Phase 07 P08 | ~50min | 3 tasks | 11 files |
+| Phase 7 P09 | ~15min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -424,6 +425,11 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: [Phase 07]: 07-07: capabilities.go's HookFiles switch generalized to wrap errHookFilesUndeclared for ANY unmapped HookMechanism (not just codex-json specifically), now that codex-json itself is a real declared case
 - [Phase 7]: [Phase 7]: 07-08: Codex's PreToolUse stickiness evidence is its own exact-identity hooks.json group, read directly via hasOwnHookBlock (D-23) -- unlike Claude's manifest-backed preToolNudgeEvidenced, Codex has no manifest concept for this opt-in, so Keep probes hooks.json unconditionally rather than gating on a manifest record.
 - [Phase 7]: [Phase 7]: 07-08: assertOwnEntriesGoneAfterUninstall's new Codex branch was moved out of that shared helper into runOwnershipLeaf after it broke TestOwnershipSharedInstructions -- that test calls the shared helper for Codex without ever planting the foreign ^Bash$ group this plan's guard checks for, so the assertion belongs only at the one call site that actually plants it.
+- [Phase 7]: CODEX-06 verdict: PASS — a fresh Codex session in an indexed repo reaches for codegraph unprompted (skill listed, codegraph CLI run), entry shown at both project and global scopes
+- [Phase 7]: CODEX-05 live verdict: PASS — nudge fires once then cools down (60s+ per session/subagent key), stays silent un-indexed, no hook error attributable to codegraph's hook
+- [Phase 7]: A4: Codex subagent PreToolUse stdin carries agent_id (UUIDv7) + agent_type alongside the parent's session_id; the main thread carries neither — D-21 session_id+agent_id (else main) keying holds unchanged on Codex
+- [Phase 7]: D-23: position-keyed hook trust re-flags a byte-identical foreign hook when its array index shifts; codegraph appends its group last so its own removal never shifts a foreign group
+- [Phase 7]: FIX-03's local real-PTY tmux re-run explicitly NOT performed (maintainer decision 2026-09-19, carried from 07-03, issue #75) — the 07-03 model-level footprint guard is the local FIX-03 evidence at this HEAD
 
 ### Pending Todos
 
@@ -577,8 +583,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T21:01:04.713Z
-Stopped at: Completed 07-08-PLAN.md
+Last session: 2026-09-19T21:28:48.065Z
+Stopped at: Completed 07-09-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
