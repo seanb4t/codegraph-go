@@ -477,6 +477,96 @@ func TestCodex_SharedSkillPackage_LastRequester(t *testing.T) {
 	}
 }
 
+// TestCodex_Install_OverrideNote (D-12) asserts that when an
+// AGENTS.override.md sits beside the instructions file Codex reads, install
+// adds exactly one Note naming it, the block is still written to AGENTS.md,
+// and the override file itself is never touched — at both local and global
+// scope. Without an override present, no such Note appears.
+func TestCodex_Install_OverrideNote(t *testing.T) {
+	t.Run("local", func(t *testing.T) {
+		fakeHome(t)
+		dir := t.TempDir()
+		t.Chdir(dir)
+		c := codexTarget{}
+
+		overridePath := filepath.Join(dir, "AGENTS.override.md")
+		overrideContent := "# my own override\n"
+		writeFile(t, overridePath, overrideContent)
+
+		result := c.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+		if len(result.Errors) != 0 {
+			t.Fatalf("Install(local) returned errors: %v", result.Errors)
+		}
+
+		found := 0
+		for _, n := range result.Notes {
+			if strings.Contains(n, "AGENTS.override.md") {
+				found++
+			}
+		}
+		if found != 1 {
+			t.Fatalf("expected exactly one Note naming AGENTS.override.md, got %d: %v", found, result.Notes)
+		}
+
+		instrPath := filepath.Join(dir, "AGENTS.md")
+		if !strings.Contains(readFile(t, instrPath), codegraphSectionStart) {
+			t.Fatalf("expected the codegraph block still written to AGENTS.md despite the override")
+		}
+		if got := readFile(t, overridePath); got != overrideContent {
+			t.Fatalf("AGENTS.override.md must never be touched:\ngot=%q\nwant=%q", got, overrideContent)
+		}
+	})
+
+	t.Run("global", func(t *testing.T) {
+		home := fakeHome(t)
+		c := codexTarget{}
+
+		overridePath := filepath.Join(home, ".codex", "AGENTS.override.md")
+		overrideContent := "# my own global override\n"
+		writeFile(t, overridePath, overrideContent)
+
+		result := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+		if len(result.Errors) != 0 {
+			t.Fatalf("Install(global) returned errors: %v", result.Errors)
+		}
+
+		found := 0
+		for _, n := range result.Notes {
+			if strings.Contains(n, "AGENTS.override.md") {
+				found++
+			}
+		}
+		if found != 1 {
+			t.Fatalf("expected exactly one Note naming AGENTS.override.md, got %d: %v", found, result.Notes)
+		}
+
+		instrPath := filepath.Join(home, ".codex", "AGENTS.md")
+		if !strings.Contains(readFile(t, instrPath), codegraphSectionStart) {
+			t.Fatalf("expected the codegraph block still written to AGENTS.md despite the override")
+		}
+		if got := readFile(t, overridePath); got != overrideContent {
+			t.Fatalf("AGENTS.override.md must never be touched:\ngot=%q\nwant=%q", got, overrideContent)
+		}
+	})
+
+	t.Run("no override present", func(t *testing.T) {
+		fakeHome(t)
+		dir := t.TempDir()
+		t.Chdir(dir)
+		c := codexTarget{}
+
+		result := c.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+		if len(result.Errors) != 0 {
+			t.Fatalf("Install(local) returned errors: %v", result.Errors)
+		}
+		for _, n := range result.Notes {
+			if strings.Contains(n, "AGENTS.override.md") {
+				t.Fatalf("expected no override Note without an override present, got: %v", result.Notes)
+			}
+		}
+	})
+}
+
 // TestCodex_ReadOnlySkillDirsFollowLiveVerdict (D-15) pins
 // Capabilities().ReadOnlySkillDirs(loc) to exactly the branch
 // 07-LIVE-SESSIONS.md's CODEX-01 verdicts selected:

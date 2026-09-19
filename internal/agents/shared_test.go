@@ -453,6 +453,187 @@ func TestSharedWriteJSONFile_FormatsWithIndentAndTrailingNewline(t *testing.T) {
 	}
 }
 
+// --- Shared repo-root AGENTS.md (D-11, 07-06): instructionsRequestedElsewhere
+// gates codexTarget.Uninstall and opencodeTarget.Uninstall so a shared
+// instructions file's marker block survives while ANOTHER registered target
+// still declares that path at that location and reports
+// Detect(loc).AlreadyConfigured. ---
+
+// assertAgentsMDKept fails the test unless r's Files contains a FileResult
+// for path with Action ActionKept — the D-11 "left alone, another agent
+// still uses it" outcome.
+func assertAgentsMDKept(t *testing.T, r WriteResult, path string) {
+	t.Helper()
+	for _, f := range r.Files {
+		if f.Path == path && f.Action == ActionKept {
+			return
+		}
+	}
+	t.Fatalf("expected %s kept (ActionKept) in result, got %+v", path, r.Files)
+}
+
+// TestSharedAgentsMD_UninstallOrders (D-11) is the full order x pre-state
+// table: for each of codex_then_opencode, opencode_then_codex, and
+// target_all (every registered target's Uninstall(local), AllTargets
+// order), and for each of a pre-existing foreign AGENTS.md and no
+// pre-existing file, install codex and opencode at local scope, uninstall
+// in the named order, and assert AGENTS.md is restored to its exact
+// pre-install state once the last sharer is gone — a two-step order's
+// FIRST uninstall must report the file kept while the block is still
+// present.
+func TestSharedAgentsMD_UninstallOrders(t *testing.T) {
+	orders := []string{"codex_then_opencode", "opencode_then_codex", "target_all"}
+	pres := []string{"preexisting", "absent"}
+	executed := 0
+	for _, order := range orders {
+		order := order
+		for _, pre := range pres {
+			pre := pre
+			t.Run(order+"/"+pre, func(t *testing.T) {
+				executed++
+				fakeHome(t)
+				dir := t.TempDir()
+				t.Chdir(dir)
+
+				agentsPath := filepath.Join(dir, "AGENTS.md")
+				var preBytes string
+				if pre == "preexisting" {
+					preBytes = "# Team Notes\n\nParagraph one, written before codegraph ever ran.\n\n" +
+						"Paragraph two, also pre-existing.\n"
+					writeFile(t, agentsPath, preBytes)
+				}
+
+				codex := codexTarget{}
+				opencode := opencodeTarget{}
+				opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+				if r := codex.Install(LocationLocal, opts); len(r.Errors) != 0 {
+					t.Fatalf("codex install: %v", r.Errors)
+				}
+				if r := opencode.Install(LocationLocal, opts); len(r.Errors) != 0 {
+					t.Fatalf("opencode install: %v", r.Errors)
+				}
+				if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
+					t.Fatalf("expected codegraph block present after both installs: %q", got)
+				}
+
+				switch order {
+				case "codex_then_opencode":
+					r1 := codex.Uninstall(LocationLocal)
+					assertAgentsMDKept(t, r1, agentsPath)
+					if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
+						t.Fatalf("block removed after the FIRST uninstall (codex), want kept: %q", got)
+					}
+					opencode.Uninstall(LocationLocal)
+				case "opencode_then_codex":
+					r1 := opencode.Uninstall(LocationLocal)
+					assertAgentsMDKept(t, r1, agentsPath)
+					if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
+						t.Fatalf("block removed after the FIRST uninstall (opencode), want kept: %q", got)
+					}
+					codex.Uninstall(LocationLocal)
+				case "target_all":
+					for _, target := range AllTargets() {
+						target.Uninstall(LocationLocal)
+					}
+				}
+
+				if pre == "preexisting" {
+					got := readFile(t, agentsPath)
+					if got != preBytes {
+						t.Fatalf("AGENTS.md not byte-identical to pre-install bytes after the last uninstall:\ngot=%q\nwant=%q", got, preBytes)
+					}
+				} else if fileExists(agentsPath) {
+					t.Fatalf("AGENTS.md should not exist after the last uninstall (never existed pre-install), got=%q", readFile(t, agentsPath))
+				}
+			})
+		}
+	}
+	if executed != 6 {
+		t.Fatalf("executed %d order/pre leaves, want 6", executed)
+	}
+}
+
+// TestSharedAgentsMD_KeptWhileOtherConfigured (D-11) pins the single-step
+// case in isolation: after installing both codex and opencode at local
+// scope, uninstalling codex alone reports AGENTS.md kept with a Note
+// naming opencode, the file is byte-identical to its pre-uninstall bytes,
+// and codex's OWN config table is still removed (the gate only affects the
+// shared instructions file, never codex's other steps).
+func TestSharedAgentsMD_KeptWhileOtherConfigured(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	codex := codexTarget{}
+	opencode := opencodeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	if r := codex.Install(LocationLocal, opts); len(r.Errors) != 0 {
+		t.Fatalf("codex install: %v", r.Errors)
+	}
+	if r := opencode.Install(LocationLocal, opts); len(r.Errors) != 0 {
+		t.Fatalf("opencode install: %v", r.Errors)
+	}
+
+	agentsPath := filepath.Join(dir, "AGENTS.md")
+	preUninstall := readFile(t, agentsPath)
+
+	result := codex.Uninstall(LocationLocal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("codex uninstall: %v", result.Errors)
+	}
+	assertAgentsMDKept(t, result, agentsPath)
+
+	foundNote := false
+	for _, n := range result.Notes {
+		if strings.Contains(n, "opencode") {
+			foundNote = true
+		}
+	}
+	if !foundNote {
+		t.Fatalf("expected a Note naming opencode, got %v", result.Notes)
+	}
+
+	if got := readFile(t, agentsPath); got != preUninstall {
+		t.Fatalf("AGENTS.md not byte-identical to its pre-uninstall bytes:\ngot=%q\nwant=%q", got, preUninstall)
+	}
+
+	configPath := filepath.Join(dir, ".codex", "config.toml")
+	if _, _, found := findTOMLTableRange(readFileOrEmpty(configPath), codexTOMLTable); found {
+		t.Fatalf("codex's own config table should still have been removed, got: %s", readFileOrEmpty(configPath))
+	}
+}
+
+// TestSharedAgentsMD_GlobalPathsNotShared (D-11) confirms the gate is a
+// no-op at global scope, where codex and opencode declare DIFFERENT
+// instructions paths (~/.codex/AGENTS.md vs <cfgdir>/opencode/AGENTS.md):
+// uninstalling codex globally removes its own block even while opencode is
+// configured globally too.
+func TestSharedAgentsMD_GlobalPathsNotShared(t *testing.T) {
+	home := fakeHome(t)
+
+	codex := codexTarget{}
+	opencode := opencodeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	if r := codex.Install(LocationGlobal, opts); len(r.Errors) != 0 {
+		t.Fatalf("codex install: %v", r.Errors)
+	}
+	if r := opencode.Install(LocationGlobal, opts); len(r.Errors) != 0 {
+		t.Fatalf("opencode install: %v", r.Errors)
+	}
+
+	codexInstrPath := filepath.Join(home, ".codex", "AGENTS.md")
+	result := codex.Uninstall(LocationGlobal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("codex uninstall: %v", result.Errors)
+	}
+	if fileExists(codexInstrPath) {
+		t.Fatalf("codex's own global AGENTS.md should have been removed entirely (never pre-existed), got: %s", readFile(t, codexInstrPath))
+	}
+}
+
 // --- blockOwnsAnyCommand (WR-02, 06-REVIEW.md: shared ownership-identity
 // predicate for writeHookEntry, removeHookEntry, and hasOwnHookBlock) ---
 
