@@ -16,6 +16,9 @@
 - Family (g) — plan 07-08: the Codex nudge lifecycle and CLI opt-in.
 - Family (h) — plan 07-10: the published capability-table doc drift guard.
 - Family (i) — plan 07-11: the MCP `instructions` wire-string byte budget.
+- Family (j) — plan 07-12 (review fixes, 07-REVIEW.md): (j1) CR-01's UTF-8
+  BOM handling in `splitTOMLLines`; (j2) WR-01's owned-block position
+  preservation in `writeHookEntry`.
 
 ## Pre-mutation cleanliness gate — the convention this log follows
 
@@ -1984,3 +1987,153 @@ exit 1 (only the planted diff).
 Family (i) verdict: the padding mutation past byte 512 (i1) and the stale pre-freeze transcript
 (i2) both demonstrated RED against a real planted mutation and reverted byte-clean; the mcp and
 wireoracle packages are GREEN after every revert.
+
+---
+
+## Family (j1) — CR-01 (07-REVIEW.md): disabling splitTOMLLines' BOM special-case turns the UTF-8 BOM guards RED
+
+**Test/guard:** `TestFindTOMLTableRange_UTF8BOM`, `TestSpliceTOMLTable_UTF8BOM_UpdatesInPlaceNeverDuplicates`,
+`TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM`, `TestSpliceTOMLTable_UTF8BOM_Fixture`
+and `TestStripTOMLTable_UTF8BOM_Fixture` (`internal/agents/toml_test.go`).
+
+**What are we testing, and why?** Whether the guards catch the exact CR-01 regression shape:
+a UTF-8 BOM at content's absolute start defeating `isTOMLHeaderLine`'s recognition of the
+header line that immediately follows it, so `findTOMLTableRange` reports `found=false` and
+`spliceTOMLTable` takes the "not found" (append) path — producing a genuine second
+`[mcp_servers.codegraph]` header instead of replacing the existing one, and leaving
+`stripTOMLTable` permanently unable to remove the table.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/toml.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/if strings\.HasPrefix\(content, tomlBOM\) \{/if false \&\&
+strings.HasPrefix(content, tomlBOM) {/' internal/agents/toml.go` (the pinned Family j1 site —
+`splitTOMLLines`' only BOM special-case, short-circuited to never fire):
+
+```diff
+--- a/internal/agents/toml.go
++++ b/internal/agents/toml.go
+@@ -194,7 +194,7 @@ const tomlBOM = "\xef\xbb\xbf"
+ func splitTOMLLines(content string) []tomlLine {
+ 	var lines []tomlLine
+ 	offset := 0
+-	if strings.HasPrefix(content, tomlBOM) {
++	if false && strings.HasPrefix(content, tomlBOM) {
+ 		lines = append(lines, tomlLine{text: tomlBOM, offset: 0})
+ 		offset = len(tomlBOM)
+ 	}
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestFindTOMLTableRange_UTF8BOM$|TestSpliceTOMLTable_UTF8BOM_UpdatesInPlaceNeverDuplicates$|TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM$|TestSpliceTOMLTable_UTF8BOM_Fixture$|TestStripTOMLTable_UTF8BOM_Fixture$'
+-v`, exit code appended):
+
+```
+    toml_test.go:188: findTOMLTableRange: found = false, want true (a leading BOM must not defeat header recognition)
+--- FAIL: TestFindTOMLTableRange_UTF8BOM (0.00s)
+    toml_test.go:200: spliceTOMLTable on a BOM'd file produced 2 [mcp_servers.codegraph] headers, want exactly 1 (CR-01 duplicate-table regression):
+        got="\ufeff[mcp_servers.codegraph]\ncommand = \"/old/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n\n[mcp_servers.codegraph]\ncommand = \"/usr/local/bin/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n"
+--- FAIL: TestSpliceTOMLTable_UTF8BOM_UpdatesInPlaceNeverDuplicates (0.00s)
+    toml_test.go:218: stripTOMLTable must remove codegraph's own table from a BOM'd file, got: "\ufeff[mcp_servers.codegraph]\ncommand = \"/usr/local/bin/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n"
+--- FAIL: TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM (0.00s)
+    toml_test.go:252: spliceTOMLTable BOM-fixture mismatch:
+        got="\ufeff[mcp_servers.codegraph]\ncommand = \"/old/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n\n[mcp_servers.codegraph]\ncommand = \"/usr/local/bin/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n"
+        want="\ufeff[mcp_servers.codegraph]\ncommand = \"/usr/local/bin/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n"
+--- FAIL: TestSpliceTOMLTable_UTF8BOM_Fixture (0.00s)
+    toml_test.go:262: stripTOMLTable BOM-fixture mismatch:
+        got="\ufeff[mcp_servers.codegraph]\ncommand = \"/usr/local/bin/codegraph\"\nargs = [\"serve\", \"--mcp\"]\n"
+        want="\ufeff\n"
+--- FAIL: TestStripTOMLTable_UTF8BOM_Fixture (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.078s
+FAIL
+exit=1
+```
+
+`TestFindTOMLTableRange_MidFileBOMNotStrippedAsWhitespace` (the negative-space control proving
+the fix isn't a blanket per-line BOM trim) stays green under this mutation, since it never
+depends on the leading-BOM special-case being enabled.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/toml.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/toml.go`, then
+`git diff --quiet -- internal/agents/toml.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestFindTOMLTableRange_UTF8BOM$|TestSpliceTOMLTable_UTF8BOM_UpdatesInPlaceNeverDuplicates$|TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM$|TestSpliceTOMLTable_UTF8BOM_Fixture$|TestStripTOMLTable_UTF8BOM_Fixture$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.077s`.
+
+Full-package re-check after the revert: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
+./internal/cli/... ./internal/mcp/ -count=1` → all packages `ok`.
+
+---
+
+## Family (j2) — WR-01 (07-REVIEW.md): reverting writeHookEntry to always-append-last turns TestWriteHookEntry_UpdatePreservesForeignBlockPosition RED
+
+**Test/guard:** `TestWriteHookEntry_UpdatePreservesForeignBlockPosition` (`internal/agents/shared_test.go`).
+
+**What are we testing, and why?** Whether the guard catches the exact WR-01 regression shape:
+an update to codegraph's own already-present PreToolUse block repositioning a foreign block
+that already follows it, spuriously changing that foreign block's array index (and, live,
+invalidating Codex's position-keyed hook trust for it) even though the foreign block's own
+bytes never changed.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/shared.go` — exit 0 (clean).
+
+**Mutation applied:** the position-preserving `if ownedInsertAt == -1 { ... } else { ... }`
+branch collapsed back to the pre-fix unconditional append-last (the pinned Family j2 site):
+
+```diff
+--- a/internal/agents/shared.go
++++ b/internal/agents/shared.go
+@@ -288,15 +288,7 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
+ 		return FileResult{Path: path, Action: ActionUnchanged}, nil
+ 	}
+ 
+-	var newEvents []any
+-	if ownedInsertAt == -1 {
+-		// First install: no owned block existed to preserve the position
+-		// of, so codegraph's group goes after every existing block (D-23).
+-		newEvents = append(append([]any{}, unowned...), normalizedOwn...)
+-	} else {
+-		newEvents = append(append([]any{}, unowned[:ownedInsertAt]...), normalizedOwn...)
+-		newEvents = append(newEvents, unowned[ownedInsertAt:]...)
+-	}
++	newEvents := append(append([]any{}, unowned...), normalizedOwn...)
+ 	hooks[event] = newEvents
+ 	existing["hooks"] = hooks
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestWriteHookEntry_UpdatePreservesForeignBlockPosition$' -v`, exit code appended):
+
+```
+    shared_test.go:763: expected codegraph's own (updated) block to stay at index 0, got command "/foreign/hook.sh": []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"/foreign/hook.sh", "type":"command"}}, "matcher":"Bash"}, map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"codegraph hook pretooluse", "timeout":10, "type":"command"}}, "matcher":"Bash"}}
+--- FAIL: TestWriteHookEntry_UpdatePreservesForeignBlockPosition (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.112s
+FAIL
+exit=1
+```
+
+`TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks` (the control pinning D-23's
+append-last-on-first-install guarantee) correctly stays green under this mutation, since the
+`ownedInsertAt == -1` first-install case takes the identical unconditional-append path both
+before and after the fix.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/shared.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/shared.go`, then
+`git diff --quiet -- internal/agents/shared.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestWriteHookEntry_UpdatePreservesForeignBlockPosition$|TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.077s`.
+
+Full-package re-check after the revert: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
+-count=1` → `ok  	github.com/seanb4t/codegraph-go/internal/agents	3.413s`.
+
+Family (j) verdict: both the BOM-special-case disablement (j1) and the always-append-last
+reversion (j2) demonstrated RED against a real planted mutation and reverted byte-clean; the
+agents/cli/mcp packages are GREEN after every revert.
