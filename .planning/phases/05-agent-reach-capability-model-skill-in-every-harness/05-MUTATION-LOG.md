@@ -391,6 +391,121 @@ reverted byte-clean.
 
 ---
 
+## Family (c) — 1A: removing the config skills parent turns TestAntigravity_Install_WritesConfigSkillDir RED
+
+**Test/guard:** `TestAntigravity_Install_WritesConfigSkillDir`
+(`internal/agents/antigravity_test.go`, plan 05-07) — plants a foreign
+sibling skill `~/.gemini/config/skills/gh-stack/SKILL.md` before install,
+then asserts after install AND after uninstall that the parent
+`~/.gemini/config/skills` still exists and that the sibling's bytes are
+read back and equal the planted bytes (T-05-30: the maintainer's real
+config skills directory holds `gh-stack`).
+
+**What are we testing, and why?** Moving Antigravity's written skill dir to
+`~/.gemini/config/skills/codegraph` (maintainer decision 1A) puts
+codegraph's package beside user-owned skills for the first time in this
+target. The guard must catch an uninstall that reaches past `codegraph/`
+into the shared parent.
+
+**Pre-mutation gate:** the GREEN change to `internal/agents/antigravity.go`
+was intentionally uncommitted in the working tree (plan 05-07 Task 2 plants
+against GREEN), so `git diff --quiet` cannot be the gate here. Instead the
+GREEN file was snapshotted before the plant and its hash recorded:
+`sha256 aee9b451d9240979974467f7581599f4a2609da015169df8884459b4668c20d6`.
+`git diff --stat -- internal/agents/` showed only that file (the GREEN
+change) before the plant.
+
+**Mutation (c-i) applied** — remove the skill dir's parent recursively
+after the skill sweep:
+
+```diff
+@@ -278,6 +278,9 @@
+ 	}
+ 
+ 	uninstallDeclaredSkill(&result, t, loc)
++	if dir, derr := t.Capabilities().WrittenSkillDir(loc); derr == nil && dir != "" {
++		_ = os.RemoveAll(filepath.Dir(dir))
++	}
+ 
+ 	return result
+ }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
+-count=1 -run 'TestAntigravity_Install_WritesConfigSkillDir$' -v`, temp
+paths shortened to `...`, exit code appended):
+
+```
+=== RUN   TestAntigravity_Install_WritesConfigSkillDir
+    antigravity_test.go:264: uninstall removed .../.gemini/config/skills, which still holds the foreign gh-stack skill
+--- FAIL: TestAntigravity_Install_WritesConfigSkillDir (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.079s
+FAIL
+exit=1
+```
+
+The parent-exists assertion fires first (the sibling is gone with its
+parent). To show the byte-compare itself discriminates — not only the
+existence check — a second variant keeps the parent and alters the
+sibling's bytes.
+
+**Mutation (c-ii) applied** (after reverting (c-i) byte-clean) — append
+one newline to the foreign sibling during uninstall:
+
+```diff
+@@ -278,6 +278,12 @@
+ 	}
+ 
+ 	uninstallDeclaredSkill(&result, t, loc)
++	if dir, derr := t.Capabilities().WrittenSkillDir(loc); derr == nil && dir != "" {
++		sib := filepath.Join(filepath.Dir(dir), "gh-stack", "SKILL.md")
++		if b, rerr := os.ReadFile(sib); rerr == nil {
++			_ = os.WriteFile(sib, append(b, '\n'), 0o644)
++		}
++	}
+ 
+ 	return result
+ }
+```
+
+**Observed failure** (verbatim, same command):
+
+```
+=== RUN   TestAntigravity_Install_WritesConfigSkillDir
+    antigravity_test.go:270: foreign sibling skill .../.gemini/config/skills/gh-stack/SKILL.md changed by uninstall:
+         got "---\nname: gh-stack\ndescription: foreign sibling skill\n---\n\nnot codegraph's\n\n"
+        want "---\nname: gh-stack\ndescription: foreign sibling skill\n---\n\nnot codegraph's\n"
+--- FAIL: TestAntigravity_Install_WritesConfigSkillDir (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.081s
+FAIL
+exit=1
+```
+
+**Revert (both variants):** `cp -f <GREEN snapshot> internal/agents/antigravity.go`.
+
+**Byte-clean proof:** after each revert `shasum -a 256 -c` against the
+recorded GREEN hash printed `internal/agents/antigravity.go: OK`, `cmp`
+against the snapshot reported no difference, and `git diff --stat --
+internal/agents/` again showed only the GREEN change
+(`internal/agents/antigravity.go | 34 ++++++++++++++++------------------`).
+
+**Green re-run** (verbatim, exit code appended):
+
+```
+$ GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1 -run 'TestAntigravity_Install_WritesConfigSkillDir$'
+ok  	github.com/seanb4t/codegraph-go/internal/agents	0.058s
+exit=0
+```
+
+**Verdict:** The foreign-sibling guard is live on both axes — a parent
+removal and a one-byte change to a sibling skill are each caught and
+named, and both plants were reverted byte-clean before the GREEN commit
+that records this entry.
+
+---
+
 ## Summary
 
 Every guard demonstrated in this log was confirmed RED against a
@@ -402,8 +517,11 @@ confirmed-applied, byte-cleanly-reverted mutation before being trusted:
 | (a2) | `TestCapabilitiesMatchInstallWrites` | `Instructions` field deleted from Claude's `Capabilities()` literal | yes (names `.claude/CLAUDE.md` undeclared, both locations) | yes |
 | (b1) | `TestOwnershipExactIdentity` (foreign-codegraph-dir) | `skillDirIsForeign` widened to also accept a bare SKILL.md as proof of ownership | yes (names `cursor/{global,local}`, `opencode/{global,local}`) | yes |
 | (b2) | `TestOwnershipExactIdentity` (claude/*) | `writeHookEntry`'s `isOwned` widened to claim any `"startup"`-matcher block (the literal 242ec0a shape) | yes (names all four `claude/*` leaves) | yes |
+| (c) | `TestAntigravity_Install_WritesConfigSkillDir` (foreign gh-stack sibling) | (c-i) `os.RemoveAll` of the config skills parent after the skill sweep; (c-ii) one byte appended to the sibling's SKILL.md | yes (c-i: parent-removed assertion; c-ii: byte-compare, got/want shown) | yes (sha256 matches the GREEN snapshot) |
 
 `git status --porcelain internal/agents/` is empty at the end of every
 plant above — no production source file was left modified by any
 mutation; each was reverted byte-clean before the commit that records it
-in this log.
+in this log. Family (c) was planted against the uncommitted GREEN change,
+so its clean state is the GREEN snapshot's sha256, not an empty
+`git status` — see its entry.

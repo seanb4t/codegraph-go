@@ -1,4 +1,4 @@
-antigravity: scopes=global mcp=<HOME>/.gemini/config/mcp_config.json format=json instructions=none skill=<HOME>/.gemini/antigravity-cli/skills/codegraph hooks=none
+antigravity: scopes=global mcp=<HOME>/.gemini/config/mcp_config.json format=json instructions=none skill=<HOME>/.gemini/config/skills/codegraph hooks=none
 claude: scopes=global,local mcp=<HOME>/.claude.json format=json instructions=<HOME>/.claude/CLAUDE.md skill=<HOME>/.claude/skills/codegraph hooks=claude-json
 codex: scopes=global mcp=<HOME>/.codex/config.toml format=toml instructions=<HOME>/.codex/AGENTS.md skill=none hooks=none
 cursor: scopes=global,local mcp=<HOME>/.cursor/mcp.json format=json instructions=none skill=<HOME>/.agents/skills/codegraph hooks=none

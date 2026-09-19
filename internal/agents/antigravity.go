@@ -41,23 +41,22 @@ func (antigravityTarget) Capabilities() Capabilities {
 	}
 }
 
-// antigravitySkillDirs resolves Antigravity's skill directories, GLOBAL
-// ONLY (AGENT-07, D-06 corrections (b)(c); [CITED: antigravity.google/
-// docs/skills.md, fetched 2026-09-18]): index 0 — the `agy` CLI's
-// documented global path, `~/.gemini/antigravity-cli/skills/codegraph/` —
-// is the one this target WRITES; it is the surface 05-06's live `agy`
-// session actually exercises. Index 1, the 2.0/IDE path
-// `~/.gemini/config/skills/codegraph/`, is `[ASSUMED]`, documented only,
-// and NEVER written here — this milestone's herdr-driven live-session
-// method drives a CLI, not a GUI IDE, so there is no live surface to
-// verify it (D-06(b)). Antigravity's own docs list `.agents/skills/` only
-// at WORKSPACE scope (never global), which this global-only target never
-// writes, and its instructions arrive solely through Gemini's own
-// `~/.gemini/GEMINI.md` write (D-06(c)) — no new AGENTS.md here. At
-// LocationLocal (unsupported — Antigravity is global-only) this returns
-// nil, nil: Capabilities.Supports/WrittenSkillDir/ReadOnlySkillDirs never
-// call it for local in normal use, but a caller error surfaces as "no skill
-// dirs" rather than a resolved local path.
+// antigravitySkillDirs resolves Antigravity's one skill directory, GLOBAL
+// ONLY (AGENT-07, maintainer decision 1A): `~/.gemini/config/skills/
+// codegraph/`. The live `agy` 1.2.6 session (05-LIVE-SESSIONS.md,
+// 2026-09-18) listed skills only from `~/.gemini/config/skills/` — a
+// renamed copy of this SKILL.md placed there was listed, while the copy at
+// `~/.gemini/antigravity-cli/skills/codegraph/` (the docs' "CLI path") never
+// was — so this is the one written directory, and the antigravity-cli path
+// is not declared at all because it is proven unread. Antigravity's own
+// docs list `.agents/skills/` only at WORKSPACE scope (never global), which
+// this global-only target never writes, and its instructions arrive solely
+// through Gemini's own `~/.gemini/GEMINI.md` write (D-06(c)) — no new
+// AGENTS.md here. At LocationLocal (unsupported — Antigravity is
+// global-only) this returns nil, nil: Capabilities.Supports/
+// WrittenSkillDir/ReadOnlySkillDirs never call it for local in normal use,
+// but a caller error surfaces as "no skill dirs" rather than a resolved
+// local path.
 func antigravitySkillDirs(loc Location) ([]string, error) {
 	if loc != LocationGlobal {
 		return nil, nil
@@ -67,7 +66,6 @@ func antigravitySkillDirs(loc Location) ([]string, error) {
 		return nil, err
 	}
 	return []string{
-		filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph"),
 		filepath.Join(home, ".gemini", "config", "skills", "codegraph"),
 	}, nil
 }
