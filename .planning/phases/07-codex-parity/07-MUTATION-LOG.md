@@ -272,3 +272,156 @@ diff).
 
 Full-package re-check after the revert: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1`
 → `ok  	github.com/seanb4t/codegraph-go/internal/agents	5.875s`.
+
+---
+
+## Family (b1) — D-13: re-shadowing install.go's explicit --target behind --yes turns TestInstall_YesWithExplicitTarget_HonoursTarget RED
+
+**Test/guard:** `TestInstall_YesWithExplicitTarget_HonoursTarget` (`internal/cli/install_test.go`)
+— asserts `install --target codex -y --location global` configures exactly Codex, never
+widening to Claude via the `auto` default.
+
+**What are we testing, and why?** Whether the guard catches the exact D-13 regression shape:
+`--yes` shadowing an explicit `--target` again, silently reintroducing the released-binary
+bug where `install --target codex --yes` configured whatever `auto` resolved to instead of
+Codex.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/install.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/case cmd\.Flags\(\)\.Changed\("target"\):/case !yes \&\&
+cmd.Flags().Changed("target"):/' internal/cli/install.go` (the pinned Family b1 site — the
+only `case cmd.Flags().Changed("target"):` line in the file):
+
+```diff
+--- a/internal/cli/install.go
++++ b/internal/cli/install.go
+@@ -109,7 +109,7 @@ func newInstallCmd() *cobra.Command {
+ 
+ 			var targets []agents.AgentTarget
+ 			switch {
+-			case cmd.Flags().Changed("target"):
++			case !yes && cmd.Flags().Changed("target"):
+ 				// D-13: an explicit --target wins over --yes — --yes only
+ 				// supplies the non-interactive default when no target was
+ 				// named.
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestInstall_YesWithExplicitTarget_HonoursTarget$' -v`, `=== RUN` line kept, exit code
+appended):
+
+```
+=== RUN   TestInstall_YesWithExplicitTarget_HonoursTarget
+    install_test.go:882: expected explicit --target codex to configure Codex, got:
+        Claude Code: configured
+          created: /var/folders/.../T/TestInstall_YesWithExplicitTarget_HonoursTarget1544763511/001/.claude.json
+          created: /var/folders/.../T/TestInstall_YesWithExplicitTarget_HonoursTarget1544763511/001/.claude/CLAUDE.md
+          created: /var/folders/.../T/TestInstall_YesWithExplicitTarget_HonoursTarget1544763511/001/.claude/skills/codegraph/SKILL.md
+          created: /var/folders/.../T/TestInstall_YesWithExplicitTarget_HonoursTarget1544763511/001/.claude/hooks/session-nudge.sh
+          created: /var/folders/.../T/TestInstall_YesWithExplicitTarget_HonoursTarget1544763511/001/.claude/settings.json
+          created: /var/folders/.../T/TestInstall_YesWithExplicitTarget_HonoursTarget1544763511/001/.claude/skills/codegraph/.codegraph-manifest.json
+--- FAIL: TestInstall_YesWithExplicitTarget_HonoursTarget (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.509s
+FAIL
+exit=1
+```
+
+With `--yes` re-shadowing the explicit target, `--target codex -y` re-resolves to `auto`,
+which falls back to Claude in a fresh fake home — exactly the released-binary behavior D-13
+fixed.
+
+**Pre-revert gate:** `git diff --quiet -- internal/cli/install.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/cli/install.go`, then
+`git diff --quiet -- internal/cli/install.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestInstall_YesWithExplicitTarget_HonoursTarget$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/cli	0.509s`.
+
+---
+
+## Family (b2) — D-13: re-shadowing uninstall.go's explicit --target behind --yes turns TestUninstall_YesWithExplicitTarget_HonoursTarget RED
+
+**Test/guard:** `TestUninstall_YesWithExplicitTarget_HonoursTarget` (`internal/cli/install_test.go`)
+— asserts `uninstall --target codex --yes --location global` removes exactly Codex's
+configuration, leaving Claude's `mcpServers.codegraph` entry untouched.
+
+**What are we testing, and why?** The uninstall sibling of Family (b1): whether the guard
+catches `--yes` shadowing an explicit `--target` in `uninstall.go`, which would resolve to
+`all` and remove every installed agent's configuration instead of just the one named.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/uninstall.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/case cmd\.Flags\(\)\.Changed\("target"\):/case !yes \&\&
+cmd.Flags().Changed("target"):/' internal/cli/uninstall.go` (the pinned Family b2 site — the
+only `case cmd.Flags().Changed("target"):` line in the file):
+
+```diff
+--- a/internal/cli/uninstall.go
++++ b/internal/cli/uninstall.go
+@@ -48,7 +48,7 @@ func newUninstallCmd() *cobra.Command {
+ 
+ 			var targets []agents.AgentTarget
+ 			switch {
+-			case cmd.Flags().Changed("target"):
++			case !yes && cmd.Flags().Changed("target"):
+ 				// D-13: an explicit --target wins over --yes — --yes only
+ 				// supplies the non-interactive default when no target was
+ 				// named.
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestUninstall_YesWithExplicitTarget_HonoursTarget$' -v`, `=== RUN` line kept, exit code
+appended):
+
+```
+=== RUN   TestUninstall_YesWithExplicitTarget_HonoursTarget
+    install_test.go:920: expected --yes NOT to widen an explicit --target codex to Claude, got:
+        Antigravity: not-configured
+          not-found: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.gemini/config/mcp_config.json
+          not-found: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.gemini/config/skills/codegraph/.codegraph-manifest.json
+          not-found: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.gemini/config/skills/codegraph/SKILL.md
+        Claude Code: removed
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude.json
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/CLAUDE.md
+          not-found: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/settings.json
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/skills/codegraph/.codegraph-manifest.json
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/skills/codegraph/SKILL.md
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/hooks/session-nudge.sh
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/settings.json
+          not-found: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/hooks/pretooluse-nudge.sh
+          not-found: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.claude/settings.json
+        Codex CLI: removed
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.codex/config.toml
+          removed: /var/folders/.../T/TestUninstall_YesWithExplicitTarget_HonoursTarget3948374326/001/.codex/AGENTS.md
+        Cursor: not-configured
+        Gemini CLI: not-configured
+        Hermes Agent: not-configured
+        Kiro: not-configured
+        opencode: not-configured
+--- FAIL: TestUninstall_YesWithExplicitTarget_HonoursTarget (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.449s
+FAIL
+exit=1
+```
+
+With `--yes` re-shadowing the explicit target, `--target codex --yes` re-resolves to `all`,
+so Claude's (and every other registered target's) configuration is removed alongside Codex's
+— the exact regression shape D-13 fixed on the uninstall side.
+
+**Pre-revert gate:** `git diff --quiet -- internal/cli/uninstall.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/cli/uninstall.go`, then
+`git diff --quiet -- internal/cli/uninstall.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestUninstall_YesWithExplicitTarget_HonoursTarget$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/cli	0.449s`.
+
+Full-package re-check after both reverts: `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1`
+→ `ok  	github.com/seanb4t/codegraph-go/internal/cli	17.205s`.
