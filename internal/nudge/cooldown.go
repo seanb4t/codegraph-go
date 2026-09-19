@@ -76,8 +76,16 @@ func (g Gate) Due(key string) bool {
 	if err := os.Mkdir(g.Dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 		return false
 	}
+	// WR-01 (06-REVIEW.md): a pre-existing sentinel directory is trusted
+	// only when its mode bits are EXACTLY 0700, mirroring
+	// TestGate_DirCreated0700's own assertion about what this Gate creates.
+	// Ownership alone (ownedByCurrentUser) does not protect against a
+	// same-uid-but-looser-permission directory: ordinary directory
+	// permission bits, not just ownership, govern who else on a shared
+	// multi-user machine can list, create, or delete entries inside it.
 	info, err := os.Lstat(g.Dir)
-	if err != nil || info.Mode()&fs.ModeSymlink != 0 || !info.IsDir() || !ownedByCurrentUser(info) {
+	if err != nil || info.Mode()&fs.ModeSymlink != 0 || !info.IsDir() ||
+		info.Mode().Perm() != 0o700 || !ownedByCurrentUser(info) {
 		return false
 	}
 
