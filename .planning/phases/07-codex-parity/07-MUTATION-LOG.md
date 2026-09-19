@@ -1867,3 +1867,120 @@ diff).
 Family (h) verdict: the codex/local hooks drift (h1) and the Cursor-global verification overclaim
 (h2) both demonstrated RED against a real planted mutation and reverted byte-clean; the agents
 package is GREEN after every revert.
+
+## Family (i1) — D-29: a planted padding mutation pushes the skill sentence past byte 512
+
+**Test/guard:** `TestInstructionsSkillSentenceWithinFirst512Bytes` and
+`TestInstructionsStaysWithinWireBudget` (`internal/mcp/instructions_contract_test.go`) — the
+former asserts the sentence carrying `skillAnchor` ends at or before byte 512 (Codex's
+instructions-truncation window); the latter asserts the whole const stays at most 600 bytes.
+
+**What are we testing, and why?** Whether the byte-budget guards actually fire when the
+`instructions` const grows past their stated limits — the exact regression class that let the
+pre-rewrite const's skill sentence drift to byte 554 unnoticed.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/mcp/server.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/^(const instructions = ")/$1 . ("padding " x 70)/e'
+internal/mcp/server.go` — prepends 70 repetitions of `"padding "` inside the const's opening
+quote, pushing every subsequent byte offset (including the skill sentence) far past both budgets
+without changing the sentence text itself:
+
+```diff
+--- a/internal/mcp/server.go
++++ b/internal/mcp/server.go
+@@ -54,7 +54,7 @@ const version = "0.1.0"
+ // since the value is JSON-encoded into every one of those transcripts and
+ // an embedded newline would become an escape sequence that makes each such
+ // diff harder to read.
+-const instructions = "codegraph indexes this repository's code into a call and symbol graph; ..."
++const instructions = "padding padding padding ... (x70) ... codegraph indexes this repository's code into a call and symbol graph; ..."
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/mcp/ -count=1
+-run 'TestInstructionsSkillSentenceWithinFirst512Bytes$' -v`):
+
+```
+instructions_contract_test.go:268: the sentence containing "codegraph skill" ends at byte 859, past Codex's 512-byte instructions window; instructions = "padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. codegraph install also adds the codegraph skill for every agent it configures except Hermes. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs."
+--- FAIL: TestInstructionsSkillSentenceWithinFirst512Bytes (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.383s
+FAIL
+exit=1
+```
+
+The 600-byte budget guard also fires independently against the same mutation (verbatim,
+`GOTOOLCHAIN=go1.26.6 go test ./internal/mcp/ -count=1 -run 'TestInstructionsStaysWithinWireBudget$' -v`):
+
+```
+instructions_contract_test.go:140: instructions is 1142 bytes, over the 600-byte budget server.go's doc comment sets
+--- FAIL: TestInstructionsStaysWithinWireBudget (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.309s
+FAIL
+```
+
+**Pre-revert gate:** `git diff --quiet -- internal/mcp/server.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/mcp/server.go`, then
+`git diff --quiet -- internal/mcp/server.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/mcp/ -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/internal/mcp	9.229s`.
+
+## Family (i2) — D-29: a stale (pre-freeze) transcript turns the wire oracle RED
+
+**Test/guard:** `TestFrozenTranscriptsMatch` (`test/wireoracle/oracle_test.go`) — the oracle's
+central byte-exact comparison between a fresh capture and the frozen `.golden` transcript, for
+every scenario.
+
+**What are we testing, and why?** Whether the wire oracle actually catches a transcript that was
+never re-frozen after the `instructions` const changed — exactly the failure class the "re-freeze
+in one reviewed diff, never hand-edit" discipline (D-29, D-00) exists to prevent: a careless or
+partial re-freeze silently leaving a stale transcript on disk.
+
+**Pre-mutation gate:** `git diff --quiet -- testdata/wireoracle/transcripts/call-callers.golden`
+— exit 0 (clean).
+
+**Mutation applied:** `git show
+e556e5e58635511af75f3d42642ffb991bf91593^:testdata/wireoracle/transcripts/call-callers.golden >
+testdata/wireoracle/transcripts/call-callers.golden` — restores `call-callers.golden` to its
+bytes from immediately before this plan's `test(07-11): re-freeze the wire transcripts for the
+new instructions` commit, i.e. the OLD Claude-Code-scoped sentence, while every other transcript
+stays re-frozen:
+
+```diff
+--- a/testdata/wireoracle/transcripts/call-callers.golden
++++ b/testdata/wireoracle/transcripts/call-callers.golden
+@@ -1,2 +1,2 @@
+-{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{},"tools":{"listChanged":true}},"instructions":"codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. codegraph install also adds the codegraph skill for every agent it configures except Hermes. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs.","protocolVersion":"2025-11-25","serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
++{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{},"tools":{"listChanged":true}},"instructions":"codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs; in Claude Code, codegraph install also adds the codegraph skill.","protocolVersion":"2025-11-25","serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
+ {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"**Callers of `Beta`** — 1 caller\n\n| Name | Kind | Location |\n|---|---|---|\n| `Alpha` | function | `pkga/pkga.go:15` |\n"}]}}
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./test/wireoracle/... -count=1
+-run 'TestFrozenTranscriptsMatch/call-callers$' -v`):
+
+```
+oracle_test.go:157: scenario "call-callers": normalized transcript differs at line 1:
+     got: "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"resources\":{},\"tools\":{\"listChanged\":true}},\"instructions\":\"codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. codegraph install also adds the codegraph skill for every agent it configures except Hermes. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs.\",\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"codegraph\",\"version\":\"<VERSION>\"}}}"
+    want: "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"resources\":{},\"tools\":{\"listChanged\":true}},\"instructions\":\"codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs; in Claude Code, codegraph install also adds the codegraph skill.\",\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"codegraph\",\"version\":\"<VERSION>\"}}}"
+--- FAIL: TestFrozenTranscriptsMatch (0.82s)
+    --- FAIL: TestFrozenTranscriptsMatch/call-callers (0.82s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/wireoracle	6.993s
+```
+
+**Pre-revert gate:** `git diff --quiet -- testdata/wireoracle/transcripts/call-callers.golden` —
+exit 1 (only the planted diff).
+
+**Revert:** `git checkout -- testdata/wireoracle/transcripts/call-callers.golden`, then
+`git diff --quiet -- testdata/wireoracle/transcripts/call-callers.golden` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./test/wireoracle/... -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/test/wireoracle	50.080s`.
+
+Family (i) verdict: the padding mutation past byte 512 (i1) and the stale pre-freeze transcript
+(i2) both demonstrated RED against a real planted mutation and reverted byte-clean; the mcp and
+wireoracle packages are GREEN after every revert.
