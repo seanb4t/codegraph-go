@@ -1763,3 +1763,107 @@ going silently absent (g2), the widened note condition regressing to Claude-only
 242ec0a matcher-shape ownership vulnerability reintroduced for Codex's own matcher (g4) all
 demonstrated RED against a real planted mutation and reverted byte-clean; both packages are GREEN
 after every revert.
+
+---
+
+## Family (h1) — D-27: a planted doc drift (codex local hooks) turns TestCapabilityDoc_MirrorsCapabilities RED
+
+**Test/guard:** `TestCapabilityDoc_MirrorsCapabilities` (`internal/agents/capability_doc_test.go`)
+— compares every code-derived cell in `docs/AGENT-CAPABILITIES.md`'s 16 rows against values
+computed straight from `Capabilities()` for all 8 `AllTargets()` x [global, local].
+
+**What are we testing, and why?** Whether the guard catches the published table drifting from
+the code it claims to mirror — the exact failure mode D-27/T-07-32 exists to prevent: a hand-kept
+markdown table silently going stale after a future `Capabilities()` literal change.
+
+**Pre-mutation gate:** `git diff --quiet -- docs/AGENT-CAPABILITIES.md` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/^(\| `codex` \| local \|.*\| )codex-json( \|)/${1}none$2/' docs/AGENT-CAPABILITIES.md`
+— rewrites the codex/local row's Hooks cell from `codex-json` to `none`, leaving every other
+cell (including the Nudge cell, still `opt-in PreToolUse`) untouched:
+
+```diff
+--- a/docs/AGENT-CAPABILITIES.md
++++ b/docs/AGENT-CAPABILITIES.md
+@@ -35,7 +35,7 @@
+ | `codex` | global | `~/.codex/config.toml` | toml | `~/.codex/AGENTS.md` | `~/.agents/skills/codegraph` | codex-json | opt-in PreToolUse | verified 2026-09-19 (07-LIVE-SESSIONS.md) |
+-| `codex` | local | `.codex/config.toml` | toml | `AGENTS.md` | `.agents/skills/codegraph` | codex-json | opt-in PreToolUse | verified 2026-09-19 (07-LIVE-SESSIONS.md) |
++| `codex` | local | `.codex/config.toml` | toml | `AGENTS.md` | `.agents/skills/codegraph` | none | opt-in PreToolUse | verified 2026-09-19 (07-LIVE-SESSIONS.md) |
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCapabilityDoc_MirrorsCapabilities$' -v`):
+
+```
+--- FAIL: TestCapabilityDoc_MirrorsCapabilities (0.00s)
+    capability_doc_test.go:225: codex/local (row 5): hooks column: doc="none" want="codex-json"
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.064s
+FAIL
+```
+
+The failure names exactly `codex/local`, the `hooks` column, `doc="none"` vs `want="codex-json"`
+— the planted cell, nothing else.
+
+**Pre-revert gate:** `git diff --quiet -- docs/AGENT-CAPABILITIES.md` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- docs/AGENT-CAPABILITIES.md`, then
+`git diff --quiet -- docs/AGENT-CAPABILITIES.md` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCapabilityDoc_MirrorsCapabilities$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.091s`.
+
+## Family (h2) — D-27: a planted verification overclaim (Cursor global) turns TestCapabilityDoc_VerificationColumn RED
+
+**Test/guard:** `TestCapabilityDoc_VerificationColumn` (`internal/agents/capability_doc_test.go`)
+— asserts the hand-kept verification column's form and, specifically, that Cursor, Gemini CLI and
+Kiro stay `[ASSUMED]` at both scopes because no live session ran against them (T-07-31).
+
+**What are we testing, and why?** Whether the guard catches a hand-edited overclaim — someone
+marking an `[ASSUMED]` row `verified` without a real live session ever having run — exactly the
+repudiation risk T-07-31 names: an overclaimed "verified" misleads a reader into trusting
+something no one actually checked.
+
+**Pre-mutation gate:** `git diff --quiet -- docs/AGENT-CAPABILITIES.md` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/^(\| \`cursor\` \| global \|.*\| )\[ASSUMED\] \(cursor\.com\/docs\/skills\.md, fetched 2026-09-18\)( \|)$/${1}verified 2026-09-18 (05-LIVE-SESSIONS.md)$2/' docs/AGENT-CAPABILITIES.md`
+— rewrites only Cursor's global verification cell from `[ASSUMED]` to a `verified` claim citing
+the same evidence file Antigravity's and opencode's genuinely-live rows cite:
+
+```diff
+--- a/docs/AGENT-CAPABILITIES.md
++++ b/docs/AGENT-CAPABILITIES.md
+@@ -38,7 +38,7 @@
+-| `cursor` | global | `~/.cursor/mcp.json` | json | none | `~/.agents/skills/codegraph` | none | none | [ASSUMED] (cursor.com/docs/skills.md, fetched 2026-09-18) |
++| `cursor` | global | `~/.cursor/mcp.json` | json | none | `~/.agents/skills/codegraph` | none | none | verified 2026-09-18 (05-LIVE-SESSIONS.md) |
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCapabilityDoc_VerificationColumn$' -v`):
+
+```
+--- FAIL: TestCapabilityDoc_VerificationColumn (0.00s)
+    capability_doc_test.go:277: cursor/global: must stay [ASSUMED] (no live session ran for this target), got "verified 2026-09-18 (05-LIVE-SESSIONS.md)"
+    capability_doc_test.go:291: cursor: expected [ASSUMED] at both scopes, got 1 [ASSUMED] row(s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.064s
+FAIL
+```
+
+Both failures name `cursor` specifically — the overclaimed row and the resulting count mismatch
+against the required 2-of-2 `[ASSUMED]` rows for Cursor.
+
+**Pre-revert gate:** `git diff --quiet -- docs/AGENT-CAPABILITIES.md` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- docs/AGENT-CAPABILITIES.md`, then
+`git diff --quiet -- docs/AGENT-CAPABILITIES.md` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	4.343s`.
+
+Family (h) verdict: the codex/local hooks drift (h1) and the Cursor-global verification overclaim
+(h2) both demonstrated RED against a real planted mutation and reverted byte-clean; the agents
+package is GREEN after every revert.
