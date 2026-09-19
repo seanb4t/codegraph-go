@@ -85,9 +85,9 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Codex Parity
 
-- [ ] **CODEX-01**: Before any `codex.go` change, a live verification in a scratch trusted project records — with dated citations — whether the current Codex CLI loads a project-scoped `.codex/config.toml`, which skill path(s) it reads (`.agents/skills/` vs `.codex/skills/`), and whether `hooks.json` works behind `features.hooks`; `codex.go`'s "no per-project config" comment is corrected in the same commit
-- [ ] **CODEX-02**: `SupportsLocation(LocationLocal)` is true; project-local `install` writes `.codex/config.toml` through the TOML splice (existing tables, inline tables, comments and CRLF preserved) and tells the user the project must be trusted; `--target auto` detection and the agent picker reflect the new scope
-- [ ] **CODEX-03**: The skill package is installed to the verified Codex skill path(s) at both scopes with its sidecar manifest, idempotently and byte-invariant against sibling content
+- [x] **CODEX-01**: Before any `codex.go` change, a live verification in a scratch trusted project records — with dated citations — whether the current Codex CLI loads a project-scoped `.codex/config.toml`, which skill path(s) it reads (`.agents/skills/` vs `.codex/skills/`), and whether `hooks.json` works behind `features.hooks`; `codex.go`'s "no per-project config" comment is corrected in the same commit
+- [x] **CODEX-02**: `SupportsLocation(LocationLocal)` is true; project-local `install` writes `.codex/config.toml` through the TOML splice (existing tables, inline tables, comments and CRLF preserved) and tells the user the project must be trusted; `--target auto` detection and the agent picker reflect the new scope
+- [x] **CODEX-03**: The skill package is installed to the verified Codex skill path(s) at both scopes with its sidecar manifest, idempotently and byte-invariant against sibling content
 - [ ] **CODEX-04**: Project-local install writes the marker-fenced instructions block into the repo-root `AGENTS.md` (global `~/.codex/AGENTS.md` behaviour unchanged) and `uninstall` removes it leaving the rest of the file byte-identical
 - [ ] **CODEX-05**: A Codex PreToolUse nudge in `hooks.json` carries the same additionalContext-only contract as NUDGE-03/04 (first matched call, then at most once a minute per session and per subagent — the 2026-09-19 amendment of NUDGE-04); it is installed only on the `--pretool-nudge` opt-in, skipped with a message when the user has explicitly disabled Codex hooks (`[features] hooks = false`), and the docs state that Codex skips a new or changed hook until it is trusted in `/hooks` (2026-09-19 maintainer decision: codex-cli 0.155.0 hooks are stable and on by default, so the "experimental, disabled by default" premise was stale)
 - [ ] **CODEX-06**: A genuinely fresh Codex session in an indexed repo reaches for codegraph unprompted — the skill is listed, and the MCP tool is called or `codegraph explore` is run — with the evidence recorded to the v0.10.0 live-session standard; `codex mcp list` shows the entry at both scopes
@@ -183,9 +183,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NUDGE-04 | Phase 6 | Complete |
 | NUDGE-05 | Phase 6 | Complete |
 | NUDGE-06 | Phase 6 | Complete |
-| CODEX-01 | Phase 7 | Pending |
-| CODEX-02 | Phase 7 | Pending |
-| CODEX-03 | Phase 7 | Pending |
+| CODEX-01 | Phase 7 | Complete |
+| CODEX-02 | Phase 7 | Complete |
+| CODEX-03 | Phase 7 | Complete |
 | CODEX-04 | Phase 7 | Pending |
 | CODEX-05 | Phase 7 | Pending |
 | CODEX-06 | Phase 7 | Pending |
