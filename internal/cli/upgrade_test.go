@@ -318,3 +318,50 @@ func TestUpgradeCommand_SwapFailureReturnsSwapError(t *testing.T) {
 		t.Fatalf("upgrade error = %v, want sentinel %v via errors.Is", err, sentinel)
 	}
 }
+
+// TestRefreshInstalledSkills_CarriesPreToolNudge: upgrade's refresh passes
+// PreToolNudgeKeep (D-10), so an opted-in location's guard is re-rendered
+// for the new binary and a location that never opted in gains nothing.
+func TestRefreshInstalledSkills_CarriesPreToolNudge(t *testing.T) {
+	t.Run("opted_in_refreshed", func(t *testing.T) {
+		home := fakeHome(t)
+		if _, _, err := execCmd("install", "--target", "claude", "--location", "global", "--pretool-nudge"); err != nil {
+			t.Fatalf("install --pretool-nudge: %v", err)
+		}
+
+		if err := refreshInstalledSkills("/opt/new/codegraph", io.Discard); err != nil {
+			t.Fatalf("refreshInstalledSkills: %v", err)
+		}
+
+		guard := readFileString(t, filepath.Join(home, ".claude", "hooks", "pretooluse-nudge.sh"))
+		if !strings.Contains(guard, "codegraph_bin='/opt/new/codegraph'") {
+			t.Fatalf("the refreshed guard does not point at the new binary:\n%s", guard)
+		}
+		hooks, _ := readJSONMap(t, filepath.Join(home, ".claude", "settings.json"))["hooks"].(map[string]any)
+		if _, ok := hooks["PreToolUse"]; !ok {
+			t.Fatalf("refresh dropped hooks.PreToolUse at an opted-in location")
+		}
+	})
+
+	t.Run("never_opted_not_added", func(t *testing.T) {
+		home := fakeHome(t)
+		if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+			t.Fatalf("plain install: %v", err)
+		}
+
+		if err := refreshInstalledSkills("/opt/new/codegraph", io.Discard); err != nil {
+			t.Fatalf("refreshInstalledSkills: %v", err)
+		}
+
+		if _, err := os.Stat(filepath.Join(home, ".claude", "hooks", "pretooluse-nudge.sh")); !os.IsNotExist(err) {
+			t.Fatalf("refresh added the guard at a location that never opted in (stat err %v)", err)
+		}
+		hooks, _ := readJSONMap(t, filepath.Join(home, ".claude", "settings.json"))["hooks"].(map[string]any)
+		if _, ok := hooks["PreToolUse"]; ok {
+			t.Fatalf("refresh added hooks.PreToolUse at a location that never opted in")
+		}
+		if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); err != nil {
+			t.Fatalf("positive control: refresh did not touch the configured location: %v", err)
+		}
+	})
+}

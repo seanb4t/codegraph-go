@@ -687,3 +687,173 @@ func TestInstallStatus_KeptForeignIsNotAChange(t *testing.T) {
 		})
 	}
 }
+
+// preToolNudgeNote is D-09's stderr note, printed once when --pretool-nudge
+// is given (either value) and Claude Code is not among the resolved targets.
+const preToolNudgeNote = "note: --pretool-nudge only configures Claude Code, which is not among the selected agents; nothing was changed for it"
+
+// localPreToolGuard is where a local opt-in writes the rendered guard, and
+// localPreToolCommand the command every local PreToolUse handler registers.
+const (
+	localPreToolGuard   = ".claude/hooks/pretooluse-nudge.sh"
+	localPreToolCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+)
+
+// ownPreToolHandlerCount counts the PreToolUse handlers in settingsPath
+// whose command is exactly command; an absent file or key counts 0.
+func ownPreToolHandlerCount(t *testing.T, settingsPath, command string) int {
+	t.Helper()
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		return 0
+	}
+	hooks, _ := readJSONMap(t, settingsPath)["hooks"].(map[string]any)
+	blocks, _ := hooks["PreToolUse"].([]any)
+	n := 0
+	for _, b := range blocks {
+		block, _ := b.(map[string]any)
+		handlers, _ := block["hooks"].([]any)
+		for _, h := range handlers {
+			if handler, _ := h.(map[string]any); handler != nil && handler["command"] == command {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// hasPreToolUseKey reports whether settingsPath carries hooks.PreToolUse.
+func hasPreToolUseKey(t *testing.T, settingsPath string) bool {
+	t.Helper()
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		return false
+	}
+	hooks, _ := readJSONMap(t, settingsPath)["hooks"].(map[string]any)
+	_, ok := hooks["PreToolUse"]
+	return ok
+}
+
+// TestInstall_PreToolNudge_OptInRegisters: --pretool-nudge writes the guard
+// and a PreToolUse registration (D-09).
+func TestInstall_PreToolNudge_OptInRegisters(t *testing.T) {
+	fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	if _, err := os.Stat(localPreToolGuard); err != nil {
+		t.Fatalf("guard %s not written: %v", localPreToolGuard, err)
+	}
+	if !hasPreToolUseKey(t, filepath.Join(".claude", "settings.json")) {
+		t.Fatalf("settings.json has no hooks.PreToolUse after an opt-in install")
+	}
+}
+
+// TestInstall_PreToolNudge_StickyAcrossPlainInstall: a plain install (flag
+// not given) keeps and refreshes a recorded opt-in (D-10 Keep).
+func TestInstall_PreToolNudge_StickyAcrossPlainInstall(t *testing.T) {
+	fakeHome(t)
+	settings := filepath.Join(".claude", "settings.json")
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	out, _, err := execCmd("install", "--target", "claude", "--location", "local")
+	if err != nil {
+		t.Fatalf("plain install: %v", err)
+	}
+	if _, err := os.Stat(localPreToolGuard); err != nil {
+		t.Fatalf("a plain install removed the opted-in guard: %v", err)
+	}
+	if n := ownPreToolHandlerCount(t, settings, localPreToolCommand); n != 6 {
+		t.Fatalf("own PreToolUse handlers after a plain install = %d, want 6", n)
+	}
+	if !strings.Contains(out, "unchanged: "+localPreToolGuard) {
+		t.Fatalf("plain install did not report the guard unchanged (Keep refresh); stdout:\n%s", out)
+	}
+}
+
+// TestInstall_PreToolNudge_ExplicitFalseRemoves: --pretool-nudge=false is
+// the opt-out (D-10 Off), and a later plain install does not bring it back.
+func TestInstall_PreToolNudge_ExplicitFalseRemoves(t *testing.T) {
+	fakeHome(t)
+	settings := filepath.Join(".claude", "settings.json")
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	if n := ownPreToolHandlerCount(t, settings, localPreToolCommand); n == 0 {
+		t.Fatalf("precondition: the opt-in registered no own PreToolUse handler")
+	}
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge=false"); err != nil {
+		t.Fatalf("install --pretool-nudge=false: %v", err)
+	}
+	assertOff := func(when string) {
+		t.Helper()
+		if _, err := os.Stat(localPreToolGuard); !os.IsNotExist(err) {
+			t.Fatalf("%s: guard %s still present (stat err %v)", when, localPreToolGuard, err)
+		}
+		if n := ownPreToolHandlerCount(t, settings, localPreToolCommand); n != 0 {
+			t.Fatalf("%s: %d own PreToolUse handlers remain, want 0", when, n)
+		}
+	}
+	assertOff("after --pretool-nudge=false")
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local"); err != nil {
+		t.Fatalf("plain install: %v", err)
+	}
+	assertOff("after a later plain install")
+}
+
+// TestInstall_PreToolNudge_NoteWhenClaudeNotSelected: given either value
+// while Claude is not a resolved target, install says so once on stderr and
+// still succeeds (D-09).
+func TestInstall_PreToolNudge_NoteWhenClaudeNotSelected(t *testing.T) {
+	for _, tc := range []struct{ name, flag string }{
+		{"given_true", "--pretool-nudge"},
+		{"given_false", "--pretool-nudge=false"},
+	} {
+		flag := tc.flag
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+
+			stdout, stderr, err := execCmd("install", "--target", "cursor", "--location", "local", flag)
+			if err != nil {
+				t.Fatalf("install --target cursor %s: %v", flag, err)
+			}
+			if got := strings.Count(stderr, preToolNudgeNote+"\n"); got != 1 {
+				t.Fatalf("stderr carries the note %d times, want 1; stderr:\n%s", got, stderr)
+			}
+			if strings.Contains(stdout, "--pretool-nudge") {
+				t.Fatalf("the note leaked onto stdout:\n%s", stdout)
+			}
+			if _, err := os.Stat(localPreToolGuard); !os.IsNotExist(err) {
+				t.Fatalf("a Cursor-only install wrote %s (stat err %v)", localPreToolGuard, err)
+			}
+		})
+	}
+}
+
+// TestInstall_PreToolNudge_NoNoteWhenClaudeSelected: no note when Claude is
+// selected, and none when the flag was not given at all.
+func TestInstall_PreToolNudge_NoNoteWhenClaudeSelected(t *testing.T) {
+	fakeHome(t)
+
+	_, stderr, err := execCmd("install", "--target", "claude,cursor", "--location", "local", "--pretool-nudge")
+	if err != nil {
+		t.Fatalf("install --target claude,cursor --pretool-nudge: %v", err)
+	}
+	if strings.Contains(stderr, "note: --pretool-nudge") {
+		t.Fatalf("note printed although Claude was selected; stderr:\n%s", stderr)
+	}
+	if _, err := os.Stat(localPreToolGuard); err != nil {
+		t.Fatalf("positive control: Claude was selected but the guard was not written: %v", err)
+	}
+
+	_, stderr, err = execCmd("install", "--target", "cursor", "--location", "local")
+	if err != nil {
+		t.Fatalf("plain install --target cursor: %v", err)
+	}
+	if strings.Contains(stderr, "note: --pretool-nudge") {
+		t.Fatalf("note printed although --pretool-nudge was not given; stderr:\n%s", stderr)
+	}
+}
