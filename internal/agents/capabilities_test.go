@@ -427,3 +427,49 @@ func TestCapabilitiesMatchInstallWrites(t *testing.T) {
 		t.Fatalf("executed %d leaf subtests, want at least 13 (5 global+local targets x 2, 3 global-only targets x 1)", leaves)
 	}
 }
+
+// fakeHooksCodexJSONTarget is a minimal AgentTarget stub reaching only
+// describeDeclaredPaths's HookFiles branch: it declares Hooks:
+// HooksCodexJSON, the mechanism HookFiles has no case for yet (Phase 7
+// owns Codex's hooks literal). Every other method is an unused stub —
+// WR-01's regression test never calls them.
+type fakeHooksCodexJSONTarget struct{}
+
+func (fakeHooksCodexJSONTarget) ID() TargetID        { return TargetID("fake-codex-hooks") }
+func (fakeHooksCodexJSONTarget) DisplayName() string { return "Fake Codex Hooks Target" }
+func (fakeHooksCodexJSONTarget) SupportsLocation(loc Location) bool {
+	return loc == LocationGlobal
+}
+func (fakeHooksCodexJSONTarget) Detect(Location) DetectionResult { return DetectionResult{} }
+func (fakeHooksCodexJSONTarget) Install(Location, InstallOptions) WriteResult {
+	return WriteResult{}
+}
+func (fakeHooksCodexJSONTarget) Uninstall(Location) WriteResult { return WriteResult{} }
+func (t fakeHooksCodexJSONTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
+}
+func (fakeHooksCodexJSONTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksCodexJSON,
+		MCPConfig:    func(Location) (string, error) { return "/fake/config.json", nil },
+	}
+}
+
+// TestDescribeDeclaredPaths_PanicsOnUndeclaredHookFiles is WR-01's
+// regression test (code review 05-REVIEW.md): errHookFilesUndeclared's and
+// HookFiles's doc comments both promise that a target declaring
+// HooksCodexJSON without a HookFiles case "must fail loudly here ...
+// rather than silently describing no hook files at all." Before the fix,
+// describeDeclaredPaths discards every HookFiles error unconditionally,
+// so DescribePaths returns an incomplete-but-successful path list instead
+// of failing loudly.
+func TestDescribeDeclaredPaths_PanicsOnUndeclaredHookFiles(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("describeDeclaredPaths did not panic for a target declaring HooksCodexJSON with no HookFiles case — the documented loud-failure contract was not honored")
+		}
+	}()
+	fakeHooksCodexJSONTarget{}.DescribePaths(LocationGlobal)
+}
