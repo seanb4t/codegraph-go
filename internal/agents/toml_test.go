@@ -207,18 +207,52 @@ func TestSpliceTOMLTable_UTF8BOM_UpdatesInPlaceNeverDuplicates(t *testing.T) {
 	}
 }
 
-func TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM(t *testing.T) {
+// TestStripTOMLTable_UTF8BOM_TableOnlyResidualDropsEntirely (WR-03,
+// 07-REVIEW-FIX.md re-review pass 2) supersedes this test's original name
+// and assertion (TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM,
+// which asserted the BOM survived): when a BOM'd config.toml's ONLY content
+// is codegraph's own table, stripping it must leave nothing behind at all
+// -- not a BOM-plus-newline stub -- since the BOM has no downstream reader
+// left to preserve it for once the table it introduced is gone. The old
+// name/assertion encoded exactly the WR-03 bug: codex.go's Uninstall keys
+// its delete-vs-rewrite decision off stripTOMLTable's "" sentinel, so a
+// non-empty BOM-only residual caused it to rewrite a 4-byte stub file to
+// disk while still reporting the file removed (see 07-REVIEW-FIX.md's "Fix
+// iteration 2" section).
+func TestStripTOMLTable_UTF8BOM_TableOnlyResidualDropsEntirely(t *testing.T) {
 	installed := tomlUTF8BOM + "[mcp_servers.codegraph]\n" +
 		`command = "/usr/local/bin/codegraph"` + "\n" +
 		`args = ["serve", "--mcp"]` + "\n"
 
 	got := stripTOMLTable(installed, "mcp_servers.codegraph")
 
-	if strings.Contains(got, "[mcp_servers.codegraph]") {
-		t.Fatalf("stripTOMLTable must remove codegraph's own table from a BOM'd file, got: %q", got)
+	if got != "" {
+		t.Fatalf("stripTOMLTable must drop a BOM-only residual entirely when codegraph's table was the file's only content (WR-03), got: %q", got)
 	}
+}
+
+// TestStripTOMLTable_UTF8BOM_PreservedWhenOtherContentSurvives (WR-03,
+// 07-REVIEW-FIX.md re-review pass 2) is the companion positive control:
+// the BOM-only-residual case above must not overreach into dropping the
+// BOM when real content survives on either side of the stripped table --
+// CR-01's "a BOM present on input must still be present on output" must
+// hold whenever there is still something for it to precede.
+func TestStripTOMLTable_UTF8BOM_PreservedWhenOtherContentSurvives(t *testing.T) {
+	installed := tomlUTF8BOM + "[mcp_servers.codegraph]\n" +
+		`command = "/usr/local/bin/codegraph"` + "\n" +
+		"[some_other_table]\n" +
+		`key = "value"` + "\n"
+
+	got := stripTOMLTable(installed, "mcp_servers.codegraph")
+
 	if !strings.HasPrefix(got, tomlUTF8BOM) {
-		t.Fatalf("stripTOMLTable must preserve the input's leading BOM byte-for-byte, got: %q", got)
+		t.Fatalf("stripTOMLTable must still preserve the leading BOM when real content survives after codegraph's table (CR-01 must not be weakened), got: %q", got)
+	}
+	if !strings.Contains(got, "[some_other_table]") || !strings.Contains(got, `key = "value"`) {
+		t.Fatalf("unrelated table must survive stripTOMLTable, got: %q", got)
+	}
+	if strings.Contains(got, "[mcp_servers.codegraph]") {
+		t.Fatalf("codegraph's own table must be removed, got: %q", got)
 	}
 }
 

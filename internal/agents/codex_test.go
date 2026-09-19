@@ -199,6 +199,47 @@ func TestCodex_Uninstall_EmptiedConfigIsRemoved(t *testing.T) {
 	}
 }
 
+// TestCodex_Uninstall_BOMOnlyEmptiedConfigIsRemoved (WR-03, 07-REVIEW-FIX.md
+// re-review pass 2) reproduces, at the codexTarget.Uninstall level rather
+// than only stripTOMLTable's, the real-binary scenario the re-review pinned:
+// a UTF-8 BOM prepended to a config.toml whose only content is codegraph's
+// own table (the realistic shape for a Windows-authored, project-local
+// config.toml, per 07-LIVE-SESSIONS.md/CR-01). Uninstalling must remove the
+// file entirely -- exactly as the no-BOM case already does in
+// TestCodex_Uninstall_EmptiedConfigIsRemoved above -- rather than leaving a
+// 4-byte BOM-plus-newline stub behind on disk while still reporting
+// ActionRemoved.
+func TestCodex_Uninstall_BOMOnlyEmptiedConfigIsRemoved(t *testing.T) {
+	home := fakeHome(t)
+	c := codexTarget{}
+
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	installed := readFile(t, configPath)
+
+	// Simulate a Windows-authored config.toml by prepending a UTF-8 BOM
+	// ahead of codegraph's own (only) table, the same way a user's editor
+	// might have saved the file before codegraph ever touched it.
+	writeFile(t, configPath, "\xef\xbb\xbf"+installed)
+
+	result := c.Uninstall(LocationGlobal)
+	if fileExists(configPath) {
+		t.Fatalf("config.toml should have been removed entirely after uninstall (BOM-only residual), got: %q", readFile(t, configPath))
+	}
+	found := false
+	for _, fr := range result.Files {
+		if fr.Path == configPath {
+			found = true
+			if fr.Action != ActionRemoved {
+				t.Fatalf("expected FileResult action %q for %s, got %q", ActionRemoved, configPath, fr.Action)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a FileResult for %s, got %v", configPath, result.Files)
+	}
+}
+
 // TestCodex_DescribePaths_Local (D-09) replaces TestCodex_DescribePaths_LocalEmpty:
 // local scope now declares config.toml, AGENTS.md and the shared skill
 // package's SKILL.md and manifest paths.
