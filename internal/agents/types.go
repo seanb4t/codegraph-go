@@ -119,7 +119,19 @@ type InstallOptions struct {
 	// every agent's MCP command entry launches the exact binary the user
 	// ran `install` from, not a PATH guess (D-04).
 	ExecPath string
+	// PreToolNudge selects what this run does with the opt-in Claude Code
+	// PreToolUse nudge.
+	PreToolNudge PreToolNudgeMode
 }
+
+// PreToolNudgeMode is InstallOptions.PreToolNudge's value.
+type PreToolNudgeMode int
+
+const (
+	PreToolNudgeKeep PreToolNudgeMode = iota
+	PreToolNudgeOn
+	PreToolNudgeOff
+)
 
 // AgentTarget is the interface every roster agent implements; the
 // registry (registry.go) iterates it so install/uninstall never branch on

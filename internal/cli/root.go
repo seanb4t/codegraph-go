@@ -127,7 +127,7 @@ func newRootCmd() *cobra.Command {
 		newNodeCmd(), newExploreCmd(), newServeCmd(), newSyncCmd(),
 		newDaemonCmd(), newUnlockCmd(), newVersionCmd(), newTelemetryCmd(),
 		newUpgradeCmd(), newInstallCmd(), newUninstallCmd(),
-		newGithooksCmd(), newManCmd(), newUiCmd())
+		newGithooksCmd(), newManCmd(), newHookCmd(), newUiCmd())
 
 	root.AddGroup(
 		&cobra.Group{ID: groupQuery, Title: "Query the graph:"},
