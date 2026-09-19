@@ -4,17 +4,17 @@ milestone: v0.14.0
 milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
-status: executing
-stopped_at: Completed 07-10-PLAN.md
-last_updated: "2026-09-19T21:56:16.782Z"
+status: verifying
+stopped_at: Completed 07-11-PLAN.md (final plan of Phase 07-codex-parity)
+last_updated: "2026-09-19T22:35:02.135Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: fb1840374416397c5092e2748154a13460e51ab7
+state_head: a27c4b82af235cdc40aa5e1a0c08f9070925eb0c
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 52
+  completed_plans: 53
   percent: 86
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 
 Phase: 7 (Codex Parity) — EXECUTING
 Plan: 11 of 11
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-19 — Phase 7 execution started
 
 ## Performance Metrics
@@ -183,6 +183,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P08 | ~50min | 3 tasks | 11 files |
 | Phase 7 P09 | ~15min | 3 tasks | 1 files |
 | Phase 07 P10 | ~18min | 2 tasks | 4 files |
+| Phase 07 P11 | 14 min | 3 tasks | 44 files |
 
 ## Accumulated Context
 
@@ -433,6 +434,9 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: FIX-03's local real-PTY tmux re-run explicitly NOT performed (maintainer decision 2026-09-19, carried from 07-03, issue #75) — the 07-03 model-level footprint guard is the local FIX-03 evidence at this HEAD
 - [Phase 7]: [Phase 07] 07-10: docs/AGENT-CAPABILITIES.md published (16 rows, AllTargets() x [global,local]) with a Go drift test (TestCapabilityDoc_MirrorsCapabilities/VerificationColumn) that recomputes every code-derived cell from Capabilities() and never lets the doc overclaim [ASSUMED] rows as verified
 - [Phase 7]: [Phase 07] 07-10: Claude's global row is [ASSUMED] (code.claude.com/docs/en/mcp, fetched 2026-09-19) after confirming no 0[5-7]-LIVE-SESSIONS.md file ran a dedicated Claude-global install+read session — only Claude local scope was live-verified (06-LIVE-SESSIONS.md)
+- [Phase 7]: [Phase 07]: D-29 skill sentence rewritten harness-neutral ('...except Hermes.'), placed after the const's first sentence so it ends at byte 299 (was 554); whole const re-measured 582 bytes. 38 pre-edit transcripts (re-measured, not assumed) re-frozen in one reviewed diff.
+- [Phase 7]: [Phase 07]: D-30 comments corrected (instructions.go, shared.go, registry_test.go) without touching the byte-frozen codegraphInstructionsBlock text; block stays skill-agnostic because it's frozen, not because the skill's reach is narrow (skill now reaches 7 of 8 targets).
+- [Phase 7]: [Phase 07]: Phase 7 gate recorded green with one documented exception — the tmux picker re-run clause reads 'not run' per the maintainer's already-accepted 2026-09-19 decision (issue #75); every other gate clause (build, 53-package suite, daemon alone, docs:cli:drift, 28 mutation families, CODEX-01/05/06 PASS, no ci-skip, WINDOWS D-08 open) passes.
 
 ### Pending Todos
 
@@ -587,8 +591,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T21:56:16.723Z
-Stopped at: Completed 07-10-PLAN.md
+Last session: 2026-09-19T22:35:01.950Z
+Stopped at: Completed 07-11-PLAN.md (final plan of Phase 07-codex-parity)
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

@@ -74,7 +74,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **AGENT-10**: Gemini CLI — skill package installed to `.gemini/skills/` (project) and its global equivalent, discoverable via `activate_skill`, the existing instructions block retained
 - [x] **AGENT-11**: Kiro — skill package installed to `.kiro/skills/` (project) and `~/.kiro/skills/`, `AGENTS.md` retained as a steering source
 - [x] **AGENT-13**: Every new per-harness write uses exact-identity ownership — a planted-foreign-entry test per harness proves an unrelated sibling entry is never overwritten — and `uninstall` reverses every write leaving unrelated content byte-identical (commit `242ec0a` cited in review)
-- [ ] **AGENT-14**: A per-harness capability table (what each of the 8 targets receives: MCP config, instructions, skill, nudge, scopes) is published in the docs and kept honest — `[ASSUMED]` where live verification was not possible — with the `instructions.go` "4 of 8" comment and the MCP `instructions` skill sentence updated to match what ships
+- [x] **AGENT-14**: A per-harness capability table (what each of the 8 targets receives: MCP config, instructions, skill, nudge, scopes) is published in the docs and kept honest — `[ASSUMED]` where live verification was not possible — with the `instructions.go` "4 of 8" comment and the MCP `instructions` skill sentence updated to match what ships
 
 ### Nudge Hook (Claude Code)
 
@@ -178,7 +178,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AGENT-10 | Phase 5 | Complete |
 | AGENT-11 | Phase 5 | Complete |
 | AGENT-13 | Phase 5 | Complete |
-| AGENT-14 | Phase 7 | Pending |
+| AGENT-14 | Phase 7 | Complete |
 | NUDGE-03 | Phase 6 | Complete |
 | NUDGE-04 | Phase 6 | Complete |
 | NUDGE-05 | Phase 6 | Complete |
