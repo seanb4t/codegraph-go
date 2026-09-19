@@ -875,3 +875,235 @@ exit=1
 `git checkout -- internal/agents/claude.go`, then `git diff --quiet` — exit 0 (byte-clean).
 
 **Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.081s`.
+
+---
+
+## Family (e1) — D-10: upgrade passing Off turns TestRefreshInstalledSkills_CarriesPreToolNudge/opted_in_refreshed RED
+
+**Test/guard:** `TestRefreshInstalledSkills_CarriesPreToolNudge/opted_in_refreshed`
+(`internal/cli/upgrade_test.go`).
+
+**What are we testing, and why?** `codegraph upgrade` swaps the binary unattended and then
+re-runs Install at every configured Claude location. The PreToolUse opt-in is recorded in the
+manifest, so the refresh must carry it (Keep) and re-render the guard for the new binary. The
+mutation passes Off instead, which silently removes an opt-in on every upgrade.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/upgrade.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/agents\.PreToolNudgeKeep/agents.PreToolNudgeOff/' internal/cli/upgrade.go`:
+
+```diff
+@@ -67,7 +67,7 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
+ 			result := t.Install(loc, agents.InstallOptions{
+ 				ExecPath:     execPath,
+ 				AutoAllow:    false,
+-				PreToolNudge: agents.PreToolNudgeKeep,
++				PreToolNudge: agents.PreToolNudgeOff,
+ 			})
+ 			for _, f := range result.Files {
+ 				fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestRefreshInstalledSkills_CarriesPreToolNudge$' -v`, exit code appended):
+
+```
+=== RUN   TestRefreshInstalledSkills_CarriesPreToolNudge
+=== RUN   TestRefreshInstalledSkills_CarriesPreToolNudge/opted_in_refreshed
+    upgrade_test.go:336: readFileString(/var/folders/.../T/TestRefreshInstalledSkills_CarriesPreToolNudgeopted_in_refreshe1033732531/001/.claude/hooks/pretooluse-nudge.sh): open /var/folders/.../T/TestRefreshInstalledSkills_CarriesPreToolNu …
+=== RUN   TestRefreshInstalledSkills_CarriesPreToolNudge/never_opted_not_added
+--- FAIL: TestRefreshInstalledSkills_CarriesPreToolNudge (0.01s)
+    --- FAIL: TestRefreshInstalledSkills_CarriesPreToolNudge/opted_in_refreshed (0.01s)
+    --- PASS: TestRefreshInstalledSkills_CarriesPreToolNudge/never_opted_not_added (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.463s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- internal/cli/upgrade.go`, then `git diff --quiet -- internal/cli/upgrade.go`
+— exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/cli	0.408s`.
+
+---
+
+## Family (e2) — D-10: a not-given flag read as Off turns TestInstall_PreToolNudge_StickyAcrossPlainInstall RED
+
+**Test/guard:** `TestInstall_PreToolNudge_StickyAcrossPlainInstall` (`internal/cli/install_test.go`).
+
+**What are we testing, and why?** An omitted flag is not consent to remove. `--pretool-nudge`
+is a tri-state read through cobra `Changed`: not given → Keep. The mutation ignores `Changed`
+for the not-given case and maps it to Off, so a plain `install` strips a recorded opt-in.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/install.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/nudge := agents\.PreToolNudgeKeep/nudge := agents.PreToolNudgeOff/' internal/cli/install.go`:
+
+```diff
+@@ -127,7 +127,7 @@ func newInstallCmd() *cobra.Command {
+ 			// through Changed. Not given keeps (and refreshes) a recorded
+ 			// opt-in and never adds one; given as true opts in; given as
+ 			// --pretool-nudge=false opts out.
+-			nudge := agents.PreToolNudgeKeep
++			nudge := agents.PreToolNudgeOff
+ 			if cmd.Flags().Changed("pretool-nudge") {
+ 				nudge = agents.PreToolNudgeOff
+ 				if pretoolNudge {
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestInstall_PreToolNudge_StickyAcrossPlainInstall$' -v`, exit code appended):
+
+```
+=== RUN   TestInstall_PreToolNudge_StickyAcrossPlainInstall
+    install_test.go:765: a plain install removed the opted-in guard: stat .claude/hooks/pretooluse-nudge.sh: no such file or directory
+--- FAIL: TestInstall_PreToolNudge_StickyAcrossPlainInstall (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.465s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- internal/cli/install.go`, then `git diff --quiet -- internal/cli/install.go`
+— exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/cli	0.425s`.
+
+---
+
+## Family (e3) — D-13: a settings-only `if` edit turns TestHookRegistrationMatchesFragmentAndScript/PreToolUse RED
+
+**Test/guard:** `TestHookRegistrationMatchesFragmentAndScript/PreToolUse`
+(`internal/agents/hookpackage_test.go`).
+
+**What are we testing, and why?** The dogfooded registration in `.claude/settings.json` must
+stay deep-equal to the embedded fragment `.claude/hooks/hooks.json`, so this repository runs
+exactly what it ships. The mutation edits one `if` rule in settings.json only; the fragment is
+untouched (`git diff --quiet -- .claude/hooks/hooks.json` — exit 0 while planted).
+
+**Pre-mutation gate:** `git diff --quiet -- .claude/settings.json` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/Bash\(rg \*\)/Bash(rg*)/' .claude/settings.json`:
+
+```diff
+@@ -37,7 +37,7 @@
+         "hooks": [
+           {
+             "type": "command",
+-            "if": "Bash(rg *)",
++            "if": "Bash(rg*)",
+             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh",
+             "timeout": 5
+           }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestHookRegistrationMatchesFragmentAndScript$' -v`, the two `%#v` dumps cut, exit code
+appended):
+
+```
+=== RUN   TestHookRegistrationMatchesFragmentAndScript
+=== RUN   TestHookRegistrationMatchesFragmentAndScript/SessionStart
+=== RUN   TestHookRegistrationMatchesFragmentAndScript/PreToolUse
+    hookpackage_test.go:385: hooks.PreToolUse differs between ../../.claude/settings.json and ../../.claude/hooks/hooks.json — Phase 7 would embed a fragment that differs from what actually runs here.
+        settings.json: []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh", "if":"Bash(grep *)", " …
+        hooks.json:    []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh", "if":"Bash(grep *)", " …
+--- FAIL: TestHookRegistrationMatchesFragmentAndScript (0.00s)
+    --- PASS: TestHookRegistrationMatchesFragmentAndScript/SessionStart (0.00s)
+    --- FAIL: TestHookRegistrationMatchesFragmentAndScript/PreToolUse (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.066s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- .claude/settings.json`, then `git diff --quiet -- .claude/settings.json` —
+exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.076s`.
+
+---
+
+## Family (e4) — NUDGE-06 / 242ec0a: the three Bash handlers merged into one block turn TestPreToolNudge_HandEditedOwnEntryDuplicates RED
+
+**Test/guard:** `TestPreToolNudge_HandEditedOwnEntryDuplicates`
+(`internal/agents/claude_pretooluse_lifecycle_test.go`) and
+`TestPreToolUseRegistrationShape/hooks.json` (`internal/agents/hookpackage_test.go`).
+
+**What are we testing, and why?** Ownership is per block by exact command (`isOwned` in
+`writeHookEntry`/`removeHookEntry`, `242ec0a`). With the three Bash handlers in ONE block, a
+hand-edit of one handler leaves the block owned through its two unedited siblings, so the
+next install overwrites the edit (the 06-04 finding). The fix is the registration shape — one
+handler per block — not the ownership code. The mutation restores the pre-06-05 merged
+block in the fragment only (`git diff --quiet -- .claude/settings.json` — exit 0 while planted).
+
+**Pre-mutation gate:** `git diff --quiet -- .claude/hooks/hooks.json` — exit 0 (clean).
+
+**Mutation applied:** `git show 98f014d5^:.claude/hooks/hooks.json > .claude/hooks/hooks.json`
+(the fragment exactly as it was before this plan's GREEN, one Bash block with three handlers):
+
+```diff
+@@ -29,23 +29,13 @@
+             "if": "Bash(grep *)",
+             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh",
+             "timeout": 5
+-          }
+-        ]
+-      },
+-      {
+-        "matcher": "Bash",
+-        "hooks": [
++          },
+           {
+             "type": "command",
+             "if": "Bash(rg *)",
+             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh",
+             "timeout": 5
+-          }
+-        ]
+-      },
+-      {
+-        "matcher": "Bash",
+-        "hooks": [
++          },
+           {
+             "type": "command",
+             "if": "Bash(find *)",
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestPreToolNudge_HandEditedOwnEntryDuplicates$|TestPreToolUseRegistrationShape$' -v`,
+the `%#v` dumps cut, exit code appended):
+
+```
+=== RUN   TestPreToolNudge_HandEditedOwnEntryDuplicates
+    claude_pretooluse_lifecycle_test.go:385: after the first On install PreToolUse has 4 blocks, want 6 owned: []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"co …
+--- FAIL: TestPreToolNudge_HandEditedOwnEntryDuplicates (0.00s)
+=== RUN   TestPreToolUseRegistrationShape
+=== RUN   TestPreToolUseRegistrationShape/settings.json
+=== RUN   TestPreToolUseRegistrationShape/hooks.json
+    hookpackage_test.go:457: ../../.claude/hooks/hooks.json: hooks.PreToolUse has 4 blocks, want 6: []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${C …
+--- FAIL: TestPreToolUseRegistrationShape (0.00s)
+    --- PASS: TestPreToolUseRegistrationShape/settings.json (0.00s)
+    --- FAIL: TestPreToolUseRegistrationShape/hooks.json (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.069s
+FAIL
+exit=1
+```
+
+The hand-edit test goes RED at its first assertion: the install registers 4 own blocks, not
+the 6 single-handler blocks. That assertion runs before the test edits the `Bash(rg *)`
+handler, so this run does not reach the overwrite itself. The overwrite through unedited
+siblings under a merged block is the behaviour 06-04 observed and recorded (06-04-SUMMARY,
+Deviation 1).
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- .claude/hooks/hooks.json`, then `git diff --quiet -- .claude/hooks/hooks.json`
+— exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.069s`.
