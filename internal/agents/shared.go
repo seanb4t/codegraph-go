@@ -199,6 +199,23 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 // the unowned blocks in their original relative order followed by
 // ownBlocks. Every unrelated event key and every unowned block under the
 // same event is carried through untouched.
+// blockOwnsAnyCommand reports whether block's own hooks[] sub-array
+// contains any command in ownCommands — the single ownership-identity test
+// writeHookEntry's isOwned closure, removeHookEntry's isOwnCommand closure,
+// and hasOwnHookBlock all apply (code review WR-02, 06-REVIEW.md: three
+// independent copies of this rule were kept in sync only by
+// TestOwnershipExactIdentity and developer discipline, not by the
+// compiler). Ownership keys on exact hooks[i]["command"] string equality
+// against ownCommands, ignoring matcher, if, and any other field — a block
+// that fails to cast to map[string]any, or whose "hooks" key fails to cast
+// to []any, is never owned.
+//
+// STUB (WR-02 fix step 1): always returns false so TestBlockOwnsAnyCommand
+// can be proven RED before this is wired up to a real implementation.
+func blockOwnsAnyCommand(block any, ownCommands []string) bool {
+	return false
+}
+
 func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
 	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {

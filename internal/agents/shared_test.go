@@ -452,3 +452,48 @@ func TestSharedWriteJSONFile_FormatsWithIndentAndTrailingNewline(t *testing.T) {
 		t.Fatalf("unexpected format:\ngot=%q\nwant=%q", got, want)
 	}
 }
+
+// --- blockOwnsAnyCommand (WR-02, 06-REVIEW.md: shared ownership-identity
+// predicate for writeHookEntry, removeHookEntry, and hasOwnHookBlock) ---
+
+func TestBlockOwnsAnyCommand(t *testing.T) {
+	own := []string{"codegraph hook pretooluse"}
+
+	t.Run("own command in multi-handler block", func(t *testing.T) {
+		block := map[string]any{
+			"matcher": "startup",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "some-other-command"},
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse"},
+			},
+		}
+		if !blockOwnsAnyCommand(block, own) {
+			t.Fatal("expected a block containing an own command among multiple hooks to be owned")
+		}
+	})
+
+	t.Run("foreign-only block is not owned", func(t *testing.T) {
+		block := map[string]any{
+			"matcher": "startup",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "some-other-command"},
+			},
+		}
+		if blockOwnsAnyCommand(block, own) {
+			t.Fatal("expected a block with no own command to be reported as not owned")
+		}
+	})
+
+	t.Run("matcher and if differences are ignored", func(t *testing.T) {
+		block := map[string]any{
+			"matcher": "totally-different-matcher",
+			"if":      "some-condition-codegraph-never-writes",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse"},
+			},
+		}
+		if !blockOwnsAnyCommand(block, own) {
+			t.Fatal("expected ownership to be determined by command identity alone, ignoring matcher/if")
+		}
+	})
+}
