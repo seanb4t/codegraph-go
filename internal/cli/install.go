@@ -109,14 +109,17 @@ func newInstallCmd() *cobra.Command {
 
 			var targets []agents.AgentTarget
 			switch {
-			case yes:
-				// D-15/Pitfall 6: --yes must short-circuit BEFORE the TTY
-				// branch, not merely skip rendering the picker — checked
-				// first in the switch so it always wins regardless of
-				// stdin/stdout's actual state.
-				targets, err = agents.ResolveTargetFlag("auto", loc)
 			case cmd.Flags().Changed("target"):
+				// D-13: an explicit --target wins over --yes — --yes only
+				// supplies the non-interactive default when no target was
+				// named.
 				targets, err = agents.ResolveTargetFlag(target, loc)
+			case yes:
+				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
+				// branch, not merely skip rendering the picker — checked
+				// here so it always wins regardless of stdin/stdout's
+				// actual state whenever --target was not given.
+				targets, err = agents.ResolveTargetFlag("auto", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:

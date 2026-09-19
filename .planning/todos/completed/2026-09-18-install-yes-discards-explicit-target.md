@@ -4,7 +4,11 @@ title: install --yes silently discards an explicit --target and resolves to auto
 area: cli
 severity: minor
 files:
+
   - internal/cli/install.go:99-109
+
+completed: 2026-09-19
+status: completed
 ---
 
 ## Problem

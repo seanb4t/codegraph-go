@@ -48,12 +48,16 @@ func newUninstallCmd() *cobra.Command {
 
 			var targets []agents.AgentTarget
 			switch {
-			case yes:
-				// D-15/Pitfall 6: --yes must short-circuit BEFORE the TTY
-				// branch, not merely skip rendering the picker.
-				targets, err = agents.ResolveTargetFlag("all", loc)
 			case cmd.Flags().Changed("target"):
+				// D-13: an explicit --target wins over --yes — --yes only
+				// supplies the non-interactive default when no target was
+				// named.
 				targets, err = agents.ResolveTargetFlag(target, loc)
+			case yes:
+				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
+				// branch, not merely skip rendering the picker, whenever
+				// --target was not given.
+				targets, err = agents.ResolveTargetFlag("all", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:
