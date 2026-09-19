@@ -6,10 +6,10 @@ current_phase: 7
 current_phase_name: Codex Parity
 status: executing
 stopped_at: Completed 07-09-PLAN.md
-last_updated: "2026-09-19T21:28:48.117Z"
+last_updated: "2026-09-19T21:30:26.444Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: 4ef6374c4cd92639009db465978659ce813c1bf6
+state_head: 1bc613a46f87aebbcdfb21c65e70a146b46c4b15
 progress:
   total_phases: 7
   completed_phases: 6
@@ -476,6 +476,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 6] Tooling gaps (not blocking, not hand-edited): (a) plan-gate commands that pick a base via git log --grep='^test\\(NN-PP\\): ' | tail -1 resolve to EARLIER milestones' same-numbered plans (hit in 06-04, 06-05, 06-07 — verified against the phase base instead); (b) stale .git/gsd-plan-head-before-NN-PP markers from earlier milestones had to be removed; (c) state.update-progress warns on every plan that STATE.md has no 'Progress:' body line; (d) frontmatter set re-serializes covered_files with a blank line after the key (parser tolerates it).
 - [Phase 6] Phase 5 now reads verification_status: stale — a GENUINE signal (like Phase 4 → Phases 1–3): Phase 6 legitimately modified files in Phase 5's covered_files (internal/agents/claude.go, capabilities.go, skillshared.go, manifest.go, types.go, shared.go, ownership/capabilities tests, internal/cli/install.go, uninstall.go, docs/CLI-REFERENCE.md). Re-verify Phases 1–5 at the milestone audit (/gsd-verify-work), together with Phase 4's missing validate-phase/secure-phase runs.
 - [Phase 7] Released codegraph binaries carry a Codex TOML data-loss bug: findTOMLTableRange ends a table only at a column-0 '[', so an indented [mcp_servers.codegraph] swallows every sibling table up to the next column-0 header. Do NOT run 'codegraph install' or 'uninstall' with --target codex or --target all on a machine whose ~/.codex/config.toml indents headers until the Phase 7 fix (07-CONTEXT D-07/D-08) ships; no patch release (maintainer decision B2, 2026-09-19)
+- [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
 
 ### Quick Tasks Completed
 
