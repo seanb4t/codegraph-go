@@ -159,6 +159,39 @@ func TestGate_DirCreated0700(t *testing.T) {
 	}
 }
 
+// TestGate_LoosePermissionsIsSilent is WR-01's regression test
+// (06-REVIEW.md): a PRE-EXISTING sentinel directory with permission bits
+// looser than 0700 (e.g. left behind by an older binary before this Gate
+// existed, or widened by a misconfigured umask) must be refused exactly
+// like a symlinked or foreign-owned one, since ordinary directory
+// permission bits — not just ownership — govern who else on a shared
+// multi-user machine can list, create, or delete entries inside it.
+func TestGate_LoosePermissionsIsSilent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nudge")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Positive control: an existing 0700 directory still fires.
+	if !(Gate{Dir: dir, Now: fixedClock(gateT)}).Due(mustKey(t, "control", "")) {
+		t.Fatal("control: Due = false for a pre-existing 0700 dir, want true")
+	}
+
+	loose := filepath.Join(t.TempDir(), "nudge")
+	if err := os.Mkdir(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if (Gate{Dir: loose, Now: fixedClock(gateT)}).Due(mustKey(t, "s", "")) {
+		t.Error("Due in a pre-existing 0755 dir = true, want false (WR-01: enforce the 0700 invariant on a pre-existing sentinel dir)")
+	}
+	entries, err := os.ReadDir(loose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("loosely-permissioned dir gained %d entries, want none", len(entries))
+	}
+}
+
 func TestSentinel_ReadRefusesSymlink(t *testing.T) {
 	d := t.TempDir()
 	target := filepath.Join(d, "target")
