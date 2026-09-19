@@ -36,13 +36,13 @@
     {
       "number": "7",
       "name": "Codex Parity",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 7 of 7 · 81% · executing"
+    "reason": "Phase 7 of 7 · 83% · executing"
   },
-  "updated_at": "2026-09-19T16:06:13.785Z"
+  "updated_at": "2026-09-19T16:22:47.229Z"
 }

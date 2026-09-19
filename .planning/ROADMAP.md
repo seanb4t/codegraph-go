@@ -396,7 +396,7 @@ Plans:
   5. The install/uninstall agent picker renders its help footer in a 100×30 pane with every registered target listed, the height budget accounting for bubbles v2 list pagination, asserted by the tmux harness *after* `CODEX-02`'s scope flip (the picker always lists all 8 registered targets, so the flip changes Codex's local pre-check, not the row count — 2026-09-19 correction); and the published per-harness capability table (MCP config, instructions, skill, nudge, scopes for all 8 targets) matches what ships, `[ASSUMED]` where live verification was not possible, with `instructions.go`'s "4 of 8" comment and the MCP `instructions` skill sentence updated to match (FIX-03, AGENT-14)
 
 **Notes**: Research pitfalls attached: 11 (Codex's config surface changed during 2026 — project-scoped `.codex/config.toml` is trust-gated and silently falls back when untrusted, the exact "looks configured, does nothing" shape rule `84d1gfpywd` exists to catch; the doc comment and the code change together with a dated citation), 12 (a Codex transcript is the evidence, not a summary; the negative-space check — did it grep instead — is recorded), 19 (the footer fix is measured against the real 100×30 budget with the *final* target count, not at default terminal size). Correction (2026-09-19, verified against codex-cli 0.155.0 and the current Codex docs): Codex hooks are stable and enabled by default, and new or changed hooks are skipped until trusted in `/hooks` — `CODEX-05` stays opt-in via `--pretool-nudge` and says so. Required companion changes when `SupportsLocation(LocationLocal)` flips: `Detect(LocationLocal)` must check the local `.codex/` path or `--target auto --location local` treats Codex as never installed; `DescribePaths(loc)` must add the local paths or `--print-config-style` under-reports; `agentpicker_test.go` gains the newly selectable row. `spliceTOMLTable`/`stripTOMLTable` operate on content, not paths, so a second file needs no path change — but correction (2026-09-19, reproduced): `findTOMLTableRange` does NOT confine edits for indented TOML (the end scan stops only at a column-0 `[`), so on a config with indented nested headers — the maintainer's own `~/.codex/config.toml` — install/uninstall would delete every following sibling MCP server; it also mishandles CRLF, an inline `codegraph = {…}` and `[mcp_servers.codegraph.*]` subtables. The fix is Phase 7's first plan. `AGENT-14` closes the milestone's docs so the table describes the shipped surface, never the plan.
-**Plans**: 1/11 plans executed
+**Plans**: 2/11 plans executed
 
 Plans:
 **Wave 1**
@@ -405,7 +405,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02-PLAN.md — `install`/`uninstall --target X --yes` resolves to exactly X, RED-first; todo closed (CODEX-02, D-13)
+- [x] 07-02-PLAN.md — `install`/`uninstall --target X --yes` resolves to exactly X, RED-first; todo closed (CODEX-02, D-13)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -456,7 +456,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | 4. CLI Glow-up | 8/8 | Complete    | 2026-09-17 |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 7/7 | Complete    | 2026-09-18 |
 | 6. Claude Code PreToolUse Nudge | 7/7 | Complete    | 2026-09-19 |
-| 7. Codex Parity | 1/11 | In Progress|  |
+| 7. Codex Parity | 2/11 | In Progress|  |
 
 8 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0). v0.14.0 scoped: 7 phases (1–7), 55 requirements, 0/7 phases complete (0%).
 
