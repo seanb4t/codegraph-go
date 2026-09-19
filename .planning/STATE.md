@@ -5,17 +5,17 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-09-19T16:42:22.917Z"
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-09-19T17:20:29.979Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: a4efcc2b25c17ae9bb9f8128be5046b46858fbdc
+state_head: 636c115f3f6369925ee6405664b557d4c29b923d
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 45
-  percent: 85
+  completed_plans: 46
+  percent: 86
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 ## Current Position
 
 Phase: 7 (Codex Parity) — EXECUTING
-Plan: 4 of 11
+Plan: 5 of 11
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 7 execution started
 
@@ -176,6 +176,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P01 | 51 min | 3 tasks | 7 files |
 | Phase 07 P02 | 15min | 2 tasks | 6 files |
 | Phase 07 P03 | ~15min | 3 tasks | 6 files |
+| Phase 07 P04 | ~15min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -408,6 +409,9 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: Family (b) mutation tests appended at end of install_test.go rather than interleaved, preserving existing test line-number references
 - [Phase 7]: [Phase 07]: 07-03: Task 3 (Family c3 tmux RED/GREEN) not performed by maintainer decision (2026-09-19) — tmux replaced by herdr on the maintainer's machines; local tmux evidence skipped, CI tmux-e2e job is the only remaining real-PTY confirmation, follow-up filed at issue #75; 07-09's post-scope-flip tmux re-run is skipped under the same decision
 - [Phase 7]: [Phase 07]: 07-03: bubbles v2 list.populatedView already inserts a row separator — checkboxDelegate/daemonDelegate must render exactly one line and never append their own trailing newline, or every row costs 2 lines against the Height() budget (D-24)
+- [Phase 07]: CODEX-01 verdict PASS: all six pass-bar L-lines PASS in an isolated Codex scratch HOME before any codex.go change; real ~/.codex and ~/.agents files unchanged (L7).
+- [Phase 07]: D-15/D-16/A2: Codex reads both .codex/skills and $CODEX_HOME/skills; trust-gates project MCP servers and hooks but NOT AGENTS.md or project skills; the -c trust_level override does not grant trust.
+- [Phase 07]: A1: both the local D-20 hook command form and the single-quoted absolute global form (with a space in the path) are shell-expanded and executed; hook trust is keyed per hooks.json file+group+handler (D-23 append-last required).
 
 ### Pending Todos
 
@@ -561,8 +565,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T16:42:09.188Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-09-19T17:19:54.846Z
+Stopped at: Completed 07-04-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
