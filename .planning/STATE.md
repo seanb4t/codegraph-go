@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 6
 current_phase_name: Claude Code PreToolUse Nudge
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-19T09:23:19.820Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-09-19T09:34:43.532Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 6 execution started
-state_head: d46dbb4485a156677f3105b940e1d1bd1eadcc1d
+state_head: ec9583a7d950fe03cfe4f2ff53d4ef43578c92fb
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 42
-  completed_plans: 37
+  completed_plans: 38
   percent: 71
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 5)
 ## Current Position
 
 Phase: 6 (Claude Code PreToolUse Nudge) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 6 execution started
 
@@ -168,6 +168,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P07 | 13min | 3 tasks | 9 files |
 | Phase 06 P01 | 10min | 2 tasks | 17 files |
 | Phase 06 P02 | 5min | 2 tasks | 6 files |
+| Phase 06 P03 | 10min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -385,6 +386,8 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: Phase 6 06-01: guard binary path delivered as one single-quoted token replaced with a POSIX-quoted absolute ExecPath (not text/template); the unrendered dogfood guard alone falls back to PATH
 - [Phase 6]: Phase 6 06-01: two bare allowlist lines (codegraph hook, codegraph hook pretooluse), both hidden commands carry --help
 - [Phase 6]: Phase 6 06-02: TestCorporaShape's logged fire rates are measured through Qualifies, not counted from the rows' want fields
+- [Phase 6]: Phase 6 06-03: Gate.Due Lstat-checks the sentinel dir after every Mkdir, not only on EEXIST, so a dir it just created is held to the same symlink/is-dir/uid test
+- [Phase 6]: Phase 6 06-03: a sentinel mtime in the future counts as due and is re-recorded, so a stepped-back clock cannot silence the nudge
 
 ### Pending Todos
 
@@ -533,8 +536,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T09:23:19.781Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-09-19T09:34:43.491Z
+Stopped at: Completed 06-03-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
