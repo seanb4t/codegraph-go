@@ -616,4 +616,13 @@ Full-package re-check after both reverts: `GOTOOLCHAIN=go1.26.6 go test ./intern
 
 ## Family (c3)
 
-Orchestrator step — pending Task 3.
+**Not run: the maintainer decided to skip it (2026-09-19).** tmux has been retired from the maintainer's machines and replaced by herdr. The maintainer chose to skip the local real-PTY RED/GREEN evidence rather than install tmux: "skip the tmux evidence, open a GH issue to consider a move from tmux to herdr, or if the e2e that we use tmux for is still needed (or if there are other options)".
+
+- No tmux was installed, and `task test:tmux` was not run locally. There is therefore no tmux version, no GREEN `executed=6` line and no RED excerpt to record.
+- The local guard for FIX-03 is the model-level footprint test (Families c1 and c2 above), which is RED on the pre-fix delegate and GREEN at HEAD.
+- The re-anchored TTY-05 assertion (`space: toggle` plus all 8 display names) compiles under `go vet -tags tmux ./test/tmux/`. Its real-PTY run is left to the CI `tmux-e2e` job (ubuntu-latest, tmux 3.4).
+- 07-09's post-scope-flip tmux re-run is skipped under the same decision.
+- Follow-up: https://github.com/seanb4t/codegraph-go/issues/75 (move the harness to herdr, a pure-Go PTY or teatest; keep it CI-only; or retire it).
+
+Maintainer decision: skip local tmux evidence for FIX-03 (c3 and the 07-09 re-run); CI tmux-e2e is the only real-PTY run; see #75.
+Family (c3) verdict: not run (maintainer decision 2026-09-19); model-level guard c1/c2 RED→GREEN stands.
