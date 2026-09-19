@@ -425,3 +425,195 @@ diff).
 
 Full-package re-check after both reverts: `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1`
 → `ok  	github.com/seanb4t/codegraph-go/internal/cli	17.205s`.
+
+---
+
+## Family (c1) — D-24: re-planting the trailing newline in checkboxDelegate.Render turns TestAgentPickerFootprintFitsDefaultPane RED
+
+**Test/guard:** `TestAgentPickerFootprintFitsDefaultPane` (`internal/cli/tui/agentpicker_test.go`)
+— asserts the agent picker's rendered view fits within 30 lines at a 100x30 window with the
+real registry's 8 targets, and shows the help footer text `space: toggle`.
+
+**What are we testing, and why?** Whether the guard catches the exact pre-fix defect FIX-03
+regressed to: `checkboxDelegate.Render` writing its own trailing newline on top of
+bubbles/v2/list's `populatedView` separator, costing each row 2 lines instead of 1 and
+overflowing the 100x30 pane so the help footer never renders (D-24).
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/tui/agentpicker.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/Fprintf\(w, "%s%s %s", cursor, box/Fprintf(w, "%s%s
+%s\\n", cursor, box/' internal/cli/tui/agentpicker.go` (the plan's pinned Family c1 site — the
+one `Fprintf(w, "%s%s %s", cursor, box` call, re-planting the byte-for-byte pre-fix newline):
+
+```diff
+--- a/internal/cli/tui/agentpicker.go
++++ b/internal/cli/tui/agentpicker.go
+@@ -64,7 +64,7 @@ func (d *checkboxDelegate) Render(w io.Writer, m list.Model, index int, item lis
+ 	if index == m.Index() {
+ 		cursor = "> "
+ 	}
+-	fmt.Fprintf(w, "%s%s %s", cursor, box, ai.target.DisplayName())
++	fmt.Fprintf(w, "%s%s %s\n", cursor, box, ai.target.DisplayName())
+ }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/tui/ -count=1
+-run 'TestAgentPickerFootprintFitsDefaultPane$' -v`, `=== RUN` line dropped, exit code
+appended):
+
+```
+    agentpicker_test.go:212: lipgloss.Height(view.Content) = 37, want <= 30 at 100x30 with 8 targets:
+           Select agents to configure   
+                                        
+        > [ ] Antigravity               
+                                        
+          [ ] Claude Code               
+                                        
+          [ ] Codex CLI                 
+                                        
+          [ ] Cursor                    
+                                        
+          [ ] Gemini CLI                
+                                        
+          [ ] Hermes Agent              
+                                        
+          [ ] Kiro                      
+                                        
+          [ ] opencode                  
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+        space: toggle  enter: confirm  q/esc: cancel
+--- FAIL: TestAgentPickerFootprintFitsDefaultPane (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli/tui	0.348s
+FAIL
+exit=1
+```
+
+The re-planted newline reproduces the exact pre-fix height (37, matching Task 1's own RED
+transcript) — the footer line never appears in the printed capture (it scrolls past the 30-line
+window this transcript's `head`-equivalent view still shows in full, but the `lipgloss.Height`
+assertion catches the overflow directly).
+
+**Pre-revert gate:** `git diff --quiet -- internal/cli/tui/agentpicker.go` — exit 1 (only the
+planted diff).
+
+**Revert:** `git checkout -- internal/cli/tui/agentpicker.go`, then
+`git diff --quiet -- internal/cli/tui/agentpicker.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/tui/ -count=1
+-run 'TestAgentPickerFootprintFitsDefaultPane$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/cli/tui	0.359s`.
+
+---
+
+## Family (c2) — D-24: re-planting the trailing newline in daemonDelegate.Render turns TestDaemonPickerFootprintFitsDefaultPane RED
+
+**Test/guard:** `TestDaemonPickerFootprintFitsDefaultPane` (`internal/cli/tui/daemonpicker_test.go`)
+— asserts the daemon picker's rendered view fits within 30 lines at a 100x30 window with 8
+records, and shows the help footer text `enter: stop selected`.
+
+**What are we testing, and why?** The daemon-picker sibling of Family (c1): whether the guard
+catches `daemonDelegate.Render`'s identical trailing-newline defect (D-24).
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/tui/daemonpicker.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/Fprintf\(w, "%s%s \(pid %d, up %s\)"/Fprintf(w, "%s%s
+(pid %d, up %s)\\n"/' internal/cli/tui/daemonpicker.go` (the plan's pinned Family c2 site — the
+one `Fprintf(w, "%s%s (pid %d, up %s)"` call, re-planting the byte-for-byte pre-fix newline):
+
+```diff
+--- a/internal/cli/tui/daemonpicker.go
++++ b/internal/cli/tui/daemonpicker.go
+@@ -61,7 +61,7 @@ func (d daemonDelegate) Render(w io.Writer, m list.Model, index int, item list.I
+ 		cursor = "> "
+ 	}
+ 	age := time.Since(di.record.StartedAt).Round(time.Second)
+-	fmt.Fprintf(w, "%s%s (pid %d, up %s)", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
++	fmt.Fprintf(w, "%s%s (pid %d, up %s)\n", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
+ }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/tui/ -count=1
+-run 'TestDaemonPickerFootprintFitsDefaultPane$' -v`, `=== RUN` line dropped, exit code
+appended):
+
+```
+    daemonpicker_test.go:384: lipgloss.Height(view.Content) = 37, want <= 30 at 100x30 with 8 records:
+           Running daemons    
+                              
+        > r0 (pid 1000, up 0s)
+                              
+          r1 (pid 1001, up 0s)
+                              
+          r2 (pid 1002, up 0s)
+                              
+          r3 (pid 1003, up 0s)
+                              
+          r4 (pid 1004, up 0s)
+                              
+          r5 (pid 1005, up 0s)
+                              
+          r6 (pid 1006, up 0s)
+                              
+          r7 (pid 1007, up 0s)
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+        enter: stop selected  a: stop all  q/esc: cancel
+--- FAIL: TestDaemonPickerFootprintFitsDefaultPane (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli/tui	0.457s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** `git diff --quiet -- internal/cli/tui/daemonpicker.go` — exit 1 (only the
+planted diff).
+
+**Revert:** `git checkout -- internal/cli/tui/daemonpicker.go`, then
+`git diff --quiet -- internal/cli/tui/daemonpicker.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/tui/ -count=1
+-run 'TestDaemonPickerFootprintFitsDefaultPane$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/cli/tui	0.329s`.
+
+Full-package re-check after both reverts: `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/tui/
+-count=1` → `ok  	github.com/seanb4t/codegraph-go/internal/cli/tui	0.318s`.
+
+---
+
+## Family (c3)
+
+Orchestrator step — pending Task 3.
