@@ -221,11 +221,17 @@ func TestInstructionsBlock_ExactMarkerText(t *testing.T) {
 }
 
 // blockNamesUnshippedCapability is WIRE-02/D-04's honesty checker: the
-// marker block is shared across all 4 marker-block agent targets (Claude,
-// Codex, opencode, Gemini), but only Claude Code ever receives the
-// embedded skill package (Phase 7, AGENT-01, v1-scoped). A block naming a
-// skill would send the other 3 targets after a file install never wrote
-// for them.
+// marker block is shared, byte-frozen (D-01a) text across all 4
+// marker-block agent targets (Claude, Codex, opencode, Gemini). It stays
+// skill-agnostic on purpose, not because the skill's own reach is narrow —
+// as of D-29 the skill package reaches 7 of the 8 registered targets,
+// every target but Hermes — but because rewriting the installed block to
+// mention it would rewrite a byte-frozen contract every existing install
+// already carries, and the skill is already announced elsewhere (the
+// wire-level instructions const in internal/mcp/server.go). A block naming
+// a skill here would be redundant at best and, for whichever of the 4
+// marker-block targets does not carry that particular MCP surface, a
+// pointer to nothing.
 //
 // It takes the block string as a parameter and never reads
 // codegraphInstructionsBlock from package scope — so it stays
@@ -240,7 +246,7 @@ func blockNamesUnshippedCapability(block string) error {
 		return fmt.Errorf("marker block %q never mentions resources/list, so an agent reading it has no pointer to the per-tool reference docs (WIRE-02)", block)
 	}
 	if strings.Contains(strings.ToLower(block), "skill") {
-		return fmt.Errorf("marker block %q names a skill, but 3 of its 4 targets (Codex, opencode, Gemini) never receive one (D-04) — this block is shared across all 4 and must stay skill-agnostic", block)
+		return fmt.Errorf("marker block %q names a skill, but this block's text is byte-frozen (D-01a) across all 4 targets that share it (Claude, Codex, opencode, Gemini) — rewriting it to mention the skill would rewrite every existing install's already-written block; the skill is announced elsewhere, by the wire-level instructions const in internal/mcp/server.go", block)
 	}
 	return nil
 }

@@ -741,10 +741,14 @@ func removeMarkedSection(filePath, startMarker, endMarker string) (FileAction, e
 
 // upsertInstructionsEntry binds a marker-fenced instructions block
 // (startMarker + content + endMarker) to replaceOrAppendMarkedSection,
-// for the 4 of 8 agent targets that get an instructions file (Claude,
-// Codex, opencode, Gemini). Marker text and block content are passed in
-// by the caller rather than imported from instructions.go, keeping this
-// helper agnostic of the specific codegraph marker constants.
+// for the 4 of 8 agent targets that declare an instructions file (Claude,
+// Codex, opencode, Gemini). Codex and opencode share the repo-root
+// AGENTS.md at local scope, which is why every uninstall on that path must
+// check instructionsRequestedElsewhere (D-11) before removing the marked
+// section — the other target sharing that file may still need it. Marker
+// text and block content are passed in by the caller rather than imported
+// from instructions.go, keeping this helper agnostic of the specific
+// codegraph marker constants.
 func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (FileResult, error) {
 	body := startMarker + "\n" + content + "\n" + endMarker
 	action, err := replaceOrAppendMarkedSection(filePath, body, startMarker, endMarker)
