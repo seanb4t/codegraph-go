@@ -61,11 +61,20 @@ var refreshInstalledSkillsFunc = refreshInstalledSkills
 // agents.ConfiguredSkillLocations (manifest-presence-only discovery, its
 // own separately pinned contract) and this refresh loop can never reach
 // it — even though the guard and its settings.json registration are
-// present there and are correctly evidenced by a direct Install call. The
-// documented recovery is the one this function's caller already prints on
-// any refresh problem: re-run `codegraph install` from that location.
+// present there and are correctly evidenced by a direct Install call.
+// Unlike a genuine refresh error, this produces NO CLI-visible signal at
+// all (code review WR-03, 06-REVIEW.md): refreshInstalledSkills returns a
+// nil error for this case — it simply never visits the location, rather
+// than visiting it and failing — so the caller's "warning: ... Run
+// `codegraph install` to refresh it manually" message (below, gated on
+// refreshErr != nil) never fires for it. `codegraph upgrade` prints
+// nothing naming this location, and the guard's baked-in ExecPath goes
+// stale (its `[ ! -f "$codegraph_bin" ]` check then exits 0 silently
+// forever, per D-08). The only real recovery is a user independently
+// re-running `codegraph install` from that location — there is no CLI
+// prompt pointing them to it.
 // TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation
-// pins this gap and its recovery path.
+// pins this gap and its (silent, user-initiated) recovery path.
 func refreshInstalledSkills(execPath string, out io.Writer) error {
 	locs := agents.ConfiguredSkillLocations(agents.Claude)
 	if len(locs) == 0 {
