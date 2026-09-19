@@ -2,10 +2,14 @@ package tui
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"charm.land/lipgloss/v2"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -353,5 +357,33 @@ func TestPrintDaemonPickerResult(t *testing.T) {
 				t.Fatalf("printDaemonPickerResult() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestDaemonPickerFootprintFitsDefaultPane is the daemon-picker sibling of
+// TestAgentPickerFootprintFitsDefaultPane (D-24/D-25): 8 records at the
+// default 100x30 pane must fit within 30 lines and still show the picker's
+// own footer text. Before the delegate fix (daemonDelegate.Render's own
+// trailing newline, same defect as checkboxDelegate), each row costs 2
+// lines and the footer overflows out of the pane.
+func TestDaemonPickerFootprintFitsDefaultPane(t *testing.T) {
+	records := make([]daemon.Record, 8)
+	for i := range records {
+		records[i] = rec(fmt.Sprintf("/repo/r%d", i), 1000+i)
+	}
+
+	m := newDaemonPickerModel("/repo/r0", records)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2, ok := updated.(daemonPickerModel)
+	if !ok {
+		t.Fatalf("Update(WindowSizeMsg) returned %T, want daemonPickerModel", updated)
+	}
+
+	content := m2.View().Content
+	if h := lipgloss.Height(content); h > 30 {
+		t.Fatalf("lipgloss.Height(view.Content) = %d, want <= 30 at 100x30 with 8 records:\n%s", h, content)
+	}
+	if !strings.Contains(content, "enter: stop selected") {
+		t.Fatalf("view content missing footer text \"enter: stop selected\":\n%s", content)
 	}
 }
