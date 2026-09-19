@@ -224,63 +224,119 @@ positive-controlled on session A. Confirm from live-b's debug log that the guard
 C7 is then assessed over both sessions' debug logs and transcripts, and the global config is
 re-checked against the pre-flight checksum.
 
+## Run notes (2026-09-19, orchestrator — Claude Code 2.1.278, Opus 5, auto mode)
+
+- Both sessions: the workspace-trust prompt was answered "Yes, I trust this folder" (records a trust entry in `~/.claude.json`, not `~/.claude/settings.json`) and the project MCP prompt "Use this MCP server" (so `codegraph_explore` was available and uptake could be observed).
+- **The maintainer's global config exposes no Grep tool** — Session A's agent said "This session has no dedicated Grep tool, so I ran rg (ripgrep) from the shell instead". Every search therefore went through **Bash `rg`**, i.e. the `Bash(rg *)` handler; the `Grep`/`Glob` blocks were never exercised live (their registration is pinned by `TestPreToolUseRegistrationShape`).
+- Timing deviations from the scripted protocol, all recorded, none weakening a criterion: prompt 2 ran 55–73 s after prompt 1's fire (so it straddles the cooldown boundary — better C2 evidence); prompt 3 ran ~40 s after the previous fire (inside the window → more C2 evidence, not C3); C4 was re-run so the subagent searched while the main key was still inside its window (the first attempt could not discriminate); C5 was re-run with explicit `rg` because after the first `/clear` the agent answered through `codegraph_explore` without searching.
+- Fires are counted as `hook_additional_context` attachments carrying the pinned substring `returns the matching symbols' source and call paths` in the session JSONL(s) (main + `subagents/agent-*.jsonl`); positive control: that search finds prompt 1's fire (below) before any zero-count claim. Event list: `/tmp/06-live/transcripts/session-a-events.txt`, `session-b-events.txt`; debug logs `/tmp/06-live/debug/live-{a,b}.log`; timeline `/tmp/06-live/transcripts/timeline-final.txt`.
+
+Positive control (session A JSONL, verbatim, truncated):
+
+```
+{"parentUuid":"ab5b1aff-…","isSidechain":false,"attachment":{"type":"hook_additional_context","content":["This repo has a codegraph index: codegraph_explore (CLI: `codegraph explore`) returns the matching symbols' source and call paths for where-is-X and how-does-Y quest…
+2026-09-19T10:42:45.872Z [DEBUG] Hook PreToolUse (${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh) provided additionalContext (170 chars)
+```
+
 ## Fire log
 
-| Key | Fire timestamps | Same-key gaps |
+| Key | Fire timestamps (UTC) | Same-key gaps |
 |-----|-----------------|---------------|
-| main (before `/clear`) | (orchestrator fills from session A) | |
-| subagent | (orchestrator fills from session A) | |
-| main (after `/clear`) | (orchestrator fills from session A) | |
-| un-indexed main | (orchestrator fills from session B) | |
+| main (session e8c8b2c2, before `/clear`) | 10:42:46.4, 10:43:46.8, 10:46:10.0, 10:47:32.1, 10:49:27.2 | 60.4 s, 143.2 s, 82.0 s, 115.1 s — silent same-key calls at 59.0 s and 59.6 s (10:43:44.9, 10:43:45.5), at 40.9/44.3/48.9 s (10:44:27.9, :31.3, :35.9) |
+| subagent a6956955 (session e8c8b2c2) | 10:44:55.4 | its second call 5.0 s later (10:45:00.5) silent |
+| subagent afc4f666 (session e8c8b2c2) | 10:46:19.4 — 9.4 s after the main key's 10:46:10.0 fire | — |
+| main after 1st `/clear` (session 0bae455c) | 10:51:00.7 | follow-ups 10:51:05.2, 10:51:09.1 silent (4.5 s, 8.4 s) |
+| main after 2nd `/clear` (session 5801bf99) | 10:51:37.3 — 36.5 s after the previous session's fire | — |
+| un-indexed main (session B) | none (2 matched calls: 10:53:31.4, 10:53:52.8) | — |
+
+Session A event excerpt (verbatim from `session-a-events.txt`):
+
+```
+2026-09-19T10:42:45.824Z  MAIN  TOOL Bash rg -n --no-heading '\bAlpha\b' /private/tmp/06-live/indexed
+2026-09-19T10:42:46.412Z  MAIN  FIRE
+2026-09-19T10:43:44.898Z  MAIN  TOOL Bash rg -n --no-heading '\bAlpha\(' /private/tmp/06-live/indexed
+2026-09-19T10:43:45.465Z  MAIN  TOOL Bash rg --files -g '*.go' /private/tmp/06-live/indexed/pkgb
+2026-09-19T10:43:46.215Z  MAIN  TOOL Read /private/tmp/06-live/indexed/pkgb/pkgb.go
+2026-09-19T10:43:46.808Z  MAIN  FIRE
+2026-09-19T10:46:09.440Z  MAIN  TOOL Bash rg -n --no-heading '\bWidget\b' /private/tmp/06-live/indexed
+2026-09-19T10:46:10.022Z  MAIN  FIRE
+2026-09-19T10:46:18.827Z  SUB:agent-afc4f666[side]  TOOL Bash rg -n --no-ignore --hidden -g '!.git' '^func\s+(\([^)]*\)\s*)?helper
+2026-09-19T10:46:19.407Z  SUB:agent-afc4f666[side]  FIRE
+2026-09-19T10:47:31.479Z  MAIN  TOOL Bash find . -name '*.go' -newer go.mod
+2026-09-19T10:47:32.059Z  MAIN  FIRE
+2026-09-19T10:48:53.269Z  MAIN  TOOL Bash git log --oneline | rg -c .
+2026-09-19T10:51:36.695Z  MAIN  TOOL Bash rg -n Widget .
+2026-09-19T10:51:37.276Z  MAIN  FIRE
+```
+
+Session B event excerpt (verbatim): `2026-09-19T10:53:31.350Z  MAIN  TOOL Bash ls -a && rg -n --no-ignore --hidden -g '!.git' '\bAlpha\b'` · `2026-09-19T10:53:52.799Z  MAIN  TOOL Bash rg -n Alpha .` — no FIRE line; pinned-substring hits across session B's JSONL: 0.
+
+Sentinel directory after both sessions: `…/T/codegraph-nudge-501/` mode `drwx------`, 5 empty `-rw-------` files (hashed keys: 3 main sessions + 2 subagents; none from session B — the un-indexed guard never starts the binary).
 
 ## Verdicts (D-18 pass bar, locked in 06-CONTEXT before any session)
 
-C1 first matched call fires once: PENDING
+C1 first matched call fires once: PASS
 
-C2 no same-key fire within 60 s: PENDING
+The session's first matched call (`rg -n … '\bAlpha\b'`, 10:42:45.8) produced exactly one fire (10:42:46.4) — delivered as `hook_additional_context` and logged "provided additionalContext (170 chars)".
 
-C3 fires again after a >= 60 s gap: PENDING
+C2 no same-key fire within 60 s: PASS
 
-C4 subagent first matched call fires once: PENDING
+Every same-key gap between fires is ≥ 60 s (60.4, 143.2, 82.0, 115.1 s); matched calls at 59.0 s and 59.6 s after a fire were silent and the call at 60.3 s fired; calls at 40.9–48.9 s were silent; follow-ups after `/clear` at 4.5 s and 8.4 s were silent; the first subagent's second call at 5.0 s was silent.
 
-C5 fires after /clear: PENDING
+C3 fires again after a >= 60 s gap: PASS
 
-C6 un-indexed control: PENDING
+After 143.2 s the main key fired again on `rg … '\bWidget\b'` (10:46:10.0); also at 82.0 s (find) and 115.1 s (rg Gamma).
 
-C7 no hook error, prompt, deny or block from the hook: PENDING
+C4 subagent first matched call fires once: PASS
 
-D-18 verdict: PENDING
+Discriminating run: subagent afc4f666's first matched call fired at 10:46:19.4, 9.4 s after the main key's own fire (main still inside its window) — its own key. (First run: subagent a6956955 fired once, its second call 5.0 s later silent.) Both subagent transcripts carry the parent's `sessionId` and their own `agentId`.
+
+C5 fires after /clear: PASS
+
+Discriminating run: after the second `/clear` (new session 5801bf99) the first matched call fired at 10:51:37.3, 36.5 s after the previous session's fire at 10:51:00.7 — a new session id is a new key. (After the first `/clear` the new session's first matched call also fired, 10:51:00.7.)
+
+C6 un-indexed control: PASS (0 fires)
+
+Session B (un-indexed, same registration) made 2 matched calls; the same pinned-substring search that found every session-A fire finds 0. Debug log: the `rg` handler's `if` matched (grep/find handlers skipped) and no error was logged — the guard ran and stayed silent (its directory check exits before the binary; timing below).
+
+C7 no hook error, prompt, deny or block from the hook: PASS
+
+Positive control: the guard's command string appears 9 times in live-a.log (one "provided additionalContext" per fire). In BOTH debug logs: 0 lines matching `hook error|non-blocking error|blocking error`, 0 error/deny/block lines naming `pretooluse-nudge`; 0 `hook_*error` attachments in any transcript. The `permissionDecision: allow` / "Boost auto-rewrite" entries in live-a.log come from the maintainer's own global Boost hook (attributed by hook output, not by symptom), never from `pretooluse-nudge.sh`.
+
+D-18 verdict: PASS
 
 ## Recorded, not gated
 
-Matched calls: PENDING
+Matched calls: 18
 
-Fires: PENDING
+Fires: 9
 
-Fire rate: PENDING
+Fire rate: 9/18
 
-True-positive fires: PENDING
+True-positive fires: 7/9
 
-Uptake: PENDING
+Uptake: Session A's first session kept searching with `rg` after each fire (it named `codegraph explore` in its own commentary but did not call it); after `/clear`, with the SessionStart nudge and the codegraph skill in the fresh context, the agent answered the where-is-X prompt by calling `mcp__codegraph__codegraph_explore` directly, with no search at all.
 
-Hook wall time: PENDING
+Hook wall time: 2.8–9.0 ms (median 3.2) un-indexed guard, directory check only; 11.4–13.0 ms (median 12.2) indexed guard running the binary and firing — 20 runs each, measured directly outside Claude Code (the in-session tool_use→fire gap of ~0.6 s includes the maintainer's other hooks running in parallel)
 
-Bash rg path fired: PENDING
+Bash rg path fired: yes
 
-FP check (git log | rg): PENDING
+FP check (git log | rg): 0 fires
+
+(81.2 s after the previous fire, i.e. outside the cooldown: Claude Code's `Bash(rg *)` `if` matched the pipe tail, the guard ran, and the D-02 first-word rule dropped it. Bash `find` path also confirmed: `find . -name '*.go' -newer go.mod` fired at 10:47:32.1.)
 
 ## The five points the docs do not confirm
 
-Point additionalContext without a decision: PENDING
+Point additionalContext without a decision: confirmed — a PreToolUse hook that returns only `hookSpecificOutput.additionalContext` (no `permissionDecision`) is delivered to the model as a `hook_additional_context` attachment and does not change the tool call.
 
-Point subagent session_id: PENDING
+Point subagent session_id: confirmed — subagent hook calls carry the PARENT's `session_id` (subagent JSONLs record `sessionId` e8c8b2c2… with their own `agentId`); the per-(session, agent) key is what separates them (D-06).
 
-Point CLAUDE_CODE_SESSION_ID export: PENDING
+Point CLAUDE_CODE_SESSION_ID export: confirmed in 2.1.278 — `echo "$CLAUDE_CODE_SESSION_ID"` in the session printed e8c8b2c2-4169-405a-9c5a-b1a5d118c8e7, equal to the transcript's session id.
 
-Point same-command handlers with different if: PENDING
+Point same-command handlers with different if: NOT deduplicated — the three single-handler Bash blocks (same command, different `if`) are evaluated independently: the debug log shows `Skipping hook due to if condition "Bash(grep *)" not matching` / `"Bash(find *)" not matching` while the `rg` handler ran, and for the `find` call the grep/rg handlers were skipped and the find handler ran and fired.
 
-Point stdin key order: PENDING
+Point stdin key order: not relied on — the subcommand parses stdin with `encoding/json`, so key order is irrelevant; the live sessions exercised parsing successfully on every fire.
 
 ## Global configuration
 
-Global config unchanged: PENDING
+Global config unchanged: yes — sha256 matches pre-flight (be3ad316a7c4d5d921569f0398839638824fc4254d660378075e65ff69a339ef before and after); `~/.claude/hooks/pretooluse-nudge.sh` absent before and after.
