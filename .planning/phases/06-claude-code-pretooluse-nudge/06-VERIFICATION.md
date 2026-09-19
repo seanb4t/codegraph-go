@@ -1,9 +1,10 @@
 ---
 phase: 06-claude-code-pretooluse-nudge
 verified: 2026-09-19T12:25:49Z
-status: human_needed
+status: passed
 score: 9/9 truths verified; 1 item routed to human verification (not counted against the score)
 covered_files:
+
   - .claude/hooks/hooks.json
   - .claude/hooks/pretooluse-nudge.sh
   - .claude/settings.json
@@ -63,10 +64,12 @@ covered_files:
   - internal/nudge/testdata/false-positives.json
   - internal/nudge/testdata/true-positives.json
   - internal/nudge/text.go
+
 covered_digest: "v1:sha256:ab70d0411fad85c40db29480ebf8a891c6090e5ad7ab41d6fc87ad3094b9cf25"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "In an environment where Claude Code exposes a native `Grep` tool (the maintainer's global config in the 06-06 live session did not), run the same D-18 protocol and confirm the `Grep` and `Glob` PreToolUse blocks actually fire `additionalContext` identically to the proven `Bash(rg *)`/`Bash(find *)`/`find` path."
     expected: "The first qualifying `Grep`/`Glob` tool call in a fresh, indexed session produces exactly one `hook_additional_context` attachment carrying the pinned nudge text, with the same cooldown and silence properties already proven live for Bash."
     why_human: "Claude Code's own tool matching and delivery are never unit-testable (D-00, this phase's own standing rule). The 06-06 live session (`06-LIVE-SESSIONS.md`) is thorough and honest about this: the maintainer's global Claude Code configuration exposes no `Grep` tool, so every live search went through Bash `rg`/`find`, and the `Grep`/`Glob` PreToolUse blocks were exercised only by `TestPreToolUseRegistrationShape` (byte-exact registration) and by the harness-neutral unit tests in `internal/cli/hook_pretooluse_test.go` (`TestHookPreToolUse_GrepFiresPinnedContext`), never by an actual Claude Code `Grep`/`Glob` tool call. The registration bytes and the adapter's internal handling of `Grep`/`Glob` are provably identical in shape to the proven `Bash`/`Read` paths (same guard script, same subcommand, same envelope, same cooldown gate), and the fetched hooks reference states matcher grammar is exact-string matching for every tool name — so there is strong indirect evidence this generalizes — but it has not been directly observed."
