@@ -351,7 +351,7 @@ Plans:
   4. `codegraph install`/`uninstall` register and remove the hook through `writeHookEntry`/`removeHookEntry` as an opt-in alongside the default SessionStart nudge; a hand-edited own entry duplicates rather than overwrites, and an unrelated `PreToolUse` entry under the same event is untouched (NUDGE-06)
 
 **Notes**: Research pitfalls attached: 8 (a hook that "redirects" reintroduces the friction GUARD-HOOK-01/02 was deferred to avoid — the out-of-scope entry is explicit: no `permissionDecision: deny|ask`, no exit 2), 9 (a blanket tool-name match is noise that trains the agent to ignore it — gate on `.codegraph/` presence AND a content heuristic). The mechanism is already event-generic: a new `PreToolUse` array in the same embedded `hooks.json` fragment, a new script beside `session-nudge.sh`, a `claudePreToolUseBlocks(loc)` mirroring `claudeSessionStartBlocks(loc)`, and a second `writeHookEntry(settingsPath, "PreToolUse", …)` call alongside the existing one — `shared.go`'s exact-command-string matching is unchanged. Carries GUARD-HOOK-02's live fire-rate measurement. Supersedes GUARD-HOOK-01/02 by the 2026-09-14 reframe.
-**Plans**: 4/7 plans executed
+**Plans**: 5/7 plans executed
 
 Plans:
 **Wave 1**
@@ -372,7 +372,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 06-05-PLAN.md — Dogfooded PreToolUse registration and its shape test, `--pretool-nudge` tri-state via cobra Changed with the D-09 note, upgrade carries the opt-in, Family (e) RED (NUDGE-06, NUDGE-03)
+- [x] 06-05-PLAN.md — Dogfooded PreToolUse registration and its shape test, `--pretool-nudge` tri-state via cobra Changed with the D-09 note, upgrade carries the opt-in, Family (e) RED (NUDGE-06, NUDGE-03)
 
 **Wave 6** *(blocked on Wave 5 completion; halts `blocking-human` for orchestrator-run live sessions)*
 
@@ -414,7 +414,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | 3. Verb Fold | 4/4 | Complete    | 2026-09-16 |
 | 4. CLI Glow-up | 8/8 | Complete    | 2026-09-17 |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 7/7 | Complete    | 2026-09-18 |
-| 6. Claude Code PreToolUse Nudge | 4/7 | In Progress|  |
+| 6. Claude Code PreToolUse Nudge | 5/7 | In Progress|  |
 | 7. Codex Parity | 0/TBD | Not started | - |
 
 8 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0). v0.14.0 scoped: 7 phases (1–7), 55 requirements, 0/7 phases complete (0%).

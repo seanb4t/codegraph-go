@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 6
 current_phase_name: Claude Code PreToolUse Nudge
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-19T10:22:59.193Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-09-19T10:37:03.953Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 6 execution started
-state_head: a615ad15e360451941630a6191eba1e0ffe5bcfc
+state_head: 4de63b58deb7d8dbcb214e42a5fb84e99ccb0aa0
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 42
-  completed_plans: 39
+  completed_plans: 40
   percent: 71
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 5)
 ## Current Position
 
 Phase: 6 (Claude Code PreToolUse Nudge) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 6 execution started
 
@@ -170,6 +170,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P02 | 5min | 2 tasks | 6 files |
 | Phase 06 P03 | 10min | 3 tasks | 5 files |
 | Phase 06 P04 | 46min | 3 tasks | 11 files |
+| Phase 06 P05 | 11min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -391,6 +392,8 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: Phase 6 06-03: a sentinel mtime in the future counts as due and is re-recorded, so a stepped-back clock cannot silence the nudge
 - [Phase 6]: Phase 6 06-04: the PreToolUse opt-in is recorded as manifest Files keys hooks/pretooluse-nudge.sh and settings.json#hooks.PreToolUse (no schema bump); Keep refreshes only while either key is present and the manifest is readable
 - [Phase 6]: Phase 6 06-04: an Off install reports only artifacts actually removed and drops both keys only when neither removal errored
+- [Phase 6]: Phase 6 06-05: the PreToolUse fragment registers one handler per block (three Bash blocks for grep/rg/find), so a hand-edit of any single own handler duplicates rather than being overwritten via its siblings; ownership code unchanged
+- [Phase 6]: Phase 6 06-05: --pretool-nudge is read through cobra Changed (not given = Keep); the D-09 note goes to stderr, plain, once, before the per-agent report
 
 ### Pending Todos
 
@@ -539,8 +542,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T10:22:59.144Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-09-19T10:37:03.911Z
+Stopped at: Completed 06-05-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
