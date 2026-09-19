@@ -857,3 +857,77 @@ func TestInstall_PreToolNudge_NoNoteWhenClaudeSelected(t *testing.T) {
 		t.Fatalf("note printed although --pretool-nudge was not given; stderr:\n%s", stderr)
 	}
 }
+
+// TestInstall_YesWithExplicitTarget_HonoursTarget is the D-13 regression:
+// an explicit --target must win over -y/--yes, not be discarded in favour
+// of the non-interactive "auto" default. Before the fix, install's switch
+// checked `case yes:` before `case cmd.Flags().Changed("target"):`, so
+// `install --target codex --yes` silently configured whatever "auto"
+// resolved to (Claude, in a fresh fake home) instead of Codex.
+// runAgentPicker is stubbed to fail the test if ever invoked — -y must
+// short-circuit before the interactive branch too (Pitfall 6), and an
+// explicit --target must not reopen that question.
+func TestInstall_YesWithExplicitTarget_HonoursTarget(t *testing.T) {
+	home := fakeHome(t)
+	withStubbedPicker(t, func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error) {
+		t.Fatal("runAgentPicker must never be called when --target is explicit")
+		return nil, nil
+	})
+
+	out, _, err := execCmd("install", "--target", "codex", "-y", "--location", "global")
+	if err != nil {
+		t.Fatalf("install --target codex -y: %v", err)
+	}
+	if !strings.Contains(out, "Codex CLI:") {
+		t.Fatalf("expected explicit --target codex to configure Codex, got:\n%s", out)
+	}
+	if strings.Contains(out, "Claude Code:") {
+		t.Fatalf("expected --yes NOT to widen an explicit --target codex to Claude, got:\n%s", out)
+	}
+
+	if _, statErr := os.Stat(filepath.Join(home, ".codex", "config.toml")); statErr != nil {
+		t.Fatalf("expected %s/.codex/config.toml to be written: %v", home, statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".claude.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected %s/.claude.json NOT to be written (--target codex must not touch Claude), stat err: %v", home, statErr)
+	}
+}
+
+// TestUninstall_YesWithExplicitTarget_HonoursTarget mirrors the install
+// regression for uninstall: an explicit --target must win over
+// -y/--yes, which otherwise resolves to "all" and would remove every
+// installed agent's configuration rather than just the one named.
+func TestUninstall_YesWithExplicitTarget_HonoursTarget(t *testing.T) {
+	home := fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude,codex", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude,codex: %v", err)
+	}
+
+	withStubbedPicker(t, func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error) {
+		t.Fatal("runAgentPicker must never be called when --target is explicit")
+		return nil, nil
+	})
+
+	out, _, err := execCmd("uninstall", "--target", "codex", "--yes", "--location", "global")
+	if err != nil {
+		t.Fatalf("uninstall --target codex --yes: %v", err)
+	}
+	if !strings.Contains(out, "Codex CLI:") {
+		t.Fatalf("expected explicit --target codex to be reported, got:\n%s", out)
+	}
+	if strings.Contains(out, "Claude Code:") {
+		t.Fatalf("expected --yes NOT to widen an explicit --target codex to Claude, got:\n%s", out)
+	}
+
+	claudeConfig := readJSONMap(t, filepath.Join(home, ".claude.json"))
+	mcpServers, _ := claudeConfig["mcpServers"].(map[string]any)
+	if _, ok := mcpServers["codegraph"]; !ok {
+		t.Fatalf("expected Claude's mcpServers.codegraph entry to survive an explicit --target codex uninstall, got: %v", mcpServers)
+	}
+
+	codexConfig := readFileString(t, filepath.Join(home, ".codex", "config.toml"))
+	if strings.Contains(codexConfig, "mcp_servers.codegraph") {
+		t.Fatalf("expected the codegraph table removed from Codex's config.toml, got:\n%s", codexConfig)
+	}
+}
