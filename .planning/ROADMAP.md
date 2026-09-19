@@ -396,11 +396,52 @@ Plans:
   5. The install/uninstall agent picker renders its help footer in a 100×30 pane with every registered target listed, the height budget accounting for bubbles v2 list pagination, asserted by the tmux harness *after* `CODEX-02`'s scope flip (the picker always lists all 8 registered targets, so the flip changes Codex's local pre-check, not the row count — 2026-09-19 correction); and the published per-harness capability table (MCP config, instructions, skill, nudge, scopes for all 8 targets) matches what ships, `[ASSUMED]` where live verification was not possible, with `instructions.go`'s "4 of 8" comment and the MCP `instructions` skill sentence updated to match (FIX-03, AGENT-14)
 
 **Notes**: Research pitfalls attached: 11 (Codex's config surface changed during 2026 — project-scoped `.codex/config.toml` is trust-gated and silently falls back when untrusted, the exact "looks configured, does nothing" shape rule `84d1gfpywd` exists to catch; the doc comment and the code change together with a dated citation), 12 (a Codex transcript is the evidence, not a summary; the negative-space check — did it grep instead — is recorded), 19 (the footer fix is measured against the real 100×30 budget with the *final* target count, not at default terminal size). Correction (2026-09-19, verified against codex-cli 0.155.0 and the current Codex docs): Codex hooks are stable and enabled by default, and new or changed hooks are skipped until trusted in `/hooks` — `CODEX-05` stays opt-in via `--pretool-nudge` and says so. Required companion changes when `SupportsLocation(LocationLocal)` flips: `Detect(LocationLocal)` must check the local `.codex/` path or `--target auto --location local` treats Codex as never installed; `DescribePaths(loc)` must add the local paths or `--print-config-style` under-reports; `agentpicker_test.go` gains the newly selectable row. `spliceTOMLTable`/`stripTOMLTable` operate on content, not paths, so a second file needs no path change — but correction (2026-09-19, reproduced): `findTOMLTableRange` does NOT confine edits for indented TOML (the end scan stops only at a column-0 `[`), so on a config with indented nested headers — the maintainer's own `~/.codex/config.toml` — install/uninstall would delete every following sibling MCP server; it also mishandles CRLF, an inline `codegraph = {…}` and `[mcp_servers.codegraph.*]` subtables. The fix is Phase 7's first plan. `AGENT-14` closes the milestone's docs so the table describes the shipped surface, never the plan.
-**Plans**: TBD
+**Plans**: 11 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD
+- [ ] 07-01-PLAN.md — TOML splice fixed at its cause, RED-first: tables end at a header of any indentation (never inside multi-line strings/arrays), CRLF kept, own subtables in range, inline/dotted codegraph keys refused; planted column-0 mutation; WINDOWS row (CODEX-02, D-07/D-08)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md — `install`/`uninstall --target X --yes` resolves to exactly X, RED-first; todo closed (CODEX-02, D-13)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-03-PLAN.md — FIX-03 at its cause: delegate trailing newline dropped (agent and daemon pickers), model-level 100×30 height test, TTY-05 re-anchored on the footer; local tmux RED/GREEN (FIX-03, D-24/D-25)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07-04-PLAN.md — CODEX-01 live verification in a scratch HOME/CODEX_HOME before any `codex.go` change: L1–L4/L7, command-form expansion, trust gating of skills/AGENTS.md, `.codex/skills`, trust override (CODEX-01)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 07-05-PLAN.md — Scope flip through the capability table: local `.codex/config.toml`, shared `.agents/skills`, repo-root `AGENTS.md`, trust Note, TOML conflicts surfaced as errors, dated comment correction (CODEX-01/02/03, D-09/D-10/D-14..D-16)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 07-06-PLAN.md — Shared repo-root `AGENTS.md` last-requester rule for Codex and opencode, `AGENTS.override.md` Note (CODEX-04, D-11/D-12)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 07-07-PLAN.md — Codex nudge tracer: embedded quoted-command guards, `--harness codex` envelope adapter on the hidden subcommand, `hooks.json` group appended last (CODEX-05, D-19..D-22)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 07-08-PLAN.md — Codex nudge lifecycle: sticky Keep/On/Off from our own `hooks.json` group, skip on `hooks = false`, `/hooks` trust Note, widened `--pretool-nudge` help, CLI reference regenerated (CODEX-05, D-18/D-19/D-23)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 07-09-PLAN.md — CODEX-05/06 live verification: fresh-session uptake, nudge fire and cooldown, raw PreToolUse stdin for a subagent id, trust re-flag check, tmux picker re-run after the flip (CODEX-05, CODEX-06, FIX-03)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [ ] 07-10-PLAN.md — `docs/AGENT-CAPABILITIES.md` capability table for 8 targets × 2 scopes with a drift test and planted mutation, README link (AGENT-14, D-27/D-28)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [ ] 07-11-PLAN.md — Harness-neutral MCP instructions skill sentence within the first 512 bytes, wire transcripts re-frozen in one diff, "4 of 8" comment fixes, phase gate (AGENT-14, D-29/D-30)
 
 ## Progress
 
