@@ -45,6 +45,11 @@ var refreshInstalledSkillsFunc = refreshInstalledSkills
 // false is not equivalent to removing it: Install with AutoAllow: false
 // simply skips the permission-list step rather than deleting anything
 // already present, which is the correct neutral behavior here.
+//
+// PreToolNudge is passed as PreToolNudgeKeep, deliberately unlike
+// AutoAllow's non-sticky false: the PreToolUse opt-in IS recorded in the
+// manifest (v0.14.0 Phase 6 D-10), so Keep re-renders the guard for the new
+// binary exactly where the opt-in was recorded and adds it nowhere else.
 func refreshInstalledSkills(execPath string, out io.Writer) error {
 	locs := agents.ConfiguredSkillLocations(agents.Claude)
 	if len(locs) == 0 {
@@ -59,7 +64,11 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
 			continue
 		}
 		for _, t := range targets {
-			result := t.Install(loc, agents.InstallOptions{ExecPath: execPath, AutoAllow: false})
+			result := t.Install(loc, agents.InstallOptions{
+				ExecPath:     execPath,
+				AutoAllow:    false,
+				PreToolNudge: agents.PreToolNudgeKeep,
+			})
 			for _, f := range result.Files {
 				fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
 			}

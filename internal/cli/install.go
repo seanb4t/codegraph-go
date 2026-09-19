@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -122,12 +123,24 @@ func newInstallCmd() *cobra.Command {
 				return fmt.Errorf("codegraph install: %w", err)
 			}
 
-			opts := agents.InstallOptions{AutoAllow: autoAllow, ExecPath: execPath}
-			if pretoolNudge {
-				// v0.14.0 Phase 6 D-09: the opt-in PreToolUse nudge.
-				// Every other invocation leaves the zero value Keep.
-				opts.PreToolNudge = agents.PreToolNudgeOn
+			// v0.14.0 Phase 6 D-10: --pretool-nudge is a tri-state read
+			// through Changed. Not given keeps (and refreshes) a recorded
+			// opt-in and never adds one; given as true opts in; given as
+			// --pretool-nudge=false opts out.
+			nudge := agents.PreToolNudgeKeep
+			if cmd.Flags().Changed("pretool-nudge") {
+				nudge = agents.PreToolNudgeOff
+				if pretoolNudge {
+					nudge = agents.PreToolNudgeOn
+				}
+				// D-09: the flag only configures Claude Code; say so when
+				// it was given but Claude is not a resolved target. Plain
+				// stderr — stdout carries the per-agent report.
+				if !slices.ContainsFunc(targets, func(t agents.AgentTarget) bool { return t.ID() == agents.Claude }) {
+					fmt.Fprintln(cmd.ErrOrStderr(), "note: --pretool-nudge only configures Claude Code, which is not among the selected agents; nothing was changed for it")
+				}
 			}
+			opts := agents.InstallOptions{AutoAllow: autoAllow, ExecPath: execPath, PreToolNudge: nudge}
 			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Install(loc, opts)
 			}, installStatus)
@@ -137,7 +150,7 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&target, "target", "t", "auto", "which agents to configure: auto|all|none|<comma-separated ids>")
 	cmd.Flags().StringVarP(&location, "location", "l", string(agents.LocationGlobal), "config scope: global|local")
 	cmd.Flags().BoolVar(&autoAllow, "auto-allow", false, "also add mcp__codegraph__* to Claude Code's permissions.allow list")
-	cmd.Flags().BoolVar(&pretoolNudge, "pretool-nudge", false, "Claude Code only: also register a PreToolUse hook that points Claude at codegraph_explore when it searches")
+	cmd.Flags().BoolVar(&pretoolNudge, "pretool-nudge", false, "Claude Code only: register a PreToolUse hook that points Claude at codegraph_explore when it searches; remembered across install and upgrade until --pretool-nudge=false or uninstall")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (auto)")
 	cmd.Flags().BoolVar(&printCfgStyle, "print-config-style", false, "print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything")
 
