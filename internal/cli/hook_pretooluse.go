@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +14,14 @@ import (
 // maxHookStdinBytes caps how much of a hook event the subcommand reads; a
 // larger event is treated as undecodable and ignored (T-06-06).
 const maxHookStdinBytes = 1 << 20
+
+// hookNow is the cooldown gate's clock; a seam so tests pin the instant
+// instead of waiting (D-17).
+var hookNow = time.Now
+
+// hookQualifies is the classifier the adapter consults; a seam so a test
+// can force a panic inside the subcommand and prove it is recovered.
+var hookQualifies = nudge.Qualifies
 
 // claudePreToolUseInput is the subset of Claude Code's PreToolUse event
 // the adapter reads.
