@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -208,5 +209,59 @@ func TestGemini_Install_WritesHarnessSkillDir(t *testing.T) {
 				t.Fatalf("GEMINI.md still has codegraph's marker block after uninstall")
 			}
 		})
+	}
+}
+
+// TestGemini_CorruptedManifestAtHarnessExclusiveDir_DoesNotFalselyAttributeClaude
+// is CR-01's regression test (code review 05-REVIEW.md): Gemini's
+// harness-exclusive `.gemini/skills/codegraph` directory (D-06) is one
+// Claude never wrote to under any schema, so an unreadable/corrupt
+// manifest there must never be read as owned by Claude — that fallback is
+// justified only for Claude's own directory and the shared
+// `.agents/skills/codegraph` directory reached through a D-17 symlink,
+// neither of which applies here. Before the fix, manifestRequesters
+// unconditionally falls back to [claude] on a read error, so the
+// self-healed manifest wrongly lists claude as a co-owner, and Uninstall
+// of gemini (the only real requester) leaves the package behind forever
+// (D-08 violation) since nothing else ever uninstalls "claude" from this
+// directory.
+func TestGemini_CorruptedManifestAtHarnessExclusiveDir_DoesNotFalselyAttributeClaude(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	g := geminiTarget{}
+	g.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	skillDir := filepath.Join(dir, ".gemini", "skills", "codegraph")
+	manifestPath := skillManifestPath(skillDir)
+	if !fileExists(manifestPath) {
+		t.Fatalf("manifest not written by first install: %s", manifestPath)
+	}
+	if err := os.WriteFile(manifestPath, []byte("{not valid json"), 0o644); err != nil {
+		t.Fatalf("corrupt manifest: %v", err)
+	}
+
+	// Re-run install over the corrupted manifest: self-healing must not
+	// invent Claude as a co-owner of a directory Claude never wrote to.
+	g.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	m, present, err := readManifest(manifestPath)
+	if err != nil || !present {
+		t.Fatalf("manifest not present after self-heal reinstall: present=%v err=%v", present, err)
+	}
+	if containsTarget(m.Targets, Claude) {
+		t.Fatalf("CONFIRMED BUG: Claude falsely attributed as requester of %s: targets after self-heal reinstall = %v", skillDir, m.Targets)
+	}
+	if !targetSetEqual(m.Targets, []TargetID{Gemini}) {
+		t.Fatalf("Targets after self-heal reinstall = %v, want [gemini]", m.Targets)
+	}
+
+	// Gemini is the only real requester — uninstalling it must fully
+	// remove the package (D-08: deleted only when targets becomes empty).
+	g.Uninstall(LocationLocal)
+
+	if fileExists(skillDir) {
+		t.Fatalf("CONFIRMED BUG: skill dir survived uninstall of its only real requester (gemini) due to phantom claude attribution")
 	}
 }
