@@ -285,23 +285,23 @@ func writeRenderedCodexGuard(t *testing.T, loc Location, binPath, projectDir str
 	return guard
 }
 
-// runCodexPreToolGuard runs guardPath with stdin and the process cwd set
-// to cwd. pwd is the value the $PWD ENVIRONMENT VARIABLE is explicitly set
-// to — deliberately a SEPARATE parameter from cwd, never left to whatever
-// the test process itself inherited (the actual shell running `go test`
-// leaves its own PWD in os.Environ(), which would otherwise leak in). The
-// two are the same value only for the global guard's own tests, which
-// legitimately depend on $PWD (D-22); every local guard test call passes
-// a DELIBERATELY WRONG pwd (bogusPWD) distinct from cwd and lacking
-// .codegraph, so a mutation that made the local guard consult $PWD
-// instead of deriving its root from $0 would be caught immediately by
-// indexed_binary_ok turning silent (Family (f2), 07-MUTATION-LOG.md) —
-// this is the negative control that makes root_from_own_path_with_empty_path
-// mean something beyond "still works," not just an accidentally-correct
-// PWD along for the ride. forcedEnv, when non-nil, REPLACES the
-// environment entirely (used by the empty-PATH subtest) — pwd is still
-// appended afterward either way.
-func runCodexPreToolGuard(t *testing.T, guardPath, cwd, pwd string, extraEnv []string, forcedEnv []string, stdin string) (stdout, stderr string, exit int, err error) {
+// runCodexPreToolGuard runs guardPath with stdin, with the CHILD PROCESS's
+// actual OS-level working directory (cmd.Dir, what getcwd() returns) set
+// to procCwd — never left as whatever the test process itself inherited.
+// $PWD is explicitly set to match procCwd: bash and other shells re-derive
+// $PWD from getcwd() at startup whenever an inherited PWD does not match
+// the real cwd (verified empirically — an attempt to fake a MISMATCHED
+// $PWD here was silently self-healed by the shell, not a usable negative
+// control), so the only way to genuinely exercise "what if this guard
+// read $PWD/cwd instead of deriving its root from $0" is to make the
+// PROCESS's real working directory itself wrong. Every LOCAL guard test
+// below therefore passes a procCwd that is NOT the project directory the
+// guard script actually lives under (Family (f2), 07-MUTATION-LOG.md) —
+// the guard's own root derivation must still find the right .codegraph
+// purely from $0, with no correct cwd to fall back on. forcedEnv, when
+// non-nil, REPLACES the environment entirely (used by the empty-PATH
+// subtest) — PWD is still appended afterward either way.
+func runCodexPreToolGuard(t *testing.T, guardPath, procCwd string, extraEnv []string, forcedEnv []string, stdin string) (stdout, stderr string, exit int, err error) {
 	t.Helper()
 
 	var env []string
@@ -316,10 +316,10 @@ func runCodexPreToolGuard(t *testing.T, guardPath, cwd, pwd string, extraEnv []s
 		}
 		env = append(env, extraEnv...)
 	}
-	env = append(env, "PWD="+pwd)
+	env = append(env, "PWD="+procCwd)
 
 	cmd := exec.Command(guardPath)
-	cmd.Dir = cwd
+	cmd.Dir = procCwd
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader(stdin)
 	var outBuf, errBuf strings.Builder
@@ -382,13 +382,14 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 		{name: "global/binary_exits_nonzero", loc: LocationGlobal, codegraph: "dir", stub: stubFail, stubMode: 0o755, wantStarted: true},
 	}
 
-	// bogusPWD is a fresh, un-indexed directory distinct from every case's
-	// own project dir — passed as $PWD for every LOCAL guard invocation
-	// below so a mutation that made the local guard consult $PWD instead
-	// of deriving its root from $0 is caught (Family (f2)), rather than
-	// accidentally passing because $PWD happened to equal the right
-	// directory anyway.
-	bogusPWD := t.TempDir()
+	// bogusCwd is a fresh, un-indexed directory, unrelated to any case's
+	// own project dir — used as the CHILD PROCESS's actual OS-level cwd
+	// for every LOCAL guard invocation below, so a mutation that made the
+	// local guard consult $PWD/cwd instead of deriving its root from $0 is
+	// caught (Family (f2)): with the real cwd wrong and lacking
+	// .codegraph, only a correct $0-based derivation can still find the
+	// project's own .codegraph directory.
+	bogusCwd := t.TempDir()
 
 	ran := 0
 	for _, tc := range cases {
@@ -402,15 +403,15 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 			project := newProject(t, tc.codegraph)
 			guard := writeRenderedCodexGuard(t, tc.loc, bin, project)
 
-			pwd := bogusPWD
+			procCwd := bogusCwd
 			if tc.loc == LocationGlobal {
-				pwd = project
+				procCwd = project
 			}
 			var forcedEnv []string
 			if tc.emptyPath {
 				forcedEnv = []string{"STUB_DIR=" + stubDir, "PATH="}
 			}
-			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, pwd, []string{"STUB_DIR=" + stubDir}, forcedEnv, preToolGuardEvent)
+			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, procCwd, []string{"STUB_DIR=" + stubDir}, forcedEnv, preToolGuardEvent)
 			if err != nil {
 				t.Fatalf("run guard: %v", err)
 			}
@@ -465,7 +466,7 @@ func TestRenderCodexPreToolGuard(t *testing.T) {
 			guard := writeRenderedCodexGuard(t, loc, bin, project)
 			shSyntaxOK(t, guard)
 
-			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, project, []string{"STUB_DIR=" + stubDir}, nil, preToolGuardEvent)
+			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, []string{"STUB_DIR=" + stubDir}, nil, preToolGuardEvent)
 			if err != nil {
 				t.Fatalf("(%s) run guard: %v", loc, err)
 			}
