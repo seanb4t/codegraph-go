@@ -194,6 +194,101 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 	recordFile(result, hooksPath, fr, werr)
 }
 
+// codexHooksExplicitlyDisabled reports whether the config.toml governing
+// loc explicitly disables Codex hooks (D-18): for local, the project
+// `.codex/config.toml` is read first; if it sets `features.hooks` (any of
+// tomlBoolSetting's three recognized forms) that value governs; else if it
+// sets the deprecated `features.codex_hooks` that governs instead; else the
+// same two checks fall back to the global `~/.codex/config.toml`. For
+// global, only the global file is consulted. source names the governing
+// file and key, for codexHooksDisabledNote. A read error other than
+// not-exist is returned unwrapped — the caller records it and writes
+// nothing, per the "cannot tell, so don't guess" posture the rest of this
+// package's config reads already follow.
+func codexHooksExplicitlyDisabled(loc Location) (bool, string, error) {
+	if loc == LocationLocal {
+		localPath, err := codexConfigPath(LocationLocal)
+		if err != nil {
+			return false, "", err
+		}
+		if disabled, source, found, err := codexConfigHooksSetting(localPath); err != nil {
+			return false, "", err
+		} else if found {
+			return disabled, source, nil
+		}
+	}
+
+	globalPath, err := codexConfigPath(LocationGlobal)
+	if err != nil {
+		return false, "", err
+	}
+	disabled, source, found, err := codexConfigHooksSetting(globalPath)
+	if err != nil {
+		return false, "", err
+	}
+	if !found {
+		return false, "", nil
+	}
+	return disabled, source, nil
+}
+
+// codexConfigHooksSetting reads path (a Codex config.toml) and reports
+// whether it sets the `[features]` table's `hooks` key, falling back to the
+// deprecated `codex_hooks` alias when `hooks` is absent — both read through
+// tomlBoolSetting, so any of its three recognized forms applies. found is
+// false when path does not exist or sets neither key; disabled is the
+// logical negation of whatever boolean value was found (hooks=false means
+// disabled=true). A missing file is reported found=false, err=nil — the
+// same "absent is not an error" posture readFileOrEmpty's callers already
+// use throughout this package.
+func codexConfigHooksSetting(path string) (disabled bool, source string, found bool, err error) {
+	data, rerr := os.ReadFile(path)
+	if rerr != nil {
+		if os.IsNotExist(rerr) {
+			return false, "", false, nil
+		}
+		return false, "", false, rerr
+	}
+	content := string(data)
+	if v, set := tomlBoolSetting(content, "features", "hooks"); set {
+		return !v, fmt.Sprintf("%s ([features] hooks)", path), true, nil
+	}
+	if v, set := tomlBoolSetting(content, "features", "codex_hooks"); set {
+		return !v, fmt.Sprintf("%s ([features] codex_hooks)", path), true, nil
+	}
+	return false, "", false, nil
+}
+
+// codexHookTrustNote returns the D-19 Note every opt-in Codex PreToolUse
+// install adds: Codex skips a new or changed hook until it is trusted in
+// /hooks (07-LIVE-SESSIONS.md B5's live "Hooks need review" prompt), so the
+// user must open that review themselves — this Note never advises
+// `--dangerously-bypass-hook-trust` (T-07-24).
+func codexHookTrustNote(loc Location) string {
+	return "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
+}
+
+// codexHooksDisabledNote returns the D-18 Note printed when an opt-in
+// install is skipped because source (a codexConfigHooksSetting result)
+// explicitly disables Codex hooks.
+func codexHooksDisabledNote(source string) string {
+	return fmt.Sprintf("Codex hooks are explicitly disabled by %s — the codegraph PreToolUse nudge was not installed", source)
+}
+
+// codexHooksFileWasWritten reports whether files (a WriteResult.Files
+// slice, typically the tail appended by one installCodexPreToolNudge call)
+// records hooksPath as created or updated — the Keep-refresh trigger for
+// codexHookTrustNote: Keep only re-announces trust when the registered
+// definition itself actually changed, never on a byte-identical refresh.
+func codexHooksFileWasWritten(files []FileResult, hooksPath string) bool {
+	for _, f := range files {
+		if f.Path == hooksPath && (f.Action == ActionCreated || f.Action == ActionUpdated) {
+			return true
+		}
+	}
+	return false
+}
+
 // uninstallCodexPreToolNudge always attempts removal of both the guard and
 // the hooks.json registration, reporting not-found when the user never
 // opted in — matching the "uninstall always attempts removal" discipline

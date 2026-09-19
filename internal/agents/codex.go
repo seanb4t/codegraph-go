@@ -236,10 +236,45 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		result.Notes = append(result.Notes, note)
 	}
 
-	// 07-07 tracer: only the On path is wired this plan — Keep and Off get
-	// their meaning in 07-08 (D-18's opt-in stays explicit).
-	if opts.PreToolNudge == PreToolNudgeOn {
-		installCodexPreToolNudge(&result, loc, opts.ExecPath)
+	// 07-08: the sticky Keep/On/Off lifecycle (D-18, D-19, D-23).
+	switch opts.PreToolNudge {
+	case PreToolNudgeOn:
+		disabled, source, err := codexHooksExplicitlyDisabled(loc)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks-disabled setting: %w", err))
+		} else if disabled {
+			result.Notes = append(result.Notes, codexHooksDisabledNote(source))
+		} else {
+			beforeErrs := len(result.Errors)
+			installCodexPreToolNudge(&result, loc, opts.ExecPath)
+			if len(result.Errors) == beforeErrs {
+				result.Notes = append(result.Notes, codexHookTrustNote(loc))
+			}
+		}
+	case PreToolNudgeKeep:
+		if hooksPath, err := codexHooksJSONPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks.json path: %w", err))
+		} else if _, ownCommands, berr := codexPreToolUseBlocks(loc); berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, berr))
+		} else if recorded, herr := hasOwnHookBlock(hooksPath, "PreToolUse", ownCommands); herr == nil && recorded {
+			disabled, source, derr := codexHooksExplicitlyDisabled(loc)
+			if derr != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks-disabled setting: %w", derr))
+			} else if disabled {
+				result.Notes = append(result.Notes, codexHooksDisabledNote(source))
+			} else {
+				beforeFiles := len(result.Files)
+				installCodexPreToolNudge(&result, loc, opts.ExecPath)
+				if codexHooksFileWasWritten(result.Files[beforeFiles:], hooksPath) {
+					result.Notes = append(result.Notes, codexHookTrustNote(loc))
+				}
+			}
+		}
+		// herr != nil (unreadable/malformed hooks.json) or !recorded: Keep
+		// touches nothing — "cannot tell, so don't guess" (matches Claude's
+		// preToolNudgeEvidenced posture for the same ambiguity).
+	case PreToolNudgeOff:
+		uninstallCodexPreToolNudge(&result, loc)
 	}
 
 	return result

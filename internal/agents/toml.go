@@ -465,6 +465,160 @@ func tomlUnquoteLiteral(s string) string {
 	return strings.TrimSuffix(s, `'`)
 }
 
+// tomlKeyValue splits a "key = value" line (after stripping a trailing
+// comment) into its normalized dotted key path and raw value text — the
+// same key-side parse tomlKeyTablePath performs, but also returning the
+// value side, which tomlBoolSetting needs. ok is false under the same
+// conditions tomlKeyTablePath reports false for (no unquoted "=", or an
+// empty key).
+func tomlKeyValue(line string) (keyPath, value string, ok bool) {
+	trimmed := strings.TrimSpace(stripTOMLTrailingComment(line))
+	i := 0
+	for i < len(trimmed) {
+		switch trimmed[i] {
+		case '=':
+			keyText := strings.TrimSpace(trimmed[:i])
+			if keyText == "" {
+				return "", "", false
+			}
+			return strings.Join(tomlSplitDottedPath(keyText), "."), strings.TrimSpace(trimmed[i+1:]), true
+		case '"':
+			i = skipTOMLBasicString(trimmed, i)
+		case '\'':
+			i = skipTOMLLiteralString(trimmed, i)
+		default:
+			i++
+		}
+	}
+	return "", "", false
+}
+
+// tomlBoolLiteral reports whether s (already trimmed of surrounding
+// whitespace by the caller) is exactly the bare TOML boolean literal
+// "true" or "false" — any other value (a quoted string, a number, an
+// array, an inline table) is reported not-a-bool, never guessed.
+func tomlBoolLiteral(s string) (value, ok bool) {
+	switch strings.TrimSpace(s) {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+// splitTOMLInlineTableEntries splits the text between an inline table's "{"
+// and "}" on "," that occurs outside a quoted segment — used only to
+// recover a single "key = value" member for tomlInlineTableBoolValue below;
+// it does not need to handle nested inline tables or arrays, since D-18's
+// only inline-table shape is a flat `table = { key = value, ... }` on one
+// line.
+func splitTOMLInlineTableEntries(s string) []string {
+	var entries []string
+	var cur strings.Builder
+	i := 0
+	for i < len(s) {
+		switch s[i] {
+		case ',':
+			entries = append(entries, cur.String())
+			cur.Reset()
+			i++
+		case '"':
+			j := skipTOMLBasicString(s, i)
+			cur.WriteString(s[i:j])
+			i = j
+		case '\'':
+			j := skipTOMLLiteralString(s, i)
+			cur.WriteString(s[i:j])
+			i = j
+		default:
+			cur.WriteByte(s[i])
+			i++
+		}
+	}
+	entries = append(entries, cur.String())
+	return entries
+}
+
+// tomlInlineTableBoolValue reports the boolean value of key within raw, a
+// single-line inline-table value text (e.g. "{ hooks = false }"). Returns
+// ok=false when raw is not an inline table, or key is absent or not a bare
+// boolean literal inside it.
+func tomlInlineTableBoolValue(raw, key string) (value, ok bool) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "{") || !strings.HasSuffix(trimmed, "}") {
+		return false, false
+	}
+	inner := trimmed[1 : len(trimmed)-1]
+	for _, part := range splitTOMLInlineTableEntries(inner) {
+		kp, v, kvOK := tomlKeyValue(part)
+		if !kvOK || kp != key {
+			continue
+		}
+		return tomlBoolLiteral(v)
+	}
+	return false, false
+}
+
+// tomlBoolSetting reports the boolean value of table.key within content,
+// recognizing three equivalent syntactic forms (D-18, used by
+// codexHooksExplicitlyDisabled to read `[features] hooks` /
+// `features.hooks` / `codex_hooks` from a Codex config.toml):
+//
+//   - a plain `key = true|false` line inside `[table]` (at any indentation,
+//     any header form findTOMLTableRange itself already accepts);
+//   - a root dotted `table.key = true|false` line OUTSIDE any table (Codex's
+//     config.toml has no notion of "root table" beyond top-of-file, so this
+//     form is only recognized before the first `[...]` header is seen);
+//   - a single-line inline `table = { ... key = true|false ... }` value.
+//
+// Any other shape — a non-boolean literal, the key inside an unrelated
+// table, or text inside a multi-line string/array (tomlLineState) — is
+// reported unset (value=false, set=false), never guessed. The last matching
+// occurrence in content wins, mirroring TOML's own "last key assignment
+// wins" semantics for a file that (invalidly, but not this function's job to
+// reject) repeats a key.
+func tomlBoolSetting(content, table, key string) (value, set bool) {
+	lines := splitTOMLLines(content)
+	var state tomlLineState
+	currentTablePath := ""
+
+	for _, ln := range lines {
+		if !state.neutral() {
+			state.scan(ln.text)
+			continue
+		}
+
+		if isTOMLHeaderLine(ln.text) {
+			currentTablePath = tomlNormalizedHeaderPath(ln.text)
+			state.scan(ln.text)
+			continue
+		}
+
+		keyPath, kv, ok := tomlKeyValue(ln.text)
+		if ok {
+			switch {
+			case currentTablePath == table && keyPath == key:
+				if b, isBool := tomlBoolLiteral(kv); isBool {
+					value, set = b, true
+				}
+			case currentTablePath == "" && keyPath == table+"."+key:
+				if b, isBool := tomlBoolLiteral(kv); isBool {
+					value, set = b, true
+				}
+			case currentTablePath == "" && keyPath == table:
+				if b, isBool := tomlInlineTableBoolValue(kv, key); isBool {
+					value, set = b, true
+				}
+			}
+		}
+
+		state.scan(ln.text)
+	}
+	return value, set
+}
+
 // tomlLineState tracks, across a run of lines, whether the scanner is
 // inside a multi-line basic (triple-double-quoted) or literal
 // (triple-single-quoted) string, and the current nesting depth of

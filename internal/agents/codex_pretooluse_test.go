@@ -792,8 +792,17 @@ func TestCodexPreToolNudge_SkippedWhenHooksDisabled(t *testing.T) {
 			if guardExists || hooksExists {
 				t.Fatalf("expected no writes when hooks are disabled, guardExists=%v hooksExists=%v", guardExists, hooksExists)
 			}
-			if len(res.Notes) != 1 {
-				t.Fatalf("Notes = %d, want exactly 1 (the disabled note): %#v", len(res.Notes), res.Notes)
+			// A local install ALSO carries codexTrustNote's unrelated D-10
+			// "loads this project's MCP server only once trusted" Note —
+			// count only Notes naming the disabled setting, not len(Notes).
+			n := 0
+			for _, note := range res.Notes {
+				if strings.Contains(note, "hooks are explicitly disabled") {
+					n++
+				}
+			}
+			if n != 1 {
+				t.Fatalf("Notes naming the disabled setting = %d, want exactly 1: %#v", n, res.Notes)
 			}
 		})
 	}
