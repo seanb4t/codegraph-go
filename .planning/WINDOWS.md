@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 8
 waived_count: 2
 fixed_count: 28
-total_count: 37
-last_updated: 2026-09-16T21:47:08.569Z
+total_count: 38
+last_updated: 2026-09-19T15:57:13.010Z
 ---
 
 # Broken Windows Ledger
@@ -52,6 +52,7 @@ last_updated: 2026-09-16T21:47:08.569Z
 | 35 | 09 | unrun-verify | web/src/lib/components/browse/EditorLinkPicker.svelte |  | Cursor and JetBrains editor-link URI templates are community-sourced (09-RESEARCH.md A1/A2), never officially documented like VS Code's — the picker carries a visible [ASSUMED] note under both buttons pending an end-of-phase human check (09-05) against a real install | open |  | 2026-09-12T19:05:59.598Z |  |
 | 36 | 10 | unrun-verify | internal/cli/index.go |  | priorCoverageGeneration (index.go:30-48) collapses 'store locked/corrupt' into the same floor-0 result as 'never indexed', so a live holder surviving graphstore.Open's ~400ms retry during a --force rebuild silently re-admits the CR-01 page-token aliasing shape (10-REVIEW.md WR-01, iteration 4). Fix: distinguish errors.Is(ErrNotFound) from ErrStoreLocked/other — hard-error before RemoveAll or at least warn — and add a hold-the-lock-across-index regression test per open_lock_test.go. Severity low/medium; window narrow; recorded in 10-SECURITY.md T-10-16. | fixed |  | 2026-09-13T14:04:31.589Z | 2026-09-15T20:32:55.674Z |
 | 37 | 03 | unrun-verify | internal/daemon/daemon_test.go | 360 | Post-merge gate after 03-02 (2026-09-16): 'go test ./internal/cli/... ./internal/daemon/ -count=1' failed 1 of 3 runs post-fold with '--- FAIL: TestRunWatchdogCancelsRunOnSimulatedReparent (250.21s)' — daemon_test.go:360 'Run did not return after a simulated reparent' (the testBudget-scaled 10s safety net, not the tick send). Reproduced on the PRE-fold commit 5bc10ed8 in a scratch worktree: 1 of 2 runs failed with the same line plus '--- FAIL: TestConvergenceTwoSessions (130.22s)' soak_test.go:238 'session B did not converge'. NOT caused by Phase 3 — its only internal/daemon diff is 4 message lines in lock.go (D-08). The daemon package passes alone (64–66s) every time. This contradicts row #12's 'fixed' status: FIX-07's injected-tick seam removed the ticker race but Run still does not return within the budget under cross-package load, so the combined-suite gate remains non-deterministic. Executor and orchestrator runs re-ran alone and reported separately per the 03-01 baseline note. | open |  | 2026-09-16T21:47:08.569Z |  |
+| 38 | 07 | deviation | internal/agents/toml.go | 107 | Codex TOML splice data loss in released binaries: findTOMLTableRange ended a table only at a column-0 '[' header, so an indented [mcp_servers.codegraph] swallowed every following sibling table up to the next column-0 header on install/uninstall --target codex\|all. Fixed on gsd/v0.14.0-milestone by 07-01 (fix(07-01) commits); no patch release by maintainer decision B2 (2026-09-19, 07-CONTEXT D-08). Stays open until the v0.14.0 release ships, then close with windows fixed. | open |  | 2026-09-19T15:57:13.010Z |  |
 
 ````json
 [
@@ -497,6 +498,19 @@ last_updated: 2026-09-16T21:47:08.569Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-16T21:47:08.569Z",
+    "resolved_at": null,
+    "milestone": "v0.14.0"
+  },
+  {
+    "id": 38,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "internal/agents/toml.go",
+    "line": 107,
+    "description": "Codex TOML splice data loss in released binaries: findTOMLTableRange ended a table only at a column-0 '[' header, so an indented [mcp_servers.codegraph] swallowed every following sibling table up to the next column-0 header on install/uninstall --target codex|all. Fixed on gsd/v0.14.0-milestone by 07-01 (fix(07-01) commits); no patch release by maintainer decision B2 (2026-09-19, 07-CONTEXT D-08). Stays open until the v0.14.0 release ships, then close with windows fixed.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-19T15:57:13.010Z",
     "resolved_at": null,
     "milestone": "v0.14.0"
   }
