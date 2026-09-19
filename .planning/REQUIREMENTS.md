@@ -78,10 +78,10 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Nudge Hook (Claude Code)
 
-- [ ] **NUDGE-03**: A PreToolUse hook on `Bash` (grep/rg/find as the first binary in the pipe), `Grep`, `Glob` and `Read` in a `.codegraph/`-indexed repo returns only `hookSpecificOutput.additionalContext` pointing at `codegraph_explore`, exits 0 unconditionally, and never emits `permissionDecision` — verified against the current hooks reference, not memory
-- [ ] **NUDGE-04**: The nudge fires on the first matched call, then at most once a minute, per session and separately per subagent (maintainer decision 2026-09-19, replacing "at most once per session"), via a session-scoped timestamp sentinel, and is silent with zero overhead in a repo without `.codegraph/` (NUDGE-02's property preserved)
-- [ ] **NUDGE-05**: The hook is validated against a false-positive corpus (legitimate grep use) and a true-positive corpus (where-is-X patterns), and its fire rate is measured in a genuinely fresh live session (carries GUARD-HOOK-02)
-- [ ] **NUDGE-06**: `codegraph install`/`uninstall` register and remove the hook through the existing exact-identity `writeHookEntry` as an opt-in alongside the default SessionStart nudge; a hand-edited own entry duplicates rather than overwrites
+- [x] **NUDGE-03**: A PreToolUse hook on `Bash` (grep/rg/find as the first binary in the pipe), `Grep`, `Glob` and `Read` in a `.codegraph/`-indexed repo returns only `hookSpecificOutput.additionalContext` pointing at `codegraph_explore`, exits 0 unconditionally, and never emits `permissionDecision` — verified against the current hooks reference, not memory
+- [x] **NUDGE-04**: The nudge fires on the first matched call, then at most once a minute, per session and separately per subagent (maintainer decision 2026-09-19, replacing "at most once per session"), via a session-scoped timestamp sentinel, and is silent with zero overhead in a repo without `.codegraph/` (NUDGE-02's property preserved)
+- [x] **NUDGE-05**: The hook is validated against a false-positive corpus (legitimate grep use) and a true-positive corpus (where-is-X patterns), and its fire rate is measured in a genuinely fresh live session (carries GUARD-HOOK-02)
+- [x] **NUDGE-06**: `codegraph install`/`uninstall` register and remove the hook through the existing exact-identity `writeHookEntry` as an opt-in alongside the default SessionStart nudge; a hand-edited own entry duplicates rather than overwrites
 
 ### Codex Parity
 
@@ -179,10 +179,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AGENT-11 | Phase 5 | Complete |
 | AGENT-13 | Phase 5 | Complete |
 | AGENT-14 | Phase 7 | Pending |
-| NUDGE-03 | Phase 6 | Pending |
-| NUDGE-04 | Phase 6 | Pending |
-| NUDGE-05 | Phase 6 | Pending |
-| NUDGE-06 | Phase 6 | Pending |
+| NUDGE-03 | Phase 6 | Complete |
+| NUDGE-04 | Phase 6 | Complete |
+| NUDGE-05 | Phase 6 | Complete |
+| NUDGE-06 | Phase 6 | Complete |
 | CODEX-01 | Phase 7 | Pending |
 | CODEX-02 | Phase 7 | Pending |
 | CODEX-03 | Phase 7 | Pending |

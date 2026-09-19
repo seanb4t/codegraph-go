@@ -4,17 +4,17 @@ milestone: v0.14.0
 milestone_name: Polish & Agent Reach
 current_phase: 6
 current_phase_name: Claude Code PreToolUse Nudge
-status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-09-19T10:57:12.263Z"
+status: verifying
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-09-19T11:03:25.989Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 6 execution started
-state_head: c1ef2bafc342453e5725ec79a7417e3cb94fd1af
+state_head: d01844c7084dfa34204464da6baf95a62419bd13
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 42
-  completed_plans: 41
+  completed_plans: 42
   percent: 71
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 5)
 
 Phase: 6 (Claude Code PreToolUse Nudge) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-19 — Phase 6 execution started
 
 ## Performance Metrics
@@ -172,6 +172,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P04 | 46min | 3 tasks | 11 files |
 | Phase 06 P05 | 11min | 3 tasks | 11 files |
 | Phase 06 P06 | 4h | 3 tasks | 1 files |
+| Phase 06 P07 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -397,6 +398,8 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: Phase 6 06-05: --pretool-nudge is read through cobra Changed (not given = Keep); the D-09 note goes to stderr, plain, once, before the per-agent report
 - [Phase 6]: Phase 6 06-06: D-18 verdict PASS (C1-C7) in Claude Code 2.1.278; fire rate 9/18, 7/9 true positives
 - [Phase 6]: Phase 6 06-06: same-command PreToolUse handlers differing only in if are not deduplicated (validates 06-05 one-handler-per-block); subagents carry the parent session_id
+- [Phase 6]: Phase 6 06-07: install/uninstall help describe only what shipped and passed live (D-18 PASS); CLI-REFERENCE.md regenerated only via task docs:cli
+- [Phase 6]: Phase 6 06-07: mutation-family count is 19 (a1-a2, b1-b3, c1-c6, d1-d4, e1-e4) after the 06-05 amendment added (e4); each carries RED and revert proof
 
 ### Pending Todos
 
@@ -545,8 +548,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T10:57:12.223Z
-Stopped at: Completed 06-06-PLAN.md
+Last session: 2026-09-19T11:03:25.946Z
+Stopped at: Completed 06-07-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
