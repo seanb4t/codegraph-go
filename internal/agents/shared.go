@@ -171,6 +171,52 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 	return out, true, nil
 }
 
+// blockOwnsAnyCommand reports whether block's own hooks[] sub-array
+// contains any command in ownCommands — the single ownership-identity test
+// writeHookEntry's isOwned call site, removeHookEntry's isOwnCommand
+// closure, and hasOwnHookBlock all apply (code review WR-02, 06-REVIEW.md:
+// three independent copies of this rule were kept in sync only by
+// TestOwnershipExactIdentity and developer discipline, not by the
+// compiler). Ownership keys on exact hooks[i]["command"] string equality
+// against ownCommands, ignoring matcher, if, and any other field — a block
+// that fails to cast to map[string]any, or whose "hooks" key fails to cast
+// to []any, is never owned.
+func blockOwnsAnyCommand(block any, ownCommands []string) bool {
+	obj, ok := block.(map[string]any)
+	if !ok {
+		return false
+	}
+	blockHooks, ok := obj["hooks"].([]any)
+	if !ok {
+		return false
+	}
+	for _, h := range blockHooks {
+		hObj, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		cmd, _ := hObj["command"].(string)
+		if commandIsOwned(cmd, ownCommands) {
+			return true
+		}
+	}
+	return false
+}
+
+// commandIsOwned reports whether cmd exactly matches one of ownCommands —
+// the single hook-level identity check blockOwnsAnyCommand (and, through
+// it, writeHookEntry's isOwned call site and hasOwnHookBlock) and
+// removeHookEntry's isOwnCommand closure both reduce to (WR-02,
+// 06-REVIEW.md).
+func commandIsOwned(cmd string, ownCommands []string) bool {
+	for _, own := range ownCommands {
+		if cmd == own {
+			return true
+		}
+	}
+	return false
+}
+
 // writeHookEntry is the array-scoped analog of writeMcpEntry for
 // hooks.<event>, an array of independent {matcher, hooks[]} blocks rather
 // than a single named map key (RESEARCH Pitfall 1). It reads path via
@@ -199,23 +245,6 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 // the unowned blocks in their original relative order followed by
 // ownBlocks. Every unrelated event key and every unowned block under the
 // same event is carried through untouched.
-// blockOwnsAnyCommand reports whether block's own hooks[] sub-array
-// contains any command in ownCommands — the single ownership-identity test
-// writeHookEntry's isOwned closure, removeHookEntry's isOwnCommand closure,
-// and hasOwnHookBlock all apply (code review WR-02, 06-REVIEW.md: three
-// independent copies of this rule were kept in sync only by
-// TestOwnershipExactIdentity and developer discipline, not by the
-// compiler). Ownership keys on exact hooks[i]["command"] string equality
-// against ownCommands, ignoring matcher, if, and any other field — a block
-// that fails to cast to map[string]any, or whose "hooks" key fails to cast
-// to []any, is never owned.
-//
-// STUB (WR-02 fix step 1): always returns false so TestBlockOwnsAnyCommand
-// can be proven RED before this is wired up to a real implementation.
-func blockOwnsAnyCommand(block any, ownCommands []string) bool {
-	return false
-}
-
 func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
 	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
@@ -228,33 +257,9 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 	}
 	events, _ := hooks[event].([]any)
 
-	isOwned := func(block any) bool {
-		obj, ok := block.(map[string]any)
-		if !ok {
-			return false
-		}
-		blockHooks, ok := obj["hooks"].([]any)
-		if !ok {
-			return false
-		}
-		for _, h := range blockHooks {
-			hObj, ok := h.(map[string]any)
-			if !ok {
-				continue
-			}
-			cmd, _ := hObj["command"].(string)
-			for _, own := range ownCommands {
-				if cmd == own {
-					return true
-				}
-			}
-		}
-		return false
-	}
-
 	var owned, unowned []any
 	for _, b := range events {
-		if isOwned(b) {
+		if blockOwnsAnyCommand(b, ownCommands) {
 			owned = append(owned, b)
 		} else {
 			unowned = append(unowned, b)
@@ -396,12 +401,7 @@ func removeHookEntry(path, event string, ownCommands []string) (FileResult, erro
 	}
 
 	isOwnCommand := func(cmd string) bool {
-		for _, own := range ownCommands {
-			if cmd == own {
-				return true
-			}
-		}
-		return false
+		return commandIsOwned(cmd, ownCommands)
 	}
 
 	var anyRemoved bool
@@ -483,15 +483,15 @@ func removeHookEntry(path, event string, ownCommands []string) (FileResult, erro
 // without writing or removing anything (code review CR-01, 06-REVIEW.md:
 // the PreToolUse opt-in can be evidenced by settings.json even when the
 // manifest never recorded it, e.g. a foreign/unmanifested D-14 skill
-// directory). Ownership is determined by the exact same command-string
-// identity test writeHookEntry's own isOwned closure and removeHookEntry's
-// own isOwnCommand closure use (242ec0a) — deliberately duplicated here
-// rather than factored out into a shared helper those two call, so this
-// addition can never change writeHookEntry's or removeHookEntry's write or
-// removal semantics. A malformed or unreadable file surfaces its error
-// unwritten, exactly like readJSONFileStrict's other callers; a missing
-// file, missing hooks object, or missing event key is (false, nil), never
-// an error.
+// directory). Ownership is determined by blockOwnsAnyCommand, the same
+// command-string identity test writeHookEntry's own isOwned call site and
+// removeHookEntry's own isOwnCommand closure reduce to (WR-02, 06-REVIEW.md
+// — this used to be a third independent duplicate of the identity rule,
+// kept in sync only by TestOwnershipExactIdentity and developer discipline;
+// it is now the same code path the compiler enforces). A malformed or
+// unreadable file surfaces its error unwritten, exactly like
+// readJSONFileStrict's other callers; a missing file, missing hooks
+// object, or missing event key is (false, nil), never an error.
 func hasOwnHookBlock(path, event string, ownCommands []string) (bool, error) {
 	existing, present, err := readJSONFileStrict(path)
 	if err != nil {
@@ -506,25 +506,8 @@ func hasOwnHookBlock(path, event string, ownCommands []string) (bool, error) {
 	}
 	events, _ := hooks[event].([]any)
 	for _, b := range events {
-		obj, ok := b.(map[string]any)
-		if !ok {
-			continue
-		}
-		blockHooks, ok := obj["hooks"].([]any)
-		if !ok {
-			continue
-		}
-		for _, h := range blockHooks {
-			hObj, ok := h.(map[string]any)
-			if !ok {
-				continue
-			}
-			cmd, _ := hObj["command"].(string)
-			for _, own := range ownCommands {
-				if cmd == own {
-					return true, nil
-				}
-			}
+		if blockOwnsAnyCommand(b, ownCommands) {
+			return true, nil
 		}
 	}
 	return false, nil
