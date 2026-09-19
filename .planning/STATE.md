@@ -5,17 +5,17 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Phase 6 complete, ready to plan Phase 7
-last_updated: "2026-09-19T15:06:32.802Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-09-19T16:10:38.318Z"
 last_activity: 2026-09-19
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: 490011da5ad87b7c97a9f89be084a71aca04f263
+last_activity_desc: Phase 7 execution started
+state_head: 63ab99ae35b8bad6b378e677005e6df18ee54f84
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 42
-  percent: 79
+  completed_plans: 43
+  percent: 81
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 
 ## Current Position
 
-Phase: 7 (Codex Parity) — READY TO EXECUTE
-Plan: Not started
+Phase: 7 (Codex Parity) — EXECUTING
+Plan: 2 of 11
 Status: Ready to execute
-Last activity: 2026-09-19 — Phase 6 complete, transitioned to Phase 7
+Last activity: 2026-09-19 — Phase 7 execution started
 
 ## Performance Metrics
 
@@ -173,6 +173,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P05 | 11min | 3 tasks | 11 files |
 | Phase 06 P06 | 4h | 3 tasks | 1 files |
 | Phase 06 P07 | 5min | 2 tasks | 3 files |
+| Phase 07 P01 | 51 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -400,6 +401,8 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: Phase 6 06-06: same-command PreToolUse handlers differing only in if are not deduplicated (validates 06-05 one-handler-per-block); subagents carry the parent session_id
 - [Phase 6]: Phase 6 06-07: install/uninstall help describe only what shipped and passed live (D-18 PASS); CLI-REFERENCE.md regenerated only via task docs:cli
 - [Phase 6]: Phase 6 06-07: mutation-family count is 19 (a1-a2, b1-b3, c1-c6, d1-d4, e1-e4) after the 06-05 amendment added (e4); each carries RED and revert proof
+- [Phase 07]: findTOMLTableRange rewritten as a line scanner (splitTOMLLines/tomlLine/tomlLineState) tracking multi-line-string and bracket-depth state across lines; codegraph's range end backs off past the contiguous blank/comment run before the next header (or EOF), a deliberate change from the pre-existing implementation.
+- [Phase 07]: tomlTableConflict is a separate scan from findTOMLTableRange with its own path normalization (tomlNormalizedHeaderPath/tomlKeyTablePath/tomlSplitDottedPath) that unquotes and trims dotted segments, refusing inline/dotted/quoted/spaced/array-of-tables/duplicate/detached-subtable forms of codegraph's own TOML table rather than duplicating a key.
 
 ### Pending Todos
 
@@ -553,8 +556,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T11:03:25.946Z
-Stopped at: Phase 6 complete, ready to plan Phase 7
+Last session: 2026-09-19T16:10:38.263Z
+Stopped at: Completed 07-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
