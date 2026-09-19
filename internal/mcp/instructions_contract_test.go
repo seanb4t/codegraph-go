@@ -44,12 +44,13 @@ const instructionsMaxBytes = 600
 const resourcesAnchor = "resources/list"
 
 // skillAnchor is WIRE-03's skill half — the literal substring the rewritten
-// instructions const must carry so a client is pointed at the Claude Code
-// codegraph skill. Scoped to Claude Code deliberately (08-RESEARCH.md
-// Pitfall 1, resolution 1): Phase 7 shipped the skill for Claude Code only,
-// so an unscoped claim reaching a Codex/opencode/Gemini/Cursor/Kiro/
-// Hermes/Antigravity client would be a new unbacked promise inside the
-// phase that exists to retire them.
+// instructions const must carry so a client is pointed at the codegraph
+// skill. As of this phase (D-29, docs/AGENT-CAPABILITIES.md) the skill
+// package reaches 7 of the 8 registered targets — every target but Hermes,
+// which has no skill mechanism at either scope — so the sentence carrying
+// this anchor is harness-neutral rather than scoped to Claude Code, and
+// TestInstructionsSkillSentenceWithinFirst512Bytes below asserts both that
+// neutrality and Codex's 512-byte placement window.
 const skillAnchor = "codegraph skill"
 
 // TestInstructionsNamesTheNarrowingFilter pins the wire contract against
@@ -114,7 +115,7 @@ func TestInstructionsDescribesEveryVisibilityMechanism(t *testing.T) {
 		{"the CODEGRAPH_MCP_TOOLS narrowing filter", allowlistEnvName},
 		{"the missing-index remedy (MCP-03)", "codegraph init"},
 		{"the resources reference surface", resourcesAnchor},
-		{"the Claude Code skill pointer", skillAnchor},
+		{"the codegraph skill pointer", skillAnchor},
 	}
 
 	for _, m := range mechanisms {
@@ -128,7 +129,7 @@ func TestInstructionsDescribesEveryVisibilityMechanism(t *testing.T) {
 // TestInstructionsStaysWithinWireBudget enforces server.go's stated
 // constraints on the instructions constant. These are boundary neighbors
 // for the fix above, not incidental style checks: the string is
-// JSON-encoded verbatim into 24 frozen wire-oracle transcripts, so a
+// JSON-encoded verbatim into 38 frozen wire-oracle transcripts, so a
 // newline becomes an escape sequence in every one of them and unbounded
 // growth inflates every transcript diff forever.
 func TestInstructionsStaysWithinWireBudget(t *testing.T) {
