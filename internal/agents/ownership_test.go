@@ -55,7 +55,7 @@ func ownershipWantSkillDir(id TargetID, loc Location, home string) string {
 			return filepath.Join(".claude", "skills", "codegraph")
 		}
 		return filepath.Join(home, ".claude", "skills", "codegraph")
-	case Cursor, Opencode:
+	case Cursor, Opencode, Codex:
 		if loc == LocationLocal {
 			return filepath.Join(".agents", "skills", "codegraph")
 		}

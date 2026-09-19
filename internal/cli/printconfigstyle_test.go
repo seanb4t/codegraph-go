@@ -206,9 +206,9 @@ func TestInstallPrintConfigStyle_StyledStripsToPlain(t *testing.T) {
 func TestInstallPrintConfigStyle_Filters(t *testing.T) {
 	fakeHome(t)
 
-	out, _, err := execCmd("install", "--print-config-style", "-t", "claude,codex", "-l", "local")
+	out, _, err := execCmd("install", "--print-config-style", "-t", "claude,hermes", "-l", "local")
 	if err != nil {
-		t.Fatalf("install --print-config-style -t claude,codex -l local: %v", err)
+		t.Fatalf("install --print-config-style -t claude,hermes -l local: %v", err)
 	}
 	lines := splitNonEmptyLines(out)
 	if len(lines) != 2 {
@@ -217,8 +217,8 @@ func TestInstallPrintConfigStyle_Filters(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "claude: scopes=") {
 		t.Errorf("line 0 = %q, want a claude line", lines[0])
 	}
-	if lines[1] != "codex: scopes=global (local not supported)" {
-		t.Errorf("line 1 = %q, want %q", lines[1], "codex: scopes=global (local not supported)")
+	if lines[1] != "hermes: scopes=global (local not supported)" {
+		t.Errorf("line 1 = %q, want %q", lines[1], "hermes: scopes=global (local not supported)")
 	}
 
 	out, _, err = execCmd("install", "--print-config-style", "-t", "none")

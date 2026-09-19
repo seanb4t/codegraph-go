@@ -78,14 +78,18 @@ func TestCapabilitiesDeclared(t *testing.T) {
 		},
 		{
 			id:     Codex,
-			scopes: []Location{LocationGlobal},
+			scopes: []Location{LocationGlobal, LocationLocal},
 			format: ConfigFormatTOML,
 			hooks:  HooksNone,
 			instructions: map[Location]string{
 				LocationGlobal: filepath.Join(home, ".codex", "AGENTS.md"),
+				LocationLocal:  "AGENTS.md",
 			},
 			skillDir: map[Location]string{
-				LocationGlobal: "",
+				// D-14: Codex writes the SHARED skill package, not a
+				// Codex-specific directory.
+				LocationGlobal: filepath.Join(home, ".agents", "skills", "codegraph"),
+				LocationLocal:  filepath.Join(".agents", "skills", "codegraph"),
 			},
 		},
 		{
@@ -426,8 +430,8 @@ func TestCapabilitiesMatchInstallWrites(t *testing.T) {
 		}
 	}
 
-	if leaves < 13 {
-		t.Fatalf("executed %d leaf subtests, want at least 13 (5 global+local targets x 2, 3 global-only targets x 1)", leaves)
+	if leaves < 14 {
+		t.Fatalf("executed %d leaf subtests, want at least 14 (6 global+local targets x 2, 2 global-only targets x 1)", leaves)
 	}
 }
 

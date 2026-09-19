@@ -2,6 +2,8 @@ package agents
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -157,6 +159,34 @@ func TestResolveTargetFlag_AutoFallsBackToClaudeWhenNoneDetected(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID() != Claude {
 		t.Fatalf("want fallback to just [claude], got %v", got)
+	}
+}
+
+// TestResolveTargetFlag_AutoDetectsCodexAtLocal (D-09, D-26) asserts
+// "--target auto --location local" and the picker's pre-check detect Codex
+// through the local .codex/ directory, using the REAL registered
+// codexTarget (not a fake) so its real Detect(loc) — a bare .codex/
+// directory counting as "installed" even with no config.toml yet — is
+// exercised end to end.
+func TestResolveTargetFlag_AutoDetectsCodexAtLocal(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+
+	got, err := ResolveTargetFlag("auto", LocationLocal)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, target := range got {
+		if target.ID() == Codex {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected auto-detected targets to include codex given a scratch .codex/ dir, got %v", got)
 	}
 }
 

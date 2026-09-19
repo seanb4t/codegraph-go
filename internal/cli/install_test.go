@@ -372,16 +372,17 @@ func TestUninstall_ReportsRemovedAndNotConfigured(t *testing.T) {
 
 // TestUninstall_ReportsUnsupportedForWrongLocation asserts uninstall
 // reports "unsupported" (never an error) for a target/location
-// combination the agent doesn't support (Codex is global-only).
+// combination the agent doesn't support (Hermes is global-only; Codex
+// gained local scope in D-09 so it is no longer this test's example).
 func TestUninstall_ReportsUnsupportedForWrongLocation(t *testing.T) {
 	fakeHome(t)
 
-	out, _, err := execCmd("uninstall", "--target", "codex", "--location", "local")
+	out, _, err := execCmd("uninstall", "--target", "hermes", "--location", "local")
 	if err != nil {
-		t.Fatalf("uninstall --target codex --location local: %v", err)
+		t.Fatalf("uninstall --target hermes --location local: %v", err)
 	}
-	if !strings.Contains(out, "Codex CLI: unsupported") {
-		t.Fatalf("expected 'Codex CLI: unsupported', got:\n%s", out)
+	if !strings.Contains(out, "Hermes Agent: unsupported") {
+		t.Fatalf("expected 'Hermes Agent: unsupported', got:\n%s", out)
 	}
 }
 

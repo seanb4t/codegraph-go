@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -74,6 +76,37 @@ func TestAgentPickerModel_PreChecksDetectedTargets(t *testing.T) {
 	}
 	if m.delegate.checked[2] {
 		t.Errorf("index 2 (c): want unchecked, got checked")
+	}
+}
+
+// TestAgentPickerModel_PreChecksCodexAtLocal (D-09, D-26) asserts the
+// picker's pre-check detects Codex through the local .codex/ directory,
+// using the REAL registry (agents.AllTargets(), agents.DetectAll) in a
+// scratch cwd — the picker still lists all 8 targets, and the Codex row
+// starts checked.
+func TestAgentPickerModel_PreChecksCodexAtLocal(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+
+	all := agents.AllTargets()
+	if len(all) != 8 {
+		t.Fatalf("agents.AllTargets() returned %d targets, want 8 (D-26)", len(all))
+	}
+	detection := agents.DetectAll(agents.LocationLocal)
+
+	m := newAgentPickerModel(all, detection)
+
+	codexChecked := false
+	for i, target := range all {
+		if target.ID() == agents.Codex {
+			codexChecked = m.delegate.checked[i]
+		}
+	}
+	if !codexChecked {
+		t.Fatalf("expected the Codex row to start checked given a scratch .codex/ dir, checked=%v", m.delegate.checked)
 	}
 }
 
