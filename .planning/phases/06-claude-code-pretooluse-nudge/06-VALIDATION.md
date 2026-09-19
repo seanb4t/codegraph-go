@@ -3,9 +3,9 @@ phase: "6"
 slug: "claude-code-pretooluse-nudge"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-19"
 ---
 
@@ -31,7 +31,7 @@ created: "2026-09-19"
 
 - **After every task commit:** Run the quick command (plus `-race` on `./internal/nudge/ ./internal/cli/` for 06-03)
 - **After every plan wave:** Run the full suite command
-- **Before `/gsd-verify-work`:** Full suite green; `06-MUTATION-LOG.md` carries 18 RED families (a1-a2, b1-b3, c1-c6, d1-d4, e1-e3); `06-LIVE-SESSIONS.md` reads `D-18 verdict: PASS` with C1-C7 excerpts and the un-indexed negative control
+- **Before `/gsd-verify-work`:** Full suite green; `06-MUTATION-LOG.md` carries 19 RED families (a1-a2, b1-b3, c1-c6, d1-d4, e1-e4 — e4 added by the 06-05 checkpoint amendment); `06-LIVE-SESSIONS.md` reads `D-18 verdict: PASS` with C1-C7 excerpts and the un-indexed negative control
 - **Max feedback latency:** 60 seconds (quick command)
 
 ---
@@ -40,24 +40,24 @@ created: "2026-09-19"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 06-01-T1 | 06-01 | 1 | NUDGE-03, NUDGE-04, NUDGE-06 | T-06-01, T-06-03, T-06-04, T-06-05 | opt-in install writes a quoted-ExecPath guard + 4 owned PreToolUse blocks; fire = pinned additionalContext only, exit 0; un-indexed silent | tracer (RED first) + real binary | `go test ./internal/cli/ ./internal/agents/ -run 'TestHookPreToolUse_GrepFiresPinnedContext$\|TestHookPreToolUse_NoSessionIsSilent$\|TestHookCmd_HiddenTwoLevel$\|TestClaude_Install_PreToolNudgeOn_WritesGuardAndBlocks$\|TestClaude_Install_DefaultWritesNoPreToolUse$'` + real-binary install/fire/silent run | ❌ W0 | ⬜ pending |
-| 06-01-T2 | 06-01 | 1 | NUDGE-03, NUDGE-04 | T-06-01, T-06-02, T-06-04, T-06-08 | guard exits 0 on every binary failure; no process started un-indexed; ExecPath quoting; Family (a) RED | unit (exec of rendered template) + mutation | `go test ./internal/agents/ -run 'TestPreToolUseGuard$\|TestRenderPreToolGuard$\|TestPreToolUseGuardSourceFallsBackToPATH$'` | ❌ W0 | ⬜ pending |
-| 06-02-T1 | 06-02 | 2 | NUDGE-05 | T-06-09, T-06-11 | first-word shell rule, parse doubt silent, Read exclusions | unit (RED first) over D-15 corpora | `go test ./internal/nudge/ -run 'TestQualifiesCorpora$\|TestCorporaShape$\|TestQualifiesShellFirstWord$\|TestQualifiesReadNonCodeExtensions$'` | ❌ W0 | ⬜ pending |
-| 06-02-T2 | 06-02 | 2 | NUDGE-03, NUDGE-05 | T-06-10 | nudge text names only real tools, no unpinned facts, factual one-liner; Family (b) RED | drift guard + mutation | `go test ./internal/mcp/ -run 'TestPreToolUseNudgeText'` | ❌ W0 | ⬜ pending |
-| 06-03-T1 | 06-03 | 3 | NUDGE-04, NUDGE-05 | T-06-12, T-06-13, T-06-14 | per-(session, agent) 60 s gate; symlink/foreign refusal at read and record layers; no session content on disk | unit (RED first, injected clock, planted mtimes, -race) | `go test -race ./internal/nudge/ -run 'TestSessionKey$\|TestGate_\|TestSentinel_\|TestDefaultDirHonoursTMPDIR$'` | ❌ W0 | ⬜ pending |
-| 06-03-T2 | 06-03 | 3 | NUDGE-03, NUDGE-04 | T-06-15, T-06-16, T-06-17 | every forced error path → Execute() nil, stdout empty or pinned, no decision key | unit (RED first, -race) | `go test -race ./internal/cli/ -run 'TestHookPreToolUse_'` | ❌ W0 | ⬜ pending |
-| 06-03-T3 | 06-03 | 3 | NUDGE-03, NUDGE-04 | T-06-12, T-06-15, T-06-16 | D-16's three named mutations + cooldown/sentinel guards go RED | mutation | Task 3 verify in 06-03-PLAN.md (Family (c)) | ❌ W0 | ⬜ pending |
-| 06-04-T1 | 06-04 | 4 | NUDGE-06 | T-06-20, T-06-22 | Keep refreshes only when recorded; Off removes + forgets; uninstall always attempts; idempotent | unit (RED first) + plain golden | `go test ./internal/agents/ -run 'TestPreToolNudge_' && go test ./internal/cli/ -run 'TestPlainGolden$'` | ❌ W0 | ⬜ pending |
-| 06-04-T2 | 06-04 | 4 | NUDGE-06 | T-06-19 | capability table names the guard; 32-leaf ownership table with a planted same-matcher PreToolUse block | unit (RED first) | `go test ./internal/agents/ -run 'TestCapabilitiesTableDrivesDerivations$\|TestCapabilitiesMatchInstallWrites$\|TestOwnershipExactIdentity$\|TestClaude_DescribePaths_IncludesManifest$'` | ✅ (extend) | ⬜ pending |
-| 06-04-T3 | 06-04 | 4 | NUDGE-06 | T-06-19, T-06-20 | 242ec0a-class ownership, stickiness and table guards go RED | mutation | Task 3 verify in 06-04-PLAN.md (Family (d)) | ❌ W0 | ⬜ pending |
-| 06-05-T1 | 06-05 | 5 | NUDGE-06, NUDGE-03 | T-06-25, T-06-26 | dogfood registration == fragment; shape pinned (matchers, if rules, timeout 5, no statusMessage) | unit (RED first) | `go test ./internal/agents/ -run 'TestHookRegistrationMatchesFragmentAndScript$\|TestPreToolUseRegistrationShape$'` | ✅ (extend) | ⬜ pending |
-| 06-05-T2 | 06-05 | 5 | NUDGE-06 | T-06-23, T-06-24 | Changed tri-state; stderr note; upgrade carries Keep and never adds | unit (RED first) + drift gate | `go test ./internal/cli/ -run 'TestInstall_PreToolNudge_\|TestRefreshInstalledSkills_' && task docs:cli:drift` | ❌ W0 | ⬜ pending |
-| 06-05-T3 | 06-05 | 5 | NUDGE-06 | T-06-23, T-06-24, T-06-26 | upgrade/stickiness/dogfood guards go RED | mutation | Task 3 verify in 06-05-PLAN.md (Family (e)) | ❌ W0 | ⬜ pending |
-| 06-06-T1 | 06-06 | 6 | NUDGE-03, NUDGE-05 | T-06-27, T-06-28 | scratch repos + locked pass bar + current hooks-reference quotes; $HOME untouched | file checks | Task 1 verify in 06-06-PLAN.md | ❌ W0 | ⬜ pending |
-| 06-06-T2 | 06-06 | 6 | NUDGE-03, NUDGE-04, NUDGE-05 | T-06-28, T-06-29 | C1-C5 live with excerpts; fire rate; five open points | manual (orchestrator) + verdict-line gate | Task 2 verify in 06-06-PLAN.md | ❌ W0 | ⬜ pending |
-| 06-06-T3 | 06-06 | 6 | NUDGE-04, NUDGE-03 | T-06-27, T-06-29 | C6 un-indexed control 0 fires; C7 no hook error/prompt/deny; D-18 verdict | manual (orchestrator) + completeness gate | Task 3 verify in 06-06-PLAN.md | ❌ W0 | ⬜ pending |
-| 06-07-T1 | 06-07 | 7 | NUDGE-06 | T-06-31 | help + reference describe the shipped opt-in | drift gate | `task docs:cli:drift && go test ./internal/cli/ -run 'TestEveryRegisteredFlagIsAccountedFor$\|TestPlainGolden$'` | ✅ | ⬜ pending |
-| 06-07-T2 | 06-07 | 7 | NUDGE-03, NUDGE-04, NUDGE-05, NUDGE-06 | T-06-32 | full suite, 18 families, D-18 PASS, untouched surfaces | full suite + drift | full suite command above + Task 2 verify in 06-07-PLAN.md | ✅ | ⬜ pending |
+| 06-01-T1 | 06-01 | 1 | NUDGE-03, NUDGE-04, NUDGE-06 | T-06-01, T-06-03, T-06-04, T-06-05 | opt-in install writes a quoted-ExecPath guard + 6 owned single-handler PreToolUse blocks (06-05 amendment); fire = pinned additionalContext only, exit 0; un-indexed silent | tracer (RED first) + real binary | `go test ./internal/cli/ ./internal/agents/ -run 'TestHookPreToolUse_GrepFiresPinnedContext$\|TestHookPreToolUse_NoSessionIsSilent$\|TestHookCmd_HiddenTwoLevel$\|TestClaude_Install_PreToolNudgeOn_WritesGuardAndBlocks$\|TestClaude_Install_DefaultWritesNoPreToolUse$'` + real-binary install/fire/silent run | ✅ | ✅ green |
+| 06-01-T2 | 06-01 | 1 | NUDGE-03, NUDGE-04 | T-06-01, T-06-02, T-06-04, T-06-08 | guard exits 0 on every binary failure; no process started un-indexed; ExecPath quoting; Family (a) RED | unit (exec of rendered template) + mutation | `go test ./internal/agents/ -run 'TestPreToolUseGuard$\|TestRenderPreToolGuard$\|TestPreToolUseGuardSourceFallsBackToPATH$'` | ✅ | ✅ green |
+| 06-02-T1 | 06-02 | 2 | NUDGE-05 | T-06-09, T-06-11 | first-word shell rule, parse doubt silent, Read exclusions | unit (RED first) over D-15 corpora | `go test ./internal/nudge/ -run 'TestQualifiesCorpora$\|TestCorporaShape$\|TestQualifiesShellFirstWord$\|TestQualifiesReadNonCodeExtensions$'` | ✅ | ✅ green |
+| 06-02-T2 | 06-02 | 2 | NUDGE-03, NUDGE-05 | T-06-10 | nudge text names only real tools, no unpinned facts, factual one-liner; Family (b) RED | drift guard + mutation | `go test ./internal/mcp/ -run 'TestPreToolUseNudgeText'` | ✅ | ✅ green |
+| 06-03-T1 | 06-03 | 3 | NUDGE-04, NUDGE-05 | T-06-12, T-06-13, T-06-14 | per-(session, agent) 60 s gate; symlink/foreign refusal at read and record layers; no session content on disk | unit (RED first, injected clock, planted mtimes, -race) | `go test -race ./internal/nudge/ -run 'TestSessionKey$\|TestGate_\|TestSentinel_\|TestDefaultDirHonoursTMPDIR$'` | ✅ | ✅ green |
+| 06-03-T2 | 06-03 | 3 | NUDGE-03, NUDGE-04 | T-06-15, T-06-16, T-06-17 | every forced error path → Execute() nil, stdout empty or pinned, no decision key | unit (RED first, -race) | `go test -race ./internal/cli/ -run 'TestHookPreToolUse_'` | ✅ | ✅ green |
+| 06-03-T3 | 06-03 | 3 | NUDGE-03, NUDGE-04 | T-06-12, T-06-15, T-06-16 | D-16's three named mutations + cooldown/sentinel guards go RED | mutation | Task 3 verify in 06-03-PLAN.md (Family (c)) | ✅ | ✅ green |
+| 06-04-T1 | 06-04 | 4 | NUDGE-06 | T-06-20, T-06-22 | Keep refreshes only when recorded; Off removes + forgets; uninstall always attempts; idempotent | unit (RED first) + plain golden | `go test ./internal/agents/ -run 'TestPreToolNudge_' && go test ./internal/cli/ -run 'TestPlainGolden$'` | ✅ | ✅ green |
+| 06-04-T2 | 06-04 | 4 | NUDGE-06 | T-06-19 | capability table names the guard; 32-leaf ownership table with a planted same-matcher PreToolUse block | unit (RED first) | `go test ./internal/agents/ -run 'TestCapabilitiesTableDrivesDerivations$\|TestCapabilitiesMatchInstallWrites$\|TestOwnershipExactIdentity$\|TestClaude_DescribePaths_IncludesManifest$'` | ✅ (extend) | ✅ green |
+| 06-04-T3 | 06-04 | 4 | NUDGE-06 | T-06-19, T-06-20 | 242ec0a-class ownership, stickiness and table guards go RED | mutation | Task 3 verify in 06-04-PLAN.md (Family (d)) | ✅ | ✅ green |
+| 06-05-T1 | 06-05 | 5 | NUDGE-06, NUDGE-03 | T-06-25, T-06-26 | dogfood registration == fragment; shape pinned (matchers, if rules, timeout 5, no statusMessage) | unit (RED first) | `go test ./internal/agents/ -run 'TestHookRegistrationMatchesFragmentAndScript$\|TestPreToolUseRegistrationShape$'` | ✅ (extend) | ✅ green |
+| 06-05-T2 | 06-05 | 5 | NUDGE-06 | T-06-23, T-06-24 | Changed tri-state; stderr note; upgrade carries Keep and never adds | unit (RED first) + drift gate | `go test ./internal/cli/ -run 'TestInstall_PreToolNudge_\|TestRefreshInstalledSkills_' && task docs:cli:drift` | ✅ | ✅ green |
+| 06-05-T3 | 06-05 | 5 | NUDGE-06 | T-06-23, T-06-24, T-06-26 | upgrade/stickiness/dogfood guards go RED | mutation | Task 3 verify in 06-05-PLAN.md (Family (e)) | ✅ | ✅ green |
+| 06-06-T1 | 06-06 | 6 | NUDGE-03, NUDGE-05 | T-06-27, T-06-28 | scratch repos + locked pass bar + current hooks-reference quotes; $HOME untouched | file checks | Task 1 verify in 06-06-PLAN.md | ✅ | ✅ green |
+| 06-06-T2 | 06-06 | 6 | NUDGE-03, NUDGE-04, NUDGE-05 | T-06-28, T-06-29 | C1-C5 live with excerpts; fire rate; five open points | manual (orchestrator) + verdict-line gate | Task 2 verify in 06-06-PLAN.md | ✅ | ✅ green |
+| 06-06-T3 | 06-06 | 6 | NUDGE-04, NUDGE-03 | T-06-27, T-06-29 | C6 un-indexed control 0 fires; C7 no hook error/prompt/deny; D-18 verdict | manual (orchestrator) + completeness gate | Task 3 verify in 06-06-PLAN.md | ✅ | ✅ green |
+| 06-07-T1 | 06-07 | 7 | NUDGE-06 | T-06-31 | help + reference describe the shipped opt-in | drift gate | `task docs:cli:drift && go test ./internal/cli/ -run 'TestEveryRegisteredFlagIsAccountedFor$\|TestPlainGolden$'` | ✅ | ✅ green |
+| 06-07-T2 | 06-07 | 7 | NUDGE-03, NUDGE-04, NUDGE-05, NUDGE-06 | T-06-32 | full suite, 19 families, D-18 PASS, untouched surfaces | full suite + drift | full suite command above + Task 2 verify in 06-07-PLAN.md | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -78,14 +78,14 @@ Requirement → test map (from `06-RESEARCH.md` Validation Architecture, refined
 
 ## Wave 0 Requirements
 
-- [ ] `internal/nudge/` package — `classify.go`, `text.go` (06-01), `cooldown.go` (06-03) with `classify_test.go`, `cooldown_test.go`, `testdata/true-positives.json`, `testdata/false-positives.json` (06-02) — D-01a/D-15/D-17
-- [ ] `internal/cli/hook_pretooluse.go` + `hook_pretooluse_test.go` — hidden `hook pretooluse`, the pinned-JSON oracle, the D-16 subcommand suite (06-01, 06-03)
-- [ ] `.claude/hooks/pretooluse-nudge.sh` (tracked 100755) + `claudeassets.go` embed + `hooks.PreToolUse` in `.claude/hooks/hooks.json` (06-01)
-- [ ] `internal/agents/claude_pretooluse.go` + `claude_pretooluse_test.go` (guard exec suite with stub binaries) and `claude_pretooluse_lifecycle_test.go` (06-01, 06-04)
-- [ ] `internal/cli/testdata/cli-reference-allowlist.txt` — `codegraph hook` and `codegraph hook pretooluse` (06-01)
-- [ ] `internal/mcp/skill_claims_drift_test.go` — three `TestPreToolUseNudgeText*` guards over the Go constant (06-02)
-- [ ] `06-MUTATION-LOG.md` — Phase 2-5 shape, Families (a)-(e) (06-01…06-05)
-- [ ] `06-LIVE-SESSIONS.md` — scaffolded by 06-06 Task 1
+- [x] `internal/nudge/` package — `classify.go`, `text.go` (06-01), `cooldown.go` (06-03) with `classify_test.go`, `cooldown_test.go`, `testdata/true-positives.json`, `testdata/false-positives.json` (06-02) — D-01a/D-15/D-17
+- [x] `internal/cli/hook_pretooluse.go` + `hook_pretooluse_test.go` — hidden `hook pretooluse`, the pinned-JSON oracle, the D-16 subcommand suite (06-01, 06-03)
+- [x] `.claude/hooks/pretooluse-nudge.sh` (tracked 100755) + `claudeassets.go` embed + `hooks.PreToolUse` in `.claude/hooks/hooks.json` (06-01)
+- [x] `internal/agents/claude_pretooluse.go` + `claude_pretooluse_test.go` (guard exec suite with stub binaries) and `claude_pretooluse_lifecycle_test.go` (06-01, 06-04)
+- [x] `internal/cli/testdata/cli-reference-allowlist.txt` — `codegraph hook` and `codegraph hook pretooluse` (06-01)
+- [x] `internal/mcp/skill_claims_drift_test.go` — three `TestPreToolUseNudgeText*` guards over the Go constant (06-02)
+- [x] `06-MUTATION-LOG.md` — Phase 2-5 shape, Families (a)-(e) (06-01…06-05)
+- [x] `06-LIVE-SESSIONS.md` — scaffolded by 06-06 Task 1
 
 *Framework install: none — `go test` is already configured; `jq` and `shellcheck` are present on the planning machine and used only in verify commands.*
 
@@ -105,11 +105,21 @@ Requirement → test map (from `06-RESEARCH.md` Validation Architecture, refined
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-19 (validate-phase §6, State A: no gaps)
+
+## Validation Audit 2026-09-19
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+The requirement→test map was re-run green against the tree after the code review converged: `go test ./internal/nudge/ ./internal/agents/ ./internal/cli/... ./internal/mcp/` gave `ok` with 0 FAIL, `TestOwnershipExactIdentity` passed 32/32, the corpora rates were 16/18 true positives and 3/22 false positives, and `TestBlockOwnsAnyCommand` (WR-02) passed. Live Claude Code items stay Manual-Only (D-00). Their evidence is in `06-LIVE-SESSIONS.md` (D-18 verdict PASS, C1–C7) and `06-UAT.md` (a live Grep/Glob delivery pass through headless `--tools` sessions, which closed the only gap the verifier flagged).
