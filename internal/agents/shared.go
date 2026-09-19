@@ -242,10 +242,17 @@ func commandIsOwned(cmd string, ownCommands []string) bool {
 // acceptable trade to avoid it.
 //
 // If the owned partition already jsonDeepEquals the normalized ownBlocks,
-// nothing is written (ActionUnchanged); otherwise the array is rebuilt as
-// the unowned blocks in their original relative order followed by
-// ownBlocks. Every unrelated event key and every unowned block under the
-// same event is carried through untouched.
+// nothing is written (ActionUnchanged). Otherwise the array is rebuilt: if
+// an owned block already existed, ownBlocks is spliced back in at the
+// index its first owned block originally occupied among the unowned
+// blocks, preserving the position of any foreign block that already
+// followed it (WR-01, 07-REVIEW.md) — Codex's hook trust is keyed on
+// array position, so leapfrogging an untouched foreign block to a new
+// index spuriously re-flags it for review. Only a genuine first install —
+// no owned block existed before this call — appends ownBlocks after every
+// existing block, preserving D-23's "codegraph's group is appended last on
+// first install" guarantee. Every unrelated event key and every unowned
+// block under the same event is carried through untouched.
 func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
 	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
@@ -259,8 +266,12 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 	events, _ := hooks[event].([]any)
 
 	var owned, unowned []any
+	ownedInsertAt := -1
 	for _, b := range events {
 		if blockOwnsAnyCommand(b, ownCommands) {
+			if ownedInsertAt == -1 {
+				ownedInsertAt = len(unowned)
+			}
 			owned = append(owned, b)
 		} else {
 			unowned = append(unowned, b)
@@ -277,7 +288,15 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 		return FileResult{Path: path, Action: ActionUnchanged}, nil
 	}
 
-	newEvents := append(append([]any{}, unowned...), normalizedOwn...)
+	var newEvents []any
+	if ownedInsertAt == -1 {
+		// First install: no owned block existed to preserve the position
+		// of, so codegraph's group goes after every existing block (D-23).
+		newEvents = append(append([]any{}, unowned...), normalizedOwn...)
+	} else {
+		newEvents = append(append([]any{}, unowned[:ownedInsertAt]...), normalizedOwn...)
+		newEvents = append(newEvents, unowned[ownedInsertAt:]...)
+	}
 	hooks[event] = newEvents
 	existing["hooks"] = hooks
 
