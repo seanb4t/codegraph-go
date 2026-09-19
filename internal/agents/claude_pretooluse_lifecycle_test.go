@@ -3,7 +3,6 @@ package agents
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -364,27 +363,15 @@ func TestPreToolNudge_ReinstallIsIdempotent(t *testing.T) {
 }
 
 // TestPreToolNudge_HandEditedOwnEntryDuplicates: ownership is the exact
-// command string, never the matcher (242ec0a). A codegraph Bash block whose
-// handlers the user re-pointed is no longer codegraph's, so the next opt-in
-// install keeps it and appends a fresh owned set; an unrelated block under
-// the same Bash matcher survives byte-identical.
+// command string, never the matcher (242ec0a). Each own PreToolUse block
+// holds exactly one handler, so re-pointing ONE handler (the Bash(rg *) one)
+// makes that block no longer codegraph's: the next opt-in install keeps it
+// byte-identical and re-adds the full owned set beside it — duplicated, not
+// overwritten via unedited siblings (NUDGE-06).
 func TestPreToolNudge_HandEditedOwnEntryDuplicates(t *testing.T) {
 	fakeHome(t)
 	t.Chdir(t.TempDir())
 	_, settings, own := lifecyclePaths(t, LocationGlobal)
-
-	unrelated := map[string]any{
-		"matcher": "Bash",
-		"hooks":   []any{map[string]any{"type": "command", "command": "/opt/other/guard.sh"}},
-	}
-	if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	planted, err := json.Marshal(map[string]any{"hooks": map[string]any{"PreToolUse": []any{unrelated}}})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	writeFile(t, settings, string(planted)+"\n")
 
 	lifecycleInstall(t, LocationGlobal, lifecycleExecA, PreToolNudgeOn)
 
@@ -394,25 +381,25 @@ func TestPreToolNudge_HandEditedOwnEntryDuplicates(t *testing.T) {
 	}
 	hooks := decoded["hooks"].(map[string]any)
 	blocks := hooks["PreToolUse"].([]any)
-	if len(blocks) != 5 {
-		t.Fatalf("after the first On install PreToolUse has %d blocks, want 5 (unrelated + 4 owned): %#v", len(blocks), blocks)
+	if len(blocks) != 6 {
+		t.Fatalf("after the first On install PreToolUse has %d blocks, want 6 owned: %#v", len(blocks), blocks)
 	}
 	edited := -1
 	for i, b := range blocks {
 		block := b.(map[string]any)
 		handlers := block["hooks"].([]any)
-		if block["matcher"] != "Bash" || handlers[0].(map[string]any)["command"] != own {
-			continue
+		if len(handlers) != 1 {
+			t.Fatalf("own block %d has %d handlers, want 1: %#v", i, len(handlers), block)
 		}
-		for _, h := range handlers {
-			handler := h.(map[string]any)
+		handler := handlers[0].(map[string]any)
+		if block["matcher"] == "Bash" && handler["if"] == "Bash(rg *)" && handler["command"] == own {
 			handler["command"] = own + " --edited"
+			edited = i
+			break
 		}
-		edited = i
-		break
 	}
 	if edited < 0 {
-		t.Fatalf("no codegraph Bash block to hand-edit: %#v", blocks)
+		t.Fatalf("no codegraph Bash(rg *) handler to hand-edit: %#v", blocks)
 	}
 	editedBlock, err := normalizeJSON(blocks[edited])
 	if err != nil {
@@ -427,27 +414,37 @@ func TestPreToolNudge_HandEditedOwnEntryDuplicates(t *testing.T) {
 	lifecycleInstall(t, LocationGlobal, lifecycleExecA, PreToolNudgeOn)
 
 	after := preToolUseBlocksAt(t, settings)
-	if len(after) != 6 {
-		t.Fatalf("PreToolUse has %d blocks, want 6 (unrelated + hand-edited + 4 fresh owned): %#v", len(after), after)
+	if len(after) != 7 {
+		t.Fatalf("PreToolUse has %d blocks, want 7 (the hand-edited one + 6 fresh owned): %#v", len(after), after)
 	}
-	wantUnrelated, err := normalizeJSON(unrelated)
+	wantOwn, _, err := claudePreToolUseBlocks(LocationGlobal)
 	if err != nil {
-		t.Fatalf("normalize unrelated: %v", err)
+		t.Fatalf("claudePreToolUseBlocks: %v", err)
 	}
-	var sawUnrelated, sawEdited bool
+	normalizedOwn, err := normalizeJSON(wantOwn)
+	if err != nil {
+		t.Fatalf("normalize own blocks: %v", err)
+	}
+	sawEdited := 0
 	for _, b := range after {
-		if jsonDeepEqual(b, wantUnrelated) {
-			sawUnrelated = true
-		}
 		if jsonDeepEqual(b, editedBlock) {
-			sawEdited = true
+			sawEdited++
 		}
 	}
-	if !sawUnrelated {
-		t.Fatalf("the unrelated Bash block did not survive byte-identical: %#v", after)
+	if sawEdited != 1 {
+		t.Fatalf("the hand-edited block appears %d times byte-identical, want 1: %#v", sawEdited, after)
 	}
-	if !sawEdited {
-		t.Fatalf("the hand-edited block was not kept as-is: %#v", after)
+	for i, w := range normalizedOwn.([]any) {
+		found := false
+		for _, b := range after {
+			if jsonDeepEqual(b, w) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("own block %d %#v missing after reinstall: %#v", i, w, after)
+		}
 	}
 	if n := countOwnPreToolHandlers(t, settings, own); n != 6 {
 		t.Fatalf("own PreToolUse handlers = %d, want a fresh owned set of 6", n)

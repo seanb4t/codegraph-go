@@ -28,60 +28,62 @@ func readSettingsHooks(t *testing.T, settingsPath string) map[string]any {
 	return hooks
 }
 
-// assertPreToolUseBlocks checks hooks.PreToolUse is exactly the four D-02
-// blocks, every handler registering wantCommand with timeout 5 and no
-// statusMessage (D-12).
+// assertPreToolUseBlocks checks hooks.PreToolUse is exactly the six D-02
+// single-handler blocks (three Bash blocks carrying the grep, rg and find
+// `if` rules, then Grep, Glob, Read), every handler registering wantCommand
+// with timeout 5 and no statusMessage (D-12).
 func assertPreToolUseBlocks(t *testing.T, hooks map[string]any, wantCommand string) {
 	t.Helper()
 	blocks, ok := hooks["PreToolUse"].([]any)
 	if !ok {
 		t.Fatalf("hooks.PreToolUse missing or not an array: %#v", hooks["PreToolUse"])
 	}
-	wantMatchers := []string{"Bash", "Grep", "Glob", "Read"}
-	if len(blocks) != len(wantMatchers) {
-		t.Fatalf("hooks.PreToolUse has %d blocks, want %d: %#v", len(blocks), len(wantMatchers), blocks)
+	want := []struct{ matcher, ifRule string }{
+		{"Bash", "Bash(grep *)"},
+		{"Bash", "Bash(rg *)"},
+		{"Bash", "Bash(find *)"},
+		{"Grep", ""},
+		{"Glob", ""},
+		{"Read", ""},
+	}
+	if len(blocks) != len(want) {
+		t.Fatalf("hooks.PreToolUse has %d blocks, want %d: %#v", len(blocks), len(want), blocks)
 	}
 	for i, b := range blocks {
 		block, ok := b.(map[string]any)
 		if !ok {
 			t.Fatalf("block %d is not an object: %#v", i, b)
 		}
-		if block["matcher"] != wantMatchers[i] {
-			t.Fatalf("block %d matcher = %#v, want %q", i, block["matcher"], wantMatchers[i])
+		if block["matcher"] != want[i].matcher {
+			t.Fatalf("block %d matcher = %#v, want %q", i, block["matcher"], want[i].matcher)
 		}
 		handlers, _ := block["hooks"].([]any)
-		wantIfs := []string{""}
-		if wantMatchers[i] == "Bash" {
-			wantIfs = []string{"Bash(grep *)", "Bash(rg *)", "Bash(find *)"}
+		if len(handlers) != 1 {
+			t.Fatalf("block %d (%s) has %d handlers, want 1: %#v", i, want[i].matcher, len(handlers), handlers)
 		}
-		if len(handlers) != len(wantIfs) {
-			t.Fatalf("block %s has %d handlers, want %d: %#v", wantMatchers[i], len(handlers), len(wantIfs), handlers)
+		handler, ok := handlers[0].(map[string]any)
+		if !ok {
+			t.Fatalf("block %d handler is not an object: %#v", i, handlers[0])
 		}
-		for j, h := range handlers {
-			handler, ok := h.(map[string]any)
-			if !ok {
-				t.Fatalf("block %s handler %d is not an object: %#v", wantMatchers[i], j, h)
+		if handler["type"] != "command" {
+			t.Errorf("block %d type = %#v, want command", i, handler["type"])
+		}
+		if handler["command"] != wantCommand {
+			t.Errorf("block %d command = %#v, want %q", i, handler["command"], wantCommand)
+		}
+		if handler["timeout"] != float64(5) {
+			t.Errorf("block %d timeout = %#v, want 5", i, handler["timeout"])
+		}
+		if _, has := handler["statusMessage"]; has {
+			t.Errorf("block %d carries statusMessage (D-12)", i)
+		}
+		gotIf, hasIf := handler["if"]
+		if want[i].ifRule == "" {
+			if hasIf {
+				t.Errorf("block %d (%s) has if = %#v, want none", i, want[i].matcher, gotIf)
 			}
-			if handler["type"] != "command" {
-				t.Errorf("block %s handler %d type = %#v, want command", wantMatchers[i], j, handler["type"])
-			}
-			if handler["command"] != wantCommand {
-				t.Errorf("block %s handler %d command = %#v, want %q", wantMatchers[i], j, handler["command"], wantCommand)
-			}
-			if handler["timeout"] != float64(5) {
-				t.Errorf("block %s handler %d timeout = %#v, want 5", wantMatchers[i], j, handler["timeout"])
-			}
-			if _, has := handler["statusMessage"]; has {
-				t.Errorf("block %s handler %d carries statusMessage (D-12)", wantMatchers[i], j)
-			}
-			gotIf, hasIf := handler["if"]
-			if wantIfs[j] == "" {
-				if hasIf {
-					t.Errorf("block %s handler %d has if = %#v, want none", wantMatchers[i], j, gotIf)
-				}
-			} else if gotIf != wantIfs[j] {
-				t.Errorf("block %s handler %d if = %#v, want %q", wantMatchers[i], j, gotIf, wantIfs[j])
-			}
+		} else if gotIf != want[i].ifRule {
+			t.Errorf("block %d if = %#v, want %q", i, gotIf, want[i].ifRule)
 		}
 	}
 }
