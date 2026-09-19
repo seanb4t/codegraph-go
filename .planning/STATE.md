@@ -5,17 +5,17 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-09-19T16:23:16.428Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-09-19T16:42:22.917Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: ae966631e4ddc659d11556262e78614d4d41acb6
+state_head: a4efcc2b25c17ae9bb9f8128be5046b46858fbdc
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 44
-  percent: 83
+  completed_plans: 45
+  percent: 85
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 ## Current Position
 
 Phase: 7 (Codex Parity) — EXECUTING
-Plan: 3 of 11
+Plan: 4 of 11
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 7 execution started
 
@@ -175,6 +175,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P07 | 5min | 2 tasks | 3 files |
 | Phase 07 P01 | 51 min | 3 tasks | 7 files |
 | Phase 07 P02 | 15min | 2 tasks | 6 files |
+| Phase 07 P03 | ~15min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -405,6 +406,8 @@ Standing decisions that outlive every milestone:
 - [Phase 07]: findTOMLTableRange rewritten as a line scanner (splitTOMLLines/tomlLine/tomlLineState) tracking multi-line-string and bracket-depth state across lines; codegraph's range end backs off past the contiguous blank/comment run before the next header (or EOF), a deliberate change from the pre-existing implementation.
 - [Phase 07]: tomlTableConflict is a separate scan from findTOMLTableRange with its own path normalization (tomlNormalizedHeaderPath/tomlKeyTablePath/tomlSplitDottedPath) that unquotes and trims dotted segments, refusing inline/dotted/quoted/spaced/array-of-tables/duplicate/detached-subtable forms of codegraph's own TOML table rather than duplicating a key.
 - [Phase 7]: Family (b) mutation tests appended at end of install_test.go rather than interleaved, preserving existing test line-number references
+- [Phase 7]: [Phase 07]: 07-03: Task 3 (Family c3 tmux RED/GREEN) not performed by maintainer decision (2026-09-19) — tmux replaced by herdr on the maintainer's machines; local tmux evidence skipped, CI tmux-e2e job is the only remaining real-PTY confirmation, follow-up filed at issue #75; 07-09's post-scope-flip tmux re-run is skipped under the same decision
+- [Phase 7]: [Phase 07]: 07-03: bubbles v2 list.populatedView already inserts a row separator — checkboxDelegate/daemonDelegate must render exactly one line and never append their own trailing newline, or every row costs 2 lines against the Height() budget (D-24)
 
 ### Pending Todos
 
@@ -558,8 +561,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T16:23:16.366Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-09-19T16:42:09.188Z
+Stopped at: Completed 07-03-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
