@@ -2,19 +2,9 @@ package agents
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
-
-// errTOMLTableConflict is wrapped by tomlTableConflict's returned error
-// whenever content already defines tableName in a shape
-// spliceTOMLTable/stripTOMLTable cannot safely edit (D-07).
-var errTOMLTableConflict = errors.New("codegraph's TOML table conflicts with an existing entry")
-
-// tomlTableConflict is a RED-phase stub (Task 2 of 07-01) — the real
-// conflict scan lands in the matching fix(07-01) commit.
-func tomlTableConflict(content, tableName string) error {
-	return nil
-}
 
 // spliceTOMLTable and stripTOMLTable are a hand-rolled, ~100-line TOML
 // single-table-block editor that uses the same per-agent TOML-splicing
@@ -29,23 +19,33 @@ func tomlTableConflict(content, tableName string) error {
 // (or, if absent, appended) so it contains exactly header + bodyLines,
 // preserving every other byte of content verbatim (T-06-03-01). When the
 // table is already present with byte-identical body, content is returned
-// unchanged (D-07 idempotency).
+// unchanged (D-07 idempotency). CRLF content stays CRLF (tomlLineEnding).
+// When tomlTableConflict reports an existing definition of tableName that
+// cannot be safely edited, content is returned completely unchanged and
+// the conflict error is discarded by the caller (spliceTOMLTable itself
+// never returns an error — callers needing to surface the conflict call
+// tomlTableConflict directly, per D-07's "refused, not duplicated" rule).
 func spliceTOMLTable(content, tableName string, bodyLines []string) string {
+	if tomlTableConflict(content, tableName) != nil {
+		return content
+	}
+
+	ending := tomlLineEnding(content)
 	var block strings.Builder
-	block.WriteString("[" + tableName + "]\n")
+	block.WriteString("[" + tableName + "]" + ending)
 	for _, line := range bodyLines {
 		block.WriteString(line)
-		block.WriteByte('\n')
+		block.WriteString(ending)
 	}
 	newBlock := block.String()
 
 	start, end, found := findTOMLTableRange(content, tableName)
 	if !found {
-		trimmed := strings.TrimRight(content, "\n")
+		trimmed := strings.TrimRight(content, "\r\n")
 		if trimmed == "" {
 			return newBlock
 		}
-		return trimmed + "\n\n" + newBlock
+		return trimmed + ending + ending + newBlock
 	}
 
 	if content[start:end] == newBlock {
@@ -57,28 +57,35 @@ func spliceTOMLTable(content, tableName string, bodyLines []string) string {
 // stripTOMLTable removes the "[tableName]" block (header through the next
 // top-level "[...]" header or EOF) from content, restoring the file to its
 // exact pre-splice bytes when applied after spliceTOMLTable (D-07/D-08). A
-// missing table is a no-op — content is returned unchanged.
+// missing table is a no-op — content is returned unchanged. CRLF content
+// stays CRLF (tomlLineEnding). A conflicting definition of tableName
+// (tomlTableConflict) also leaves content completely unchanged.
 func stripTOMLTable(content, tableName string) string {
+	if tomlTableConflict(content, tableName) != nil {
+		return content
+	}
+
 	start, end, found := findTOMLTableRange(content, tableName)
 	if !found {
 		return content
 	}
 
-	before := strings.TrimRight(content[:start], "\n")
-	after := strings.TrimLeft(content[end:], "\n")
+	ending := tomlLineEnding(content)
+	before := strings.TrimRight(content[:start], "\r\n")
+	after := strings.TrimLeft(content[end:], "\r\n")
 
 	switch {
 	case before == "" && after == "":
 		return ""
 	case before == "":
-		if !strings.HasSuffix(after, "\n") {
-			return after + "\n"
+		if !strings.HasSuffix(after, ending) {
+			return after + ending
 		}
 		return after
 	case after == "":
-		return before + "\n"
+		return before + ending
 	default:
-		return before + "\n\n" + after
+		return before + ending + ending + after
 	}
 }
 
@@ -265,6 +272,197 @@ func tomlHeaderPath(line string) string {
 	trimmed = strings.TrimPrefix(trimmed, "[")
 	trimmed = strings.TrimSuffix(trimmed, "]")
 	return strings.TrimSpace(trimmed)
+}
+
+// tomlLineEnding returns "\r\n" when content contains at least one CRLF
+// line ending, else "\n" (D-07: a CRLF file must round-trip byte for
+// byte through splice/strip).
+func tomlLineEnding(content string) string {
+	if strings.Contains(content, "\r\n") {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// errTOMLTableConflict is wrapped by tomlTableConflict's returned error
+// whenever content already defines tableName in a shape
+// spliceTOMLTable/stripTOMLTable cannot safely edit (D-07).
+var errTOMLTableConflict = errors.New("codegraph's TOML table conflicts with an existing entry")
+
+// tomlTableConflict scans content for any existing definition of
+// tableName that spliceTOMLTable/stripTOMLTable cannot safely edit: a
+// quoted or spaced variant of codegraph's own header, a duplicate exact
+// header, an "[[...]]" array-of-tables header naming the same path, an
+// inline table or dotted key assigning into the same path from a
+// different table, or one of codegraph's own subtable headers detached
+// from its main header's contiguous range (D-07). On any conflict it
+// returns a non-nil error wrapping errTOMLTableConflict naming the
+// 1-based line; spliceTOMLTable/stripTOMLTable both leave content
+// completely unchanged in that case, never producing a duplicate key.
+func tomlTableConflict(content, tableName string) error {
+	subtablePrefix := tableName + "."
+	exactHeader := "[" + tableName + "]"
+	lines := splitTOMLLines(content)
+
+	rangeStart, rangeEnd, rangeFound := 0, 0, false
+	if s, e, found := findTOMLTableRange(content, tableName); found {
+		rangeStart, rangeEnd, rangeFound = s, e, true
+	}
+
+	var state tomlLineState
+	currentTablePath := ""
+	exactHeaderCount := 0
+
+	for _, ln := range lines {
+		if !state.neutral() {
+			state.scan(ln.text)
+			continue
+		}
+
+		if isTOMLHeaderLine(ln.text) {
+			raw := strings.TrimSpace(stripTOMLTrailingComment(ln.text))
+			isArrayHeader := strings.HasPrefix(raw, "[[") && strings.HasSuffix(raw, "]]")
+			path := tomlNormalizedHeaderPath(ln.text)
+
+			switch {
+			case isArrayHeader:
+				if path == tableName || strings.HasPrefix(path, subtablePrefix) {
+					return tomlConflictError(lines, ln)
+				}
+			case path == tableName:
+				exactHeaderCount++
+				if raw != exactHeader || exactHeaderCount > 1 {
+					return tomlConflictError(lines, ln)
+				}
+			case strings.HasPrefix(path, subtablePrefix):
+				inOwnRange := rangeFound && ln.offset >= rangeStart && ln.offset < rangeEnd
+				if !inOwnRange {
+					return tomlConflictError(lines, ln)
+				}
+			}
+			currentTablePath = path
+			state.scan(ln.text)
+			continue
+		}
+
+		if keyPath, ok := tomlKeyTablePath(ln.text); ok {
+			effective := keyPath
+			if currentTablePath != "" {
+				effective = currentTablePath + "." + keyPath
+			}
+			ownTable := currentTablePath == tableName || strings.HasPrefix(currentTablePath, subtablePrefix)
+			if !ownTable && (effective == tableName || strings.HasPrefix(effective, subtablePrefix)) {
+				return tomlConflictError(lines, ln)
+			}
+		}
+		state.scan(ln.text)
+	}
+	return nil
+}
+
+// tomlConflictError builds the errTOMLTableConflict-wrapping error for
+// the conflicting line ln, naming its 1-based line number.
+func tomlConflictError(lines []tomlLine, ln tomlLine) error {
+	lineNo := 0
+	for i, l := range lines {
+		if l.offset == ln.offset {
+			lineNo = i + 1
+			break
+		}
+	}
+	return fmt.Errorf("%w: line %d: %q", errTOMLTableConflict, lineNo, strings.TrimRight(ln.text, "\r"))
+}
+
+// tomlNormalizedHeaderPath returns the dotted table path named by a
+// header line, like tomlHeaderPath, but additionally splits on "."
+// outside quotes and unquotes/trims each segment (tomlSplitDottedPath),
+// so a quoted (`["a"."b"]`) or spaced (`[a . b]`) header normalizes to
+// the same path as its bare form `[a.b]` for conflict comparison.
+func tomlNormalizedHeaderPath(line string) string {
+	trimmed := strings.TrimSpace(stripTOMLTrailingComment(line))
+	trimmed = strings.TrimPrefix(trimmed, "[")
+	trimmed = strings.TrimSuffix(trimmed, "]")
+	trimmed = strings.TrimPrefix(trimmed, "[")
+	trimmed = strings.TrimSuffix(trimmed, "]")
+	return strings.Join(tomlSplitDottedPath(strings.TrimSpace(trimmed)), ".")
+}
+
+// tomlKeyTablePath reports the normalized dotted path named by the key
+// side of a "key = value" line (the text before the first "=" outside
+// any quoted segment), or ok=false if line carries no such unquoted "="
+// (e.g. a blank/comment line or an array-continuation line).
+func tomlKeyTablePath(line string) (path string, ok bool) {
+	trimmed := strings.TrimSpace(stripTOMLTrailingComment(line))
+	i := 0
+	for i < len(trimmed) {
+		switch trimmed[i] {
+		case '=':
+			keyText := strings.TrimSpace(trimmed[:i])
+			if keyText == "" {
+				return "", false
+			}
+			return strings.Join(tomlSplitDottedPath(keyText), "."), true
+		case '"':
+			i = skipTOMLBasicString(trimmed, i)
+		case '\'':
+			i = skipTOMLLiteralString(trimmed, i)
+		default:
+			i++
+		}
+	}
+	return "", false
+}
+
+// tomlSplitDottedPath splits a dotted TOML key/table path on "." that
+// occurs outside a quoted segment, trimming surrounding spaces and
+// unquoting each segment (basic "…" or literal '…'), so a quoted or
+// spaced variant of a path normalizes to the same segment list as its
+// bare form.
+func tomlSplitDottedPath(raw string) []string {
+	var segments []string
+	var cur strings.Builder
+	i := 0
+	n := len(raw)
+	for i < n {
+		switch raw[i] {
+		case '.':
+			segments = append(segments, strings.TrimSpace(cur.String()))
+			cur.Reset()
+			i++
+		case '"':
+			j := skipTOMLBasicString(raw, i)
+			cur.WriteString(tomlUnquoteBasic(raw[i:j]))
+			i = j
+		case '\'':
+			j := skipTOMLLiteralString(raw, i)
+			cur.WriteString(tomlUnquoteLiteral(raw[i:j]))
+			i = j
+		default:
+			cur.WriteByte(raw[i])
+			i++
+		}
+	}
+	segments = append(segments, strings.TrimSpace(cur.String()))
+	return segments
+}
+
+// tomlUnquoteBasic strips the surrounding quotes from a single-line
+// basic-string token (as returned by skipTOMLBasicString) and unescapes
+// \" and \\, the two escapes tomlString ever produces.
+func tomlUnquoteBasic(s string) string {
+	s = strings.TrimPrefix(s, `"`)
+	s = strings.TrimSuffix(s, `"`)
+	s = strings.ReplaceAll(s, `\"`, `"`)
+	s = strings.ReplaceAll(s, `\\`, `\`)
+	return s
+}
+
+// tomlUnquoteLiteral strips the surrounding quotes from a single-line
+// literal-string token (as returned by skipTOMLLiteralString); literal
+// strings have no escapes to undo.
+func tomlUnquoteLiteral(s string) string {
+	s = strings.TrimPrefix(s, `'`)
+	return strings.TrimSuffix(s, `'`)
 }
 
 // tomlLineState tracks, across a run of lines, whether the scanner is
