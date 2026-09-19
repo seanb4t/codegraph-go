@@ -526,18 +526,73 @@ turn_context: trusted   approval=on-request sandbox=workspace-write
 
 In a real untrusted session, Codex gates the project config (MCP servers: A2 and A3 `[]`) and hooks, but not `AGENTS.md`, project `.agents/skills` or project `.codex/skills`.
 
+### Protocol C evidence (orchestrator, 2026-09-19)
+
+**C1: global install through the HEAD binary** (`transcripts/C1-install.txt`, `C1-config-before.toml`)
+
+```
+$ (cd $S/bare && HOME=$S/home CODEX_HOME=$S/home/.codex XDG_CONFIG_HOME=$S/home/.config $S/codegraph install --target codex --location global --yes)
+Codex CLI: configured
+  updated: /private/tmp/07-live/home/.codex/config.toml
+  created: /private/tmp/07-live/home/.codex/AGENTS.md
+trust/hook-state lines before: 5   after: 5
+$ diff C1-config-before.toml $S/home/.codex/config.toml
+10a11,14
+>
+> [mcp_servers.codegraph]
+> command = "/private/tmp/07-live/codegraph"
+> args = ["serve", "--mcp"]
+```
+
+The fixed splice from 07-01 appended only our table. Codex's own `[projects."…"]` and `[hooks.state."…"]` tables were untouched.
+
+**C2: L1 global** (`C2-{bare,trusted,untrusted}-mcp.json`)
+
+```
+bare      [{"name":"codegraph","command":"/private/tmp/07-live/codegraph"}]            <- global layer
+trusted   [{"name":"codegraph","command":"/private/tmp/07-live/codegraph-project"}]    <- project layer wins
+untrusted [{"name":"codegraph","command":"/private/tmp/07-live/codegraph"}]            <- project layer still not loaded
+```
+
+**C3: A1 global quoted form** (`C3-hook-review-before.txt`, `C3-hook-review-after.txt`). The probe script was placed under a directory whose name contains a space (`.../hooks/space dir/a1-probe-global.sh`), so the single-quoted absolute command form is exercised against whitespace (the AR-06-08 case). The TUI was restarted (`/quit`, then `codex`). The Codex update offer (0.155.0 to 0.155.1) was declined with "Skip", so the version under test stayed 0.155.0.
+
+```
+  Hooks need review
+  1 hook is new or changed.                      <- only the new global hook; the trusted project hook was not re-flagged
+  [!] Hook 1 · new
+  [x] Hook 2
+  Source    User config - ~/.codex/hooks.json
+  Command   '/private/tmp/07-live/home/.codex/hooks/space dir/a1-probe-global.sh'
+  Trust     New hook - review required   -> (t) ->   Trust     Trusted
+$ cat probes/a1-global.log                        # after prompt "Run this exact shell command and nothing else: echo a1-global"
+a1-global 2026-09-19T17:11:22Z /private/tmp/07-live/trusted
+$ tail -1 probes/a1-local.log                     # the project hook fired on the same turn
+a1-local 2026-09-19T17:11:22Z /private/tmp/07-live/trusted
+stdin: {"tool_name":"Bash","command":"echo a1-global","cwd":"/private/tmp/07-live/trusted","has_agent_id":false}
+```
+
+**C4: L7** (`transcripts/preflight-orchestrator.sha`, `transcripts/postflight.sha`)
+
+```
+same b4077b8a786230575935c44cfa85c17da7ca2bf3f1386675c8c6b22d322dbb17   ~/.codex/config.toml
+same e0ad2381a6b1bf7933438d7946914737be14ca398ae41090298183c21fb49a99   ~/.codex/hooks.json
+same 54e268bda66adfb9c0d17a0eb73235a452f390b68d83ba1eea1dceada5379982   ~/.codex/AGENTS.md
+same e711379d68094bffbd5d997cccd172bb43ec3c8fa9276e06c67a59b4ce647644   ~/.agents/skills/codegraph/SKILL.md
+$S/home/.codex/auth.json -> /Users/sean/.codex/auth.json   (symlink, never read or printed)
+```
+
 ### CODEX-01 verdicts
 
 L1 project config loads when trusted: PASS
-L1 global entry shown (global install): PENDING
+L1 global entry shown (global install): PASS
 L2 untrusted project layer not loaded: PASS
 L3 prompt-input lists skill and AGENTS.md block: PASS
 L4 uninstalled repo shows no codegraph surface: PASS
-L7 real HOME unchanged (CODEX-01): PENDING
+L7 real HOME unchanged (CODEX-01): PASS
 Untrusted warning: none observed (mcp list / debug prompt-input / exec stderr carry no warning; the only trust messaging is the TUI prompt quoted in B4)
 Trust override (-c projects trust_level) grants trust: no (A3: `[]` under the override; the same key written by the real TUI trust loads the layer, B6)
 A1 local command form shell-expanded: yes (B5: a1-local 2026-09-19T17:02:54Z /private/tmp/07-live/trusted)
-A1 global quoted command form runs: PENDING
+A1 global quoted command form runs: yes (C3: a1-global 2026-09-19T17:11:22Z /private/tmp/07-live/trusted, single-quoted absolute path containing a space)
 A2 AGENTS.md trust-gated in a real session: no (B8: "## CodeGraph" injected in the untrusted read-only exec session, 2 vs 2)
 D-16 project .agents/skills trust-gated: no (B8: "- codegraph: Use when" listed in the untrusted session, 2 vs 2)
 D-15 .codex/skills read: yes (B7: r0 = trusted/.codex/skills lists cgprobe-dotcodex; also listed untrusted, B8)
@@ -545,4 +600,4 @@ D-15 CODEX_HOME/skills read: yes (B7: r1 = home/.codex/skills lists cgprobe-code
 D-17 skill description as listed: "Use when asked where X is defined, how Y works, what calls X, or what changing X breaks in a .codegraph/ repo." (untruncated, byte-identical to SKILL.md frontmatter; B7)
 Hooks.json runs behind features.hooks: yes (B5: marker 1->2 with hooks on, 1->1 with -c features.hooks=false; `hooks stable true` in features list)
 PreToolUse stdin fields (main thread): cwd, hook_event_name, model, permission_mode, session_id, tool_input, tool_name, tool_use_id, transcript_path, turn_id; tool_name "Bash"; tool_input.command is a string; no agent_id/agent_type on the main thread (B5)
-CODEX-01 verdict: PENDING
+CODEX-01 verdict: PASS
