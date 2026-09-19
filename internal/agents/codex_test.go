@@ -125,6 +125,7 @@ func TestCodex_Install_RefusesConflictingCodegraphTable(t *testing.T) {
 
 	conflicting := "[mcp_servers]\ncodegraph = { command = \"/other/bin\" }\n"
 	configPath := filepath.Join(dir, ".codex", "config.toml")
+	relConfigPath := filepath.Join(".codex", "config.toml")
 	writeFile(t, configPath, conflicting)
 
 	result := c.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
@@ -133,12 +134,12 @@ func TestCodex_Install_RefusesConflictingCodegraphTable(t *testing.T) {
 	}
 	foundNamed := false
 	for _, err := range result.Errors {
-		if strings.Contains(err.Error(), configPath) {
+		if strings.Contains(err.Error(), relConfigPath) {
 			foundNamed = true
 		}
 	}
 	if !foundNamed {
-		t.Fatalf("expected an error naming %s, got: %v", configPath, result.Errors)
+		t.Fatalf("expected an error naming %s, got: %v", relConfigPath, result.Errors)
 	}
 	got := readFile(t, configPath)
 	if got != conflicting {
@@ -151,7 +152,7 @@ func TestCodex_Install_RefusesConflictingCodegraphTable(t *testing.T) {
 	uninstallResult := c.Uninstall(LocationLocal)
 	uninstallErrored := false
 	for _, err := range uninstallResult.Errors {
-		if strings.Contains(err.Error(), configPath) {
+		if strings.Contains(err.Error(), relConfigPath) {
 			uninstallErrored = true
 		}
 	}
@@ -175,6 +176,7 @@ func TestCodex_Uninstall_EmptiedConfigIsRemoved(t *testing.T) {
 
 	c.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
 	configPath := filepath.Join(dir, ".codex", "config.toml")
+	relConfigPath := filepath.Join(".codex", "config.toml")
 	if !fileExists(configPath) {
 		t.Fatalf("precondition: config.toml should exist after install")
 	}
@@ -185,15 +187,15 @@ func TestCodex_Uninstall_EmptiedConfigIsRemoved(t *testing.T) {
 	}
 	found := false
 	for _, fr := range result.Files {
-		if fr.Path == configPath {
+		if fr.Path == relConfigPath {
 			found = true
 			if fr.Action != ActionRemoved {
-				t.Fatalf("expected FileResult action %q for %s, got %q", ActionRemoved, configPath, fr.Action)
+				t.Fatalf("expected FileResult action %q for %s, got %q", ActionRemoved, relConfigPath, fr.Action)
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("expected a FileResult for %s, got %v", configPath, result.Files)
+		t.Fatalf("expected a FileResult for %s, got %v", relConfigPath, result.Files)
 	}
 }
 
@@ -207,10 +209,10 @@ func TestCodex_DescribePaths_Local(t *testing.T) {
 	paths := c.DescribePaths(LocationLocal)
 
 	want := []string{
-		filepath.Join(dir, ".codex", "config.toml"),
-		filepath.Join(dir, "AGENTS.md"),
-		filepath.Join(dir, ".agents", "skills", "codegraph", "SKILL.md"),
-		filepath.Join(dir, ".agents", "skills", "codegraph", ".codegraph-manifest.json"),
+		filepath.Join(".codex", "config.toml"),
+		"AGENTS.md",
+		filepath.Join(".agents", "skills", "codegraph", "SKILL.md"),
+		filepath.Join(".agents", "skills", "codegraph", ".codegraph-manifest.json"),
 	}
 	for _, w := range want {
 		found := false
@@ -483,7 +485,7 @@ func TestCodex_ReadOnlySkillDirsFollowLiveVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadOnlySkillDirs(local): %v", err)
 	}
-	wantLocal := filepath.Join(dir, ".codex", "skills", "codegraph")
+	wantLocal := filepath.Join(".codex", "skills", "codegraph")
 	if !containsPath(localRO, wantLocal) {
 		t.Fatalf("ReadOnlySkillDirs(local) = %v, want to contain %q (D-15 .codex/skills read: yes)", localRO, wantLocal)
 	}

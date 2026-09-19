@@ -927,8 +927,13 @@ func TestUninstall_YesWithExplicitTarget_HonoursTarget(t *testing.T) {
 		t.Fatalf("expected Claude's mcpServers.codegraph entry to survive an explicit --target codex uninstall, got: %v", mcpServers)
 	}
 
-	codexConfig := readFileString(t, filepath.Join(home, ".codex", "config.toml"))
-	if strings.Contains(codexConfig, "mcp_servers.codegraph") {
-		t.Fatalf("expected the codegraph table removed from Codex's config.toml, got:\n%s", codexConfig)
+	// Codex's config.toml held only the codegraph table (nothing else was
+	// ever written to it), so stripping that table empties the file
+	// entirely — the D-07/D-08 keep-clean precedent removes it rather than
+	// leaving an empty file behind (D-09: this now applies at every scope,
+	// not just local).
+	codexConfigPath := filepath.Join(home, ".codex", "config.toml")
+	if _, statErr := os.Stat(codexConfigPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected %s to be removed entirely (emptied by stripping the sole codegraph table), stat err: %v", codexConfigPath, statErr)
 	}
 }

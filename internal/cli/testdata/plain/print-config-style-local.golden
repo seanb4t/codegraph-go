@@ -1,6 +1,6 @@
 antigravity: scopes=global (local not supported)
 claude: scopes=global,local mcp=.mcp.json format=json instructions=.claude/CLAUDE.md skill=.claude/skills/codegraph hooks=claude-json
-codex: scopes=global (local not supported)
+codex: scopes=global,local mcp=.codex/config.toml format=toml instructions=AGENTS.md skill=.agents/skills/codegraph hooks=none
 cursor: scopes=global,local mcp=.cursor/mcp.json format=json instructions=none skill=.agents/skills/codegraph hooks=none
 gemini: scopes=global,local mcp=.gemini/settings.json format=json instructions=GEMINI.md skill=.gemini/skills/codegraph hooks=none
 hermes: scopes=global (local not supported)
