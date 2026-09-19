@@ -520,14 +520,14 @@ func TestSharedAgentsMD_UninstallOrders(t *testing.T) {
 				switch order {
 				case "codex_then_opencode":
 					r1 := codex.Uninstall(LocationLocal)
-					assertAgentsMDKept(t, r1, agentsPath)
+					assertAgentsMDKept(t, r1, "AGENTS.md")
 					if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
 						t.Fatalf("block removed after the FIRST uninstall (codex), want kept: %q", got)
 					}
 					opencode.Uninstall(LocationLocal)
 				case "opencode_then_codex":
 					r1 := opencode.Uninstall(LocationLocal)
-					assertAgentsMDKept(t, r1, agentsPath)
+					assertAgentsMDKept(t, r1, "AGENTS.md")
 					if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
 						t.Fatalf("block removed after the FIRST uninstall (opencode), want kept: %q", got)
 					}
@@ -583,7 +583,7 @@ func TestSharedAgentsMD_KeptWhileOtherConfigured(t *testing.T) {
 	if len(result.Errors) != 0 {
 		t.Fatalf("codex uninstall: %v", result.Errors)
 	}
-	assertAgentsMDKept(t, result, agentsPath)
+	assertAgentsMDKept(t, result, "AGENTS.md")
 
 	foundNote := false
 	for _, n := range result.Notes {

@@ -213,6 +213,19 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	} else {
 		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
 		recordFile(&result, instrPath, fr, err)
+
+		// D-12: an AGENTS.override.md beside the instructions file Codex
+		// reads shadows AGENTS.md for Codex — the block is still written
+		// above (a later install of the override's content could still
+		// pull it in), but the user should know Codex will not see it
+		// until then. codegraph never writes AGENTS.override.md itself.
+		overridePath := filepath.Join(filepath.Dir(instrPath), "AGENTS.override.md")
+		if fileExists(overridePath) {
+			result.Notes = append(result.Notes, fmt.Sprintf(
+				"%s shadows %s for Codex — Codex will not see the codegraph block there until the override includes it (codegraph never writes AGENTS.override.md itself)",
+				overridePath, instrPath,
+			))
+		}
 	}
 
 	installDeclaredSkill(&result, t, loc)
@@ -230,9 +243,11 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 // definition is refused (never partially stripped); a strip that empties
 // config.toml entirely removes the file rather than leaving an empty one
 // (the removeMarkedSection/removeHookEntry keep-clean precedent); the
-// instructions step is unchanged in shape (07-06 adds the D-11
-// shared-AGENTS.md gate); uninstallDeclaredSkill mirrors the shared skill
-// package's install step.
+// instructions step is gated by instructionsRequestedElsewhere (D-11): the
+// repo-root AGENTS.md is shared with opencode at local scope, so codex's
+// own block is only removed when no other registered target still
+// declares that same file and reports itself configured there —
+// uninstallDeclaredSkill mirrors the shared skill package's install step.
 func (t codexTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 	caps := t.Capabilities()
@@ -268,6 +283,9 @@ func (t codexTarget) Uninstall(loc Location) WriteResult {
 
 	if instrPath, err := caps.InstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex instructions path: %w", err))
+	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {
+		result.Files = append(result.Files, FileResult{Path: instrPath, Action: ActionKept})
+		result.Notes = append(result.Notes, instructionsKeptNote(instrPath, others))
 	} else {
 		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
 		recordAction(&result, instrPath, action, err)

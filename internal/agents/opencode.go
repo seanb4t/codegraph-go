@@ -334,6 +334,13 @@ func (t opencodeTarget) Uninstall(loc Location) WriteResult {
 
 	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
+	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {
+		// D-11: the repo-root AGENTS.md is shared with codex at local
+		// scope — leave the marker block in place while another
+		// registered target still declares this same file and reports
+		// itself configured there.
+		result.Files = append(result.Files, FileResult{Path: instrPath, Action: ActionKept})
+		result.Notes = append(result.Notes, instructionsKeptNote(instrPath, others))
 	} else {
 		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
 		recordAction(&result, instrPath, action, err)

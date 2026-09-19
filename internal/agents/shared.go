@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
@@ -751,6 +752,78 @@ func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (
 		return FileResult{}, err
 	}
 	return FileResult{Path: filePath, Action: action}, nil
+}
+
+// instructionsRequestedElsewhere reports which OTHER registered targets
+// (excluding self) still declare path as their own instructions file at
+// loc and report Detect(loc).AlreadyConfigured (D-11): the gate
+// codexTarget.Uninstall and opencodeTarget.Uninstall both call BEFORE
+// removeMarkedSection, so removing codegraph's marker block from a shared
+// instructions file — repo-root AGENTS.md, written by both Codex and
+// opencode at local scope — never silently degrades a still-configured
+// sibling target that reads the same file.
+//
+// The requester set is DERIVED from the registry (AllTargets()) on EVERY
+// call, never cached or stored in a manifest (07-RESEARCH "Don't Hand-
+// Roll"): a target's own Detect result already reflects the current,
+// on-disk truth, so re-deriving it here can never drift from what
+// AllTargets() actually contains.
+//
+// Both paths are resolved to their absolute, cleaned form before
+// comparison — path and every candidate target's own InstructionsPath(loc)
+// — so a relative "AGENTS.md" (the local-scope convention) still compares
+// correctly against another relative "AGENTS.md" resolved from the same
+// cwd. A target that does not support loc, declares no instructions path,
+// or whose path fails to resolve is silently skipped, exactly like every
+// other Capabilities-derived helper in this package.
+func instructionsRequestedElsewhere(path string, loc Location, self TargetID) []TargetID {
+	absPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return nil
+	}
+
+	var ids []TargetID
+	for _, t := range AllTargets() {
+		if t.ID() == self {
+			continue
+		}
+		caps := t.Capabilities()
+		if !caps.Supports(loc) {
+			continue
+		}
+		p, err := caps.InstructionsPath(loc)
+		if err != nil || p == "" {
+			continue
+		}
+		absP, err := filepath.Abs(filepath.Clean(p))
+		if err != nil || absP != absPath {
+			continue
+		}
+		if t.Detect(loc).AlreadyConfigured {
+			ids = append(ids, t.ID())
+		}
+	}
+	return ids
+}
+
+// instructionsKeptNote renders the D-11 advisory Note codexTarget.Uninstall
+// and opencodeTarget.Uninstall both append when instructionsRequestedElsewhere
+// returns a non-empty requester set: path's marker block is left in place
+// (ActionKept, never removed) because these other targets still declare it
+// and report AlreadyConfigured. Falls back to the bare TargetID string if a
+// requester is somehow no longer registered (defensive; AllTargets() and
+// GetTarget share the same registry, so this should never happen in
+// practice).
+func instructionsKeptNote(path string, others []TargetID) string {
+	names := make([]string, len(others))
+	for i, id := range others {
+		name := string(id)
+		if t, ok := GetTarget(id); ok {
+			name = t.DisplayName()
+		}
+		names[i] = name
+	}
+	return fmt.Sprintf("%s keeps its codegraph block: still used by %s", path, strings.Join(names, ", "))
 }
 
 // atomicWriteFile writes content to path via a temp file created in the
