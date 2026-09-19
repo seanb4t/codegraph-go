@@ -2,7 +2,10 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -263,4 +266,229 @@ func TestCodex_Uninstall_RemovesHooks(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeRenderedCodexGuard renders one of the two REAL embedded Codex guard
+// templates (chosen by loc) for binPath and writes it, executable, at the
+// exact installed layout the local guard's own root derivation depends on:
+// <projectDir>/.codex/hooks/codegraph-pretooluse.sh. The global guard does
+// not care about its own path (it checks $PWD, D-22), so it is written at
+// the same location purely for helper reuse.
+func writeRenderedCodexGuard(t *testing.T, loc Location, binPath, projectDir string) string {
+	t.Helper()
+	rendered, err := renderCodexPreToolGuard(loc, binPath)
+	if err != nil {
+		t.Fatalf("renderCodexPreToolGuard(%s, %q): %v", loc, binPath, err)
+	}
+	guard := filepath.Join(projectDir, ".codex", "hooks", "codegraph-pretooluse.sh")
+	writeStub(t, guard, rendered, 0o755)
+	return guard
+}
+
+// runCodexPreToolGuard runs guardPath with stdin and cwd set to cwd. PWD is
+// always explicitly set to cwd (never left to whatever the test process
+// itself inherited) — the global guard's own indexed check is `${PWD:-.}`,
+// and leaving an ambient, stale PWD in the environment (inherited from
+// the actual shell running `go test`) would make that check silently pass
+// or fail against the WRONG directory. forcedEnv, when non-nil, REPLACES
+// the environment entirely (used by the empty-PATH subtest); otherwise the
+// current environment (with PWD stripped and re-added as cwd) plus
+// extraEnv is used.
+func runCodexPreToolGuard(t *testing.T, guardPath, cwd string, extraEnv []string, forcedEnv []string, stdin string) (stdout, stderr string, exit int, err error) {
+	t.Helper()
+
+	var env []string
+	if forcedEnv != nil {
+		env = append([]string{}, forcedEnv...)
+	} else {
+		for _, kv := range os.Environ() {
+			if k, _, ok := strings.Cut(kv, "="); ok && k == "PWD" {
+				continue
+			}
+			env = append(env, kv)
+		}
+		env = append(env, extraEnv...)
+	}
+	env = append(env, "PWD="+cwd)
+
+	cmd := exec.Command(guardPath)
+	cmd.Dir = cwd
+	cmd.Env = env
+	cmd.Stdin = strings.NewReader(stdin)
+	var outBuf, errBuf strings.Builder
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	runErr := cmd.Run()
+	stdout, stderr = outBuf.String(), errBuf.String()
+	if runErr == nil {
+		return stdout, stderr, 0, nil
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(runErr, &exitErr) {
+		return stdout, stderr, 0, fmt.Errorf("runCodexPreToolGuard(%s): %w", guardPath, runErr)
+	}
+	return stdout, stderr, exitErr.ExitCode(), nil
+}
+
+// TestCodexPreToolUseGuard is the guard-level D-16/D-22 suite over BOTH
+// real embedded templates, rendered with stub binaries: every case exits
+// 0, starts no process in an un-indexed repo, and — when it does start the
+// stub — passes stdin and stdout through untouched.
+func TestCodexPreToolUseGuard(t *testing.T) {
+	cases := []struct {
+		name        string
+		loc         Location
+		codegraph   string // "dir", "file" or "" (absent)
+		stub        string // stub content; "" = binary missing
+		stubMode    os.FileMode
+		emptyPath   bool
+		wantStarted bool
+		check       func(t *testing.T, stubDir, stdout, stderr string)
+	}{
+		{name: "local/indexed_binary_ok", loc: LocationLocal, codegraph: "dir", stub: stubOK, stubMode: 0o755, wantStarted: true,
+			check: func(t *testing.T, stubDir, stdout, stderr string) {
+				if got := readFile(t, filepath.Join(stubDir, "stdin")); got != preToolGuardEvent {
+					t.Errorf("binary stdin = %q, want the event byte-identical %q", got, preToolGuardEvent)
+				}
+				if stdout != "STUB-OUT\n" {
+					t.Errorf("stdout = %q, want the binary's stdout unmodified %q", stdout, "STUB-OUT\n")
+				}
+				if stderr != "" {
+					t.Errorf("stderr = %q, want empty", stderr)
+				}
+			}},
+		{name: "local/not_indexed", loc: LocationLocal, codegraph: "", stub: stubOK, stubMode: 0o755, wantStarted: false, check: wantNoOutput},
+		{name: "local/codegraph_is_file", loc: LocationLocal, codegraph: "file", stub: stubOK, stubMode: 0o755, wantStarted: false, check: wantNoOutput},
+		{name: "local/binary_missing", loc: LocationLocal, codegraph: "dir", stub: "", wantStarted: false, check: wantNoOutput},
+		{name: "local/binary_not_executable", loc: LocationLocal, codegraph: "dir", stub: stubOK, stubMode: 0o644, wantStarted: false,
+			check: func(t *testing.T, _, stdout, _ string) {
+				if stdout != "" {
+					t.Errorf("stdout = %q, want empty", stdout)
+				}
+			}},
+		{name: "local/binary_exits_nonzero", loc: LocationLocal, codegraph: "dir", stub: stubFail, stubMode: 0o755, wantStarted: true},
+		{name: "local/binary_crashes", loc: LocationLocal, codegraph: "dir", stub: stubCrash, stubMode: 0o755, wantStarted: true},
+		{name: "local/root_from_own_path_with_empty_path", loc: LocationLocal, codegraph: "dir", stub: stubOK, stubMode: 0o755, emptyPath: true, wantStarted: true},
+		{name: "global/indexed_pwd", loc: LocationGlobal, codegraph: "dir", stub: stubOK, stubMode: 0o755, wantStarted: true},
+		{name: "global/not_indexed_pwd", loc: LocationGlobal, codegraph: "", stub: stubOK, stubMode: 0o755, wantStarted: false, check: wantNoOutput},
+		{name: "global/binary_exits_nonzero", loc: LocationGlobal, codegraph: "dir", stub: stubFail, stubMode: 0o755, wantStarted: true},
+	}
+
+	ran := 0
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ran++
+			stubDir := t.TempDir()
+			bin := filepath.Join(t.TempDir(), "codegraph")
+			if tc.stub != "" {
+				writeStub(t, bin, tc.stub, tc.stubMode)
+			}
+			project := newProject(t, tc.codegraph)
+			guard := writeRenderedCodexGuard(t, tc.loc, bin, project)
+
+			var forcedEnv []string
+			if tc.emptyPath {
+				forcedEnv = []string{"STUB_DIR=" + stubDir, "PATH="}
+			}
+			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, []string{"STUB_DIR=" + stubDir}, forcedEnv, preToolGuardEvent)
+			if err != nil {
+				t.Fatalf("run guard: %v", err)
+			}
+			if exit != 0 {
+				t.Fatalf("guard exit = %d, want 0 (stdout %q, stderr %q)", exit, stdout, stderr)
+			}
+			started := exists(filepath.Join(stubDir, "started"))
+			if started != tc.wantStarted {
+				t.Fatalf("binary started = %v, want %v", started, tc.wantStarted)
+			}
+			if tc.check != nil {
+				tc.check(t, stubDir, stdout, stderr)
+			}
+		})
+	}
+	if ran != len(cases) || ran < 11 {
+		t.Fatalf("ran %d guard subtests, want 11", ran)
+	}
+}
+
+// TestRenderCodexPreToolGuard pins renderCodexPreToolGuard's quoting and
+// input validation over BOTH templates: the rendered ExecPath is one
+// POSIX single-quoted word that survives a space and a single quote, and
+// invalid ExecPaths are rejected at both locations.
+func TestRenderCodexPreToolGuard(t *testing.T) {
+	bothLocs := []Location{LocationLocal, LocationGlobal}
+
+	t.Run("plain_path", func(t *testing.T) {
+		for _, loc := range bothLocs {
+			rendered, err := renderCodexPreToolGuard(loc, "/usr/local/bin/codegraph")
+			if err != nil {
+				t.Fatalf("(%s) render: %v", loc, err)
+			}
+			if !strings.Contains(rendered, "\ncodegraph_bin='/usr/local/bin/codegraph'\n") {
+				t.Fatalf("(%s) rendered guard lacks the quoted ExecPath line:\n%s", loc, rendered)
+			}
+			if strings.Contains(rendered, preToolGuardExecPathToken) {
+				t.Fatalf("(%s) rendered guard still carries the token", loc)
+			}
+			guard := filepath.Join(t.TempDir(), "guard.sh")
+			writeStub(t, guard, rendered, 0o755)
+			shSyntaxOK(t, guard)
+		}
+	})
+
+	t.Run("quote_and_space_in_path", func(t *testing.T) {
+		for _, loc := range bothLocs {
+			stubDir := t.TempDir()
+			bin := filepath.Join(t.TempDir(), "it's a dir", "codegraph")
+			writeStub(t, bin, stubOK, 0o755)
+			project := newProject(t, "dir")
+			guard := writeRenderedCodexGuard(t, loc, bin, project)
+			shSyntaxOK(t, guard)
+
+			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, []string{"STUB_DIR=" + stubDir}, nil, preToolGuardEvent)
+			if err != nil {
+				t.Fatalf("(%s) run guard: %v", loc, err)
+			}
+			if exit != 0 {
+				t.Fatalf("(%s) guard exit = %d, want 0 (stderr %q)", loc, exit, stderr)
+			}
+			if !exists(filepath.Join(stubDir, "started")) {
+				t.Fatalf("(%s) binary at %q never started — the rendered path was mis-quoted (stdout %q, stderr %q)", loc, bin, stdout, stderr)
+			}
+		}
+	})
+
+	t.Run("relative_path_rejected", func(t *testing.T) {
+		for _, loc := range bothLocs {
+			if out, err := renderCodexPreToolGuard(loc, "codegraph"); err == nil {
+				t.Fatalf("(%s) render(relative) = nil error, want an error; got:\n%s", loc, out)
+			}
+		}
+	})
+
+	t.Run("empty_path_rejected", func(t *testing.T) {
+		for _, loc := range bothLocs {
+			if out, err := renderCodexPreToolGuard(loc, ""); err == nil {
+				t.Fatalf("(%s) render(empty) = nil error, want an error; got:\n%s", loc, out)
+			}
+		}
+	})
+
+	t.Run("template_token_exactly_once", func(t *testing.T) {
+		local, err := claudeassets.CodexPreToolUseGuardLocalTemplate()
+		if err != nil {
+			t.Fatalf("CodexPreToolUseGuardLocalTemplate: %v", err)
+		}
+		if n := strings.Count(string(local), preToolGuardExecPathToken); n != 1 {
+			t.Fatalf("local template carries the token %d times, want exactly 1", n)
+		}
+		global, err := claudeassets.CodexPreToolUseGuardGlobalTemplate()
+		if err != nil {
+			t.Fatalf("CodexPreToolUseGuardGlobalTemplate: %v", err)
+		}
+		if n := strings.Count(string(global), preToolGuardExecPathToken); n != 1 {
+			t.Fatalf("global template carries the token %d times, want exactly 1", n)
+		}
+	})
 }
