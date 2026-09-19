@@ -44,10 +44,10 @@ findings:
   total: 4
 status: fixed
 fix_status:
-  fixed: 2
+  fixed: 3
   deferred: 1
   fixed_at: 2026-09-19T00:00:00Z
-  fixed_findings: [CR-01, WR-01]
+  fixed_findings: [CR-01, WR-01, WR-03]
   deferred_findings: [IN-01]
 ---
 
