@@ -6,10 +6,10 @@ current_phase: 7
 current_phase_name: Codex Parity
 status: planning
 stopped_at: Phase 6 complete, ready to plan Phase 7
-last_updated: "2026-09-19T12:39:02.722Z"
+last_updated: "2026-09-19T12:39:23.738Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: 79fa5d37931306a8864caaea2a889a2616b82856
+state_head: 69a75b64fdd84ab9f81dc6f5b23cefad09941969
 progress:
   total_phases: 7
   completed_phases: 6
@@ -444,6 +444,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 6] AR-06-08: the registered hook commands (SessionStart and PreToolUse) are unquoted shell-form paths — a project dir or $HOME containing whitespace splits them before the guard runs, giving a non-blocking 'hook error' notice (never a block, never injection). The exec-form/quoting fix changes the owned command identity (duplicates on upgrade), so it is a deferred decision (06-CONTEXT Deferred Ideas); CODEX-05 should decide its own form deliberately.
 - [Phase 6] codegraph upgrade cannot reach a Claude location whose skill dir is fully foreign/unmanifested: its PreToolUse guard keeps the old ExecPath with NO user-visible signal (test-pinned: TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation; recovery = re-run codegraph install there). Open proposal (06-REVIEW-FIX WR-03): a one-line upgrade note naming such a location.
 - [Phase 6] Tooling gaps (not blocking, not hand-edited): (a) plan-gate commands that pick a base via git log --grep='^test\\(NN-PP\\): ' | tail -1 resolve to EARLIER milestones' same-numbered plans (hit in 06-04, 06-05, 06-07 — verified against the phase base instead); (b) stale .git/gsd-plan-head-before-NN-PP markers from earlier milestones had to be removed; (c) state.update-progress warns on every plan that STATE.md has no 'Progress:' body line; (d) frontmatter set re-serializes covered_files with a blank line after the key (parser tolerates it).
+- [Phase 6] Phase 5 now reads verification_status: stale — a GENUINE signal (like Phase 4 → Phases 1–3): Phase 6 legitimately modified files in Phase 5's covered_files (internal/agents/claude.go, capabilities.go, skillshared.go, manifest.go, types.go, shared.go, ownership/capabilities tests, internal/cli/install.go, uninstall.go, docs/CLI-REFERENCE.md). Re-verify Phases 1–5 at the milestone audit (/gsd-verify-work), together with Phase 4's missing validate-phase/secure-phase runs.
 
 ### Quick Tasks Completed
 
