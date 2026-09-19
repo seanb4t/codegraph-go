@@ -189,15 +189,45 @@ func globalOnlyPath(fn func() (string, error)) PathFunc {
 	}
 }
 
+// declaredSkillFallback resolves the "unreadable manifest" fallback CR-01
+// (05-REVIEW.md) requires for requester's declared, written skill
+// directory dir at loc: "assume Claude" is justified only where a
+// pre-phase manifest could genuinely exist — Claude's own directory, and
+// the shared `.agents/skills/codegraph` directory that Cursor and
+// opencode declare as their WRITTEN skill directory, which D-17's symlink
+// convention can make the SAME physical directory as Claude's. dir is
+// compared against the shared path with sameSkillDir (D-17-aware: handles
+// a non-existent or dangling-symlink dir exactly like the comparison
+// installSkillPackageWithFallback itself already performs against
+// Claude's directory). Every harness-exclusive directory (Gemini, Kiro,
+// Antigravity) — anything that resolves to somewhere else — falls back to
+// [requester] instead, so a corrupted manifest there self-heals to the
+// single real owner rather than inventing Claude as a phantom co-owner
+// that can never legitimately relinquish ownership.
+func declaredSkillFallback(dir string, loc Location, requester TargetID) ([]TargetID, error) {
+	shared, err := sharedSkillDirPath(loc)
+	if err != nil {
+		return nil, err
+	}
+	same, err := sameSkillDir(dir, shared)
+	if err != nil {
+		return nil, err
+	}
+	if same {
+		return []TargetID{Claude}, nil
+	}
+	return []TargetID{requester}, nil
+}
+
 // installDeclaredSkill resolves t's declared, written skill directory (the
 // D-01 derivation of Capabilities().SkillDirs via WrittenSkillDir) and, if
 // one is declared for loc, installs the shared skill package there through
-// installSkillPackage (AGENT-08): install and uninstall derive the skill
-// step from the ONE table. Every target except Claude — which has its own
-// symlink-aware policy via claudeSkillPolicy (D-17) — calls this instead of
-// hand-rolling its own skill-directory write. A resolution error is
-// recorded via result.Errors (CR-01); "" (no error) means t declares no
-// skill directory at loc and this is a silent no-op.
+// installSkillPackageWithFallback (AGENT-08, CR-01): install and uninstall
+// derive the skill step from the ONE table. Every target except Claude —
+// which has its own symlink-aware policy via claudeSkillPolicy (D-17) —
+// calls this instead of hand-rolling its own skill-directory write. A
+// resolution error is recorded via result.Errors (CR-01); "" (no error)
+// means t declares no skill directory at loc and this is a silent no-op.
 func installDeclaredSkill(result *WriteResult, t AgentTarget, loc Location) {
 	dir, err := t.Capabilities().WrittenSkillDir(loc)
 	if err != nil {
@@ -207,7 +237,12 @@ func installDeclaredSkill(result *WriteResult, t AgentTarget, loc Location) {
 	if dir == "" {
 		return
 	}
-	installSkillPackage(result, dir, loc, t.ID(), refuseUnmanifested)
+	fallback, err := declaredSkillFallback(dir, loc, t.ID())
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, err))
+		return
+	}
+	installSkillPackageWithFallback(result, dir, loc, t.ID(), refuseUnmanifested, fallback)
 }
 
 // uninstallDeclaredSkill mirrors installDeclaredSkill for Uninstall — every
@@ -224,7 +259,12 @@ func uninstallDeclaredSkill(result *WriteResult, t AgentTarget, loc Location) {
 	if dir == "" {
 		return
 	}
-	uninstallSkillPackage(result, dir, t.ID(), nil, refuseUnmanifested)
+	fallback, err := declaredSkillFallback(dir, loc, t.ID())
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, err))
+		return
+	}
+	uninstallSkillPackageWithFallback(result, dir, t.ID(), nil, refuseUnmanifested, fallback)
 }
 
 // describeDeclaredPaths is the shared DescribePaths body every target's

@@ -175,11 +175,26 @@ func containsTarget(ids []TargetID, id TargetID) bool {
 // see and extend the FIRST target's requester set (RESEARCH "Anti-Patterns
 // to Avoid": a package-level "already wrote this run" flag would silently
 // drop every requester after the first).
+//
+// recordSkillManifest itself always assumes Claude on an unreadable
+// manifest, preserving every existing caller's behavior exactly (Claude's
+// own directory, and every direct test call, which always exercises the
+// shared directory where that assumption is justified). A harness-
+// exclusive directory (CR-01, 05-REVIEW.md) must use
+// recordSkillManifestWithFallback directly instead, with a fallback that
+// does not invent Claude as a phantom co-owner.
 func recordSkillManifest(result *WriteResult, dir string, loc Location, requester TargetID, ownFiles map[string]string) {
+	recordSkillManifestWithFallback(result, dir, loc, requester, ownFiles, []TargetID{Claude})
+}
+
+// recordSkillManifestWithFallback is recordSkillManifest's general form,
+// taking the "unreadable manifest" fallback explicit at the call site
+// (CR-01) instead of hard-coding Claude unconditionally.
+func recordSkillManifestWithFallback(result *WriteResult, dir string, loc Location, requester TargetID, ownFiles map[string]string, unreadableFallback []TargetID) {
 	manifestPath := skillManifestPath(dir)
 	existing, present, rerr := readManifest(manifestPath)
 
-	requesters := manifestRequesters(existing, present, rerr)
+	requesters := manifestRequesters(existing, present, rerr, unreadableFallback)
 	if !containsTarget(requesters, requester) {
 		requesters = append(requesters, requester)
 	}
@@ -221,7 +236,22 @@ func recordSkillManifest(result *WriteResult, dir string, loc Location, requeste
 // claudeSkillPolicy is what actually governs correctness on Claude's side
 // of the comparison. A comparison error is recorded in result.Errors
 // rather than silently dropped.
+//
+// installSkillPackage always assumes Claude on an unreadable manifest
+// (recordSkillManifest's default), matching every existing caller: it is
+// only ever invoked directly at the shared directory (Cursor's and
+// opencode's declared skill directory IS the shared path), where that
+// assumption is justified. installDeclaredSkill uses
+// installSkillPackageWithFallback directly for CR-01's harness-exclusive
+// case.
 func installSkillPackage(result *WriteResult, dir string, loc Location, requester TargetID, policy unmanifestedPolicy) {
+	installSkillPackageWithFallback(result, dir, loc, requester, policy, []TargetID{Claude})
+}
+
+// installSkillPackageWithFallback is installSkillPackage's general form,
+// taking the "unreadable manifest" fallback explicit at the call site
+// (CR-01) instead of hard-coding Claude unconditionally.
+func installSkillPackageWithFallback(result *WriteResult, dir string, loc Location, requester TargetID, policy unmanifestedPolicy, unreadableFallback []TargetID) {
 	if requester != Claude {
 		if claudeDir, err := claudeSkillDirPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, err))
@@ -238,9 +268,9 @@ func installSkillPackage(result *WriteResult, dir string, loc Location, requeste
 	if !ok {
 		return
 	}
-	recordSkillManifest(result, dir, loc, requester, map[string]string{
+	recordSkillManifestWithFallback(result, dir, loc, requester, map[string]string{
 		manifestKeySkillMD: hashContent(content),
-	})
+	}, unreadableFallback)
 }
 
 // uninstallSkillPackage is installSkillPackage's mirror (D-08): a manifest
@@ -255,7 +285,20 @@ func installSkillPackage(result *WriteResult, dir string, loc Location, requeste
 // first (so the directory-empty sweep below sees it already gone), then
 // SKILL.md, then sweeps the directory via removeSkillDirIfEmpty — never a
 // recursive delete, so a user's own file in the directory survives.
+//
+// uninstallSkillPackage always assumes Claude on an unreadable manifest,
+// matching installSkillPackage's default and every existing caller (see
+// its doc comment). uninstallDeclaredSkill uses
+// uninstallSkillPackageWithFallback directly for CR-01's harness-exclusive
+// case.
 func uninstallSkillPackage(result *WriteResult, dir string, requester TargetID, exclusiveKeys []string, policy unmanifestedPolicy) {
+	uninstallSkillPackageWithFallback(result, dir, requester, exclusiveKeys, policy, []TargetID{Claude})
+}
+
+// uninstallSkillPackageWithFallback is uninstallSkillPackage's general
+// form, taking the "unreadable manifest" fallback explicit at the call
+// site (CR-01) instead of hard-coding Claude unconditionally.
+func uninstallSkillPackageWithFallback(result *WriteResult, dir string, requester TargetID, exclusiveKeys []string, policy unmanifestedPolicy, unreadableFallback []TargetID) {
 	manifestPath := skillManifestPath(dir)
 	skillPath := filepath.Join(dir, skillFileName)
 
@@ -289,7 +332,7 @@ func uninstallSkillPackage(result *WriteResult, dir string, requester TargetID, 
 		return
 	}
 
-	requesters := manifestRequesters(existing, present, rerr)
+	requesters := manifestRequesters(existing, present, rerr, unreadableFallback)
 	if !containsTarget(requesters, requester) {
 		result.Files = append(result.Files,
 			FileResult{Path: manifestPath, Action: ActionNotFound},

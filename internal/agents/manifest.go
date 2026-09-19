@@ -71,28 +71,33 @@ type skillManifest struct {
 
 // manifestRequesters folds readManifest's three possible outcomes into the
 // single non-destructive reading D-07's planner amendment requires: an
-// unreadable manifest (readErr != nil) is read as owned solely by Claude,
-// because Claude's installer was the only writer of any manifest before
-// this phase (schema_version 1) and any other reading (e.g. "unknown,
-// treat as empty") would let a later uninstall delete a package Claude
-// still legitimately owns out from under it — exactly the risk D-17's
-// symlinked-layout groundwork exists to avoid. An absent manifest
+// unreadable manifest (readErr != nil), or a present-and-decodable one
+// whose Targets field is nil (a genuine schema_version 1 write, or any
+// hand-authored manifest predating D-07), returns unreadableFallback
+// unchanged — the caller decides what "unreadable" means at its own
+// directory, since that reading is only justified where a pre-phase
+// manifest could genuinely exist (code review CR-01, 05-REVIEW.md):
+// Claude's own directory, and the shared `.agents/skills/codegraph`
+// directory reached through D-17's symlink-aware path, where "assume
+// Claude" avoids a later uninstall deleting a package Claude still
+// legitimately owns out from under it. A harness-exclusive directory
+// (Gemini, Kiro, Antigravity) Claude never wrote to under any schema has
+// no such ambiguity, so its caller passes a fallback that self-heals to
+// the actual requester instead of inventing Claude as a phantom co-owner
+// that can never legitimately relinquish ownership. An absent manifest
 // (present == false) has no requesters at all — there is nothing to own.
-// A present, decodable manifest with a nil Targets field — a genuine
-// schema_version 1 write, or any hand-authored manifest predating D-07 —
-// is likewise read as [Claude] for the same reason. Only a present
-// manifest that already carries a Targets field returns that set, copied
-// so a caller mutating the returned slice can never corrupt the
-// manifest's own backing array.
-func manifestRequesters(m skillManifest, present bool, readErr error) []TargetID {
+// Only a present manifest that already carries a Targets field returns
+// that set, copied so a caller mutating the returned slice can never
+// corrupt the manifest's own backing array.
+func manifestRequesters(m skillManifest, present bool, readErr error, unreadableFallback []TargetID) []TargetID {
 	if readErr != nil {
-		return []TargetID{Claude}
+		return unreadableFallback
 	}
 	if !present {
 		return nil
 	}
 	if m.Targets == nil {
-		return []TargetID{Claude}
+		return unreadableFallback
 	}
 	out := make([]TargetID, len(m.Targets))
 	copy(out, m.Targets)
@@ -289,7 +294,7 @@ func ConfiguredSkillLocations(id TargetID) []Location {
 		if !present {
 			continue
 		}
-		if containsTarget(manifestRequesters(m, present, rerr), id) {
+		if containsTarget(manifestRequesters(m, present, rerr, []TargetID{Claude}), id) {
 			locs = append(locs, loc)
 		}
 	}
