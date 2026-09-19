@@ -689,9 +689,10 @@ func TestInstallStatus_KeptForeignIsNotAChange(t *testing.T) {
 	}
 }
 
-// preToolNudgeNote is D-09's stderr note, printed once when --pretool-nudge
-// is given (either value) and Claude Code is not among the resolved targets.
-const preToolNudgeNote = "note: --pretool-nudge only configures Claude Code, which is not among the selected agents; nothing was changed for it"
+// preToolNudgeNote is D-09's (07-08-widened) stderr note, printed once when
+// --pretool-nudge is given (either value) and neither Claude Code nor Codex
+// CLI is among the resolved targets.
+const preToolNudgeNote = "note: --pretool-nudge only configures Claude Code and Codex CLI, neither of which is among the selected agents; nothing was changed for them"
 
 // localPreToolGuard is where a local opt-in writes the rendered guard, and
 // localPreToolCommand the command every local PreToolUse handler registers.
@@ -805,10 +806,15 @@ func TestInstall_PreToolNudge_ExplicitFalseRemoves(t *testing.T) {
 	assertOff("after a later plain install")
 }
 
-// TestInstall_PreToolNudge_NoteWhenClaudeNotSelected: given either value
-// while Claude is not a resolved target, install says so once on stderr and
-// still succeeds (D-09).
-func TestInstall_PreToolNudge_NoteWhenClaudeNotSelected(t *testing.T) {
+// localCodexPreToolGuard is where a local Codex opt-in writes the rendered
+// guard (mirrors localPreToolGuard for Claude).
+const localCodexPreToolGuard = ".codex/hooks/codegraph-pretooluse.sh"
+
+// TestInstall_PreToolNudge_NoteWhenNeitherClaudeNorCodexSelected (renamed
+// from …WhenClaudeNotSelected, 07-08/D-09 widened): given either value
+// while neither Claude nor Codex is a resolved target, install says so once
+// on stderr and still succeeds.
+func TestInstall_PreToolNudge_NoteWhenNeitherClaudeNorCodexSelected(t *testing.T) {
 	for _, tc := range []struct{ name, flag string }{
 		{"given_true", "--pretool-nudge"},
 		{"given_false", "--pretool-nudge=false"},
@@ -830,7 +836,105 @@ func TestInstall_PreToolNudge_NoteWhenClaudeNotSelected(t *testing.T) {
 			if _, err := os.Stat(localPreToolGuard); !os.IsNotExist(err) {
 				t.Fatalf("a Cursor-only install wrote %s (stat err %v)", localPreToolGuard, err)
 			}
+			if _, err := os.Stat(localCodexPreToolGuard); !os.IsNotExist(err) {
+				t.Fatalf("a Cursor-only install wrote %s (stat err %v)", localCodexPreToolGuard, err)
+			}
 		})
+	}
+}
+
+// TestInstall_PreToolNudge_NoNoteWhenCodexSelected: given true while Codex
+// is a resolved target, install prints no note and writes Codex's guard and
+// hooks.json (D-09 widened — the note's absence when Claude is selected is
+// already covered by TestInstall_PreToolNudge_NoNoteWhenClaudeSelected).
+func TestInstall_PreToolNudge_NoNoteWhenCodexSelected(t *testing.T) {
+	fakeHome(t)
+
+	_, stderr, err := execCmd("install", "--target", "codex,cursor", "--location", "local", "--pretool-nudge")
+	if err != nil {
+		t.Fatalf("install --target codex,cursor --pretool-nudge: %v", err)
+	}
+	if strings.Contains(stderr, "note: --pretool-nudge") {
+		t.Fatalf("note printed although Codex was selected; stderr:\n%s", stderr)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); err != nil {
+		t.Fatalf("positive control: Codex was selected but the guard was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(".codex", "hooks.json")); err != nil {
+		t.Fatalf("positive control: Codex was selected but hooks.json was not written: %v", err)
+	}
+}
+
+// TestInstall_PreToolNudge_CodexOptInRegisters mirrors
+// TestInstall_PreToolNudge_OptInRegisters/StickyAcrossPlainInstall/
+// ExplicitFalseRemoves for Codex: a CLI-level opt-in registers the guard
+// and hooks.json group, a plain install keeps it, and
+// --pretool-nudge=false removes it.
+func TestInstall_PreToolNudge_CodexOptInRegisters(t *testing.T) {
+	fakeHome(t)
+	hooksPath := filepath.Join(".codex", "hooks.json")
+
+	if _, _, err := execCmd("install", "--target", "codex", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --target codex --pretool-nudge: %v", err)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); err != nil {
+		t.Fatalf("guard %s not written: %v", localCodexPreToolGuard, err)
+	}
+	if _, err := os.Stat(hooksPath); err != nil {
+		t.Fatalf("hooks.json %s not written: %v", hooksPath, err)
+	}
+
+	if _, _, err := execCmd("install", "--target", "codex", "--location", "local"); err != nil {
+		t.Fatalf("plain install --target codex: %v", err)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); err != nil {
+		t.Fatalf("a plain install removed the opted-in Codex guard: %v", err)
+	}
+
+	if _, _, err := execCmd("install", "--target", "codex", "--location", "local", "--pretool-nudge=false"); err != nil {
+		t.Fatalf("install --target codex --pretool-nudge=false: %v", err)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); !os.IsNotExist(err) {
+		t.Fatalf("guard %s still present after --pretool-nudge=false (stat err %v)", localCodexPreToolGuard, err)
+	}
+}
+
+// TestInstallHelpNeverAdvisesTrustBypass (D-19, T-07-24): install --help,
+// uninstall --help, and the generated CLI reference never advise bypassing
+// Codex's hook trust review, and install --help names both Codex and
+// /hooks. The forbidden token is built by concatenation so this test's own
+// source never matches it.
+func TestInstallHelpNeverAdvisesTrustBypass(t *testing.T) {
+	forbidden := "--dangerously-" + "bypass-hook-trust"
+
+	installHelp, _, err := execCmd("install", "--help")
+	if err != nil {
+		t.Fatalf("install --help: %v", err)
+	}
+	if strings.Contains(installHelp, forbidden) {
+		t.Fatalf("install --help advises trust bypass:\n%s", installHelp)
+	}
+	if !strings.Contains(installHelp, "Codex") {
+		t.Fatalf("install --help does not mention Codex:\n%s", installHelp)
+	}
+	if !strings.Contains(installHelp, "/hooks") {
+		t.Fatalf("install --help does not mention /hooks:\n%s", installHelp)
+	}
+
+	uninstallHelp, _, err := execCmd("uninstall", "--help")
+	if err != nil {
+		t.Fatalf("uninstall --help: %v", err)
+	}
+	if strings.Contains(uninstallHelp, forbidden) {
+		t.Fatalf("uninstall --help advises trust bypass:\n%s", uninstallHelp)
+	}
+
+	refBytes, err := os.ReadFile(cliReferenceDocPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", cliReferenceDocPath, err)
+	}
+	if strings.Contains(string(refBytes), forbidden) {
+		t.Fatalf("%s advises trust bypass", cliReferenceDocPath)
 	}
 }
 

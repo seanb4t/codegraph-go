@@ -186,6 +186,27 @@ const ownershipUnrelatedHookCommand = "/opt/some-other-tool/on-startup.sh"
 // (242ec0a), so it must survive install and uninstall byte-identical.
 const ownershipUnrelatedPreToolUseBlock = `{"matcher":"Bash","hooks":[{"type":"command","command":"` + ownershipUnrelatedHookCommand + `"}]}`
 
+// ownershipCodexForeignBashGroup (07-08, D-23) is an unrelated PreToolUse
+// group planted under Codex's OWN matcher, "^Bash$" — the 242ec0a shape for
+// Codex's hooks.json: ownership must be the exact command string, never the
+// matcher, so this group must survive install and uninstall byte-identical.
+const ownershipCodexForeignBashGroup = `{"matcher":"^Bash$","hooks":[{"type":"command","command":"` + ownershipUnrelatedHookCommand + `"}]}`
+
+// plantForeignCodexHooksGroup seeds loc's Codex hooks.json with
+// ownershipCodexForeignBashGroup before Install — exercising exact-identity
+// ownership (D-23) the same way reproduce242ec0aPrecondition does for
+// Claude's SessionStart matcher, but without needing a pre-install call
+// first: Codex's stickiness evidence is the hooks.json group itself, never
+// a manifest, so there is no manifest precondition to establish first.
+func plantForeignCodexHooksGroup(t *testing.T, loc Location) {
+	t.Helper()
+	hooksPath, err := codexHooksJSONPath(loc)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath(%s): %v", loc, err)
+	}
+	writeFile(t, hooksPath, `{"hooks":{"PreToolUse":[`+ownershipCodexForeignBashGroup+`]}}`)
+}
+
 // foreignPlant records exactly what was planted at one ownership leaf, so
 // the post-uninstall assertions compare against what was ACTUALLY written
 // rather than re-deriving it a second time.
@@ -424,7 +445,14 @@ func assertOwnEntriesGoneAfterUninstall(t *testing.T, id TargetID, caps Capabili
 		}
 	}
 
-	if id != Claude || !caps.Supports(loc) {
+	if !caps.Supports(loc) {
+		return
+	}
+	if id == Codex {
+		assertCodexOwnPreToolUseEntriesGoneAfterUninstall(t, loc)
+		return
+	}
+	if id != Claude {
 		return
 	}
 
@@ -505,6 +533,64 @@ func assertOwnEntriesGoneAfterUninstall(t *testing.T, id TargetID, caps Capabili
 	}
 }
 
+// assertCodexOwnPreToolUseEntriesGoneAfterUninstall (07-08, D-23/242ec0a) is
+// assertOwnEntriesGoneAfterUninstall's Codex analog: the leaf planted
+// ownershipCodexForeignBashGroup under Codex's own "^Bash$" matcher before
+// Install, so after Uninstall that foreign group must survive
+// deep-equal to what was planted, no group may carry codegraph's own
+// command, and the guard must be gone.
+func assertCodexOwnPreToolUseEntriesGoneAfterUninstall(t *testing.T, loc Location) {
+	t.Helper()
+
+	guardPath, err := codexPreToolGuardPath(loc)
+	if err != nil {
+		t.Fatalf("codexPreToolGuardPath: %v", err)
+	}
+	if _, err := os.Lstat(guardPath); !os.IsNotExist(err) {
+		t.Fatalf("Codex PreToolUse guard %s still present after uninstall (Lstat err %v)", guardPath, err)
+	}
+
+	hooksPath, err := codexHooksJSONPath(loc)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath: %v", err)
+	}
+	content := readFileOrEmpty(hooksPath)
+	if content == "" {
+		t.Fatalf("%s missing after uninstall — the unrelated ^Bash$ group should have survived", hooksPath)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(content), &decoded); err != nil {
+		t.Fatalf("unmarshal post-uninstall %s: %v", hooksPath, err)
+	}
+	var planted any
+	if err := json.Unmarshal([]byte(ownershipCodexForeignBashGroup), &planted); err != nil {
+		t.Fatalf("unmarshal planted codex group: %v", err)
+	}
+	_, ownCommands, err := codexPreToolUseBlocks(loc)
+	if err != nil {
+		t.Fatalf("codexPreToolUseBlocks: %v", err)
+	}
+	hooks, _ := decoded["hooks"].(map[string]any)
+	preToolUse, _ := hooks["PreToolUse"].([]any)
+	sawForeign := false
+	for _, e := range preToolUse {
+		if jsonDeepEqual(e, planted) {
+			sawForeign = true
+		}
+		entry, _ := e.(map[string]any)
+		entries, _ := entry["hooks"].([]any)
+		for _, h := range entries {
+			hObj, _ := h.(map[string]any)
+			if cmd, _ := hObj["command"].(string); commandIsOwned(cmd, ownCommands) {
+				t.Fatalf("codegraph's own Codex PreToolUse command %q still present after uninstall", cmd)
+			}
+		}
+	}
+	if !sawForeign {
+		t.Fatalf("foreign ^Bash$ group missing or changed after uninstall: %#v", preToolUse)
+	}
+}
+
 // runOwnershipLeaf executes one <target>/<loc>/<variant> leaf of
 // TestOwnershipExactIdentity.
 func runOwnershipLeaf(t *testing.T, target AgentTarget, loc Location, variant string) {
@@ -524,6 +610,9 @@ func runOwnershipLeaf(t *testing.T, target AgentTarget, loc Location, variant st
 
 	if target.ID() == Claude && caps.Supports(loc) {
 		reproduce242ec0aPrecondition(t, target, loc, opts)
+	}
+	if target.ID() == Codex && caps.Supports(loc) {
+		plantForeignCodexHooksGroup(t, loc)
 	}
 
 	if !caps.Supports(loc) {
