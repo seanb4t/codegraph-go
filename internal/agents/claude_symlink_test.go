@@ -600,3 +600,77 @@ func TestSharedSkillWriter_NotesSameDirAsClaude(t *testing.T) {
 		}
 	})
 }
+
+// TestSymlinkedSkillDir_PreToolNudgeEvidencedBySettingsWhenForeign is CR-01's
+// regression test (06-REVIEW.md): combines symlinkedClaudeLayout with
+// pre-existing foreign, unmanifested content in the shared directory (the
+// exact precondition TestSymlinkedSkillDir_ForeignContentKeptForeign
+// already proves keeps the manifest step from EVER running there) and
+// PreToolNudge: PreToolNudgeOn. Before the fix, the guard and its
+// settings.json registration were written successfully but never recorded
+// anywhere, so a subsequent Keep install silently forgot the opt-in
+// forever (D-10's "sticky until explicitly turned off" broken). After the
+// fix, preToolNudgeEvidenced treats settings.json's own registration as
+// evidence, so the opt-in is refreshed rather than orphaned.
+func TestSymlinkedSkillDir_PreToolNudgeEvidencedBySettingsWhenForeign(t *testing.T) {
+	symlinkedClaudeLayout(t)
+	sharedDir, err := sharedSkillDirPath(LocationGlobal)
+	if err != nil {
+		t.Fatalf("sharedSkillDirPath: %v", err)
+	}
+	writeFile(t, filepath.Join(sharedDir, skillFileName), "# Someone else's skill\n\nThis was never written by codegraph.\n")
+
+	c := claudeTarget{}
+	onResult := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+	if len(onResult.Errors) != 0 {
+		t.Fatalf("On install returned errors: %v", onResult.Errors)
+	}
+
+	guardPath, err := claudePreToolGuardPath(LocationGlobal)
+	if err != nil {
+		t.Fatalf("claudePreToolGuardPath: %v", err)
+	}
+	if !fileExists(guardPath) {
+		t.Fatalf("On install did not write the guard at %s despite the foreign skill dir", guardPath)
+	}
+
+	manifestPath, err := claudeManifestPath(LocationGlobal)
+	if err != nil {
+		t.Fatalf("claudeManifestPath: %v", err)
+	}
+	if fileExists(manifestPath) {
+		t.Fatalf("precondition broken: a manifest exists at %s despite foreign skill content", manifestPath)
+	}
+
+	// The defect CR-01 found: the manifest-only check reports the opt-in as
+	// unrecorded here, even though it was genuinely, successfully opted in.
+	if recorded, _ := preToolNudgeRecorded(LocationGlobal); recorded {
+		t.Fatalf("precondition broken: preToolNudgeRecorded already true with no manifest on disk — this test no longer isolates CR-01")
+	}
+
+	// The fix: preToolNudgeEvidenced widens that to true via settings.json's
+	// own registration.
+	if recorded, readable := preToolNudgeEvidenced(LocationGlobal); !recorded || !readable {
+		t.Fatalf("preToolNudgeEvidenced = (%v, %v), want (true, true): settings.json already carries codegraph's own PreToolUse registration (CR-01)", recorded, readable)
+	}
+
+	// A moved binary: a subsequent plain (Keep) install must refresh the
+	// guard's baked-in ExecPath, never silently leave an orphaned old one
+	// forever (the CR-01 consequence chain's step 4, upgrade's refresh).
+	keepResult := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph-v2", PreToolNudge: PreToolNudgeKeep})
+	if len(keepResult.Errors) != 0 {
+		t.Fatalf("Keep install returned errors: %v", keepResult.Errors)
+	}
+	guardAfterKeep := readFile(t, guardPath)
+	if !strings.Contains(guardAfterKeep, "codegraph-v2") {
+		t.Fatalf("Keep did not refresh the orphaned guard for the moved binary; guard still reads:\n%s", guardAfterKeep)
+	}
+
+	// The foreign SKILL.md content itself must still be untouched — CR-01's
+	// fix is scoped to the PreToolUse record, never a license to touch
+	// D-14's protected foreign content.
+	gotContent := readFile(t, filepath.Join(sharedDir, skillFileName))
+	if gotContent != "# Someone else's skill\n\nThis was never written by codegraph.\n" {
+		t.Fatalf("foreign SKILL.md content changed:\ngot=%q", gotContent)
+	}
+}

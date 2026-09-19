@@ -461,6 +461,58 @@ func removeHookEntry(path, event string, ownCommands []string) (FileResult, erro
 	return FileResult{Path: path, Action: ActionRemoved}, nil
 }
 
+// hasOwnHookBlock is a READ-ONLY probe over hooks.<event>, used by callers
+// that need to know whether codegraph's own registration is already present
+// without writing or removing anything (code review CR-01, 06-REVIEW.md:
+// the PreToolUse opt-in can be evidenced by settings.json even when the
+// manifest never recorded it, e.g. a foreign/unmanifested D-14 skill
+// directory). Ownership is determined by the exact same command-string
+// identity test writeHookEntry's own isOwned closure and removeHookEntry's
+// own isOwnCommand closure use (242ec0a) — deliberately duplicated here
+// rather than factored out into a shared helper those two call, so this
+// addition can never change writeHookEntry's or removeHookEntry's write or
+// removal semantics. A malformed or unreadable file surfaces its error
+// unwritten, exactly like readJSONFileStrict's other callers; a missing
+// file, missing hooks object, or missing event key is (false, nil), never
+// an error.
+func hasOwnHookBlock(path, event string, ownCommands []string) (bool, error) {
+	existing, present, err := readJSONFileStrict(path)
+	if err != nil {
+		return false, err
+	}
+	if !present {
+		return false, nil
+	}
+	hooks, _ := existing["hooks"].(map[string]any)
+	if hooks == nil {
+		return false, nil
+	}
+	events, _ := hooks[event].([]any)
+	for _, b := range events {
+		obj, ok := b.(map[string]any)
+		if !ok {
+			continue
+		}
+		blockHooks, ok := obj["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, h := range blockHooks {
+			hObj, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			cmd, _ := hObj["command"].(string)
+			for _, own := range ownCommands {
+				if cmd == own {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
 // removeEmbeddedFile removes path if it exists, reporting ActionRemoved.
 // Reports ActionNotFound (never an error) when path does not exist,
 // matching the pre-existing D-08 invariant; any other os.Remove error is

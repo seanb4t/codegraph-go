@@ -63,6 +63,64 @@ func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 	return blocks, []string{ownCommand}, nil
 }
 
+// preToolNudgeEvidenced widens preToolNudgeRecorded's manifest-only check
+// (code review CR-01, 06-REVIEW.md): a Claude skill directory that is a
+// symlinked shared directory holding pre-existing foreign, unmanifested
+// content (D-14/D-17) makes Install skip its manifest-record step entirely
+// (claude.go's `haveSkillMDContent` gate), even though the PreToolUse
+// guard and its settings.json registration were written successfully. The
+// manifest alone then silently under-reports a genuine, live opt-in,
+// breaking D-10's "sticky until explicitly turned off" promise and
+// upgrade's guard-refresh path.
+//
+// recorded is true when EITHER preToolNudgeRecorded's manifest check is
+// true OR settings.json at loc already carries one of codegraph's own
+// PreToolUse command blocks by EXACT identity — the same ownership test
+// writeHookEntry/removeHookEntry themselves use (242ec0a), read here
+// through hasOwnHookBlock's read-only probe rather than any write path.
+// This only ever widens "recorded" using evidence codegraph itself would
+// have written under an earlier explicit opt-in; it can never make Keep
+// ADD the hook somewhere no such evidence exists.
+//
+// The settings.json widening applies ONLY when the manifest is genuinely
+// ABSENT (preToolNudgeRecorded's readable-but-not-recorded case — exactly
+// what a foreign/unmanifested skill directory produces, since no manifest
+// is ever written there). A manifest that EXISTS but cannot be read or
+// decoded is a distinct, deliberately more conservative failure mode:
+// TestPreToolNudge_KeepWithUnreadableManifestTouchesNothing (06-04) pins
+// "cannot tell, so touch nothing" for that case regardless of
+// settings.json's content, and this function preserves that verdict
+// unchanged — corruption of a manifest that WAS written is a different,
+// untrusted signal than one that was never written at all, so it is never
+// overridden by evidence found elsewhere.
+func preToolNudgeEvidenced(loc Location) (recorded, readable bool) {
+	manifestRecorded, manifestReadable := preToolNudgeRecorded(loc)
+	if manifestRecorded {
+		return true, true
+	}
+	if !manifestReadable {
+		return false, false
+	}
+
+	settingsPath, err := claudeSettingsPath(loc)
+	if err != nil {
+		return false, true
+	}
+	_, ownCommands, err := claudePreToolUseBlocks(loc)
+	if err != nil {
+		return false, true
+	}
+	settingsEvidenced, err := hasOwnHookBlock(settingsPath, "PreToolUse", ownCommands)
+	if err != nil {
+		// settings.json itself is unreadable/corrupt: report not-recorded
+		// rather than claiming evidence this read could not confirm. The
+		// manifest side already established readable=true (genuinely
+		// absent), so that verdict stands.
+		return false, true
+	}
+	return settingsEvidenced, true
+}
+
 // shellSingleQuote returns s as one POSIX single-quoted shell word: each
 // embedded single quote is emitted as close-quote, backslash-quote,
 // reopen-quote, so no byte of s is ever interpreted by the shell (T-06-01).
