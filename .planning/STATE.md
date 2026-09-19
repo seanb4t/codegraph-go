@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Completed 07-09-PLAN.md
-last_updated: "2026-09-19T21:30:26.444Z"
+stopped_at: Completed 07-10-PLAN.md
+last_updated: "2026-09-19T21:56:16.782Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: 1bc613a46f87aebbcdfb21c65e70a146b46c4b15
+state_head: fb1840374416397c5092e2748154a13460e51ab7
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 51
+  completed_plans: 52
   percent: 86
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 ## Current Position
 
 Phase: 7 (Codex Parity) — EXECUTING
-Plan: 10 of 11
+Plan: 11 of 11
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 7 execution started
 
@@ -182,6 +182,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P07 | ~40min | 3 tasks | 14 files |
 | Phase 07 P08 | ~50min | 3 tasks | 11 files |
 | Phase 7 P09 | ~15min | 3 tasks | 1 files |
+| Phase 07 P10 | ~18min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -430,6 +431,8 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: A4: Codex subagent PreToolUse stdin carries agent_id (UUIDv7) + agent_type alongside the parent's session_id; the main thread carries neither — D-21 session_id+agent_id (else main) keying holds unchanged on Codex
 - [Phase 7]: D-23: position-keyed hook trust re-flags a byte-identical foreign hook when its array index shifts; codegraph appends its group last so its own removal never shifts a foreign group
 - [Phase 7]: FIX-03's local real-PTY tmux re-run explicitly NOT performed (maintainer decision 2026-09-19, carried from 07-03, issue #75) — the 07-03 model-level footprint guard is the local FIX-03 evidence at this HEAD
+- [Phase 7]: [Phase 07] 07-10: docs/AGENT-CAPABILITIES.md published (16 rows, AllTargets() x [global,local]) with a Go drift test (TestCapabilityDoc_MirrorsCapabilities/VerificationColumn) that recomputes every code-derived cell from Capabilities() and never lets the doc overclaim [ASSUMED] rows as verified
+- [Phase 7]: [Phase 07] 07-10: Claude's global row is [ASSUMED] (code.claude.com/docs/en/mcp, fetched 2026-09-19) after confirming no 0[5-7]-LIVE-SESSIONS.md file ran a dedicated Claude-global install+read session — only Claude local scope was live-verified (06-LIVE-SESSIONS.md)
 
 ### Pending Todos
 
@@ -584,8 +587,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T21:28:48.065Z
-Stopped at: Completed 07-09-PLAN.md
+Last session: 2026-09-19T21:56:16.723Z
+Stopped at: Completed 07-10-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
