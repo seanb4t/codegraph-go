@@ -122,9 +122,10 @@ type InstallOptions struct {
 	// PreToolNudge selects what this run does with the opt-in Claude Code
 	// PreToolUse nudge (Claude-only; a no-op for every other target,
 	// v0.14.0 Phase 6 D-09). PreToolNudgeOn writes the rendered guard
-	// script and its hooks.PreToolUse registration. Keep and Off touch
-	// nothing yet: their sticky meaning arrives with the manifest record
-	// (D-10, plan 06-04).
+	// script and its hooks.PreToolUse registration and records both in the
+	// Claude skill manifest. PreToolNudgeKeep refreshes them only while the
+	// manifest records them; PreToolNudgeOff removes them and drops the
+	// record (D-10).
 	PreToolNudge PreToolNudgeMode
 }
 

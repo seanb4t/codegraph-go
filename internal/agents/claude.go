@@ -451,6 +451,11 @@ func (t claudeTarget) Detect(loc Location) DetectionResult {
 func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
+	// D-10: whether the manifest records the PreToolUse opt-in is read
+	// before any write, so this call's own manifest update cannot decide
+	// what Keep does.
+	preToolRecorded, preToolReadable := preToolNudgeRecorded(loc)
+
 	// Pitfall 3: migrate a legacy ./.claude.json local entry into
 	// ./.mcp.json before writing the correct entry.
 	if loc == LocationLocal {
@@ -569,15 +574,30 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	// v0.14.0 Phase 6 (D-01, D-01b, D-09, D-12): the opt-in PreToolUse
-	// nudge — the guard rendered with this binary's absolute path, then its
-	// registration through the same exact-identity hook writer as
-	// SessionStart. Only an explicit opt-in writes; Keep and Off touch
-	// nothing here (their sticky D-10 meaning lands with the manifest
-	// record in 06-04).
-	// A render failure skips both writes, so no registration ever points
-	// at a guard this call did not write.
-	if opts.PreToolNudge == PreToolNudgeOn {
+	// v0.14.0 Phase 6 (D-01, D-01b, D-09, D-10, D-12): the opt-in
+	// PreToolUse nudge — the guard rendered with this binary's absolute
+	// path, then its registration through the same exact-identity hook
+	// writer as SessionStart. D-10's three modes:
+	//   - On writes both, and the manifest step below records them;
+	//   - Keep (the zero value: every plain install and every upgrade)
+	//     re-renders and rewrites both only when the manifest already
+	//     records the opt-in, so a moved binary is picked up; with no
+	//     record — or a manifest that cannot be read — it touches nothing;
+	//   - Off removes the guard and codegraph's own PreToolUse handlers and
+	//     drops the record in the same single manifest write.
+	// havePreTool follows the CR-01 have-flag rule: set only when BOTH the
+	// guard and the registration writes succeeded. A render failure skips
+	// both writes, so no registration ever points at a guard this call did
+	// not write.
+	var (
+		preToolGuardContent []byte
+		preToolBlocks       []any
+		havePreTool         bool
+		dropPreTool         bool
+	)
+	enablePreTool := opts.PreToolNudge == PreToolNudgeOn ||
+		(opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable)
+	if enablePreTool {
 		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
 		} else if rendered, rerr := renderPreToolGuard(opts.ExecPath); rerr != nil {
@@ -593,9 +613,40 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 				} else {
 					fr, werr := writeHookEntry(settingsPath, "PreToolUse", blocks, ownCommands)
 					recordFile(&result, settingsPath, fr, werr)
+					if werr == nil {
+						preToolGuardContent = []byte(rendered)
+						preToolBlocks = blocks
+						havePreTool = true
+					}
 				}
 			}
 		}
+	} else if opts.PreToolNudge == PreToolNudgeOff {
+		// Only artifacts actually removed are reported, so an Off install on
+		// a location that never opted in adds no lines (errors still surface).
+		removeFailed := false
+		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+			removeFailed = true
+		} else if fr, rerr := removeEmbeddedFile(guardPath); rerr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, rerr))
+			removeFailed = true
+		} else if fr.Action == ActionRemoved {
+			result.Files = append(result.Files, fr)
+		}
+		if settingsPath, err := claudeSettingsPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+			removeFailed = true
+		} else if _, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+			removeFailed = true
+		} else if fr, werr := removeHookEntry(settingsPath, "PreToolUse", ownCommands); werr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, werr))
+			removeFailed = true
+		} else if fr.Action == ActionRemoved {
+			result.Files = append(result.Files, fr)
+		}
+		dropPreTool = !removeFailed
 	}
 
 	// D-17 (Plan 03, superseding Plan 03's original hand-built manifest):
@@ -615,11 +666,24 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if herr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeSkillDir, herr))
 		} else {
-			recordSkillManifest(&result, claudeSkillDir, loc, Claude, map[string]string{
+			ownFiles := map[string]string{
 				manifestKeySkillMD:   hashContent(skillMDContent),
 				manifestKeyScript:    hashContent(scriptContent),
 				manifestKeyHooksFrag: hooksHash,
-			})
+			}
+			var dropKeys []string
+			if havePreTool {
+				if fragHash, ferr := hashOwnedHookBlocks(preToolBlocks); ferr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeSkillDir, ferr))
+				} else {
+					ownFiles[manifestKeyPreToolGuard] = hashContent(preToolGuardContent)
+					ownFiles[manifestKeyPreToolFrag] = fragHash
+				}
+			}
+			if dropPreTool {
+				dropKeys = []string{manifestKeyPreToolGuard, manifestKeyPreToolFrag}
+			}
+			recordSkillManifestWithFallback(&result, claudeSkillDir, loc, Claude, ownFiles, []TargetID{Claude}, dropKeys)
 		}
 	}
 
@@ -678,7 +742,9 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeDir, perr))
 			policy = refuseUnmanifested
 		}
-		uninstallSkillPackage(&result, claudeDir, Claude, []string{manifestKeyScript, manifestKeyHooksFrag}, policy)
+		uninstallSkillPackage(&result, claudeDir, Claude, []string{
+			manifestKeyScript, manifestKeyHooksFrag, manifestKeyPreToolGuard, manifestKeyPreToolFrag,
+		}, policy)
 	}
 
 	if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
@@ -696,6 +762,31 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 		} else {
 			fr, werr := removeHookEntry(settingsPath, "SessionStart", ownCommands)
+			recordFile(&result, settingsPath, fr, werr)
+		}
+	}
+
+	// D-11: the PreToolUse guard and codegraph's own PreToolUse handlers
+	// are ALWAYS attempted, whether or not the manifest records the opt-in
+	// (a foreign skill directory skips the record but not the writes), and
+	// report not-found when the user never opted in. Ownership is the exact
+	// command string (242ec0a): an unrelated block under the same matcher
+	// is never touched.
+	if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+	} else {
+		fr, rerr := removeEmbeddedFile(guardPath)
+		recordFile(&result, guardPath, fr, rerr)
+	}
+
+	if settingsPath, err := claudeSettingsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+	} else {
+		_, ownCommands, berr := claudePreToolUseBlocks(loc)
+		if berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+		} else {
+			fr, werr := removeHookEntry(settingsPath, "PreToolUse", ownCommands)
 			recordFile(&result, settingsPath, fr, werr)
 		}
 	}

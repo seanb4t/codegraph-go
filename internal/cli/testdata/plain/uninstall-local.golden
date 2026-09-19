@@ -7,3 +7,5 @@ Claude Code: removed
   removed: .claude/skills/codegraph/SKILL.md
   removed: .claude/hooks/session-nudge.sh
   removed: .claude/settings.json
+  not-found: .claude/hooks/pretooluse-nudge.sh
+  not-found: .claude/settings.json

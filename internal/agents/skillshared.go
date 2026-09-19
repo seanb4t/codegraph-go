@@ -190,6 +190,10 @@ func recordSkillManifest(result *WriteResult, dir string, loc Location, requeste
 // recordSkillManifestWithFallback is recordSkillManifest's general form,
 // taking the "unreadable manifest" fallback explicit at the call site
 // (CR-01) instead of hard-coding Claude unconditionally.
+// dropKeys names Files keys to delete from the merged map before the one
+// manifest write (D-10: an explicit PreToolUse opt-out forgets its record
+// in the same write that records everything else). Every caller that owns
+// nothing to forget passes nil.
 func recordSkillManifestWithFallback(result *WriteResult, dir string, loc Location, requester TargetID, ownFiles map[string]string, unreadableFallback []TargetID, dropKeys []string) {
 	manifestPath := skillManifestPath(dir)
 	existing, present, rerr := readManifest(manifestPath)
@@ -205,6 +209,9 @@ func recordSkillManifestWithFallback(result *WriteResult, dir string, loc Locati
 	}
 	for k, v := range ownFiles {
 		files[k] = v
+	}
+	for _, k := range dropKeys {
+		delete(files, k)
 	}
 
 	m := skillManifest{

@@ -36,8 +36,12 @@ const (
 	manifestKeyScript    = "hooks/session-nudge.sh"
 	manifestKeyHooksFrag = "settings.json#hooks.SessionStart"
 	// manifestKeyPreToolGuard and manifestKeyPreToolFrag record the opt-in
-	// PreToolUse nudge (v0.14.0 Phase 6, D-10): new Files map keys, not a
-	// schema bump. Their presence is what makes the opt-in sticky.
+	// PreToolUse nudge (v0.14.0 Phase 6, D-10): the rendered guard script
+	// and codegraph's own hooks.PreToolUse blocks. They are new Files map
+	// keys, not a schema bump — an older binary carries unknown keys
+	// through recordSkillManifest's merge untouched. Their PRESENCE is what
+	// makes the opt-in sticky (preToolNudgeRecorded); renaming either key
+	// silently un-opts every recorded install.
 	manifestKeyPreToolGuard = "hooks/pretooluse-nudge.sh"
 	manifestKeyPreToolFrag  = "settings.json#hooks.PreToolUse"
 	// manifestSchemaVersion history: 1 = v0.10.0 Phase 7 through v0.14.0
@@ -161,9 +165,27 @@ func hashOwnedHookBlocks(blocks []any) (string, error) {
 	return hashContent(data), nil
 }
 
-// preToolNudgeRecorded is a 06-04 RED placeholder.
+// preToolNudgeRecorded reports whether Claude's manifest at loc records
+// the PreToolUse opt-in (D-10): recorded is true when either PreToolUse key
+// is present in Files. An absent manifest is (false, true) — readable, and
+// simply not opted in. A manifest that exists but cannot be read or
+// decoded is (false, false): the caller cannot tell an opted-in location
+// from one that is not, so it must neither refresh nor remove anything.
 func preToolNudgeRecorded(loc Location) (recorded, readable bool) {
-	return false, false
+	path, err := claudeManifestPath(loc)
+	if err != nil {
+		return false, false
+	}
+	m, present, err := readManifest(path)
+	if err != nil {
+		return false, false
+	}
+	if !present {
+		return false, true
+	}
+	_, guard := m.Files[manifestKeyPreToolGuard]
+	_, frag := m.Files[manifestKeyPreToolFrag]
+	return guard || frag, true
 }
 
 // readManifest parses path as a skillManifest, distinguishing three
