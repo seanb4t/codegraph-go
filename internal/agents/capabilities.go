@@ -303,6 +303,19 @@ func describeDeclaredPaths(t AgentTarget, loc Location) []string {
 		for _, p := range hookFiles {
 			add(p)
 		}
+	} else if errors.Is(err, errHookFilesUndeclared) {
+		// WR-01 (code review 05-REVIEW.md): errHookFilesUndeclared's and
+		// HookFiles's doc comments both promise a target literal that sets
+		// Hooks: HooksCodexJSON without a HookFiles case "must fail loudly
+		// here ... rather than silently describing no hook files at all."
+		// DescribePaths has no error return to surface this through, so a
+		// programmer error — a hooks mechanism this package cannot
+		// describe — panics instead of silently shipping an
+		// incomplete-but-successful path list. Every other HookFiles error
+		// (e.g. a path resolution failure for HooksClaudeJSON) is still
+		// silently skipped here, consistent with MCPConfig/InstructionsPath
+		// above.
+		panic(fmt.Sprintf("agents: %s declares Hooks=%q with no HookFiles case: %v", t.ID(), caps.Hooks, err))
 	}
 	if skillDir, err := caps.WrittenSkillDir(loc); err == nil && skillDir != "" {
 		add(filepath.Join(skillDir, skillFileName))
