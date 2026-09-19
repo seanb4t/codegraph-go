@@ -149,8 +149,11 @@ func (c Capabilities) ReadOnlySkillDirs(loc Location) ([]string, error) {
 }
 
 // HookFiles resolves the file(s) c's declared Hooks mechanism touches at
-// loc: HooksClaudeJSON names the two files Claude's SessionStart
-// registration writes (claudeSettingsPath, claudeHooksScriptPath);
+// loc: HooksClaudeJSON names settings.json, the SessionStart nudge script
+// and the opt-in PreToolUse guard (claudeSettingsPath,
+// claudeHooksScriptPath, claudePreToolGuardPath — v0.14.0 Phase 6 D-13:
+// the mechanism MAY touch the guard; `--print-config-style` still prints
+// only the mechanism name);
 // HooksNone names none; HooksCodexJSON is undeclared this phase and errors
 // loudly via errHookFilesUndeclared rather than silently naming nothing.
 func (c Capabilities) HookFiles(loc Location) ([]string, error) {
@@ -164,7 +167,11 @@ func (c Capabilities) HookFiles(loc Location) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []string{settingsPath, scriptPath}, nil
+		preToolGuardPath, err := claudePreToolGuardPath(loc)
+		if err != nil {
+			return nil, err
+		}
+		return []string{settingsPath, scriptPath, preToolGuardPath}, nil
 	case HooksCodexJSON:
 		return nil, errHookFilesUndeclared
 	default:
