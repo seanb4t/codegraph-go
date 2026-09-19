@@ -46,6 +46,11 @@ func (d daemonDelegate) Spacing() int { return 0 }
 
 func (d daemonDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
 
+// Render draws one row: a "> " cursor on the focused row, the repo's
+// basename, its pid, and its age. No trailing newline (D-24/FIX-03):
+// bubbles/v2/list's populatedView already inserts its own separator
+// between rows, so a delegate-written newline here would cost each row 2
+// lines instead of the 1 Height() declares.
 func (d daemonDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	di, ok := item.(daemonItem)
 	if !ok {
@@ -56,7 +61,7 @@ func (d daemonDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		cursor = "> "
 	}
 	age := time.Since(di.record.StartedAt).Round(time.Second)
-	fmt.Fprintf(w, "%s%s (pid %d, up %s)\n", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
+	fmt.Fprintf(w, "%s%s (pid %d, up %s)", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
 }
 
 // resolveRepoRoot normalizes p via filepath.EvalSymlinks for comparison —
