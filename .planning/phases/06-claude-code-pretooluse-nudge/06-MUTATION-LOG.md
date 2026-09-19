@@ -684,3 +684,194 @@ The panic escapes `Execute()` and kills the test binary.
 `git diff --quiet` — exit 0 (byte-clean).
 
 **Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/cli	0.438s`.
+
+---
+
+## Family (d1) — D-11 / 242ec0a: matcher-based ownership turns TestOwnershipExactIdentity/claude RED
+
+**Test/guard:** `TestOwnershipExactIdentity` (`internal/agents/ownership_test.go`), whose claude
+leaves (06-04) install with `PreToolNudge: PreToolNudgeOn` and plant an unrelated PreToolUse
+block under the SAME `Bash` matcher as codegraph's own block.
+
+**What are we testing, and why?** Whether the ownership table catches ownership decided by
+matcher instead of by exact command string — the 242ec0a failure class, now for the opt-in
+event (D-11: an unrelated PreToolUse entry must survive byte-identical).
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/shared.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/(\tisOwned := func\(block any\) bool \{\n\t\tobj, ok := block\.\(map\[string\]any\)\n\t\tif !ok \{\n\t\t\treturn false\n\t\t\}\n)/$1\t\tif m, _ := obj["matcher"].(string); m == "Bash" {\n\t\t\treturn true\n\t\t}\n/' internal/agents/shared.go`:
+
+```diff
+@@ -216,6 +216,9 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
+ 		if !ok {
+ 			return false
+ 		}
++		if m, _ := obj["matcher"].(string); m == "Bash" {
++			return true
++		}
+ 		blockHooks, ok := obj["hooks"].([]any)
+ 		if !ok {
+ 			return false
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestOwnershipExactIdentity$' -v`, exit code appended):
+
+```
+--- FAIL: TestOwnershipExactIdentity (0.10s)
+    --- FAIL: TestOwnershipExactIdentity/claude/global/clean (0.01s)
+    --- FAIL: TestOwnershipExactIdentity/claude/global/foreign-codegraph-dir (0.01s)
+    --- FAIL: TestOwnershipExactIdentity/claude/local/clean (0.01s)
+    --- FAIL: TestOwnershipExactIdentity/claude/local/foreign-codegraph-dir (0.01s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.213s
+FAIL
+exit=1
+```
+
+Each claude leaf fails with `ownership_test.go:595: unrelated same-matcher PreToolUse block
+missing or changed after uninstall: []interface {}(nil)` — install claimed the planted Bash
+block as codegraph's and replaced it. The other 28 leaves stay PASS (they write no hooks).
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- internal/agents/shared.go`, then `git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.152s`.
+
+---
+
+## Family (d2) — D-10: Keep treated as Off turns TestPreToolNudge_KeepRefreshesWhenRecorded RED
+
+**Test/guard:** `TestPreToolNudge_KeepRefreshesWhenRecorded`
+(`internal/agents/claude_pretooluse_lifecycle_test.go`).
+
+**What are we testing, and why?** D-10's prohibition: a plain install or an upgrade (Keep, the
+zero value) must never remove a recorded opt-in; it must refresh the guard for a moved binary
+(D-01b). The mutation routes the Keep-and-recorded case into the remove branch.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/claude.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/\tenablePreTool := opts\.PreToolNudge == PreToolNudgeOn \|\|\n\t\t\(opts\.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable\)\n/\tenablePreTool := opts.PreToolNudge == PreToolNudgeOn\n/; s/\} else if opts\.PreToolNudge == PreToolNudgeOff \{/} else if opts.PreToolNudge == PreToolNudgeOff || (opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable) {/' internal/agents/claude.go`:
+
+```diff
+@@ -595,8 +595,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
+ 		havePreTool         bool
+ 		dropPreTool         bool
+ 	)
+-	enablePreTool := opts.PreToolNudge == PreToolNudgeOn ||
+-		(opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable)
++	enablePreTool := opts.PreToolNudge == PreToolNudgeOn
+ 	if enablePreTool {
+@@ -621,7 +620,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
+-	} else if opts.PreToolNudge == PreToolNudgeOff {
++	} else if opts.PreToolNudge == PreToolNudgeOff || (opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable) {
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestPreToolNudge_KeepRefreshesWhenRecorded$' -v`, exit code appended):
+
+```
+=== RUN   TestPreToolNudge_KeepRefreshesWhenRecorded
+    claude_pretooluse_lifecycle_test.go:140: readFile(/var/folders/.../T/TestPreToolNudge_KeepRefreshesWhenRecorded2526786249/001/.claude/hooks/pretooluse-nudge.sh): open /var/folders/.../T/TestPreToolNudge_KeepRefreshesWhenRecorded2526786249/001/.claude/hooks/pretooluse-nudge.sh: no such file or directory
+--- FAIL: TestPreToolNudge_KeepRefreshesWhenRecorded (0.01s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.105s
+FAIL
+exit=1
+```
+
+The plain Keep install deleted the recorded guard.
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- internal/agents/claude.go`, then `git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.066s`.
+
+---
+
+## Family (d3) — D-13: HookFiles without the guard turns TestCapabilitiesMatchInstallWrites/claude RED
+
+**Test/guard:** `TestCapabilitiesMatchInstallWrites` (`internal/agents/capabilities_test.go`),
+which since 06-04 installs with `PreToolNudge: PreToolNudgeOn`.
+
+**What are we testing, and why?** D-13: the capability table must declare every file the
+claude-json hook mechanism can touch, including the opt-in guard. The mutation returns the
+pre-06-04 two-file list.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/capabilities.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/return \[\]string\{settingsPath, scriptPath, preToolGuardPath\}, nil/_ = preToolGuardPath\n\t\treturn []string{settingsPath, scriptPath}, nil/' internal/agents/capabilities.go`:
+
+```diff
+@@ -171,7 +171,8 @@ func (c Capabilities) HookFiles(loc Location) ([]string, error) {
+ 		if err != nil {
+ 			return nil, err
+ 		}
+-		return []string{settingsPath, scriptPath, preToolGuardPath}, nil
++		_ = preToolGuardPath
++		return []string{settingsPath, scriptPath}, nil
+ 	case HooksCodexJSON:
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCapabilitiesMatchInstallWrites$' -v`, the declared-path lists cut, exit code appended):
+
+```
+    capabilities_test.go:423: Install wrote/kept "/var/folders/.../T/TestCapabilitiesMatchInstallWritesclaudeglobal3450879695/001/.claude/hooks/pretooluse-nudge.sh", which the table does not declare: declared=[...]
+    capabilities_test.go:423: Install wrote/kept ".claude/hooks/pretooluse-nudge.sh", which the table does not declare: declared=[.mcp.json .claude/CLAUDE.md .claude/settings.json .claude/hooks/session-nudge.sh ...]
+--- FAIL: TestCapabilitiesMatchInstallWrites (0.03s)
+    --- FAIL: TestCapabilitiesMatchInstallWrites/claude/global (0.00s)
+    --- FAIL: TestCapabilitiesMatchInstallWrites/claude/local (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.123s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- internal/agents/capabilities.go`, then `git diff --quiet` — exit 0
+(byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.100s`.
+
+---
+
+## Family (d4) — D-10: an Off path that keeps the record turns TestPreToolNudge_OffRemovesAndForgets RED
+
+**Test/guard:** `TestPreToolNudge_OffRemovesAndForgets`
+(`internal/agents/claude_pretooluse_lifecycle_test.go`).
+
+**What are we testing, and why?** D-10's other prohibition: after an explicit
+`--pretool-nudge=false`, nothing may re-add the hook. `recordSkillManifest` merges `Files`, so
+Off must drop both keys explicitly; if it does not, the stale record makes the next plain
+install (Keep) re-add the hook. The mutation passes nil dropKeys on the Off path.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/claude.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/dropKeys = \[\]string\{manifestKeyPreToolGuard, manifestKeyPreToolFrag\}/dropKeys = nil/' internal/agents/claude.go`:
+
+```diff
+@@ -681,7 +681,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
+ 			if dropPreTool {
+-				dropKeys = []string{manifestKeyPreToolGuard, manifestKeyPreToolFrag}
++				dropKeys = nil
+ 			}
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestPreToolNudge_OffRemovesAndForgets$' -v`, the Files map cut, exit code appended):
+
+```
+=== RUN   TestPreToolNudge_OffRemovesAndForgets
+    claude_pretooluse_lifecycle_test.go:239: Off kept the manifest record "hooks/pretooluse-nudge.sh": map[string]string{"hooks/pretooluse-nudge.sh":"sha256:046502d38734b9bba47116c3529dd1feab00e4e8fccdc4f2756aee641d2a991a", ...}
+--- FAIL: TestPreToolNudge_OffRemovesAndForgets (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.081s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** the captured `git diff` above is non-empty (dirty). **Revert:**
+`git checkout -- internal/agents/claude.go`, then `git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.081s`.
