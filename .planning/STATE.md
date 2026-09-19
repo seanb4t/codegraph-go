@@ -4,17 +4,17 @@ milestone: v0.14.0
 milestone_name: Polish & Agent Reach
 current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
-status: executing
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-09-19T00:05:38.154Z"
+status: verifying
+stopped_at: Completed 05-07-PLAN.md
+last_updated: "2026-09-19T00:20:40.664Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: ed52f925a7f345e3e34e53acf33b8bad47a753c7
+state_head: 1c10c974cc52bab34dcb4b79d93e3b3db1c7bdfc
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
   percent: 57
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 
 Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-18 — Phase 5 execution started
 
 ## Performance Metrics
@@ -165,6 +165,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 5 P04 | 38min | 2 tasks | 13 files |
 | Phase 05 P05 | ~40min | 2 tasks | 11 files |
 | Phase 05 P06 | 1h32m | 3 tasks | 1 files |
+| Phase 05 P07 | 13min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -377,6 +378,8 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: 05-06 2A: opencode duplicate-skill-name WARN accepted as an advisory (copies byte-identical; no guard on the shared write)
 - [Phase 5]: 05-06 1A: agy 1.2.6 reads user skills only from ~/.gemini/config/skills/ — Antigravity skill dir moves there in 05-07
 - [Phase 5]: 05-06 3A: Antigravity cleanup judged on codegraph-owned paths and recorded hashes; agy runtime state classified, not reverted
+- [Phase 5]: 05-07: D-11 recorded not probed, so Cursor keeps writing no instructions file (no-change branch)
+- [Phase 5]: 05-07 (1A): Antigravity's only skill dir is ~/.gemini/config/skills/codegraph; the antigravity-cli path is not declared and gets no migration (unreleased)
 
 ### Pending Todos
 
@@ -521,8 +524,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T00:05:38.113Z
-Stopped at: Completed 05-06-PLAN.md
+Last session: 2026-09-19T00:20:40.615Z
+Stopped at: Completed 05-07-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

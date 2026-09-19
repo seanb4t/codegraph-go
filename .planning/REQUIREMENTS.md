@@ -66,7 +66,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Agent Reach
 
-- [ ] **AGENT-08**: `AgentTarget` exposes per-target capabilities (skill directories, instructions path, hook mechanism, supported scopes) so `install`, `uninstall`, `Detect` and `--print-config-style` derive from one table rather than eight re-implementations
+- [x] **AGENT-08**: `AgentTarget` exposes per-target capabilities (skill directories, instructions path, hook mechanism, supported scopes) so `install`, `uninstall`, `Detect` and `--print-config-style` derive from one table rather than eight re-implementations
 - [x] **AGENT-09**: The skill package is written once to `.agents/skills/codegraph/` (project) and `~/.agents/skills/codegraph/` (global) with its sidecar manifest, and each harness documented as reading that path is verified live to discover it; a harness-specific directory is written only where a live session shows the shared path is not read
 - [x] **AGENT-04**: Cursor — skill package installed; repo-root `AGENTS.md` pickup probed in a live Cursor session before any Cursor-specific instructions target is written, the probe's outcome recorded either way
 - [x] **AGENT-06**: opencode — skill package installed at a path opencode reads, SKILL.md frontmatter compatibility verified, the existing instructions block retained
@@ -170,7 +170,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VERB-06 | Phase 3 | Complete |
 | VERB-07 | Phase 3 | Complete |
 | VERB-08 | Phase 3 | Complete |
-| AGENT-08 | Phase 5 | Pending |
+| AGENT-08 | Phase 5 | Complete |
 | AGENT-09 | Phase 5 | Complete |
 | AGENT-04 | Phase 5 | Complete |
 | AGENT-06 | Phase 5 | Complete |
