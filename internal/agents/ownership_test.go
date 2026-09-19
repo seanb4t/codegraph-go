@@ -602,6 +602,91 @@ func TestOwnershipExactIdentity(t *testing.T) {
 	}
 }
 
+// TestOwnershipSharedInstructions (D-13, D-11, 07-06) extends the
+// commit-242ec0a418703c6a4dab45188242149960cda77d exact-identity ownership
+// discipline documented above the guard's earlier tests in this file to
+// the shared repo-root AGENTS.md: this is a positive-controlled GUARD, not
+// a novel assertion — it passes against 07-06's Task 1 implementation
+// today, and Family (e2) in 07-MUTATION-LOG.md demonstrates it going RED
+// when opencodeTarget.Uninstall's instructionsRequestedElsewhere gate is
+// removed (the same "guard must carry a positive assertion that it did
+// its work" discipline 242ec0a's revert established, generalized to a
+// second sharer of one file rather than a second copy of one hook block).
+//
+// Plants a foreign MCP entry in BOTH .codex/config.toml and
+// opencode.jsonc, a foreign marker-less section in the shared AGENTS.md,
+// a foreign sibling skill directory, and — for the foreign-codegraph-dir
+// variant — a manifest-less SKILL.md in every newSkillDirs root (planted
+// once via codex's plantForeignFixtures call; opencode's call skips
+// re-planting the skill roots to avoid a redundant double-write of
+// identical bytes). Installs codex and opencode at local scope, uninstalls
+// in the named order, and asserts every foreign byte survives untouched,
+// no codegraph MCP table/entry remains in either config, no marker block
+// remains in AGENTS.md, and no manifest remains at any skill root.
+func TestOwnershipSharedInstructions(t *testing.T) {
+	orders := []string{"codex_then_opencode", "opencode_then_codex", "target_all"}
+	variants := []string{"clean", "foreign-codegraph-dir"}
+	executed := 0
+	for _, order := range orders {
+		order := order
+		for _, variant := range variants {
+			variant := variant
+			t.Run(order+"/"+variant, func(t *testing.T) {
+				executed++
+				home := fakeHome(t)
+				dir := t.TempDir()
+				t.Chdir(dir)
+
+				codex := codexTarget{}
+				opencode := opencodeTarget{}
+				opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+				foreignSkillDirs := variant == "foreign-codegraph-dir"
+				codexPlant := plantForeignFixtures(t, codex.Capabilities(), LocationLocal, home, foreignSkillDirs)
+				// opencode shares the SAME AGENTS.md and sibling-skill paths
+				// at local scope (D-11) — plant only opencode's own MCP
+				// config here, never re-plant the shared skill roots a
+				// second time.
+				opencodePlant := plantForeignFixtures(t, opencode.Capabilities(), LocationLocal, home, false)
+
+				if r := codex.Install(LocationLocal, opts); len(r.Errors) != 0 {
+					t.Fatalf("codex install: %v", r.Errors)
+				}
+				if r := opencode.Install(LocationLocal, opts); len(r.Errors) != 0 {
+					t.Fatalf("opencode install: %v", r.Errors)
+				}
+
+				switch order {
+				case "codex_then_opencode":
+					codex.Uninstall(LocationLocal)
+					opencode.Uninstall(LocationLocal)
+				case "opencode_then_codex":
+					opencode.Uninstall(LocationLocal)
+					codex.Uninstall(LocationLocal)
+				case "target_all":
+					for _, target := range AllTargets() {
+						target.Uninstall(LocationLocal)
+					}
+				}
+
+				assertForeignBytesUnchangedAfterUninstall(t, codexPlant)
+				assertForeignBytesUnchangedAfterUninstall(t, opencodePlant)
+				assertOwnEntriesGoneAfterUninstall(t, Codex, codex.Capabilities(), LocationLocal)
+				assertOwnEntriesGoneAfterUninstall(t, Opencode, opencode.Capabilities(), LocationLocal)
+
+				for _, skillDir := range newSkillDirs(home, LocationLocal) {
+					if fileExists(skillManifestPath(skillDir)) {
+						t.Fatalf("manifest still present at %s after uninstall", skillDir)
+					}
+				}
+			})
+		}
+	}
+	if executed != 6 {
+		t.Fatalf("executed %d shared-instructions leaves, want 6", executed)
+	}
+}
+
 // TestOwnershipExactIdentity_CrossCheckWrittenSkillDir cross-checks
 // Capabilities().WrittenSkillDir against the INDEPENDENT ownershipWantSkillDir
 // oracle for every target x supported location — the table and the oracle
