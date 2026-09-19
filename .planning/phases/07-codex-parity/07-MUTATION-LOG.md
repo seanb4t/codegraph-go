@@ -18,7 +18,8 @@
 - Family (i) — plan 07-11: the MCP `instructions` wire-string byte budget.
 - Family (j) — plan 07-12 (review fixes, 07-REVIEW.md): (j1) CR-01's UTF-8
   BOM handling in `splitTOMLLines`; (j2) WR-01's owned-block position
-  preservation in `writeHookEntry`.
+  preservation in `writeHookEntry`; (j3) WR-03's (07-REVIEW-FIX.md re-review
+  pass 2) BOM-only-residual drop in `stripTOMLTable`.
 
 ## Pre-mutation cleanliness gate — the convention this log follows
 
@@ -2134,6 +2135,81 @@ diff).
 Full-package re-check after the revert: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
 -count=1` → `ok  	github.com/seanb4t/codegraph-go/internal/agents	3.413s`.
 
-Family (j) verdict: both the BOM-special-case disablement (j1) and the always-append-last
-reversion (j2) demonstrated RED against a real planted mutation and reverted byte-clean; the
-agents/cli/mcp packages are GREEN after every revert.
+---
+
+## Family (j3) — WR-03 (07-REVIEW-FIX.md re-review pass 2): disabling stripTOMLTable's BOM-only-residual case turns the WR-03 guards RED
+
+**Test/guard:** `TestStripTOMLTable_UTF8BOM_TableOnlyResidualDropsEntirely`,
+`TestStripTOMLTable_UTF8BOM_Fixture` (`internal/agents/toml_test.go`) and
+`TestCodex_Uninstall_BOMOnlyEmptiedConfigIsRemoved` (`internal/agents/codex_test.go`).
+
+**What are we testing, and why?** Whether the guards catch the exact WR-03 regression shape:
+`stripTOMLTable` treating a leading UTF-8 BOM as surviving content even when it is the ONLY
+thing left after codegraph's table is stripped, producing a non-empty `"\ufeff\n"` residual
+instead of `""` — which in turn makes `codexTarget.Uninstall`'s `updated == ""` keep-clean
+check miss, so it rewrites a 4-byte BOM-plus-newline stub file via `atomicWriteFile` instead of
+removing it via `os.Remove`, while still reporting `ActionRemoved`.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/toml.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/beforeIsEmptyOrBOMOnly := before == "" \|\| before ==
+tomlBOM/beforeIsEmptyOrBOMOnly := before == ""/' internal/agents/toml.go` (the pinned Family j3
+site — `stripTOMLTable`'s only BOM-only-residual special-case, narrowed back to the pre-fix
+"before must be truly empty" condition):
+
+```diff
+--- a/internal/agents/toml.go
++++ b/internal/agents/toml.go
+@@ -87,7 +87,7 @@ func stripTOMLTable(content, tableName string) string {
+ 	// every caller (today, only codexTarget.Uninstall) keys its
+ 	// keep-clean removal off of, instead of every caller having to
+ 	// separately special-case a BOM-only residual.
+-	beforeIsEmptyOrBOMOnly := before == "" || before == tomlBOM
++	beforeIsEmptyOrBOMOnly := before == ""
+ 
+ 	switch {
+ 	case beforeIsEmptyOrBOMOnly && after == "":
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestStripTOMLTable_UTF8BOM_TableOnlyResidualDropsEntirely$|TestStripTOMLTable_UTF8BOM_Fixture$|TestCodex_Uninstall_BOMOnlyEmptiedConfigIsRemoved$'
+-v`, exit code appended):
+
+```
+    codex_test.go:227: config.toml should have been removed entirely after uninstall (BOM-only residual), got: "\ufeff\n"
+--- FAIL: TestCodex_Uninstall_BOMOnlyEmptiedConfigIsRemoved (0.00s)
+    toml_test.go:230: stripTOMLTable must drop a BOM-only residual entirely when codegraph's table was the file's only content (WR-03), got: "\ufeff\n"
+--- FAIL: TestStripTOMLTable_UTF8BOM_TableOnlyResidualDropsEntirely (0.00s)
+    toml_test.go:296: stripTOMLTable BOM-fixture mismatch:
+        got="\ufeff\n"
+        want=""
+--- FAIL: TestStripTOMLTable_UTF8BOM_Fixture (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.115s
+FAIL
+exit=1
+```
+
+`TestStripTOMLTable_UTF8BOM_PreservedWhenOtherContentSurvives` (the positive control proving
+the fix isn't a blanket "always drop the BOM") correctly stays green under this mutation, since
+that case's `before` is the literal BOM with real content on the `after` side, which still
+falls to the unaffected `default` branch regardless of `beforeIsEmptyOrBOMOnly`'s definition.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/toml.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/toml.go`, then
+`git diff --quiet -- internal/agents/toml.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestStripTOMLTable_UTF8BOM_TableOnlyResidualDropsEntirely$|TestStripTOMLTable_UTF8BOM_PreservedWhenOtherContentSurvives$|TestStripTOMLTable_UTF8BOM_Fixture$|TestCodex_Uninstall_BOMOnlyEmptiedConfigIsRemoved$'
+-v` → all 4 `PASS`, `ok  	github.com/seanb4t/codegraph-go/internal/agents	0.066s`.
+
+Full-package re-check after the revert: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
+./internal/cli/... ./internal/mcp/ -count=1` → all packages `ok`.
+
+---
+
+Family (j) verdict: the BOM-special-case disablement (j1), the always-append-last reversion
+(j2), and the BOM-only-residual narrowing (j3) each demonstrated RED against a real planted
+mutation and reverted byte-clean; the agents/cli/mcp packages are GREEN after every revert.
