@@ -65,7 +65,8 @@ func newHookCmd() *cobra.Command {
 // newHookPreToolUseCmd builds `codegraph hook pretooluse`, the Claude Code
 // PreToolUse nudge reached through the installed guard script (D-01). It
 // never returns an error, so cmd/codegraph/main.go's print-and-exit-1 path
-// is unreachable from it, and it recovers any panic (D-01a): the contract
+// is unreachable from it, and its first statement recovers any panic in
+// the whole body, the stdin read included (D-01a): the contract
 // is additionalContext-only and exit 0 on every path (NUDGE-03).
 func newHookPreToolUseCmd() *cobra.Command {
 	return &cobra.Command{
@@ -84,7 +85,12 @@ func newHookPreToolUseCmd() *cobra.Command {
 // runHookPreToolUse is the Claude envelope adapter around the
 // harness-neutral nudge core: it decodes the event, maps the tool onto a
 // nudge.Tool, and prints the pinned context object when the call
-// qualifies and a session key exists. Every failure is silent.
+// qualifies, a (session, agent) key exists, and that key is outside its
+// cooldown. It never returns an error to cobra and never writes to stderr
+// (D-01a); the session id is the env id with stdin's as the fallback and
+// agent_id comes from stdin only (D-07); every failure, including any
+// sentinel error, is silent (D-08). Classification runs before any
+// sentinel I/O, so a non-qualifying call touches no file.
 func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) {
 	data, err := io.ReadAll(io.LimitReader(in, maxHookStdinBytes+1))
 	if err != nil || len(data) == 0 || len(data) > maxHookStdinBytes {
@@ -92,6 +98,9 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 	}
 	var event claudePreToolUseInput
 	if err := json.Unmarshal(data, &event); err != nil {
+		return
+	}
+	if event.HookEventName != "" && event.HookEventName != "PreToolUse" {
 		return
 	}
 
@@ -109,7 +118,7 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 	default:
 		return
 	}
-	if !nudge.Qualifies(tool, input) {
+	if !hookQualifies(tool, input) {
 		return
 	}
 
@@ -118,7 +127,11 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 	if session == "" {
 		session = event.SessionID
 	}
-	if session == "" {
+	key, ok := nudge.SessionKey(session, event.AgentID)
+	if !ok {
+		return
+	}
+	if !(nudge.Gate{Dir: nudge.DefaultDir(), Now: hookNow}).Due(key) {
 		return
 	}
 
