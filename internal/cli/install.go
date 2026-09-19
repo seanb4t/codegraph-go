@@ -66,13 +66,18 @@ func newInstallCmd() *cobra.Command {
 			"reads; a directory shared by several agents holds one package they own\n" +
 			"jointly, and a codegraph/ skill directory codegraph did not write is\n" +
 			"left untouched. --print-config-style prints what each agent receives\n" +
-			"without writing anything. Idempotent — re-running install is a no-op\n" +
-			"when nothing changed.",
+			"without writing anything. With --pretool-nudge (Claude Code only),\n" +
+			"install also registers a PreToolUse hook that adds a one-line pointer\n" +
+			"to codegraph_explore when Claude searches an indexed repository; it\n" +
+			"never blocks a tool call, and the choice is remembered\n" +
+			"until --pretool-nudge=false or uninstall. Idempotent — re-running\n" +
+			"install is a no-op when nothing changed.",
 		Example: "  codegraph install\n" +
 			"  codegraph install --target all --location global\n" +
 			"  codegraph install --target claude,cursor\n" +
 			"  codegraph install --target none\n" +
-			"  codegraph install --print-config-style --location local",
+			"  codegraph install --print-config-style --location local\n" +
+			"  codegraph install --target claude --pretool-nudge",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loc, err := parseLocationFlag(location)

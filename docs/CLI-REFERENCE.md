@@ -700,8 +700,12 @@ instruction block. Install also writes the codegraph skill package
 reads; a directory shared by several agents holds one package they own
 jointly, and a codegraph/ skill directory codegraph did not write is
 left untouched. --print-config-style prints what each agent receives
-without writing anything. Idempotent — re-running install is a no-op
-when nothing changed.
+without writing anything. With --pretool-nudge (Claude Code only),
+install also registers a PreToolUse hook that adds a one-line pointer
+to codegraph_explore when Claude searches an indexed repository; it
+never blocks a tool call, and the choice is remembered
+until --pretool-nudge=false or uninstall. Idempotent — re-running
+install is a no-op when nothing changed.
 
 ```
 codegraph install [flags]
@@ -715,6 +719,7 @@ codegraph install [flags]
   codegraph install --target claude,cursor
   codegraph install --target none
   codegraph install --print-config-style --location local
+  codegraph install --target claude --pretool-nudge
 ```
 
 ### Options
@@ -1011,8 +1016,10 @@ block — while preserving every unrelated key, entry, and section in
 every file it touches. It removes codegraph's skill package too; a
 shared skill directory's package is deleted only when no other agent
 that installed it remains, and a skill directory codegraph did not
-write is never touched. Reports removed / not-configured / unsupported
-per agent and never errors on an agent that was never installed.
+write is never touched. It also removes the Claude Code
+PreToolUse nudge hook and its guard script when present. Reports
+removed / not-configured / unsupported per agent and never errors on
+an agent that was never installed.
 
 ```
 codegraph uninstall [flags]
