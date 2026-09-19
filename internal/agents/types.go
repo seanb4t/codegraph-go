@@ -120,16 +120,26 @@ type InstallOptions struct {
 	// ran `install` from, not a PATH guess (D-04).
 	ExecPath string
 	// PreToolNudge selects what this run does with the opt-in Claude Code
-	// PreToolUse nudge.
+	// PreToolUse nudge (Claude-only; a no-op for every other target,
+	// v0.14.0 Phase 6 D-09). PreToolNudgeOn writes the rendered guard
+	// script and its hooks.PreToolUse registration. Keep and Off touch
+	// nothing yet: their sticky meaning arrives with the manifest record
+	// (D-10, plan 06-04).
 	PreToolNudge PreToolNudgeMode
 }
 
-// PreToolNudgeMode is InstallOptions.PreToolNudge's value.
+// PreToolNudgeMode is InstallOptions.PreToolNudge's tri-state: an install
+// run either keeps whatever the manifest records (the zero value, so every
+// caller that never mentions the nudge keeps it), turns it on, or turns it
+// off (D-10).
 type PreToolNudgeMode int
 
 const (
+	// PreToolNudgeKeep leaves the recorded opt-in as it is (D-10, 06-04).
 	PreToolNudgeKeep PreToolNudgeMode = iota
+	// PreToolNudgeOn installs the PreToolUse nudge (D-09).
 	PreToolNudgeOn
+	// PreToolNudgeOff removes a recorded opt-in (D-10, 06-04).
 	PreToolNudgeOff
 )
 

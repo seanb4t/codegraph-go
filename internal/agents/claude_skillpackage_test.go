@@ -455,12 +455,13 @@ func TestClaude_Install_HookCommandIsLocationAware(t *testing.T) {
 }
 
 // TestClaudeAssets_EmbedsNoVerificationTranscripts proves the embed-scope
-// test is not vacuous: it asserts the walk found exactly 3 entries (not
+// test is not vacuous: it asserts the walk found exactly 4 entries (not
 // merely "none under verification/", which a directory pattern excluding
 // only some files could satisfy by accident) and separately asserts the
 // real on-disk verification/ directory is non-empty, so this test would
-// go red if a directory pattern were ever substituted for the three
-// explicit file patterns in claudeassets.go.
+// go red if a directory pattern were ever substituted for the four
+// explicit file patterns in claudeassets.go (the fourth, the PreToolUse
+// guard template, added by v0.14.0 Phase 6).
 func TestClaudeAssets_EmbedsNoVerificationTranscripts(t *testing.T) {
 	var walked []string
 	err := fs.WalkDir(claudeassets.FS, ".", func(path string, d fs.DirEntry, err error) error {
@@ -475,8 +476,8 @@ func TestClaudeAssets_EmbedsNoVerificationTranscripts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("walk claudeassets.FS: %v", err)
 	}
-	if len(walked) != 3 {
-		t.Fatalf("expected exactly 3 embedded files, got %d: %v", len(walked), walked)
+	if len(walked) != 4 {
+		t.Fatalf("expected exactly 4 embedded files, got %d: %v", len(walked), walked)
 	}
 	for _, p := range walked {
 		if strings.Contains(p, "verification") {

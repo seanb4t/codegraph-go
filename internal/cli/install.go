@@ -50,6 +50,7 @@ func newInstallCmd() *cobra.Command {
 	var target string
 	var location string
 	var autoAllow bool
+	var pretoolNudge bool
 	var yes bool
 	var printCfgStyle bool
 
@@ -122,6 +123,11 @@ func newInstallCmd() *cobra.Command {
 			}
 
 			opts := agents.InstallOptions{AutoAllow: autoAllow, ExecPath: execPath}
+			if pretoolNudge {
+				// v0.14.0 Phase 6 D-09: the opt-in PreToolUse nudge.
+				// Every other invocation leaves the zero value Keep.
+				opts.PreToolNudge = agents.PreToolNudgeOn
+			}
 			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Install(loc, opts)
 			}, installStatus)
@@ -131,6 +137,7 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&target, "target", "t", "auto", "which agents to configure: auto|all|none|<comma-separated ids>")
 	cmd.Flags().StringVarP(&location, "location", "l", string(agents.LocationGlobal), "config scope: global|local")
 	cmd.Flags().BoolVar(&autoAllow, "auto-allow", false, "also add mcp__codegraph__* to Claude Code's permissions.allow list")
+	cmd.Flags().BoolVar(&pretoolNudge, "pretool-nudge", false, "Claude Code only: also register a PreToolUse hook that points Claude at codegraph_explore when it searches")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (auto)")
 	cmd.Flags().BoolVar(&printCfgStyle, "print-config-style", false, "print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything")
 

@@ -7,3 +7,5 @@
 codegraph man	hidden by v0.5.0 D-02 — the Homebrew cask post-install hook's man-page generator, never an interactive command; its only flag is cobra's --help (12-CONTEXT D-05)
 codegraph query	hidden rename stub for `search --full` (VERB-03); removed in v0.15.0
 codegraph unlock	hidden rename stub for `daemon unlock` (VERB-04); removed in v0.15.0
+codegraph hook	hidden parent of the PreToolUse nudge entry point (Phase 6 D-01a); its only flag is cobra's --help
+codegraph hook pretooluse	hidden; reached only through the installed guard script, never typed by a human (Phase 6 D-01/D-01a)

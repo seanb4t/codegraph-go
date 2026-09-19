@@ -5,7 +5,8 @@
 // module, so the Codex nudge (CODEX-05) reuses it behind its own adapter.
 package nudge
 
-// Tool is a harness-neutral tool family.
+// Tool is a harness-neutral tool family. Each harness adapter maps its own
+// tool names and input fields onto one of these.
 type Tool string
 
 const (
@@ -16,7 +17,15 @@ const (
 )
 
 // Qualifies reports whether a call to tool with input should receive the
-// nudge.
+// nudge. Grep and Glob always qualify (D-03). Shell (first-word
+// grep/egrep/fgrep/rg/find, D-02) and Read (unless an obvious non-code
+// file, D-03) are filled in by plan 06-02; until then they never qualify,
+// so the tracer can only stay silent on them, never over-fire.
 func Qualifies(tool Tool, input string) bool {
-	return false
+	switch tool {
+	case ToolGrep, ToolGlob:
+		return true
+	default:
+		return false
+	}
 }

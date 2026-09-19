@@ -257,36 +257,52 @@ func claudeHookCommand(loc Location) (string, error) {
 	return claudeHooksScriptPath(LocationGlobal)
 }
 
-// claudeSessionStartBlocks decodes the embedded hooks fragment
-// (claudeassets.HooksFragment) and rewrites every command field whose
-// value equals the fragment's own literal project-relative command
-// (claudeFragmentCommand) into claudeHookCommand(loc). Deriving the
-// blocks from the embedded fragment rather than re-authoring them in Go
-// keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
+// claudeSessionStartBlocks returns the SessionStart blocks for loc,
+// derived from the embedded hooks fragment by claudeFragmentEventBlocks
+// with the fragment's own literal project-relative command
+// (claudeFragmentCommand) rewritten into claudeHookCommand(loc). Deriving
+// the blocks from the embedded fragment rather than re-authoring them in
+// Go keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
 // matcher literal is hand-typed here. Returns the rewritten blocks and
 // the single-element list of owned command strings writeHookEntry uses
 // for identity.
 func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
-	data, err := claudeassets.HooksFragment()
-	if err != nil {
-		return nil, nil, err
-	}
-	var decoded struct {
-		Hooks struct {
-			SessionStart []any `json:"SessionStart"`
-		} `json:"hooks"`
-	}
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return nil, nil, fmt.Errorf("decode embedded hooks fragment: %w", err)
-	}
-
 	ownCommand, err := claudeHookCommand(loc)
 	if err != nil {
 		return nil, nil, err
 	}
+	blocks, err := claudeFragmentEventBlocks("SessionStart", claudeFragmentCommand, ownCommand)
+	if err != nil {
+		return nil, nil, err
+	}
+	return blocks, []string{ownCommand}, nil
+}
 
-	blocks := make([]any, 0, len(decoded.Hooks.SessionStart))
-	for _, b := range decoded.Hooks.SessionStart {
+// claudeFragmentEventBlocks decodes hooks.<event> from the embedded hooks
+// fragment (claudeassets.HooksFragment) and returns a deep copy of its
+// blocks with every handler whose command equals fragmentCommand rewritten
+// into ownCommand. Shared by every event codegraph registers (SessionStart,
+// and the opt-in PreToolUse nudge of v0.14.0 Phase 6), so the fragment
+// stays the one source of each event's matchers and handler fields. An
+// event the fragment does not carry is an error, never an empty list.
+func claudeFragmentEventBlocks(event, fragmentCommand, ownCommand string) ([]any, error) {
+	data, err := claudeassets.HooksFragment()
+	if err != nil {
+		return nil, err
+	}
+	var decoded struct {
+		Hooks map[string][]any `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return nil, fmt.Errorf("decode embedded hooks fragment: %w", err)
+	}
+	source, ok := decoded.Hooks[event]
+	if !ok {
+		return nil, fmt.Errorf("embedded hooks fragment has no hooks.%s", event)
+	}
+
+	blocks := make([]any, 0, len(source))
+	for _, b := range source {
 		obj, ok := b.(map[string]any)
 		if !ok {
 			blocks = append(blocks, b)
@@ -308,7 +324,7 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 				for k, v := range eo {
 					newEO[k] = v
 				}
-				if cmd, ok := newEO["command"].(string); ok && cmd == claudeFragmentCommand {
+				if cmd, ok := newEO["command"].(string); ok && cmd == fragmentCommand {
 					newEO["command"] = ownCommand
 				}
 				newEntries = append(newEntries, newEO)
@@ -317,8 +333,7 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 		}
 		blocks = append(blocks, rewritten)
 	}
-
-	return blocks, []string{ownCommand}, nil
+	return blocks, nil
 }
 
 // addClaudeAllowPermission appends claudeAllowToken to permissions.allow in
@@ -550,6 +565,35 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 			if werr == nil {
 				sessionStartBlocks = blocks
 				haveSessionStart = true
+			}
+		}
+	}
+
+	// v0.14.0 Phase 6 (D-01, D-01b, D-09, D-12): the opt-in PreToolUse
+	// nudge — the guard rendered with this binary's absolute path, then its
+	// registration through the same exact-identity hook writer as
+	// SessionStart. Only an explicit opt-in writes; Keep and Off touch
+	// nothing here (their sticky D-10 meaning lands with the manifest
+	// record in 06-04).
+	// A render failure skips both writes, so no registration ever points
+	// at a guard this call did not write.
+	if opts.PreToolNudge == PreToolNudgeOn {
+		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+		} else if rendered, rerr := renderPreToolGuard(opts.ExecPath); rerr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, rerr))
+		} else {
+			fr, werr := writeEmbeddedFile(guardPath, rendered, true)
+			recordFile(&result, guardPath, fr, werr)
+			if werr == nil {
+				if settingsPath, err := claudeSettingsPath(loc); err != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+				} else if blocks, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+				} else {
+					fr, werr := writeHookEntry(settingsPath, "PreToolUse", blocks, ownCommands)
+					recordFile(&result, settingsPath, fr, werr)
+				}
 			}
 		}
 	}

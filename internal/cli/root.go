@@ -42,9 +42,9 @@ var ErrNotInitialized = errors.New("cli: not initialized")
 // (CLI-06) — registered on root via AddGroup in this exact order (query,
 // build, agents, maintenance) so both cobra's own help template and, when
 // fang is declined (D-14), present.RenderHelp render the same four
-// titled sections in the same order. Hidden commands (man, the query/
-// unlock rename stubs) are deliberately absent from commandGroups below
-// and stay groupless.
+// titled sections in the same order. Hidden commands (man, hook, the
+// query/unlock rename stubs) are deliberately absent from commandGroups
+// below and stay groupless.
 const (
 	groupQuery       = "query"
 	groupBuild       = "build"
@@ -56,8 +56,8 @@ const (
 // group — applied to root's direct children after AddCommand (CLI-06).
 // Only root's direct children are grouped: cobra groups are per-parent,
 // so daemon start|stop and githooks install|remove|status are never
-// grouped. man, query and unlock are deliberately absent (hidden, stay
-// groupless); help and completion are set separately via
+// grouped. man, hook, query and unlock are deliberately absent (hidden,
+// stay groupless); help and completion are set separately via
 // SetHelpCommandGroupID/SetCompletionCommandGroupID since cobra creates
 // them lazily, after this map is applied.
 var commandGroups = map[string]string{
@@ -100,9 +100,11 @@ var commandGroups = map[string]string{
 // (renamed.go) for one release (D-05/D-09). man (Phase 3 D-01/D-02) is a
 // hidden, Go-only command generating the full man-page tree from the
 // binary itself, invoked by the Homebrew cask's post-install hook rather
-// than by an interactive user. Usage/error text is printed by the
-// caller (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
-// SilenceErrors are set on every command in the tree.
+// than by an interactive user. hook (Phase 6 D-01a) is the hidden parent
+// of the agent hook entry points the installed guard scripts invoke.
+// Usage/error text is printed by the caller (cmd/codegraph/main.go), not
+// by cobra itself, so SilenceUsage and SilenceErrors are set on every
+// command in the tree.
 //
 // The tree is grouped into D-13's four titled sections (CLI-06): Query
 // the graph, Build the index, Agents & serving, and Maintenance — every

@@ -723,6 +723,7 @@ codegraph install [flags]
       --auto-allow           also add mcp__codegraph__* to Claude Code's permissions.allow list
   -h, --help                 help for install
   -l, --location string      config scope: global|local (default "global")
+      --pretool-nudge        Claude Code only: also register a PreToolUse hook that points Claude at codegraph_explore when it searches
       --print-config-style   print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything
   -t, --target string        which agents to configure: auto|all|none|<comma-separated ids> (default "auto")
   -y, --yes                  skip the interactive picker; use the non-interactive default set (auto)
