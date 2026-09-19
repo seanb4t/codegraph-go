@@ -394,6 +394,18 @@ func TestCodex_DescribePaths_Global(t *testing.T) {
 	}
 }
 
+// Task 2 (07-05) note: the three tests below (TestCodex_SharedSkillPackage_
+// LastRequester, TestCodex_Install_Local_IsIdempotent,
+// TestCodex_ReadOnlySkillDirsFollowLiveVerdict) were written as Task 2's own
+// planned RED/GREEN cycle, but Task 1's Capabilities()/installDeclaredSkill/
+// uninstallDeclaredSkill/codexSkillDirs implementation already satisfies
+// every one of their assertions — they passed the moment Task 1's GREEN
+// commit landed, with no further code change required. Recorded honestly
+// (05-03-SUMMARY.md precedent, TestSymlinkedSkillDir_ClaudeAndSharedAreOnePackage)
+// rather than reshaping any of the three to force an artificial RED they do
+// not have; all three are kept as permanent regression coverage for D-14's
+// shared-skill-requester contract and D-15's read-only skill roots.
+
 // TestCodex_SharedSkillPackage_LastRequester (D-14) asserts Codex is one
 // more requester of the shared skill package: installing opencode then
 // codex yields one manifest with targets {codex, opencode}; uninstalling
