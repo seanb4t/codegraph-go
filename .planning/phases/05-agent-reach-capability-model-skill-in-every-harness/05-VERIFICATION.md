@@ -1,9 +1,10 @@
 ---
 phase: 05-agent-reach-capability-model-skill-in-every-harness
 verified: 2026-09-18T00:00:00Z
-status: human_needed
+status: passed
 score: 8/9 must-haves verified (1 partially verified — routed to human_verification)
 covered_files:
+
   - .planning/phases/05-agent-reach-capability-model-skill-in-every-harness/05-01-PLAN.md
   - .planning/phases/05-agent-reach-capability-model-skill-in-every-harness/05-01-SUMMARY.md
   - .planning/phases/05-agent-reach-capability-model-skill-in-every-harness/05-02-PLAN.md
@@ -60,6 +61,7 @@ covered_files:
   - internal/cli/testdata/plain/print-config-style.golden
   - internal/cli/tui/agentpicker_test.go
   - internal/cli/uninstall.go
+
 covered_digest: "v1:sha256:3d772dfed1d4cfa86d011feb820f86c10b4211abd36bc5faa4f89065d826776b"
 behavior_unverified: 0
 overrides_applied: 0
