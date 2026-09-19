@@ -67,12 +67,12 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Agent Reach
 
 - [ ] **AGENT-08**: `AgentTarget` exposes per-target capabilities (skill directories, instructions path, hook mechanism, supported scopes) so `install`, `uninstall`, `Detect` and `--print-config-style` derive from one table rather than eight re-implementations
-- [ ] **AGENT-09**: The skill package is written once to `.agents/skills/codegraph/` (project) and `~/.agents/skills/codegraph/` (global) with its sidecar manifest, and each harness documented as reading that path is verified live to discover it; a harness-specific directory is written only where a live session shows the shared path is not read
-- [ ] **AGENT-04**: Cursor — skill package installed; repo-root `AGENTS.md` pickup probed in a live Cursor session before any Cursor-specific instructions target is written, the probe's outcome recorded either way
-- [ ] **AGENT-06**: opencode — skill package installed at a path opencode reads, SKILL.md frontmatter compatibility verified, the existing instructions block retained
-- [ ] **AGENT-07**: Antigravity — skill package via `.agents/skills/` and the instructions block in `AGENTS.md`
-- [ ] **AGENT-10**: Gemini CLI — skill package installed to `.gemini/skills/` (project) and its global equivalent, discoverable via `activate_skill`, the existing instructions block retained
-- [ ] **AGENT-11**: Kiro — skill package installed to `.kiro/skills/` (project) and `~/.kiro/skills/`, `AGENTS.md` retained as a steering source
+- [x] **AGENT-09**: The skill package is written once to `.agents/skills/codegraph/` (project) and `~/.agents/skills/codegraph/` (global) with its sidecar manifest, and each harness documented as reading that path is verified live to discover it; a harness-specific directory is written only where a live session shows the shared path is not read
+- [x] **AGENT-04**: Cursor — skill package installed; repo-root `AGENTS.md` pickup probed in a live Cursor session before any Cursor-specific instructions target is written, the probe's outcome recorded either way
+- [x] **AGENT-06**: opencode — skill package installed at a path opencode reads, SKILL.md frontmatter compatibility verified, the existing instructions block retained
+- [x] **AGENT-07**: Antigravity — skill package via `.agents/skills/` and the instructions block in `AGENTS.md`
+- [x] **AGENT-10**: Gemini CLI — skill package installed to `.gemini/skills/` (project) and its global equivalent, discoverable via `activate_skill`, the existing instructions block retained
+- [x] **AGENT-11**: Kiro — skill package installed to `.kiro/skills/` (project) and `~/.kiro/skills/`, `AGENTS.md` retained as a steering source
 - [x] **AGENT-13**: Every new per-harness write uses exact-identity ownership — a planted-foreign-entry test per harness proves an unrelated sibling entry is never overwritten — and `uninstall` reverses every write leaving unrelated content byte-identical (commit `242ec0a` cited in review)
 - [ ] **AGENT-14**: A per-harness capability table (what each of the 8 targets receives: MCP config, instructions, skill, nudge, scopes) is published in the docs and kept honest — `[ASSUMED]` where live verification was not possible — with the `instructions.go` "4 of 8" comment and the MCP `instructions` skill sentence updated to match what ships
 
@@ -171,12 +171,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VERB-07 | Phase 3 | Complete |
 | VERB-08 | Phase 3 | Complete |
 | AGENT-08 | Phase 5 | Pending |
-| AGENT-09 | Phase 5 | Pending |
-| AGENT-04 | Phase 5 | Pending |
-| AGENT-06 | Phase 5 | Pending |
-| AGENT-07 | Phase 5 | Pending |
-| AGENT-10 | Phase 5 | Pending |
-| AGENT-11 | Phase 5 | Pending |
+| AGENT-09 | Phase 5 | Complete |
+| AGENT-04 | Phase 5 | Complete |
+| AGENT-06 | Phase 5 | Complete |
+| AGENT-07 | Phase 5 | Complete |
+| AGENT-10 | Phase 5 | Complete |
+| AGENT-11 | Phase 5 | Complete |
 | AGENT-13 | Phase 5 | Complete |
 | AGENT-14 | Phase 7 | Pending |
 | NUDGE-03 | Phase 6 | Pending |

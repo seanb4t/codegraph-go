@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 5
 current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-09-18T22:40:51.220Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-09-19T00:05:38.154Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 execution started
-state_head: 7492fee29bd6d9157593e87ce2628de7966011a2
+state_head: ed52f925a7f345e3e34e53acf33b8bad47a753c7
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
   percent: 57
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
 ## Current Position
 
 Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-09-18 — Phase 5 execution started
 
@@ -164,6 +164,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 5 P03 | 55min | 2 tasks | 5 files |
 | Phase 5 P04 | 38min | 2 tasks | 13 files |
 | Phase 05 P05 | ~40min | 2 tasks | 11 files |
+| Phase 05 P06 | 1h32m | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -372,6 +373,10 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: [Phase 05] 05-04: TestOwnershipExactIdentity (32-leaf D-13 ownership table, citing 242ec0a by SHA) wires Cursor and opencode onto the shared skill package through installDeclaredSkill/uninstallDeclaredSkill; Family (b1)/(b2) prove the guard fails against both historical shapes of the 242ec0a-class ownership vulnerability. Found the plan's own Task 1 verify script undercounts due to an rg substring-inclusion footgun (uninstallDeclaredSkill contains installDeclaredSkill); documented and worked around with a lookbehind-corrected check rather than altering the design.
 - [Phase 5]: [Phase 05] Gemini writes its own .gemini/skills/codegraph dir (D-06 correction (a)); shared .agents/skills alias stays a documented read path only, never written
 - [Phase 5]: [Phase 05] Kiro writes only .kiro/skills/codegraph (no shared alias, no AGENTS.md); Antigravity writes only the agy CLI global dir, the [ASSUMED] 2.0/IDE path stays documented-only
+- [Phase 5]: 05-06: no Cursor account — Cursor and D-11 recorded not probed; Cursor stays [ASSUMED]; 05-07 takes the D-11 no-change branch
+- [Phase 5]: 05-06 2A: opencode duplicate-skill-name WARN accepted as an advisory (copies byte-identical; no guard on the shared write)
+- [Phase 5]: 05-06 1A: agy 1.2.6 reads user skills only from ~/.gemini/config/skills/ — Antigravity skill dir moves there in 05-07
+- [Phase 5]: 05-06 3A: Antigravity cleanup judged on codegraph-owned paths and recorded hashes; agy runtime state classified, not reverted
 
 ### Pending Todos
 
@@ -516,8 +521,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-18T22:27:22.555Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-09-19T00:05:38.113Z
+Stopped at: Completed 05-06-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
