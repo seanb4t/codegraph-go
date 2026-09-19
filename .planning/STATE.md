@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-09-19T19:16:12.785Z"
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-09-19T19:59:38.716Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: ed6a60435dad1bda9bb3e4a4d16cdc50adb37ed5
+state_head: eb45c8506f0f925bf350f8e4932d30aa7a9e016e
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 48
+  completed_plans: 49
   percent: 86
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 ## Current Position
 
 Phase: 7 (Codex Parity) — EXECUTING
-Plan: 7 of 11
+Plan: 8 of 11
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 7 execution started
 
@@ -179,6 +179,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P04 | ~15min | 3 tasks | 1 files |
 | Phase 7 P05 | ~55min | 3 tasks | 11 files |
 | Phase 07 P06 | ~25min | 3 tasks | 7 files |
+| Phase 07 P07 | ~40min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -418,6 +419,8 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: [Phase 07-05]: codexSkillDirs declares BOTH D-15 read-only roots (.codex/skills locally, $CODEX_HOME/skills globally) since 07-LIVE-SESSIONS.md recorded both verdicts as yes -- codegraph never writes to either (D-14); DescribePaths never lists them
 - [Phase 7]: [Phase 07-05]: Task 3's own plan-authored verify precondition grep (rg -c -F 'installDeclaredSkill(&result, t, loc)') has a substring-collision bug -- it matches inside uninstallDeclaredSkill too, returning 2 instead of 1. Verified the substance with a corrected negative-lookbehind pattern and confirmed the actual perl mutation touches only the intended call site; documented rather than hand-editing the plan or the code to force a false match
 - [Phase 07]: [Phase 07-06]: instructionsRequestedElsewhere derives the shared-AGENTS.md requester set from AllTargets() on every Uninstall call — never a stored index — so codex/opencode's shared repo-root AGENTS.md is kept while a sibling still uses it and restored byte-for-byte only once the last sharer is gone
+- [Phase 7]: [Phase 07]: 07-07: TestCodexPreToolUseGuard's PWD-based negative control for D-22 needed a redesign -- faking $PWD alone does nothing since bash re-derives it from getcwd() when mismatched; fixed by making the child process's actual OS-level cwd itself wrong for local guard subtests (commits 5c930bb5, 602e30a3)
+- [Phase 7]: [Phase 07]: 07-07: capabilities.go's HookFiles switch generalized to wrap errHookFilesUndeclared for ANY unmapped HookMechanism (not just codex-json specifically), now that codex-json itself is a real declared case
 
 ### Pending Todos
 
@@ -571,8 +574,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T19:16:12.726Z
-Stopped at: Completed 07-06-PLAN.md
+Last session: 2026-09-19T19:59:38.664Z
+Stopped at: Completed 07-07-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
