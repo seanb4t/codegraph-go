@@ -2,37 +2,37 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-current_phase: 6
-current_phase_name: Claude Code PreToolUse Nudge
-status: verifying
-stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-09-19T11:03:25.989Z"
+current_phase: 7
+current_phase_name: Codex Parity
+status: planning
+stopped_at: Phase 6 complete, ready to plan Phase 7
+last_updated: "2026-09-19T12:39:02.722Z"
 last_activity: 2026-09-19
-last_activity_desc: Phase 6 execution started
-state_head: d01844c7084dfa34204464da6baf95a62419bd13
+last_activity_desc: Phase 6 complete, transitioned to Phase 7
+state_head: 79fa5d37931306a8864caaea2a889a2616b82856
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 42
   completed_plans: 42
-  percent: 71
+  percent: 86
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-19 after Phase 5)
+See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 6 — Claude Code PreToolUse Nudge
+**Current focus:** Phase 7 — Codex Parity
 
 ## Current Position
 
-Phase: 6 (Claude Code PreToolUse Nudge) — EXECUTING
-Plan: 7 of 7
-Status: Phase complete — ready for verification
-Last activity: 2026-09-19 — Phase 6 execution started
+Phase: 7 — Codex Parity
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-19 — Phase 6 complete, transitioned to Phase 7
 
 ## Performance Metrics
 
@@ -49,7 +49,7 @@ Last activity: 2026-09-19 — Phase 6 execution started
 | 03 | 4 | - | - |
 | 4 | 8 | - | - |
 | 5 | 7 | - | - |
-| 6 | 8 | - | - |
+| 6 | 7 | - | - |
 | 7 | 4 | - | - |
 | 08 | 5 | - | - |
 | 09 | 6 | - | - |
@@ -441,6 +441,9 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 5] Live-verification breadth deferred by maintainer decision (05-UAT.md, 2 deferred follow-ups): Cursor (no account — D-11 verdict 'not probed', so Cursor keeps writing no instructions file) and Gemini CLI/Kiro (not installed — D-10). Their rows stay [ASSUMED] from primary docs; AGENT-14 (Phase 7) must publish them as [ASSUMED].
 - [Phase 5] REQUIREMENTS.md AGENT-07 wording ('skill package via .agents/skills/ and the instructions block in AGENTS.md') is stale: live agy 1.2.6 reads user skills only from ~/.gemini/config/skills/ (maintainer decision 1A, shipped in 05-07) and Antigravity's instructions arrive via ~/.gemini/GEMINI.md (D-06(c)). Maintainer to reword at the milestone audit; the code is correct.
 - [Phase 5] Advisories carried forward: (1) install --yes discards an explicit --target (todo 2026-09-18-install-yes-discards-explicit-target.md); (2) uninstall leaves an empty parent skills dir it created (removing the parent unconditionally is wrong — 05-07 Family (c-i)); (3) review Info IN-01 (dead caps.MCPConfig nil-check, printconfigstyle.go) and IN-02 (ActionKeptForeign renders with the default role, untested); (4) gsd-tools frontmatter set re-serializes covered_files with a blank line after the key (harmless to the parser, observed twice).
+- [Phase 6] AR-06-08: the registered hook commands (SessionStart and PreToolUse) are unquoted shell-form paths — a project dir or $HOME containing whitespace splits them before the guard runs, giving a non-blocking 'hook error' notice (never a block, never injection). The exec-form/quoting fix changes the owned command identity (duplicates on upgrade), so it is a deferred decision (06-CONTEXT Deferred Ideas); CODEX-05 should decide its own form deliberately.
+- [Phase 6] codegraph upgrade cannot reach a Claude location whose skill dir is fully foreign/unmanifested: its PreToolUse guard keeps the old ExecPath with NO user-visible signal (test-pinned: TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation; recovery = re-run codegraph install there). Open proposal (06-REVIEW-FIX WR-03): a one-line upgrade note naming such a location.
+- [Phase 6] Tooling gaps (not blocking, not hand-edited): (a) plan-gate commands that pick a base via git log --grep='^test\\(NN-PP\\): ' | tail -1 resolve to EARLIER milestones' same-numbered plans (hit in 06-04, 06-05, 06-07 — verified against the phase base instead); (b) stale .git/gsd-plan-head-before-NN-PP markers from earlier milestones had to be removed; (c) state.update-progress warns on every plan that STATE.md has no 'Progress:' body line; (d) frontmatter set re-serializes covered_files with a blank line after the key (parser tolerates it).
 
 ### Quick Tasks Completed
 
@@ -549,7 +552,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-19T11:03:25.946Z
-Stopped at: Completed 06-07-PLAN.md
+Stopped at: Phase 6 complete, ready to plan Phase 7
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
