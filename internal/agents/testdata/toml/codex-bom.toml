@@ -1,0 +1,3 @@
+﻿[mcp_servers.codegraph]
+command = "/old/codegraph"
+args = ["serve", "--mcp"]

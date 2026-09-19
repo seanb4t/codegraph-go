@@ -169,6 +169,100 @@ func TestCodexGlobal_MaintainerIndentedLayoutRoundTrip(t *testing.T) {
 	}
 }
 
+// D-07/CR-01 (07-REVIEW.md): a UTF-8 BOM (U+FEFF, bytes EF BB BF) at the
+// absolute start of a Codex config.toml must never defeat header
+// recognition. This is the common real-world shape a Windows-authored
+// project-local .codex/config.toml takes: per 07-LIVE-SESSIONS.md's
+// scaffold, such a file commonly holds ONLY the [mcp_servers.*] tables,
+// with no preceding model =/approval_policy = prelude, so the BOM sits
+// directly in front of codegraph's own header line.
+const tomlUTF8BOM = "\xef\xbb\xbf"
+
+func TestFindTOMLTableRange_UTF8BOM(t *testing.T) {
+	content := tomlUTF8BOM + "[mcp_servers.codegraph]\n" +
+		`command = "/old/codegraph"` + "\n" +
+		`args = ["serve", "--mcp"]` + "\n"
+
+	_, _, found := findTOMLTableRange(content, "mcp_servers.codegraph")
+	if !found {
+		t.Fatalf("findTOMLTableRange: found = false, want true (a leading BOM must not defeat header recognition)")
+	}
+}
+
+func TestSpliceTOMLTable_UTF8BOM_UpdatesInPlaceNeverDuplicates(t *testing.T) {
+	content := tomlUTF8BOM + "[mcp_servers.codegraph]\n" +
+		`command = "/old/codegraph"` + "\n" +
+		`args = ["serve", "--mcp"]` + "\n"
+
+	got := spliceTOMLTable(content, "mcp_servers.codegraph", codexBody())
+
+	if n := strings.Count(got, "[mcp_servers.codegraph]"); n != 1 {
+		t.Fatalf("spliceTOMLTable on a BOM'd file produced %d [mcp_servers.codegraph] headers, want exactly 1 (CR-01 duplicate-table regression):\ngot=%q", n, got)
+	}
+	if !strings.HasPrefix(got, tomlUTF8BOM) {
+		t.Fatalf("spliceTOMLTable must preserve the input's leading BOM byte-for-byte:\ngot=%q", got)
+	}
+	if strings.Contains(got, "/old/codegraph") {
+		t.Fatalf("old command should have been replaced in place, not left alongside a duplicate: %s", got)
+	}
+}
+
+func TestStripTOMLTable_UTF8BOM_RemovesEntirelyPreservingBOM(t *testing.T) {
+	installed := tomlUTF8BOM + "[mcp_servers.codegraph]\n" +
+		`command = "/usr/local/bin/codegraph"` + "\n" +
+		`args = ["serve", "--mcp"]` + "\n"
+
+	got := stripTOMLTable(installed, "mcp_servers.codegraph")
+
+	if strings.Contains(got, "[mcp_servers.codegraph]") {
+		t.Fatalf("stripTOMLTable must remove codegraph's own table from a BOM'd file, got: %q", got)
+	}
+	if !strings.HasPrefix(got, tomlUTF8BOM) {
+		t.Fatalf("stripTOMLTable must preserve the input's leading BOM byte-for-byte, got: %q", got)
+	}
+}
+
+// TestFindTOMLTableRange_MidFileBOMNotStrippedAsWhitespace pins the other
+// half of CR-01's fix: only content's true, absolute leading BOM (offset 0
+// of the whole file) is special-cased. A BOM byte sequence that appears on
+// any later line must never be treated as leading whitespace to strip
+// before recognizing a header — this is pathological, constructed input,
+// never a real TOML file, but it proves the fix isn't a blanket per-line
+// BOM trim.
+func TestFindTOMLTableRange_MidFileBOMNotStrippedAsWhitespace(t *testing.T) {
+	content := "[a]\nkey = 1\n" + tomlUTF8BOM + "[mcp_servers.codegraph]\ncommand = \"/x\"\n"
+
+	_, _, found := findTOMLTableRange(content, "mcp_servers.codegraph")
+	if found {
+		t.Fatalf("findTOMLTableRange found a header on a BOM-prefixed non-first line, want false: a mid-file BOM must not be treated as leading whitespace")
+	}
+}
+
+// TestSpliceTOMLTable_UTF8BOM_Fixture and TestStripTOMLTable_UTF8BOM_Fixture
+// pin the same regression by fixture rather than only inline strings (D-07's
+// established convention for the maintainer-indented-layout case above), so
+// the round-trip is asserted byte-exact against testdata rather than only
+// via substring checks.
+func TestSpliceTOMLTable_UTF8BOM_Fixture(t *testing.T) {
+	input := readTestdata(t, "codex-bom.toml")
+	want := readTestdata(t, "codex-bom.installed.toml")
+
+	got := spliceTOMLTable(input, "mcp_servers.codegraph", codexBody())
+	if got != want {
+		t.Fatalf("spliceTOMLTable BOM-fixture mismatch:\ngot=%q\nwant=%q", got, want)
+	}
+}
+
+func TestStripTOMLTable_UTF8BOM_Fixture(t *testing.T) {
+	installed := readTestdata(t, "codex-bom.installed.toml")
+	want := readTestdata(t, "codex-bom.uninstalled.toml")
+
+	got := stripTOMLTable(installed, "mcp_servers.codegraph")
+	if got != want {
+		t.Fatalf("stripTOMLTable BOM-fixture mismatch:\ngot=%q\nwant=%q", got, want)
+	}
+}
+
 // D-07: the remaining cases — a header-like "[" line inside a multi-line
 // basic/literal string or an unfinished multi-line array must never end
 // codegraph's range.
