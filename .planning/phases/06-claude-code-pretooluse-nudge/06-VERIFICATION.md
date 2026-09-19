@@ -65,7 +65,7 @@ covered_files:
   - internal/nudge/testdata/true-positives.json
   - internal/nudge/text.go
 
-covered_digest: "v1:sha256:ab70d0411fad85c40db29480ebf8a891c6090e5ad7ab41d6fc87ad3094b9cf25"
+covered_digest: "v1:sha256:204ded532d159bfa84536ca28f6a0950fd3fce869d58e13dc07dec80f456b5a3"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

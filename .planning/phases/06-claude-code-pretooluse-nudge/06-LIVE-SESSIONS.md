@@ -1,7 +1,8 @@
 # Phase 6 Plan 6: Live-Session Evidence — Does Claude Code Match, Deliver and Space the PreToolUse Nudge?
 
-**Status:** Task 1 (scaffold) done 2026-09-19 at HEAD `d3201ba9`. Sessions A and B (Tasks 2–3)
-have not run yet; every verdict line below is still open.
+**Status:** complete, 2026-09-19. The Task 1 scaffold was built at HEAD `d3201ba9`. The orchestrator
+ran Sessions A (indexed) and B (un-indexed) live on Claude Code 2.1.278. Every criterion C1–C7 is
+PASS and the `D-18 verdict:` is PASS (below). The Grep/Glob live delivery is recorded in `06-UAT.md`.
 
 ## Method
 
