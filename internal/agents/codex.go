@@ -43,13 +43,13 @@ func (t codexTarget) SupportsLocation(loc Location) bool {
 }
 
 // Capabilities is Codex's capability table entry (D-09): both scopes, TOML
-// config, the shared skill package plus D-15's read-only skill roots, no
-// hooks yet (07-07 adds codex-json).
+// config, the shared skill package plus D-15's read-only skill roots, and
+// the opt-in PreToolUse nudge's codex-json hooks mechanism (07-07, D-18).
 func (codexTarget) Capabilities() Capabilities {
 	return Capabilities{
 		Scopes:       []Location{LocationGlobal, LocationLocal},
 		ConfigFormat: ConfigFormatTOML,
-		Hooks:        HooksNone,
+		Hooks:        HooksCodexJSON,
 		MCPConfig:    codexConfigPath,
 		Instructions: codexInstructionsPath,
 		SkillDirs:    codexSkillDirs,
@@ -236,6 +236,12 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		result.Notes = append(result.Notes, note)
 	}
 
+	// 07-07 tracer: only the On path is wired this plan — Keep and Off get
+	// their meaning in 07-08 (D-18's opt-in stays explicit).
+	if opts.PreToolNudge == PreToolNudgeOn {
+		installCodexPreToolNudge(&result, loc, opts.ExecPath)
+	}
+
 	return result
 }
 
@@ -292,6 +298,10 @@ func (t codexTarget) Uninstall(loc Location) WriteResult {
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)
+
+	// D-09/D-11 discipline: uninstall always attempts removal, whether or
+	// not the opt-in was ever recorded — reports not-found when it wasn't.
+	uninstallCodexPreToolNudge(&result, loc)
 
 	return result
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -215,12 +216,15 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 // runHookPreToolUseCodex is the Codex envelope adapter around the same
 // harness-neutral nudge core runHookPreToolUse uses (D-21): it decodes the
 // event, maps tool_name onto the shell rule (Codex has no Grep/Glob/Read
-// tools, so only the shell corpora ever fire), keys the cooldown on
-// stdin's session_id plus agent_id (main when absent, per D-06/D-07's
-// SessionKey contract — no env-var fallback exists for Codex, unlike
-// Claude's CLAUDE_CODE_SESSION_ID), and prints the same pinned output
-// object. It never returns an error and never writes to stderr, matching
-// runHookPreToolUse's contract exactly (D-16).
+// tools, so only the shell corpora ever fire), re-checks that stdin's cwd
+// is absolute and holds a .codegraph directory (D-22 — the Go core
+// re-checks this independently of the guard's own check, since the guard
+// alone is not a security boundary this adapter can rely on), keys the
+// cooldown on stdin's session_id plus agent_id (main when absent, per
+// D-06/D-07's SessionKey contract — no env-var fallback exists for Codex,
+// unlike Claude's CLAUDE_CODE_SESSION_ID), and prints the same pinned
+// output object. It never returns an error and never writes to stderr,
+// matching runHookPreToolUse's contract exactly (D-16).
 func runHookPreToolUseCodex(in io.Reader, out io.Writer) {
 	data, err := io.ReadAll(io.LimitReader(in, maxHookStdinBytes+1))
 	if err != nil || len(data) == 0 || len(data) > maxHookStdinBytes {
@@ -241,6 +245,12 @@ func runHookPreToolUseCodex(in io.Reader, out io.Writer) {
 		return
 	}
 	if !hookQualifies(nudge.ToolShell, command) {
+		return
+	}
+	if event.Cwd == "" || !filepath.IsAbs(event.Cwd) {
+		return
+	}
+	if info, statErr := os.Stat(filepath.Join(event.Cwd, ".codegraph")); statErr != nil || !info.IsDir() {
 		return
 	}
 

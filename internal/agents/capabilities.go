@@ -48,12 +48,11 @@ const (
 )
 
 // errHookFilesUndeclared is returned by (Capabilities).HookFiles when Hooks
-// is HooksCodexJSON — no target declares that mechanism this phase, so
-// there is no known file set to name. A future literal that switches to
-// HooksCodexJSON without also declaring its files must fail loudly here
-// (surfacing as a D-03 guard failure) rather than silently describing no
-// hook files at all.
-var errHookFilesUndeclared = errors.New("agents: hook files not declared for HooksCodexJSON")
+// names a mechanism this function has no case for. A future target literal
+// that introduces a new HookMechanism without also giving HookFiles a case
+// for it must fail loudly here (surfacing as a D-03 guard failure) rather
+// than silently describing no hook files at all.
+var errHookFilesUndeclared = errors.New("agents: hook files not declared for this HookMechanism")
 
 // PathFunc resolves one target path at a given Location — the shape every
 // existing per-target path function (claudeConfigPath, cursorConfigPath,
@@ -153,11 +152,16 @@ func (c Capabilities) ReadOnlySkillDirs(loc Location) ([]string, error) {
 // and the opt-in PreToolUse guard (claudeSettingsPath,
 // claudeHooksScriptPath, claudePreToolGuardPath — v0.14.0 Phase 6 D-13:
 // the mechanism MAY touch the guard; `--print-config-style` still prints
-// only the mechanism name);
-// HooksNone names none; HooksCodexJSON is undeclared this phase and errors
-// loudly via errHookFilesUndeclared rather than silently naming nothing.
+// only the mechanism name); HooksCodexJSON names hooks.json and the opt-in
+// PreToolUse guard (codexHooksJSONPath, codexPreToolGuardPath — Phase 7
+// D-18); HooksNone names none. Any other mechanism errors loudly via
+// errHookFilesUndeclared rather than silently naming nothing — the
+// programmer-error case a future HookMechanism literal must not ship
+// without also giving this switch a case.
 func (c Capabilities) HookFiles(loc Location) ([]string, error) {
 	switch c.Hooks {
+	case HooksNone:
+		return nil, nil
 	case HooksClaudeJSON:
 		settingsPath, err := claudeSettingsPath(loc)
 		if err != nil {
@@ -173,9 +177,17 @@ func (c Capabilities) HookFiles(loc Location) ([]string, error) {
 		}
 		return []string{settingsPath, scriptPath, preToolGuardPath}, nil
 	case HooksCodexJSON:
-		return nil, errHookFilesUndeclared
+		hooksPath, err := codexHooksJSONPath(loc)
+		if err != nil {
+			return nil, err
+		}
+		guardPath, err := codexPreToolGuardPath(loc)
+		if err != nil {
+			return nil, err
+		}
+		return []string{hooksPath, guardPath}, nil
 	default:
-		return nil, nil
+		return nil, fmt.Errorf("%w: %q", errHookFilesUndeclared, c.Hooks)
 	}
 }
 
