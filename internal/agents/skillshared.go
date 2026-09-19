@@ -184,13 +184,13 @@ func containsTarget(ids []TargetID, id TargetID) bool {
 // recordSkillManifestWithFallback directly instead, with a fallback that
 // does not invent Claude as a phantom co-owner.
 func recordSkillManifest(result *WriteResult, dir string, loc Location, requester TargetID, ownFiles map[string]string) {
-	recordSkillManifestWithFallback(result, dir, loc, requester, ownFiles, []TargetID{Claude})
+	recordSkillManifestWithFallback(result, dir, loc, requester, ownFiles, []TargetID{Claude}, nil)
 }
 
 // recordSkillManifestWithFallback is recordSkillManifest's general form,
 // taking the "unreadable manifest" fallback explicit at the call site
 // (CR-01) instead of hard-coding Claude unconditionally.
-func recordSkillManifestWithFallback(result *WriteResult, dir string, loc Location, requester TargetID, ownFiles map[string]string, unreadableFallback []TargetID) {
+func recordSkillManifestWithFallback(result *WriteResult, dir string, loc Location, requester TargetID, ownFiles map[string]string, unreadableFallback []TargetID, dropKeys []string) {
 	manifestPath := skillManifestPath(dir)
 	existing, present, rerr := readManifest(manifestPath)
 
@@ -270,7 +270,7 @@ func installSkillPackageWithFallback(result *WriteResult, dir string, loc Locati
 	}
 	recordSkillManifestWithFallback(result, dir, loc, requester, map[string]string{
 		manifestKeySkillMD: hashContent(content),
-	}, unreadableFallback)
+	}, unreadableFallback, nil)
 }
 
 // uninstallSkillPackage is installSkillPackage's mirror (D-08): a manifest

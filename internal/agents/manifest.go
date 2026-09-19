@@ -35,6 +35,11 @@ const (
 	manifestKeySkillMD   = "skills/codegraph/SKILL.md"
 	manifestKeyScript    = "hooks/session-nudge.sh"
 	manifestKeyHooksFrag = "settings.json#hooks.SessionStart"
+	// manifestKeyPreToolGuard and manifestKeyPreToolFrag record the opt-in
+	// PreToolUse nudge (v0.14.0 Phase 6, D-10): new Files map keys, not a
+	// schema bump. Their presence is what makes the opt-in sticky.
+	manifestKeyPreToolGuard = "hooks/pretooluse-nudge.sh"
+	manifestKeyPreToolFrag  = "settings.json#hooks.PreToolUse"
 	// manifestSchemaVersion history: 1 = v0.10.0 Phase 7 through v0.14.0
 	// Phase 4 — a single, Claude-only writer with no requester set. 2 =
 	// the requester set added by 05-02 (D-07): skillManifest.Targets, the
@@ -154,6 +159,11 @@ func hashOwnedHookBlocks(blocks []any) (string, error) {
 		return "", err
 	}
 	return hashContent(data), nil
+}
+
+// preToolNudgeRecorded is a 06-04 RED placeholder.
+func preToolNudgeRecorded(loc Location) (recorded, readable bool) {
+	return false, false
 }
 
 // readManifest parses path as a skillManifest, distinguishing three
