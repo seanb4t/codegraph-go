@@ -445,14 +445,7 @@ func assertOwnEntriesGoneAfterUninstall(t *testing.T, id TargetID, caps Capabili
 		}
 	}
 
-	if !caps.Supports(loc) {
-		return
-	}
-	if id == Codex {
-		assertCodexOwnPreToolUseEntriesGoneAfterUninstall(t, loc)
-		return
-	}
-	if id != Claude {
+	if id != Claude || !caps.Supports(loc) {
 		return
 	}
 
@@ -656,6 +649,13 @@ func runOwnershipLeaf(t *testing.T, target AgentTarget, loc Location, variant st
 
 	assertForeignBytesUnchangedAfterUninstall(t, plant)
 	assertOwnEntriesGoneAfterUninstall(t, target.ID(), caps, loc)
+	if target.ID() == Codex {
+		// D-23/242ec0a: this leaf planted ownershipCodexForeignBashGroup
+		// before Install (above), so the foreign group must survive here —
+		// unlike assertOwnEntriesGoneAfterUninstall's generic callers (e.g.
+		// TestOwnershipSharedInstructions), which never plant it.
+		assertCodexOwnPreToolUseEntriesGoneAfterUninstall(t, loc)
+	}
 
 	for _, dir := range skillRoots {
 		if fileExists(skillManifestPath(dir)) {
