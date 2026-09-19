@@ -785,20 +785,89 @@ $S2/indexed/.agents/skills/codegraph/SKILL.md   present
 |-----|------------------|------|
 | _(empty — filled by Task 2/3)_ | | |
 
+### Task 2 evidence (orchestrator, 2026-09-19, codex-cli 0.155.0)
+
+All runs used `HOME=/private/tmp/07-live2/home CODEX_HOME=/private/tmp/07-live2/home/.codex`. Transcripts are in `/private/tmp/07-live2/transcripts/`. Stale sentinels were cleared first (`rm -rf "${TMPDIR}codegraph-nudge-501"`). Two Codex "Update available 0.155.0 -> 0.155.1" prompts were declined with "Skip" (one accidental "Update now" was interrupted with Ctrl-C before the cask swapped; `codex --version` stayed 0.155.0 throughout).
+
+**B1: folder trust, hooks left untrusted.** In both `indexed` and `unindexed` the TUI trust prompt was accepted and the hook prompt answered "3. Continue without trusting (hooks won't run)":
+
+```
+  Hooks need review
+  2 hooks are new or changed.
+  Hooks can run outside the sandbox after you trust them.
+› 1. Review hooks
+  2. Trust all and continue
+  3. Continue without trusting (hooks won't run)
+[projects."/private/tmp/07-live2/indexed"]     trust_level = "trusted"
+[projects."/private/tmp/07-live2/unindexed"]   trust_level = "trusted"
+(no [hooks.state] table yet)
+```
+
+**B2: untrusted-hook check** (`B2-untrusted-hooks.jsonl`, rollout `01a0bb82-161e-…`)
+
+```
+$ codex exec --json -C $S2/indexed 'Run exactly this shell command and nothing else: rg -n Alpha .' < /dev/null
+/bin/zsh -lc 'rg -n Alpha .' -> exit 0
+pinned nudge substring in the rollout: 0
+$S2/probes before: a4-probe.sh    after: a4-probe.sh      (no a4-*.json written: the probe hook did not run either)
+stderr: (nothing about hooks)
+```
+
+Codex reported nothing about the skipped hooks in `exec`. The only statement is the TUI's "hooks won't run" option text. The positive control for the probe's absence is B5 below (two `a4-*.json` files per Bash call once trusted).
+
+**B3: `/hooks` trust** (`B3-indexed-hooks-{before,after}.txt`)
+
+```
+  PreToolUse            2           0           2           Before a tool executes
+  [!] Hook 1 · new   Command   "$(git rev-parse --show-toplevel)/.codex/hooks/codegraph-pretooluse.sh"   Trust  New hook - review required
+  [!] Hook 2 · new   Command   '/private/tmp/07-live2/probes/a4-probe.sh'                                Trust  New hook - review required
+  -> (t, t) ->  [x] Hook 1   [x] Hook 2   Trust  Trusted
+[hooks.state."/private/tmp/07-live2/indexed/.codex/hooks.json:pre_tool_use:0:0"]   trusted_hash = "sha256:2234081d…"
+[hooks.state."/private/tmp/07-live2/indexed/.codex/hooks.json:pre_tool_use:1:0"]   trusted_hash = "sha256:07c31625…"
+[hooks.state."/private/tmp/07-live2/unindexed/.codex/hooks.json:pre_tool_use:0:0"] / :1:0   (same, for unindexed)
+```
+
+**B4: L1 post-flip** (`B4-{bare,indexed}-mcp.json`)
+
+```
+bare     [{"name":"codegraph","enabled":true,"command":"/private/tmp/07-live2/codegraph","args":["serve","--mcp"]}]
+indexed  [{"name":"codegraph","enabled":true,"command":"/private/tmp/07-live2/codegraph","args":["serve","--mcp"]}]
+$S2/home/.codex/config.toml:      [mcp_servers.codegraph] command = "/private/tmp/07-live2/codegraph" args = ["serve", "--mcp"]
+$S2/indexed/.codex/config.toml:   [mcp_servers.codegraph] command = "/private/tmp/07-live2/codegraph" args = ["serve", "--mcp"]
+```
+
+Both layers were written by the HEAD binary from the same ExecPath, so the merged entry is identical from both cwds. That the project layer is loaded when trusted was shown with a distinct binary path in CODEX-01 (B6). "Both scopes" is evidenced by the two config files plus `mcp list` from two cwds, never by a scope field (adjacency backstop).
+
+**B5: L5 uptake** (`B5-L5.jsonl`, rollout `01a0bb83-dec3-…`). Prompt: `Where is the function Alpha defined in this repository, and what calls it? Give file:line references.`
+
+```
+injected context: "- codegraph: Use when" x2 (skill listed); "codegraph_explore" x4 (the MCP tool definition loaded)
+agent_message: I'm using the CodeGraph skill because this repository is indexed and the question asks for a definit…
+command_execution: /bin/zsh -lc 'cat /private/tmp/07-live2/indexed/.agents/skills/codegraph/SKILL.md && codegraph explore "Where is function Alpha defined, and what directly or transitively calls it? Include file and line references."'
+command_execution: /bin/zsh -lc 'codegraph callers Alpha && codegraph callers Run'
+agent_message: `Alpha` is defined at pkga/pkga.go:13 …
+mcp_tool_call items: none (the agent used the CLI path, not the MCP tool)
+grep/rg/find first-word commands: 0
+pinned nudge substring in the rollout: 0 (no Bash call qualified: neither command starts with grep/rg/find)
+probe files written this session: a4-1789852382-61975.json, a4-1789852386-62280.json (hooks ran on both calls; tool_name "Bash", no agent_id)
+```
+
+Positive control for the searches: the skill-listing search found `- codegraph: Use when` x2 in this rollout and x2 in the B2 rollout; the pinned-substring search finds the string in `internal/nudge/text.go` and in the 06-06 fire logs.
+
 ### CODEX-05/06 verdicts
 
-L1 post-flip both scopes (codegraph-installed): PENDING
-L5 fresh session reaches for codegraph unprompted: PENDING
+L1 post-flip both scopes (codegraph-installed): PASS
+L5 fresh session reaches for codegraph unprompted: PASS
 L6 nudge fires once then cools down; un-indexed 0 fires: PENDING
 L7 real HOME unchanged (CODEX-05/06): PENDING
-Untrusted hook skipped before /hooks trust: PENDING
+Untrusted hook skipped before /hooks trust: yes (B2: 0 pinned substrings and no a4-*.json for the turn; B5 wrote two a4-*.json per session once trusted)
 A4 PreToolUse stdin carries a subagent id: PENDING
 tool_input.command type: PENDING
 D-23 removing our group re-flags later foreign hooks: PENDING
-Negative space (grep/rg/find runs in the L5 session): PENDING
+Negative space (grep/rg/find runs in the L5 session): 0 — the only commands were `cat …SKILL.md && codegraph explore "…"` and `codegraph callers Alpha && codegraph callers Run`
 Matched Bash search calls: PENDING
 Fires: PENDING
-Uptake: PENDING
+Uptake: the agent opened with "I'm using the CodeGraph skill because this repository is indexed", read SKILL.md and ran `codegraph explore` in its FIRST Bash call, then `codegraph callers`; no nudge fire preceded the codegraph call (0 fires: no qualifying search was ever run); the MCP tool was loaded but the CLI path was chosen
 Uninstall leaves the scratch repo clean: PENDING
 Picker tmux re-run after flip: PENDING
 CODEX-05 live verdict: PENDING
