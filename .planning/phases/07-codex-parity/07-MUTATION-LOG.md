@@ -894,3 +894,225 @@ diff).
 Family (d) verdict: all four scope-flip guards (D-09's Scopes literal, D-14's shared-skill write,
 D-07's conflict refusal, D-10's trust Note) demonstrated RED against a real planted mutation and
 reverted byte-clean; internal/agents is GREEN after every revert.
+
+---
+
+## Family (e1) — D-11: an early `return nil` in `instructionsRequestedElsewhere` turns TestSharedAgentsMD_KeptWhileOtherConfigured RED
+
+**Test/guard:** `TestSharedAgentsMD_KeptWhileOtherConfigured` (`internal/agents/shared_test.go`).
+
+**What are we testing, and why?** Whether the guard catches the D-11 requester-detection helper
+itself being neutered — `instructionsRequestedElsewhere` always reporting "no one else needs
+this file," which would make BOTH `codexTarget.Uninstall` and `opencodeTarget.Uninstall`
+unconditionally strip the shared `AGENTS.md` block the moment either agent uninstalls, even
+while the other is still fully configured.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/shared.go` — exit 0 (clean).
+
+**Mutation applied:** an early `return nil` inserted immediately after
+`instructionsRequestedElsewhere`'s signature line (the pinned Family e1 site):
+
+```diff
+--- a/internal/agents/shared.go
++++ b/internal/agents/shared.go
+@@ -779,6 +779,7 @@ func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (
+ // other Capabilities-derived helper in this package.
+ func instructionsRequestedElsewhere(path string, loc Location, self TargetID) []TargetID {
++	return nil
+ 	absPath, err := filepath.Abs(filepath.Clean(path))
+ 	if err != nil {
+ 		return nil
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestSharedAgentsMD_KeptWhileOtherConfigured$' -v`, exit code appended):
+
+```
+    shared_test.go:586: expected AGENTS.md kept (ActionKept) in result, got [{Path:.codex/config.toml Action:removed} {Path:AGENTS.md Action:removed} {Path:.agents/skills/codegraph/.codegraph-manifest.json Action:updated} {Path:.agents/skills/codegraph/SKILL.md Action:kept}]
+--- FAIL: TestSharedAgentsMD_KeptWhileOtherConfigured (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.091s
+FAIL
+exit=1
+```
+
+With the helper stubbed to always report zero requesters, codex's uninstall strips the shared
+`AGENTS.md` block outright — the exact D-11 regression shape this guard exists to catch.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/shared.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/shared.go`, then
+`git diff --quiet -- internal/agents/shared.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestSharedAgentsMD_KeptWhileOtherConfigured$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.127s`.
+
+---
+
+## Family (e2) — D-11: removing opencode.go's gate turns TestSharedAgentsMD_UninstallOrders/opencode_then_codex RED
+
+**Test/guard:** `TestSharedAgentsMD_UninstallOrders/opencode_then_codex/{preexisting,absent}`
+(`internal/agents/shared_test.go`).
+
+**What are we testing, and why?** Whether the guard catches `opencodeTarget.Uninstall` skipping
+the D-11 gate specifically (as opposed to Family (e1)'s package-wide helper failure) — the
+regression shape where codex's own gate keeps working but opencode's own call site is deleted or
+disabled, so opencode alone always strips the shared block regardless of who else still needs it.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/opencode.go` — exit 0 (clean).
+
+**Mutation applied:** the `len(others) > 0` gate condition short-circuited to always-false via
+`false &&` (keeping `others` referenced so the file still compiles) — the pinned Family e2 site,
+the one `else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {`
+line in `opencodeTarget.Uninstall`:
+
+```diff
+--- a/internal/agents/opencode.go
++++ b/internal/agents/opencode.go
+@@ -334,7 +334,7 @@ func (t opencodeTarget) Uninstall(loc Location) WriteResult {
+ 
+ 	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
+ 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
+-	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {
++	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); false && len(others) > 0 {
+ 		// D-11: the repo-root AGENTS.md is shared with codex at local
+ 		// scope — leave the marker block in place while another
+ 		// registered target still declares this same file and reports
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestSharedAgentsMD_UninstallOrders$|TestOwnershipSharedInstructions$' -v`, unaffected
+subtests' `--- PASS` lines kept, exit code appended):
+
+```
+--- PASS: TestOwnershipSharedInstructions (0.11s)
+    --- PASS: TestOwnershipSharedInstructions/codex_then_opencode/clean (0.05s)
+    --- PASS: TestOwnershipSharedInstructions/codex_then_opencode/foreign-codegraph-dir (0.01s)
+    --- PASS: TestOwnershipSharedInstructions/opencode_then_codex/clean (0.01s)
+    --- PASS: TestOwnershipSharedInstructions/opencode_then_codex/foreign-codegraph-dir (0.02s)
+    --- PASS: TestOwnershipSharedInstructions/target_all/clean (0.01s)
+    --- PASS: TestOwnershipSharedInstructions/target_all/foreign-codegraph-dir (0.01s)
+    shared_test.go:530: expected AGENTS.md kept (ActionKept) in result, got [{Path:opencode.jsonc Action:removed} {Path:AGENTS.md Action:removed} {Path:.agents/skills/codegraph/.codegraph-manifest.json Action:updated} {Path:.agents/skills/codegraph/SKILL.md Action:kept}]
+    shared_test.go:530: expected AGENTS.md kept (ActionKept) in result, got [{Path:opencode.jsonc Action:removed} {Path:AGENTS.md Action:removed} {Path:.agents/skills/codegraph/.codegraph-manifest.json Action:updated} {Path:.agents/skills/codegraph/SKILL.md Action:kept}]
+--- FAIL: TestSharedAgentsMD_UninstallOrders (0.28s)
+    --- PASS: TestSharedAgentsMD_UninstallOrders/codex_then_opencode/preexisting (0.00s)
+    --- PASS: TestSharedAgentsMD_UninstallOrders/codex_then_opencode/absent (0.01s)
+    --- FAIL: TestSharedAgentsMD_UninstallOrders/opencode_then_codex/preexisting (0.00s)
+    --- FAIL: TestSharedAgentsMD_UninstallOrders/opencode_then_codex/absent (0.01s)
+    --- PASS: TestSharedAgentsMD_UninstallOrders/target_all/preexisting (0.01s)
+    --- PASS: TestSharedAgentsMD_UninstallOrders/target_all/absent (0.25s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.513s
+FAIL
+exit=1
+```
+
+**Note on the observed shape (accuracy over prediction, per the established convention — Family
+(a1) and the 07-05-SUMMARY.md grep-bug precedent):** the plan text predicted this mutation would
+also turn `TestOwnershipSharedInstructions/opencode_then_codex` RED. It does not, and the reason
+is structural, not a bug in either test: `TestOwnershipSharedInstructions` (Task 2) asserts only
+END-of-sequence state (every foreign byte identical, every codegraph entry gone) — it never
+inspects the intermediate `FileResult` from opencode's OWN first uninstall call. With this
+mutation, opencode strips the shared block on its own turn (the bug), but by the time codex's
+(still-correct) gate runs second, opencode's own MCP entry is already gone, so
+`instructionsRequestedElsewhere` correctly reports no remaining requester and codex's own
+`removeMarkedSection` call is a harmless no-op against an already-empty span. The end state is
+therefore identical whether or not opencode's own gate fired — the defect is real (a user relying
+on Codex's block staying up while opencode is uninstalled first, in the general case where codex
+uninstalls LATER, would lose it prematurely) but is only OBSERVABLE at the intermediate step,
+which is exactly what `TestSharedAgentsMD_UninstallOrders`'s per-step `assertAgentsMDKept` check
+was designed to catch — and it does, RED on both `preexisting` and `absent` subtests. This is
+sufficient positive control for the D-11 gate as specified; `TestOwnershipSharedInstructions`'s
+scope (end-state-only, matching its own Task 2 behavior spec) is unaffected by this finding.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/opencode.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/opencode.go`, then
+`git diff --quiet -- internal/agents/opencode.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestSharedAgentsMD_UninstallOrders$|TestOwnershipSharedInstructions$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.304s`.
+
+---
+
+## Family (e3) — D-12: dropping the override Note append turns TestCodex_Install_OverrideNote RED
+
+**Test/guard:** `TestCodex_Install_OverrideNote/{local,global}` (`internal/agents/codex_test.go`).
+
+**What are we testing, and why?** Whether the guard catches `Install` silently dropping the D-12
+`AGENTS.override.md`-shadow advisory — the one place a user learns that Codex will not see the
+codegraph block codegraph just wrote to `AGENTS.md` because an override file shadows it.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex.go` — exit 0 (clean).
+
+**Mutation applied:** the entire D-12 override-detection-and-Note block removed from `Install`
+(the instructions step's `recordFile` call is untouched — only the override check that follows it
+is deleted):
+
+```diff
+--- a/internal/agents/codex.go
++++ b/internal/agents/codex.go
+@@ -214,18 +214,6 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
+ 		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+ 		recordFile(&result, instrPath, fr, err)
+ 
+-		// D-12: an AGENTS.override.md beside the instructions file Codex
+-		// reads shadows AGENTS.md for Codex — the block is still written
+-		// above (a later install of the override's content could still
+-		// pull it in), but the user should know Codex will not see it
+-		// until then. codegraph never writes AGENTS.override.md itself.
+-		overridePath := filepath.Join(filepath.Dir(instrPath), "AGENTS.override.md")
+-		if fileExists(overridePath) {
+-			result.Notes = append(result.Notes, fmt.Sprintf(
+-				"%s shadows %s for Codex — Codex will not see the codegraph block there until the override includes it (codegraph never writes AGENTS.override.md itself)",
+-				overridePath, instrPath,
+-			))
+-		}
+ 	}
+ 
+ 	installDeclaredSkill(&result, t, loc)
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodex_Install_OverrideNote$' -v`, exit code appended):
+
+```
+    codex_test.go:508: expected exactly one Note naming AGENTS.override.md, got 0: [Codex loads this project's MCP server (/var/folders/.../TestCodex_Install_OverrideNotelocal718478490/002) only once the project is trusted — accept Codex's trust prompt, or add `trust_level = "trusted"` under `[projects."/var/folders/.../TestCodex_Install_OverrideNotelocal718478490/002"]` in ~/.codex/config.toml (codegraph never writes this entry itself). The codegraph skill and the AGENTS.md block are read regardless of trust.]
+    codex_test.go:540: expected exactly one Note naming AGENTS.override.md, got 0: []
+--- FAIL: TestCodex_Install_OverrideNote (0.01s)
+    --- FAIL: TestCodex_Install_OverrideNote/local (0.00s)
+    --- FAIL: TestCodex_Install_OverrideNote/global (0.01s)
+    --- PASS: TestCodex_Install_OverrideNote/no_override_present (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.101s
+FAIL
+exit=1
+```
+
+The `no_override_present` subtest correctly stays green throughout — it asserts the ABSENCE of an
+override Note, which a stub that never adds one still satisfies trivially.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/codex.go`, then
+`git diff --quiet -- internal/agents/codex.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodex_Install_OverrideNote$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.132s`.
+
+Full-package re-check after all three reverts: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
+-count=1` → `ok  	github.com/seanb4t/codegraph-go/internal/agents	26.659s`.
+
+Family (e) verdict: the D-11 package-wide requester-detection helper (e1), the D-11 opencode-side
+gate call site specifically (e2), and the D-12 override Note (e3) all demonstrated RED against a
+real planted mutation and reverted byte-clean; internal/agents is GREEN after every revert. e2's
+finding that `TestOwnershipSharedInstructions` (an end-state-only guard, per its own Task 2
+behavior spec) does not itself go RED for that mutation is recorded above as a scope observation,
+not a defect — `TestSharedAgentsMD_UninstallOrders`'s per-step assertion is the guard that
+demonstrably catches this exact regression shape.
