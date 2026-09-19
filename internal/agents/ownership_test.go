@@ -180,6 +180,12 @@ const ownershipForeignInstructionsContent = "# My own notes\n\nKeep this paragra
 const ownershipForeignSiblingSkillContent = "# an unrelated skill\n"
 const ownershipUnrelatedHookCommand = "/opt/some-other-tool/on-startup.sh"
 
+// ownershipUnrelatedPreToolUseBlock is an unrelated PreToolUse block
+// planted under the SAME "Bash" matcher codegraph's own opt-in block uses
+// (D-11). Ownership is the exact command string, never the matcher
+// (242ec0a), so it must survive install and uninstall byte-identical.
+const ownershipUnrelatedPreToolUseBlock = `{"matcher":"Bash","hooks":[{"type":"command","command":"` + ownershipUnrelatedHookCommand + `"}]}`
+
 // foreignPlant records exactly what was planted at one ownership leaf, so
 // the post-uninstall assertions compare against what was ACTUALLY written
 // rather than re-deriving it a second time.
@@ -284,7 +290,10 @@ func reproduce242ec0aPrecondition(t *testing.T, target AgentTarget, loc Location
 	if err != nil {
 		t.Fatalf("claudeSettingsPath: %v", err)
 	}
-	writeFile(t, settingsPath, `{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"`+ownershipUnrelatedHookCommand+`"}]}]}}`)
+	// D-11: next to the unrelated SessionStart "startup" block, an
+	// unrelated PreToolUse block under the same "Bash" matcher as
+	// codegraph's own — the 242ec0a shape for the opt-in event.
+	writeFile(t, settingsPath, `{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"`+ownershipUnrelatedHookCommand+`"}]}],"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"`+ownershipUnrelatedHookCommand+`"}]}]}}`)
 }
 
 // assertForeignVariantAfterInstall checks the foreign-codegraph-dir
@@ -456,6 +465,44 @@ func assertOwnEntriesGoneAfterUninstall(t *testing.T, id TargetID, caps Capabili
 	if !sawUnrelated {
 		t.Fatalf("unrelated startup hook missing after uninstall: %#v", sessionStart)
 	}
+
+	// D-11 / 242ec0a: the leaf installed with the PreToolUse opt-in on, so
+	// codegraph's own PreToolUse handlers and guard must be gone, while the
+	// unrelated block planted under the same "Bash" matcher survives
+	// deep-equal to what was planted.
+	wantPreCmd, err := claudePreToolHookCommand(loc)
+	if err != nil {
+		t.Fatalf("claudePreToolHookCommand: %v", err)
+	}
+	guardPath, err := claudePreToolGuardPath(loc)
+	if err != nil {
+		t.Fatalf("claudePreToolGuardPath: %v", err)
+	}
+	if _, err := os.Lstat(guardPath); !os.IsNotExist(err) {
+		t.Fatalf("PreToolUse guard %s still present after uninstall (Lstat err %v)", guardPath, err)
+	}
+	var planted any
+	if err := json.Unmarshal([]byte(ownershipUnrelatedPreToolUseBlock), &planted); err != nil {
+		t.Fatalf("unmarshal planted PreToolUse block: %v", err)
+	}
+	preToolUse, _ := hooks["PreToolUse"].([]any)
+	sawUnrelatedPre := false
+	for _, e := range preToolUse {
+		if jsonDeepEqual(e, planted) {
+			sawUnrelatedPre = true
+		}
+		entry, _ := e.(map[string]any)
+		entries, _ := entry["hooks"].([]any)
+		for _, h := range entries {
+			hObj, _ := h.(map[string]any)
+			if cmd, _ := hObj["command"].(string); cmd == wantPreCmd {
+				t.Fatalf("codegraph's own PreToolUse command %q still present after uninstall", wantPreCmd)
+			}
+		}
+	}
+	if !sawUnrelatedPre {
+		t.Fatalf("unrelated same-matcher PreToolUse block missing or changed after uninstall: %#v", preToolUse)
+	}
 }
 
 // runOwnershipLeaf executes one <target>/<loc>/<variant> leaf of
@@ -469,7 +516,10 @@ func runOwnershipLeaf(t *testing.T, target AgentTarget, loc Location, variant st
 	}
 
 	caps := target.Capabilities()
-	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+	// D-11: every leaf installs with the PreToolUse opt-in on (a no-op for
+	// every target but Claude), so the Claude leaves exercise the opt-in
+	// event's exact-identity ownership (242ec0a) as well as SessionStart's.
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn}
 	plant := plantForeignFixtures(t, caps, loc, home, variant == "foreign-codegraph-dir")
 
 	if target.ID() == Claude && caps.Supports(loc) {

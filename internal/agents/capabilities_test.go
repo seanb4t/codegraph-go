@@ -282,6 +282,9 @@ func expectedDeclaredPaths(t *testing.T, caps Capabilities, loc Location) []stri
 		if scriptPath, err := claudeHooksScriptPath(loc); err == nil {
 			want = append(want, scriptPath)
 		}
+		if guardPath, err := claudePreToolGuardPath(loc); err == nil {
+			want = append(want, guardPath)
+		}
 	}
 	if caps.SkillDirs != nil {
 		if dirs, err := caps.SkillDirs(loc); err == nil && len(dirs) > 0 {
@@ -383,7 +386,7 @@ func TestCapabilitiesMatchInstallWrites(t *testing.T) {
 				t.Chdir(t.TempDir())
 				leaves++
 
-				result := target.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+				result := target.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
 				if len(result.Errors) != 0 {
 					t.Fatalf("Install(%s) returned errors: %v", loc, result.Errors)
 				}

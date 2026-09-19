@@ -949,8 +949,8 @@ func TestClaude_DescribePaths_IncludesManifest(t *testing.T) {
 			}
 			seen[p] = true
 		}
-		if len(paths) != 6 {
-			t.Fatalf("DescribePaths(%s) expected 6 paths, got %d: %v", loc, len(paths), paths)
+		if len(paths) != 7 {
+			t.Fatalf("DescribePaths(%s) expected 7 paths, got %d: %v", loc, len(paths), paths)
 		}
 	}
 }
