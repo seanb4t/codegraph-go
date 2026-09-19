@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 7
 current_phase_name: Codex Parity
 status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-09-19T19:59:38.716Z"
+stopped_at: Completed 07-08-PLAN.md
+last_updated: "2026-09-19T21:01:23.209Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 7 execution started
-state_head: eb45c8506f0f925bf350f8e4932d30aa7a9e016e
+state_head: 32ba6aa49255f0c1afc7391d0d912919e9bf2e22
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 49
+  completed_plans: 50
   percent: 86
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 ## Current Position
 
 Phase: 7 (Codex Parity) — EXECUTING
-Plan: 8 of 11
+Plan: 9 of 11
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 7 execution started
 
@@ -180,6 +180,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 7 P05 | ~55min | 3 tasks | 11 files |
 | Phase 07 P06 | ~25min | 3 tasks | 7 files |
 | Phase 07 P07 | ~40min | 3 tasks | 14 files |
+| Phase 07 P08 | ~50min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -421,6 +422,8 @@ Standing decisions that outlive every milestone:
 - [Phase 07]: [Phase 07-06]: instructionsRequestedElsewhere derives the shared-AGENTS.md requester set from AllTargets() on every Uninstall call — never a stored index — so codex/opencode's shared repo-root AGENTS.md is kept while a sibling still uses it and restored byte-for-byte only once the last sharer is gone
 - [Phase 7]: [Phase 07]: 07-07: TestCodexPreToolUseGuard's PWD-based negative control for D-22 needed a redesign -- faking $PWD alone does nothing since bash re-derives it from getcwd() when mismatched; fixed by making the child process's actual OS-level cwd itself wrong for local guard subtests (commits 5c930bb5, 602e30a3)
 - [Phase 7]: [Phase 07]: 07-07: capabilities.go's HookFiles switch generalized to wrap errHookFilesUndeclared for ANY unmapped HookMechanism (not just codex-json specifically), now that codex-json itself is a real declared case
+- [Phase 7]: [Phase 7]: 07-08: Codex's PreToolUse stickiness evidence is its own exact-identity hooks.json group, read directly via hasOwnHookBlock (D-23) -- unlike Claude's manifest-backed preToolNudgeEvidenced, Codex has no manifest concept for this opt-in, so Keep probes hooks.json unconditionally rather than gating on a manifest record.
+- [Phase 7]: [Phase 7]: 07-08: assertOwnEntriesGoneAfterUninstall's new Codex branch was moved out of that shared helper into runOwnershipLeaf after it broke TestOwnershipSharedInstructions -- that test calls the shared helper for Codex without ever planting the foreign ^Bash$ group this plan's guard checks for, so the assertion belongs only at the one call site that actually plants it.
 
 ### Pending Todos
 
@@ -574,8 +577,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T19:59:38.664Z
-Stopped at: Completed 07-07-PLAN.md
+Last session: 2026-09-19T21:01:04.713Z
+Stopped at: Completed 07-08-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
