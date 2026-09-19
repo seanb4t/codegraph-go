@@ -165,15 +165,39 @@ type tomlLine struct {
 	offset int
 }
 
+// tomlBOM is the UTF-8 byte-order mark (U+FEFF, EF BB BF). A Windows-
+// authored config.toml commonly opens with one (CR-01, 07-REVIEW.md).
+const tomlBOM = "\xef\xbb\xbf"
+
 // splitTOMLLines splits content into lines by "\n" only, recording each
 // line's starting byte offset. Unlike strings.Split, a trailing "\n" at
 // EOF produces no phantom empty final line — the empty element after a
 // final newline is not a line (D-07 interfaces note) — so back-off
 // scanning from EOF never mistakes "nothing after the last newline" for
 // an extra blank line.
+//
+// When content's absolute first three bytes are a UTF-8 BOM, that BOM is
+// emitted as its own synthetic zero-th "line" (offset 0, the 3 BOM bytes,
+// no trailing newline) rather than folded into whatever real line follows
+// it (CR-01, 07-REVIEW.md). This is the single point of entry
+// findTOMLTableRange, tomlTableConflict and tomlBoolSetting all funnel
+// through, so a BOM never defeats isTOMLHeaderLine's recognition of a
+// header that immediately follows it — the common shape for a project-
+// local Codex config.toml holding only the [mcp_servers.*] tables. The
+// BOM pseudo-line is never itself eligible to be a header (isTOMLHeaderLine
+// requires a "[" prefix) or to be spliced over, and every other line's
+// offset is unaffected, so content[start:end] byte-slicing elsewhere in
+// this file stays correct. Only content's true, absolute leading BOM is
+// special-cased this way — a BOM byte sequence appearing on any later
+// line is ordinary line content, never treated as leading whitespace to
+// strip before recognizing a header.
 func splitTOMLLines(content string) []tomlLine {
 	var lines []tomlLine
 	offset := 0
+	if strings.HasPrefix(content, tomlBOM) {
+		lines = append(lines, tomlLine{text: tomlBOM, offset: 0})
+		offset = len(tomlBOM)
+	}
 	for {
 		idx := strings.IndexByte(content[offset:], '\n')
 		if idx == -1 {
