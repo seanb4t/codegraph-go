@@ -374,3 +374,313 @@ diff).
 
 **Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/mcp/ -count=1 -run 'TestPreToolUseNudgeTextNamesOnlyRealTools$'`
 → `ok  	github.com/seanb4t/codegraph-go/internal/mcp` (green).
+
+---
+
+## Family (c1) — D-06: a SessionKey that ignores agentID turns the per-agent tests RED
+
+**Test/guard:** `TestSessionKey` and `TestGate_SeparateKeysForMainAndSubagent`
+(`internal/nudge/cooldown_test.go`).
+
+**What are we testing, and why?** Whether the suite catches a subagent sharing the main
+thread's cooldown. D-06 gives every subagent its own key because it starts with a fresh
+context and never saw the main thread's nudge.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/nudge/cooldown.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/return sessionID \+ "\\x00" \+ agentID, true/return sessionID + "\\x00" + "main", true/' internal/nudge/cooldown.go`:
+
+```diff
+@@ -39,7 +39,7 @@ func SessionKey(sessionID, agentID string) (key string, ok bool) {
+ 	if agentID == "" {
+ 		agentID = "main"
+ 	}
+-	return sessionID + "\x00" + agentID, true
++	return sessionID + "\x00" + "main", true
+ }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/nudge/ -count=1
+-run 'TestSessionKey$|TestGate_SeparateKeysForMainAndSubagent$' -v`, `=== RUN` lines dropped,
+exit code appended):
+
+```
+    cooldown_test.go:54: SessionKey("s", "a1") = ("s\x00main", true), want ("s\x00a1", true)
+    cooldown_test.go:60: SessionKey(s, "") == SessionKey(s, a1) == "s\x00main"; the main thread and a subagent must not share a key (D-06)
+--- FAIL: TestSessionKey (0.00s)
+    cooldown_test.go:129: subagent at T: Due = false, want true (a subagent has its own cooldown, D-06)
+--- FAIL: TestGate_SeparateKeysForMainAndSubagent (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/nudge	0.098s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** exit 1 (only the planted diff). **Revert:** `git checkout -- internal/nudge/cooldown.go`,
+then `git diff --quiet -- internal/nudge/cooldown.go` — exit 0 (byte-clean).
+
+**Green control:** same command without `-v` → `ok  	github.com/seanb4t/codegraph-go/internal/nudge	0.081s`.
+
+---
+
+## Family (c2) — D-08: a link-following read layer turns TestSentinel_ReadRefusesSymlink RED
+
+**Test/guard:** `TestSentinel_ReadRefusesSymlink` (`internal/nudge/cooldown_test.go`) — the read
+layer alone, so the record layer's own refusal cannot mask a regression here.
+
+**What are we testing, and why?** Whether the suite catches `checkSentinel` following a
+symlinked sentinel (T-06-12). A followed link reads the target's mtime and ownership, so a
+link planted by another user could steer the cooldown.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/nudge/cooldown.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/(func checkSentinel.*?)os\.Lstat\(path\)/$1os.Stat(path)/s' internal/nudge/cooldown.go`
+(scoped to `checkSentinel`; `Due`'s directory `Lstat` is untouched):
+
+```diff
+@@ -103,7 +103,7 @@ func sentinelName(key string) string {
+ func checkSentinel(path string, now time.Time) (due bool, err error) {
+-	info, err := os.Lstat(path)
++	info, err := os.Stat(path)
+ 	if errors.Is(err, fs.ErrNotExist) {
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/nudge/ -count=1
+-run 'TestSentinel_ReadRefusesSymlink$' -v`, `=== RUN` lines dropped, exit code appended):
+
+```
+    cooldown_test.go:180: checkSentinel(symlink) = (true, nil), want an error (D-08: refuse a symlinked sentinel)
+--- FAIL: TestSentinel_ReadRefusesSymlink (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/nudge	0.077s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** exit 1. **Revert:** `git checkout -- internal/nudge/cooldown.go`, then
+`git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/nudge	0.066s`.
+
+---
+
+## Family (c3) — D-08: an open without O_NOFOLLOW turns TestSentinel_RecordRefusesSymlink RED
+
+**Test/guard:** `TestSentinel_RecordRefusesSymlink` (`internal/nudge/cooldown_test.go`) — the
+record layer alone.
+
+**What are we testing, and why?** Whether the suite catches `recordFire` writing through a
+symlink: re-timing a victim file (T-06-12). `O_NOFOLLOW` is what makes the open fail
+atomically when a link is swapped in after the read layer's check.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/nudge/cooldown.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/\|syscall\.O_NOFOLLOW//' internal/nudge/cooldown.go`:
+
+```diff
+@@ -125,7 +125,7 @@ func checkSentinel(path string, now time.Time) (due bool, err error) {
+ func recordFire(path string, now time.Time) error {
+-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
++	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o600)
+ 	if err != nil {
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/nudge/ -count=1
+-run 'TestSentinel_RecordRefusesSymlink$' -v`, `=== RUN` lines dropped, exit code appended):
+
+```
+    cooldown_test.go:198: recordFire(symlink) = nil, want an error (D-08: never write through a symlink)
+    cooldown_test.go:205: victim mtime = 2026-09-19 08:00:00 -0400 EDT, want unchanged 2026-09-18 12:00:00 +0000 UTC
+--- FAIL: TestSentinel_RecordRefusesSymlink (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/nudge	0.088s
+FAIL
+exit=1
+```
+
+The victim's mtime moved to the injected clock (12:00 UTC = 08:00 EDT): the unguarded open
+followed the link and re-timed the victim.
+
+**Pre-revert gate:** exit 1. **Revert:** `git checkout -- internal/nudge/cooldown.go`, then
+`git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/nudge	0.058s`.
+
+---
+
+## Family (c4) — D-16: a returned error reaching cobra's exit-1 path turns the contract suite RED
+
+**Test/guard:** `TestHookPreToolUse_ForcedErrorContract` (`internal/cli/hook_pretooluse_test.go`)
+through `assertHookContract`.
+
+**What are we testing, and why?** Whether the suite catches `RunE` returning an error. Any
+non-nil error from `Execute()` reaches `cmd/codegraph/main.go`'s print-and-exit-1 path, which
+Claude Code surfaces as a hook error (D-01a, T-06-15). This is one of D-16's three named
+mutations.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/hook_pretooluse.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/("encoding\/json"\n)/$1\t"errors"\n/; s/(runHookPreToolUse\(cmd\.InOrStdin\(\), cmd\.OutOrStdout\(\), os\.Getenv\)\n\t\t\t)return nil/$1return errors.New("planted")/' internal/cli/hook_pretooluse.go`:
+
+```diff
+@@ -2,6 +2,7 @@ package cli
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"io"
+@@ -77,7 +78,7 @@ func newHookPreToolUseCmd() *cobra.Command {
+ 			defer func() { _ = recover() }()
+ 			runHookPreToolUse(cmd.InOrStdin(), cmd.OutOrStdout(), os.Getenv)
+-			return nil
++			return errors.New("planted")
+ 		},
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestHookPreToolUse_ForcedErrorContract$' -v`, `=== RUN` lines dropped, the message line
+repeated once per subtest shown once, exit code appended):
+
+```
+    hook_pretooluse_test.go:228: hook pretooluse returned planted, want nil (D-01a: never an error to cobra)
+--- FAIL: TestHookPreToolUse_ForcedErrorContract (0.01s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/no_stdin (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/malformed_json (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/oversized_input (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/max_size_input_fires (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/no_session_ids (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/env_session_only (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/stdin_session_only (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/non_pretooluse_event (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/unqualified_tool_touches_no_sentinel (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/unwritable_sentinel_base (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/symlinked_sentinel_dir (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.475s
+FAIL
+exit=1
+```
+
+All 11 subtests go RED: the error escapes on every path, silent or firing.
+
+**Pre-revert gate:** exit 1. **Revert:** `git checkout -- internal/cli/hook_pretooluse.go`, then
+`git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/cli	0.451s`.
+
+---
+
+## Family (c5) — D-16 / NUDGE-03: an emitted permissionDecision turns the firing subtests RED
+
+**Test/guard:** `TestHookPreToolUse_ForcedErrorContract` through `assertHookContract`'s
+forbidden-key scan and the pinned oracle.
+
+**What are we testing, and why?** Whether the suite catches the output gaining a decision key.
+The nudge is additionalContext-only; a `permissionDecision` of `allow` would bypass the
+user's permission prompts (T-06-16). This is one of D-16's three named mutations.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/hook_pretooluse.go` — exit 0 (clean).
+
+**Mutation applied:** ``perl -0pi -e 's/(\tAdditionalContext string `json:"additionalContext"`\n)/$1\tPermissionDecision string `json:"permissionDecision"`\n/; s/(\t\tAdditionalContext: nudge\.Text,\n)/$1\t\tPermissionDecision: "allow",\n/' internal/cli/hook_pretooluse.go``:
+
+```diff
+@@ -42,6 +42,7 @@ type claudePreToolUseInput struct {
+ type claudeHookSpecificOutput struct {
+ 	HookEventName     string `json:"hookEventName"`
+ 	AdditionalContext string `json:"additionalContext"`
++	PermissionDecision string `json:"permissionDecision"`
+ }
+@@ -138,6 +139,7 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string)
+ 		HookEventName:     "PreToolUse",
+ 		AdditionalContext: nudge.Text,
++		PermissionDecision: "allow",
+ 	}})
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestHookPreToolUse_ForcedErrorContract$' -v`, `=== RUN` lines dropped, the three-line
+message group repeated per firing subtest shown once, exit code appended):
+
+```
+    hook_pretooluse_test.go:228: stdout = "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"This repo has a codegraph index: codegraph_explore (CLI: `codegraph explore`) returns the matching symbols' source and call paths for where-is-X and how-does-Y questions.\",\"permissionDecision\":\"allow\"}}\n", want empty or exactly the pinned fire line
+    hook_pretooluse_test.go:228: stdout carries permissionDecision; the nudge never decides (NUDGE-03): "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"This repo has a codegraph index: codegraph_explore (CLI: `codegraph explore`) returns the matching symbols' source and call paths for where-is-X and how-does-Y questions.\",\"permissionDecision\":\"allow\"}}\n"
+    hook_pretooluse_test.go:230: stdout = "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"This repo has a codegraph index: codegraph_explore (CLI: `codegraph explore`) returns the matching symbols' source and call paths for where-is-X and how-does-Y questions.\",\"permissionDecision\":\"allow\"}}\n", want "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"This repo has a codegraph index: codegraph_explore (CLI: `codegraph explore`) returns the matching symbols' source and call paths for where-is-X and how-does-Y questions.\"}}\n"
+--- FAIL: TestHookPreToolUse_ForcedErrorContract (0.01s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/no_stdin (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/malformed_json (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/oversized_input (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/max_size_input_fires (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/no_session_ids (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/env_session_only (0.00s)
+    --- FAIL: TestHookPreToolUse_ForcedErrorContract/stdin_session_only (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/non_pretooluse_event (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/unqualified_tool_touches_no_sentinel (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/unwritable_sentinel_base (0.00s)
+    --- PASS: TestHookPreToolUse_ForcedErrorContract/symlinked_sentinel_dir (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.437s
+FAIL
+exit=1
+```
+
+The three firing subtests go RED; the eight silent ones print nothing, so they correctly stay
+green.
+
+**Pre-revert gate:** exit 1. **Revert:** `git checkout -- internal/cli/hook_pretooluse.go`, then
+`git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/cli	0.414s`.
+
+---
+
+## Family (c6) — D-01a / D-16: removing the recover lets a forced panic crash the test binary
+
+**Test/guard:** `TestHookPreToolUse_PanicIsRecovered` (`internal/cli/hook_pretooluse_test.go`),
+which swaps the `hookQualifies` seam for a func that panics.
+
+**What are we testing, and why?** Whether the suite catches the loss of RunE's deferred
+recover. Without it, any panic inside the subcommand crashes the process with exit 2 and a
+stack trace on stderr, which Claude Code surfaces as a hook error (T-06-15).
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/hook_pretooluse.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/\t\t\tdefer func\(\) \{ _ = recover\(\) \}\(\)\n//' internal/cli/hook_pretooluse.go`:
+
+```diff
+@@ -75,7 +75,6 @@ func newHookPreToolUseCmd() *cobra.Command {
+ 		RunE: func(cmd *cobra.Command, args []string) error {
+-			defer func() { _ = recover() }()
+ 			runHookPreToolUse(cmd.InOrStdin(), cmd.OutOrStdout(), os.Getenv)
+ 			return nil
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestHookPreToolUse_PanicIsRecovered$' -v`, the goroutine trace cut after the frames that
+show the panic's path, module-cache paths abbreviated to `.../`, exit code appended):
+
+```
+=== RUN   TestHookPreToolUse_PanicIsRecovered
+--- FAIL: TestHookPreToolUse_PanicIsRecovered (0.00s)
+panic: forced panic in the classifier [recovered, repanicked]
+
+goroutine 24 [running]:
+...
+github.com/seanb4t/codegraph-go/internal/cli.TestHookPreToolUse_PanicIsRecovered.func2({0x39b0c4916c00?, 0x6b?}, {0x200?, 0x10878c7c0?})
+	/Volumes/Code/github.com/seanb4t/codegraph-go/internal/cli/hook_pretooluse_test.go:323 +0x2c
+github.com/seanb4t/codegraph-go/internal/cli.runHookPreToolUse({0x108b30d80, 0x39b0c49e6300}, {0x108b30d60, 0x39b0c49e4f00}, 0x108b20a60)
+	/Volumes/Code/github.com/seanb4t/codegraph-go/internal/cli/hook_pretooluse.go:120 +0x1f8
+github.com/seanb4t/codegraph-go/internal/cli.newHookCmd.newHookPreToolUseCmd.func1(0x39b0c49f4908, {0x108d0ea20?, 0x4?, 0x105d770a3?})
+	/Volumes/Code/github.com/seanb4t/codegraph-go/internal/cli/hook_pretooluse.go:78 +0x4c
+github.com/spf13/cobra.(*Command).execute(0x39b0c49f4908, {0x108d0ea20, 0x0, 0x0})
+	.../github.com/spf13/cobra@v1.10.2/command.go:1015 +0x814
+...
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.456s
+FAIL
+exit=1
+```
+
+The panic escapes `Execute()` and kills the test binary.
+
+**Pre-revert gate:** exit 1. **Revert:** `git checkout -- internal/cli/hook_pretooluse.go`, then
+`git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** → `ok  	github.com/seanb4t/codegraph-go/internal/cli	0.438s`.
