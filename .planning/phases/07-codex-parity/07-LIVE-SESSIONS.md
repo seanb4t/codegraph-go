@@ -610,7 +610,7 @@ Per D-02/D-04, this evidence is gathered by the **orchestrator**, never by an ex
 subagent — a backgrounded subagent cannot reliably drive another pane's TTY (the 05-06/06-06
 precedent, carried into CODEX-01 above). Task 1 (this section's scaffold) is executor work: it
 builds the scratch, runs the real HEAD-binary installs, plants the A4/D-23 probe, and writes the
-16-line PENDING skeleton below — nothing here is a live-session claim yet. Tasks 2 and 3 are
+16-line verdict skeleton below (each line placeholder until filled). Tasks 2 and 3 are
 ORCHESTRATOR work in a sibling Herdr pane against a real Codex TUI plus scripted `codex exec
 --json -C <repo>` runs, all under the scratch environment `HOME=$S2/home CODEX_HOME=$S2/home/.codex`
 (plus `XDG_CONFIG_HOME=$S2/home/.config` for codegraph runs).
@@ -665,7 +665,7 @@ $ id -u
 ```
 
 tmux: not installed — local tmux evidence skipped by maintainer decision 2026-09-19 (#75). The
-`Picker tmux re-run after flip` line below is left `PENDING` for the orchestrator to fill with the
+`Picker tmux re-run after flip` line below was left as a placeholder for the orchestrator to fill with the
 not-run decision; follow-up tracked as GitHub issue #75.
 
 ### Scaffold
@@ -783,7 +783,10 @@ $S2/indexed/.agents/skills/codegraph/SKILL.md   present
 
 | key | fire timestamps | gaps |
 |-----|------------------|------|
-| _(empty — filled by Task 2/3)_ | | |
+| indexed TUI main thread (session 01a0bb82-c64c…, agent `main`; sentinel 5b155476…) | 21:16:51.323Z (`rg -n Alpha .`), 21:18:10.673Z (`find . -name '*.go'`) | 79.4 s between fires; `grep -rn Beta .` at 21:17:09 (18 s after fire 1) was silent |
+| indexed TUI subagent (same session, agent_id 01a0bb89-42d1…, agent_type default; sentinel cfd951d0…) | 17:18:53 local (`rg -n Gamma .`, its first matched call) | first fire for its own key while the main thread was 43 s into its cooldown |
+| unindexed TUI (session 01a0bb83-8086…) | none | 0 fires while the probe captured the `rg -n Alpha .` call |
+| L5 exec session (01a0bb83-dec3…) | none | 0 fires: no Bash call started with grep/rg/find |
 
 ### Task 2 evidence (orchestrator, 2026-09-19, codex-cli 0.155.0)
 
@@ -854,21 +857,86 @@ probe files written this session: a4-1789852382-61975.json, a4-1789852386-62280.
 
 Positive control for the searches: the skill-listing search found `- codegraph: Use when` x2 in this rollout and x2 in the B2 rollout; the pinned-substring search finds the string in `internal/nudge/text.go` and in the 06-06 fire logs.
 
+### Task 3 evidence (orchestrator, 2026-09-19)
+
+**T1: L6 in one TUI session** (indexed, rollout `01a0bb82-c64c-…`; stale sentinels cleared before turn 1). Fires are counted by the pinned substring in the rollout, and every match is a `developer` message whose `content_item_kinds` is `["hooks.additional_context"]`. This is Codex's own record of delivering the hook's `additionalContext` to the model.
+
+```
+turn 1  Run exactly this shell command and nothing else: rg -n Alpha .
+        probe a4-1789852611-82814.json 17:16:51  cmd "rg -n Alpha ."
+        rollout 21:16:51.323Z developer message: "This repo has a codegraph index: codegraph_explore (CLI: `codegraph explore`) returns the matching symbols' source and call paths for where-is-X and how-does-Y questions."   content_item_kinds ["hooks.additional_context"]
+        sentinel 5b155476… created 17:16:51
+turn 2  grep -rn Beta .   probe a4-1789852629-84349.json 17:17:09 (18 s later)   rollout: no new match   sentinel mtime unchanged 17:16:51
+turn 3  find . -name '*.go'   (sent after an until-loop confirmed the sentinel was ≥66 s old)
+        probe a4-1789852690-89947.json 17:18:10 (79 s after fire 1)   rollout 21:18:10.673Z: second hooks.additional_context developer message   sentinel mtime 17:18:10
+$ rg -c -F "returns the matching symbols' source and call paths" <rollout>   -> 2
+hook errors: rg -i 'hook error|blocked|codegraph-pretooluse' over both rollouts and the pane text -> none (positive control: the command string appears in B3's hook listing)
+```
+
+**Un-indexed control** (unindexed TUI, rollout `01a0bb83-8086-…`): prompt `rg -n Alpha .`; probe `a4-1789852716-92414.json 17:18:36` with `cwd /private/tmp/07-live2/unindexed` proves both hooks ran; pinned substring 0; `hooks.additional_context` items 0.
+
+**T2: A4 via a subagent** (indexed TUI: `Use a subagent to run exactly this shell command and report its output: rg -n Gamma .`). The TUI showed "Waiting for agents / Completed `/root/run_gamma`". The probe captured the subagent's call:
+
+```
+a4-1789852733-94273.json: {"tool_name":"Bash","tool_input":{"command":"rg -n Gamma ."},
+  "session_id":"01a0bb82-c64c-77d3-a1fd-1d1fd4ad07b6",  (the parent's session)
+  "agent_id":"01a0bb89-42d1-7e13-ab33-6e2459d10c0e","agent_type":"default", "turn_id":"01a0bb89-4301…"}
+extra keys vs the main thread: ["agent_id","agent_type"]
+sentinel dir afterwards: 5b155476… (17:18:10, main) and cfd951d0… (17:18:53, the subagent key) — a second key, so the subagent got its own first fire 43 s into the main thread's cooldown
+```
+
+Research A4 (no agent_id documented for PreToolUse) is resolved: subagent calls DO carry `agent_id` and `agent_type`; the main thread carries neither. D-21's `session_id` + `agent_id`, else `main`, keying holds on Codex without change.
+
+**T3: D-23 position shift** (`T3-d23-install.txt`, `T3-d23-after-skip.txt`, `T3-d23-review.txt`)
+
+```
+$ codegraph install --target codex --location local --pretool-nudge=false --yes   (in $S2/indexed)
+  removed: .codex/hooks/codegraph-pretooluse.sh
+  removed: .codex/hooks.json          <- the codegraph ENTRY was removed; the file was rewritten with the foreign probe group kept (ActionRemoved's documented meaning; advisory: the label reads as if the file went away)
+hooks.json after: ["'/private/tmp/07-live2/probes/a4-probe.sh'"]   (the probe moved from index 1 to index 0; its bytes are unchanged)
+codex startup:  Hooks need review / 1 hook is new or changed.
+/hooks review:  [!] Hook 1 · modified   Command '/private/tmp/07-live2/probes/a4-probe.sh'   Trust  Modified since last trusted - review required
+```
+
+Trust is position-keyed (`…:pre_tool_use:1:0` was recorded; the same hook is now `:0:0`), so removing a group that precedes a foreign one re-flags that foreign hook. codegraph's group is appended last (D-23), so its removal never shifts a foreign group. The probe was left untrusted (it is not ours to re-trust).
+
+**T4: uninstall** (`T4-uninstall-local.txt`, `T4-uninstall-global.txt`)
+
+```
+local:  removed .codex/config.toml, AGENTS.md, .agents/skills/codegraph/{.codegraph-manifest.json,SKILL.md}; not-found .codex/hooks/codegraph-pretooluse.sh, .codex/hooks.json (already removed in T3)
+global: removed home/.codex/config.toml, home/.codex/AGENTS.md, home/.agents/skills/codegraph/{manifest,SKILL.md}; not-found the hook files (never installed globally)
+indexed after: .agents (empty) .codegraph .codex (hooks/ empty, hooks.json = probe group only) .git go.mod main.go pkga pkgb skip_linux.go
+  config.toml absent; AGENTS.md gone (it held only our block); shared skill gone; probe group intact
+global after: no [mcp_servers.codegraph]; AGENTS.md gone; Codex's own 7 [projects]/[hooks.state] tables kept
+advisory (carried todo): the emptied .agents/ and .codex/hooks/ directories are left behind
+```
+
+**T5: tmux re-run.** Not run: maintainer decision 2026-09-19 (tmux retired, replaced by herdr; issue #75). The model-level footprint guard from 07-03 (Families c1/c2) is the FIX-03 evidence at HEAD; CI's `tmux-e2e` job is the only real-PTY run.
+
+**T6: L7** (`transcripts/postflight.sha` vs the CODEX-01 pre-flight)
+
+```
+same b4077b8a786230575935c44cfa85c17da7ca2bf3f1386675c8c6b22d322dbb17   ~/.codex/config.toml
+same e0ad2381a6b1bf7933438d7946914737be14ca398ae41090298183c21fb49a99   ~/.codex/hooks.json
+same 54e268bda66adfb9c0d17a0eb73235a452f390b68d83ba1eea1dceada5379982   ~/.codex/AGENTS.md
+same e711379d68094bffbd5d997cccd172bb43ec3c8fa9276e06c67a59b4ce647644   ~/.agents/skills/codegraph/SKILL.md
+```
+
 ### CODEX-05/06 verdicts
 
 L1 post-flip both scopes (codegraph-installed): PASS
 L5 fresh session reaches for codegraph unprompted: PASS
-L6 nudge fires once then cools down; un-indexed 0 fires: PENDING
-L7 real HOME unchanged (CODEX-05/06): PENDING
+L6 nudge fires once then cools down; un-indexed 0 fires: PASS
+L7 real HOME unchanged (CODEX-05/06): PASS
 Untrusted hook skipped before /hooks trust: yes (B2: 0 pinned substrings and no a4-*.json for the turn; B5 wrote two a4-*.json per session once trusted)
-A4 PreToolUse stdin carries a subagent id: PENDING
-tool_input.command type: PENDING
-D-23 removing our group re-flags later foreign hooks: PENDING
+A4 PreToolUse stdin carries a subagent id: yes (agent_id "01a0bb89-42d1-7e13-ab33-6e2459d10c0e" (a UUIDv7 string) and agent_type "default", alongside the parent session_id; absent on the main thread)
+tool_input.command type: string ("rg -n Gamma ." in the subagent probe; "rg -n Alpha ." on the main thread)
+D-23 removing our group re-flags later foreign hooks: yes (/hooks showed "Hook 1 · modified — Modified since last trusted - review required" for the byte-identical probe after it shifted from index 1 to 0)
 Negative space (grep/rg/find runs in the L5 session): 0 — the only commands were `cat …SKILL.md && codegraph explore "…"` and `codegraph callers Alpha && codegraph callers Run`
-Matched Bash search calls: PENDING
-Fires: PENDING
+Matched Bash search calls: 5
+Fires: 3
 Uptake: the agent opened with "I'm using the CodeGraph skill because this repository is indexed", read SKILL.md and ran `codegraph explore` in its FIRST Bash call, then `codegraph callers`; no nudge fire preceded the codegraph call (0 fires: no qualifying search was ever run); the MCP tool was loaded but the CLI path was chosen
-Uninstall leaves the scratch repo clean: PENDING
-Picker tmux re-run after flip: PENDING
-CODEX-05 live verdict: PENDING
-CODEX-06 verdict: PENDING
+Uninstall leaves the scratch repo clean: PASS
+Picker tmux re-run after flip: not run (maintainer decision 2026-09-19: tmux retired, replaced by herdr; local tmux evidence skipped; CI tmux-e2e is the only real-PTY run; issue #75)
+CODEX-05 live verdict: PASS
+CODEX-06 verdict: PASS
