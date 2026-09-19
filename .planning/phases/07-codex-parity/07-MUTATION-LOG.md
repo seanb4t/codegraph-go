@@ -626,3 +626,271 @@ Full-package re-check after both reverts: `GOTOOLCHAIN=go1.26.6 go test ./intern
 
 Maintainer decision: skip local tmux evidence for FIX-03 (c3 and the 07-09 re-run); CI tmux-e2e is the only real-PTY run; see #75.
 Family (c3) verdict: not run (maintainer decision 2026-09-19); model-level guard c1/c2 RED→GREEN stands.
+
+---
+
+## Family (d1) — D-09: reverting the Scopes literal to global-only turns TestCapabilitiesDeclared/codex and TestCodex_SupportsLocation_GlobalAndLocal RED
+
+**Test/guard:** `TestCapabilitiesDeclared` (codex row, `internal/agents/capabilities_test.go`)
+and `TestCodex_SupportsLocation_GlobalAndLocal` (`internal/agents/codex_test.go`).
+
+**What are we testing, and why?** Whether the guards catch the scope flip being silently
+reverted — Codex's `Capabilities().Scopes` collapsing back to `{LocationGlobal}` — since every
+other Codex behavior this plan added (local install, the trust Note, the shared skill, D-15's
+read-only dirs) is reachable only once `SupportsLocation(LocationLocal)` is true.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -pi -e 's/Scopes:       \[\]Location\{LocationGlobal, LocationLocal\},/Scopes:       []Location{LocationGlobal},/' internal/agents/codex.go`:
+
+```diff
+--- a/internal/agents/codex.go
++++ b/internal/agents/codex.go
+@@ -47,7 +47,7 @@ func (t codexTarget) SupportsLocation(loc Location) bool {
+  // hooks yet (07-07 adds codex-json).
+  func (codexTarget) Capabilities() Capabilities {
+  	return Capabilities{
+-		Scopes:       []Location{LocationGlobal, LocationLocal},
++		Scopes:       []Location{LocationGlobal},
+  		ConfigFormat: ConfigFormatTOML,
+  		Hooks:        HooksNone,
+  		MCPConfig:    codexConfigPath,
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodex_SupportsLocation_GlobalAndLocal$|TestCapabilitiesDeclared$' -v`, exit code
+appended):
+
+```
+=== RUN   TestCapabilitiesDeclared
+=== RUN   TestCapabilitiesDeclared/antigravity
+=== RUN   TestCapabilitiesDeclared/claude
+=== RUN   TestCapabilitiesDeclared/codex
+    capabilities_test.go:186: Scopes = [global], want [global local]
+=== RUN   TestCapabilitiesDeclared/cursor
+=== RUN   TestCapabilitiesDeclared/gemini
+=== RUN   TestCapabilitiesDeclared/hermes
+=== RUN   TestCapabilitiesDeclared/kiro
+=== RUN   TestCapabilitiesDeclared/opencode
+--- FAIL: TestCapabilitiesDeclared (0.00s)
+    --- PASS: TestCapabilitiesDeclared/antigravity (0.00s)
+    --- PASS: TestCapabilitiesDeclared/claude (0.00s)
+    --- FAIL: TestCapabilitiesDeclared/codex (0.00s)
+    --- PASS: TestCapabilitiesDeclared/cursor (0.00s)
+    --- PASS: TestCapabilitiesDeclared/gemini (0.00s)
+    --- PASS: TestCapabilitiesDeclared/hermes (0.00s)
+    --- PASS: TestCapabilitiesDeclared/kiro (0.00s)
+    --- PASS: TestCapabilitiesDeclared/opencode (0.00s)
+=== RUN   TestCodex_SupportsLocation_GlobalAndLocal
+    codex_test.go:25: codex should support local (D-09 scope flip)
+--- FAIL: TestCodex_SupportsLocation_GlobalAndLocal (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.121s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/codex.go`, then
+`git diff --quiet -- internal/agents/codex.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	2.674s`.
+
+---
+
+## Family (d2) — D-09/D-14: deleting the `installDeclaredSkill` call turns TestCapabilitiesMatchInstallWrites/codex and TestCodex_Install_Local_WritesConfigInstructionsAndSkill RED
+
+**Test/guard:** `TestCapabilitiesMatchInstallWrites` (`codex/global` and `codex/local` leaves,
+`internal/agents/capabilities_test.go`) and `TestCodex_Install_Local_WritesConfigInstructionsAndSkill`
+(`internal/agents/codex_test.go`).
+
+**What are we testing, and why?** Whether the guards catch Codex's `Install` silently dropping
+the shared skill-package write — the exact regression shape the plan's own precondition names
+(`installDeclaredSkill(&result, t, loc)` deleted from `Install`), leaving config.toml and
+AGENTS.md written but the declared skill directory (`DescribePaths`) never populated.
+
+**Note on the plan's own precondition check (accuracy over prediction):** the plan's `<verify>`
+names a precondition of `rg -c -F 'installDeclaredSkill(&result, t, loc)' internal/agents/codex.go`
+`= "1"` before planting. Run literally, this returns **2**, not 1 — `uninstallDeclaredSkill(&result,
+t, loc)` on a different line also matches the literal substring `installDeclaredSkill(&result, t,
+loc)`, since "uninstall" contains "install" as a substring (`un` + `install...`). This is a bug in
+the plan's own grep pattern (a substring collision), not a real second call site — confirmed with a
+corrected pattern: `rg -c -P '(?<!un)installDeclaredSkill\(&result, t, loc\)' internal/agents/codex.go`
+→ `1`. The actual perl mutation below is unaffected by this: its pattern requires
+`\n\s*installDeclaredSkill\(&result, t, loc\)\n` (whitespace only before the call), which cannot
+match `\tuninstallDeclaredSkill(...)` since `un` is not whitespace — confirmed by the diff below
+touching exactly the one call site in `Install`, `uninstallDeclaredSkill` in `Uninstall` untouched.
+Recorded per plan-authored-verify-assertion guidance: verify the substance a different way and
+record the deviation, rather than editing the check to force a match it does not have.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/\n\s*installDeclaredSkill\(&result, t, loc\)\n/\n/'
+internal/agents/codex.go`:
+
+```diff
+--- a/internal/agents/codex.go
++++ b/internal/agents/codex.go
+@@ -215,8 +215,6 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
+  		recordFile(&result, instrPath, fr, err)
+  	}
+ 
+-	installDeclaredSkill(&result, t, loc)
+-
+  	if note, err := codexTrustNote(loc); err != nil {
+  		result.Errors = append(result.Errors, fmt.Errorf("resolve codex trust note: %w", err))
+  	} else if note != "" {
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodex_Install_Local_WritesConfigInstructionsAndSkill$|TestCapabilitiesMatchInstallWrites$'
+-v`, `=== RUN` lines for unaffected leaves dropped, exit code appended):
+
+```
+=== RUN   TestCapabilitiesMatchInstallWrites/codex/global
+    capabilities_test.go:413: declared path ".../.agents/skills/codegraph/SKILL.md" was not among Install's created/updated/unchanged files: [{.../.codex/config.toml created} {.../.codex/AGENTS.md created}]
+    capabilities_test.go:413: declared path ".../.agents/skills/codegraph/.codegraph-manifest.json" was not among Install's created/updated/unchanged files: [{.../.codex/config.toml created} {.../.codex/AGENTS.md created}]
+=== RUN   TestCapabilitiesMatchInstallWrites/codex/local
+    capabilities_test.go:413: declared path ".agents/skills/codegraph/SKILL.md" was not among Install's created/updated/unchanged files: [{.codex/config.toml created} {AGENTS.md created}]
+    capabilities_test.go:413: declared path ".agents/skills/codegraph/.codegraph-manifest.json" was not among Install's created/updated/unchanged files: [{.codex/config.toml created} {AGENTS.md created}]
+--- FAIL: TestCapabilitiesMatchInstallWrites (0.03s)
+    --- FAIL: TestCapabilitiesMatchInstallWrites/codex/global (0.00s)
+    --- FAIL: TestCapabilitiesMatchInstallWrites/codex/local (0.00s)
+=== RUN   TestCodex_Install_Local_WritesConfigInstructionsAndSkill
+    codex_test.go:60: expected shared skill SKILL.md at .../.agents/skills/codegraph/SKILL.md
+--- FAIL: TestCodex_Install_Local_WritesConfigInstructionsAndSkill (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.108s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/codex.go`, then
+`git diff --quiet -- internal/agents/codex.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	2.674s`.
+
+---
+
+## Family (d3) — D-07: disabling Install's `tomlTableConflict` check turns TestCodex_Install_RefusesConflictingCodegraphTable RED
+
+**Test/guard:** `TestCodex_Install_RefusesConflictingCodegraphTable` (`internal/agents/codex_test.go`).
+
+**What are we testing, and why?** Whether the guard catches `Install` silently skipping the D-07
+conflict check it added on top of `spliceTOMLTable`'s own internal (silent, no-error) conflict
+handling — without the explicit check, an existing conflicting `codegraph` definition produces
+`ActionUnchanged` with no error, instead of a named, visible failure.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex.go` — exit 0 (clean).
+
+**Mutation applied:** the `if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {`
+guard's condition replaced with an unreachable `if false {` (preserving `cerr`'s declaration so the
+block still compiles), forcing every install through the splice branch regardless of a conflict:
+
+```diff
+--- a/internal/agents/codex.go
++++ b/internal/agents/codex.go
+@@ -190,7 +190,8 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
+  	} else {
+  		existed := fileExists(configPath)
+  		existing := readFileOrEmpty(configPath)
+-		if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
++		if false {
++			var cerr error
+  			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, cerr))
+  		} else {
+  			updated := spliceTOMLTable(existing, codexTOMLTable, codexTableBody(opts.ExecPath))
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodex_Install_RefusesConflictingCodegraphTable$' -v`, exit code appended):
+
+```
+=== RUN   TestCodex_Install_RefusesConflictingCodegraphTable
+    codex_test.go:133: expected a conflict error, got none: {Files:[{Path:.codex/config.toml Action:unchanged} {Path:AGENTS.md Action:created} {Path:.agents/skills/codegraph/SKILL.md Action:created} {Path:.agents/skills/codegraph/.codegraph-manifest.json Action:created}] Notes:[Codex loads this project's MCP server (.../TestCodex_Install_RefusesConflictingCodegraphTable2678842244/001) only once the project is trusted — accept Codex's trust prompt, or add `trust_level = "trusted"` under `[projects."..."]` in ~/.codex/config.toml (codegraph never writes this entry itself). The codegraph skill and the AGENTS.md block are read regardless of trust.] Errors:[]}
+--- FAIL: TestCodex_Install_RefusesConflictingCodegraphTable (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.130s
+FAIL
+exit=1
+```
+
+Note the still-`ActionUnchanged` config.toml: `spliceTOMLTable`'s own internal
+`tomlTableConflict` check independently refuses to WRITE a conflicting table (it returns
+`content` unchanged rather than corrupting it), but with Install's explicit check gone, that
+silent no-op is reported as an ordinary successful "unchanged" file rather than a named error —
+exactly the D-07 "refused, not silently absorbed" property this guard protects.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/codex.go`, then
+`git diff --quiet -- internal/agents/codex.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	2.674s`.
+
+---
+
+## Family (d4) — D-10: dropping the trust Note append turns TestCodex_Install_Local_TrustNote RED
+
+**Test/guard:** `TestCodex_Install_Local_TrustNote` (`internal/agents/codex_test.go`).
+
+**What are we testing, and why?** Whether the guard catches `Install` silently dropping the D-10
+trust advisory — the one place a user learns that Codex will not load the just-written project
+MCP server until the project is trusted.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex.go` — exit 0 (clean).
+
+**Mutation applied:** the `codexTrustNote(loc)` call-and-append block removed from `Install`
+entirely (the `codexTrustNote` function itself is left in place, merely unused — Go does not
+error on an unused top-level function):
+
+```diff
+--- a/internal/agents/codex.go
++++ b/internal/agents/codex.go
+@@ -217,12 +217,6 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
+ 
+  	installDeclaredSkill(&result, t, loc)
+ 
+-	if note, err := codexTrustNote(loc); err != nil {
+-		result.Errors = append(result.Errors, fmt.Errorf("resolve codex trust note: %w", err))
+-	} else if note != "" {
+-		result.Notes = append(result.Notes, note)
+-	}
+-
+  	return result
+  }
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodex_Install_Local_TrustNote$' -v`, exit code appended):
+
+```
+    codex_test.go:97: expected exactly one trust note, got 0: []
+--- FAIL: TestCodex_Install_Local_TrustNote (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.095s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/codex.go`, then
+`git diff --quiet -- internal/agents/codex.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	2.674s`.
+
+Family (d) verdict: all four scope-flip guards (D-09's Scopes literal, D-14's shared-skill write,
+D-07's conflict refusal, D-10's trust Note) demonstrated RED against a real planted mutation and
+reverted byte-clean; internal/agents is GREEN after every revert.
