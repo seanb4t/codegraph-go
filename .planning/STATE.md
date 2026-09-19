@@ -5,16 +5,16 @@ milestone_name: Polish & Agent Reach
 current_phase: 6
 current_phase_name: Claude Code PreToolUse Nudge
 status: executing
-stopped_at: Phase 5 complete, ready to plan Phase 6
-last_updated: "2026-09-19T09:03:53.636Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-19T09:16:15.760Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: eff5dd03c9a187111096202b517f372f79e1fc59
+state_head: 35cbfe28af055aa880c8014e427e7c4beb6bc6c6
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 42
-  completed_plans: 35
+  completed_plans: 36
   percent: 71
 ---
 
@@ -166,6 +166,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P05 | ~40min | 2 tasks | 11 files |
 | Phase 05 P06 | 1h32m | 3 tasks | 1 files |
 | Phase 05 P07 | 13min | 3 tasks | 9 files |
+| Phase 06 P01 | 10min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -380,6 +381,8 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: 05-06 3A: Antigravity cleanup judged on codegraph-owned paths and recorded hashes; agy runtime state classified, not reverted
 - [Phase 5]: 05-07: D-11 recorded not probed, so Cursor keeps writing no instructions file (no-change branch)
 - [Phase 5]: 05-07 (1A): Antigravity's only skill dir is ~/.gemini/config/skills/codegraph; the antigravity-cli path is not declared and gets no migration (unreleased)
+- [Phase 6]: Phase 6 06-01: guard binary path delivered as one single-quoted token replaced with a POSIX-quoted absolute ExecPath (not text/template); the unrendered dogfood guard alone falls back to PATH
+- [Phase 6]: Phase 6 06-01: two bare allowlist lines (codegraph hook, codegraph hook pretooluse), both hidden commands carry --help
 
 ### Pending Todos
 
@@ -528,8 +531,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T00:20:40.615Z
-Stopped at: Phase 5 complete, ready to plan Phase 6
+Last session: 2026-09-19T09:16:15.718Z
+Stopped at: Completed 06-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
