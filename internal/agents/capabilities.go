@@ -189,28 +189,21 @@ func globalOnlyPath(fn func() (string, error)) PathFunc {
 	}
 }
 
-// declaredSkillFallback resolves the "unreadable manifest" fallback CR-01
-// (05-REVIEW.md, re-verified in iteration 2) requires for requester's
-// declared, written skill directory dir at loc: "assume Claude" is
-// justified only when dir is ACTUALLY the same physical directory as
-// Claude's own declared skill directory (D-17's symlink convention — the
-// `npx skills` layout where `~/.claude/skills/codegraph` is a symlink onto
-// the shared `.agents/skills/codegraph`), never merely because dir equals
-// the shared path by definition. Comparing against the shared path itself
-// (an earlier draft of this fix) is tautologically true for Cursor and
-// opencode, whose declared skill directory IS the shared path by
-// definition (cursor.go, opencode.go) — it fires unconditionally
-// regardless of whether Claude is even installed. Comparing against
-// claudeSkillDirPath instead reuses the exact D-17-aware check
-// installSkillPackageWithFallback already performs for its advisory note
-// (skillshared.go), so "assume Claude" only ever fires when Claude's
-// directory and dir are the same physical directory on THIS machine.
-// Every other case — including the common Cursor/opencode-only, no-Claude
-// machine, and every harness-exclusive directory (Gemini, Kiro,
-// Antigravity) — falls back to [requester] instead, so a corrupted
-// manifest there self-heals to the single real owner rather than
-// inventing Claude as a phantom co-owner that can never legitimately
-// relinquish ownership.
+// declaredSkillFallback resolves the requester set an unreadable or
+// pre-`targets` manifest is read as, for requester's written skill
+// directory dir at loc (CR-01, 05-REVIEW.md). "Assume Claude" (D-07) is
+// justified only where Claude could have written that manifest: when dir
+// is the same physical directory as Claude's own skill directory — D-17's
+// `npx skills` layout, where `~/.claude/skills/codegraph` is a symlink onto
+// the shared `.agents/skills/codegraph`. The comparison is sameSkillDir
+// against claudeSkillDirPath, the same D-17-aware check
+// installSkillPackageWithFallback uses for its advisory note. Comparing
+// against the shared path would always match for Cursor and opencode,
+// whose declared directory is the shared path. In every other case (a
+// machine without Claude's layout, or a harness-exclusive directory for
+// Gemini, Kiro or Antigravity) the fallback is [requester], so a corrupted
+// manifest self-heals to its real owner instead of naming a phantom Claude
+// that no uninstall would ever remove (D-08).
 func declaredSkillFallback(dir string, loc Location, requester TargetID) ([]TargetID, error) {
 	claudeDir, err := claudeSkillDirPath(loc)
 	if err != nil {

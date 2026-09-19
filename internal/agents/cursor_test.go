@@ -207,21 +207,15 @@ func TestCursor_Install_WritesSharedSkillPackage(t *testing.T) {
 }
 
 // TestCursor_CorruptedManifestAtSharedDir_NoClaudePresent_DoesNotFalselyAttributeClaude
-// is CR-01's iteration-2 regression test (05-REVIEW.md): unlike
+// pins CR-01 (05-REVIEW.md) on the shared directory: unlike
 // TestGemini_CorruptedManifestAtHarnessExclusiveDir_DoesNotFalselyAttributeClaude,
-// which exercises a harness-exclusive directory, this drives the REAL
-// production shared-directory path -- cursorTarget{}.Install()/Uninstall()
-// through installDeclaredSkill/uninstallDeclaredSkill and
-// declaredSkillFallback -- with NO Claude directory present anywhere and NO
-// D-17 symlink in play. Cursor's declared skill directory IS
-// sharedSkillDirPath by definition (cursor.go), so comparing dir against
-// the shared path itself (the iteration-1 defect) is tautologically true
-// on every machine, with or without Claude -- self-healing a corrupted
-// manifest into [claude cursor] and permanently orphaning the shared
-// package on Uninstall, since nothing ever uninstalls a "claude" that was
-// never really there. Comparing dir against Claude's OWN declared
-// directory instead correctly yields [cursor] here, because the two
-// directories are not the same physical directory on this machine.
+// which covers a harness-exclusive directory, this drives the production
+// path -- cursorTarget{}.Install()/Uninstall() through
+// installDeclaredSkill/uninstallDeclaredSkill and declaredSkillFallback --
+// with no Claude directory and no D-17 symlink. Cursor's declared skill
+// directory is the shared path, but it is not Claude's directory on this
+// machine, so a corrupted manifest must self-heal to [cursor], not
+// [claude cursor], and uninstalling Cursor must remove the package.
 func TestCursor_CorruptedManifestAtSharedDir_NoClaudePresent_DoesNotFalselyAttributeClaude(t *testing.T) {
 	fakeHome(t)
 
