@@ -451,10 +451,14 @@ func (t claudeTarget) Detect(loc Location) DetectionResult {
 func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
-	// D-10: whether the manifest records the PreToolUse opt-in is read
-	// before any write, so this call's own manifest update cannot decide
-	// what Keep does.
-	preToolRecorded, preToolReadable := preToolNudgeRecorded(loc)
+	// D-10: whether the opt-in is already recorded is read before any
+	// write, so this call's own manifest update cannot decide what Keep
+	// does. preToolNudgeEvidenced (CR-01, 06-REVIEW.md) widens the
+	// manifest-only check to also trust settings.json's own PreToolUse
+	// registration, so a foreign/unmanifested skill directory (D-14) —
+	// where the manifest step below never runs — cannot silently forget a
+	// live opt-in.
+	preToolRecorded, preToolReadable := preToolNudgeEvidenced(loc)
 
 	// Pitfall 3: migrate a legacy ./.claude.json local entry into
 	// ./.mcp.json before writing the correct entry.

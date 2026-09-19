@@ -49,7 +49,23 @@ var refreshInstalledSkillsFunc = refreshInstalledSkills
 // PreToolNudge is passed as PreToolNudgeKeep, deliberately unlike
 // AutoAllow's non-sticky false: the PreToolUse opt-in IS recorded in the
 // manifest (v0.14.0 Phase 6 D-10), so Keep re-renders the guard for the new
-// binary exactly where the opt-in was recorded and adds it nowhere else.
+// binary exactly where the opt-in was recorded and adds it nowhere else —
+// widened by agents.preToolNudgeEvidenced (code review CR-01, 06-REVIEW.md)
+// to also trust settings.json's own registration when the manifest step
+// never ran at all.
+//
+// Accepted limitation (CR-01, 06-REVIEW-FIX.md): a location whose Claude
+// skill directory is a symlinked shared directory holding pre-existing
+// foreign, unmanifested content (D-14) NEVER gets a manifest written there
+// under any PreToolNudge mode, so it is invisible to
+// agents.ConfiguredSkillLocations (manifest-presence-only discovery, its
+// own separately pinned contract) and this refresh loop can never reach
+// it — even though the guard and its settings.json registration are
+// present there and are correctly evidenced by a direct Install call. The
+// documented recovery is the one this function's caller already prints on
+// any refresh problem: re-run `codegraph install` from that location.
+// TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation
+// pins this gap and its recovery path.
 func refreshInstalledSkills(execPath string, out io.Writer) error {
 	locs := agents.ConfiguredSkillLocations(agents.Claude)
 	if len(locs) == 0 {
