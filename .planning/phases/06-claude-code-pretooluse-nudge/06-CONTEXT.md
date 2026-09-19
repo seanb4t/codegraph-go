@@ -24,7 +24,7 @@ Out of scope:
 - **Ownership:** hooks are owned by exact command string, never by matcher (`242ec0a`). A hand-edited own entry is duplicated, not overwritten. An unrelated `PreToolUse` entry under the same event stays byte-identical.
 
 ### A. Hook form & trigger heuristic
-- **D-01 (maintainer: option 1, "Go subcommand plus a sh guard", chosen over Python/uv and pure sh):** the logic lives in a hidden Go subcommand, `codegraph hook pretooluse`, reached through a tiny embedded POSIX `sh` guard.
+- **D-01:** Maintainer decision, option 1: a Go subcommand plus a sh guard, chosen over Python/uv and pure sh. The logic lives in a hidden Go subcommand, `codegraph hook pretooluse`, reached through a tiny embedded POSIX `sh` guard.
   - **Guard:** dogfooded under `.claude/hooks/`, embedded via `claudeassets` beside `session-nudge.sh` (v0.10.0 D-03/D-04). It is the registered hook command, so it carries the owned identity.
   - **Guard job:** (a) do the D-04 directory check, exiting 0 at once when the repo is un-indexed (no binary started); (b) exit 0 silently when the codegraph binary is missing or not executable (never a "hook error" notice); (c) run the binary with stdin passed through, then `exit 0` whatever the binary did, so even a crash cannot produce a non-zero exit.
   - **Why Go:** real JSON parsing, portable time handling for D-05, direct Go unit tests, no new runtime for users (the project's core value), and a harness-neutral core that CODEX-05 reuses in Phase 7.
@@ -41,8 +41,8 @@ Out of scope:
 - **D-04:** The repo counts as indexed when the guard's `[ -d "${CLAUDE_PROJECT_DIR:-.}/.codegraph" ]` holds, the exact NUDGE-02 check. It runs before any process is started or stdin is read.
 
 ### B. Cooldown & scope (maintainer decisions 2026-09-19, replacing "once per session")
-- **D-05 (maintainer: "C, once per minute"):** fire on the first matched call, then at most once every 60 seconds per key. The 60 s value is one named Go constant. NUDGE-04 and ROADMAP criterion 2, the goal, and the CODEX-05 note are amended to match. Expected ceiling: about 60 fires, roughly 3.6k tokens, per hour of continuous searching.
-- **D-06 (maintainer: "why not sub agents?"):** subagents are included, each with its own cooldown. The key is (session, agent): `session_id` plus `agent_id`, or the literal `main` when `agent_id` is absent. A subagent starts with a fresh context and did not see the main thread's nudge.
+- **D-05:** Maintainer decision, option C at once per minute. Fire on the first matched call, then at most once every 60 seconds per key. The 60 s value is one named Go constant. NUDGE-04 and ROADMAP criterion 2, the goal, and the CODEX-05 note are amended to match. Expected ceiling: about 60 fires, roughly 3.6k tokens, per hour of continuous searching.
+- **D-06:** Maintainer decision, from the question "why not sub agents?". Subagents are included, each with its own cooldown. The key is (session, agent): `session_id` plus `agent_id`, or the literal `main` when `agent_id` is absent. A subagent starts with a fresh context and did not see the main thread's nudge.
 - **D-07:** The session id is `$CLAUDE_CODE_SESSION_ID`, falling back to `session_id` parsed from stdin. With neither available, stay silent and never fire unkeyed. `/clear` produces a new id, so the next matched call fires at once. `--resume` keeps the id, so the cooldown continues.
 - **D-08:** The sentinel is per key, under `os.TempDir()` (which honours `TMPDIR`), in `codegraph-nudge-<uid>/`:
   - The directory is created mode 0700. Use `Lstat`, and stay silent if the directory exists but is a symlink or is not owned by the current uid.

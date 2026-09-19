@@ -351,11 +351,36 @@ Plans:
   4. `codegraph install`/`uninstall` register and remove the hook through `writeHookEntry`/`removeHookEntry` as an opt-in alongside the default SessionStart nudge; a hand-edited own entry duplicates rather than overwrites, and an unrelated `PreToolUse` entry under the same event is untouched (NUDGE-06)
 
 **Notes**: Research pitfalls attached: 8 (a hook that "redirects" reintroduces the friction GUARD-HOOK-01/02 was deferred to avoid — the out-of-scope entry is explicit: no `permissionDecision: deny|ask`, no exit 2), 9 (a blanket tool-name match is noise that trains the agent to ignore it — gate on `.codegraph/` presence AND a content heuristic). The mechanism is already event-generic: a new `PreToolUse` array in the same embedded `hooks.json` fragment, a new script beside `session-nudge.sh`, a `claudePreToolUseBlocks(loc)` mirroring `claudeSessionStartBlocks(loc)`, and a second `writeHookEntry(settingsPath, "PreToolUse", …)` call alongside the existing one — `shared.go`'s exact-command-string matching is unchanged. Carries GUARD-HOOK-02's live fire-rate measurement. Supersedes GUARD-HOOK-01/02 by the 2026-09-14 reframe.
-**Plans**: TBD
+**Plans**: 7 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD
+- [ ] 06-01-PLAN.md — Tracer: `install --pretool-nudge` writes an embedded, ExecPath-rendered POSIX guard and four owned PreToolUse blocks; the hidden `codegraph hook pretooluse` prints only the pinned additionalContext and always exits 0; guard-level D-16 exec suite, Family (a) RED (NUDGE-03, NUDGE-04, NUDGE-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06-02-PLAN.md — D-02 first-word shell rule and D-03 Read exclusions, the D-15 true/false-positive corpora, D-14 drift guards over the nudge constant, Family (b) RED (NUDGE-05, NUDGE-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 06-03-PLAN.md — Per-(session, agent) 60 s cooldown with a symlink-safe, content-free sentinel (D-05…D-08, injected clock), wired into the subcommand; every D-16 subcommand error path forced; Family (c) RED (NUDGE-04, NUDGE-03, NUDGE-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 06-04-PLAN.md — Sticky opt-in in the Claude manifest (Keep/On/Off), uninstall always removes it, capability table names the guard, 32-leaf ownership table with a planted same-matcher PreToolUse block, Family (d) RED (NUDGE-06)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 06-05-PLAN.md — Dogfooded PreToolUse registration and its shape test, `--pretool-nudge` tri-state via cobra Changed with the D-09 note, upgrade carries the opt-in, Family (e) RED (NUDGE-06, NUDGE-03)
+
+**Wave 6** *(blocked on Wave 5 completion; halts `blocking-human` for orchestrator-run live sessions)*
+
+- [ ] 06-06-PLAN.md — D-18 live evidence in `06-LIVE-SESSIONS.md`: fresh `claude --debug-file` sessions in an indexed scratch repo (C1-C5, fire rate, the five open points) and an un-indexed control (C6, C7), verdict against the locked pass bar (NUDGE-05, NUDGE-03, NUDGE-04)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 06-07-PLAN.md — install/uninstall help text, `docs/CLI-REFERENCE.md` regenerated through the drift gate, phase gate and maintainer advisories (NUDGE-03…06)
 
 #### Phase 7: Codex Parity
 
@@ -366,7 +391,7 @@ Plans:
 
   1. Before any `codex.go` change, a live verification in a scratch trusted project records — with dated citations — whether the current Codex CLI loads a project-scoped `.codex/config.toml`, which skill path(s) it reads (`.agents/skills/` vs `.codex/skills/`), and whether `hooks.json` works behind `features.hooks`; `codex.go`'s "no per-project config" comment is corrected in the same commit (CODEX-01)
   2. `SupportsLocation(LocationLocal)` is true; project-local `install` writes `.codex/config.toml` through the TOML splice with existing tables, inline tables, comments and CRLF preserved and tells the user the project must be trusted; `--target auto` detection and the agent picker reflect the new scope; the skill package is installed to the verified Codex path(s) at both scopes idempotently and byte-invariant against sibling content; project-local install writes the marker-fenced block into the repo-root `AGENTS.md` with global `~/.codex/AGENTS.md` unchanged, and `uninstall` removes it leaving the rest of the file byte-identical (CODEX-02, CODEX-03, CODEX-04)
-  3. A Codex PreToolUse nudge in `hooks.json` carries the same additionalContext-only, once-per-session contract as NUDGE-03/04; it is installed only when Codex's hooks feature is enabled (opt-in), skipped with a message otherwise, and its experimental, Windows-unsupported status is stated in the docs (CODEX-05)
+  3. A Codex PreToolUse nudge in `hooks.json` carries the same additionalContext-only contract as NUDGE-03/04 (first matched call, then at most once a minute per session and per subagent — the 2026-09-19 amendment of NUDGE-04); it is installed only when Codex's hooks feature is enabled (opt-in), skipped with a message otherwise, and its experimental, Windows-unsupported status is stated in the docs (CODEX-05)
   4. A genuinely fresh Codex session in an indexed repo reaches for codegraph unprompted — the skill is listed, and the MCP tool is called or `codegraph explore` is run — with the evidence recorded to the v0.10.0 live-session standard, and `codex mcp list` shows the entry at both scopes (CODEX-06)
   5. The install/uninstall agent picker renders its help footer in a 100×30 pane with every registered target listed, the height budget accounting for bubbles v2 list pagination, asserted by the tmux harness *after* `CODEX-02`'s scope flip — the milestone's last change to the target count; and the published per-harness capability table (MCP config, instructions, skill, nudge, scopes for all 8 targets) matches what ships, `[ASSUMED]` where live verification was not possible, with `instructions.go`'s "4 of 8" comment and the MCP `instructions` skill sentence updated to match (FIX-03, AGENT-14)
 
