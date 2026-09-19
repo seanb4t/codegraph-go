@@ -197,40 +197,48 @@ func TestAntigravity_DescribePaths_GlobalOnly(t *testing.T) {
 	}
 }
 
-// TestAntigravity_Install_WritesCliSkillDir (AGENT-07, D-06 corrections
-// (b)(c); [CITED: antigravity.google/docs/skills.md, fetched 2026-09-18]):
-// Antigravity installs the codegraph skill at the `agy` CLI's documented
-// global skill directory — index 0 of antigravitySkillDirs, the surface
-// 05-06's live session exercises — never the [ASSUMED] 2.0/IDE path, the
-// shared .agents/skills alias (workspace-scope only for Antigravity, which
-// this global-only target never writes), or a new AGENTS.md (D-06(c):
-// Antigravity's instructions arrive only via Gemini's own
-// ~/.gemini/GEMINI.md write).
-func TestAntigravity_Install_WritesCliSkillDir(t *testing.T) {
+// TestAntigravity_Install_WritesConfigSkillDir (AGENT-07, maintainer
+// decision 1A, 2026-09-18): Antigravity installs the codegraph skill at
+// ~/.gemini/config/skills/codegraph/, the one directory the live `agy`
+// 1.2.6 session (05-LIVE-SESSIONS.md § Antigravity) was proven to read.
+// The docs' CLI path ~/.gemini/antigravity-cli/skills/ is proven unread and
+// is never written, nor is the shared .agents/skills alias (workspace-scope
+// only for Antigravity) or a new AGENTS.md (D-06(c)). A foreign sibling
+// skill beside codegraph's directory — the maintainer's real config dir
+// holds gh-stack — must keep its exact bytes through install and uninstall.
+func TestAntigravity_Install_WritesConfigSkillDir(t *testing.T) {
 	home := fakeHome(t)
+	skillsRoot := filepath.Join(home, ".gemini", "config", "skills")
+	foreignPath := filepath.Join(skillsRoot, "gh-stack", "SKILL.md")
+	const foreignBody = "---\nname: gh-stack\ndescription: foreign sibling skill\n---\n\nnot codegraph's\n"
+	writeFile(t, foreignPath, foreignBody)
+
 	a := antigravityTarget{}
 	a.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
 
-	cliDir := filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph")
-	skillPath := filepath.Join(cliDir, "SKILL.md")
+	configDir := filepath.Join(skillsRoot, "codegraph")
+	skillPath := filepath.Join(configDir, "SKILL.md")
 	want, err := claudeassets.SkillMarkdown()
 	if err != nil {
 		t.Fatalf("claudeassets.SkillMarkdown: %v", err)
 	}
-	if got := readFile(t, skillPath); got != string(want) {
-		t.Fatalf("CLI skill SKILL.md at %s does not match the embed", skillPath)
+	if !fileExists(skillPath) {
+		t.Fatalf("expected the codegraph SKILL.md at %s after install", skillPath)
 	}
-	m, present, err := readManifest(skillManifestPath(cliDir))
+	if got := readFile(t, skillPath); got != string(want) {
+		t.Fatalf("config skill SKILL.md at %s does not match the embed", skillPath)
+	}
+	m, present, err := readManifest(skillManifestPath(configDir))
 	if err != nil || !present {
-		t.Fatalf("expected a manifest at %s (present=%v err=%v)", cliDir, present, err)
+		t.Fatalf("expected a manifest at %s (present=%v err=%v)", configDir, present, err)
 	}
 	if len(m.Targets) != 1 || !containsTarget(m.Targets, Antigravity) {
 		t.Fatalf("manifest targets = %v, want exactly [antigravity]", m.Targets)
 	}
 
-	ideDir := filepath.Join(home, ".gemini", "config", "skills", "codegraph")
-	if fileExists(ideDir) {
-		t.Fatalf("antigravity must not write the [ASSUMED] 2.0/IDE skill path, found %s", ideDir)
+	cliSkills := filepath.Join(home, ".gemini", "antigravity-cli", "skills")
+	if fileExists(cliSkills) {
+		t.Fatalf("antigravity must not write the live-proven-unread CLI skill path, found %s", cliSkills)
 	}
 	if fileExists(filepath.Join(home, ".agents", "skills")) {
 		t.Fatalf("antigravity must not write under the shared .agents/skills alias")
@@ -238,34 +246,44 @@ func TestAntigravity_Install_WritesCliSkillDir(t *testing.T) {
 	if fileExists(filepath.Join(home, ".gemini", "AGENTS.md")) {
 		t.Fatalf("antigravity must not write a new AGENTS.md")
 	}
+	if got := readFile(t, foreignPath); got != foreignBody {
+		t.Fatalf("foreign sibling skill %s changed by install:\n got %q\nwant %q", foreignPath, got, foreignBody)
+	}
 
 	a.Uninstall(LocationGlobal)
 	if fileExists(skillPath) {
-		t.Fatalf("CLI SKILL.md not removed after uninstall")
+		t.Fatalf("config SKILL.md not removed after uninstall")
 	}
-	if fileExists(skillManifestPath(cliDir)) {
-		t.Fatalf("CLI manifest not removed after uninstall")
+	if fileExists(skillManifestPath(configDir)) {
+		t.Fatalf("config manifest not removed after uninstall")
 	}
-	if fileExists(cliDir) {
-		t.Fatalf("CLI skill dir not swept after uninstall")
+	if fileExists(configDir) {
+		t.Fatalf("config skill dir not swept after uninstall")
+	}
+	if !fileExists(skillsRoot) {
+		t.Fatalf("uninstall removed %s, which still holds the foreign gh-stack skill", skillsRoot)
+	}
+	if !fileExists(foreignPath) {
+		t.Fatalf("foreign sibling skill %s removed by uninstall", foreignPath)
+	}
+	if got := readFile(t, foreignPath); got != foreignBody {
+		t.Fatalf("foreign sibling skill %s changed by uninstall:\n got %q\nwant %q", foreignPath, got, foreignBody)
 	}
 }
 
-// TestAntigravity_ReadOnlySkillDirDocumented (D-06(b)): the 2.0/IDE skill
-// path is documented via Capabilities().ReadOnlySkillDirs but never
-// written by Install — an [ASSUMED] read path with no live surface this
-// milestone's herdr-driven method can verify (it drives the CLI, not a
-// GUI IDE).
-func TestAntigravity_ReadOnlySkillDirDocumented(t *testing.T) {
-	home := fakeHome(t)
+// TestAntigravity_NoReadOnlySkillDirs (maintainer decision 1A): Antigravity
+// declares exactly one skill directory — the one it writes — so
+// Capabilities().ReadOnlySkillDirs(global) is empty. The former CLI path is
+// live-proven unread and is not declared at all.
+func TestAntigravity_NoReadOnlySkillDirs(t *testing.T) {
+	fakeHome(t)
 	a := antigravityTarget{}
 	got, err := a.Capabilities().ReadOnlySkillDirs(LocationGlobal)
 	if err != nil {
 		t.Fatalf("ReadOnlySkillDirs: %v", err)
 	}
-	want := filepath.Join(home, ".gemini", "config", "skills", "codegraph")
-	if len(got) != 1 || got[0] != want {
-		t.Fatalf("ReadOnlySkillDirs(global) = %v, want [%s]", got, want)
+	if len(got) != 0 {
+		t.Fatalf("ReadOnlySkillDirs(global) = %v, want none", got)
 	}
 }
 

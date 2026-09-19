@@ -74,7 +74,7 @@ func ownershipWantSkillDir(id TargetID, loc Location, home string) string {
 		if loc == LocationLocal {
 			return ""
 		}
-		return filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph")
+		return filepath.Join(home, ".gemini", "config", "skills", "codegraph")
 	default:
 		return ""
 	}
@@ -83,10 +83,13 @@ func ownershipWantSkillDir(id TargetID, loc Location, home string) string {
 // newSkillDirs lists every skill directory this PHASE introduces (D-05,
 // D-06) at loc: the shared package every target eventually funnels onto,
 // plus the two harness-specific directories (Gemini, Kiro) and, at global
-// scope only, Antigravity's two documented skill roots (05-CONTEXT.md
-// D-06's research correction). These are the ownership guard's planting
-// sites for the foreign-codegraph-dir variant, and the sites that must
-// never accumulate a manifest for a target that does not write there.
+// scope only, two Antigravity roots: the config dir it writes (maintainer
+// decision 1A, the one agy is live-proven to read) and the former
+// antigravity-cli path, proven unread and no longer written — a foreign
+// codegraph/ dir planted there must stay untouched. These are the
+// ownership guard's planting sites for the foreign-codegraph-dir variant,
+// and the sites that must never accumulate a manifest for a target that
+// does not write there.
 func newSkillDirs(home string, loc Location) []string {
 	if loc == LocationLocal {
 		return []string{

@@ -57,8 +57,9 @@ func TestCapabilitiesDeclared(t *testing.T) {
 				LocationGlobal: "",
 			},
 			skillDir: map[Location]string{
-				// AGENT-07 (05-05): the agy CLI's documented global skill dir.
-				LocationGlobal: filepath.Join(home, ".gemini", "antigravity-cli", "skills", "codegraph"),
+				// AGENT-07, maintainer decision 1A (05-07): the one dir agy
+				// 1.2.6 was live-proven to read (05-LIVE-SESSIONS.md).
+				LocationGlobal: filepath.Join(home, ".gemini", "config", "skills", "codegraph"),
 			},
 		},
 		{
