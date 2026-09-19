@@ -29,13 +29,23 @@
             "if": "Bash(grep *)",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh",
             "timeout": 5
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
             "if": "Bash(rg *)",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh",
             "timeout": 5
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
             "if": "Bash(find *)",
