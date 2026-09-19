@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/nudge"
 )
 
 // GUARD-01 (05-CONTEXT.md, T-06-05): SKILL.md is the third surface in this
@@ -855,6 +857,92 @@ func TestNudgeTextCarriesNoUnpinnedFacts(t *testing.T) {
 	for _, m := range envVarTokenRe.FindAllString(doc, -1) {
 		if m != allowlistEnvName {
 			t.Errorf("%s names environment variable %q, which is not %s", nudgeScriptPath, m, allowlistEnvName)
+		}
+	}
+}
+
+// TestPreToolUseNudgeTextNamesOnlyRealTools is GUARD-01's tool-name half for
+// the PreToolUse nudge (D-14). The text under test is the Go constant
+// nudge.Text itself, not any file on disk, so no read step can drift away
+// from what the hook actually emits. This is the SECOND layer over that
+// text: the FIRST (the byte pin) is the hand-typed JSON oracle in
+// internal/cli/hook_pretooluse_test.go, which proves nothing about the
+// text's honesty; this layer pins it against the live tool roster.
+func TestPreToolUseNudgeTextNamesOnlyRealTools(t *testing.T) {
+	doc := nudge.Text
+
+	known := make(map[string]bool, len(allToolNames()))
+	for _, name := range allToolNames() {
+		known[name] = true
+	}
+
+	matches := toolNameTokenRe.FindAllString(doc, -1)
+	if len(matches) == 0 {
+		t.Fatal("found zero codegraph_<name> tokens in nudge.Text — this test would verify nothing")
+	}
+	for _, m := range matches {
+		if !known[m] {
+			t.Errorf("nudge.Text names %s, which is not a member of allToolNames() — a renamed or removed tool left behind in the nudge text", m)
+		}
+	}
+
+	if err := docNamesCompanionsWithoutTheFilter(doc); err != nil {
+		t.Errorf("nudge.Text %v", err)
+	}
+}
+
+// TestPreToolUseNudgeTextCarriesNoUnpinnedFacts is GUARD-01's remaining half
+// for the PreToolUse nudge (D-14), over the constant nudge.Text rather than
+// any file: no host-specific path, no default-or-max numeric claim, no count
+// claim, and the only CODEGRAPH_-prefixed token permitted (if any) is
+// allowlistEnvName. Like the test above, it is the second layer over the
+// byte pin in internal/cli/hook_pretooluse_test.go.
+func TestPreToolUseNudgeTextCarriesNoUnpinnedFacts(t *testing.T) {
+	doc := nudge.Text
+
+	if found := hostFactsIn(doc); len(found) > 0 {
+		t.Errorf("nudge.Text carries host-specific path(s) %v — no agent-facing text may interpolate machine-specific filesystem layout", found)
+	}
+	if claims := numericClaimsMultiset(doc); len(claims) != 0 {
+		t.Errorf("nudge.Text states numeric claim(s) %v — no default or maximum belongs in the nudge text", claims)
+	}
+	if claims := countClaimsIn(doc); len(claims) != 0 {
+		t.Errorf("nudge.Text states count claim(s) %v — no tool/companion count belongs in the nudge text", claims)
+	}
+	for _, m := range envVarTokenRe.FindAllString(doc, -1) {
+		if m != allowlistEnvName {
+			t.Errorf("nudge.Text names environment variable %q, which is not %s", m, allowlistEnvName)
+		}
+	}
+}
+
+// preToolUseNudgeDenylist is the mechanical floor of D-14's factual-wording
+// rule: imperative or system-command phrasing, matched case-insensitively.
+var preToolUseNudgeDenylist = []string{
+	"important", "system", "must", "always", "never", "ignore",
+	"instead of", "do not", "don't", "you should", "stop",
+}
+
+// TestPreToolUseNudgeTextIsFactualOneLiner pins D-14's "factual one-liner"
+// rule over the constant nudge.Text. The hooks documentation advises factual
+// wording because imperative "system-command" phrasing in injected context
+// can trip prompt-injection defences (06-CONTEXT D-14); this denylist is the
+// mechanical floor, and review of the wording is the rest.
+func TestPreToolUseNudgeTextIsFactualOneLiner(t *testing.T) {
+	doc := nudge.Text
+
+	if strings.Contains(doc, "\n") {
+		t.Errorf("nudge.Text spans more than one line: %q", doc)
+	}
+	for _, want := range []string{"codegraph_explore", "`codegraph explore`"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("nudge.Text does not name %s: %q", want, doc)
+		}
+	}
+	lower := strings.ToLower(doc)
+	for _, word := range preToolUseNudgeDenylist {
+		if strings.Contains(lower, word) {
+			t.Errorf("nudge.Text contains imperative or system-style wording %q: %q", word, doc)
 		}
 	}
 }
