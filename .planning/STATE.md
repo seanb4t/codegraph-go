@@ -2,37 +2,37 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-current_phase: 5
-current_phase_name: Agent Reach — Capability Model & Skill in Every Harness
-status: verifying
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-09-19T00:20:40.664Z"
+current_phase: 6
+current_phase_name: Claude Code PreToolUse Nudge
+status: planning
+stopped_at: Phase 5 complete, ready to plan Phase 6
+last_updated: "2026-09-19T01:23:44.738Z"
 last_activity: 2026-09-18
-last_activity_desc: Phase 5 execution started
-state_head: 1c10c974cc52bab34dcb4b79d93e3b3db1c7bdfc
+last_activity_desc: Phase 5 complete, transitioned to Phase 6
+state_head: 00f1b24df2c41d838c14338336f6868759269f89
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 35
   completed_plans: 35
-  percent: 57
+  percent: 71
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-17 after Phase 4)
+See: .planning/PROJECT.md (updated 2026-09-19 after Phase 5)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 5 — Agent Reach — Capability Model & Skill in Every Harness
+**Current focus:** Phase 6 — Claude Code PreToolUse Nudge
 
 ## Current Position
 
-Phase: 5 (Agent Reach — Capability Model & Skill in Every Harness) — EXECUTING
-Plan: 7 of 7
-Status: Phase complete — ready for verification
-Last activity: 2026-09-18 — Phase 5 execution started
+Phase: 6 — Claude Code PreToolUse Nudge
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-18 — Phase 5 complete, transitioned to Phase 6
 
 ## Performance Metrics
 
@@ -48,7 +48,7 @@ Last activity: 2026-09-18 — Phase 5 execution started
 | 02 | 7 | - | - |
 | 03 | 4 | - | - |
 | 4 | 8 | - | - |
-| 5 | 8 | - | - |
+| 5 | 7 | - | - |
 | 6 | 8 | - | - |
 | 7 | 4 | - | - |
 | 08 | 5 | - | - |
@@ -417,6 +417,10 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 4] Not verified: the D-11 ~2 s OSC-11 timeout on a non-answering terminal (tmux without allow-passthrough / SSH) — tmux is not installed locally and SSH was not attempted; every measured run in Herdr's terminal answered OSC 11 in ≤0.16 s. IN-01 (status 'Project:' value unstyled) left open as Info.
 - [Phase 4] Phases 1–3 read verification_status: stale after Phase 4 — a GENUINE signal, not #4155 bookkeeping: their covered_files name internal/cli/{root,search,daemon,index,renamed}.go and docs/CLI-REFERENCE.md, all legitimately modified by the glow-up (plus REQUIREMENTS/ROADMAP via phase.complete). Phase 4's regression gate (52/52 pkgs, wire oracle, real-binary renamed_stubs test) covered the risk for this run; the digest was NOT re-stamped. Repair = /gsd-verify-work 02 / 03 (and 01) — surfaces at the milestone audit.
 - [Phase 5] One unidentified internal/cli test failure after 05-05 (2026-09-18): the package run took 53.6 s vs a normal ~18 s — the machine was under other load (likely the 05-05 executor's own full-suite run still finishing) — and the failing test's name was not captured (output piped through tail). Six reruns passed (2 standalone, 4 with internal/agents in parallel). Treat as a possible load-sensitive flake in internal/cli; next occurrence: capture the full output, then decide whether it is a WINDOWS.md row.
+- [Phase 5] The verify:post hooks (validate-phase, secure-phase) did NOT run at the Phase 4 transition: 04-VALIDATION.md is still status: draft / nyquist_compliant: false and there is no 04-SECURITY.md, although workflow.nyquist_validation and workflow.security_enforcement are both active. Run /gsd-validate-phase 4 and /gsd-secure-phase 4 before the milestone audit (audit-milestone §5.5 reports NOT-VALIDATED).
+- [Phase 5] Live-verification breadth deferred by maintainer decision (05-UAT.md, 2 deferred follow-ups): Cursor (no account — D-11 verdict 'not probed', so Cursor keeps writing no instructions file) and Gemini CLI/Kiro (not installed — D-10). Their rows stay [ASSUMED] from primary docs; AGENT-14 (Phase 7) must publish them as [ASSUMED].
+- [Phase 5] REQUIREMENTS.md AGENT-07 wording ('skill package via .agents/skills/ and the instructions block in AGENTS.md') is stale: live agy 1.2.6 reads user skills only from ~/.gemini/config/skills/ (maintainer decision 1A, shipped in 05-07) and Antigravity's instructions arrive via ~/.gemini/GEMINI.md (D-06(c)). Maintainer to reword at the milestone audit; the code is correct.
+- [Phase 5] Advisories carried forward: (1) install --yes discards an explicit --target (todo 2026-09-18-install-yes-discards-explicit-target.md); (2) uninstall leaves an empty parent skills dir it created (removing the parent unconditionally is wrong — 05-07 Family (c-i)); (3) review Info IN-01 (dead caps.MCPConfig nil-check, printconfigstyle.go) and IN-02 (ActionKeptForeign renders with the default role, untested); (4) gsd-tools frontmatter set re-serializes covered_files with a blank line after the key (harmless to the parser, observed twice).
 
 ### Quick Tasks Completed
 
@@ -525,7 +529,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-19T00:20:40.615Z
-Stopped at: Completed 05-07-PLAN.md
+Stopped at: Phase 5 complete, ready to plan Phase 6
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

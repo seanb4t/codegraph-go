@@ -142,7 +142,7 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
 - [x] **Phase 2: Guards, CI Wiring & Docs Burn-down** - Every guard that could pass vacuously fails against its incident shape, CI runs the checks that exist only locally, and every doc claim about dependencies, provenance, scanners and planning state matches what ships (completed 2026-09-16)
 - [x] **Phase 3: Verb Fold** - `query` folds into `search --full` and `unlock` into `daemon unlock`, every consumer of the old names found, the removed verbs failing loudly for one release (completed 2026-09-16)
 - [x] **Phase 4: CLI Glow-up** - Every human-output verb renders through one shared semantic palette, adaptive to the terminal and the user's colour preferences, with the agent/MCP, `--json` and piped paths byte-identical (completed 2026-09-17)
-- [ ] **Phase 5: Agent Reach — Capability Model & Skill in Every Harness** - One capability table drives all eight targets, and every harness with a skill mechanism receives the codegraph skill, verified live, with every write exact-identity-owned and reversible
+- [x] **Phase 5: Agent Reach — Capability Model & Skill in Every Harness** - One capability table drives all eight targets, and every harness with a skill mechanism receives the codegraph skill, verified live, with every write exact-identity-owned and reversible (completed 2026-09-18)
 - [ ] **Phase 6: Claude Code PreToolUse Nudge** - In an indexed repo, Claude Code is pointed at `codegraph_explore` the first time it reaches for grep/find/Read — as added context, never a denial — and stays silent everywhere else
 - [ ] **Phase 7: Codex Parity** - Codex receives everything Claude Code does — project-local MCP config, skill, repo-root instructions, opt-in nudge — each mechanism verified live before it is written, and a fresh Codex session reaches for codegraph unprompted
 
@@ -388,7 +388,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | 2. Guards, CI Wiring & Docs Burn-down | 7/7 | Complete    | 2026-09-16 |
 | 3. Verb Fold | 4/4 | Complete    | 2026-09-16 |
 | 4. CLI Glow-up | 8/8 | Complete    | 2026-09-17 |
-| 5. Agent Reach — Capability Model & Skill in Every Harness | 7/7 | In Progress|  |
+| 5. Agent Reach — Capability Model & Skill in Every Harness | 7/7 | Complete    | 2026-09-18 |
 | 6. Claude Code PreToolUse Nudge | 0/TBD | Not started | - |
 | 7. Codex Parity | 0/TBD | Not started | - |
 
