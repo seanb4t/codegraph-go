@@ -700,12 +700,13 @@ instruction block. Install also writes the codegraph skill package
 reads; a directory shared by several agents holds one package they own
 jointly, and a codegraph/ skill directory codegraph did not write is
 left untouched. --print-config-style prints what each agent receives
-without writing anything. With --pretool-nudge (Claude Code only),
-install also registers a PreToolUse hook that adds a one-line pointer
-to codegraph_explore when Claude searches an indexed repository; it
-never blocks a tool call, and the choice is remembered
-until --pretool-nudge=false or uninstall. Idempotent — re-running
-install is a no-op when nothing changed.
+without writing anything. With --pretool-nudge (Claude Code and Codex
+CLI), install also registers a PreToolUse hook that adds a one-line
+pointer to codegraph_explore when the agent searches an indexed
+repository; it never blocks a tool call, and the choice is
+remembered until --pretool-nudge=false or uninstall. Codex skips a
+new or changed hook until it is trusted in /hooks. Idempotent —
+re-running install is a no-op when nothing changed.
 
 ```
 codegraph install [flags]
@@ -720,6 +721,7 @@ codegraph install [flags]
   codegraph install --target none
   codegraph install --print-config-style --location local
   codegraph install --target claude --pretool-nudge
+  codegraph install --target codex --location local --pretool-nudge
 ```
 
 ### Options
@@ -728,7 +730,7 @@ codegraph install [flags]
       --auto-allow           also add mcp__codegraph__* to Claude Code's permissions.allow list
   -h, --help                 help for install
   -l, --location string      config scope: global|local (default "global")
-      --pretool-nudge        Claude Code only: register a PreToolUse hook that points Claude at codegraph_explore when it searches; remembered across install and upgrade until --pretool-nudge=false or uninstall
+      --pretool-nudge        Claude Code and Codex CLI: register a PreToolUse hook that points the agent at codegraph_explore when it searches; remembered across install and upgrade until --pretool-nudge=false or uninstall
       --print-config-style   print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything
   -t, --target string        which agents to configure: auto|all|none|<comma-separated ids> (default "auto")
   -y, --yes                  skip the interactive picker; use the non-interactive default set (auto)
@@ -1016,10 +1018,10 @@ block — while preserving every unrelated key, entry, and section in
 every file it touches. It removes codegraph's skill package too; a
 shared skill directory's package is deleted only when no other agent
 that installed it remains, and a skill directory codegraph did not
-write is never touched. It also removes the Claude Code
-PreToolUse nudge hook and its guard script when present. Reports
-removed / not-configured / unsupported per agent and never errors on
-an agent that was never installed.
+write is never touched. It also removes the Claude Code and Codex
+CLI PreToolUse nudge hooks and their guard scripts when present.
+Reports removed / not-configured / unsupported per agent and never
+errors on an agent that was never installed.
 
 ```
 codegraph uninstall [flags]

@@ -32,10 +32,10 @@ func newUninstallCmd() *cobra.Command {
 			"every file it touches. It removes codegraph's skill package too; a\n" +
 			"shared skill directory's package is deleted only when no other agent\n" +
 			"that installed it remains, and a skill directory codegraph did not\n" +
-			"write is never touched. It also removes the Claude Code\n" +
-			"PreToolUse nudge hook and its guard script when present. Reports\n" +
-			"removed / not-configured / unsupported per agent and never errors on\n" +
-			"an agent that was never installed.",
+			"write is never touched. It also removes the Claude Code and Codex\n" +
+			"CLI PreToolUse nudge hooks and their guard scripts when present.\n" +
+			"Reports removed / not-configured / unsupported per agent and never\n" +
+			"errors on an agent that was never installed.",
 		Example: "  codegraph uninstall\n" +
 			"  codegraph uninstall --target all --location global\n" +
 			"  codegraph uninstall --target claude,cursor",
