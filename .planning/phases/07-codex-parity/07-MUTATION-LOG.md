@@ -1477,3 +1477,289 @@ see commit `602e30a3`), the adapter's Claude-env-fallback exclusion (f3), the ar
 extraction (f4), and the Go core's own independent `cwd`/`.codegraph` re-check (f5) all
 demonstrated RED against a real planted mutation and reverted byte-clean; both packages are GREEN
 after every revert.
+
+---
+
+## Family (g1) — D-23: the dispatcher treating Keep as Off turns TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent RED
+
+**Test/guard:** `TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent` (`internal/agents/codex_pretooluse_test.go`).
+
+**What are we testing, and why?** Whether the guard catches `codexTarget.Install`'s
+`PreToolNudgeKeep` case silently collapsing into `PreToolNudgeOff`'s removal — the lifecycle
+distinction D-10/D-23 exist to preserve: Keep must refresh a sticky opt-in's guard for a moved
+binary, never remove it.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex.go` — exit 0 (clean).
+
+**Mutation applied:** the `PreToolNudgeKeep` case body replaced with the same call
+`PreToolNudgeOff` makes (the pinned Family g1 site):
+
+```diff
+diff --git a/internal/agents/codex.go b/internal/agents/codex.go
+index 833b2a09..52f74592 100644
+--- a/internal/agents/codex.go
++++ b/internal/agents/codex.go
+@@ -252,27 +252,8 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
+ 			}
+ 		}
+ 	case PreToolNudgeKeep:
+-		if hooksPath, err := codexHooksJSONPath(loc); err != nil {
+-			result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks.json path: %w", err))
+-		} else if _, ownCommands, berr := codexPreToolUseBlocks(loc); berr != nil {
+-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, berr))
+-		} else if recorded, herr := hasOwnHookBlock(hooksPath, "PreToolUse", ownCommands); herr == nil && recorded {
+-			disabled, source, derr := codexHooksExplicitlyDisabled(loc)
+-			if derr != nil {
+-				result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks-disabled setting: %w", derr))
+-			} else if disabled {
+-				result.Notes = append(result.Notes, codexHooksDisabledNote(source))
+-			} else {
+-				beforeFiles := len(result.Files)
+-				installCodexPreToolNudge(&result, loc, opts.ExecPath)
+-				if codexHooksFileWasWritten(result.Files[beforeFiles:], hooksPath) {
+-					result.Notes = append(result.Notes, codexHookTrustNote(loc))
+-				}
+-			}
+-		}
+-		// herr != nil (unreadable/malformed hooks.json) or !recorded: Keep
+-		// touches nothing — "cannot tell, so don't guess" (matches Claude's
+-		// preToolNudgeEvidenced posture for the same ambiguity).
++		// Family (g1) planted mutation: the dispatcher treats Keep as Off.
++		uninstallCodexPreToolNudge(&result, loc)
+ 	case PreToolNudgeOff:
+ 		uninstallCodexPreToolNudge(&result, loc)
+ 	}
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent$' -v`):
+
+```
+    codex_pretooluse_test.go:606: readFile(.codex/hooks/codegraph-pretooluse.sh): open .codex/hooks/codegraph-pretooluse.sh: no such file or directory
+--- FAIL: TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.131s
+FAIL
+exit=1
+```
+
+Keep now removes the guard the prior On install wrote instead of refreshing it, so reading the
+guard's expected content fails outright.
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/codex.go`, then
+`git diff --quiet -- internal/agents/codex.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.103s`.
+
+---
+
+## Family (g2) — D-18: an early return from `codexHooksExplicitlyDisabled` turns TestCodexPreToolNudge_SkippedWhenHooksDisabled RED
+
+**Test/guard:** `TestCodexPreToolNudge_SkippedWhenHooksDisabled` (`internal/agents/codex_pretooluse_test.go`),
+5 of its 7 subtests (the disabled cases).
+
+**What are we testing, and why?** Whether the guard catches `codexHooksExplicitlyDisabled`
+silently always reporting "not disabled" — the D-18 skip this function exists to drive: without
+it, an opt-in install would register the hook even when the user explicitly turned Codex hooks
+off.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/codex_pretooluse.go` — exit 0 (clean).
+
+**Mutation applied:** an unconditional early return inserted immediately after the pinned
+`codexHooksExplicitlyDisabled` signature line (the exact mutation this plan's own Task 3
+`<verify>` gate re-applies and re-checks independently):
+
+```diff
+diff --git a/internal/agents/codex_pretooluse.go b/internal/agents/codex_pretooluse.go
+index 2623e3b0..6b08cc09 100644
+--- a/internal/agents/codex_pretooluse.go
++++ b/internal/agents/codex_pretooluse.go
+@@ -206,6 +206,7 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
+ // nothing, per the "cannot tell, so don't guess" posture the rest of this
+ // package's config reads already follow.
+ func codexHooksExplicitlyDisabled(loc Location) (bool, string, error) {
++	return false, "", nil
+ 	if loc == LocationLocal {
+ 		localPath, err := codexConfigPath(LocationLocal)
+ 		if err != nil {
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodexPreToolNudge_SkippedWhenHooksDisabled$' -v`):
+
+```
+    codex_pretooluse_test.go:793: expected no writes when hooks are disabled, guardExists=true hooksExists=true
+    codex_pretooluse_test.go:793: expected no writes when hooks are disabled, guardExists=true hooksExists=true
+    codex_pretooluse_test.go:793: expected no writes when hooks are disabled, guardExists=true hooksExists=true
+    codex_pretooluse_test.go:793: expected no writes when hooks are disabled, guardExists=true hooksExists=true
+    codex_pretooluse_test.go:793: expected no writes when hooks are disabled, guardExists=true hooksExists=true
+--- FAIL: TestCodexPreToolNudge_SkippedWhenHooksDisabled (0.02s)
+    --- FAIL: TestCodexPreToolNudge_SkippedWhenHooksDisabled/features_hooks_false_local (0.00s)
+    --- FAIL: TestCodexPreToolNudge_SkippedWhenHooksDisabled/global_false_applies_to_local (0.00s)
+    --- FAIL: TestCodexPreToolNudge_SkippedWhenHooksDisabled/codex_hooks_false_deprecated (0.00s)
+    --- FAIL: TestCodexPreToolNudge_SkippedWhenHooksDisabled/dotted_root_key (0.00s)
+    --- FAIL: TestCodexPreToolNudge_SkippedWhenHooksDisabled/inline_table (0.00s)
+    --- PASS: TestCodexPreToolNudge_SkippedWhenHooksDisabled/local_true_overrides_global_false (0.00s)
+    --- PASS: TestCodexPreToolNudge_SkippedWhenHooksDisabled/hooks_true_writes (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.086s
+FAIL
+exit=1
+```
+
+Only the 5 disabled-config subtests turn RED — the two subtests already expecting a write
+(`local_true_overrides_global_false`, `hooks_true_writes`) are unaffected, since the mutation only
+ever answers "not disabled".
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/codex_pretooluse.go` — exit 1 (only the
+planted diff).
+
+**Revert:** `git checkout -- internal/agents/codex_pretooluse.go`, then
+`git diff --quiet -- internal/agents/codex_pretooluse.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestCodexPreToolNudge_SkippedWhenHooksDisabled$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.089s`.
+
+---
+
+## Family (g3) — D-09: narrowing the note condition back to Claude only turns TestInstall_PreToolNudge_NoNoteWhenCodexSelected RED
+
+**Test/guard:** `TestInstall_PreToolNudge_NoNoteWhenCodexSelected` (`internal/cli/install_test.go`).
+
+**What are we testing, and why?** Whether the guard catches the widened D-09 note condition
+regressing back to its pre-07-08 Claude-only form — the exact bug this plan's own note-widening
+work fixes: a Codex-only install would wrongly print "nothing was changed" even though the flag
+DID configure Codex.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/install.go` — exit 0 (clean).
+
+**Mutation applied:** the `hasClaudeOrCodex` predicate narrowed back to Claude only (the pinned
+Family g3 site):
+
+```diff
+diff --git a/internal/cli/install.go b/internal/cli/install.go
+index 681cea8b..ed3a363f 100644
+--- a/internal/cli/install.go
++++ b/internal/cli/install.go
+@@ -148,7 +148,7 @@ func newInstallCmd() *cobra.Command {
+ 				// resolved target. Plain stderr — stdout carries the
+ 				// per-agent report.
+ 				hasClaudeOrCodex := slices.ContainsFunc(targets, func(t agents.AgentTarget) bool {
+-					return t.ID() == agents.Claude || t.ID() == agents.Codex
++					return t.ID() == agents.Claude // Family (g3) planted mutation: narrowed back to Claude only
+ 				})
+ 				if !hasClaudeOrCodex {
+ 					fmt.Fprintln(cmd.ErrOrStderr(), "note: --pretool-nudge only configures Claude Code and Codex CLI, neither of which is among the selected agents; nothing was changed for them")
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestInstall_PreToolNudge_NoNoteWhenCodexSelected$' -v`):
+
+```
+=== RUN   TestInstall_PreToolNudge_NoNoteWhenCodexSelected
+    install_test.go:858: note printed although Codex was selected; stderr:
+        note: --pretool-nudge only configures Claude Code and Codex CLI, neither of which is among the selected agents; nothing was changed for them
+--- FAIL: TestInstall_PreToolNudge_NoNoteWhenCodexSelected (0.01s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.487s
+FAIL
+exit=1
+```
+
+**Pre-revert gate:** `git diff --quiet -- internal/cli/install.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/cli/install.go`, then
+`git diff --quiet -- internal/cli/install.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1
+-run 'TestInstall_PreToolNudge_NoNoteWhenCodexSelected$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/cli	0.462s`.
+
+---
+
+## Family (g4) — 242ec0a: reintroducing matcher-shape hook ownership turns TestOwnershipExactIdentity/codex/ RED
+
+**Test/guard:** `TestOwnershipExactIdentity/codex/{global,local}/{clean,foreign-codegraph-dir}`
+(`internal/agents/ownership_test.go`), 4 leaves.
+
+**What are we testing, and why?** Whether the guard catches `blockOwnsAnyCommand` reintroducing
+the historical 242ec0a matcher-shape recovery — this time for Codex's `^Bash$` matcher rather than
+Claude's `"startup"` — which would let codegraph silently claim (and later strip) a foreign user
+block that merely shares the same matcher, exactly the vulnerability commit
+`242ec0a418703c6a4dab45188242149960cda77d` fixed.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/agents/shared.go` — exit 0 (clean).
+
+**Mutation applied:** an early `return true` added to `blockOwnsAnyCommand` for any block whose
+matcher is exactly `"^Bash$"` — Codex's own opt-in matcher (the pinned Family g4 site):
+
+```diff
+diff --git a/internal/agents/shared.go b/internal/agents/shared.go
+index b88e1098..b6b6d558 100644
+--- a/internal/agents/shared.go
++++ b/internal/agents/shared.go
+@@ -185,6 +185,11 @@ func blockOwnsAnyCommand(block any, ownCommands []string) bool {
+ 	if !ok {
+ 		return false
+ 	}
++	// Family (g4) planted mutation: the 242ec0a matcher-shape recovery,
++	// reintroduced.
++	if m, _ := obj["matcher"].(string); m == "^Bash$" {
++		return true
++	}
+ 	blockHooks, ok := obj["hooks"].([]any)
+ 	if !ok {
+ 		return false
+```
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestOwnershipExactIdentity/codex/' -v`, `=== RUN` lines dropped):
+
+```
+    ownership_test.go:684: /var/folders/.../T/TestOwnershipExactIdentitycodexglobalclean1030932451/001/.codex/hooks.json missing after uninstall — the unrelated ^Bash$ group should have survived
+    ownership_test.go:684: /var/folders/.../T/TestOwnershipExactIdentitycodexglobalforeign-codegraph-dir3970184593/001/.codex/hooks.json missing after uninstall — the unrelated ^Bash$ group should have survived
+    ownership_test.go:684: .codex/hooks.json missing after uninstall — the unrelated ^Bash$ group should have survived
+    ownership_test.go:684: .codex/hooks.json missing after uninstall — the unrelated ^Bash$ group should have survived
+    ownership_test.go:690: executed 4 ownership leaves, want 32
+--- FAIL: TestOwnershipExactIdentity (0.06s)
+    --- FAIL: TestOwnershipExactIdentity/codex/global/clean (0.02s)
+    --- FAIL: TestOwnershipExactIdentity/codex/global/foreign-codegraph-dir (0.01s)
+    --- FAIL: TestOwnershipExactIdentity/codex/local/clean (0.00s)
+    --- FAIL: TestOwnershipExactIdentity/codex/local/foreign-codegraph-dir (0.02s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.145s
+FAIL
+exit=1
+```
+
+All 4 Codex leaves turn RED together: `blockOwnsAnyCommand` now claims the foreign `^Bash$` group
+as codegraph's own by matcher alone, so `removeHookEntry` strips it during uninstall along with
+codegraph's real group — the planted foreign group no longer survives. (`executed 4 ownership
+leaves, want 32` is the `-run` filter narrowing this run to only the Codex leaves, not a guard
+defect.)
+
+**Pre-revert gate:** `git diff --quiet -- internal/agents/shared.go` — exit 1 (only the planted
+diff).
+
+**Revert:** `git checkout -- internal/agents/shared.go`, then
+`git diff --quiet -- internal/agents/shared.go` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/ -count=1
+-run 'TestOwnershipExactIdentity$'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/agents	0.176s`.
+
+Full-package re-check after all four reverts: `GOTOOLCHAIN=go1.26.6 go test ./internal/agents/
+./internal/cli/ -count=1` → both `ok`.
+
+Family (g) verdict: the Keep-collapses-to-Off dispatcher regression (g1), the hooks-disabled skip
+going silently absent (g2), the widened note condition regressing to Claude-only (g3), and the
+242ec0a matcher-shape ownership vulnerability reintroduced for Codex's own matcher (g4) all
+demonstrated RED against a real planted mutation and reverted byte-clean; both packages are GREEN
+after every revert.
