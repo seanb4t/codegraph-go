@@ -285,16 +285,23 @@ func writeRenderedCodexGuard(t *testing.T, loc Location, binPath, projectDir str
 	return guard
 }
 
-// runCodexPreToolGuard runs guardPath with stdin and cwd set to cwd. PWD is
-// always explicitly set to cwd (never left to whatever the test process
-// itself inherited) — the global guard's own indexed check is `${PWD:-.}`,
-// and leaving an ambient, stale PWD in the environment (inherited from
-// the actual shell running `go test`) would make that check silently pass
-// or fail against the WRONG directory. forcedEnv, when non-nil, REPLACES
-// the environment entirely (used by the empty-PATH subtest); otherwise the
-// current environment (with PWD stripped and re-added as cwd) plus
-// extraEnv is used.
-func runCodexPreToolGuard(t *testing.T, guardPath, cwd string, extraEnv []string, forcedEnv []string, stdin string) (stdout, stderr string, exit int, err error) {
+// runCodexPreToolGuard runs guardPath with stdin and the process cwd set
+// to cwd. pwd is the value the $PWD ENVIRONMENT VARIABLE is explicitly set
+// to — deliberately a SEPARATE parameter from cwd, never left to whatever
+// the test process itself inherited (the actual shell running `go test`
+// leaves its own PWD in os.Environ(), which would otherwise leak in). The
+// two are the same value only for the global guard's own tests, which
+// legitimately depend on $PWD (D-22); every local guard test call passes
+// a DELIBERATELY WRONG pwd (bogusPWD) distinct from cwd and lacking
+// .codegraph, so a mutation that made the local guard consult $PWD
+// instead of deriving its root from $0 would be caught immediately by
+// indexed_binary_ok turning silent (Family (f2), 07-MUTATION-LOG.md) —
+// this is the negative control that makes root_from_own_path_with_empty_path
+// mean something beyond "still works," not just an accidentally-correct
+// PWD along for the ride. forcedEnv, when non-nil, REPLACES the
+// environment entirely (used by the empty-PATH subtest) — pwd is still
+// appended afterward either way.
+func runCodexPreToolGuard(t *testing.T, guardPath, cwd, pwd string, extraEnv []string, forcedEnv []string, stdin string) (stdout, stderr string, exit int, err error) {
 	t.Helper()
 
 	var env []string
@@ -309,7 +316,7 @@ func runCodexPreToolGuard(t *testing.T, guardPath, cwd string, extraEnv []string
 		}
 		env = append(env, extraEnv...)
 	}
-	env = append(env, "PWD="+cwd)
+	env = append(env, "PWD="+pwd)
 
 	cmd := exec.Command(guardPath)
 	cmd.Dir = cwd
@@ -375,6 +382,14 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 		{name: "global/binary_exits_nonzero", loc: LocationGlobal, codegraph: "dir", stub: stubFail, stubMode: 0o755, wantStarted: true},
 	}
 
+	// bogusPWD is a fresh, un-indexed directory distinct from every case's
+	// own project dir — passed as $PWD for every LOCAL guard invocation
+	// below so a mutation that made the local guard consult $PWD instead
+	// of deriving its root from $0 is caught (Family (f2)), rather than
+	// accidentally passing because $PWD happened to equal the right
+	// directory anyway.
+	bogusPWD := t.TempDir()
+
 	ran := 0
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -387,11 +402,15 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 			project := newProject(t, tc.codegraph)
 			guard := writeRenderedCodexGuard(t, tc.loc, bin, project)
 
+			pwd := bogusPWD
+			if tc.loc == LocationGlobal {
+				pwd = project
+			}
 			var forcedEnv []string
 			if tc.emptyPath {
 				forcedEnv = []string{"STUB_DIR=" + stubDir, "PATH="}
 			}
-			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, []string{"STUB_DIR=" + stubDir}, forcedEnv, preToolGuardEvent)
+			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, pwd, []string{"STUB_DIR=" + stubDir}, forcedEnv, preToolGuardEvent)
 			if err != nil {
 				t.Fatalf("run guard: %v", err)
 			}
@@ -446,7 +465,7 @@ func TestRenderCodexPreToolGuard(t *testing.T) {
 			guard := writeRenderedCodexGuard(t, loc, bin, project)
 			shSyntaxOK(t, guard)
 
-			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, []string{"STUB_DIR=" + stubDir}, nil, preToolGuardEvent)
+			stdout, stderr, exit, err := runCodexPreToolGuard(t, guard, project, project, []string{"STUB_DIR=" + stubDir}, nil, preToolGuardEvent)
 			if err != nil {
 				t.Fatalf("(%s) run guard: %v", loc, err)
 			}
