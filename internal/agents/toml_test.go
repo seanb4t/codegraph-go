@@ -483,3 +483,109 @@ func containsAll(haystack string, needles ...string) bool {
 	}
 	return true
 }
+
+// TestTOMLBoolSetting (D-18) pins tomlBoolSetting's three recognized forms
+// — a plain in-table key, a root dotted key, and a single-line inline
+// table — plus the shapes it must correctly report as unset rather than
+// guess at.
+func TestTOMLBoolSetting(t *testing.T) {
+	cases := []struct {
+		name      string
+		content   string
+		table     string
+		key       string
+		wantValue bool
+		wantSet   bool
+	}{
+		{
+			name:      "table_false",
+			content:   "[features]\nhooks = false\n",
+			table:     "features",
+			key:       "hooks",
+			wantValue: false,
+			wantSet:   true,
+		},
+		{
+			name:      "table_true",
+			content:   "[features]\nhooks = true\n",
+			table:     "features",
+			key:       "hooks",
+			wantValue: true,
+			wantSet:   true,
+		},
+		{
+			name:      "table_indented_header",
+			content:   "  [features]\n  hooks = false\n",
+			table:     "features",
+			key:       "hooks",
+			wantValue: false,
+			wantSet:   true,
+		},
+		{
+			name:      "trailing_comment",
+			content:   "[features]\nhooks = false  # disabled on purpose\n",
+			table:     "features",
+			key:       "hooks",
+			wantValue: false,
+			wantSet:   true,
+		},
+		{
+			name:      "dotted_root",
+			content:   "features.hooks = false\n",
+			table:     "features",
+			key:       "hooks",
+			wantValue: false,
+			wantSet:   true,
+		},
+		{
+			name:      "inline_table",
+			content:   "features = { hooks = false, other = true }\n",
+			table:     "features",
+			key:       "hooks",
+			wantValue: false,
+			wantSet:   true,
+		},
+		{
+			name:    "not_bool_is_unset",
+			content: "[features]\nhooks = \"false\"\n",
+			table:   "features",
+			key:     "hooks",
+			wantSet: false,
+		},
+		{
+			name:    "absent_is_unset",
+			content: "[other]\nkey = \"value\"\n",
+			table:   "features",
+			key:     "hooks",
+			wantSet: false,
+		},
+		{
+			name:    "key_in_other_table_is_unset",
+			content: "[other]\nhooks = false\n",
+			table:   "features",
+			key:     "hooks",
+			wantSet: false,
+		},
+		{
+			name: "inside_multiline_string_is_unset",
+			content: "[features]\n" +
+				"notes = \"\"\"\n" +
+				"hooks = false\n" +
+				"\"\"\"\n",
+			table:   "features",
+			key:     "hooks",
+			wantSet: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotValue, gotSet := tomlBoolSetting(tc.content, tc.table, tc.key)
+			if gotSet != tc.wantSet {
+				t.Fatalf("tomlBoolSetting(%q, %q, %q) set = %v, want %v", tc.content, tc.table, tc.key, gotSet, tc.wantSet)
+			}
+			if gotSet && gotValue != tc.wantValue {
+				t.Fatalf("tomlBoolSetting(%q, %q, %q) value = %v, want %v", tc.content, tc.table, tc.key, gotValue, tc.wantValue)
+			}
+		})
+	}
+}

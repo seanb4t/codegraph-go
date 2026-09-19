@@ -512,3 +512,438 @@ func TestRenderCodexPreToolGuard(t *testing.T) {
 		}
 	})
 }
+
+// The sticky Keep/On/Off lifecycle of the Codex PreToolUse nudge (07-08,
+// D-18/D-19/D-23). Unlike Claude's manifest-backed stickiness
+// (preToolNudgeEvidenced), Codex's stickiness evidence is its own
+// exact-identity hooks.json group directly (D-23) — Codex has no skill
+// manifest concept for this opt-in.
+
+// countHooksJSONFileAction returns the FileResult.Action recorded for path
+// in res.Files, or "" when res.Files has no entry for it.
+func countHooksJSONFileAction(res WriteResult, path string) FileAction {
+	for _, f := range res.Files {
+		if f.Path == path {
+			return f.Action
+		}
+	}
+	return ""
+}
+
+// TestCodexPreToolNudge_OnWritesAndNotesTrust (D-19): both local and global
+// On installs write the guard and register codegraph's own PreToolUse
+// group, and each carries exactly one Note mentioning /hooks.
+func TestCodexPreToolNudge_OnWritesAndNotesTrust(t *testing.T) {
+	for _, loc := range []Location{LocationLocal, LocationGlobal} {
+		t.Run(string(loc), func(t *testing.T) {
+			fakeHome(t)
+			t.Chdir(t.TempDir())
+
+			res := codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			if len(res.Errors) != 0 {
+				t.Fatalf("Install errors: %v", res.Errors)
+			}
+			guard, err := codexPreToolGuardPath(loc)
+			if err != nil {
+				t.Fatalf("codexPreToolGuardPath(%s): %v", loc, err)
+			}
+			if _, statErr := os.Stat(guard); statErr != nil {
+				t.Fatalf("guard not written: %v", statErr)
+			}
+			hooksPath, err := codexHooksJSONPath(loc)
+			if err != nil {
+				t.Fatalf("codexHooksJSONPath(%s): %v", loc, err)
+			}
+			_, ownCommands, err := codexPreToolUseBlocks(loc)
+			if err != nil {
+				t.Fatalf("codexPreToolUseBlocks(%s): %v", loc, err)
+			}
+			has, herr := hasOwnHookBlock(hooksPath, "PreToolUse", ownCommands)
+			if herr != nil || !has {
+				t.Fatalf("hooks.json has no own PreToolUse group after On install (has=%v err=%v)", has, herr)
+			}
+			n := 0
+			for _, note := range res.Notes {
+				if strings.Contains(note, "/hooks") {
+					n++
+				}
+			}
+			if n != 1 {
+				t.Fatalf("Notes mentioning /hooks = %d, want 1: %#v", n, res.Notes)
+			}
+		})
+	}
+}
+
+// TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent (D-23): On with
+// ExecPath A, then Keep with ExecPath B refreshes the guard for the moved
+// binary, reports hooks.json unchanged (the definition itself did not
+// change), and prints no trust Note (nothing new to trust).
+func TestCodexPreToolNudge_KeepRefreshesWhenOwnGroupPresent(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+
+	const execA = "/opt/a/codegraph"
+	const execB = "/opt/b/codegraph"
+
+	if res := (codexTarget{}).Install(LocationLocal, InstallOptions{ExecPath: execA, PreToolNudge: PreToolNudgeOn}); len(res.Errors) != 0 {
+		t.Fatalf("On Install errors: %v", res.Errors)
+	}
+	guard, err := codexPreToolGuardPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexPreToolGuardPath: %v", err)
+	}
+	hooksPath, err := codexHooksJSONPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath: %v", err)
+	}
+	beforeHooks := readFile(t, hooksPath)
+
+	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: execB, PreToolNudge: PreToolNudgeKeep})
+	if len(res.Errors) != 0 {
+		t.Fatalf("Keep Install errors: %v", res.Errors)
+	}
+	content := readFile(t, guard)
+	if !strings.Contains(content, "\ncodegraph_bin='"+execB+"'\n") {
+		t.Fatalf("Keep did not re-render the guard for the moved binary:\n%s", content)
+	}
+	if got := countHooksJSONFileAction(res, hooksPath); got != ActionUnchanged {
+		t.Fatalf("hooks.json FileResult after Keep = %q, want %q", got, ActionUnchanged)
+	}
+	if got := readFile(t, hooksPath); got != beforeHooks {
+		t.Fatalf("hooks.json bytes changed after Keep, want byte-identical:\nbefore=%q\nafter=%q", beforeHooks, got)
+	}
+	for _, note := range res.Notes {
+		if strings.Contains(note, "/hooks") {
+			t.Fatalf("Keep with an unchanged definition printed a trust note: %#v", res.Notes)
+		}
+	}
+}
+
+// TestCodexPreToolNudge_KeepNoopWhenNotOptedIn: Keep on a fresh (never
+// opted-in) location writes nothing.
+func TestCodexPreToolNudge_KeepNoopWhenNotOptedIn(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+
+	guard, err := codexPreToolGuardPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexPreToolGuardPath: %v", err)
+	}
+	hooksPath, err := codexHooksJSONPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath: %v", err)
+	}
+
+	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeKeep})
+	if len(res.Errors) != 0 {
+		t.Fatalf("Keep Install errors: %v", res.Errors)
+	}
+	if _, statErr := os.Lstat(guard); !os.IsNotExist(statErr) {
+		t.Fatalf("a fresh Keep install wrote %s (Lstat err %v)", guard, statErr)
+	}
+	if _, statErr := os.Lstat(hooksPath); !os.IsNotExist(statErr) {
+		t.Fatalf("a fresh Keep install wrote %s (Lstat err %v)", hooksPath, statErr)
+	}
+}
+
+// TestCodexPreToolNudge_KeepWithMalformedHooksJSONTouchesNothing: a
+// malformed hooks.json with Keep writes nothing, reports no error, and
+// leaves the file byte-identical (hasOwnHookBlock's read failure is
+// treated as "cannot tell", never surfaced as an Install error).
+func TestCodexPreToolNudge_KeepWithMalformedHooksJSONTouchesNothing(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+
+	hooksPath, err := codexHooksJSONPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath: %v", err)
+	}
+	writeFile(t, hooksPath, "{not json")
+	before := readFile(t, hooksPath)
+	guard, err := codexPreToolGuardPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexPreToolGuardPath: %v", err)
+	}
+
+	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeKeep})
+	if len(res.Errors) != 0 {
+		t.Fatalf("Keep with a malformed hooks.json returned errors, want none: %v", res.Errors)
+	}
+	if got := readFile(t, hooksPath); got != before {
+		t.Fatalf("Keep with a malformed hooks.json changed its bytes:\nbefore=%q\nafter=%q", before, got)
+	}
+	if _, statErr := os.Lstat(guard); !os.IsNotExist(statErr) {
+		t.Fatalf("Keep with a malformed hooks.json wrote the guard (Lstat err %v)", statErr)
+	}
+}
+
+// TestCodexPreToolNudge_OffRemovesAndForgets: On then Off removes the
+// guard and codegraph's own hooks.json group; a later Keep adds nothing
+// back (D-18's opt-in stays explicit — Off is not merely a pause).
+func TestCodexPreToolNudge_OffRemovesAndForgets(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+
+	guard, err := codexPreToolGuardPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexPreToolGuardPath: %v", err)
+	}
+	hooksPath, err := codexHooksJSONPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath: %v", err)
+	}
+
+	if res := (codexTarget{}).Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn}); len(res.Errors) != 0 {
+		t.Fatalf("On Install errors: %v", res.Errors)
+	}
+	if _, statErr := os.Stat(guard); statErr != nil {
+		t.Fatalf("precondition: guard not written: %v", statErr)
+	}
+
+	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOff})
+	if len(res.Errors) != 0 {
+		t.Fatalf("Off Install errors: %v", res.Errors)
+	}
+	if _, statErr := os.Lstat(guard); !os.IsNotExist(statErr) {
+		t.Fatalf("Off left the guard (Lstat err %v)", statErr)
+	}
+	if _, statErr := os.Lstat(hooksPath); !os.IsNotExist(statErr) {
+		t.Fatalf("Off left hooks.json (Lstat err %v)", statErr)
+	}
+
+	res = codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeKeep})
+	if len(res.Errors) != 0 {
+		t.Fatalf("Keep after Off errors: %v", res.Errors)
+	}
+	if _, statErr := os.Lstat(guard); !os.IsNotExist(statErr) {
+		t.Fatalf("Keep after Off re-added the guard (Lstat err %v)", statErr)
+	}
+	if _, statErr := os.Lstat(hooksPath); !os.IsNotExist(statErr) {
+		t.Fatalf("Keep after Off re-added hooks.json (Lstat err %v)", statErr)
+	}
+}
+
+// TestCodexPreToolNudge_SkippedWhenHooksDisabled (D-18): an On install is
+// skipped, writing neither the guard nor hooks.json and carrying exactly
+// one Note, whenever the governing config.toml explicitly disables Codex
+// hooks — recognized via any of tomlBoolSetting's three forms, at either
+// local or (falling back) global scope, under either the current or the
+// deprecated key name. A LOCAL true overrides a GLOBAL false (local wins),
+// and an unqualified true install still writes.
+func TestCodexPreToolNudge_SkippedWhenHooksDisabled(t *testing.T) {
+	cases := []struct {
+		name         string
+		localConfig  string
+		globalConfig string
+		wantWrites   bool
+	}{
+		{name: "features_hooks_false_local", localConfig: "[features]\nhooks = false\n"},
+		{name: "global_false_applies_to_local", globalConfig: "[features]\nhooks = false\n"},
+		{name: "codex_hooks_false_deprecated", localConfig: "[features]\ncodex_hooks = false\n"},
+		{name: "dotted_root_key", localConfig: "features.hooks = false\n"},
+		{name: "inline_table", localConfig: "features = { hooks = false }\n"},
+		{name: "local_true_overrides_global_false", localConfig: "[features]\nhooks = true\n", globalConfig: "[features]\nhooks = false\n", wantWrites: true},
+		{name: "hooks_true_writes", localConfig: "[features]\nhooks = true\n", wantWrites: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := fakeHome(t)
+			t.Chdir(t.TempDir())
+
+			if tc.localConfig != "" {
+				localPath, err := codexConfigPath(LocationLocal)
+				if err != nil {
+					t.Fatalf("codexConfigPath(local): %v", err)
+				}
+				writeFile(t, localPath, tc.localConfig)
+			}
+			if tc.globalConfig != "" {
+				writeFile(t, filepath.Join(home, ".codex", "config.toml"), tc.globalConfig)
+			}
+
+			guard, err := codexPreToolGuardPath(LocationLocal)
+			if err != nil {
+				t.Fatalf("codexPreToolGuardPath: %v", err)
+			}
+			hooksPath, err := codexHooksJSONPath(LocationLocal)
+			if err != nil {
+				t.Fatalf("codexHooksJSONPath: %v", err)
+			}
+
+			res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			if len(res.Errors) != 0 {
+				t.Fatalf("Install errors: %v", res.Errors)
+			}
+
+			_, guardErr := os.Lstat(guard)
+			_, hooksErr := os.Lstat(hooksPath)
+			guardExists := guardErr == nil
+			hooksExists := hooksErr == nil
+
+			if tc.wantWrites {
+				if !guardExists || !hooksExists {
+					t.Fatalf("expected writes when hooks are enabled, guardExists=%v hooksExists=%v (guardErr=%v hooksErr=%v)", guardExists, hooksExists, guardErr, hooksErr)
+				}
+				return
+			}
+
+			if guardExists || hooksExists {
+				t.Fatalf("expected no writes when hooks are disabled, guardExists=%v hooksExists=%v", guardExists, hooksExists)
+			}
+			if len(res.Notes) != 1 {
+				t.Fatalf("Notes = %d, want exactly 1 (the disabled note): %#v", len(res.Notes), res.Notes)
+			}
+		})
+	}
+}
+
+// TestCodexPreToolNudge_ReinstallIsIdempotent: On twice reports every file
+// unchanged on the second run.
+func TestCodexPreToolNudge_ReinstallIsIdempotent(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+
+	if res := (codexTarget{}).Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn}); len(res.Errors) != 0 {
+		t.Fatalf("first On Install errors: %v", res.Errors)
+	}
+
+	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+	if len(res.Errors) != 0 {
+		t.Fatalf("second On Install errors: %v", res.Errors)
+	}
+	if len(res.Files) == 0 {
+		t.Fatalf("second On install reported no files")
+	}
+	for _, f := range res.Files {
+		if f.Action != ActionUnchanged {
+			t.Errorf("second On install: %s = %q, want %q", f.Path, f.Action, ActionUnchanged)
+		}
+	}
+}
+
+// TestCodexPreToolNudge_HandEditedOwnGroupDuplicates: ownership is the
+// exact command string, never the matcher (242ec0a). Hand-editing the
+// installed group's handler command makes it no longer codegraph's own —
+// the next On install leaves it byte-identical and appends a fresh owned
+// group beside it, rather than overwriting it.
+func TestCodexPreToolNudge_HandEditedOwnGroupDuplicates(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+
+	if res := (codexTarget{}).Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn}); len(res.Errors) != 0 {
+		t.Fatalf("On Install errors: %v", res.Errors)
+	}
+	hooksPath, err := codexHooksJSONPath(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexHooksJSONPath: %v", err)
+	}
+	ownCommand, err := codexPreToolHookCommand(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexPreToolHookCommand: %v", err)
+	}
+
+	decoded := readJSONHooksFile(t, hooksPath)
+	hooks, _ := decoded["hooks"].(map[string]any)
+	groups, _ := hooks["PreToolUse"].([]any)
+	if len(groups) != 1 {
+		t.Fatalf("after the first On install PreToolUse has %d groups, want 1: %#v", len(groups), groups)
+	}
+	group, _ := groups[0].(map[string]any)
+	handlers, _ := group["hooks"].([]any)
+	handler, _ := handlers[0].(map[string]any)
+	if handler["command"] != ownCommand {
+		t.Fatalf("own group's handler command = %#v, want %q", handler["command"], ownCommand)
+	}
+	handler["command"] = ownCommand + " --edited"
+	editedGroup, err := normalizeJSON(group)
+	if err != nil {
+		t.Fatalf("normalize edited group: %v", err)
+	}
+	out, err := json.MarshalIndent(decoded, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	writeFile(t, hooksPath, string(out)+"\n")
+
+	if res := (codexTarget{}).Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn}); len(res.Errors) != 0 {
+		t.Fatalf("second On Install errors: %v", res.Errors)
+	}
+
+	after := readJSONHooksFile(t, hooksPath)
+	afterHooks, _ := after["hooks"].(map[string]any)
+	afterGroups, _ := afterHooks["PreToolUse"].([]any)
+	if len(afterGroups) != 2 {
+		t.Fatalf("PreToolUse has %d groups, want 2 (the hand-edited one + 1 fresh owned): %#v", len(afterGroups), afterGroups)
+	}
+	sawEdited := 0
+	for _, g := range afterGroups {
+		if jsonDeepEqual(g, editedGroup) {
+			sawEdited++
+		}
+	}
+	if sawEdited != 1 {
+		t.Fatalf("the hand-edited group appears %d times byte-identical, want 1: %#v", sawEdited, afterGroups)
+	}
+	_, ownCommands, err := codexPreToolUseBlocks(LocationLocal)
+	if err != nil {
+		t.Fatalf("codexPreToolUseBlocks: %v", err)
+	}
+	has, herr := hasOwnHookBlock(hooksPath, "PreToolUse", ownCommands)
+	if herr != nil || !has {
+		t.Fatalf("hasOwnHookBlock after reinstall = (%v, %v), want (true, nil)", has, herr)
+	}
+}
+
+// TestCodexNotesNeverAdviseTrustBypass (D-19, T-07-24): every Note produced
+// by a Codex install — across On/Keep/Off, both scopes, and the
+// hooks-disabled skip — never advises bypassing Codex's hook trust review.
+// The forbidden token is built by concatenation so this test's own source
+// never matches it (grep-proofing the negative assertion itself).
+func TestCodexNotesNeverAdviseTrustBypass(t *testing.T) {
+	forbidden := "--dangerously-" + "bypass-hook-trust"
+
+	check := func(t *testing.T, notes []string) {
+		t.Helper()
+		for _, note := range notes {
+			if strings.Contains(note, forbidden) {
+				t.Fatalf("a Codex Note advises trust bypass: %q", note)
+			}
+		}
+	}
+
+	for _, loc := range []Location{LocationLocal, LocationGlobal} {
+		t.Run(string(loc)+"/on", func(t *testing.T) {
+			fakeHome(t)
+			t.Chdir(t.TempDir())
+			res := codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			check(t, res.Notes)
+		})
+		t.Run(string(loc)+"/keep_after_on", func(t *testing.T) {
+			fakeHome(t)
+			t.Chdir(t.TempDir())
+			codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			res := codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeKeep})
+			check(t, res.Notes)
+		})
+		t.Run(string(loc)+"/off", func(t *testing.T) {
+			fakeHome(t)
+			t.Chdir(t.TempDir())
+			codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			res := codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOff})
+			check(t, res.Notes)
+		})
+	}
+	t.Run("hooks_disabled_skip", func(t *testing.T) {
+		fakeHome(t)
+		t.Chdir(t.TempDir())
+		localPath, err := codexConfigPath(LocationLocal)
+		if err != nil {
+			t.Fatalf("codexConfigPath: %v", err)
+		}
+		writeFile(t, localPath, "[features]\nhooks = false\n")
+		res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+		check(t, res.Notes)
+	})
+}
