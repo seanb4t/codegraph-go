@@ -389,23 +389,160 @@ $S/home/.codex/config.toml        absent (no global install yet — Task 3's job
    value equals the pre-flight record above.
 5. `CODEX-01 verdict: PASS` only if L1 (project), L1 (global), L2, L3, L4 and L7 are all PASS.
 
+### Protocol A/B evidence (orchestrator, 2026-09-19, codex-cli 0.155.0)
+
+All runs used `HOME=/private/tmp/07-live/home CODEX_HOME=/private/tmp/07-live/home/.codex`. Transcripts are in `/private/tmp/07-live/transcripts/`. The orchestrator re-took the pre-flight sha256 independently (`transcripts/preflight-orchestrator.sha`), and all four values equal the scaffold's record.
+
+**A1: bare, model-free** (`A1-bare-mcp.json`, `A1-bare-prompt.json`)
+
+```
+$ codex mcp list --json          # in $S/bare
+[]
+$ codex debug prompt-input       # 14068 bytes; stderr empty
+searches:  codegraph=0  CODEGRAPH_START=0  "## CodeGraph"=0  cgprobe-dotcodex=0  cgprobe-codexhome=1
+```
+
+**A2: untrusted, model-free** (`A2-untrusted-mcp.json`, `A2-untrusted-prompt.json`). The project `.codex/config.toml` is identical in shape to `trusted`'s (`command = "/private/tmp/07-live/codegraph-project"`).
+
+```
+$ codex mcp list --json          # in $S/untrusted; exit 0; stdout:
+[]
+# stderr: (empty)                # codex debug prompt-input stderr: (empty)
+prompt-input searches:  codegraph=2  CODEGRAPH_START=1  "## CodeGraph"=1  cgprobe-dotcodex=1  cgprobe-codexhome=1
+```
+
+**A3: trust override** (`A3-override-mcp.json`)
+
+```
+$ codex -c 'projects."/private/tmp/07-live/untrusted".trust_level="trusted"' mcp list --json   # in $S/untrusted
+[]
+# exit 0; stderr empty; $S/home/.codex/config.toml still absent afterwards (the override wrote nothing)
+```
+
+Positive control for the override key: the real TUI trust (B4) wrote `[projects."/private/tmp/07-live/trusted"]` / `trust_level = "trusted"`, the same key shape the override used, and that trust makes the identical project config load (B6). The `-c` override does not grant trust.
+
+**B4: real TUI trust prompt** (Herdr pane `w1H:pA`, `codex` in `$S/trusted`)
+
+```
+> You are in /private/tmp/07-live/trusted
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk
+  of prompt injection. Trusting the directory allows project-local config, hooks, and exec policies to
+  load.
+› 1. Yes, continue
+  2. No, quit
+```
+
+After "Yes, continue", the scratch config held exactly these trust lines:
+
+```
+[projects."/private/tmp/07-live/trusted"]
+trust_level = "trusted"
+```
+
+**B5: hook review, A1 local and the stdin capture** (`B5-hook-review-before.txt`, `B5-hook-review-after.txt`)
+
+```
+  Hooks need review
+  1 hook is new or changed.
+  Hooks can run outside the sandbox after you trust them.
+...
+  [!] Hook 1 · new
+  Event     PreToolUse
+  Matcher   ^Bash$
+  Source    Project config - /private/tmp/07-live/trusted/.codex/hooks.json
+  Command   "$(git rev-parse --show-toplevel)/.codex/hooks/a1-probe.sh"
+  Mode      Sync
+  Timeout   5s
+  Trust     New hook - review required
+```
+
+After pressing `t`, the hook showed `Trust     Trusted`, and the scratch config gained a position-keyed hash entry:
+
+```
+[hooks.state."/private/tmp/07-live/trusted/.codex/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:2c48671e342b9f4f695100bc3aa4a178502291526dfa0f2b6254f279e5f6d3e3"
+```
+
+The trust state key is file path, event, group index and handler index. This matters for D-23: our group must be appended last.
+
+Probe turn (TUI prompt `Run this exact shell command and nothing else: echo a1-probe`). `$S/probes` was empty before the turn. Afterwards:
+
+```
+$ cat /private/tmp/07-live/probes/a1-local.log
+a1-local 2026-09-19T17:02:54Z /private/tmp/07-live/trusted
+$ jq -c keys probes/a1-local-stdin-1789837374.json
+["cwd","hook_event_name","model","permission_mode","session_id","tool_input","tool_name","tool_use_id","transcript_path","turn_id"]
+$ jq -c '{tool_name, command_type: (.tool_input.command|type), tool_input_keys: (.tool_input|keys), has_agent_id: has("agent_id")}'
+{"tool_name":"Bash","command_type":"string","tool_input_keys":["command"],"has_agent_id":false}
+tool_input = {"command":"echo a1-probe"}; session_id = 01a0ba9e-524d-7331-a576-91cf8d26ae06 (= the TUI rollout id)
+```
+
+`features.hooks` discrimination: two `codex exec --json -C $S/trusted` turns, each run with `< /dev/null`. The first attempt without it blocked on "Reading additional input from stdin..." and timed out (exit 124). It was discarded as inconclusive, not counted.
+
+```
+codex -c features.hooks=false exec ... 'echo a1-off'   -> /bin/zsh -lc 'echo a1-off' -> exit 0 ; marker lines 1 -> 1 (silent)
+codex exec ... 'echo a1-on'                             -> /bin/zsh -lc 'echo a1-on'  -> exit 0 ; marker lines 1 -> 2
+  a1-local 2026-09-19T17:07:08Z /private/tmp/07-live/trusted
+```
+
+**B6: L1 project** (`B6-trusted-mcp.json`)
+
+```
+$ codex mcp list --json          # in $S/trusted
+{"name":"codegraph","enabled":true,"transport":{"type":"stdio","command":"/private/tmp/07-live/codegraph-project","args":["serve","--mcp"],"env":null,"env_vars":[],"cwd":null}}
+```
+
+**B7: L3, D-15 and D-17** (`B7-trusted-prompt.json`). This is the positive control for A1's absence searches.
+
+```
+searches (trusted vs bare):  codegraph 2/0  CODEGRAPH_START 1/0  "## CodeGraph" 1/0  cgprobe-dotcodex 1/0  cgprobe-codexhome 1/1
+### Skill roots
+- `r0` = `/private/tmp/07-live/trusted/.codex/skills`
+- `r1` = `/private/tmp/07-live/home/.codex/skills`
+- `r2` = `/private/tmp/07-live/home/.codex/skills/.system`
+- `r3` = `/private/tmp/07-live/trusted/.agents/skills`
+- cgprobe-dotcodex: D-15 probe for the project .codex/skills root (file: r0/cgprobe-dotcodex/SKILL.md)
+- codegraph: Use when asked where X is defined, how Y works, what calls X, or what changing X breaks in a .codegraph/ repo. (file: r3/codegraph/SKILL.md)
+- cgprobe-codexhome: D-15 probe for the CODEX_HOME/skills root (file: r1/cgprobe-codexhome/SKILL.md)
+# AGENTS.md instructions for /private/tmp/07-live/trusted
+  ...
+  ## CodeGraph
+```
+
+SKILL.md frontmatter: `description: Use when asked where X is defined, how Y works, what calls X, or what changing X breaks in a .codegraph/ repo.` The listing renders it byte-identical, untruncated.
+
+**B8: A2 and D-16 in real sessions.** Untrusted: `codex exec --json -C $S/untrusted 'Reply with the single word ok.' < /dev/null` (rollout `01a0baa3-068c-…`). Trusted: the TUI session (rollout `01a0ba9e-524d-…`). The untrusted repo was never trusted: the scratch config holds no `$S/untrusted` key.
+
+```
+injected-context search          trusted-TUI  untrusted-exec
+"- codegraph: Use when"          2            2
+"## CodeGraph"                   2            2
+"CODEGRAPH_START"                2            2
+"AGENTS.md instructions for"     1            1
+"cgprobe-dotcodex"               2            2
+turn_context: trusted   approval=on-request sandbox=workspace-write
+              untrusted approval=never      sandbox=read-only      (so Codex did treat it as untrusted)
+```
+
+In a real untrusted session, Codex gates the project config (MCP servers: A2 and A3 `[]`) and hooks, but not `AGENTS.md`, project `.agents/skills` or project `.codex/skills`.
+
 ### CODEX-01 verdicts
 
-L1 project config loads when trusted: PENDING
+L1 project config loads when trusted: PASS
 L1 global entry shown (global install): PENDING
-L2 untrusted project layer not loaded: PENDING
-L3 prompt-input lists skill and AGENTS.md block: PENDING
-L4 uninstalled repo shows no codegraph surface: PENDING
+L2 untrusted project layer not loaded: PASS
+L3 prompt-input lists skill and AGENTS.md block: PASS
+L4 uninstalled repo shows no codegraph surface: PASS
 L7 real HOME unchanged (CODEX-01): PENDING
-Untrusted warning: PENDING
-Trust override (-c projects trust_level) grants trust: PENDING
-A1 local command form shell-expanded: PENDING
+Untrusted warning: none observed (mcp list / debug prompt-input / exec stderr carry no warning; the only trust messaging is the TUI prompt quoted in B4)
+Trust override (-c projects trust_level) grants trust: no (A3: `[]` under the override; the same key written by the real TUI trust loads the layer, B6)
+A1 local command form shell-expanded: yes (B5: a1-local 2026-09-19T17:02:54Z /private/tmp/07-live/trusted)
 A1 global quoted command form runs: PENDING
-A2 AGENTS.md trust-gated in a real session: PENDING
-D-16 project .agents/skills trust-gated: PENDING
-D-15 .codex/skills read: PENDING
-D-15 CODEX_HOME/skills read: PENDING
-D-17 skill description as listed: PENDING
-Hooks.json runs behind features.hooks: PENDING
-PreToolUse stdin fields (main thread): PENDING
+A2 AGENTS.md trust-gated in a real session: no (B8: "## CodeGraph" injected in the untrusted read-only exec session, 2 vs 2)
+D-16 project .agents/skills trust-gated: no (B8: "- codegraph: Use when" listed in the untrusted session, 2 vs 2)
+D-15 .codex/skills read: yes (B7: r0 = trusted/.codex/skills lists cgprobe-dotcodex; also listed untrusted, B8)
+D-15 CODEX_HOME/skills read: yes (B7: r1 = home/.codex/skills lists cgprobe-codexhome)
+D-17 skill description as listed: "Use when asked where X is defined, how Y works, what calls X, or what changing X breaks in a .codegraph/ repo." (untruncated, byte-identical to SKILL.md frontmatter; B7)
+Hooks.json runs behind features.hooks: yes (B5: marker 1->2 with hooks on, 1->1 with -c features.hooks=false; `hooks stable true` in features list)
+PreToolUse stdin fields (main thread): cwd, hook_event_name, model, permission_mode, session_id, tool_input, tool_name, tool_use_id, transcript_path, turn_id; tool_name "Bash"; tool_input.command is a string; no agent_id/agent_type on the main thread (B5)
 CODEX-01 verdict: PENDING
