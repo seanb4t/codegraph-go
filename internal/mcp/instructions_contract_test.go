@@ -244,6 +244,36 @@ func TestInstructionsSkillClaimIsResolvable(t *testing.T) {
 	}
 }
 
+// TestInstructionsSkillSentenceWithinFirst512Bytes pins D-29's rewrite:
+// Codex documents a roughly 512-byte instructions-truncation window
+// (07-RESEARCH.md, developers.openai.com/codex/*), so the sentence carrying
+// skillAnchor must end at or before that offset, and it must be
+// harness-neutral — true for the 7 skill-receiving targets
+// (docs/AGENT-CAPABILITIES.md), not scoped to Claude Code specifically.
+// Before this test the sentence read "in Claude Code, codegraph install
+// also adds the codegraph skill." and ended at byte 554, past Codex's
+// window and false for the 6 non-Claude skill-receiving targets.
+func TestInstructionsSkillSentenceWithinFirst512Bytes(t *testing.T) {
+	idx := strings.Index(instructions, skillAnchor)
+	if idx == -1 {
+		t.Fatalf("instructions never contains %q", skillAnchor)
+	}
+	dot := strings.Index(instructions[idx:], ".")
+	if dot == -1 {
+		t.Fatalf("no sentence-ending %q found after %q in instructions", ".", skillAnchor)
+	}
+	end := idx + dot + 1
+	if end > 512 {
+		t.Errorf("the sentence containing %q ends at byte %d, past Codex's 512-byte instructions window; instructions = %q", skillAnchor, end, instructions)
+	}
+	if strings.Contains(instructions, "Claude Code") {
+		t.Errorf("instructions still names Claude Code specifically; the skill sentence must be harness-neutral, true for every skill-receiving target (D-29). instructions = %q", instructions)
+	}
+	if strings.Contains(instructions, "Hermes") && !strings.Contains(instructions, "except Hermes") {
+		t.Errorf("instructions names Hermes but not as the stated exception (Hermes is the one target with no skill mechanism); instructions = %q", instructions)
+	}
+}
+
 // TestInstructionsCarriesNoWireContractViolation is T-08-01's mitigation:
 // the instructions const must stay pure ASCII (so len() and rune count
 // agree, per the WIRE-01/encoding edge resolution) and must never carry an
