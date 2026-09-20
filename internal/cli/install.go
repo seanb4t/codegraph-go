@@ -251,6 +251,12 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc age
 			}
 		}
 		for _, note := range result.Notes {
+			// T-04-24: a note is filesystem-derived too — codexTrustNote
+			// and the shared-instructions notes interpolate an absolute
+			// path — so it is sanitized exactly like the file and error
+			// lines. Both branches: a user with NO_COLOR on a real
+			// terminal takes the plain one.
+			note = sanitizePathForDisplay(note)
 			if mode.Styled {
 				_, _ = io.WriteString(w, "  "+pal.Label.Render("note:")+" "+pal.Value.Render(note)+"\n")
 			} else {

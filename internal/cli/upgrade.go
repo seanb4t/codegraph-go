@@ -94,11 +94,13 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
 				AutoAllow:    false,
 				PreToolNudge: agents.PreToolNudgeKeep,
 			})
+			// T-04-24: paths and notes are filesystem-derived, so they are
+			// sanitized here exactly as printAgentResults does.
 			for _, f := range result.Files {
-				fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
+				fmt.Fprintf(out, "  %s: %s\n", f.Action, sanitizePathForDisplay(f.Path))
 			}
 			for _, note := range result.Notes {
-				fmt.Fprintf(out, "  note: %s\n", note)
+				fmt.Fprintf(out, "  note: %s\n", sanitizePathForDisplay(note))
 			}
 			errs = append(errs, result.Errors...)
 		}
