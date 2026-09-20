@@ -154,7 +154,7 @@ covered_files:
   - internal/cli/version_test.go
   - internal/cli/version.go
 
-covered_digest: "v1:sha256:2412a1b09faae629480665aee154c1773ebb2c5e35aa0fb6b24b3b9189fc3c82"
+covered_digest: "v1:sha256:15842a7ba7d8e3e70542b9e74f183fd891e7bf914e9e2fb486717e3284b3abc2"
 human_verification:
 
   - test: "CLI-04 palette readability: run `codegraph status`, `codegraph explore <term>`, `codegraph node <symbol>`, `codegraph search <term> --full`, `codegraph install --target claude-code --location local` (fake HOME), and `codegraph --help` on (a) Solarized Light or macOS light Terminal and (b) a dark-theme terminal."
@@ -171,6 +171,8 @@ human_verification:
     why_human: "End-to-end pager/terminal behaviour. Programmatic evidence already confirms the byte-level mechanism (--color=always emits ESC bytes even on a non-TTY pipe; --color=never suppresses them on a TTY per TestResolveColorMatrix's never/tty/CLICOLOR_FORCE case) — the pager rendering itself needs a human to view it."
 ---
 
+
+**Re-verified at HEAD 2026-09-20 (v0.14.0 milestone audit).** This report went `stale` because later phases legitimately modified files in its `covered_files` — Phase 7's own fixes touched `internal/cli/install.go`, and Phases 5-7 touched `internal/agents/*`. The milestone audit re-exercised these claims against HEAD rather than re-stamping blind: the full suite (54 packages plus `internal/daemon` run separately) is green, an independent integration check verified 7/7 cross-phase seams with a real-binary end-to-end pass, and every phase holds a security audit with 0 threats open at or above the `high` gate. The digest below is recomputed over the same covered set at that HEAD. See `.planning/v0.14.0-MILESTONE-AUDIT.md`.
 # Phase 4: CLI Glow-up Verification Report
 
 **Phase Goal:** Every human-output verb renders through a `present` renderer using one shared semantic palette — adaptive to light and dark backgrounds, downsampled to what the terminal can show, overridable by `--color` and the standard environment variables — with grouped, consistently styled help and consistent short flags, while the agent/MCP path, `--json` and piped output stay byte-identical and the archtest that keeps charm out of the serve-reachable closure catches every import path added this milestone.

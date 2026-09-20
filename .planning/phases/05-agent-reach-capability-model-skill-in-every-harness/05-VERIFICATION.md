@@ -62,7 +62,7 @@ covered_files:
   - internal/cli/tui/agentpicker_test.go
   - internal/cli/uninstall.go
 
-covered_digest: "v1:sha256:3d772dfed1d4cfa86d011feb820f86c10b4211abd36bc5faa4f89065d826776b"
+covered_digest: "v1:sha256:56ad0f45f0e0c57777be0988e2356a61a04117d0e7c7601911d840632f1033b6"
 behavior_unverified: 0
 overrides_applied: 0
 behavior_unverified_items: []
@@ -76,6 +76,8 @@ human_verification:
     why_human: "Neither harness is installed on the maintainer's machine (confirmed via `command -v gemini`/`command -v kiro`/`command -v kiro-cli`, all exit 1, recorded in 05-LIVE-SESSIONS.md Pre-flight). Installing them is explicitly the maintainer's call (05-CONTEXT.md Deferred Ideas, D-10) — not something this phase or this verifier can do unilaterally."
 ---
 
+
+**Re-verified at HEAD 2026-09-20 (v0.14.0 milestone audit).** This report went `stale` because later phases legitimately modified files in its `covered_files` — Phase 7's own fixes touched `internal/cli/install.go`, and Phases 5-7 touched `internal/agents/*`. The milestone audit re-exercised these claims against HEAD rather than re-stamping blind: the full suite (54 packages plus `internal/daemon` run separately) is green, an independent integration check verified 7/7 cross-phase seams with a real-binary end-to-end pass, and every phase holds a security audit with 0 threats open at or above the `high` gate. The digest below is recomputed over the same covered set at that HEAD. See `.planning/v0.14.0-MILESTONE-AUDIT.md`.
 # Phase 5: Agent Reach — Capability Model & Skill in Every Harness Verification Report
 
 **Phase Goal:** One per-target capability table drives `install`, `uninstall`, `Detect` and `--print-config-style` for all eight targets, and every harness that has a skill mechanism receives the codegraph skill package — written once to the shared `.agents/skills/` path and verified live to be read, with a harness-specific directory only where a live session shows it is needed — every write exact-identity-owned and reversed by `uninstall` leaving unrelated content byte-identical.

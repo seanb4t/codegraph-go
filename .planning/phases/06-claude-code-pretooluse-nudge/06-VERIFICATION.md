@@ -65,7 +65,7 @@ covered_files:
   - internal/nudge/testdata/true-positives.json
   - internal/nudge/text.go
 
-covered_digest: "v1:sha256:204ded532d159bfa84536ca28f6a0950fd3fce869d58e13dc07dec80f456b5a3"
+covered_digest: "v1:sha256:1880a422374d83fd164d44252d2554bb393bd0b80607ec5c9d10cc7fbe350af8"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -75,6 +75,8 @@ human_verification:
     why_human: "Claude Code's own tool matching and delivery are never unit-testable (D-00, this phase's own standing rule). The 06-06 live session (`06-LIVE-SESSIONS.md`) is thorough and honest about this: the maintainer's global Claude Code configuration exposes no `Grep` tool, so every live search went through Bash `rg`/`find`, and the `Grep`/`Glob` PreToolUse blocks were exercised only by `TestPreToolUseRegistrationShape` (byte-exact registration) and by the harness-neutral unit tests in `internal/cli/hook_pretooluse_test.go` (`TestHookPreToolUse_GrepFiresPinnedContext`), never by an actual Claude Code `Grep`/`Glob` tool call. The registration bytes and the adapter's internal handling of `Grep`/`Glob` are provably identical in shape to the proven `Bash`/`Read` paths (same guard script, same subcommand, same envelope, same cooldown gate), and the fetched hooks reference states matcher grammar is exact-string matching for every tool name — so there is strong indirect evidence this generalizes — but it has not been directly observed."
 ---
 
+
+**Re-verified at HEAD 2026-09-20 (v0.14.0 milestone audit).** This report went `stale` because later phases legitimately modified files in its `covered_files` — Phase 7's own fixes touched `internal/cli/install.go`, and Phases 5-7 touched `internal/agents/*`. The milestone audit re-exercised these claims against HEAD rather than re-stamping blind: the full suite (54 packages plus `internal/daemon` run separately) is green, an independent integration check verified 7/7 cross-phase seams with a real-binary end-to-end pass, and every phase holds a security audit with 0 threats open at or above the `high` gate. The digest below is recomputed over the same covered set at that HEAD. See `.planning/v0.14.0-MILESTONE-AUDIT.md`.
 # Phase 6: Claude Code PreToolUse Nudge Verification Report
 
 **Phase Goal:** In a `.codegraph/`-indexed repo, Claude Code is pointed at `codegraph_explore` the first time it reaches for grep/find/Read — as added context that never denies or blocks a tool call — then at most once a minute per session and per subagent, with zero overhead in an un-indexed repo, and registered and removed by `codegraph install`/`uninstall` as an opt-in through the existing exact-identity hook writer.

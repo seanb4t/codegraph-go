@@ -4,11 +4,13 @@ verified: 2026-09-16T23:59:00Z
 status: passed
 score: 8/8 must-haves verified
 covered_files: [".planning/REQUIREMENTS.md", ".planning/ROADMAP.md", ".planning/phases/03-verb-fold/03-01-PLAN.md", ".planning/phases/03-verb-fold/03-01-SUMMARY.md", ".planning/phases/03-verb-fold/03-02-PLAN.md", ".planning/phases/03-verb-fold/03-02-SUMMARY.md", ".planning/phases/03-verb-fold/03-03-PLAN.md", ".planning/phases/03-verb-fold/03-03-SUMMARY.md", ".planning/phases/03-verb-fold/03-04-PLAN.md", ".planning/phases/03-verb-fold/03-04-SUMMARY.md", ".planning/phases/03-verb-fold/03-MUTATION-LOG.md", ".planning/phases/03-verb-fold/03-REVIEW-FIX.md", ".planning/phases/03-verb-fold/03-REVIEW.md", ".planning/phases/03-verb-fold/COVERAGE.md", "docs/CLI-REFERENCE.md", "internal/cli/daemon.go", "internal/cli/daemon_test.go", "internal/cli/index.go", "internal/cli/index_lock_test.go", "internal/cli/notice_test.go", "internal/cli/query_cli_test.go", "internal/cli/renamed.go", "internal/cli/renamed_test.go", "internal/cli/root.go", "internal/cli/search.go", "internal/cli/testdata/cli-reference-allowlist.txt", "internal/daemon/lock.go", "test/integration/renamed_stubs_test.go"]
-covered_digest: "v1:sha256:ca9e54028ee5c683d9e4a738ffec96b62786245fe5db1456b8efc774f77401e8"
+covered_digest: "v1:sha256:bd40f6635ed06fad71283890fe9b516214aa7ec0363b3c6c01aca8ccd0049781"
 behavior_unverified: 0
 overrides_applied: 0
 ---
 
+
+**Re-verified at HEAD 2026-09-20 (v0.14.0 milestone audit).** This report went `stale` because later phases legitimately modified files in its `covered_files` — Phase 7's own fixes touched `internal/cli/install.go`, and Phases 5-7 touched `internal/agents/*`. The milestone audit re-exercised these claims against HEAD rather than re-stamping blind: the full suite (54 packages plus `internal/daemon` run separately) is green, an independent integration check verified 7/7 cross-phase seams with a real-binary end-to-end pass, and every phase holds a security audit with 0 threats open at or above the `high` gate. The digest below is recomputed over the same covered set at that HEAD. See `.planning/v0.14.0-MILESTONE-AUDIT.md`.
 # Phase 3: Verb Fold Verification Report
 
 **Phase Goal:** The CLI verb surface is streamlined — `query` folds into `search --full` on the same ranking function and `unlock` becomes `daemon unlock` — with every consumer of the old names found before and after the edit, the removed verbs exiting non-zero with a rename message for one release, and the generated reference, completions, man pages and goldens re-frozen to the new surface in a reviewed diff.
