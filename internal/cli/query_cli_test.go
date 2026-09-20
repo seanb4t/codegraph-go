@@ -17,6 +17,7 @@ func setupIndexedFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := copyFixture(t)
+	pruneGOOSSuffixedFiles(t, dir)
 	if _, _, err := execCmd("init", dir); err != nil {
 		t.Fatalf("init fixture: unexpected error: %v", err)
 	}

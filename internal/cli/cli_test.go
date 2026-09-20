@@ -48,6 +48,58 @@ func copyFixture(t *testing.T) string {
 	return dst
 }
 
+// pruneGOOSSuffixedFiles deletes every fixture file whose name carries a
+// GOOS or GOARCH build-constraint suffix, making the copied corpus index
+// to the same file set on every runner.
+//
+// gofixture deliberately ships `skip_linux.go` so the indexer's own
+// discovery tests can prove `go/build.MatchFile` filtering is honored
+// (internal/indexer/discover_test.go). That same file makes the corpus
+// platform-dependent for everyone else: it is excluded on darwin and
+// indexed on linux, so a byte-exact golden frozen on one runner cannot
+// match the other. `internal/cli/index_test.go` and
+// `internal/query/files_status_test.go` already work around this by
+// deriving their expectations instead of hardcoding counts; a golden is
+// hardcoded bytes by construction (D-16), so the corpus itself has to be
+// portable. Dropping the file is a no-op on darwin — the indexer already
+// skipped it — so the frozen goldens stay byte-identical there and start
+// matching on linux.
+func pruneGOOSSuffixedFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	// The GOOS/GOARCH values a filename suffix can name; `go help build`
+	// treats `name_$GOOS.go` and `name_$GOARCH.go` as implicit constraints.
+	constrained := map[string]bool{
+		"aix": true, "android": true, "darwin": true, "dragonfly": true,
+		"freebsd": true, "hurd": true, "illumos": true, "ios": true,
+		"js": true, "linux": true, "nacl": true, "netbsd": true,
+		"openbsd": true, "plan9": true, "solaris": true, "wasip1": true,
+		"windows": true, "zos": true,
+		"386": true, "amd64": true, "arm": true, "arm64": true,
+		"loong64": true, "mips": true, "mips64": true, "mips64le": true,
+		"mipsle": true, "ppc64": true, "ppc64le": true, "riscv64": true,
+		"s390x": true, "wasm": true,
+	}
+
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		base := strings.TrimSuffix(filepath.Base(path), ".go")
+		base = strings.TrimSuffix(base, "_test")
+		if i := strings.LastIndex(base, "_"); i >= 0 && constrained[base[i+1:]] {
+			return os.Remove(path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("prune GOOS-suffixed fixture files: %v", err)
+	}
+}
+
 // execCmd runs the real codegraph command tree with the given args and an
 // empty stdin, capturing stdout/stderr — the cobra execution-test pattern
 // (RESEARCH §Validation Architecture) rather than shelling out to a built
@@ -205,4 +257,40 @@ func TestInitIndexUninit(t *testing.T) {
 			t.Fatalf("expected --verbose output to be longer than default: default=%q verbose=%q", defaultOut, verboseOut)
 		}
 	})
+}
+
+// TestGoldenFixtureIsPlatformPortable is the positive assertion for
+// pruneGOOSSuffixedFiles: the corpus the byte-exact goldens are produced
+// from must carry no GOOS/GOARCH-suffixed file on ANY runner, or the same
+// golden cannot match on darwin and linux both. The raw fixture must
+// still ship one (the indexer's discovery tests need it), so this also
+// pins that the prune had something to do rather than passing vacuously.
+func TestGoldenFixtureIsPlatformPortable(t *testing.T) {
+	raw := copyFixture(t)
+	if _, err := os.Stat(filepath.Join(raw, "skip_linux.go")); err != nil {
+		t.Fatalf("raw gofixture no longer ships skip_linux.go, so this guard is vacuous: %v", err)
+	}
+
+	pruned := copyFixture(t)
+	pruneGOOSSuffixedFiles(t, pruned)
+	if _, err := os.Stat(filepath.Join(pruned, "skip_linux.go")); !os.IsNotExist(err) {
+		t.Errorf("skip_linux.go survived the prune (stat err = %v); goldens frozen on darwin cannot match linux", err)
+	}
+
+	var leftovers []string
+	err := filepath.WalkDir(pruned, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, "_linux.go") {
+			leftovers = append(leftovers, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk pruned fixture: %v", err)
+	}
+	if len(leftovers) > 0 {
+		t.Errorf("platform-suffixed files left in the golden corpus: %v", leftovers)
+	}
 }
