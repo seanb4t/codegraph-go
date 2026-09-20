@@ -1110,3 +1110,34 @@ func TestInstall_NotesAreControlCharacterSanitized(t *testing.T) {
 		assertSanitized(t, "styled", stripInstallSGR(out))
 	})
 }
+
+// TestInstall_PlainBranchPathsAreControlCharacterSanitized closes the
+// parity gap the v0.14.0 milestone integration check found: the T-04-24
+// fix sanitized notes in both branches but claimed the sibling file and
+// error lines already did the same — they did so only in the STYLED
+// branch. A global install into a HOME whose name carries an OSC-0
+// sequence makes f.Path absolute, and therefore attacker-influenced.
+func TestInstall_PlainBranchPathsAreControlCharacterSanitized(t *testing.T) {
+	const osc = "\x1b]0;PWNED\x07"
+
+	home := filepath.Join(t.TempDir(), "home"+osc+"x")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir control-character home: %v", err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
+	t.Chdir(t.TempDir())
+
+	out, _, err := execCmd("install", "--target", "codex", "--location", "global", "--yes")
+	if err != nil {
+		t.Fatalf("install --target codex --location global: %v\n%s", err, out)
+	}
+	if strings.Contains(out, osc) {
+		t.Errorf("plain install output carries the raw OSC-0 set-title sequence on a file line: %q", out)
+	}
+	// Positive control: the absolute path is still reported, minus the escape.
+	if !strings.Contains(out, "config.toml") {
+		t.Errorf("expected the created config.toml path in the output, got: %q", out)
+	}
+}
