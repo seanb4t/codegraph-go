@@ -144,7 +144,7 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
 - [x] **Phase 4: CLI Glow-up** - Every human-output verb renders through one shared semantic palette, adaptive to the terminal and the user's colour preferences, with the agent/MCP, `--json` and piped paths byte-identical (completed 2026-09-17)
 - [x] **Phase 5: Agent Reach — Capability Model & Skill in Every Harness** - One capability table drives all eight targets, and every harness with a skill mechanism receives the codegraph skill, verified live, with every write exact-identity-owned and reversible (completed 2026-09-18)
 - [x] **Phase 6: Claude Code PreToolUse Nudge** - In an indexed repo, Claude Code is pointed at `codegraph_explore` the first time it reaches for grep/find/Read — as added context, never a denial — and stays silent everywhere else (completed 2026-09-19)
-- [ ] **Phase 7: Codex Parity** - Codex receives everything Claude Code does — project-local MCP config, skill, repo-root instructions, opt-in nudge — each mechanism verified live before it is written, and a fresh Codex session reaches for codegraph unprompted
+- [x] **Phase 7: Codex Parity** - Codex receives everything Claude Code does — project-local MCP config, skill, repo-root instructions, opt-in nudge — each mechanism verified live before it is written, and a fresh Codex session reaches for codegraph unprompted (completed 2026-09-19)
 
 #### Phase 1: Defect & Flake Burn-down
 
@@ -456,7 +456,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Only fou
 | 4. CLI Glow-up | 8/8 | Complete    | 2026-09-17 |
 | 5. Agent Reach — Capability Model & Skill in Every Harness | 7/7 | Complete    | 2026-09-18 |
 | 6. Claude Code PreToolUse Nudge | 7/7 | Complete    | 2026-09-19 |
-| 7. Codex Parity | 11/11 | In Progress|  |
+| 7. Codex Parity | 11/11 | Complete    | 2026-09-19 |
 
 8 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0). v0.14.0 scoped: 7 phases (1–7), 55 requirements, 0/7 phases complete (0%).
 
