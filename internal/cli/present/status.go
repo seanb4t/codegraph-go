@@ -100,48 +100,52 @@ const (
 
 // writeStatLine writes one styled "  <label:><value>\n" row of the Index
 // Statistics block, label left-justified to statLabelWidth columns and
-// rendered via labelStyle (structural chrome only — value is repo-derived
-// data passed through unstyled).
-func writeStatLine(b *strings.Builder, label, value string) {
-	fmt.Fprintf(b, "  %s%s\n", labelStyle.Render(fmt.Sprintf("%-*s", statLabelWidth, label+":")), value)
+// rendered via pal.Label (structural chrome only). value is written
+// as-is: a caller that wants a numeric value styled via pal.Count
+// pre-renders it before calling this (D-08) — Backend/DB Size stay
+// data-only, matching the plain renderer's own treatment of those two
+// fields.
+func writeStatLine(b *strings.Builder, pal Palette, label, value string) {
+	fmt.Fprintf(b, "  %s%s\n", pal.Label.Render(fmt.Sprintf("%-*s", statLabelWidth, label+":")), value)
 }
 
-// writeBreakdownText writes one styled breakdown section: a sectionStyle
-// header line followed by one "  <key padded to 15> <formatNumber(count)>\n"
-// row per entry in counts (already filtered/sorted by sortedCounts —
-// present never recomputes this).
-func writeBreakdownText(b *strings.Builder, header string, counts []kindCount) {
-	b.WriteString(sectionStyle.Render(header) + "\n")
+// writeBreakdownText writes one styled breakdown section: a pal.Header
+// header line followed by one "  <key padded to 15> <pal.Count-styled
+// formatNumber(count)>\n" row per entry in counts (already
+// filtered/sorted by sortedCounts — present never recomputes this).
+func writeBreakdownText(b *strings.Builder, pal Palette, header string, counts []kindCount) {
+	b.WriteString(pal.Header.Render(header) + "\n")
 	for _, kc := range counts {
-		fmt.Fprintf(b, "  %-*s %s\n", breakdownKeyWidth, kc.Key, formatNumber(kc.Count))
+		fmt.Fprintf(b, "  %-*s %s\n", breakdownKeyWidth, kc.Key, pal.Count.Render(formatNumber(kc.Count)))
 	}
 }
 
 // writeStatusAdvisories writes the staleness + reindex advisory lines,
 // driven by r.Stale and r.Index.ReindexRecommended — the same live
 // signals query.RenderStatusText uses (D-02: present decorates, never
-// recomputes).
-func writeStatusAdvisories(b *strings.Builder, r query.StatusResult, staleLabel, reindexLabel string) {
+// recomputes). The advisory label itself renders via pal.Warning (D-08);
+// the advisory body text stays data-only.
+func writeStatusAdvisories(b *strings.Builder, pal Palette, r query.StatusResult, staleLabel, reindexLabel string) {
 	if r.Stale {
-		fmt.Fprintf(b, "\n%s a sync is recommended — this index may be stale. Run \"codegraph sync\" to update.\n", staleLabel)
+		fmt.Fprintf(b, "\n%s a sync is recommended — this index may be stale. Run \"codegraph sync\" to update.\n", pal.Warning.Render(staleLabel))
 	} else {
 		b.WriteString("\nIndex is up to date.\n")
 	}
 
 	if r.Index.ReindexRecommended {
-		fmt.Fprintf(b, "\n%s this index predates the current schema version. Run \"codegraph index --force\" to rebuild.\n", reindexLabel)
+		fmt.Fprintf(b, "\n%s this index predates the current schema version. Run \"codegraph index --force\" to rebuild.\n", pal.Warning.Render(reindexLabel))
 	}
 }
 
 // RenderStatus writes a lipgloss-styled rendering of r to w, walking the
 // SAME section order as query.RenderStatusText (header → Project →
 // worktree warning when present → Index Statistics → Nodes by Kind →
-// Edges by Kind → Files by Language → advisories) with
-// headerStyle/labelStyle/sectionStyle applied as structural chrome only
-// (D-01/D-02). r is consumed read-only: counts, sort order, and wording
-// are never re-derived here — only styling is added. Callers gate this
-// behind ChoosePresentation (D-03); RenderStatus itself never reads a
-// TTY/env value.
+// Edges by Kind → Files by Language → advisories) with pal's seven roles
+// applied as structural chrome only (D-01/D-02/D-05). r is consumed
+// read-only: counts, sort order, and wording are never re-derived here —
+// only styling is added. Callers gate this behind ChoosePresentation
+// (D-03) and build pal via NewPalette(mode.Dark) at the RunE boundary;
+// RenderStatus itself never reads a TTY/env value.
 //
 // v0.11.0 Phase 1 (D-01/D-04) added a new breakdown section between Nodes
 // by Kind and Files by Language, matching query.RenderStatusText's
@@ -150,20 +154,21 @@ func writeStatusAdvisories(b *strings.Builder, r query.StatusResult, staleLabel,
 // choosing this renderer or the piped one) — this file's edgeCounts,
 // like sortedCounts, never re-derives that decision; it only renders
 // whatever map it is given.
-func RenderStatus(r query.StatusResult, projectPath string, w io.Writer) error {
+func RenderStatus(r query.StatusResult, projectPath string, pal Palette, w io.Writer) error {
 	var b strings.Builder
-	b.WriteString(headerStyle.Render("CodeGraph Status") + "\n\n")
+	b.WriteString(pal.Header.Render("CodeGraph Status") + "\n\n")
 	// projectPath is the CLI's resolved start path (--path flag or
 	// os.Getwd()) and may be adversarial — strip control characters
 	// before it reaches the terminal (CR-01).
-	fmt.Fprintf(&b, "%s %s\n", labelStyle.Render("Project:"), sanitizeControl(projectPath))
+	fmt.Fprintf(&b, "%s %s\n", pal.Label.Render("Project:"), sanitizeControl(projectPath))
 
 	// Warning() embeds two git-derived filesystem paths (WorktreeRoot,
 	// IndexRoot) that may be adversarial. Sanitize a copy of the two path
 	// fields — not the formatted Warning() string as a whole — so the
 	// literal newlines that structure the multi-line message survive
-	// (sanitizeControl also strips \n/\t/\r by design; running it over the
-	// whole message would collapse the warning onto one line).
+	// (sanitizeControl also strips \n/\r by design, though not \t since
+	// CR-02; running it over the whole message would collapse the warning
+	// onto one line).
 	if r.WorktreeMismatch != nil {
 		sanitizedMismatch := &gitmeta.Mismatch{
 			WorktreeRoot: sanitizeControl(r.WorktreeMismatch.WorktreeRoot),
@@ -174,18 +179,18 @@ func RenderStatus(r query.StatusResult, projectPath string, w io.Writer) error {
 		}
 	}
 
-	b.WriteString("\n" + sectionStyle.Render("Index Statistics:") + "\n")
-	writeStatLine(&b, "Files", formatNumber(r.FileCount))
-	writeStatLine(&b, "Nodes", formatNumber(r.NodeCount))
-	writeStatLine(&b, "Edges", formatNumber(r.EdgeCount))
-	writeStatLine(&b, "DB Size", formatMB(r.DbSizeBytes))
-	writeStatLine(&b, "Backend", r.Backend)
+	b.WriteString("\n" + pal.Header.Render("Index Statistics:") + "\n")
+	writeStatLine(&b, pal, "Files", pal.Count.Render(formatNumber(r.FileCount)))
+	writeStatLine(&b, pal, "Nodes", pal.Count.Render(formatNumber(r.NodeCount)))
+	writeStatLine(&b, pal, "Edges", pal.Count.Render(formatNumber(r.EdgeCount)))
+	writeStatLine(&b, pal, "DB Size", formatMB(r.DbSizeBytes))
+	writeStatLine(&b, pal, "Backend", r.Backend)
 
-	writeBreakdownText(&b, "Nodes by Kind:", sortedCounts(r.NodesByKind))
-	writeBreakdownText(&b, "Edges by Kind:", edgeCounts(r.EdgesByKind))
-	writeBreakdownText(&b, "Files by Language:", sortedCounts(r.FilesByLanguage))
+	writeBreakdownText(&b, pal, "Nodes by Kind:", sortedCounts(r.NodesByKind))
+	writeBreakdownText(&b, pal, "Edges by Kind:", edgeCounts(r.EdgesByKind))
+	writeBreakdownText(&b, pal, "Files by Language:", sortedCounts(r.FilesByLanguage))
 
-	writeStatusAdvisories(&b, r, "Pending Changes:", "Reindex recommended:")
+	writeStatusAdvisories(&b, pal, r, "Pending Changes:", "Reindex recommended:")
 
 	_, err := io.WriteString(w, b.String())
 	return err

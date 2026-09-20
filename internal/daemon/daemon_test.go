@@ -296,31 +296,32 @@ func TestRunPolicyDisabledRegistersNothing(t *testing.T) {
 // TestRunWatchdogCancelsRunOnSimulatedReparent is the primary D-07/D-08
 // integration gate: Run starts startWatchdog (07-03) against its own
 // derived, cancellable ctx, so a simulated reparent — driven through the
-// injectable getppid seam, no forking required — cancels Run itself and
-// drives the SAME clean teardown a caller's ctx cancellation would (lock
-// released, registry record deregistered) with no new shutdown path.
+// per-instance getppid/watchdogTicks seam (D-13/D-14), no forking required
+// — cancels Run itself and drives the SAME clean teardown a caller's ctx
+// cancellation would (lock released, registry record deregistered) with no
+// new shutdown path.
 func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
 	withRegistryDir(t)
 
-	origGetppid := getppid
-	t.Cleanup(func() { getppid = origGetppid })
 	const original = 424242
-	// current is read through the SAME getppid closure both before and
-	// after the simulated reparent below — the closure itself is assigned
-	// to the package var exactly once, before Run ever starts, so flipping
-	// current afterward via atomic.StoreInt32 cannot race against
-	// startWatchdog's own read of the getppid var (mirrors
-	// watchdog_test.go's TestWatchdogCancelsOnReparent seam pattern).
+	// current is read through the SAME ppid closure both before and after
+	// the simulated reparent below — the closure is assigned to the
+	// Daemon's unexported getppid field exactly once, before Run ever
+	// starts, so flipping current afterward via atomic.StoreInt32 cannot
+	// race against startWatchdog's own read (mirrors watchdog_test.go's
+	// TestWatchdogCancelsOnReparent seam pattern).
 	var current int32 = original
-	getppid = func() int { return int(atomic.LoadInt32(&current)) }
 
 	root, codegraphDir, _ := initFixture(t)
 
+	ticks := make(chan time.Time)
 	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	d.getppid = func() int { return int(atomic.LoadInt32(&current)) }
+	d.watchdogTicks = ticks
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -332,9 +333,15 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
 
-	// Simulate a reparent: the watchdog's next poll tick observes this and
-	// cancels Run's own derived ctx — no external cancel is ever called.
+	// Simulate a reparent, then drive the watchdog's next poll directly
+	// via the injected tick channel — no real ticker is ever involved, so
+	// this assertion never races a wall clock.
 	atomic.StoreInt32(&current, original+1)
+	select {
+	case ticks <- time.Now():
+	case <-time.After(testBudget(10 * time.Second)):
+		t.Fatal("could not send a tick to the watchdog goroutine")
+	}
 
 	select {
 	case err := <-runErr:
@@ -342,13 +349,14 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 			t.Fatalf("Run: %v, want nil — a watchdog-triggered cancel must drive the same clean shutdown as an external ctx cancel (D-08)", err)
 		}
 	case <-time.After(testBudget(10 * time.Second)):
-		// 10s (not the file's usual 5s) — watchdogInterval is a fixed 1s
-		// wall-clock ticker inside Run; under heavy full-suite parallel
-		// load (many packages' test binaries compiling/running at once)
-		// the ticker's next fire after the simulated reparent can be
-		// delayed well past 1s, mirroring the load-induced flake class
-		// already documented on TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock
-		// above.
+		// 10s (not the file's usual 5s) is now a safety net a real ticker
+		// no longer has to beat, not a race against one: the tick above is
+		// sent directly by this test rather than waiting on
+		// watchdogInterval's real 1s wall-clock ticker, which is what
+		// this session's own full-suite `-race` run (250.35s,
+		// 2026-09-14) actually timed out on under heavy parallel load
+		// (WINDOWS #12; D-14). If this still times out, Run itself — not
+		// scheduling delay — is what to suspect.
 		t.Fatal("Run did not return after a simulated reparent — watchdog is not wired into Run (D-07/D-08)")
 	}
 

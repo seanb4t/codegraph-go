@@ -1,0 +1,20 @@
+[
+  {"tool": "shell", "input": "grep -rn \"func NewServer\" .", "want": true, "note": ""},
+  {"tool": "shell", "input": "grep -rn 'type Engine struct' internal/", "want": true, "note": ""},
+  {"tool": "shell", "input": "rg -n \"func ParseConfig\"", "want": true, "note": ""},
+  {"tool": "shell", "input": "rg --type go \"Execute\\(\" internal/cli", "want": true, "note": ""},
+  {"tool": "shell", "input": "find . -name \"*.go\" -path \"*handler*\"", "want": true, "note": ""},
+  {"tool": "shell", "input": "LC_ALL=C grep -rn handleRequest internal", "want": true, "note": ""},
+  {"tool": "shell", "input": "egrep -rn \"class .*Service\" src", "want": true, "note": ""},
+  {"tool": "shell", "input": "fgrep -rn \"NewClient(\" .", "want": true, "note": ""},
+  {"tool": "shell", "input": "rg -l \"implements Repository\" | head -20", "want": true, "note": ""},
+  {"tool": "shell", "input": "git grep -n \"func Parse\"", "want": false, "note": "accepted miss — first word is git; D-02 checks only the first word and Claude's Bash(grep *) rule never matches git grep"},
+  {"tool": "shell", "input": "cd internal && grep -rn Alpha .", "want": false, "note": "accepted miss — compound command, first word cd; D-02 parse-doubt rule"},
+  {"tool": "grep", "input": "func Execute\\(", "want": true, "note": ""},
+  {"tool": "grep", "input": "type .*Store interface", "want": true, "note": ""},
+  {"tool": "glob", "input": "**/*handler*.go", "want": true, "note": ""},
+  {"tool": "glob", "input": "internal/**/server.go", "want": true, "note": ""},
+  {"tool": "read", "input": "/repo/internal/cli/root.go", "want": true, "note": ""},
+  {"tool": "read", "input": "/repo/src/components/App.tsx", "want": true, "note": ""},
+  {"tool": "read", "input": "/repo/lib/parser.py", "want": true, "note": ""}
+]

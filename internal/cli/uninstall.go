@@ -29,8 +29,13 @@ func newUninstallCmd() *cobra.Command {
 		Long: "Reverse everything `codegraph install` wrote for the selected agents —\n" +
 			"the MCP server entry and, where present, the marker-fenced instruction\n" +
 			"block — while preserving every unrelated key, entry, and section in\n" +
-			"every file it touches. Reports removed / not-configured / unsupported\n" +
-			"per agent and never errors on an agent that was never installed.",
+			"every file it touches. It removes codegraph's skill package too; a\n" +
+			"shared skill directory's package is deleted only when no other agent\n" +
+			"that installed it remains, and a skill directory codegraph did not\n" +
+			"write is never touched. It also removes the Claude Code and Codex\n" +
+			"CLI PreToolUse nudge hooks and their guard scripts when present.\n" +
+			"Reports removed / not-configured / unsupported per agent and never\n" +
+			"errors on an agent that was never installed.",
 		Example: "  codegraph uninstall\n" +
 			"  codegraph uninstall --target all --location global\n" +
 			"  codegraph uninstall --target claude,cursor",
@@ -43,12 +48,16 @@ func newUninstallCmd() *cobra.Command {
 
 			var targets []agents.AgentTarget
 			switch {
-			case yes:
-				// D-15/Pitfall 6: --yes must short-circuit BEFORE the TTY
-				// branch, not merely skip rendering the picker.
-				targets, err = agents.ResolveTargetFlag("all", loc)
 			case cmd.Flags().Changed("target"):
+				// D-13: an explicit --target wins over --yes — --yes only
+				// supplies the non-interactive default when no target was
+				// named.
 				targets, err = agents.ResolveTargetFlag(target, loc)
+			case yes:
+				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
+				// branch, not merely skip rendering the picker, whenever
+				// --target was not given.
+				targets, err = agents.ResolveTargetFlag("all", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:

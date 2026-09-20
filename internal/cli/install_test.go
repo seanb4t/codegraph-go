@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -11,6 +12,17 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
 )
+
+// installSGRSequence is a local copy of present/ansistrip_test.go's SGR
+// stripper — a _test.go helper cannot be imported across packages, so
+// every package with its own styled-output test carries this one-line
+// regexp rather than exporting it out of present.
+var installSGRSequence = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// stripInstallSGR removes every SGR escape sequence from s.
+func stripInstallSGR(s string) string {
+	return installSGRSequence.ReplaceAllString(s, "")
+}
 
 // fakeHome points HOME (and every home-derived env var codegraph's agent
 // targets consult — XDG_CONFIG_HOME for opencode, HERMES_HOME for Hermes)
@@ -271,6 +283,71 @@ func TestInstall_WriteFailure_ReportsErrorAndNonZeroExit(t *testing.T) {
 	}
 }
 
+// TestInstall_StyledOutputStripsToPlain asserts printAgentResults' styled
+// branch (--color=always) strips back to byte-identical plain output —
+// both for a normal two-target install (TestInstall_TargetCSV_
+// SelectsExactlyThose's shape) and for the write-failure/non-zero-exit
+// shape (TestInstall_WriteFailure_ReportsErrorAndNonZeroExit's fixture) —
+// without weakening errors.Join's non-nil-error contract (CR-01). Each
+// comparison runs plain and styled against their OWN fresh fakeHome (two
+// independent t.TempDir()s), so the two absolute home paths embedded in
+// the output are normalized away before comparing; everything else must
+// match byte-for-byte once ANSI is stripped.
+func TestInstall_StyledOutputStripsToPlain(t *testing.T) {
+	plainHome := fakeHome(t)
+	plain, _, err := execCmd("install", "--target", "claude,cursor", "--location", "global")
+	if err != nil {
+		t.Fatalf("install --target claude,cursor (plain): %v", err)
+	}
+	plainNorm := strings.ReplaceAll(plain, plainHome, "<HOME>")
+
+	styledHome := fakeHome(t)
+	styled, _, err := execCmd("install", "--target", "claude,cursor", "--location", "global", "--color=always")
+	if err != nil {
+		t.Fatalf("install --target claude,cursor (styled): %v", err)
+	}
+	if !strings.Contains(styled, "\x1b[") {
+		t.Fatalf("expected styled output to contain an ESC byte, got:\n%q", styled)
+	}
+	styledNorm := strings.ReplaceAll(stripInstallSGR(styled), styledHome, "<HOME>")
+	if styledNorm != plainNorm {
+		t.Fatalf("stripped+normalized styled output does not equal plain:\nplain:  %q\nstyled: %q", plainNorm, styledNorm)
+	}
+
+	// Write-failure shape: a non-nil error, in both plain and styled, with
+	// a stripped "  error:" line equal once normalized.
+	plainFailHome := fakeHome(t)
+	plainFailConfig := filepath.Join(plainFailHome, ".claude.json")
+	if err := os.Mkdir(plainFailConfig, 0o755); err != nil {
+		t.Fatalf("seed directory-in-place-of-file (plain): %v", err)
+	}
+	plainFail, _, plainFailErr := execCmd("install", "--target", "claude", "--location", "global")
+	if plainFailErr == nil {
+		t.Fatalf("expected plain write-failure run to return a non-nil error; output:\n%s", plainFail)
+	}
+	plainFailNorm := strings.ReplaceAll(plainFail, plainFailHome, "<HOME>")
+
+	styledFailHome := fakeHome(t)
+	styledFailConfig := filepath.Join(styledFailHome, ".claude.json")
+	if err := os.Mkdir(styledFailConfig, 0o755); err != nil {
+		t.Fatalf("seed directory-in-place-of-file (styled): %v", err)
+	}
+	styledFail, _, styledFailErr := execCmd("install", "--target", "claude", "--location", "global", "--color=always")
+	if styledFailErr == nil {
+		t.Fatalf("expected styled write-failure run to return a non-nil error; output:\n%s", styledFail)
+	}
+	if !strings.Contains(styledFail, "\x1b[") {
+		t.Fatalf("expected styled write-failure output to contain an ESC byte, got:\n%q", styledFail)
+	}
+	styledFailNorm := strings.ReplaceAll(stripInstallSGR(styledFail), styledFailHome, "<HOME>")
+	if styledFailNorm != plainFailNorm {
+		t.Fatalf("stripped+normalized styled write-failure output does not equal plain:\nplain:  %q\nstyled: %q", plainFailNorm, styledFailNorm)
+	}
+	if !strings.Contains(styledFailNorm, "error:") {
+		t.Fatalf("expected normalized styled write-failure output to include an 'error:' line, got:\n%s", styledFailNorm)
+	}
+}
+
 // TestUninstall_ReportsRemovedAndNotConfigured asserts uninstall reports
 // "removed" for an agent install actually configured and
 // "not-configured" for one that was never touched (D-08).
@@ -295,16 +372,17 @@ func TestUninstall_ReportsRemovedAndNotConfigured(t *testing.T) {
 
 // TestUninstall_ReportsUnsupportedForWrongLocation asserts uninstall
 // reports "unsupported" (never an error) for a target/location
-// combination the agent doesn't support (Codex is global-only).
+// combination the agent doesn't support (Hermes is global-only; Codex
+// gained local scope in D-09 so it is no longer this test's example).
 func TestUninstall_ReportsUnsupportedForWrongLocation(t *testing.T) {
 	fakeHome(t)
 
-	out, _, err := execCmd("uninstall", "--target", "codex", "--location", "local")
+	out, _, err := execCmd("uninstall", "--target", "hermes", "--location", "local")
 	if err != nil {
-		t.Fatalf("uninstall --target codex --location local: %v", err)
+		t.Fatalf("uninstall --target hermes --location local: %v", err)
 	}
-	if !strings.Contains(out, "Codex CLI: unsupported") {
-		t.Fatalf("expected 'Codex CLI: unsupported', got:\n%s", out)
+	if !strings.Contains(out, "Hermes Agent: unsupported") {
+		t.Fatalf("expected 'Hermes Agent: unsupported', got:\n%s", out)
 	}
 }
 
@@ -571,5 +649,495 @@ func TestInstallUninstallRoundTrip_TempHome_RestoresPreInstallState(t *testing.T
 	final := readJSONMap(t, claudeConfig)
 	if _, ok := final["mcpServers"]; ok {
 		t.Fatalf("expected mcpServers removed entirely (was codegraph-only), got: %v", final)
+	}
+}
+
+// TestInstallStatus_KeptForeignIsNotAChange (D-14): a foreign skill
+// directory codegraph left untouched (agents.ActionKeptForeign) must not
+// flip install's per-agent headline to "configured" — it is not a change
+// codegraph made. A genuine change (agents.ActionCreated) alongside a
+// kept-foreign entry still reports "configured".
+func TestInstallStatus_KeptForeignIsNotAChange(t *testing.T) {
+	cases := []struct {
+		name   string
+		result agents.WriteResult
+		want   string
+	}{
+		{
+			name: "unchanged plus kept foreign",
+			result: agents.WriteResult{Files: []agents.FileResult{
+				{Path: "a", Action: agents.ActionUnchanged},
+				{Path: "b", Action: agents.ActionKeptForeign},
+			}},
+			want: "unchanged",
+		},
+		{
+			name: "created plus kept foreign",
+			result: agents.WriteResult{Files: []agents.FileResult{
+				{Path: "a", Action: agents.ActionCreated},
+				{Path: "b", Action: agents.ActionKeptForeign},
+			}},
+			want: "configured",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := installStatus(tc.result); got != tc.want {
+				t.Fatalf("installStatus(%+v) = %q, want %q", tc.result, got, tc.want)
+			}
+		})
+	}
+}
+
+// preToolNudgeNote is D-09's (07-08-widened) stderr note, printed once when
+// --pretool-nudge is given (either value) and neither Claude Code nor Codex
+// CLI is among the resolved targets.
+const preToolNudgeNote = "note: --pretool-nudge only configures Claude Code and Codex CLI, neither of which is among the selected agents; nothing was changed for them"
+
+// localPreToolGuard is where a local opt-in writes the rendered guard, and
+// localPreToolCommand the command every local PreToolUse handler registers.
+const (
+	localPreToolGuard   = ".claude/hooks/pretooluse-nudge.sh"
+	localPreToolCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+)
+
+// ownPreToolHandlerCount counts the PreToolUse handlers in settingsPath
+// whose command is exactly command; an absent file or key counts 0.
+func ownPreToolHandlerCount(t *testing.T, settingsPath, command string) int {
+	t.Helper()
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		return 0
+	}
+	hooks, _ := readJSONMap(t, settingsPath)["hooks"].(map[string]any)
+	blocks, _ := hooks["PreToolUse"].([]any)
+	n := 0
+	for _, b := range blocks {
+		block, _ := b.(map[string]any)
+		handlers, _ := block["hooks"].([]any)
+		for _, h := range handlers {
+			if handler, _ := h.(map[string]any); handler != nil && handler["command"] == command {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// hasPreToolUseKey reports whether settingsPath carries hooks.PreToolUse.
+func hasPreToolUseKey(t *testing.T, settingsPath string) bool {
+	t.Helper()
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		return false
+	}
+	hooks, _ := readJSONMap(t, settingsPath)["hooks"].(map[string]any)
+	_, ok := hooks["PreToolUse"]
+	return ok
+}
+
+// TestInstall_PreToolNudge_OptInRegisters: --pretool-nudge writes the guard
+// and a PreToolUse registration (D-09).
+func TestInstall_PreToolNudge_OptInRegisters(t *testing.T) {
+	fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	if _, err := os.Stat(localPreToolGuard); err != nil {
+		t.Fatalf("guard %s not written: %v", localPreToolGuard, err)
+	}
+	if !hasPreToolUseKey(t, filepath.Join(".claude", "settings.json")) {
+		t.Fatalf("settings.json has no hooks.PreToolUse after an opt-in install")
+	}
+}
+
+// TestInstall_PreToolNudge_StickyAcrossPlainInstall: a plain install (flag
+// not given) keeps and refreshes a recorded opt-in (D-10 Keep).
+func TestInstall_PreToolNudge_StickyAcrossPlainInstall(t *testing.T) {
+	fakeHome(t)
+	settings := filepath.Join(".claude", "settings.json")
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	out, _, err := execCmd("install", "--target", "claude", "--location", "local")
+	if err != nil {
+		t.Fatalf("plain install: %v", err)
+	}
+	if _, err := os.Stat(localPreToolGuard); err != nil {
+		t.Fatalf("a plain install removed the opted-in guard: %v", err)
+	}
+	if n := ownPreToolHandlerCount(t, settings, localPreToolCommand); n != 6 {
+		t.Fatalf("own PreToolUse handlers after a plain install = %d, want 6", n)
+	}
+	if !strings.Contains(out, "unchanged: "+localPreToolGuard) {
+		t.Fatalf("plain install did not report the guard unchanged (Keep refresh); stdout:\n%s", out)
+	}
+}
+
+// TestInstall_PreToolNudge_ExplicitFalseRemoves: --pretool-nudge=false is
+// the opt-out (D-10 Off), and a later plain install does not bring it back.
+func TestInstall_PreToolNudge_ExplicitFalseRemoves(t *testing.T) {
+	fakeHome(t)
+	settings := filepath.Join(".claude", "settings.json")
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	if n := ownPreToolHandlerCount(t, settings, localPreToolCommand); n == 0 {
+		t.Fatalf("precondition: the opt-in registered no own PreToolUse handler")
+	}
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local", "--pretool-nudge=false"); err != nil {
+		t.Fatalf("install --pretool-nudge=false: %v", err)
+	}
+	assertOff := func(when string) {
+		t.Helper()
+		if _, err := os.Stat(localPreToolGuard); !os.IsNotExist(err) {
+			t.Fatalf("%s: guard %s still present (stat err %v)", when, localPreToolGuard, err)
+		}
+		if n := ownPreToolHandlerCount(t, settings, localPreToolCommand); n != 0 {
+			t.Fatalf("%s: %d own PreToolUse handlers remain, want 0", when, n)
+		}
+	}
+	assertOff("after --pretool-nudge=false")
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "local"); err != nil {
+		t.Fatalf("plain install: %v", err)
+	}
+	assertOff("after a later plain install")
+}
+
+// localCodexPreToolGuard is where a local Codex opt-in writes the rendered
+// guard (mirrors localPreToolGuard for Claude).
+const localCodexPreToolGuard = ".codex/hooks/codegraph-pretooluse.sh"
+
+// TestInstall_PreToolNudge_NoteWhenNeitherClaudeNorCodexSelected (renamed
+// from …WhenClaudeNotSelected, 07-08/D-09 widened): given either value
+// while neither Claude nor Codex is a resolved target, install says so once
+// on stderr and still succeeds.
+func TestInstall_PreToolNudge_NoteWhenNeitherClaudeNorCodexSelected(t *testing.T) {
+	for _, tc := range []struct{ name, flag string }{
+		{"given_true", "--pretool-nudge"},
+		{"given_false", "--pretool-nudge=false"},
+	} {
+		flag := tc.flag
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+
+			stdout, stderr, err := execCmd("install", "--target", "cursor", "--location", "local", flag)
+			if err != nil {
+				t.Fatalf("install --target cursor %s: %v", flag, err)
+			}
+			if got := strings.Count(stderr, preToolNudgeNote+"\n"); got != 1 {
+				t.Fatalf("stderr carries the note %d times, want 1; stderr:\n%s", got, stderr)
+			}
+			if strings.Contains(stdout, "--pretool-nudge") {
+				t.Fatalf("the note leaked onto stdout:\n%s", stdout)
+			}
+			if _, err := os.Stat(localPreToolGuard); !os.IsNotExist(err) {
+				t.Fatalf("a Cursor-only install wrote %s (stat err %v)", localPreToolGuard, err)
+			}
+			if _, err := os.Stat(localCodexPreToolGuard); !os.IsNotExist(err) {
+				t.Fatalf("a Cursor-only install wrote %s (stat err %v)", localCodexPreToolGuard, err)
+			}
+		})
+	}
+}
+
+// TestInstall_PreToolNudge_NoNoteWhenCodexSelected: given true while Codex
+// is a resolved target, install prints no note and writes Codex's guard and
+// hooks.json (D-09 widened — the note's absence when Claude is selected is
+// already covered by TestInstall_PreToolNudge_NoNoteWhenClaudeSelected).
+func TestInstall_PreToolNudge_NoNoteWhenCodexSelected(t *testing.T) {
+	fakeHome(t)
+
+	_, stderr, err := execCmd("install", "--target", "codex,cursor", "--location", "local", "--pretool-nudge")
+	if err != nil {
+		t.Fatalf("install --target codex,cursor --pretool-nudge: %v", err)
+	}
+	if strings.Contains(stderr, "note: --pretool-nudge") {
+		t.Fatalf("note printed although Codex was selected; stderr:\n%s", stderr)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); err != nil {
+		t.Fatalf("positive control: Codex was selected but the guard was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(".codex", "hooks.json")); err != nil {
+		t.Fatalf("positive control: Codex was selected but hooks.json was not written: %v", err)
+	}
+}
+
+// TestInstall_PreToolNudge_CodexOptInRegisters mirrors
+// TestInstall_PreToolNudge_OptInRegisters/StickyAcrossPlainInstall/
+// ExplicitFalseRemoves for Codex: a CLI-level opt-in registers the guard
+// and hooks.json group, a plain install keeps it, and
+// --pretool-nudge=false removes it.
+func TestInstall_PreToolNudge_CodexOptInRegisters(t *testing.T) {
+	fakeHome(t)
+	hooksPath := filepath.Join(".codex", "hooks.json")
+
+	if _, _, err := execCmd("install", "--target", "codex", "--location", "local", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --target codex --pretool-nudge: %v", err)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); err != nil {
+		t.Fatalf("guard %s not written: %v", localCodexPreToolGuard, err)
+	}
+	if _, err := os.Stat(hooksPath); err != nil {
+		t.Fatalf("hooks.json %s not written: %v", hooksPath, err)
+	}
+
+	if _, _, err := execCmd("install", "--target", "codex", "--location", "local"); err != nil {
+		t.Fatalf("plain install --target codex: %v", err)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); err != nil {
+		t.Fatalf("a plain install removed the opted-in Codex guard: %v", err)
+	}
+
+	if _, _, err := execCmd("install", "--target", "codex", "--location", "local", "--pretool-nudge=false"); err != nil {
+		t.Fatalf("install --target codex --pretool-nudge=false: %v", err)
+	}
+	if _, err := os.Stat(localCodexPreToolGuard); !os.IsNotExist(err) {
+		t.Fatalf("guard %s still present after --pretool-nudge=false (stat err %v)", localCodexPreToolGuard, err)
+	}
+}
+
+// TestInstallHelpNeverAdvisesTrustBypass (D-19, T-07-24): install --help,
+// uninstall --help, and the generated CLI reference never advise bypassing
+// Codex's hook trust review, and install --help names both Codex and
+// /hooks. The forbidden token is built by concatenation so this test's own
+// source never matches it.
+func TestInstallHelpNeverAdvisesTrustBypass(t *testing.T) {
+	forbidden := "--dangerously-" + "bypass-hook-trust"
+
+	installHelp, _, err := execCmd("install", "--help")
+	if err != nil {
+		t.Fatalf("install --help: %v", err)
+	}
+	if strings.Contains(installHelp, forbidden) {
+		t.Fatalf("install --help advises trust bypass:\n%s", installHelp)
+	}
+	if !strings.Contains(installHelp, "Codex") {
+		t.Fatalf("install --help does not mention Codex:\n%s", installHelp)
+	}
+	if !strings.Contains(installHelp, "/hooks") {
+		t.Fatalf("install --help does not mention /hooks:\n%s", installHelp)
+	}
+
+	uninstallHelp, _, err := execCmd("uninstall", "--help")
+	if err != nil {
+		t.Fatalf("uninstall --help: %v", err)
+	}
+	if strings.Contains(uninstallHelp, forbidden) {
+		t.Fatalf("uninstall --help advises trust bypass:\n%s", uninstallHelp)
+	}
+
+	refBytes, err := os.ReadFile(cliReferenceDocPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", cliReferenceDocPath, err)
+	}
+	if strings.Contains(string(refBytes), forbidden) {
+		t.Fatalf("%s advises trust bypass", cliReferenceDocPath)
+	}
+}
+
+// TestInstall_PreToolNudge_NoNoteWhenClaudeSelected: no note when Claude is
+// selected, and none when the flag was not given at all.
+func TestInstall_PreToolNudge_NoNoteWhenClaudeSelected(t *testing.T) {
+	fakeHome(t)
+
+	_, stderr, err := execCmd("install", "--target", "claude,cursor", "--location", "local", "--pretool-nudge")
+	if err != nil {
+		t.Fatalf("install --target claude,cursor --pretool-nudge: %v", err)
+	}
+	if strings.Contains(stderr, "note: --pretool-nudge") {
+		t.Fatalf("note printed although Claude was selected; stderr:\n%s", stderr)
+	}
+	if _, err := os.Stat(localPreToolGuard); err != nil {
+		t.Fatalf("positive control: Claude was selected but the guard was not written: %v", err)
+	}
+
+	_, stderr, err = execCmd("install", "--target", "cursor", "--location", "local")
+	if err != nil {
+		t.Fatalf("plain install --target cursor: %v", err)
+	}
+	if strings.Contains(stderr, "note: --pretool-nudge") {
+		t.Fatalf("note printed although --pretool-nudge was not given; stderr:\n%s", stderr)
+	}
+}
+
+// TestInstall_YesWithExplicitTarget_HonoursTarget is the D-13 regression:
+// an explicit --target must win over -y/--yes, not be discarded in favour
+// of the non-interactive "auto" default. Before the fix, install's switch
+// checked `case yes:` before `case cmd.Flags().Changed("target"):`, so
+// `install --target codex --yes` silently configured whatever "auto"
+// resolved to (Claude, in a fresh fake home) instead of Codex.
+// runAgentPicker is stubbed to fail the test if ever invoked — -y must
+// short-circuit before the interactive branch too (Pitfall 6), and an
+// explicit --target must not reopen that question.
+func TestInstall_YesWithExplicitTarget_HonoursTarget(t *testing.T) {
+	home := fakeHome(t)
+	withStubbedPicker(t, func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error) {
+		t.Fatal("runAgentPicker must never be called when --target is explicit")
+		return nil, nil
+	})
+
+	out, _, err := execCmd("install", "--target", "codex", "-y", "--location", "global")
+	if err != nil {
+		t.Fatalf("install --target codex -y: %v", err)
+	}
+	if !strings.Contains(out, "Codex CLI:") {
+		t.Fatalf("expected explicit --target codex to configure Codex, got:\n%s", out)
+	}
+	if strings.Contains(out, "Claude Code:") {
+		t.Fatalf("expected --yes NOT to widen an explicit --target codex to Claude, got:\n%s", out)
+	}
+
+	if _, statErr := os.Stat(filepath.Join(home, ".codex", "config.toml")); statErr != nil {
+		t.Fatalf("expected %s/.codex/config.toml to be written: %v", home, statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".claude.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected %s/.claude.json NOT to be written (--target codex must not touch Claude), stat err: %v", home, statErr)
+	}
+}
+
+// TestUninstall_YesWithExplicitTarget_HonoursTarget mirrors the install
+// regression for uninstall: an explicit --target must win over
+// -y/--yes, which otherwise resolves to "all" and would remove every
+// installed agent's configuration rather than just the one named.
+func TestUninstall_YesWithExplicitTarget_HonoursTarget(t *testing.T) {
+	home := fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude,codex", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude,codex: %v", err)
+	}
+
+	withStubbedPicker(t, func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error) {
+		t.Fatal("runAgentPicker must never be called when --target is explicit")
+		return nil, nil
+	})
+
+	out, _, err := execCmd("uninstall", "--target", "codex", "--yes", "--location", "global")
+	if err != nil {
+		t.Fatalf("uninstall --target codex --yes: %v", err)
+	}
+	if !strings.Contains(out, "Codex CLI:") {
+		t.Fatalf("expected explicit --target codex to be reported, got:\n%s", out)
+	}
+	if strings.Contains(out, "Claude Code:") {
+		t.Fatalf("expected --yes NOT to widen an explicit --target codex to Claude, got:\n%s", out)
+	}
+
+	claudeConfig := readJSONMap(t, filepath.Join(home, ".claude.json"))
+	mcpServers, _ := claudeConfig["mcpServers"].(map[string]any)
+	if _, ok := mcpServers["codegraph"]; !ok {
+		t.Fatalf("expected Claude's mcpServers.codegraph entry to survive an explicit --target codex uninstall, got: %v", mcpServers)
+	}
+
+	// Codex's config.toml held only the codegraph table (nothing else was
+	// ever written to it), so stripping that table empties the file
+	// entirely — the D-07/D-08 keep-clean precedent removes it rather than
+	// leaving an empty file behind (D-09: this now applies at every scope,
+	// not just local).
+	codexConfigPath := filepath.Join(home, ".codex", "config.toml")
+	if _, statErr := os.Stat(codexConfigPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected %s to be removed entirely (emptied by stripping the sole codegraph table), stat err: %v", codexConfigPath, statErr)
+	}
+}
+
+// TestInstall_NotesAreControlCharacterSanitized pins T-04-24 (Phase 4's
+// security audit, found 2026-09-19): result.Notes reached the terminal
+// unsanitized while the sibling files and error lines were sanitized.
+// Phase 4 shipped with only a constant note, so nothing carried a path;
+// Phases 5 and 7 then added path-bearing notes (codexTrustNote embeds the
+// absolute repo root), which turned the gap into a live escape-injection:
+// installing from a directory whose NAME carries an OSC-0 set-title
+// sequence emitted that sequence raw to stdout. Both output modes are
+// pinned — a user with NO_COLOR on a real terminal takes the plain branch.
+func TestInstall_NotesAreControlCharacterSanitized(t *testing.T) {
+	const osc = "\x1b]0;PWNED\x07"
+
+	run := func(t *testing.T, extraArgs ...string) string {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+		t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
+
+		project := filepath.Join(t.TempDir(), "repo"+osc+"x")
+		if err := os.MkdirAll(project, 0o755); err != nil {
+			t.Fatalf("mkdir control-character project dir: %v", err)
+		}
+		t.Chdir(project)
+
+		args := append([]string{"install", "--target", "codex", "--location", "local", "--yes"}, extraArgs...)
+		out, _, err := execCmd(args...)
+		if err != nil {
+			t.Fatalf("install --target codex --location local: %v\n%s", err, out)
+		}
+		if !strings.Contains(out, "note:") {
+			t.Fatalf("expected a note: line (codexTrustNote) in the output, got:\n%q", out)
+		}
+		return out
+	}
+
+	// The note must still name the project — the sanitizer strips control
+	// characters, it does not drop the path (positive control: without this
+	// the assertion below would pass on an empty note).
+	assertSanitized := func(t *testing.T, label, out string) {
+		t.Helper()
+		if strings.Contains(out, osc) {
+			t.Errorf("%s output carries the raw OSC-0 set-title sequence (T-04-24): %q", label, out)
+		}
+		noteLine := ""
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, "note:") {
+				noteLine = line
+				break
+			}
+		}
+		if !strings.Contains(noteLine, "repo") || !strings.Contains(noteLine, "trusted") {
+			t.Errorf("%s note line lost its content while sanitizing: %q", label, noteLine)
+		}
+	}
+
+	t.Run("plain", func(t *testing.T) {
+		assertSanitized(t, "plain", run(t))
+	})
+	t.Run("styled", func(t *testing.T) {
+		out := run(t, "--color=always")
+		if !strings.Contains(out, "\x1b[") {
+			t.Fatalf("expected styled output to carry SGR escapes, got:\n%q", out)
+		}
+		// Strip the renderer's own SGR sequences; anything left must be clean.
+		assertSanitized(t, "styled", stripInstallSGR(out))
+	})
+}
+
+// TestInstall_PlainBranchPathsAreControlCharacterSanitized closes the
+// parity gap the v0.14.0 milestone integration check found: the T-04-24
+// fix sanitized notes in both branches but claimed the sibling file and
+// error lines already did the same — they did so only in the STYLED
+// branch. A global install into a HOME whose name carries an OSC-0
+// sequence makes f.Path absolute, and therefore attacker-influenced.
+func TestInstall_PlainBranchPathsAreControlCharacterSanitized(t *testing.T) {
+	const osc = "\x1b]0;PWNED\x07"
+
+	home := filepath.Join(t.TempDir(), "home"+osc+"x")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir control-character home: %v", err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
+	t.Chdir(t.TempDir())
+
+	out, _, err := execCmd("install", "--target", "codex", "--location", "global", "--yes")
+	if err != nil {
+		t.Fatalf("install --target codex --location global: %v\n%s", err, out)
+	}
+	if strings.Contains(out, osc) {
+		t.Errorf("plain install output carries the raw OSC-0 set-title sequence on a file line: %q", out)
+	}
+	// Positive control: the absolute path is still reported, minus the escape.
+	if !strings.Contains(out, "config.toml") {
+		t.Errorf("expected the created config.toml path in the output, got: %q", out)
 	}
 }

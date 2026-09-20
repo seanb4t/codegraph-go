@@ -109,6 +109,37 @@ func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
 		)
 	}
 
+	// Repo is a category error, not a tolerance question, for the same
+	// reason GOOS/GOARCH, Runner and ScratchFS are: a corpus/seed/count
+	// change is a measurement-frame change of the same kind — comparing
+	// throughput across two different synthetic corpora is meaningless
+	// regardless of how close the numbers land. Repo is expected to be
+	// the regression-mode synthesized corpus id (produced at
+	// tools/bench/runner/main.go:691 as "synthetic-seed{N}-count{M}" and
+	// carried forward at :759 through the median aggregation), NOT a
+	// filesystem path and NOT a human corpus label — publish-mode
+	// Metrics carry a human corpus name and never reach this function
+	// (main.go:627 is the sole call site, reachable only from
+	// -mode regression). A future change routing publish-mode metrics
+	// through CheckRegression would need to revisit this comparison
+	// (Pitfall 16). An empty Repo means "never recorded", not a
+	// wildcard: it is refused against a non-empty value on either side,
+	// exactly like the runner and scratch_fs guards above. Both empty
+	// still matches, so callers that construct Metrics without repo
+	// attribution (unit tests, pre-attribution baselines) are
+	// unaffected.
+	if baseline.Repo != current.Repo {
+		return fmt.Errorf(
+			"bench: corpus identity mismatch: baseline was measured against repo %s but "+
+				"this run is %s; a corpus/seed/count change is a measurement-frame change of "+
+				"the same kind as GOOS/GOARCH, runner or scratch_fs, so this comparison would "+
+				"be meaningless. An empty repo value means it predates repo recording, which "+
+				"is not a wildcard match against a recorded one — re-bless the baseline for "+
+				"this corpus (tools/bench/BASELINE.md) instead of comparing across them",
+			repoString(baseline.Repo), repoString(current.Repo),
+		)
+	}
+
 	if baseline.FilesPerSec <= 0 {
 		return fmt.Errorf("bench: invalid baseline: FilesPerSec must be positive, got %.4f", baseline.FilesPerSec)
 	}
@@ -182,4 +213,12 @@ func scratchFSString(scratchFS string) string {
 		return "(not recorded)"
 	}
 	return scratchFS
+}
+
+// repoString is runnerString's twin for Repo, same rationale.
+func repoString(repo string) string {
+	if repo == "" {
+		return "(not recorded)"
+	}
+	return repo
 }

@@ -131,7 +131,7 @@ func noticeCommandCases(path string) []noticeCase {
 	return []noticeCase{
 		{"explore", []string{"explore", "Alpha", "-p", path}},
 		{"node", []string{"node", "Alpha", "-p", path}},
-		{"query", []string{"query", "Alpha", "-p", path}},
+		{"search --full", []string{"search", "Alpha", "--full", "-p", path}},
 		{"search", []string{"search", "Alpha", "-p", path}},
 		{"callers", []string{"callers", "helper", "-p", path}},
 		{"callees", []string{"callees", "Alpha", "-p", path}},
@@ -215,7 +215,7 @@ func TestNoticeSuppressedInJSON(t *testing.T) {
 	glyph := noticeGlyph(t)
 
 	cases := []noticeCase{
-		{"query", []string{"query", "Alpha", "-p", wt, "--json"}},
+		{"search --full", []string{"search", "Alpha", "--full", "-p", wt, "--json"}},
 		{"search", []string{"search", "Alpha", "-p", wt, "--json"}},
 		{"callers", []string{"callers", "helper", "-p", wt, "--json"}},
 		{"callees", []string{"callees", "Alpha", "-p", wt, "--json"}},

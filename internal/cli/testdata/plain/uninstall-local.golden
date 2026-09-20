@@ -1,0 +1,11 @@
+Claude Code: removed
+  removed: .mcp.json
+  not-found: .claude.json
+  removed: .claude/CLAUDE.md
+  not-found: .claude/settings.json
+  removed: .claude/skills/codegraph/.codegraph-manifest.json
+  removed: .claude/skills/codegraph/SKILL.md
+  removed: .claude/hooks/session-nudge.sh
+  removed: .claude/settings.json
+  not-found: .claude/hooks/pretooluse-nudge.sh
+  not-found: .claude/settings.json

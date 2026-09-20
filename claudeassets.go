@@ -23,16 +23,20 @@ package claudeassets
 
 import "embed"
 
-// FS embeds exactly three files, named explicitly rather than as a
+// FS embeds exactly four files, named explicitly rather than as a
 // directory pattern over .claude/skills/codegraph/ — embed's default
 // dot/underscore filtering does not exclude
 // .claude/skills/codegraph/verification/, so a directory pattern would
 // also ship Phase 6's rehearsal-transcript evidence to every install
-// target (07-RESEARCH.md Pitfall 2).
+// target (07-RESEARCH.md Pitfall 2). The fourth, pretooluse-nudge.sh, is a
+// template: install renders the binary's absolute path into it before
+// writing it (v0.14.0 Phase 6 D-01b), unlike the other three, which are
+// installed byte-identical.
 //
 //go:embed .claude/skills/codegraph/SKILL.md
 //go:embed .claude/hooks/hooks.json
 //go:embed .claude/hooks/session-nudge.sh
+//go:embed .claude/hooks/pretooluse-nudge.sh
 var FS embed.FS
 
 const (
@@ -46,6 +50,10 @@ const (
 	HooksFragmentPath = ".claude/hooks/hooks.json"
 	// SessionNudgeScriptPath is FS's path to the SessionStart nudge script.
 	SessionNudgeScriptPath = ".claude/hooks/session-nudge.sh"
+	// PreToolUseGuardPath is FS's path to the PreToolUse nudge guard
+	// template (v0.14.0 Phase 6 D-01, D-01b) — also this repository's own
+	// dogfood guard.
+	PreToolUseGuardPath = ".claude/hooks/pretooluse-nudge.sh"
 )
 
 // SkillMarkdown returns the embedded SKILL.md content.
@@ -56,3 +64,7 @@ func HooksFragment() ([]byte, error) { return FS.ReadFile(HooksFragmentPath) }
 
 // SessionNudgeScript returns the embedded session-nudge.sh content.
 func SessionNudgeScript() ([]byte, error) { return FS.ReadFile(SessionNudgeScriptPath) }
+
+// PreToolUseGuardTemplate returns the embedded, unrendered
+// pretooluse-nudge.sh guard template.
+func PreToolUseGuardTemplate() ([]byte, error) { return FS.ReadFile(PreToolUseGuardPath) }

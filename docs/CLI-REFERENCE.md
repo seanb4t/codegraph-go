@@ -15,8 +15,9 @@ codegraph builds and maintains a local knowledge graph of a repository's symbols
 ### Options
 
 ```
-  -h, --help      help for codegraph
-  -v, --version   version for codegraph
+      --color string   colour output: auto (detect), always, or never (default "auto")
+  -h, --help           help for codegraph
+  -v, --version        version for codegraph
 ```
 
 ### SEE ALSO
@@ -34,8 +35,7 @@ codegraph builds and maintains a local knowledge graph of a repository's symbols
 * [codegraph init](#codegraph-init)	 - Create .codegraph/ and build the full graph in one step
 * [codegraph install](#codegraph-install)	 - Configure coding agents to use this codegraph binary as their MCP server
 * [codegraph node](#codegraph-node)	 - Show a symbol's signature, calls, and callers, or a line-numbered file read
-* [codegraph query](#codegraph-query)	 - Search full node records by name/qualifiedName
-* [codegraph search](#codegraph-search)	 - Lexically search symbol names/qualified names (locations only)
+* [codegraph search](#codegraph-search)	 - Lexically search symbol names/qualified names
 * [codegraph serve](#codegraph-serve)	 - Run the codegraph MCP server
 * [codegraph status](#codegraph-status)	 - Report index health and counts
 * [codegraph sync](#codegraph-sync)	 - Incrementally update the graph from changed files
@@ -43,7 +43,6 @@ codegraph builds and maintains a local knowledge graph of a repository's symbols
 * [codegraph ui](#codegraph-ui)	 - Run a local, read-only web UI over the repository's own index
 * [codegraph uninit](#codegraph-uninit)	 - Remove .codegraph/
 * [codegraph uninstall](#codegraph-uninstall)	 - Remove codegraph's configuration from coding agents
-* [codegraph unlock](#codegraph-unlock)	 - Clear a stale daemon lock
 * [codegraph upgrade](#codegraph-upgrade)	 - Download, verify, and install a new codegraph release
 * [codegraph version](#codegraph-version)	 - Print build version information
 
@@ -67,6 +66,12 @@ codegraph affected [files...] [flags]
       --stdin           read changed file paths from stdin, one per line (union'd with positional args)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -86,6 +91,12 @@ codegraph callees <symbol> [flags]
   -j, --json          emit JSON output
   -l, --limit int     cap on results returned
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -109,6 +120,12 @@ codegraph callers <symbol> [flags]
   -p, --path string   repo path (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -127,6 +144,12 @@ See each sub-command's help for details on how to use the generated script.
 
 ```
   -h, --help   help for completion
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -176,6 +199,12 @@ codegraph completion bash
       --no-descriptions   disable completion descriptions
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph completion](#codegraph-completion)	 - Generate the autocompletion script for the specified shell
@@ -210,6 +239,12 @@ codegraph completion fish [flags]
       --no-descriptions   disable completion descriptions
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph completion](#codegraph-completion)	 - Generate the autocompletion script for the specified shell
@@ -239,6 +274,12 @@ codegraph completion powershell [flags]
 ```
   -h, --help              help for powershell
       --no-descriptions   disable completion descriptions
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -286,6 +327,12 @@ codegraph completion zsh [flags]
       --no-descriptions   disable completion descriptions
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph completion](#codegraph-completion)	 - Generate the autocompletion script for the specified shell
@@ -299,8 +346,9 @@ List and manage running codegraph daemons
 With no subcommand: on a TTY, open an interactive picker of every
 running daemon (current project first) to stop one, stop all, or
 cancel; off a TTY, print the same list and exit 0. Use `daemon start`
-to run the shared watch/index server in the foreground, and
-`daemon stop [--all]` to stop it non-interactively.
+to run the shared watch/index server in the foreground,
+`daemon stop [--all]` to stop it non-interactively, and
+`daemon unlock [path]` to clear a stale lock left by a crash.
 
 ```
 codegraph daemon [flags]
@@ -313,11 +361,18 @@ codegraph daemon [flags]
   -p, --path string   repo path for current-project-first ordering (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
 * [codegraph daemon start](#codegraph-daemon-start)	 - Run the shared watch/index server in the foreground
 * [codegraph daemon stop](#codegraph-daemon-stop)	 - Stop the current-repo daemon, or every running daemon (--all)
+* [codegraph daemon unlock](#codegraph-daemon-unlock)	 - Clear a stale daemon lock
 
 ## codegraph daemon start
 
@@ -335,6 +390,12 @@ codegraph daemon start [flags]
   -q, --quiet         suppress daemon-driven sync progress output
   -v, --verbose       emit per-file/per-pass detail for daemon-driven syncs
       --workers int   bound the daemon's extraction worker pool (default: number of CPUs)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -357,6 +418,36 @@ codegraph daemon stop [flags]
   -p, --path string   repo path to stop (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
+### SEE ALSO
+
+* [codegraph daemon](#codegraph-daemon)	 - List and manage running codegraph daemons
+
+## codegraph daemon unlock
+
+Clear a stale daemon lock
+
+```
+codegraph daemon unlock [path] [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for unlock
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph daemon](#codegraph-daemon)	 - List and manage running codegraph daemons
@@ -375,6 +466,12 @@ codegraph explore <query...> [flags]
   -h, --help            help for explore
       --max-files int   cap on distinct files returned (default 5)
   -p, --path string     repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -402,6 +499,12 @@ codegraph files [flags]
       --pattern string   shell glob narrowing the result set
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -414,6 +517,12 @@ Manage git sync hooks (post-commit/post-merge/post-checkout)
 
 ```
   -h, --help   help for githooks
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -437,6 +546,12 @@ codegraph githooks install [path] [flags]
   -h, --help   help for install
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph githooks](#codegraph-githooks)	 - Manage git sync hooks (post-commit/post-merge/post-checkout)
@@ -455,6 +570,12 @@ codegraph githooks remove [path] [flags]
   -h, --help   help for remove
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph githooks](#codegraph-githooks)	 - Manage git sync hooks (post-commit/post-merge/post-checkout)
@@ -471,6 +592,12 @@ codegraph githooks status [path] [flags]
 
 ```
   -h, --help   help for status
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -492,6 +619,12 @@ codegraph impact <symbol> [flags]
   -h, --help          help for impact
   -j, --json          emit JSON output
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -516,6 +649,12 @@ codegraph index [path] [flags]
       --workers int   bound the extraction worker pool (default: number of CPUs)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -537,6 +676,12 @@ codegraph init [path] [flags]
       --workers int   bound the extraction worker pool (default: number of CPUs)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -550,8 +695,18 @@ Configure coding agents to use this codegraph binary as their MCP server
 Detect and configure the agent roster (Claude Code, Cursor, Codex CLI,
 opencode, Gemini CLI, Antigravity, Hermes, Kiro): write each agent's MCP
 server entry plus, for the agents that support it, a short marker-fenced
-instruction block. Idempotent — re-running install is a no-op when
-nothing changed.
+instruction block. Install also writes the codegraph skill package
+(SKILL.md plus a sidecar manifest) into the skill directory each agent
+reads; a directory shared by several agents holds one package they own
+jointly, and a codegraph/ skill directory codegraph did not write is
+left untouched. --print-config-style prints what each agent receives
+without writing anything. With --pretool-nudge (Claude Code and Codex
+CLI), install also registers a PreToolUse hook that adds a one-line
+pointer to codegraph_explore when the agent searches an indexed
+repository; it never blocks a tool call, and the choice is
+remembered until --pretool-nudge=false or uninstall. Codex skips a
+new or changed hook until it is trusted in /hooks. Idempotent —
+re-running install is a no-op when nothing changed.
 
 ```
 codegraph install [flags]
@@ -564,16 +719,27 @@ codegraph install [flags]
   codegraph install --target all --location global
   codegraph install --target claude,cursor
   codegraph install --target none
+  codegraph install --print-config-style --location local
+  codegraph install --target claude --pretool-nudge
+  codegraph install --target codex --location local --pretool-nudge
 ```
 
 ### Options
 
 ```
-      --auto-allow        also add mcp__codegraph__* to Claude Code's permissions.allow list
-  -h, --help              help for install
-  -l, --location string   config scope: global|local (default "global")
-  -t, --target string     which agents to configure: auto|all|none|<comma-separated ids> (default "auto")
-  -y, --yes               skip the interactive picker; use the non-interactive default set (auto)
+      --auto-allow           also add mcp__codegraph__* to Claude Code's permissions.allow list
+  -h, --help                 help for install
+  -l, --location string      config scope: global|local (default "global")
+      --pretool-nudge        Claude Code and Codex CLI: register a PreToolUse hook that points the agent at codegraph_explore when it searches; remembered across install and upgrade until --pretool-nudge=false or uninstall
+      --print-config-style   print each agent's capability table (scopes, MCP config, format, instructions, skill dir, hooks) and exit without writing anything
+  -t, --target string        which agents to configure: auto|all|none|<comma-separated ids> (default "auto")
+  -y, --yes                  skip the interactive picker; use the non-interactive default set (auto)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -597,26 +763,10 @@ codegraph node [symbol] [flags]
   -p, --path string   repo path (default: cwd)
 ```
 
-### SEE ALSO
-
-* [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
-
-## codegraph query
-
-Search full node records by name/qualifiedName
+### Options inherited from parent commands
 
 ```
-codegraph query <term> [flags]
-```
-
-### Options
-
-```
-  -h, --help          help for query
-  -j, --json          emit JSON output
-  -k, --kind string   restrict to one node kind
-  -l, --limit int     cap on results returned
-  -p, --path string   repo path (default: cwd)
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -625,7 +775,7 @@ codegraph query <term> [flags]
 
 ## codegraph search
 
-Lexically search symbol names/qualified names (locations only)
+Lexically search symbol names/qualified names
 
 ```
 codegraph search <term> [flags]
@@ -634,11 +784,18 @@ codegraph search <term> [flags]
 ### Options
 
 ```
+      --full          return full node records (signature, qualified name) instead of locations
   -h, --help          help for search
-      --json          emit JSON output
-      --kind string   restrict to one node kind
-      --limit int     cap on results returned
+  -j, --json          emit JSON output
+  -k, --kind string   restrict to one node kind
+  -l, --limit int     cap on results returned
   -p, --path string   repo path (default: cwd)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -694,6 +851,12 @@ codegraph serve [flags]
       --watch         Force the file watcher on, overriding the WSL2/slow-filesystem auto-off (the CLI twin of CODEGRAPH_FORCE_WATCH=1)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -715,6 +878,12 @@ codegraph status [flags]
   -p, --path string   repo path (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -734,6 +903,12 @@ codegraph sync [path] [flags]
   -q, --quiet         suppress progress and summary output
   -v, --verbose       emit per-file/per-pass detail
       --workers int   bound the extraction worker pool (default: number of CPUs)
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -764,6 +939,12 @@ codegraph telemetry [flags]
   -h, --help   help for telemetry
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -790,6 +971,12 @@ codegraph ui [flags]
   -p, --path string         repo path (default: cwd)
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -809,6 +996,12 @@ codegraph uninit [path] [flags]
   -h, --help    help for uninit
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -822,8 +1015,13 @@ Remove codegraph's configuration from coding agents
 Reverse everything `codegraph install` wrote for the selected agents —
 the MCP server entry and, where present, the marker-fenced instruction
 block — while preserving every unrelated key, entry, and section in
-every file it touches. Reports removed / not-configured / unsupported
-per agent and never errors on an agent that was never installed.
+every file it touches. It removes codegraph's skill package too; a
+shared skill directory's package is deleted only when no other agent
+that installed it remains, and a skill directory codegraph did not
+write is never touched. It also removes the Claude Code and Codex
+CLI PreToolUse nudge hooks and their guard scripts when present.
+Reports removed / not-configured / unsupported per agent and never
+errors on an agent that was never installed.
 
 ```
 codegraph uninstall [flags]
@@ -846,22 +1044,10 @@ codegraph uninstall [flags]
   -y, --yes               skip the interactive picker; use the non-interactive default set (all)
 ```
 
-### SEE ALSO
-
-* [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
-
-## codegraph unlock
-
-Clear a stale daemon lock
+### Options inherited from parent commands
 
 ```
-codegraph unlock [path] [flags]
-```
-
-### Options
-
-```
-  -h, --help   help for unlock
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO
@@ -907,6 +1093,12 @@ codegraph upgrade [version] [flags]
   -h, --help    help for upgrade
 ```
 
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
+```
+
 ### SEE ALSO
 
 * [codegraph](#codegraph)	 - Pre-indexed code knowledge graph for coding agents
@@ -935,6 +1127,12 @@ codegraph version [flags]
 ```
   -h, --help   help for version
       --json   emit build identity as JSON
+```
+
+### Options inherited from parent commands
+
+```
+      --color string   colour output: auto (detect), always, or never (default "auto")
 ```
 
 ### SEE ALSO

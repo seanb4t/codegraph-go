@@ -328,37 +328,35 @@ though each one is easy to mistake for doing so:
 **The dependency tree is minimal and audited. CGo, via tree-sitter, is the
 sole documented exception to the project's pure-Go, no-CGo default.**
 
-Read literally, `go.mod`'s `require` blocks list 134 total module
-requirements. That number alone is misleading without context: 107 of those
-134 are **indirect** (transitive) dependencies pulled in by the project's
-actual direct choices — none were individually selected or reviewed on
-their own merits, they are the closure of what `pebble`, `mcp-go`,
-`sigstore-go`, `cobra`, and the tree-sitter bindings themselves require.
+`go.mod` lists many more indirect requirements than direct ones, and the raw
+counts on both sides move with every dependency bump — this document
+deliberately quotes none of them. For the live picture, run `go list -m all`
+for the full module closure or `go mod graph` to see who pulls in what.
 
-Of the **27 direct** requires this project deliberately added, **14 are
-tree-sitter grammar modules** — one per supported language
-(`tree-sitter-go`, `tree-sitter-java`, `tree-sitter-c-sharp`,
-`tree-sitter-python`, `tree-sitter-typescript`, `tree-sitter-rust`,
+The tree is **wide-but-shallow** by deliberate design, not a small flat one:
+one grammar module per supported language, each a self-contained,
+independently-versioned parser pulled in only because that language is a
+supported extraction target — `tree-sitter-go`, `tree-sitter-java`,
+`tree-sitter-c-sharp`, `tree-sitter-python`, `tree-sitter-typescript`,
+`tree-sitter-javascript` (also covers TS/JSX parsing), `tree-sitter-rust`,
 `tree-sitter-ruby`, `tree-sitter-php`, `tree-sitter-c`, `tree-sitter-cpp`,
 `tree-sitter-kotlin`, `tree-sitter-swift`, plus the shared
-`tree-sitter/go-tree-sitter` binding and `tree-sitter-javascript`, which also
-covers TS/JSX parsing). This is a **wide-but-shallow** tree by deliberate
-design, not a small flat one: each grammar module is a self-contained,
-independently-versioned parser for exactly one language, pulled in only
-because that language is a supported extraction target (see
+`tree-sitter/go-tree-sitter` binding they all sit on (see
 `docs/LANGUAGE-CAPABILITY-MATRIX.md`). It is not incidental bloat — it *is*
 the multi-language parsing story, made explicit rather than hidden behind a
 single monolithic "parser" dependency.
 
-The remaining 13 direct requires are the actual supply-chain surface worth
-auditing individually: the storage engine (`cockroachdb/pebble/v2`), the MCP
-server (`mark3labs/mcp-go`), the CLI framework (`spf13/cobra`), the file
+Beyond the grammars, a short, deliberately chosen list of direct requires is
+the actual supply-chain surface worth auditing individually: the storage
+engine (`cockroachdb/pebble/v2`), the MCP server
+(`modelcontextprotocol/go-sdk`), the CLI framework (`spf13/cobra`), the file
 watcher (`fsnotify/fsnotify`), the release-verification client
 (`sigstore/sigstore-go`), a JSONC parser for agent-config editing
-(`tailscale/hujson`), protobuf codegen support
-(`google/protobuf`), a goroutine-leak test harness
-(`go.uber.org/goleak`), and a handful of `golang.org/x/*` toolchain
-packages.
+(`tailscale/hujson`), the protobuf runtime (`google.golang.org/protobuf`),
+the community-detection library (`gonum.org/v1/gonum`), the TUI stack
+(`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`, `charm.land/lipgloss/v2`),
+a goroutine-leak test harness (`go.uber.org/goleak`), and a handful of
+`golang.org/x/*` toolchain packages.
 
 **CGo is the sole documented exception.** `CGO_ENABLED=1` is required
 because `tree-sitter/go-tree-sitter` wraps the tree-sitter C runtime and

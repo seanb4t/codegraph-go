@@ -1,727 +1,283 @@
-# Architecture Integration Research: v0.13.0 Guard Hardening & UI Follow-through
+# Architecture Research — v0.14.0 Polish & Agent Reach
 
-**Domain:** integration architecture for a new-features milestone on an established codebase
-**Researched:** 2026-09-08
-**Confidence:** HIGH — every claim below is either a quoted source line from this repository at HEAD, or an explicit inference labelled as such.
+**Domain:** Brownfield integration — CLI styling glow-up, verb-surface fold, multi-harness agent reach, Codex parity, on an existing shipped Go codebase.
+**Researched:** 2026-09-14
+**Confidence:** HIGH for CLI/present/MCP/agents mechanics (read from source with line evidence); MEDIUM for Codex CLI precedence claims and `charm.land/fang/v2` runtime behavior (web-sourced, not yet run against this repo).
 
-## How to read this file
+## Standard Architecture (today, before this milestone)
 
-This is not a green-field architecture doc. `internal/query.Engine` is the single read-only
-seam; `internal/uiserver` is a ConnectRPC surface over it guarded by two tests
-(`internal/uiserver/readonly_test.go`) that this milestone must clear for every new symbol;
-`internal/schema/graph.proto` (on-disk) and `internal/uiproto/uiv1/ui.proto` (wire) are two
-independently-evolving, additive-only proto surfaces (D-02a). Each numbered section below
-answers one milestone question with file paths, quoted source, and an explicit
-new-vs-modified verdict.
-
----
-
-## 1. HLT-04 — coverage denominator ("files discovered but NOT indexed, with reason")
-
-### What `internal/indexer.Discover` actually knows and drops
-
-`internal/indexer/discover.go:97` (`func Discover(root string) ([]DiscoveredFile, string, error)`)
-walks the tree with `filepath.WalkDir` and for every candidate file either appends a
-`pendingFile` or returns `nil` from the callback with **no record kept**. Three exclusion
-reasons exist in the walk today, none of them persisted or even counted:
-
-1. **Directory skip** — `discover.go:106`: `if p != root && ShouldSkipDir(d.Name()) { return fs.SkipDir }`. `ShouldSkipDir` (`discover.go:53`) excludes `vendor` and any dot-prefixed directory.
-2. **Unregistered extension** — `discover.go:113-116`: `spec, ok := lookupLanguageByExt(ext); if !ok { return nil }`.
-3. **Go build-tag mismatch** — `discover.go:128-134`: `ctx.MatchFile(...)`, Go-only, via `go/build.Context`.
-
-None of these three produce any record — the file's relative path is never captured before
-the early `return nil`. This is genuinely new discovery-time data the store does not persist
-today, exactly as the milestone context predicted.
-
-### A second, already-persisted category the milestone context did not anticipate
-
-Files that **do** pass `Discover` and reach Pass 1 (`internal/indexer/extract.go`) but fail to
-parse or read are **already recorded**, end to end:
-
-- `extract.go:122-129`: a read failure is captured on `goextract.FileResult.Err`.
-- `internal/indexer/resolve.go:296-298`:
-  ```go
-  if r.Err != nil {
-      f.Errors = []string{r.Err.Error()}
-  }
-  ```
-  — a `schema.File` record is still minted for the failed file, with `Errors` populated.
-- `internal/schema/graph.proto:113-117`:
-  ```proto
-  // errors records per-file extraction failures (e.g. oversized or
-  // unparseable source) so one bad file does not abort the whole index run
-  repeated string errors = 6;
-  ```
-
-So `schema.File.errors` **already exists on disk, schema version 1, no migration needed** —
-but nothing reads it out. `rg -n "Errors|errors" internal/query/status.go internal/query/files.go`
-returns zero hits outside `"errors"` the stdlib import and two `errors.Is` calls — confirmed:
-no Engine method surfaces `File.Errors` today.
-
-**HLT-04 is therefore two distinct sub-problems, not one:**
-
-| Category | Source of truth | Persisted today? | What's needed |
-|---|---|---|---|
-| Discovered-but-excluded-before-extraction (vendor/dot-dir, unsupported ext, Go build-tag) | Not captured anywhere | No | New discovery-time collection, computed fresh at query time (see below) |
-| Discovered, extracted, but failed (parse/read error) | `schema.File.Errors` | **Yes**, already on disk | Just a new Engine read + wire projection |
-
-### Additive-only feasibility (D-02a)
-
-No schema change is required for either category if computed at query time rather than
-persisted:
-- Category 2 already has a field (`File.errors`, number 6, spent since Phase 2/3) — reading
-  it is pure Engine work, zero proto changes to `internal/schema/graph.proto`.
-- Category 1 does **not** need a schema field at all if implemented as a live filesystem
-  walk at query time (see next section) — the "reserved 50 to 59" annotation slots on
-  `Node`/`Edge` (`graph.proto:65`, `:96`) are explicitly earmarked for a **different**
-  concern ("embedding vector, community/cluster assignment" — see §2) and should not be
-  overloaded for this.
-
-### Recommended integration: query-time, not index-time — following `Status()`'s own precedent
-
-`internal/query.Engine` already does **live filesystem work alongside store reads**, not just
-pure store scans — this is the load-bearing precedent that makes a new Coverage-style method
-architecturally consistent rather than a special case:
-
-- `Engine` carries `repoRoot string` (`internal/query/engine.go:42`).
-- `Status()` conditionally walks the filesystem when `e.repoRoot != ""`
-  (`internal/query/status.go:317-320`, `newestSourceMtime` at `status.go:113`), and degrades
-  gracefully to a zero value when no repo root is configured (New vs OpenAt) — exactly the
-  degrade discipline a new method should copy.
-
-**Recommended new Engine surface** (new, per milestone context's own framing): an
-`Engine.Coverage()`-shaped method (naming below is illustrative, not binding) that:
-1. Re-walks `e.repoRoot` reusing `indexer.ShouldSkipDir` and the language-extension registry
-   (or a small sibling of `indexer.Discover` that records exclusions with a reason string
-   instead of silently continuing) to enumerate category 1 — computed **fresh per call**, no
-   cache, mirroring `FileGraph()`'s and `BuildReverseAdjacency`'s fresh-per-call discipline
-   (`traverse.go:150-152`: *"It is built FRESH inside every call, with no package-level
-   cache and no once-latch"*).
-2. Scans `IterateFiles()` for records with non-empty `Errors` for category 2 — a cheap
-   addition to the same scan `Status()` already runs (`status.go:260-269`).
-3. Degrades to an empty/zero result when `e.repoRoot == ""`, never erroring — same contract
-   `Status()`'s `DbSizeBytes` follows (`status.go:317`, D-07 precedent).
-
-This needs a genuinely **new package-level function in `internal/indexer`** (or a query-local
-duplicate, mirroring the `shouldSkipStaleDir` precedent in `status.go:107-110`, which
-duplicates `indexer.ShouldSkipDir` specifically "to avoid an internal/query -> internal/indexer
-dependency edge" — the same choice must be made here, and the T-01-18 archtest in §6 will
-directly govern it).
-
-### Wire integration — extend `GetHealth`, do not add a 15th rpc
-
-`GetHealthResponse` (`internal/uiproto/uiv1/ui.proto:742-812`) is the health-page-only,
-heavier-than-`GetStatus` surface — its own doc comment says it exists "separately from
-GetStatus (which stays cheap for every-navigation polling, D-01)" (readonly_test.go's
-plan-04-03 comment). Coverage is inherently a health/diagnostic question ("why is my file
-missing"), and the last spent field number on `GetHealthResponse` is 16
-(`commit_sha`, `ui.proto:809`) — **field 17 is free and additive**. The frontend precedent
-(`web/src/routes/health/+page.svelte`) already exists as the natural consumer; no existing
-"coverage" concept is in the frontend today (`rg -n "coverage|Coverage" web/src` finds
-nothing outside unrelated `highlight.ts`/`SourcePane.svelte` matches), confirming this is new
-UI, not rewiring.
-
-**Verdict: no new rpc is required.** Extend `GetHealthResponse` with a new nested message
-(mirroring the `IndexHealth`/`PendingChanges`/`WorktreeMismatch` per-concept message
-pattern already established at fields 12-14) at field 17, mapped by a new
-`coverageToProto`-named function in `internal/uiserver/handlers.go` alongside
-`healthToProto` (`handlers.go:900`), `fileGraphToProto` (`:997`), `fileSymbolsToProto`
-(`:1082`) — **never an inline literal at the call site**, matching every existing mapper's
-documented discipline.
-
-**Naming gotcha if a new rpc is chosen instead** (e.g. if planning decides Coverage warrants
-its own call for pagination/cost reasons): `mutatingVerbs`
-(`internal/uiserver/readonly_test.go`) forbids the *substring* `"Index"` anywhere in a method
-name — `TestUIServiceDeclaresNoMutatingMethod` matches with `strings.Contains(name, verb)`.
-A tempting name like `GetIndexCoverage` or `IndexCoverage` **fails this guard outright**,
-despite being purely read-only. Safe names: `GetCoverage`, `Coverage`. This is a real,
-source-verified trap, not a style note.
-
-### New vs modified — HLT-04
-
-| Component | New / Modified | File |
-|---|---|---|
-| Discovery-exclusion collector | **New** function (likely `internal/indexer`) | `internal/indexer/discover.go` or a new sibling file |
-| `Engine.Coverage()` (or extension of `Status()`) | **New** Engine method | `internal/query/status.go` or a new `internal/query/coverage.go` |
-| `GetHealthResponse` field 17 + nested message | **Modified** (additive) | `internal/uiproto/uiv1/ui.proto` |
-| `coverageToProto` mapper | **New** function | `internal/uiserver/handlers.go` |
-| `GetHealth` handler | **Modified** (calls the new Engine method) | `internal/uiserver/health.go` (or wherever `GetHealth` is implemented — verify exact file at plan time; `health_test.go` exists in `internal/uiserver/`) |
-| Health page UI | **New** rendering | `web/src/routes/health/+page.svelte` |
-| `uiProtoFieldNumbers` fixture | **Modified** (extended, never rewritten) | `internal/uiserver/readonly_test.go` |
-
----
-
-## 2. GRF-06 — community clustering
-
-### Where the schema "reserves annotation space" — and why that is the wrong slot for this feature
-
-`internal/schema/graph.proto` reserves field ranges 50-59 on **`Node`** (`:65`), **`Edge`**
-(`:96`), and a third message (`:166`, reserved for "team-scale provenance") — this is the
-**on-disk, persisted** schema, explicitly earmarked:
-
-```proto
-// Reserved now, before any consumer exists, so a future embedding-vector
-// or community/cluster-assignment field lands at a pre-agreed number
-// instead of colliding with whatever the next organic field would be.
-reserved 50 to 59; // future: embedding vector, community/cluster assignment
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│ cmd/codegraph/main.go — cli.Execute() → os.Exit(1) on error            │
+├───────────────────────────────────────────────────────────────────────┤
+│ internal/cli  (24 visible verbs, one file each, cobra RunE)            │
+│   RunE reads TTY/NO_COLOR/flags → chooses plain vs styled branch       │
+│   ┌─────────────┐   ┌──────────────────┐   ┌────────────────────┐     │
+│   │ present/     │   │ tui/ (bubbletea) │   │ agents/ (8 targets) │     │
+│   │ lipgloss v2  │   │ agentpicker      │   │ install/uninstall   │     │
+│   │ D-01 sole    │   │ daemonpicker     │   │ AgentTarget iface   │     │
+│   │ lipgloss home│   │                  │   │                    │     │
+│   └──────┬───────┘   └──────────────────┘   └─────────┬──────────┘     │
+├──────────┼──────────────────────────────────────────────┼──────────────┤
+│          ▼ consumes plain structs, never recomputes      ▼ writes ext. │
+│ internal/query.Engine — SOLE read-only surface (Query/Search/Node/     │
+│   Explore/Callers/Callees/Impact/Affected/Files/Status/FileGraph)      │
+│   ExploreDetail/NodeDetail = plain-struct seams (v0.12 Phase 1, "third │
+│   consumer never a second gather path") already shared by CLI/MCP/UI   │
+├───────────────────────────────────────────────────────────────────────┤
+│ internal/mcp (stdio) ── internal/uiserver (ConnectRPC) — never import  │
+│ charm; TUI-01 archtest (present/archtest) proves the 6-package closure │
+│ {mcp, graphstore, daemon, watch, indexer, query} is charm-free         │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-This IS the literal slot the milestone context refers to. But using it would mean **persisting
-community assignments at index time** into `Node` records on every re-index — a structural
-choice with real consequences (index-time compute cost, staleness between re-indexes,
-migration of the reserved-field convention from "future" to "spent").
+`internal/cli/present` today has exactly 3 style vars (`headerStyle`, `labelStyle`, `sectionStyle`, `present/styles.go:19-28`) and is consumed by 3 call sites: `status.go:86-88`, `files.go:72-73`, `progress_cli.go:31-34`. Every other RunE prints via bare `fmt.Fprintf` loops over already-computed structs.
 
-### The established counter-precedent: `FileGraphNode.CycleID` is computed fresh, at query time
+## Component Responsibilities (this milestone's new/changed pieces)
 
-`internal/query/traverse.go`'s `FileGraph()` already solves the **structurally identical**
-problem — partitioning the file-adjacency graph into components — for cycle detection, and it
-does so **without touching the persisted schema at all**:
+| Component | Responsibility | New or Modified |
+|-----------|-----------------|------------------|
+| `internal/cli/present/*.go` (new `Render<Verb>` funcs) | Styled rendering of every verb's plain struct, mirroring `RenderStatus`/`RenderFiles` | **New** ~15 files, same package |
+| `internal/cli/colorflag.go` (proposed) | Resolves `--color`/TTY/`NO_COLOR` into `present.ChoosePresentation`'s two args, once, shared by every RunE | **New** |
+| `internal/cli/search.go` (existing, extended) | `--full` flag selects `Engine.Query` vs `Engine.Search` shape | **Modified** |
+| `internal/cli/query.go` | Becomes a `Hidden` non-zero-exit stub naming `search --full` | **Modified**, behavior-breaking |
+| `internal/cli/unlock.go` | Becomes a `Hidden` non-zero-exit stub naming `daemon unlock`; new `daemon unlock` subcommand added to `daemon.go` | **Modified + new subcommand** |
+| `internal/agents/types.go` `AgentTarget` | Grows capability-describing methods (skill dir, hook mechanism) so 8 targets stop needing 8 bespoke re-implementations | **Modified interface**, additive |
+| `internal/agents/codex.go` | Grows project-local scope, skill-dir install, `AGENTS.md` repo-root block (already has global `AGENTS.md`), possible Codex hook mechanism | **Modified** |
+| `.claude/hooks/hooks.json` + `claudeassets.go` | New `PreToolUse` block alongside existing `SessionStart` block | **Modified** (additive embed) |
+| `internal/mcp/server.go` `instructions` const | Unaffected by the verb fold (no CLI verb names in it today) but should gain "Codex has a skill too" parity language if the Claude-only carve-out (`instructions.go:20-27`) is revisited | **Possibly modified, low risk** |
 
-- `traverse.go:87-89`: `CycleID` is "0 for a node in no strongly-connected cycle and is
-  populated by the cycle detector, not by this scan."
-- `traverse.go:305-314`: cycle detection runs **inside** `FileGraph()`, over the same
-  aggregated `cycleAdj` adjacency map the edge-rollup scan just built, via
-  `stronglyConnectedCycles(cycleAdj)` — a pure in-memory graph algorithm, no store write.
-- `traverse.go:150-152` (doc comment on `FileGraph` itself): *"It is built FRESH inside every
-  call, with no package-level cache and no once-latch — mirroring `BuildReverseAdjacency`'s
-  fresh-per-call discipline."*
+## Part 1 — The CLI glow-up
 
-`FileGraphNode` (`ui.proto:824-839`) and `FileGraphEdge` (`ui.proto:842-871`) carry **no
-`reserved` clause at all** — unlike `Node`, `SourceBlob`, and the graph.proto messages, this
-message was never given a pre-agreed annotation band, because nothing anticipated needing one:
-the pattern established for extending it is a plain **additive new field**, exactly like
-`CycleID`/`cycle_id` (field 4) and `InCycle`/`in_cycle` (field 5) were added.
+### Where colour enters (D-03 rule, already precedented)
 
-### Recommendation: community detection is computed at QUERY TIME inside `FileGraph()`, following the `CycleID` pattern exactly — not persisted, and not using the schema's reserved 50-59 slot
-
-This is a direct, source-backed answer to the milestone's open question. The reserved
-50-59 range on `schema.Node`/`Edge` remains earmarked for a genuinely different, later
-concern (embeddings, team-scale provenance) and should be left untouched by GRF-06.
-
-Concretely:
-1. `internal/query.FileGraphNode` (`traverse.go:74-90`) gets a new field, e.g. `CommunityID
-   int`, populated the same way `CycleID` is — a second graph-partitioning pass over the same
-   `cycleAdj`-shaped adjacency (or a purpose-built one, since community detection algorithms
-   like label propagation or Louvain are not the same as Tarjan SCC) inside `FileGraph()`,
-   after the existing cycle-detection block (`traverse.go:305-330`).
-2. `FileGraphResult` (`traverse.go:112-129`) gets a corresponding aggregate field (mirroring
-   `CycleCount`, `traverse.go:128`), e.g. `CommunityCount int`.
-3. `uiv1.FileGraphNode` (`ui.proto:824-839`) gets an additive `community_id` field at the next
-   free number (5 — `cycle_id` is 4, no gap), and `FileGraphResponse` (`ui.proto:881-905`)
-   gets a `community_count` field at 7 (`cycle_count` is 6, `ui.proto:905`).
-4. **No new rpc** — `FileGraph` (the 12th method, already in `wantUIServiceMethods`) is
-   extended additively, exactly as `GRF-04`'s cycle detection was folded into the same rpc
-   rather than minting a separate one. This directly avoids the exact mistake the milestone's
-   own question flags ("a prior milestone's research claimed an rpc supplied data it did not,
-   costing an unbudgeted 13th rpc") — `FileGraph` genuinely already computes and returns the
-   file-adjacency graph GRF-06 needs to partition; there is no missing rpc here.
-5. `fileGraphToProto` (`internal/uiserver/handlers.go:997`) is modified, not replaced.
-
-### New vs modified — GRF-06
-
-| Component | New / Modified | File |
-|---|---|---|
-| Community-detection algorithm | **New** function | `internal/query/traverse.go` (near `stronglyConnectedCycles`) |
-| `FileGraphNode.CommunityID`, `FileGraphResult.CommunityCount` | **Modified** (additive struct fields) | `internal/query/traverse.go:74-129` |
-| `FileGraphNode.community_id`, `FileGraphResponse.community_count` | **Modified** (additive proto fields) | `internal/uiproto/uiv1/ui.proto` |
-| `fileGraphToProto` | **Modified** | `internal/uiserver/handlers.go:997` |
-| `uiProtoFieldNumbers` fixture | **Modified** (extended) | `internal/uiserver/readonly_test.go` |
-| Graph view color/grouping-by-community | **New** rendering | `web/src/routes/graph/+page.svelte`, `web/src/lib/components/graph/file-graph-transform.ts` |
-
----
-
-## 3. BRW-11 — editor handoff (configurable URI scheme)
-
-### The exact architectural precedent already exists: `GetPermalink`
-
-`internal/uiserver/permalink.go` is a **near-complete template** for this feature. It already:
-- Confines a caller-supplied `path`+`line`+`end_line` through
-  `eng.ValidateRepoRelativePath(path)` (`permalink.go:138`) — "the SAME `resolveSourcePath`
-  gate `GetNodeDetail` and `Explore` already share (SRV-05)."
-- Builds a URL server-side from validated inputs, never trusting the client to assemble one
-  (`buildGitHubBlobURL`, `permalink.go:259-277`).
-- Establishes the **exact precedent for the absolute-path tension** the milestone context
-  flags. `GetHealthResponse.worktree_mismatch` (`ui.proto:685-695`, `WorktreeMismatch`
-  message) is documented as *"the ONE scoped exception to this service's
-  project_path/index_path privacy stance... because the warning is useless without naming
-  both trees, and a clean tree still leaks nothing (T-04-09, accepted)."* This is a
-  **maintainer-approved precedent for a deliberate, scoped absolute-path exception at the RPC
-  boundary** — exactly the shape BRW-11 needs.
-
-### Resolving "how the absolute path reaches the browser without weakening repo-root confinement"
-
-The confinement gate (`ValidateRepoRelativePath`) is **only** about which files the server
-will read/reference — not about whether the *response* may carry an absolute path once that
-gate has passed. `GetPermalink` proves the pattern: validate the repo-relative path
-server-side, then **compute the full destination URL server-side** (there, a GitHub blob URL;
-here, an editor URI such as `vscode://file/<abs-path>:<line>`), and return only the
-already-assembled string. The client never independently learns or reconstructs the server's
-absolute filesystem prefix — it receives an opaque URI it can hand to `window.open()`. This is
-architecturally identical to `WorktreeMismatch.worktree_root`/`index_root` carrying absolute
-paths only when the maintainer scoped that exception explicitly (T-04-09) — BRW-11's plan
-should record the same kind of explicit, scoped, one-line decision rather than reopening the
-general privacy stance.
-
-Given the whole UI is **already loopback-only bound** (v0.12.0 scope: "Loopback-only bind +
-Origin/Host validation, read-only by construction"), the practical exposure of an editor URI
-carrying the server's own absolute repo path is materially lower than a public service would
-have — the same host that can reach the UI already has filesystem access to that path.
-
-### Where the configurable URI scheme lives
-
-`uiserver.Options` (`internal/uiserver/server.go:61-73`) currently has exactly two fields:
-`RepoPath` and `Addr`. `Addr`'s own doc comment states the established pattern for adding a
-new configurable knob:
+The rule the milestone states — "chosen at the RunE call site from TTY + `NO_COLOR` + `--color`, passed in rather than read from env inside `present`" — is not a new invention, it is the **existing, enforced pattern**. `present.ChoosePresentation(isTTY bool, noColor string) bool` (`present/tty.go:10-12`) is already pure and already documented as forbidden from reading `os.Getenv`/`term.IsTerminal` itself (`present/styles.go:7-9`). The 3 existing call sites each do:
 
 ```go
-// Nothing outside this package writes this field in v1 — no flag, no
-// environment variable, no configuration file reads it (D-08). A later
-// `--host`/`--port` is therefore an override of a field that already
-// exists, not a restructuring (SRV-03).
-```
-
-`internal/cli/ui.go`'s `newUiCmd()` (`ui.go:29-80`) registers exactly two flags today
-(`--path`/`-p`, `--no-open`) and passes them into `uiserver.Options{RepoPath: start}`
-(`ui.go:57`). **Recommendation**: add a new `Options.EditorURIScheme string` field (default
-`"vscode"` when empty, following the `Addr`-defaults-to-`DefaultAddr`-when-empty pattern
-already established at `server.go:66-67`), wired from a new `codegraph ui --editor` flag —
-this is additive to `Options` and to `newUiCmd`, not a restructuring, exactly matching the
-`Addr` precedent's own stated intent for future flags.
-
-A **per-request override** (an optional field on the request message, so a user can switch
-editors without restarting the server) is architecturally cheap to add later and should not
-block v1 — same "field added speculatively can never be taken back" discipline the
-`FileSymbolsRequest` doc comment states (`ui.proto:906-913`: *"There is no limit field in v1
-... a limit can be added additively later"*). Client-side localStorage for a *display*
-preference (which scheme label is shown/selected in a dropdown) is a legitimate frontend-only
-concern independent of the wire contract — it does not need any server awareness.
-
-### Does it need a new rpc at all?
-
-**Recommendation: no.** `GetPermalink` already accepts `path`+`line`+`end_line` and returns a
-computed URL — the mechanically simplest, most economical extension is an additive
-`editor_url` field on `GetPermalinkResponse` (`ui.proto:651-668`, next field number would be
-4 after `url`=1, `availability`=2, `reason`=3), computed unconditionally alongside the GitHub
-URL whenever the path resolves.
-
-**The one real design risk with reusing `GetPermalink`**: its `PermalinkAvailability` enum
-(`LINKABLE` / `LINKABLE_UNVERIFIED` / `NO_LINK`) encodes GitHub-specific uncertainty (remote
-presence, commit SHA verification) that has **no analog** for an editor link — an editor URI
-is either buildable (path resolves) or not (it doesn't), with no "unverified" middle state.
-Mixing two different availability semantics onto one response risks exactly the kind of
-"same field, two meanings" ambiguity this codebase's own conventions elsewhere go out of their
-way to avoid (e.g. `NodeDefinition.detail_gathered` exists specifically so emptiness is never
-overloaded with two meanings, `ui.proto:459-472`). If planning decides the semantics really
-don't fit together, the fallback is a small, purpose-built new message
-(`GetEditorLinkResponse`) reusing `ValidateRepoRelativePath` — **still no new rpc is
-mandatory if it's folded as fields onto `GetNodeDetailResponse` or kept as a `GetPermalink`
-extension with its own always-populated field and no availability enum at all** (simplest:
-`editor_url` is just empty string when the path does not resolve, no enum needed, since there
-is no "maybe available" state to express).
-
-### New vs modified — BRW-11
-
-| Component | New / Modified | File |
-|---|---|---|
-| `Options.EditorURIScheme` | **New** field (additive) | `internal/uiserver/server.go:61-73` |
-| `--editor` flag | **New** flag | `internal/cli/ui.go` (`newUiCmd`) |
-| `GetPermalinkResponse.editor_url` | **Modified** (additive field) | `internal/uiproto/uiv1/ui.proto:651-668` |
-| Editor-URI builder function | **New** function, mirroring `buildGitHubBlobURL` | `internal/uiserver/permalink.go` (new sibling function, same file) |
-| `GetPermalink` handler | **Modified** | `internal/uiserver/permalink.go:86-203` |
-| `uiProtoFieldNumbers` fixture | **Modified** (extended) | `internal/uiserver/readonly_test.go` |
-| UI "open in editor" affordance | **New** rendering | `web/src/lib/components/browse/SourcePane.svelte` (or wherever the permalink button already lives) |
-
----
-
-## 4. BRW-10 — "where am I" breadcrumb
-
-### The exact data already exists — via a call that is not yet wired into the file view
-
-`GetNodeDetailResponse` in `NODE_DETAIL_MODE_FILE` mode returns **only** `path` and `source`
-(`ui.proto:493-524`: *"NODE_DETAIL_MODE_FILE | path, source"*) — **no per-symbol line ranges**.
-The breadcrumb cannot be computed from this response alone.
-
-But `FileSymbols` — the 13th rpc, already shipped in Phase 5 (`readonly_test.go`'s
-plan-05-06 comment) — returns exactly the data needed:
-
-```proto
-message FileSymbolsResponse {
-  repeated Node symbols = 1;   // reuses the shared Node message
-  int32 total_count = 2;
-  bool truncated = 3;
+// status.go:86, files.go:72, progress_cli.go:31 — same 2-line idiom, 3x duplicated
+if present.ChoosePresentation(term.IsTerminal(int(os.Stdout.Fd())), os.Getenv("NO_COLOR")) {
+    return present.RenderStatus(result, start, cmd.OutOrStdout())
 }
 ```
 
-And the shared `Node` message (`ui.proto:131-145`) carries `start_line = 7` and `end_line = 8`
-for every symbol. This is confirmed by `FileSymbols`'s own doc comment
-(`ui.proto:906-913`), which explicitly contrasts it with `GetNodeDetail`'s file mode: *"...
-separately from GetNodeDetail (whose file mode carries a path and a source blob only, and does
-not enumerate symbols) so that every-navigation message stays cheap (D-01 precedent)."* —
-i.e., the split between "cheap file view" and "symbol enumeration" was a **deliberate,
-already-made** architectural decision, not an oversight.
+**Integration point for `--color`:** do not change `ChoosePresentation`'s signature (it is a stable, tested, pure 2-arg function used identically by 3 call sites today — widening it fans out to every caller and to `progress_cli.go`'s stderr-fd variant, which has different TTY semantics). Instead add one shared resolver in `internal/cli` (new `colorflag.go`, or folded into `root.go`) that takes `(cmd *cobra.Command, fd uintptr) (isTTY bool, noColor string)` and pre-empts the two inputs when `--color` is explicit:
 
-### Confirmed: `FileSymbols` is not yet consumed by the file-detail view
-
-`rg -n "fileSymbols|FileSymbols" web/src` returns exactly three hits:
-`web/src/routes/graph/+page.svelte`, `web/src/lib/gen/ui_pb.ts` (generated client), and
-`web/src/lib/components/graph/file-graph-transform.ts` — all on the `/graph` route (drilling
-into a file for its symbol list from the file/package graph view). The file-source rendering
-component, `web/src/lib/components/browse/SourcePane.svelte` (found via
-`rg -ln "GetNodeDetail|getNodeDetail" web/src`, alongside `web/src/routes/browse/+page.svelte`),
-does **not** currently call `FileSymbols`.
-
-### Recommendation: no backend work at all — reuse `FileSymbols`, purely a frontend integration
-
-This directly answers the milestone's open question ("whether a `FileSymbols`-style call must
-be reused") — yes, and it is a pure reuse, zero proto/Engine changes:
-1. When the browse/file view opens a file in `NODE_DETAIL_MODE_FILE`, also call `FileSymbols`
-   for that path (a second, parallel rpc call — the same two-call pattern the `/graph` route
-   already exercises for its own file drill-down).
-2. Client-side, on scroll, compute the containing symbol by interval containment over each
-   returned `Node.start_line`/`end_line` against the current scroll position — pure frontend
-   logic, no new wire shape.
-3. `MaxFileSymbols` (referenced in `ui.proto:910`, `internal/query.Engine.FileSymbols`,
-   file `internal/query/filesymbols.go`) already caps and truncates server-side — the
-   breadcrumb calculation should treat a `truncated=true` response as "breadcrumb may be
-   incomplete for very large files" rather than erroring.
-
-### New vs modified — BRW-10
-
-| Component | New / Modified | File |
-|---|---|---|
-| Breadcrumb component + scroll-position tracking | **New** | `web/src/lib/components/browse/SourcePane.svelte` (or a new sibling component) |
-| `FileSymbols` client call wiring | **Modified** (new call site, existing rpc) | `web/src/routes/browse/+page.svelte` |
-| Everything backend (`internal/query`, `internal/uiserver`, `ui.proto`) | **Untouched** | — |
-
-This is the cheapest of the four UI follow-ons in real engineering terms, and the ROADMAP's
-own "ordered by increasing scope" placement (BRW-11, BRW-10, HLT-04, GRF-06) is consistent
-with this finding only if BRW-10 is read as "smaller than HLT-04/GRF-06" rather than smaller
-than BRW-11 — worth flagging to the roadmapper: on this research, BRW-10 is architecturally the
-**smallest** item in the whole follow-through set (frontend-only), smaller than BRW-11 (which
-touches `Options`, a new flag, and a proto field even in the reuse-`GetPermalink` design).
-
----
-
-## 5. 999.2 — tmux real-PTY e2e harness
-
-### There is no existing precedent for building/exec'ing the release binary in tests
-
-Confirmed by direct search: `rg -n "go build -o" internal -g '*_test.go'` returns **zero
-hits**, and `rg -n "tmux"` across the whole repository (`.go`, `.yml` files) returns **zero
-hits**. The only `exec.Command` usage in `internal/cli/*_test.go` is `git`
-(`githooks_test.go:25`, `notice_test.go:30`) — never the `codegraph` binary itself. This
-confirms the milestone context's framing directly: this is genuinely new infrastructure, not
-an extension of an existing exec-based test.
-
-### Why the existing suite structurally cannot cover this (the ROADMAP's own stated reason)
-
-The existing "piped integration tests" in `internal/cli` invoke Cobra commands **in-process**
-against buffered stdin/stdout — this never allocates a real pty, so escape-sequence
-handshakes (DECRQM capability probes) and alternate-screen entry/exit (which only a real
-terminal driver honors) are invisible to them. `ROADMAP.md`'s own Phase 999.2 scope entry
-names the exact two bugs (G-07-1, G-07-2) that both "the full piped automated suite AND a deep
-multi-agent code review missed" for precisely this reason.
-
-### Where it should live
-
-No `//go:build` tag convention exists in this repo for anything but OS gating today
-(`internal/daemon/stop_posix.go: //go:build !windows`, `procstart_linux.go: //go:build linux`,
-`procstart_other.go: //go:build !linux` — `rg -n "^//go:build" internal`). A new **feature**
-build tag (e.g. `//go:build tmux`) would be the first of its kind in this codebase — this is
-worth flagging explicitly to whoever plans it, since it is establishing a new convention, not
-following one.
-
-**Recommended location**: a new package, e.g. `test/tmux/` (top-level, alongside no existing
-sibling — there is currently no top-level `test/` directory; verify at plan time whether one
-should be introduced or whether this belongs under `internal/tmuxtest` following the
-`internal/`-only convention every other test package in this repo uses). Given every existing
-test package in this repo lives under `internal/`, favor `internal/tmuxtest/` unless a
-deliberate decision is made to break that pattern for e2e-only scope.
-
-### How it obtains the built binary
-
-No existing test builds the binary via `go build`. The harness needs a `TestMain` (or a
-`sync.Once`-guarded helper) that runs `go build -o <tmp>/codegraph .` once per test binary
-invocation, or — more in keeping with this repo's CI-first discipline (GoReleaser owns the
-release build) — consumes a path to an **already-built** binary passed via an environment
-variable set by the CI job (e.g. `CODEGRAPH_BIN`), falling back to a local `go build` for
-local development. This mirrors the project's own stated preference (v0.5.0 scope: "the
-release pipeline is now one `goreleaser release` invocation") for not duplicating build logic.
-
-### How CI provides tmux
-
-`.github/workflows/ci.yml`'s job list (`rg -n "^  [a-zA-Z0-9_-]+:$"`) currently has: `test`,
-`govulncheck`, `tool-vuln`, `reproducibility`, `perf-regression`, `actionlint`,
-`transcript-freeze`, `goreleaser-check`. None install `tmux`. A new job (or a new step within
-`test`) would need `apt-get install -y tmux` (or the `ubuntu-latest` runner's package
-manager equivalent) — cheap, and the ROADMAP scope already anticipates this ("gate the suite
-behind a build tag / CI job that has tmux available; skips cleanly elsewhere").
-
-### How it relates to the existing piped integration tests
-
-Not a replacement — an **additional rung**. `ROADMAP.md`'s own framing: *"the missing rung
-between the piped never-hang/byte-identity integration tests (necessary, TTY-blind) and manual
-human UAT (thorough, unautomated)."* The existing `internal/cli` piped suite stays exactly as
-is; this is a wholly new, orthogonal test surface that exercises the **same built binary**
-through a **different I/O path** (a real pty via tmux send-keys/capture-pane) rather than a
-buffered `bytes.Buffer`.
-
-### Build-order implication (see §7's global ordering)
-
-The ROADMAP explicitly states this "lands **before** the UI work so that work has a real-
-terminal rung" — but note this refers to the *existing* TUI surfaces (daemon picker,
-install/uninstall checkbox picker), not to the new `codegraph ui` web surface, which has no
-terminal-rendering component at all and is therefore unaffected by tmux ordering.
-
-### New vs modified — 999.2
-
-| Component | New / Modified | File |
-|---|---|---|
-| tmux harness package | **New** | `internal/tmuxtest/` (recommended) or `test/tmux/` |
-| Binary-build/locate helper | **New** | same package |
-| `//go:build tmux` tag | **New convention** — first feature build tag in this repo | same package |
-| CI job/step installing tmux | **New** | `.github/workflows/ci.yml` |
-| `Taskfile.yml` `test:tmux` leg | **New** task; **not** added to the `test:` wrapper by default (see `TestTaskfileWrapperIsSerial`, `internal/upgrade`, which set-equality-guards the wrapper's leg list — a new leg must be deliberately added there or deliberately left out, either way a conscious edit) | `Taskfile.yml` |
-
----
-
-## 6. Guard hardening — five items, each with exact source location
-
-### 999.4 — `CheckRegression` current-metrics positivity
-
-**Exact location**: `internal/bench/regression.go:110-111`:
 ```go
-if baseline.PeakRSSBytes <= 0 {
-    return fmt.Errorf("bench: invalid baseline: PeakRSSBytes must be positive, got %d", baseline.PeakRSSBytes)
+// proposed, internal/cli — NOT in present (present stays env-blind, D-03)
+func resolveColor(cmd *cobra.Command, fd uintptr) (isTTY bool, noColor string) {
+    isTTY = term.IsTerminal(int(fd))
+    noColor = os.Getenv("NO_COLOR")
+    switch colorFlag { // persistent string flag on root, "auto"|"always"|"never"
+    case "always":
+        return true, ""
+    case "never":
+        return false, "1"
+    }
+    return isTTY, noColor
 }
 ```
-This is the **only** positivity check in the function — confirmed by `rg -n "PeakRSSBytes|Throughput" internal/bench/*.go`, which shows no equivalent check on `current`. `current.PeakRSSBytes`,
-`current.FilesPerSec` (and any other current-side metric consumed by the relative-delta and
-absolute-ceiling checks at `regression.go:115-133`) are unguarded.
 
-**Non-vacuous replacement structurally**: mirror the existing baseline check exactly, on
-`current`, naming the degenerate field — `regression.go` already establishes the pattern (the
-GOOS/GOARCH and Runner checks earlier in the same function, `:51-59`, `:74-...`, are
-similarly named, field-specific refusals). Demonstrated RED per the repo's standing rule: a
-test constructing `current.PeakRSSBytes = 0` with an otherwise-matching, non-regressing frame,
-asserting `CheckRegression` returns a non-nil error naming `PeakRSSBytes` — currently this
-returns `nil` (the exact bypass `10-SECURITY.md` and code-review finding WR-06 already
-reproduced).
+This keeps `present` at zero new inputs and zero new tests to re-verify D-03/D-04 (`present/tty_test.go`); only the 20+ RunE call sites change their 2-line preamble to `resolveColor(cmd, os.Stdout.Fd())`. `--color` should be a **persistent flag on root** (`root.go:44-54`, alongside `Version`/`SilenceUsage`) so every subcommand inherits it without per-verb flag registration — this also means it becomes one of the flags `TestEveryRegisteredFlagIsAccountedFor` (`cli_reference_test.go`) walks once via `PersistentFlags().VisitAll` at root and never re-attributes to children (the existing `inheritedFromAncestor` guard at `cli_reference_test.go:66-79` already handles this correctly for a new persistent flag with zero changes needed to the guard itself).
 
-### T-01-18 — `internal/query` dependency-direction archtest
+### Palette, not just chrome
 
-**Reusable shape already exists**: `internal/graphstore/archtest/import_graph_test.go` (full
-file read above) is a **direct, one-for-one template**:
+Today's 3 styles (`Bold`, `Faint`, `Bold+Underline`) are monochrome — the milestone wants real colour. Add the palette as more `lipgloss.NewStyle()` vars in `present/styles.go` (e.g. `successStyle`, `warnStyle`, `errStyle`, `accentStyle` with `.Foreground(lipgloss.Color(...))`, matching `progress.go:13`'s existing `progressStyle.Foreground(lipgloss.Color("212"))` precedent) — this is additive to an already-established file, not a new architectural seam.
+
+### How 20+ plain-fmt verbs get a renderer each, without touching `internal/query` or MCP
+
+This is the milestone's central technical risk, and the codebase already answers it via a pattern proven twice (`RenderStatus` over `query.StatusResult`, `RenderFiles` over `query.FilesResult`): **every verb's plain branch already consumes a plain Go struct that `present` can also consume — the struct boundary already exists, `present` just needs to grow one `Render<X>` function per struct.**
+
+Verb-by-verb evidence of what already exists to render against:
+
+| Verb | Engine call already made in RunE | Struct/string to style | Evidence |
+|------|-----------------------------------|--------------------------|----------|
+| `status` | `eng.Status(ctx)` | `query.StatusResult` | already has `present.RenderStatus` |
+| `files` | `eng.Files(opts)` | `query.FilesResult` | already has `present.RenderFiles` |
+| `search`/`query` (post-fold) | `eng.Query`/`eng.Search` | `[]*schema.Node` / `[]query.Location` | `query.go:61`, `search.go:39` |
+| `callers` | `eng.Callers(symbol, limit)` | `query.CallersResult` | `callers.go:52-55` loops `.Callers` |
+| `callees` | `eng.Callees(symbol, limit)` | `query.CalleesResult` | `callees.go:53-56` |
+| `impact` | `eng.Impact(symbol, depth)` | `query.ImpactResult` | `impact.go:54-58` |
+| `affected` | `eng.Affected(files, depth)` | `query.AffectedResult` | `affected.go:136-143` |
+| `explore` | **currently** `eng.Explore(q, maxFiles)` → markdown `string` | **available instead:** `eng.ExploreDetail(q, maxFiles)` → `query.ExploreResult` (`explore.go:231-238` shows `Explore` is a thin wrapper: `buildExploreResult` → `RenderExplore(...)`) | `query/detail.go:306,681` |
+| `node` | **currently** `eng.Node(symbol,file,line)` → markdown `string` | **available instead:** `eng.NodeDetail(...)` → `query.NodeDetail` (mode-switched: File/SingleDef/MultiDef) (`node.go:337-357` shows the same thin-wrapper shape) | `query/detail.go:190,250` |
+| `init`/`index`/`sync`/`daemon start` | progress + final summary line | already TTY-gated via `present.NewProgress` (`progress_cli.go`) | styling is header/summary text only, no new struct |
+| `install`/`uninstall` | `agents.WriteResult` per target | new `present.RenderAgentResults` over `[]agents.WriteResult` | `install.go:139-165` (`printAgentResults`) is the exact seam to branch inside |
+
+**The critical finding:** `explore` and `node` do **not** need a new `internal/query` surface. `Engine.Explore`/`Engine.Node` were already refactored in v0.12.0 Phase 1 (Key Decision: *"A new consumer gets a seam, never a second gather path"*, PROJECT.md) into thin wrappers over `ExploreDetail`/`NodeDetail`, specifically so the UI (`internal/uiserver`) could consume the same plain structs `Explore`/`Node`'s markdown renderers consume. The CLI glow-up's `present.RenderExplore`/`present.RenderNode` should call `eng.ExploreDetail`/`eng.NodeDetail` directly in the styled branch — exactly the same shape `status.go` already uses (`eng.Status()` once, then branch between `present.RenderStatus` and `query.RenderStatusText` on the same result). **Zero changes to `internal/query`, zero changes to `internal/mcp`** — this is a third consumer of an already-built seam, not a fourth gather path.
+
+For `install`/`uninstall`, the natural boundary is `printAgentResults` (`install.go:139`) — thread a `render func(agents.WriteResult) string` (or branch inside the loop) the same way `status.go` branches, keeping `agents.WriteResult` as the shared plain struct both plain and styled paths consume.
+
+### Golden oracle and CLI-REFERENCE drift-gate constraints
+
+- **Wire oracle** (`test/wireoracle`, 38 frozen transcripts) freezes MCP JSON-RPC traffic — tool names, descriptions, resource content. The glow-up touches **only** `internal/cli`; MCP never imports charm (TUI-01 archtest, `present/archtest/import_graph_test.go:39-46`), so the glow-up cannot touch a single wire-oracle transcript **as long as no styled output leaks into a code path the MCP server also executes** (see the fang risk below — this is the one place that boundary could be breached).
+- **CLI golden fixtures**: no literal per-verb `query.json`/`search.json`/etc. golden files were found under `testdata/golden` or `internal/query/testdata` in this pass — the "golden" referenced by `query.go`'s doc comment (`query.MarshalQueryJSON`) is the `--json` envelope shape, asserted by unit tests inline rather than a frozen fixture tree. **This must be re-verified at plan time** (`rg -l MarshalQueryJSON` across `_test.go` files) before assuming no fixture needs updating, but the styling work itself never touches `--json` output — every `present.Render*` call in every verb is gated **after** the `if jsonOut { ... }` early return (the existing pattern in every RunE, e.g. `query.go:66-72` before `status.go:86`), so `--json` and the agent/MCP-adjacent non-TTY plain path are structurally unreachable from the new styled branch.
+- **`docs/CLI-REFERENCE.md` drift gate** (`tools/clidoc/main.go`, `cli_reference_test.go`): generated from `cobra/doc` output over the live tree; adding a persistent `--color` flag, `search --full`, and `daemon unlock` all flow through automatically on the next `task docs:cli` regen. The one manual step: `TestEveryRegisteredFlagIsAccountedFor`'s allowlist (`testdata/cli-reference-allowlist.txt`, D-08 format `<command path>\t<reason>`) needs one new command-level entry per hidden renamed-verb stub (`query` and `unlock`), because `documentedByReference` (`cli_reference_test.go:57-64`) returns `false` for a `Hidden: true` command, and every hidden command still gets a `help` flag via `cmd.InitDefaultHelpFlag()` (`cli_reference_test.go:178`) that must land somewhere in the accounting.
+
+### Fang: where it can live, and the risk that needs proving
+
+`charm.land/fang/v2` exists (matches this repo's already-adopted `charm.land/.../v2` vanity-import family for `lipgloss`/`bubbletea`/`bubbles`, unlike the plain `github.com/charmbracelet/fang` path — confirm the `charm.land` variant is current before pinning, per the same Finding-1 caution the archtest's own comment records for lipgloss, `present/archtest/import_graph_test.go:9-13`). Fang is a **process-level** wrapper: `fang.Execute(ctx, root, ...)` replaces `cobra.Command.Execute()` itself, styling `--help`, error output, and `--version`, and typically owns `os.Exit`.
+
+This changes the integration point from "one more `present` call inside a RunE" to **`cmd/codegraph/main.go`'s single call site** (`main.go:12-16`, currently `cli.Execute()` → manual `fmt.Fprintln(os.Stderr, err); os.Exit(1)`), or `internal/cli.Execute()` itself (`root.go:68-70`). Two consequences the archtest boundary does **not** currently cover:
+
+1. **`internal/cli` is excluded from the TUI-01 closure scan by design** (`present/archtest/import_graph_test.go:73-75`, comment: *"it is also the package tree ... that legitimately owns the sole charm import ... it must not be treated as part of the serve-reachable closure"*). A fang import in `root.go`/`main.go` is therefore **invisible** to `TestNoCharmInServeReachablePackages` today — not a violation, but not a proof of safety either, since that test was never designed to reason about the *entry point* `serve --mcp` shares with every other verb.
+2. **`serve --mcp` and `daemon start` dispatch through the exact same `Execute()`/`fang.Execute()` call** as every styled verb. Fang's documented behavior only intercepts help/usage/error rendering, not a command's own `RunE` stdout — but this is a claim from web documentation (MEDIUM confidence), not yet verified against this binary. Before adopting fang at the `Execute()` boundary, the phase that does so must add a positive proof (a wire-oracle-style transcript re-capture of `serve --mcp`'s stdout before/after the fang wrap, byte-identical) — this is a **new guard**, not an amendment to the existing archtest, because the existing archtest's scope (a static import-closure walk) cannot express "and no runtime output changed on the happy path."
+
+**Recommendation:** either (a) confine fang to `--help`/error rendering only via its narrower API surface (styling functions, not `fang.Execute` replacing the whole dispatch) if such an API exists, keeping `main.go`'s existing error-handling contract (`SilenceUsage`/`SilenceErrors`, `main.go:12-16`) intact, or (b) adopt `fang.Execute` at the `main.go` boundary and add the byte-identical `serve --mcp` transcript proof as a first-class task in the same plan. Do not treat "fang wraps Execute" as a drop-in with no verification burden — this is the one place in the glow-up where the CLI/MCP boundary genuinely widens.
+
+### The hidden `man` verb under fang / `cobra/doc`
+
+`man` is already `Hidden: true` (`man.go:50`) and calls `doc.GenManTree(newRootCmd(), ...)` (`man.go:61`) — it builds its own fresh, **un-executed** root tree, so it never passes through `cli.Execute()`/`main.go` at all; it is invoked directly by the Homebrew cask's post-install hook as a subcommand RunE. Fang wrapping `Execute()` therefore has **no interaction with `man`** — `man`'s own `RunE` still runs cobra's normal dispatch either way, and `cobra/doc`'s `GenManTree`/`GenMarkdownCustom` (also used by `tools/clidoc`) read the command tree's metadata (`Use`, `Short`, `Long`, flags) which fang does not rewrite — fang only wraps *rendering at execution time*, not the static command metadata `cobra/doc` walks. `documented()`'s `IsAvailableCommand()` filter (`clidoc/main.go:61-63`) already excludes `Hidden` commands from both `man` and the CLI-REFERENCE walk identically, so the renamed-verb stubs (also `Hidden: true`) get the same free exclusion `man` already enjoys.
+
+## Part 2 — The verb fold
+
+### `query` → `search --full`
+
+`Engine.Query(term, kind, limit) []*schema.Node` and `Engine.Search(term, kind, limit) []Location` already share `matchNodes` (`query/search.go:74,119,152` — confirmed: both call `e.matchNodes(term, kind)` and differ only in what they project from the ranked result). The fold is mechanical:
+
+- `search.go` (`search.go:18-71`) gains a `--full` bool flag. When set, RunE calls `eng.Query(...)` instead of `eng.Search(...)`, and the human branch prints the "what it discards today" fields the milestone calls out (full node records vs. locations-only) — `query.go`'s current human loop already prints `n.Name, n.Kind, n.FilePath, n.StartLine` (`query.go:81-83`), identical to `search.go`'s (`search.go:58-60`); `--full`'s value-add is printing the *additional* fields `query.Node` carries that `Location` does not (signature/body preview) — the milestone's own framing ("finally shows what it discards today") implies the human branch should get richer, not just re-labeled.
+- `--json` under `--full` should emit `query.MarshalQueryJSON` (the exact function `query.go:67` already calls) instead of the bare `json.Marshal(locs)` `search.go:45` uses today — this is the one place the two verbs' `--json` envelopes genuinely differ in shape, and that difference must be preserved post-fold (`search --full --json` = today's `query --json`; `search --json` unchanged = today's `search --json`).
+- **`internal/cli/query.go`** itself is deleted as a real command and replaced with a `Hidden: true` stub: `Use: "query"`, `RunE` returns a non-zero error naming `search --full`, e.g. `fmt.Errorf("codegraph query has been renamed to \"codegraph search --full\"")`. Cobra's own error-return path already causes non-zero exit (`SilenceErrors: true` at root, `root.go:52-53`, means the caller — `main.go`'s `fmt.Fprintln(os.Stderr, err); os.Exit(1)` — prints and exits 1, satisfying "exits non-zero with 'renamed to X'" with **zero new error-printing code**).
+- `root.go:56-61`'s `AddCommand(...)` list keeps `newQueryCmd()` registered (now returning the stub), so `--target`-style discovery, shell completion, and `cobra/doc`'s tree walk all still see it exists (as hidden) — this matters for the "for one release, then vanish" plan: the stub's removal in a *later* milestone is a one-line deletion from `AddCommand`, not a re-architecture.
+
+### `unlock` → `daemon unlock`
+
+`daemon.go` already has the `daemon`/`daemon start`/`daemon stop` sub-tree (`daemon.go:47-94,113-181,201-249`) built with `cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd())` (`daemon.go:91`). Adding `unlock` as a third child is mechanical: `cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd(), newDaemonUnlockCmd())`, where `newDaemonUnlockCmd()` is **`unlock.go`'s existing `newUnlockCmd()` body moved verbatim** (`unlock.go:21-43`, identical shape to how `daemon start` was itself "moved verbatim" from the old bare `daemon` RunE per `daemon.go:113-118`'s own doc comment — this milestone repeats a pattern the codebase already executed once). `internal/cli/unlock.go`'s top-level `newUnlockCmd()` becomes the same `Hidden`+non-zero-exit stub shape as `query`, naming `daemon unlock`.
+
+### Registering the "renamed" stub consistently across every guard
+
+Both `query` and `unlock` stubs need the identical five-way consistency the milestone calls out:
+
+1. **`cobra/doc`/CLI-REFERENCE**: automatic — `Hidden: true` excludes them from `documented()` (`clidoc/main.go:61-63`), so they never appear in `docs/CLI-REFERENCE.md`.
+2. **Flag-accounting guard** (`cli_reference_test.go`): the stub's `help` flag (added by every command via `InitDefaultHelpFlag`) needs a command-level allowlist line — `query\t<reason: renamed to "search --full">` and `unlock\t<reason: renamed to "daemon unlock">` in `testdata/cli-reference-allowlist.txt`. If the stub takes zero flags of its own (recommended — no `--path`/`-p` on a stub that only errors), this is the *only* line needed per stub.
+3. **Goldens**: no CLI golden fixture keys off `query`/`unlock` by literal command name was found in this pass (see Part 1's caveat) — verify at plan time, but the wire oracle (MCP) is untouched since MCP tool names are frozen and neither `query` nor `unlock` ever had an MCP tool (the 8 MCP tools map to `explore/node/search/callers/callees/impact/files/status` — `tools.go:174,310-346` — `query` and `unlock` were CLI-only, so the fold has **zero MCP wire surface to preserve or break**).
+4. **`root.go`'s command count** (`newRootCmd`, `root.go:44-63`): unchanged count of top-level `AddCommand` entries (stub replaces real command 1:1); `daemon`'s subcommand count grows by one.
+5. **SKILL.md / `internal/mcp/resources`**: per the read-through of `search.md` (`internal/mcp/resources/search.md`) and `SKILL.md` (`.claude/skills/codegraph/SKILL.md:10-16,46-55`), **neither `query` nor `unlock` is named by CLI-verb-form anywhere in the skill or resource docs today** — only `explore` and `impact` get an explicit `codegraph <verb> "<query>"` CLI-fallback mention (`SKILL.md:36,40`), and those verbs are untouched by the fold. **No skill/resource text needs to change for the fold itself.** (It *would* be worth a documentation pass adding a `codegraph search --full <term>` fallback mention alongside `codegraph_search`'s row for consistency, but that is a docs-polish addition, not a fold-driven correction.)
+
+### Verb fold vs. glow-up ordering inside Part 1/2's shared surface
+
+Because `search.go`/`daemon.go` are exactly the files Part 1's `present.RenderSearch`/`present.RenderQuery` would also touch, doing the fold **first** means the styled renderer is written once against the final `search --full` flag shape, never against a `query` struct that gets deleted out from under it a phase later.
+
+## Part 3 — Agent reach
+
+### Growing `AgentTarget` without 8 re-implementations
+
+The interface (`types.go:127-160`) is already minimal and correctly factored: `ID/DisplayName/SupportsLocation/Detect/Install/Uninstall/DescribePaths`. Today, **Claude alone** gets skill+hook (`claude.go:405-503` — `claudeSkillFilePath`, `claudeHooksScriptPath`, `claudeSessionStartBlocks`), while Codex/opencode/Gemini get only the shared marker-fenced instructions block (`instructions.go`, `codegraphInstructionsBlock`) and the other 4 targets (Cursor, Hermes, Antigravity, Kiro) get neither. `install.go`'s loop (`printAgentResults`, `install.go:139-165`) never branches on capability — it calls `t.Install(loc, opts)` uniformly and prints whatever `WriteResult` comes back. **This is already the right shape for "grows capabilities without re-implementing install"**: the interface itself does not need new methods to add skill+hook to more targets, because `Install`/`Uninstall` are already per-target black boxes. What *would* need a new interface method is a **capability query** the milestone's reach matrix needs to report ("which of the 8 targets has a skill dir / instructions path / hook mechanism") without every caller re-deriving it from `DescribePaths()`'s flat path list.
+
+Recommended addition — additive, does not break the 8 existing implementations if given a default:
+
 ```go
-cfg := &packages.Config{
-    Mode:  packages.NeedImports | packages.NeedName | packages.NeedDeps,
-    Tests: true,
+// Capability describes what mechanisms a target actually supports —
+// distinct from DescribePaths (which paths exist) because a target with
+// no hook mechanism should never be asked to write one, and
+// "supports X" must be knowable without attempting a write.
+type Capability struct {
+    Skill        bool // has a skill-directory mechanism (SKILL.md-shaped or equivalent)
+    Instructions bool // has a marker-fenced instructions file (existing 4-target set)
+    Hook         bool // has a session/tool-event hook mechanism to register into
 }
-pkgs, err := packages.Load(cfg, "github.com/seanb4t/codegraph-go/...")
+
+// AgentTarget grows:
+Capabilities() Capability
 ```
-plus a **non-vacuity positive control** (`archtest`'s own: *"if internal/graphstore itself no
-longer imports pebble/v2 ... the check above is vacuously true for the wrong reason ... this
-test cannot verify enforcement"*) — the todo's own suggested fix already names the exact same
-pattern with `google.golang.org/protobuf` (via `internal/schema`) as the positive control.
 
-**Recommended location**: a new sibling test file — either a new `internal/query/archtest/`
-subpackage (mirroring `internal/graphstore/archtest`'s own placement one level down from the
-package it guards) or directly inside `internal/query` as `archtest_test.go`. Given
-`internal/graphstore/archtest` is a **separate package** specifically so the archtest itself
-cannot accidentally import the thing it's checking, the same isolation argument favors a
-separate `internal/query/archtest/` package over a same-package test file.
+Each of the 8 target files implements `Capabilities()` as a one-line literal (mirroring how `SupportsLocation` is already a one-line literal per target, e.g. `codex.go:28`, `kiro.go:27`) — no shared logic duplicated, no behavior change to `Install`/`Uninstall`, and `install.go`'s picker/summary code can now render a capability column without probing `DescribePaths()` heuristically. This is additive to the interface (every existing implementer must add one method — a compile-time-enforced, mechanical change across 8 files, not a design risk).
 
-**Assertions**: `go list -deps` (or `packages.Load` with `NeedDeps`) over
-`internal/query`'s package path contains zero entries for `connectrpc.com/connect` and zero
-for `internal/uiproto` (any subpackage), with `google.golang.org/protobuf` asserted present as
-the positive control (arriving legitimately via `internal/schema`).
+### Where the Claude Code PreToolUse nudge hook lives
 
-### `release:dry-run-signed` additions-only diff guard
+The embedded hook mechanism is already **event-generic**, not `SessionStart`-specific, at the writer level: `writeHookEntry(path, event string, ownBlocks []any, ownCommands []string)` (`shared.go:202-269`) takes `event` as a plain string and does exact-command-string ownership matching (`shared.go:180-183,214-236` — the v0.10.0 security lesson: *"exact command-string match ... never by the block's matcher value or shape"*). Registering a `PreToolUse` block requires **zero changes to `writeHookEntry` itself** — only:
 
-**Exact location, verified at HEAD** (line numbers differ from the todo file, which predates
-several unrelated Taskfile edits — cite the live location, not the stale one):
-- `Taskfile.yml:1771` — task `release:dry-run-signed:`
-- `Taskfile.yml:1841` — the awk anchor: `/^      - "sign-blob"$/ { print keyline }`
-- `Taskfile.yml:2225` / `:2381` — the second consumer, `release:rehearse-notarize:`, reusing
-  the identical anchor (confirmed by the task's own comment at `:2367-2368`: *"the SAME awk
-  anchor and additions-only diff guard `release:dry-run-signed` already uses"*).
+1. A new script, e.g. `.claude/hooks/pretooluse-nudge.sh`, embedded alongside the existing `session-nudge.sh` via a new `//go:embed` line in `claudeassets.go:33-36` and a new accessor (`PreToolUseNudgeScript()`, mirroring `SessionNudgeScript()`, `claudeassets.go:58`).
+2. A new `PreToolUse` array added to the **same** `.claude/hooks/hooks.json` fragment (`hooks.json`'s top-level `hooks` object already supports multiple event keys — the JSON shape is `{"hooks": {"SessionStart": [...], "PreToolUse": [...]}}`), with a `matcher` targeting the tool names the milestone specifies (grep/find/Read) — Claude Code's own hook-matcher syntax needs a docs check at plan time (verify the current matcher grammar against `docs.anthropic.com/.../hooks` before hand-authoring the matcher string — flagged `[ASSUMED]` here since not fetched in this pass).
+3. `claude.go` grows a `claudePreToolUseBlocks(loc)` function mirroring `claudeSessionStartBlocks(loc)` (`claude.go:207-260`) exactly — decode the embedded fragment's `PreToolUse` key instead of `SessionStart`, rewrite the command path the same way, and call `writeHookEntry(settingsPath, "PreToolUse", blocks, ownCommands)` alongside (not instead of) the existing `writeHookEntry(settingsPath, "SessionStart", ...)` call in `Install` (`claude.go:462-476`).
+4. **Uninstall reversal** is symmetric and already generic: `removeHookEntry(settingsPath, "PreToolUse", ownCommands)` alongside the existing `removeHookEntry(settingsPath, "SessionStart", ownCommands)` call (`claude.go:576-586`) — same exact-identity matching, same idempotency guarantee, same "never touches a user's unrelated hook under the same event" property `writeHookEntry`'s doc comment already establishes.
 
-**Non-vacuous replacement**: add a positive assertion immediately after the awk injection in
-both tasks — count the injected `--key=` lines and hard-fail if the count is zero, **before**
-running the additions-only diff. Demonstrated RED by deliberately re-indenting the `sign-blob`
-args block in a generated copy (not the committed file) and observing the new assertion fail
-loudly rather than the diff silently reporting zero additions.
+### Runtime cost — the `.codegraph/` presence check
 
-### `post-release-verify.yml` event-aware conclusion guard
+The milestone's own precedent is the answer: `session-nudge.sh` (`.claude/hooks/session-nudge.sh:12-15`) does exactly one `[ -d "${CLAUDE_PROJECT_DIR:-.}/.codegraph" ]` check, no binary invocation, no index read — a `PreToolUse` script must be at least as cheap since it runs on **every** matched tool call, not once per session. The nudge script's job is: check `.codegraph/` exists, and if the matched tool is grep/find/Read, emit additive context (never block — the milestone is explicit: "add context... never denies", i.e. `PreToolUse`'s hook output must use the non-blocking/advisory response shape, not an exit code or JSON field that denies the tool call — verify the exact non-blocking response contract against current Claude Code hooks docs at plan time, since a `PreToolUse` hook *can* block by design and this feature must deliberately opt out of that capability).
 
-**Exact locations**: `.github/workflows/post-release-verify.yml:303`, `:408` (job-level `if:`
-guards), cross-checked by `internal/upgrade/release_workflow_shape_test.go:1369`
-(`TestPostReleaseJobsDeclareCheckoutPolicy`), which enumerates the same file's jobs via
-`postReleaseCheckoutShapes` (`release_workflow_shape_test.go:1306-1325`) but — confirmed by
-reading `fullWorkflowJob`'s struct definition (`:1042-1046`) — **carries no `If` field at
-all**: `Env`, `Permissions`, `Steps` only. This directly confirms the todo's claim: no
-existing parser even sees the `if:` guard, let alone asserts it.
+## Part 4 — Codex parity
 
-**Non-vacuous replacement, reusing existing scaffolding**: add `If string \`yaml:"if"\`` to
-`fullWorkflowJob` (additive struct field, `release_workflow_shape_test.go:1042-1046`), extend
-`postReleaseCheckoutShape` (`:1297-1302`) with the same field, and extend
-`postReleaseCheckoutShapes` (`:1306-1325`) to capture it — the exact wrapper
-`TestPostReleaseJobsDeclareCheckoutPolicy` (`:1582`) already iterates every job and classifies
-it (`latestVerifierJobIDs`/`releaseMatchedTestJobIDs`, referenced at `:1593-1596`); add a new
-assertion in that same loop requiring every job's `If` to contain the verbatim disjunct
-`github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'`.
-Pair with a non-vacuity companion mirroring
-`TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError` (`:1277-1285`): an empty/malformed
-document must error, never silently pass.
+### Current state (`codex.go`)
 
-### `TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets`
+- Global-only (`SupportsLocation` returns `loc == LocationGlobal`, `codex.go:28`) — `Install`/`Uninstall`/`DescribePaths` all short-circuit to a no-op at `LocationLocal` (`codex.go:87-89,122-124,153-155`).
+- MCP entry: hand-rolled TOML splice of exactly one table, `[mcp_servers.codegraph]`, via `spliceTOMLTable`/`stripTOMLTable` (`toml.go:19-69`) against `~/.codex/config.toml` (`codexConfigPath`, `codex.go:30-36`).
+- Instructions: a shared marker-fenced block at `~/.codex/AGENTS.md` (`codexInstructionsPath`, `codex.go:38-44`) — **global**, not repo-root.
+- No skill directory, no hook/nudge mechanism today.
 
-**Exact location**: `internal/upgrade/release_workflow_shape_test.go:1565-1574`. Confirmed
-tautological by direct read:
-```go
-func TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets(t *testing.T) {
-    releasePleaseAppSecretNames := []string{"APP_ID", "APP_PRIVATE_KEY"}
-    for _, tapName := range homebrewTapCredentialNames[:2] {
-        for _, rpName := range releasePleaseAppSecretNames {
-            if tapName == rpName { t.Errorf(...) }
+### What must grow
+
+1. **Re-verify the "Codex has no per-project config" premise.** Current web evidence (MEDIUM confidence, not yet cross-checked against `openai/codex`'s own repo docs) says Codex resolves config through a precedence chain **"`.codex/config.toml` (closest to cwd wins) → `~/.codex/config.toml` → `/etc/codex/config.toml` → defaults"**, and that `.codex/config.toml` in a repo only loads when the project is marked **trusted** — an untrusted project silently falls back to user/system config with no error. If accurate, `codexTarget.SupportsLocation(LocationLocal)` should flip to `true`, `codexConfigPath()` should take a `loc Location` parameter (mirroring `claudeConfigPath(loc)`, `claude.go:82-91`) and resolve to `./.codex/config.toml` for local, and `codexTableBody`/`spliceTOMLTable` need no changes — the splice function already operates on arbitrary file content, so it is location-agnostic by construction (`toml.go:19-41` takes `content string`, never a path). **This is the single highest-risk unverified claim in this research — a live Codex CLI session (`codex --version`, then a real repo with `.codex/config.toml` written and a fresh session probing whether it took effect) must confirm project-trust gating before this ships**, because a silent-fallback config write is exactly the "looks configured, does nothing" failure class this codebase's own guard-discipline (rule `84d1gfpywd`, PROJECT.md Key Decisions) exists to catch.
+2. **Skill directory.** Codex's skill mechanism (per the same web pass) is `.agents/skills/<name>/` at project scope — **not** `.claude/skills/`. This needs a new `codexSkillDirPath(loc)` and a new install/uninstall step in `codex.go` mirroring `claudeSkillFilePath`/`claudeSkillDirPath` (`claude.go:129-164`) but writing into `.agents/skills/codegraph/SKILL.md` (global equivalent under `~/.agents/skills/` or Codex's documented global skill root — verify exact path at plan time). The **content** should be the same embedded `SKILL.md` (`claudeassets.SkillMarkdown()`) — no reason to author a second skill file, since the skill's content is harness-agnostic Markdown, not Claude-specific syntax (the file's own frontmatter is just `name:`/`description:`, `.claude/skills/codegraph/SKILL.md:1-4`).
+3. **Repo-root `AGENTS.md` block.** Distinct from the existing **global** `~/.codex/AGENTS.md` block — a **project-local** `./AGENTS.md` at repo root, using the exact same `codegraphSectionStart`/`codegraphSectionEnd` marker fence and `upsertInstructionsEntry`/`removeMarkedSection` helpers already shared by every target (`instructions.go:9-11`, `shared.go` — `claude.go:389-394` and `codex.go:110-115` both already call these verbatim). This is a **second, location-scoped instructions file** for Codex, not a replacement of the global one — both must coexist, the same way Claude already writes both a global `~/.claude/CLAUDE.md` block and a local `./.claude/CLAUDE.md` block depending on `loc` (`claudeInstructionsPath(loc)`, `claude.go:101-110`).
+4. **Codex's own hook/nudge mechanism, if one exists.** Not confirmed in this research pass — Codex CLI's customization stack (per the web search) lists AGENTS.md, skills, MCP, and subagents as its four composition layers; no lifecycle-hook-equivalent to Claude's `SessionStart`/`PreToolUse` was surfaced. **Flagged `[ASSUMED: none exists]`** — if a plan-time doc check confirms no hook mechanism, Codex parity for the "nudge" theme is satisfied by the `AGENTS.md` block and skill file alone (both of which Codex already reads at session start per the web search's "Codex walks up from cwd toward project root and includes AGENTS.md guidance in the first turn" finding) — no PreToolUse-equivalent to build.
+5. **TOML splice coping with a second table/file.** `spliceTOMLTable`/`stripTOMLTable` (`toml.go`) operate on a single named table within one file's content string; a **second file** (`.codex/config.toml` vs `~/.codex/config.toml`) needs no new code in `toml.go` at all — it is just a second `content, err := os.ReadFile(newLocalConfigPath)` / `spliceTOMLTable(...)` / `atomicWriteFile(...)` call sequence, parameterized by `loc` exactly like `claudeConfigPath(loc)` already parameterizes Claude's two files. **A second table within one file** is also already handled: `findTOMLTableRange` (`toml.go:77-103`) scopes its replace/append purely to `[mcp_servers.codegraph]`'s own header-to-next-header byte range, so an unrelated `[some_other_table]` in the same `config.toml` is preserved untouched by construction (the same "preserving every other byte of content verbatim" guarantee documented at `toml.go:23`).
+
+### `SupportsLocation(LocationLocal)` flipping to `true` — downstream effects
+
+- **`ResolveTargetFlag("auto", loc)`** (`registry.go:79-93`): iterates `AllTargetIDs()` and calls `Detect(loc).Installed` per target — Codex's `Detect` (`codex.go:63-83`) already branches on `loc != LocationGlobal` and returns an empty `DetectionResult{}` for local; flipping `SupportsLocation` **without** also updating `Detect` to actually check `.codex/` presence at the *local* path would silently make `--target auto --location local` treat Codex as "not installed" forever even though it now supports local scope — this is a **required companion change**, not optional: `Detect(LocationLocal)` must check for `.codex/config.toml` or `.codex/` existing in the repo, mirroring `claudeTarget.Detect`'s own local-vs-global path branch (`claude.go:348-364`).
+- **`agentpicker` (`internal/cli/tui/agentpicker.go`)**: the picker renders `DisplayName()` + a `SupportsLocation(loc)`-gated selectability per target for whatever `loc` the interactive `install` run is targeting (`install.go` → `runAgentPicker(cmd, loc)`). Today Codex is presumably shown greyed-out/unselectable (or absent) under `--location local`; once `SupportsLocation(LocationLocal)` is `true`, Codex becomes selectable in the local picker for the first time — this is a **UI-visible behavior change** the picker's own test suite (`agentpicker_test.go`) will need a new fixture/assertion for, and is exactly the kind of change WINDOWS #32 ("picker footer overflow ... with all 8 targets") is already tracking — worth sequencing the Codex-local flip **after** #32's footer fix lands, not before, so the newly-selectable 8th/9th row doesn't make the pre-existing overflow bug worse mid-milestone.
+- **`DescribePaths(loc)`** (`codex.go:152-164`) must add the new local paths (`.codex/config.toml`, `.agents/skills/codegraph/SKILL.md`, `./AGENTS.md`) to its local-scope return, or `--print-config-style` reporting and any test asserting `DescribePaths` completeness will silently under-report.
+
+## Part 5 — Suggested build order
+
+The four themes have a real dependency graph, not just a priority order:
+
 ```
-Both sides are in-test constants (`homebrewTapCredentialNames` at `:1366-1370`); the function
-reads zero workflow files.
+                    ┌─────────────────────────┐
+                    │ Bug/window burn-down     │  independent, parallelizable
+                    │ (WINDOWS #12,13,26,28,   │  any time, any engineer —
+                    │  29,30,31,32,36; GH      │  touches unrelated files
+                    │  #13-20)                 │  (web/, ci.yml, docs/RELEASE.md)
+                    └─────────────────────────┘
 
-**Non-vacuous replacement, reusing existing scaffolding**: `findHomebrewTapCredentialReferences`
-(`:1382-1415`) already exists and is exercised by the sibling test
-`TestHomebrewTapTokenScopedToReleaseJob` (`:1450-1558`) — it decodes real workflow files
-(`decodeFullWorkflowDoc`, `:1059-1069`) and finds actual secret-name references at
-env:/with: scope. The fix: read `release.yml`'s actual referenced secret names (via this
-existing walker, filtered to the release job) and `release-please.yml`'s actual referenced
-secret names (the same walker, parameterized with `releasePleaseAppSecretNames`), then assert
-the two **observed, file-derived** sets are disjoint — never comparing two hardcoded literals
-against each other. Add the same positive-floor discipline
-`TestHomebrewTapTokenScopedToReleaseJob` already documents (`:1495-1509`, rule `84d1gfpywd`):
-both sets must be non-empty before the disjointness assertion is trusted. Demonstrated RED by
-pointing `release.yml`'s mint at `APP_ID`/`APP_PRIVATE_KEY` (the todo's own suggested
-mutation).
+1. Verb fold FIRST                     2. Reach capability model FIRST
+   (search --full, daemon unlock,         (AgentTarget.Capabilities(),
+    hidden stubs, allowlist entries)      per-harness doc verification)
+        │                                        │
+        ▼                                        ▼
+3. CLI glow-up SECOND                  4. Codex parity SECOND
+   (present.Render* written once          (first real consumer of the
+    against the FINAL verb surface;       capability model; project-
+    --color flag; fang evaluation)        local scope verified live)
+        │                                        │
+        └──────────────┬─────────────────────────┘
+                        ▼
+              5. Cross-cutting close-out
+                 (SKILL.md/resources docs pass naming search --full
+                  where explore/impact are already named; re-freeze
+                  CLI-REFERENCE + allowlist; live-session verification
+                  per harness, the v0.10.0 evidence standard)
+```
 
-### New vs modified — guard hardening (all five)
+**Why verb fold before glow-up:** the milestone context states this directly and the codebase confirms it — writing `present.RenderQuery`/`present.RenderSearch` against `search.go`'s pre-fold two-flag shape means deleting and rewriting that renderer one phase later when `--full` lands. `search.go` and `daemon.go` are exactly the files both themes touch (Part 2's fold and Part 1's per-verb renderer), so sequencing avoids a guaranteed rework.
 
-Every item in this section is a **modification** to an existing file — no new packages, no new
-production code paths, purely test/CI-config hardening. This is the cheapest set in the whole
-milestone in terms of surface area touched, though not necessarily in effort (each requires a
-genuine RED demonstration per this repo's `84d1gfpywd` rule, not just a code change).
+**Why the reach capability model before Codex parity:** Codex is explicitly named as "the first consumer" reaching for the general mechanism (skill dir capability, hook capability) the other 7 targets either already have (Claude) or will get in the same phase (AGENT-04…07 un-deferred). Building `Capability{}` and wiring it into `install.go`'s reporting *before* writing Codex's specific skill-dir/AGENTS.md/local-scope code means Codex's implementation is the first real exercise of the new interface method, not a special case bolted on afterward — the same "seam before second consumer" discipline this codebase already applies elsewhere (v0.12.0 Phase 1's Key Decision).
 
-| Item | File(s) modified |
-|---|---|
-| 999.4 | `internal/bench/regression.go`, `internal/bench/regression_test.go` |
-| T-01-18 | New file: `internal/query/archtest/import_graph_test.go` (or in-package) |
-| `dry-run-signed` guard | `Taskfile.yml` (both `release:dry-run-signed:` and `release:rehearse-notarize:`) |
-| `post-release-verify` guard | `internal/upgrade/release_workflow_shape_test.go` |
-| Tap-secret distinctness | `internal/upgrade/release_workflow_shape_test.go` |
+**Why glow-up and Codex parity are each "second" within their track, not "last":** glow-up has no dependency on agent-reach work (disjoint packages: `internal/cli/present` + `internal/cli/*.go` RunE bodies vs. `internal/agents/*.go`), so the two tracks can run as parallel workstreams once their own track's first step lands — only the *internal* ordering within each track (fold-before-style, capability-before-Codex) is a hard dependency.
 
----
+**Why bug/window burn-down is fully independent:** every item in the four burn-down buckets (favicon/CSP, picker footer, `/graph` console errors, `priorCoverageGeneration`, `web:drift`, the vendored `button.svelte`, the daemon watchdog flake, docs/CI wiring, GH #15/#16/#20) lives in files disjoint from `internal/cli/present`, `internal/agents`, and the verb surface — `web/`, `.github/workflows/`, `docs/RELEASE.md`, `SECURITY.md`, `internal/uiserver` (cytoscape-elk, coverage). The one soft coupling: WINDOWS #32 (picker footer overflow) should land **before** the Codex-local-scope flip (Part 4) makes the picker's selectable-target count grow, per the note in Part 4 above — everything else in the burn-down can run on any timeline relative to the other three themes.
 
-## 7. Suggested build order
+## Anti-Patterns to Avoid
 
-Ordering rationale, not a rigid phase-count prescription — the roadmapper decomposes phases;
-this is the dependency graph that should drive that decomposition.
+### Anti-Pattern 1: Widening `present.ChoosePresentation`'s signature for `--color`
 
-### Wave 0 — guard hardening (§6), fully independent, do first
+**What people do:** add a third parameter (or an enum) to `ChoosePresentation` to thread `--color` through.
+**Why it's wrong:** breaks the D-03/D-04 contract that made `present` trivially unit-testable and env-blind (`present/tty_test.go`); fans out to every one of the 20+ new call sites for a concern (`--color` flag parsing) that belongs entirely in `internal/cli`, not `internal/cli/present`.
+**Do this instead:** resolve `--color` + TTY + `NO_COLOR` into the existing two-arg shape at a single shared `internal/cli` helper, called from every RunE — `present` never changes.
 
-All five guard-hardening items touch disjoint files, have zero dependency on each other or on
-anything else in this milestone, and each is small (test/CI-config only). They can run in
-parallel across sub-agents/plans and should land **before** any UI work, matching the
-ROADMAP's own stated rationale ("every item in it already has a written RED demonstration in
-mind"). T-01-18 in particular should land early since it **governs** how the HLT-04
-discovery-exclusion helper is allowed to be wired (internal/query must not gain a new
-dependency edge toward internal/indexer without violating the same invariant the archtest
-checks the other direction — verify at plan time whether the archtest should also assert
-`internal/query -> internal/indexer` is forbidden or merely `internal/query -> connectrpc`/
-`internal/uiproto`; the todo's stated scope is the latter only).
+### Anti-Pattern 2: Reading `internal/query`'s markdown strings back into styled output
 
-### Wave 1 — 999.2 tmux harness, before any TUI-adjacent verification
-
-Genuinely new infrastructure (new package, new build tag, new CI job) with no dependency on
-Wave 0 or on any of the UI follow-ons — it exercises the *terminal* UI (daemon/install
-pickers), not the *web* UI. Can run in parallel with Wave 0. The ROADMAP places it "before the
-UI work" for terminal-rung reasons that do not extend to `codegraph ui` (a browser surface with
-no pty involvement) — sequencing it before §§1-4 is about narrative/CI-availability
-convenience, not a hard dependency.
-
-### Wave 2 — UI follow-through, ordered by real dependency and scope, not the ROADMAP's listed order
-
-The ROADMAP lists BRW-11, BRW-10, HLT-04, GRF-06 "by increasing scope." This research finds a
-different real ordering by scope and risk:
-
-1. **BRW-10 (breadcrumb)** — smallest by a wide margin: **zero backend changes**, pure
-   frontend reuse of an already-shipped rpc (`FileSymbols`). No proto edit, no new Engine
-   method, no new fixture entries. Should go first regardless of the ROADMAP's listed order,
-   since it has no risk of blocking anything else and can be demonstrated complete fastest.
-2. **BRW-11 (editor handoff)** — small: one new `Options` field, one new CLI flag, one
-   additive proto field on an existing message (`GetPermalinkResponse`), reusing
-   `ValidateRepoRelativePath` entirely. The one open design question (whether the
-   `PermalinkAvailability` enum semantics fit an editor link) should be resolved at discuss-
-   phase time before planning, since it changes whether this is "add one field" or "add one
-   small new message."
-3. **HLT-04 (coverage denominator)** — medium: genuinely new discovery-time logic
-   (`internal/indexer` or a query-local duplicate), a new Engine method, and an additive
-   `GetHealthResponse` field/message. Depends on T-01-18 (Wave 0) if the new discovery-
-   exclusion helper is placed in a way that could create a forbidden dependency edge —
-   verify the archtest's scope covers this before writing the helper.
-4. **GRF-06 (community clustering)** — largest of the four: a new graph-partitioning
-   algorithm (a real algorithmic choice — label propagation, Louvain, etc. — not just wiring),
-   plus additive fields on `FileGraphNode`/`FileGraphResult`/their proto projections, plus
-   frontend rendering (grouping/coloring by community) on top of the `/graph` view that
-   already exists. This is also the item most likely to hit the guava-scale rendering ceiling
-   the milestone context explicitly warns about (v0.12.0's GRF-01 threshold failure on a
-   3,233-node view) — GRF-07 (whole-symbol graph) was explicitly parked for exactly this
-   reason, and community clustering adds visual complexity to the same file-graph view GRF-01
-   already found expensive. Budget a measured-render-time checkpoint for this item
-   specifically, mirroring GRF-01's own "committed the threshold before measuring" discipline.
-
-### Wave 3 — DOCS-05 (self-authored CLI reference + drift guard)
-
-Independent of everything above, but logically last since it should document the **final**
-flag surface, including any new flags §3 (BRW-11's `--editor`) introduces. The exact reusable
-shape is `internal/cli/flag_parity_test.go` (deleted at v0.11.0, commit `5139e60c`, git-log
-confirmed) — resurrect its `newRootCmd()` + `cmd.Flags().VisitAll` recursive walk +
-substring-presence-in-doc pattern verbatim, retargeted from `docs/FLAG-PARITY.md` at
-`internal/cli/flag_parity_test.go:16` to a new `docs/CLI-REFERENCE.md`. This is a fully
-proven, previously-shipped pattern — the lowest-risk item in the whole milestone.
-
-### Summary table
-
-| Wave | Items | Parallelizable within wave | Blocks |
-|---|---|---|---|
-| 0 | 999.4, T-01-18, dry-run-signed guard, post-release-verify guard, tap-secret test | Yes, all 5 | Wave 2's HLT-04 (via T-01-18) |
-| 1 | 999.2 tmux harness | N/A (one item) | Nothing downstream (terminal-only) |
-| 2a | BRW-10 | N/A | Nothing |
-| 2b | BRW-11 | N/A | Nothing (independent of 2a) |
-| 2c | HLT-04 | Depends on Wave 0 (T-01-18) | Nothing |
-| 2d | GRF-06 | Independent, but budget render-time risk | Nothing |
-| 3 | DOCS-05 | Should follow Wave 2 (documents its flags) | — |
-
----
+**What people do:** call `eng.Explore(...)`/`eng.Node(...)` (the markdown-string methods) in the styled branch and try to lipgloss-colorize the resulting markdown text with regex/string manipulation.
+**Why it's wrong:** re-derives formatting from a rendered string instead of the plain struct underneath it — exactly the anti-pattern `present`'s own doc comments repeatedly warn against ("present decorates, never recomputes", `present/status.go:27-28,55-56`), and it is fragile against any future change to `RenderExplore`'s markdown shape.
+**Do this instead:** call `eng.ExploreDetail`/`eng.NodeDetail` directly in the styled branch — the same plain structs the UI already consumes.
 
 ## Sources
 
-Every claim above is either a direct quote from a file at this repository's HEAD (2026-09-08,
-tag `v0.12.0`, commit `17e88d67`) verified via `Read`/`rg`/`git log`, or is explicitly labelled
-as inference. No external documentation lookup was needed or performed — this is a pure
-codebase-integration research task, and the source of truth is the repository itself.
+- `/Volumes/Code/github.com/seanb4t/codegraph-go` — read directly: `internal/cli/{present,tui}/*.go`, `internal/cli/{query,search,root,unlock,daemon,status,install,man,explore,node,callers,callees,impact,affected}.go`, `internal/query/{engine,search,detail,explore,node}.go`, `internal/agents/{types,registry,claude,codex,toml,instructions,shared,claudeassets}.go`, `internal/mcp/{server,resources,tools}.go`, `tools/clidoc/main.go`, `internal/cli/cli_reference_test.go`, `.claude/skills/codegraph/SKILL.md`, `.claude/hooks/{hooks.json,session-nudge.sh}`, `claudeassets.go`, `.planning/PROJECT.md` (Key Decisions, Current Milestone) — HIGH confidence, primary source.
+- `pkg.go.dev/github.com/charmbracelet/fang`, `pkg.go.dev/charm.land/fang/v2`, `github.com/charmbracelet/fang` (web, MEDIUM confidence) — fang's styled help/error/version feature set confirmed; runtime interaction with a long-lived `RunE` (e.g. `serve --mcp`) not independently verified against this binary.
+- Codex CLI config precedence, `.codex/config.toml` project-trust gating, `.agents/skills/` layout, `AGENTS.md` discovery (web, MEDIUM confidence, not cross-checked against `openai/codex`'s own repository docs in this pass) — `developers.openai.com/codex/config-basic`, `codex.danielvaughan.com` (Codex Knowledge Base, third-party but detailed and internally consistent across 3 separate articles), `inventivehq.com/knowledge-base/openai/where-configuration-files-are-stored`. **Flagged for live-session re-verification per the milestone's own "verified against current docs rather than assumed" instruction** — this is the single highest-risk unverified claim in this document.
+- Claude Code `PreToolUse` hook matcher grammar and non-blocking/advisory response contract — **not fetched in this pass**; flagged `[ASSUMED]`, required reading before Part 3's hook script is authored (`docs.anthropic.com` hooks reference).
 
-- `internal/query/engine.go`, `internal/query/status.go`, `internal/query/traverse.go` — Engine surface, `Status()`'s filesystem-degrade precedent, `FileGraph()`'s fresh-per-call cycle detection
-- `internal/indexer/discover.go`, `internal/indexer/extract.go`, `internal/indexer/resolve.go` — discovery/extraction exclusion paths, existing `File.Errors` persistence
-- `internal/schema/graph.proto` — on-disk schema, reserved annotation ranges, additive-only discipline
-- `internal/uiproto/uiv1/ui.proto` — wire schema, all 14 rpcs, message field numbers
-- `internal/uiserver/readonly_test.go` — `mutatingVerbs`, `wantUIServiceMethods`, `uiProtoFieldNumbers` fixture mechanics
-- `internal/uiserver/permalink.go`, `internal/uiserver/server.go`, `internal/uiserver/handlers.go` — GetPermalink precedent, Options shape, mapper-function convention
-- `internal/cli/ui.go` — `codegraph ui` command, flag registration
-- `internal/bench/regression.go` — `CheckRegression` positivity gap
-- `internal/graphstore/archtest/import_graph_test.go` — reusable archtest shape for T-01-18
-- `Taskfile.yml` — `release:dry-run-signed`, `release:rehearse-notarize`, `test:` wrapper, `TestTaskfileWrapperIsSerial` reference
-- `internal/upgrade/release_workflow_shape_test.go` — `fullWorkflowJob`/`fullWorkflowDoc` parsing shape, `TestPostReleaseJobsDeclareCheckoutPolicy`, `TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets`, `findHomebrewTapCredentialReferences`
-- `.github/workflows/ci.yml`, `.github/workflows/post-release-verify.yml` — job lists, conclusion guard locations
-- `git log --oneline --all -- docs/FLAG-PARITY.md internal/cli/flag_parity_test.go` + `git show v0.10.0:internal/cli/flag_parity_test.go` — DOCS-05's reusable prior-art
-- `web/src/routes/{health,graph,browse}/`, `web/src/lib/components/browse/SourcePane.svelte` — confirmed frontend consumption gaps for BRW-10/HLT-04/GRF-06
-- `.planning/PROJECT.md` — milestone goal, target features, key context
-- `.planning/todos/pending/*.md` — exact guard descriptions and threat refs for §6
-- `.planning/ROADMAP.md` — Backlog 999.2 and 999.4 verbatim scopes
+---
+*Architecture research for: CodeGraph Go v0.14.0 Polish & Agent Reach*
+*Researched: 2026-09-14*

@@ -1,0 +1,9 @@
+{
+  "command": "GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1 -run TestIndexForceRefusesWhileStoreIsHeld$|TestDaemonUnlockCmd$ -v",
+  "exitCode": 1,
+  "output": "=== RUN   TestDaemonUnlockCmd\n=== RUN   TestDaemonUnlockCmd/absent_lock_is_a_clean_no-op\n    daemon_test.go:360: daemon unlock: unexpected error: unknown command \"unlock\" for \"codegraph daemon\"\n=== RUN   TestDaemonUnlockCmd/dead-pid_lock_is_removed\n    daemon_test.go:389: daemon unlock: unexpected error: unknown command \"unlock\" for \"codegraph daemon\"\n=== RUN   TestDaemonUnlockCmd/at_most_one_positional_arg\n=== RUN   TestDaemonUnlockCmd/no_flags_of_its_own_(identical_to_the_old_verb)\n    daemon_test.go:414: daemon unlock -p <dir> error = \"unknown command \\\"unlock\\\" for \\\"codegraph daemon\\\"\", want it to contain \"unknown shorthand flag\"\n--- FAIL: TestDaemonUnlockCmd (0.01s)\n    --- FAIL: TestDaemonUnlockCmd/absent_lock_is_a_clean_no-op (0.00s)\n    --- FAIL: TestDaemonUnlockCmd/dead-pid_lock_is_removed (0.01s)\n    --- PASS: TestDaemonUnlockCmd/at_most_one_positional_arg (0.00s)\n    --- FAIL: TestDaemonUnlockCmd/no_flags_of_its_own_(identical_to_the_old_verb) (0.00s)\nFAIL\nFAIL\tgithub.com/seanb4t/codegraph-go/internal/cli\t0.507s\nFAIL\n",
+  "targetTest": "TestDaemonUnlockCmd",
+  "targetFile": "internal/cli/daemon_test.go",
+  "expected": "daemon unlock behaves like the old top-level unlock verb",
+  "actual": "unknown command \"unlock\" for \"codegraph daemon\" (not yet registered)"
+}

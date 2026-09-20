@@ -2,8 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 )
 
 // telemetryStatement is the honest, auditable trust claim `codegraph
@@ -38,6 +41,19 @@ func newTelemetryCmd() *cobra.Command {
 		Example: "  codegraph telemetry",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				w := mode.Writer(cmd.OutOrStdout())
+				pal := present.NewPalette(mode.Dark)
+				// telemetryStatement carries no trailing newline (the
+				// literal ends at "package."), so splitting on "\n" and
+				// rendering each line via Lines — which appends its own
+				// "\n" per call — reconstructs exactly the same bytes
+				// fmt.Fprintln's single trailing newline produces on the
+				// plain path.
+				return present.Lines(w, pal, present.RoleValue, strings.Split(telemetryStatement, "\n")...)
+			}
+
 			fmt.Fprintln(cmd.OutOrStdout(), telemetryStatement)
 			return nil
 		},

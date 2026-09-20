@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/upgrade"
 	"github.com/seanb4t/codegraph-go/internal/version"
 )
@@ -44,6 +45,36 @@ var refreshInstalledSkillsFunc = refreshInstalledSkills
 // false is not equivalent to removing it: Install with AutoAllow: false
 // simply skips the permission-list step rather than deleting anything
 // already present, which is the correct neutral behavior here.
+//
+// PreToolNudge is passed as PreToolNudgeKeep, deliberately unlike
+// AutoAllow's non-sticky false: the PreToolUse opt-in IS recorded in the
+// manifest (v0.14.0 Phase 6 D-10), so Keep re-renders the guard for the new
+// binary exactly where the opt-in was recorded and adds it nowhere else —
+// widened by agents.preToolNudgeEvidenced (code review CR-01, 06-REVIEW.md)
+// to also trust settings.json's own registration when the manifest step
+// never ran at all.
+//
+// Accepted limitation (CR-01, 06-REVIEW-FIX.md): a location whose Claude
+// skill directory is a symlinked shared directory holding pre-existing
+// foreign, unmanifested content (D-14) NEVER gets a manifest written there
+// under any PreToolNudge mode, so it is invisible to
+// agents.ConfiguredSkillLocations (manifest-presence-only discovery, its
+// own separately pinned contract) and this refresh loop can never reach
+// it — even though the guard and its settings.json registration are
+// present there and are correctly evidenced by a direct Install call.
+// Unlike a genuine refresh error, this produces NO CLI-visible signal at
+// all (code review WR-03, 06-REVIEW.md): refreshInstalledSkills returns a
+// nil error for this case — it simply never visits the location, rather
+// than visiting it and failing — so the caller's "warning: ... Run
+// `codegraph install` to refresh it manually" message (below, gated on
+// refreshErr != nil) never fires for it. `codegraph upgrade` prints
+// nothing naming this location, and the guard's baked-in ExecPath goes
+// stale (its `[ ! -f "$codegraph_bin" ]` check then exits 0 silently
+// forever, per D-08). The only real recovery is a user independently
+// re-running `codegraph install` from that location — there is no CLI
+// prompt pointing them to it.
+// TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation
+// pins this gap and its (silent, user-initiated) recovery path.
 func refreshInstalledSkills(execPath string, out io.Writer) error {
 	locs := agents.ConfiguredSkillLocations(agents.Claude)
 	if len(locs) == 0 {
@@ -58,12 +89,18 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
 			continue
 		}
 		for _, t := range targets {
-			result := t.Install(loc, agents.InstallOptions{ExecPath: execPath, AutoAllow: false})
+			result := t.Install(loc, agents.InstallOptions{
+				ExecPath:     execPath,
+				AutoAllow:    false,
+				PreToolNudge: agents.PreToolNudgeKeep,
+			})
+			// T-04-24: paths and notes are filesystem-derived, so they are
+			// sanitized here exactly as printAgentResults does.
 			for _, f := range result.Files {
-				fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
+				fmt.Fprintf(out, "  %s: %s\n", f.Action, sanitizePathForDisplay(f.Path))
 			}
 			for _, note := range result.Notes {
-				fmt.Fprintf(out, "  note: %s\n", note)
+				fmt.Fprintf(out, "  note: %s\n", sanitizePathForDisplay(note))
 			}
 			errs = append(errs, result.Errors...)
 		}
@@ -126,7 +163,16 @@ func newUpgradeCmd() *cobra.Command {
 				return nil
 			}
 
-			if refreshErr := refreshInstalledSkillsFunc(target, cmd.OutOrStdout()); refreshErr != nil {
+			out := cmd.OutOrStdout()
+			mode := resolveColor(cmd)
+			refreshOut := out
+			var pal present.Palette
+			if mode.Styled {
+				pal = present.NewPalette(mode.Dark)
+				refreshOut = present.NewLineWriter(mode.Writer(out), pal, present.RoleValue)
+			}
+
+			if refreshErr := refreshInstalledSkillsFunc(target, refreshOut); refreshErr != nil {
 				// D-07: the swap already succeeded and is independently
 				// verified/atomic — a refresh failure is reported as a
 				// separate warning, not as a failed upgrade. Conflating a
@@ -135,7 +181,14 @@ func newUpgradeCmd() *cobra.Command {
 				// did update, and would likely send the user to re-run
 				// upgrade rather than the one command that actually fixes
 				// it, so the warning names that command explicitly.
-				fmt.Fprintf(cmd.OutOrStdout(), "warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v\nRun `codegraph install` to refresh it manually.\n", refreshErr)
+				if mode.Styled {
+					w := mode.Writer(out)
+					_ = present.Line(w, pal, present.RoleWarning, fmt.Sprintf(
+						"warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v", refreshErr))
+					_ = present.Line(w, pal, present.RoleWarning, "Run `codegraph install` to refresh it manually.")
+				} else {
+					fmt.Fprintf(out, "warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v\nRun `codegraph install` to refresh it manually.\n", refreshErr)
+				}
 			}
 			return nil
 		},

@@ -340,6 +340,142 @@ after storage is controlled for. Anyone picking this up should expect
 cache volumes to help some, but should not expect them to close the gap
 to `ubuntu-latest`'s 28.6x headroom on their own.
 
+## GH #20 follow-up decisions
+
+GH #20 filed two open questions left over from the investigation above, each
+with the raw data attached so neither had to be re-derived. Both are closed
+here, on the record, in the order the issue itself states them.
+
+### Follow-up 1 — Namespace cache volume on the 8x16 profile: won't-do
+
+**Bar for adoption, in the issue's own words:** matching `ubuntu-latest`'s
+stability, not merely beating overlayfs. The gate's job is sensitivity, and
+`ubuntu-latest` standard runners are free on a public repo, so trading
+headroom for speed on a manually-dispatched job is a bad exchange.
+
+Two facts already established above decide it without a new measurement:
+
+- `ubuntu-latest` + disk is **free** and measured **28.6x headroom** (0.35%
+  session-to-session disagreement) against Namespace 4x8 + disk's **2.30x
+  headroom** (4.36% disagreement) — see "Round 1" and "Round 4" above. That
+  is the 28x-more-stable comparison the bar is measured against.
+- A cache volume only reaches Round 3's storage-latency hypothesis, and
+  Round 3's own tmpfs experiment already refuted storage class as the
+  driver (tmpfs made **both** runner classes worse, not better). The
+  leading explanation left unrefuted — host-placement variance, each
+  Namespace session landing on a different ephemeral VM instance — is not
+  something a storage class can reach, cache volume or otherwise. See
+  "Deferred: Namespace cache volumes" above, which flagged exactly this
+  caveat before this decision closed it.
+
+**Decision: WON'T-DO.** Namespace's cache volume follow-up is closed without
+a new measurement — the two facts above already decide it, and running it
+would only re-confirm a bar it cannot clear for a reason a storage change
+cannot address.
+
+One caveat this closure does NOT cover: GH #20's own observation that "the
+gate needs a staleness check, not just a one-time refresh" is a **deferred
+capability**, tracked separately (01-CONTEXT.md Deferred Ideas), not part of
+this decision. Closing GH #20 is not a rejection of that idea.
+
+### Follow-up 2 — the unexplained baseline drift: attributed to FLEET
+
+**Located commit:** `git log -S'11279' -- tools/bench/baseline.json` finds
+`d4672cf5c72a1e83f56e09181ae5b4a7fa3e1ba8`, dated 2026-07-31. Confirmed by
+reading the file back at that commit (`git show
+d4672cf5c72a1e83f56e09181ae5b4a7fa3e1ba8:tools/bench/baseline.json`):
+`files_per_sec: 11279.591291175333` — matches the "reblessed 2026-07-31"
+baseline this file and GH #20 both already reference.
+
+**Drift, computed directly from the two real figures either side of this
+plan** (the located historical value and the `files_per_sec` currently
+committed in `tools/bench/baseline.json`, `17090.87527197409`):
+
+```
+(17090.87527197409 - 11279.591291175333) / 11279.591291175333 = +51.5%
+```
+
+This is the SAME arithmetic already recorded above under "The staleness
+finding itself" — same two endpoints, same answer. It differs from GH #20's
+own stated **+44.8%**, which anchors the same `11279.59` starting point
+against `16330.41` files/s instead — one of the two 2-session disk-scratch
+control medians recorded earlier in this same investigation (see "Round 4"
+above's re-scaling paragraph), not the eventual 7-trial rebless value that
+became the committed baseline. Both readings are real measurements taken
+during this investigation; they diverge because the issue and this file
+anchor to two different later readings of the same drift, not because
+either figure is wrong.
+
+**Planned discriminator** (specified fully here so it is reproducible from
+this file alone, without re-deriving it from the issue): check out the
+located commit and run the regression benchmark on today's runner class,
+same seed/count as always. Concretely:
+
+- **Ref to dispatch:** a temporary branch pushed at
+  `d4672cf5c72a1e83f56e09181ae5b4a7fa3e1ba8` (`bench-gh20-discriminator`).
+- **Job:** `rebless`. At that commit, `.github/workflows/bench.yml`'s
+  `workflow_dispatch` only offers `headtohead` / `rebless` / `both` —
+  `disk-control-github` (this file's own later, non-mutating control job)
+  did not exist yet. `workflow_dispatch` runs the workflow definition **as
+  it exists on the dispatched ref**, so this is the only option that
+  measures `-mode regression` at that commit. The historical `rebless` job
+  takes no write token (same as today's), writes its candidate only to the
+  ephemeral checkout, and publishes it as a downloadable artifact plus a
+  job-summary delta table — it never reaches this repository's committed
+  `tools/bench/baseline.json`.
+- **Flags baked into that historical job definition:** `-mode regression
+  -rebless -baseline tools/bench/baseline.json -seed 42 -count 120000
+  -trials <N>` with no `-runner`/`-scratch-fs` flags — both post-date this
+  commit. The runner's temp-dir default at that revision resolves to a
+  disk-backed path via `os.MkdirTemp`, which is what GH #20 itself means by
+  "byte-identical to the pre-change default."
+- **Trials:** `7`, matching the rigor of every other number in this file's
+  investigation (the committed baseline's own `median_of_trials: 7`, and
+  every Round above).
+- **Runner class:** `ubuntu-latest` — the historical `rebless` job's
+  `runs-on`, matching the class both the gate and today's committed
+  baseline spend on. Same hardware as today's gate; only the code varies.
+- **Measured `files_per_sec`:** `16569.160272289788`, from the `rebless`
+  job's `baseline-candidate` artifact ([run 34980422924][gh20-run],
+  2026-09-15T14:15:41Z → 14:30:10Z, `ubuntu-latest`). Same commit
+  (`d4672cf5`), same `-seed 42 -count 120000`, 7 trials, as the historical
+  `11279.591291175333` — only the runner changed underneath it.
+- **Attribution: FLEET.** Three comparisons, each holding one variable
+  constant:
+
+  | Comparison | Held constant | Varied | Result |
+  |---|---|---|---|
+  | July vs today, same commit `d4672cf5` | the code | hardware / fleet | **+46.90%** (`11279.591291175333` → `16569.160272289788`) |
+  | Today, same runner, old vs current code | hardware | the code | **+3.15%** (`16569.160272289788` → `17090.87527197409`, the committed baseline) |
+  | Total (July baseline → committed baseline) | — | both | **+51.52%** |
+
+  The code contribution is **+3.15%** — inside `DefaultThroughputTolerance`
+  (`internal/bench/regression.go`, 10%), indistinguishable from noise.
+  Essentially the entire drift is GitHub runner hardware, consistent with
+  the AMD EPYC 9V74 current-generation part this issue's own A/B already
+  observed. This is the same fleet-vs-code vocabulary "The staleness
+  finding itself" above uses — a control run separating hardware from code
+  is exactly what resolves an ambiguous drift there, and it resolves this
+  one the same way.
+
+**What this does — and does NOT — resolve.** GH #20's own closing
+observation, "if GitHub's fleet can shift ~45% in two days, any baseline
+goes stale fast and the gate needs a staleness check, not just a one-time
+refresh," is now confirmed with a number (~47%, mechanism identified: fleet
+hardware, not code) — but the underlying capability gap is still open.
+While the baseline sat stale at `11279.591291175333`,
+`DefaultThroughputTolerance`'s 10% budget could only fire below
+`11279.591291175333 * 0.9 = 10151.63` files/s. Real performance over that
+window was ~`16569.16` files/s. That means **a regression of up to ~38.7%**
+(`(16569.160272289788 - 10151.6321620577997) / 16569.160272289788 =
+0.3873`) **would have passed the gate green** for as long as the baseline
+stayed stale. Closing GH #20 records the attribution; it does not add a
+staleness check — that remains a **deferred gate capability**, tracked in
+the roadmap backlog (see the "won't-do" section above and 01-CONTEXT.md
+Deferred Ideas), not a defect this closure fixes.
+
+[gh20-run]: https://github.com/seanb4t/codegraph-go/actions/runs/34980422924
+
 ## Measurement procedure
 
 Two nested levels of repetition, both deliberate:

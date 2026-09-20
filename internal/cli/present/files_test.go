@@ -35,7 +35,7 @@ func fixtureFileEntries() []query.FileEntry {
 func TestRenderFiles_Tree(t *testing.T) {
 	r := query.FilesResult{Format: "tree", Tree: fixtureFileTree()}
 	var buf bytes.Buffer
-	if err := RenderFiles(r, &buf); err != nil {
+	if err := RenderFiles(r, NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderFiles: %v", err)
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("\x1b[")) {
@@ -65,7 +65,7 @@ func TestRenderFiles_Tree(t *testing.T) {
 func TestRenderFiles_Flat(t *testing.T) {
 	r := query.FilesResult{Format: "flat", Files: fixtureFileEntries()}
 	var buf bytes.Buffer
-	if err := RenderFiles(r, &buf); err != nil {
+	if err := RenderFiles(r, NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderFiles: %v", err)
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("\x1b[")) {
@@ -84,7 +84,7 @@ func TestRenderFiles_Flat(t *testing.T) {
 // panic, nil error.
 func TestRenderFiles_Empty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := RenderFiles(query.FilesResult{Format: "flat"}, &buf); err != nil {
+	if err := RenderFiles(query.FilesResult{Format: "flat"}, NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderFiles (empty flat): %v", err)
 	}
 	if buf.Len() != 0 {
@@ -92,7 +92,7 @@ func TestRenderFiles_Empty(t *testing.T) {
 	}
 
 	buf.Reset()
-	if err := RenderFiles(query.FilesResult{Format: "tree"}, &buf); err != nil {
+	if err := RenderFiles(query.FilesResult{Format: "tree"}, NewPalette(true), &buf); err != nil {
 		t.Fatalf("RenderFiles (empty tree): %v", err)
 	}
 	if buf.Len() != 0 {

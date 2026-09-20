@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 func TestAntigravity_ID(t *testing.T) {
@@ -192,5 +194,114 @@ func TestAntigravity_DescribePaths_GlobalOnly(t *testing.T) {
 	a := antigravityTarget{}
 	if paths := a.DescribePaths(LocationLocal); len(paths) != 0 {
 		t.Fatalf("DescribePaths(local) should be empty for a global-only target, got %v", paths)
+	}
+}
+
+// TestAntigravity_Install_WritesConfigSkillDir (AGENT-07, maintainer
+// decision 1A, 2026-09-18): Antigravity installs the codegraph skill at
+// ~/.gemini/config/skills/codegraph/, the one directory the live `agy`
+// 1.2.6 session (05-LIVE-SESSIONS.md § Antigravity) was proven to read.
+// The docs' CLI path ~/.gemini/antigravity-cli/skills/ is proven unread and
+// is never written, nor is the shared .agents/skills alias (workspace-scope
+// only for Antigravity) or a new AGENTS.md (D-06(c)). A foreign sibling
+// skill beside codegraph's directory — the maintainer's real config dir
+// holds gh-stack — must keep its exact bytes through install and uninstall.
+func TestAntigravity_Install_WritesConfigSkillDir(t *testing.T) {
+	home := fakeHome(t)
+	skillsRoot := filepath.Join(home, ".gemini", "config", "skills")
+	foreignPath := filepath.Join(skillsRoot, "gh-stack", "SKILL.md")
+	const foreignBody = "---\nname: gh-stack\ndescription: foreign sibling skill\n---\n\nnot codegraph's\n"
+	writeFile(t, foreignPath, foreignBody)
+
+	a := antigravityTarget{}
+	a.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	configDir := filepath.Join(skillsRoot, "codegraph")
+	skillPath := filepath.Join(configDir, "SKILL.md")
+	want, err := claudeassets.SkillMarkdown()
+	if err != nil {
+		t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+	}
+	if !fileExists(skillPath) {
+		t.Fatalf("expected the codegraph SKILL.md at %s after install", skillPath)
+	}
+	if got := readFile(t, skillPath); got != string(want) {
+		t.Fatalf("config skill SKILL.md at %s does not match the embed", skillPath)
+	}
+	m, present, err := readManifest(skillManifestPath(configDir))
+	if err != nil || !present {
+		t.Fatalf("expected a manifest at %s (present=%v err=%v)", configDir, present, err)
+	}
+	if len(m.Targets) != 1 || !containsTarget(m.Targets, Antigravity) {
+		t.Fatalf("manifest targets = %v, want exactly [antigravity]", m.Targets)
+	}
+
+	cliSkills := filepath.Join(home, ".gemini", "antigravity-cli", "skills")
+	if fileExists(cliSkills) {
+		t.Fatalf("antigravity must not write the live-proven-unread CLI skill path, found %s", cliSkills)
+	}
+	if fileExists(filepath.Join(home, ".agents", "skills")) {
+		t.Fatalf("antigravity must not write under the shared .agents/skills alias")
+	}
+	if fileExists(filepath.Join(home, ".gemini", "AGENTS.md")) {
+		t.Fatalf("antigravity must not write a new AGENTS.md")
+	}
+	if got := readFile(t, foreignPath); got != foreignBody {
+		t.Fatalf("foreign sibling skill %s changed by install:\n got %q\nwant %q", foreignPath, got, foreignBody)
+	}
+
+	a.Uninstall(LocationGlobal)
+	if fileExists(skillPath) {
+		t.Fatalf("config SKILL.md not removed after uninstall")
+	}
+	if fileExists(skillManifestPath(configDir)) {
+		t.Fatalf("config manifest not removed after uninstall")
+	}
+	if fileExists(configDir) {
+		t.Fatalf("config skill dir not swept after uninstall")
+	}
+	if !fileExists(skillsRoot) {
+		t.Fatalf("uninstall removed %s, which still holds the foreign gh-stack skill", skillsRoot)
+	}
+	if !fileExists(foreignPath) {
+		t.Fatalf("foreign sibling skill %s removed by uninstall", foreignPath)
+	}
+	if got := readFile(t, foreignPath); got != foreignBody {
+		t.Fatalf("foreign sibling skill %s changed by uninstall:\n got %q\nwant %q", foreignPath, got, foreignBody)
+	}
+}
+
+// TestAntigravity_NoReadOnlySkillDirs (maintainer decision 1A): Antigravity
+// declares exactly one skill directory — the one it writes — so
+// Capabilities().ReadOnlySkillDirs(global) is empty. The former CLI path is
+// live-proven unread and is not declared at all.
+func TestAntigravity_NoReadOnlySkillDirs(t *testing.T) {
+	fakeHome(t)
+	a := antigravityTarget{}
+	got, err := a.Capabilities().ReadOnlySkillDirs(LocationGlobal)
+	if err != nil {
+		t.Fatalf("ReadOnlySkillDirs: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ReadOnlySkillDirs(global) = %v, want none", got)
+	}
+}
+
+// TestAntigravity_Local_WritesNothing (D-06): Antigravity is global-only;
+// Install(local) and Uninstall(local) must be complete no-ops, creating
+// nothing on disk.
+func TestAntigravity_Local_WritesNothing(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	a := antigravityTarget{}
+	installResult := a.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	if len(installResult.Files) != 0 || len(installResult.Errors) != 0 {
+		t.Fatalf("Install(local) = %+v, want empty", installResult)
+	}
+	uninstallResult := a.Uninstall(LocationLocal)
+	if len(uninstallResult.Files) != 0 || len(uninstallResult.Errors) != 0 {
+		t.Fatalf("Uninstall(local) = %+v, want empty", uninstallResult)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
-	"github.com/seanb4t/codegraph-go/internal/version"
 )
 
 // claudeAllowToken is the permission entry Claude's settings.json needs so
@@ -28,9 +27,34 @@ func init() {
 	registerTarget(claudeTarget{})
 }
 
-func (claudeTarget) ID() TargetID                   { return Claude }
-func (claudeTarget) DisplayName() string            { return "Claude Code" }
-func (claudeTarget) SupportsLocation(Location) bool { return true }
+func (claudeTarget) ID() TargetID        { return Claude }
+func (claudeTarget) DisplayName() string { return "Claude Code" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t claudeTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
+
+// Capabilities is Claude's capability table entry (D-01, D-02): both
+// scopes, JSON config, a claude-json hooks mechanism (its files are
+// hardcoded in Capabilities.HookFiles), and the one target whose
+// SkillDirs is populated — the shared writer's skill package.
+func (claudeTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksClaudeJSON,
+		MCPConfig:    claudeConfigPath,
+		Instructions: claudeInstructionsPath,
+		SkillDirs: func(loc Location) ([]string, error) {
+			dir, err := claudeSkillDirPath(loc)
+			if err != nil {
+				return nil, err
+			}
+			return []string{dir}, nil
+		},
+	}
+}
 
 // fileExists reports whether path exists (any file type), swallowing stat
 // errors that indicate genuine absence — every per-agent Detect
@@ -141,15 +165,6 @@ func claudeSkillDirPath(loc Location) (string, error) {
 	return filepath.Join(home, ".claude", "skills", "codegraph"), nil
 }
 
-// claudeSkillFilePath is claudeSkillDirPath(loc) joined with SKILL.md.
-func claudeSkillFilePath(loc Location) (string, error) {
-	dir, err := claudeSkillDirPath(loc)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "SKILL.md"), nil
-}
-
 // claudeManifestPath is claudeSkillDirPath(loc) joined with the sidecar
 // manifest filename (D-03). The dot prefix keeps the file out of any
 // future recursive skill-content scan and signals "codegraph-internal, not
@@ -177,6 +192,44 @@ func claudeHooksScriptPath(loc Location) (string, error) {
 	return filepath.Join(home, ".claude", "hooks", "session-nudge.sh"), nil
 }
 
+// claudeSkillPolicy resolves Install/Uninstall's foreign-content policy for
+// loc's skill directory (D-17, RESEARCH Pitfall 2): the maintainer's own
+// `~/.claude/skills/codegraph -> ../../.agents/skills/codegraph` symlink
+// (the `npx skills` convention) makes Claude's skill directory and the
+// shared directory every other target writes into the SAME physical
+// directory. sameSkillDir (filepath.EvalSymlinks-based, dangling links
+// followed) is used rather than a literal path comparison because a
+// symlink is exactly the case a literal string comparison cannot see
+// through, and a dangling link (its target not yet created) must still
+// resolve identically to its eventual target so a fresh install through
+// the link lands on the shared package rather than a Claude-only one. When
+// the two paths coincide, refuseUnmanifested applies — D-14's
+// foreign-content rule governs the shared directory, and Claude must never
+// adopt content it does not uniquely own there. When they are genuinely
+// distinct directories, adoptUnmanifested preserves Claude's v0.10.0
+// non-shared behaviour byte-for-byte (D-05). A comparison error (e.g. a
+// symlink cycle) is returned to the caller, which records it and falls
+// back to the conservative refuseUnmanifested rather than ever adopting
+// content whose relationship to the shared dir could not be established.
+func claudeSkillPolicy(loc Location) (unmanifestedPolicy, error) {
+	claudeDir, err := claudeSkillDirPath(loc)
+	if err != nil {
+		return refuseUnmanifested, err
+	}
+	sharedDir, err := sharedSkillDirPath(loc)
+	if err != nil {
+		return refuseUnmanifested, err
+	}
+	same, err := sameSkillDir(claudeDir, sharedDir)
+	if err != nil {
+		return refuseUnmanifested, err
+	}
+	if same {
+		return refuseUnmanifested, nil
+	}
+	return adoptUnmanifested, nil
+}
+
 // claudeHookCommand returns the command string Phase 7 writes into
 // hooks.SessionStart[].hooks[].command for loc. Local scope reuses Phase
 // 6's dogfooded, project-relative fragment verbatim so
@@ -195,36 +248,52 @@ func claudeHookCommand(loc Location) (string, error) {
 	return claudeHooksScriptPath(LocationGlobal)
 }
 
-// claudeSessionStartBlocks decodes the embedded hooks fragment
-// (claudeassets.HooksFragment) and rewrites every command field whose
-// value equals the fragment's own literal project-relative command
-// (claudeFragmentCommand) into claudeHookCommand(loc). Deriving the
-// blocks from the embedded fragment rather than re-authoring them in Go
-// keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
+// claudeSessionStartBlocks returns the SessionStart blocks for loc,
+// derived from the embedded hooks fragment by claudeFragmentEventBlocks
+// with the fragment's own literal project-relative command
+// (claudeFragmentCommand) rewritten into claudeHookCommand(loc). Deriving
+// the blocks from the embedded fragment rather than re-authoring them in
+// Go keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
 // matcher literal is hand-typed here. Returns the rewritten blocks and
 // the single-element list of owned command strings writeHookEntry uses
 // for identity.
 func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
-	data, err := claudeassets.HooksFragment()
-	if err != nil {
-		return nil, nil, err
-	}
-	var decoded struct {
-		Hooks struct {
-			SessionStart []any `json:"SessionStart"`
-		} `json:"hooks"`
-	}
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return nil, nil, fmt.Errorf("decode embedded hooks fragment: %w", err)
-	}
-
 	ownCommand, err := claudeHookCommand(loc)
 	if err != nil {
 		return nil, nil, err
 	}
+	blocks, err := claudeFragmentEventBlocks("SessionStart", claudeFragmentCommand, ownCommand)
+	if err != nil {
+		return nil, nil, err
+	}
+	return blocks, []string{ownCommand}, nil
+}
 
-	blocks := make([]any, 0, len(decoded.Hooks.SessionStart))
-	for _, b := range decoded.Hooks.SessionStart {
+// claudeFragmentEventBlocks decodes hooks.<event> from the embedded hooks
+// fragment (claudeassets.HooksFragment) and returns a deep copy of its
+// blocks with every handler whose command equals fragmentCommand rewritten
+// into ownCommand. Shared by every event codegraph registers (SessionStart,
+// and the opt-in PreToolUse nudge of v0.14.0 Phase 6), so the fragment
+// stays the one source of each event's matchers and handler fields. An
+// event the fragment does not carry is an error, never an empty list.
+func claudeFragmentEventBlocks(event, fragmentCommand, ownCommand string) ([]any, error) {
+	data, err := claudeassets.HooksFragment()
+	if err != nil {
+		return nil, err
+	}
+	var decoded struct {
+		Hooks map[string][]any `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return nil, fmt.Errorf("decode embedded hooks fragment: %w", err)
+	}
+	source, ok := decoded.Hooks[event]
+	if !ok {
+		return nil, fmt.Errorf("embedded hooks fragment has no hooks.%s", event)
+	}
+
+	blocks := make([]any, 0, len(source))
+	for _, b := range source {
 		obj, ok := b.(map[string]any)
 		if !ok {
 			blocks = append(blocks, b)
@@ -246,7 +315,7 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 				for k, v := range eo {
 					newEO[k] = v
 				}
-				if cmd, ok := newEO["command"].(string); ok && cmd == claudeFragmentCommand {
+				if cmd, ok := newEO["command"].(string); ok && cmd == fragmentCommand {
 					newEO["command"] = ownCommand
 				}
 				newEntries = append(newEntries, newEO)
@@ -255,8 +324,7 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 		}
 		blocks = append(blocks, rewritten)
 	}
-
-	return blocks, []string{ownCommand}, nil
+	return blocks, nil
 }
 
 // addClaudeAllowPermission appends claudeAllowToken to permissions.allow in
@@ -345,15 +413,23 @@ func removeClaudeAllowPermission(path string) (FileResult, error) {
 	return FileResult{Path: path, Action: ActionRemoved}, nil
 }
 
-func (claudeTarget) Detect(loc Location) DetectionResult {
-	configPath, err := claudeConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03): the
+// installed-evidence fallback is the ancestor of a table path
+// (filepath.Dir of the global instructions path, i.e. ~/.claude) rather
+// than a restated literal.
+func (t claudeTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
 	installed := fileExists(configPath)
 	if !installed && loc == LocationGlobal {
-		if home, herr := os.UserHomeDir(); herr == nil {
-			installed = fileExists(filepath.Join(home, ".claude"))
+		if instrPath, ierr := caps.InstructionsPath(loc); ierr == nil {
+			installed = fileExists(filepath.Dir(instrPath))
 		}
 	}
 	return DetectionResult{
@@ -365,6 +441,15 @@ func (claudeTarget) Detect(loc Location) DetectionResult {
 
 func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+
+	// D-10: whether the opt-in is already recorded is read before any
+	// write, so this call's own manifest update cannot decide what Keep
+	// does. preToolNudgeEvidenced (CR-01, 06-REVIEW.md) widens the
+	// manifest-only check to also trust settings.json's own PreToolUse
+	// registration, so a foreign/unmanifested skill directory (D-14) —
+	// where the manifest step below never runs — cannot silently forget a
+	// live opt-in.
+	preToolRecorded, preToolReadable := preToolNudgeEvidenced(loc)
 
 	// Pitfall 3: migrate a legacy ./.claude.json local entry into
 	// ./.mcp.json before writing the correct entry.
@@ -402,22 +487,23 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	// Phase 7: install the binary's own embedded Claude Code skill
-	// package (SKILL.md, executable session-nudge.sh, SessionStart
-	// registration) — follows --location with no special-casing (D-01),
-	// funnelled through recordFile like every step above (CR-01).
+	// Phase 7 (D-17 as of 05-03): install the binary's own embedded Claude
+	// Code skill package (SKILL.md, executable session-nudge.sh,
+	// SessionStart registration) — follows --location with no
+	// special-casing (D-01), funnelled through recordFile like every step
+	// above (CR-01).
 	//
-	// The three content values are captured here (skillMDContent,
-	// scriptContent, sessionStartBlocks) so Plan 03's manifest step below
-	// can hash exactly what this Install call intended to write, rather
-	// than re-reading the files back from disk — re-reading would make
-	// the manifest record what survived the write instead of what
-	// codegraph wrote, which would make D-05's drift check permanently
+	// The content values captured here (skillMDContent, scriptContent,
+	// sessionStartBlocks) let the recordSkillManifest step below hash
+	// exactly what this Install call intended to write, rather than
+	// re-reading the files back from disk — re-reading would make the
+	// manifest record what survived the write instead of what codegraph
+	// wrote, which would make D-05's drift check permanently
 	// self-satisfying. Each have* flag is set only after ITS OWN write
-	// succeeds (werr == nil), never merely on content resolution — a
-	// manifest recording a hash for an artifact whose disk write just
-	// failed would assert success that never happened (code review CR-01).
-	// Errors still surface via recordFile/result.Errors either way.
+	// succeeds, never merely on content resolution — a manifest recording
+	// a hash for an artifact whose disk write just failed would assert
+	// success that never happened (code review CR-01). Errors still
+	// surface via recordFile/result.Errors either way.
 	var (
 		skillMDContent     []byte
 		haveSkillMDContent bool
@@ -427,19 +513,27 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		haveSessionStart   bool
 	)
 
-	if skillFilePath, err := claudeSkillFilePath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill file path: %w", err))
+	// D-17: claudeSkillPolicy resolves whether Claude's own skill
+	// directory and the shared directory every other target writes into
+	// are the SAME physical directory (a symlink — 05-RESEARCH.md
+	// Pitfall 2) BEFORE any write. When they coincide the shared writer's
+	// foreign-content policy (D-14) governs; when they are distinct,
+	// Claude keeps its v0.10.0 non-shared adopt behaviour (D-05).
+	var claudeSkillDir string
+	skillPolicy := refuseUnmanifested
+	if dir, err := claudeSkillDirPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill dir path: %w", err))
 	} else {
-		content, rerr := claudeassets.SkillMarkdown()
-		if rerr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillFilePath, rerr))
+		claudeSkillDir = dir
+		if p, perr := claudeSkillPolicy(loc); perr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, perr))
 		} else {
-			fr, werr := writeEmbeddedFile(skillFilePath, string(content), false)
-			recordFile(&result, skillFilePath, fr, werr)
-			if werr == nil {
-				skillMDContent = content
-				haveSkillMDContent = true
-			}
+			skillPolicy = p
+		}
+		content, ok := writeSkillFile(&result, claudeSkillDir, skillPolicy)
+		if ok {
+			skillMDContent = content
+			haveSkillMDContent = true
 		}
 	}
 
@@ -475,30 +569,116 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	// Plan 03 (D-03/D-04): write the sidecar manifest describing exactly
-	// what the three steps above intended to write. Only proceeds if all
-	// three artifacts' content resolved — a manifest recording a hash for
-	// content that was never actually available would be worse than no
-	// manifest at all.
-	if manifestPath, err := claudeManifestPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude manifest path: %w", err))
-	} else if haveSkillMDContent && haveScriptContent && haveSessionStart {
+	// v0.14.0 Phase 6 (D-01, D-01b, D-09, D-10, D-12): the opt-in
+	// PreToolUse nudge — the guard rendered with this binary's absolute
+	// path, then its registration through the same exact-identity hook
+	// writer as SessionStart. D-10's three modes:
+	//   - On writes both, and the manifest step below records them;
+	//   - Keep (the zero value: every plain install and every upgrade)
+	//     re-renders and rewrites both only when the manifest already
+	//     records the opt-in, so a moved binary is picked up; with no
+	//     record — or a manifest that cannot be read — it touches nothing;
+	//   - Off removes the guard and codegraph's own PreToolUse handlers and
+	//     drops the record in the same single manifest write.
+	// havePreTool follows the CR-01 have-flag rule: set only when BOTH the
+	// guard and the registration writes succeeded. A render failure skips
+	// both writes, so no registration ever points at a guard this call did
+	// not write.
+	var (
+		preToolGuardContent []byte
+		preToolBlocks       []any
+		havePreTool         bool
+		dropPreTool         bool
+	)
+	enablePreTool := opts.PreToolNudge == PreToolNudgeOn ||
+		(opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable)
+	if enablePreTool {
+		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+		} else if rendered, rerr := renderPreToolGuard(opts.ExecPath); rerr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, rerr))
+		} else {
+			fr, werr := writeEmbeddedFile(guardPath, rendered, true)
+			recordFile(&result, guardPath, fr, werr)
+			if werr == nil {
+				if settingsPath, err := claudeSettingsPath(loc); err != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+				} else if blocks, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+				} else {
+					fr, werr := writeHookEntry(settingsPath, "PreToolUse", blocks, ownCommands)
+					recordFile(&result, settingsPath, fr, werr)
+					if werr == nil {
+						preToolGuardContent = []byte(rendered)
+						preToolBlocks = blocks
+						havePreTool = true
+					}
+				}
+			}
+		}
+	} else if opts.PreToolNudge == PreToolNudgeOff {
+		// Only artifacts actually removed are reported, so an Off install on
+		// a location that never opted in adds no lines (errors still surface).
+		removeFailed := false
+		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+			removeFailed = true
+		} else if fr, rerr := removeEmbeddedFile(guardPath); rerr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, rerr))
+			removeFailed = true
+		} else if fr.Action == ActionRemoved {
+			result.Files = append(result.Files, fr)
+		}
+		if settingsPath, err := claudeSettingsPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+			removeFailed = true
+		} else if _, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+			removeFailed = true
+		} else if fr, werr := removeHookEntry(settingsPath, "PreToolUse", ownCommands); werr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, werr))
+			removeFailed = true
+		} else if fr.Action == ActionRemoved {
+			result.Files = append(result.Files, fr)
+		}
+		dropPreTool = !removeFailed
+	}
+
+	// D-17 (Plan 03, superseding Plan 03's original hand-built manifest):
+	// record Claude's ownership through the manifest-owned writer (05-02)
+	// rather than a hand-built skillManifest — this is what makes a
+	// symlinked shared directory's manifest end up with targets containing
+	// BOTH claude and whichever other agent installed there, instead of
+	// Claude's own write silently clobbering theirs (D-05/D-07/D-08 all
+	// apply via recordSkillManifest). Only proceeds if all three
+	// artifacts' content resolved — recording a hash for content that was
+	// never actually written would be worse than no manifest at all
+	// (CR-01, unchanged posture). When writeSkillFile above kept a foreign
+	// directory untouched, haveSkillMDContent is false and this step is
+	// skipped entirely — every other Claude artifact above still wrote.
+	if claudeSkillDir != "" && haveSkillMDContent && haveScriptContent && haveSessionStart {
 		hooksHash, herr := hashOwnedHookBlocks(sessionStartBlocks)
 		if herr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", manifestPath, herr))
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeSkillDir, herr))
 		} else {
-			m := skillManifest{
-				SchemaVersion:    manifestSchemaVersion,
-				CodegraphVersion: version.Info().Version,
-				Location:         string(loc),
-				Files: map[string]string{
-					manifestKeySkillMD:   hashContent(skillMDContent),
-					manifestKeyScript:    hashContent(scriptContent),
-					manifestKeyHooksFrag: hooksHash,
-				},
+			ownFiles := map[string]string{
+				manifestKeySkillMD:   hashContent(skillMDContent),
+				manifestKeyScript:    hashContent(scriptContent),
+				manifestKeyHooksFrag: hooksHash,
 			}
-			fr, werr := writeManifest(manifestPath, m)
-			recordFile(&result, manifestPath, fr, werr)
+			var dropKeys []string
+			if havePreTool {
+				if fragHash, ferr := hashOwnedHookBlocks(preToolBlocks); ferr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeSkillDir, ferr))
+				} else {
+					ownFiles[manifestKeyPreToolGuard] = hashContent(preToolGuardContent)
+					ownFiles[manifestKeyPreToolFrag] = fragHash
+				}
+			}
+			if dropPreTool {
+				dropKeys = []string{manifestKeyPreToolGuard, manifestKeyPreToolFrag}
+			}
+			recordSkillManifestWithFallback(&result, claudeSkillDir, loc, Claude, ownFiles, []TargetID{Claude}, dropKeys)
 		}
 	}
 
@@ -535,35 +715,31 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		recordFile(&result, settingsPath, fr, err)
 	}
 
-	// Plan 03: remove the sidecar manifest before the SKILL.md removal
-	// below, so the removeSkillDirIfEmpty sweep that follows SKILL.md's
-	// removal sees an already manifest-free directory. A manifest that
-	// does not exist reports ActionNotFound and is not an error (D-08).
-	if manifestPath, err := claudeManifestPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude manifest path: %w", err))
+	// D-17 (Plan 03, superseding Plan 02/03's hand-rolled manifest+SKILL.md
+	// removal): remove Claude's ownership through the manifest-owned
+	// writer (05-02), using the same sameSkillDir-derived policy Install
+	// uses. In a symlinked layout this is D-08's last-requester rule: only
+	// when Claude is the LAST requester does the shared package actually
+	// get removed (manifest, then SKILL.md, then the directory-empty
+	// sweep — never a recursive delete, this plan's
+	// must_haves.prohibitions); otherwise Claude's own two exclusive
+	// manifest keys (script, hooks fragment) are dropped and the package
+	// is left intact for whichever other target still requests it
+	// (T-05-11). Claude's session-nudge script and SessionStart
+	// registration live outside the skill directory and are removed by
+	// the two steps below exactly as before, regardless of requester
+	// count.
+	if claudeDir, err := claudeSkillDirPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill dir path: %w", err))
 	} else {
-		fr, rerr := removeEmbeddedFile(manifestPath)
-		recordFile(&result, manifestPath, fr, rerr)
-	}
-
-	// Plan 02: remove exactly the three artifacts Phase 7's Install wrote
-	// — the skill file, the executable script, and codegraph's own
-	// SessionStart blocks — each funnelled through recordFile like every
-	// step above (CR-01). Never a recursive directory delete: the skill
-	// directory is only removed once emptying codegraph's own file
-	// leaves nothing else behind (this plan's must_haves.prohibitions).
-	if skillFilePath, err := claudeSkillFilePath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill file path: %w", err))
-	} else {
-		fr, rerr := removeEmbeddedFile(skillFilePath)
-		recordFile(&result, skillFilePath, fr, rerr)
-		if rerr == nil {
-			if skillDir, derr := claudeSkillDirPath(loc); derr == nil {
-				if cerr := removeSkillDirIfEmpty(skillDir); cerr != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillDir, cerr))
-				}
-			}
+		policy, perr := claudeSkillPolicy(loc)
+		if perr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", claudeDir, perr))
+			policy = refuseUnmanifested
 		}
+		uninstallSkillPackage(&result, claudeDir, Claude, []string{
+			manifestKeyScript, manifestKeyHooksFrag, manifestKeyPreToolGuard, manifestKeyPreToolFrag,
+		}, policy)
 	}
 
 	if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
@@ -585,28 +761,35 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		}
 	}
 
+	// D-11: the PreToolUse guard and codegraph's own PreToolUse handlers
+	// are ALWAYS attempted, whether or not the manifest records the opt-in
+	// (a foreign skill directory skips the record but not the writes), and
+	// report not-found when the user never opted in. Ownership is the exact
+	// command string (242ec0a): an unrelated block under the same matcher
+	// is never touched.
+	if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+	} else {
+		fr, rerr := removeEmbeddedFile(guardPath)
+		recordFile(&result, guardPath, fr, rerr)
+	}
+
+	if settingsPath, err := claudeSettingsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+	} else {
+		_, ownCommands, berr := claudePreToolUseBlocks(loc)
+		if berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+		} else {
+			fr, werr := removeHookEntry(settingsPath, "PreToolUse", ownCommands)
+			recordFile(&result, settingsPath, fr, werr)
+		}
+	}
+
 	return result
 }
 
-func (claudeTarget) DescribePaths(loc Location) []string {
-	var paths []string
-	if p, err := claudeConfigPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeInstructionsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeSettingsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeSkillFilePath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeHooksScriptPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := claudeManifestPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t claudeTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

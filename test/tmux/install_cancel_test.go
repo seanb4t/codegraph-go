@@ -37,18 +37,26 @@ func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 	if !strings.Contains(capture, "[ ]") {
 		t.Fatalf("TTY-05: converged capture does not contain the unchecked checkbox glyph \"[ ]\":\n%s", capture)
 	}
-	// Positive control proving the pane isn't blank or crashed: the
-	// picker's own list title. NOT the help footer text — empirically
-	// verified (temporary, reverted debug instrumentation; see
-	// 08-02-SUMMARY.md) that bubbles/v2/list's pagination padding already
-	// overflows its allocated height (WindowSizeMsg Height=30 -> listHeight
-	// 28, but the rendered list body is 35 lines) BEFORE the footer text is
-	// appended, at this package's default 100x30 pane with all 8 registered
-	// agent targets — so the footer never appears in any capture at this
-	// geometry, converged or not. This is real, reproducible product
-	// behavior, not a harness flake.
-	if !strings.Contains(capture, "Select agents to configure") {
-		t.Fatalf("TTY-05: converged capture does not contain the picker's title \"Select agents to configure\":\n%s", capture)
+	// Positive control proving the pane isn't blank or crashed: the help
+	// footer text and every registered target's display name. Since FIX-03
+	// (D-24/D-25), each picker row costs exactly one line — the delegate's
+	// own Render no longer writes a trailing newline, so bubbles/v2/list's
+	// populatedView separator is the only newline per row — so all 8 rows
+	// plus the footer now fit within this package's default 100x30 pane.
+	// The footer is the positive control, not the picker's title, because
+	// it also proves the fix: before FIX-03 the footer never appeared at
+	// this geometry (verified via temporary, reverted debug
+	// instrumentation; see 08-02-SUMMARY.md).
+	if !strings.Contains(capture, "space: toggle") {
+		t.Fatalf("TTY-05: converged capture does not contain the footer text \"space: toggle\":\n%s", capture)
+	}
+	for _, name := range []string{
+		"Antigravity", "Claude Code", "Codex CLI", "Cursor",
+		"Gemini CLI", "Hermes Agent", "Kiro", "opencode",
+	} {
+		if !strings.Contains(capture, name) {
+			t.Fatalf("TTY-05: converged capture does not contain target display name %q:\n%s", name, capture)
+		}
 	}
 
 	sendKey(t, session, "Space")

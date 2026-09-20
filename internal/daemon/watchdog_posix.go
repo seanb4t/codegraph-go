@@ -11,6 +11,6 @@ package daemon
 // against the captured original ppid, rather than a bare `ppid == 1`
 // check, is the robust form that also catches reparenting inside such a
 // supervisor/container.
-func parentChanged(original int) bool {
-	return getppid() != original
+func parentChanged(original int, ppid func() int) bool {
+	return ppid() != original
 }

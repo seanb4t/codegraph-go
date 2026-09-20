@@ -32,10 +32,29 @@ import (
 // Pitfall 5) — hashing the whole shared file would report drift on every
 // unrelated user edit.
 const (
-	manifestKeySkillMD    = "skills/codegraph/SKILL.md"
-	manifestKeyScript     = "hooks/session-nudge.sh"
-	manifestKeyHooksFrag  = "settings.json#hooks.SessionStart"
-	manifestSchemaVersion = 1
+	manifestKeySkillMD   = "skills/codegraph/SKILL.md"
+	manifestKeyScript    = "hooks/session-nudge.sh"
+	manifestKeyHooksFrag = "settings.json#hooks.SessionStart"
+	// manifestKeyPreToolGuard and manifestKeyPreToolFrag record the opt-in
+	// PreToolUse nudge (v0.14.0 Phase 6, D-10): the rendered guard script
+	// and codegraph's own hooks.PreToolUse blocks. They are new Files map
+	// keys, not a schema bump — an older binary carries unknown keys
+	// through recordSkillManifest's merge untouched. Their PRESENCE is what
+	// makes the opt-in sticky (preToolNudgeRecorded); renaming either key
+	// silently un-opts every recorded install.
+	manifestKeyPreToolGuard = "hooks/pretooluse-nudge.sh"
+	manifestKeyPreToolFrag  = "settings.json#hooks.PreToolUse"
+	// manifestSchemaVersion history: 1 = v0.10.0 Phase 7 through v0.14.0
+	// Phase 4 — a single, Claude-only writer with no requester set. 2 =
+	// the requester set added by 05-02 (D-07): skillManifest.Targets, the
+	// ownership identity a shared skill directory needs once more than one
+	// target can request it. Bumping this is flagged `costly` in
+	// 05-02-PLAN.md: a released binary older than this change reads (and,
+	// if it writes, rewrites) a schema-2 manifest at schema 1, silently
+	// dropping Targets — self-healed on the next new-binary install via
+	// manifestRequesters' "nil Targets read as [claude]" rule below, with
+	// the loss mode confined to D-17's symlinked layouts.
+	manifestSchemaVersion = 2
 )
 
 // skillManifest is the on-disk shape of <skillDir>/.codegraph-manifest.json.
@@ -50,6 +69,72 @@ type skillManifest struct {
 	InstalledAt      string            `json:"installed_at"`
 	Location         string            `json:"location"`
 	Files            map[string]string `json:"files"`
+	// Targets is the requester set that owns this manifest's skill
+	// directory (D-07, 05-02) — the ownership identity a shared skill
+	// package (AGENT-09) needs, since more than one target can request the
+	// same directory. omitempty keeps a manifest written by a target that
+	// never populates this field (none yet — 05-03 moves Claude onto the
+	// shared writer) byte-identical to schema_version 1's shape.
+	Targets []TargetID `json:"targets,omitempty"`
+}
+
+// manifestRequesters folds readManifest's three possible outcomes into the
+// single non-destructive reading D-07's planner amendment requires: an
+// unreadable manifest (readErr != nil), or a present-and-decodable one
+// whose Targets field is nil (a genuine schema_version 1 write, or any
+// hand-authored manifest predating D-07), returns unreadableFallback
+// unchanged — the caller decides what "unreadable" means at its own
+// directory, since that reading is only justified where a pre-phase
+// manifest could genuinely exist (code review CR-01, 05-REVIEW.md):
+// Claude's own directory, and the shared `.agents/skills/codegraph`
+// directory reached through D-17's symlink-aware path, where "assume
+// Claude" avoids a later uninstall deleting a package Claude still
+// legitimately owns out from under it. A harness-exclusive directory
+// (Gemini, Kiro, Antigravity) Claude never wrote to under any schema has
+// no such ambiguity, so its caller passes a fallback that self-heals to
+// the actual requester instead of inventing Claude as a phantom co-owner
+// that can never legitimately relinquish ownership. An absent manifest
+// (present == false) has no requesters at all — there is nothing to own.
+// Only a present manifest that already carries a Targets field returns
+// that set, copied so a caller mutating the returned slice can never
+// corrupt the manifest's own backing array.
+func manifestRequesters(m skillManifest, present bool, readErr error, unreadableFallback []TargetID) []TargetID {
+	if readErr != nil {
+		return unreadableFallback
+	}
+	if !present {
+		return nil
+	}
+	if m.Targets == nil {
+		return unreadableFallback
+	}
+	out := make([]TargetID, len(m.Targets))
+	copy(out, m.Targets)
+	return out
+}
+
+// targetSetEqual reports whether a and b contain the same TargetIDs,
+// ignoring order and duplicate count (D-07: targets is written in
+// first-install order but compared as a SET, so a re-run in any install
+// order is a byte-level no-op).
+func targetSetEqual(a, b []TargetID) bool {
+	setA := make(map[TargetID]bool, len(a))
+	for _, t := range a {
+		setA[t] = true
+	}
+	setB := make(map[TargetID]bool, len(b))
+	for _, t := range b {
+		setB[t] = true
+	}
+	if len(setA) != len(setB) {
+		return false
+	}
+	for t := range setA {
+		if !setB[t] {
+			return false
+		}
+	}
+	return true
 }
 
 // hashContent returns "sha256:" followed by the lowercase hex encoding of
@@ -78,6 +163,29 @@ func hashOwnedHookBlocks(blocks []any) (string, error) {
 		return "", err
 	}
 	return hashContent(data), nil
+}
+
+// preToolNudgeRecorded reports whether Claude's manifest at loc records
+// the PreToolUse opt-in (D-10): recorded is true when either PreToolUse key
+// is present in Files. An absent manifest is (false, true) — readable, and
+// simply not opted in. A manifest that exists but cannot be read or
+// decoded is (false, false): the caller cannot tell an opted-in location
+// from one that is not, so it must neither refresh nor remove anything.
+func preToolNudgeRecorded(loc Location) (recorded, readable bool) {
+	path, err := claudeManifestPath(loc)
+	if err != nil {
+		return false, false
+	}
+	m, present, err := readManifest(path)
+	if err != nil {
+		return false, false
+	}
+	if !present {
+		return false, true
+	}
+	_, guard := m.Files[manifestKeyPreToolGuard]
+	_, frag := m.Files[manifestKeyPreToolFrag]
+	return guard || frag, true
 }
 
 // readManifest parses path as a skillManifest, distinguishing three
@@ -144,7 +252,8 @@ func writeManifest(path string, m skillManifest) (FileResult, error) {
 		existing.SchemaVersion == m.SchemaVersion &&
 		existing.CodegraphVersion == m.CodegraphVersion &&
 		existing.Location == m.Location &&
-		stringMapEqual(existing.Files, m.Files) {
+		stringMapEqual(existing.Files, m.Files) &&
+		targetSetEqual(existing.Targets, m.Targets) {
 		return FileResult{Path: path, Action: ActionUnchanged}, nil
 	}
 
@@ -164,20 +273,39 @@ func writeManifest(path string, m skillManifest) (FileResult, error) {
 }
 
 // ConfiguredSkillLocations reports every location that carries evidence of
-// a prior codegraph install for id — a readable manifest, OR one that
-// exists but failed to parse — by probing the two fixed candidate
-// manifest paths, never by walking the filesystem. A present-but-corrupted
-// manifest is proof the location was configured before, exactly as much
-// proof as a readable one; excluding it would let a corrupted manifest
-// silently drop that location from every future `codegraph upgrade`
-// refresh with no warning anywhere (code review WR-04), even though
-// writeManifest self-heals a corrupted manifest the moment Install() next
-// runs there. Only a genuinely absent manifest (no error, not present)
-// means "never configured" and is excluded. Exported because Plan 04's
-// CLI-layer upgrade refresh needs it. Returns nil for any target id other
-// than Claude, since this phase is Claude-only by scope: discovery is two
-// stat calls for a phase deliberately narrowed to one agent, and anything
-// more general is unneeded generality here.
+// a prior codegraph install FOR id — a readable manifest naming id among
+// its requesters, OR one that exists but failed to parse — by probing the
+// two fixed candidate manifest paths, never by walking the filesystem.
+//
+// D-17 changed what "a manifest exists at Claude's path" can mean: since a
+// symlinked shared skill directory makes Claude's path and another
+// target's shared directory the SAME physical file, a manifest can now
+// exist there because Cursor or opencode alone requested the shared
+// package — proof that THOSE agents were configured, not proof Claude
+// was. `codegraph upgrade`'s refresh step must never install Claude at a
+// location the user never asked it to configure (T-05-13), so manifest
+// presence alone is no longer sufficient: id must actually be among the
+// manifest's requesters (manifestRequesters).
+//
+// A present-but-corrupted manifest is still proof the location was
+// configured before, exactly as much proof as a readable one naming id —
+// excluding it would let a corrupted manifest silently drop that location
+// from every future refresh with no warning anywhere (code review WR-04),
+// even though writeManifest self-heals a corrupted manifest the moment
+// Install() next runs there. A legacy manifest (schema_version 1, no
+// targets key) reads as owned by [Claude] via manifestRequesters' D-07
+// rule, so it is included too — both are read-error/nil-Targets cases
+// manifestRequesters already folds into "assume Claude," and this
+// function trusts that folding rather than re-deriving it. Only a
+// genuinely absent manifest (no error, not present), or one present and
+// decodable but naming OTHER requesters without id, means "never
+// configured for id" and is excluded.
+//
+// Exported because Plan 04's CLI-layer upgrade refresh needs it. Returns
+// nil for any target id other than Claude, since this phase is
+// Claude-only by scope: discovery is two stat calls for a phase
+// deliberately narrowed to one agent, and anything more general is
+// unneeded generality here.
 func ConfiguredSkillLocations(id TargetID) []Location {
 	if id != Claude {
 		return nil
@@ -188,11 +316,19 @@ func ConfiguredSkillLocations(id TargetID) []Location {
 		if err != nil {
 			continue
 		}
-		_, present, rerr := readManifest(path)
-		if rerr == nil && !present {
+		m, present, rerr := readManifest(path)
+		if rerr != nil {
+			// WR-04: unreadable/corrupt is still proof of a prior
+			// configuration — never silently dropped.
+			locs = append(locs, loc)
 			continue
 		}
-		locs = append(locs, loc)
+		if !present {
+			continue
+		}
+		if containsTarget(manifestRequesters(m, present, rerr, []TargetID{Claude}), id) {
+			locs = append(locs, loc)
+		}
 	}
 	return locs
 }

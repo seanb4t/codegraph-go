@@ -14,7 +14,8 @@ func TestSanitizeControl(t *testing.T) {
 		{"strips ESC (ANSI SGR injection)", "a\x1b[31mred\x1b[0m", "a[31mred[0m"},
 		{"strips OSC introducer, keeps printable payload", "file\x1b]0;pwned\x07.go", "file]0;pwned.go"},
 		{"strips embedded newline", "line1\nline2", "line1line2"},
-		{"strips tab and CR", "a\tb\rc", "abc"},
+		{"strips CR, keeps tab (CR-02: a bare tab cannot start an escape sequence)", "a\tb\rc", "a\tbc"},
+		{"keeps leading tab indentation", "\treturn helper()", "\treturn helper()"},
 		{"strips DEL", "a\x7fb\u009bc", "abc"},
 	}
 	for _, tt := range tests {

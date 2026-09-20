@@ -1,0 +1,11 @@
+This build of codegraph collects zero telemetry: there is no passive
+or background phone-home code anywhere in this binary.
+
+The one intentional exception is "codegraph upgrade": an explicit,
+user-initiated network request to the project's GitHub Releases,
+made only when you run that command. No other command opens a
+network connection.
+
+Verify this yourself: the SBOM lists every dependency shipped in
+this binary, and the source is public — audit it for outbound
+connections outside the upgrade command's package.

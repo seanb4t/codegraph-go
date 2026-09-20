@@ -11,20 +11,23 @@ const (
 )
 
 // codegraphInstructionsBlock is the short marker-fenced pointer block
-// install injects into the 4 of 8 agent targets that get an instructions
-// file (Claude, Codex, opencode, Gemini — see the 06-RESEARCH.md
-// per-agent install-coverage table). It points agents at codegraph_explore
-// / `codegraph explore` and, generically, at resources/list for the
+// install injects into the 4 of 8 agent targets that declare an
+// instructions file (Claude, Codex, opencode, Gemini — see the
+// 06-RESEARCH.md per-agent install-coverage table). Codex and opencode
+// share this same repo-root AGENTS.md at local scope, gated by
+// instructionsRequestedElsewhere (D-11) so uninstall never strips it out
+// from under the other. It points agents at codegraph_explore /
+// `codegraph explore` and, generically, at resources/list for the
 // per-tool reference — this is deliberately SHORT, not the old full
 // playbook TS removed in #529/#704.
 //
-// It names no skill and no skill file, on purpose: only Claude Code
-// receives the embedded skill package (Phase 7, AGENT-01, v1-scoped),
-// while Codex, opencode and Gemini get this identical shared block and
-// never receive one. The wire-level instructions const in
-// internal/mcp/server.go scopes its own skill sentence to Claude Code for
-// the same reason — see 08-RESEARCH.md Pitfall 1 for why the two surfaces
-// deliberately diverge on that one point.
+// It names no skill and no skill file, on purpose: the block text is
+// frozen (D-01a) so no user's already-installed block is ever rewritten
+// just because the skill's own reach changed. The skill package now
+// reaches 7 of the 8 registered targets — every target but Hermes, which
+// has no skill mechanism at either scope (D-29, docs/AGENT-CAPABILITIES.md)
+// — and is announced elsewhere, by the wire-level instructions const in
+// internal/mcp/server.go, not by this block.
 // TestInstructionsBlockNamesOnlyShippedCapabilities holds this property.
 const codegraphInstructionsBlock = codegraphSectionStart + `
 ## CodeGraph

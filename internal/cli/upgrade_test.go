@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/agents"
 	"github.com/seanb4t/codegraph-go/internal/upgrade"
 )
 
@@ -316,5 +317,134 @@ func TestUpgradeCommand_SwapFailureReturnsSwapError(t *testing.T) {
 	_, _, err := execCmd("upgrade")
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("upgrade error = %v, want sentinel %v via errors.Is", err, sentinel)
+	}
+}
+
+// TestRefreshInstalledSkills_CarriesPreToolNudge: upgrade's refresh passes
+// PreToolNudgeKeep (D-10), so an opted-in location's guard is re-rendered
+// for the new binary and a location that never opted in gains nothing.
+func TestRefreshInstalledSkills_CarriesPreToolNudge(t *testing.T) {
+	t.Run("opted_in_refreshed", func(t *testing.T) {
+		home := fakeHome(t)
+		if _, _, err := execCmd("install", "--target", "claude", "--location", "global", "--pretool-nudge"); err != nil {
+			t.Fatalf("install --pretool-nudge: %v", err)
+		}
+
+		if err := refreshInstalledSkills("/opt/new/codegraph", io.Discard); err != nil {
+			t.Fatalf("refreshInstalledSkills: %v", err)
+		}
+
+		guard := readFileString(t, filepath.Join(home, ".claude", "hooks", "pretooluse-nudge.sh"))
+		if !strings.Contains(guard, "codegraph_bin='/opt/new/codegraph'") {
+			t.Fatalf("the refreshed guard does not point at the new binary:\n%s", guard)
+		}
+		hooks, _ := readJSONMap(t, filepath.Join(home, ".claude", "settings.json"))["hooks"].(map[string]any)
+		if _, ok := hooks["PreToolUse"]; !ok {
+			t.Fatalf("refresh dropped hooks.PreToolUse at an opted-in location")
+		}
+	})
+
+	t.Run("never_opted_not_added", func(t *testing.T) {
+		home := fakeHome(t)
+		if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+			t.Fatalf("plain install: %v", err)
+		}
+
+		if err := refreshInstalledSkills("/opt/new/codegraph", io.Discard); err != nil {
+			t.Fatalf("refreshInstalledSkills: %v", err)
+		}
+
+		if _, err := os.Stat(filepath.Join(home, ".claude", "hooks", "pretooluse-nudge.sh")); !os.IsNotExist(err) {
+			t.Fatalf("refresh added the guard at a location that never opted in (stat err %v)", err)
+		}
+		hooks, _ := readJSONMap(t, filepath.Join(home, ".claude", "settings.json"))["hooks"].(map[string]any)
+		if _, ok := hooks["PreToolUse"]; ok {
+			t.Fatalf("refresh added hooks.PreToolUse at a location that never opted in")
+		}
+		if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); err != nil {
+			t.Fatalf("positive control: refresh did not touch the configured location: %v", err)
+		}
+	})
+}
+
+// TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation
+// pins CR-01's residual gap (06-REVIEW.md), deliberately left unresolved by
+// the CR-01 fix in internal/agents (preToolNudgeEvidenced): when Claude's
+// skill directory is a symlinked shared directory holding pre-existing
+// foreign, unmanifested content (D-14), Claude's manifest step never runs
+// there under ANY PreToolNudge mode — there is no manifest codegraph is
+// permitted to write into that directory. agents.ConfiguredSkillLocations
+// discovers a location purely through manifest presence — its own
+// documented, separately-pinned contract (internal/agents'
+// TestConfiguredSkillLocations_* suite) — so upgrade's refresh loop, which
+// iterates only that list, can never reach this location, even though the
+// guard and its settings.json registration are present and evidenced.
+//
+// This is intentionally NOT fixed by widening ConfiguredSkillLocations
+// itself: that function has several other pinned callers/tests asserting
+// manifest-only discovery, and widening its general contract to
+// Claude-and-PreToolUse-specific settings.json evidence was judged a
+// disproportionate blast radius for a gap whose existing, documented
+// recovery already works — a direct `codegraph install` run FROM the
+// affected location (proven below via the exported AgentTarget.Install
+// path exactly as refreshInstalledSkills itself calls it) still refreshes
+// the guard correctly, and `codegraph upgrade`'s own warning path already
+// names that exact recovery command when a refresh problem is suspected.
+func TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation(t *testing.T) {
+	home := fakeHome(t)
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills", "codegraph"), 0o755); err != nil {
+		t.Fatalf("mkdir shared skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".agents", "skills", "codegraph", "SKILL.md"), []byte("# foreign, never written by codegraph\n"), 0o644); err != nil {
+		t.Fatalf("seed foreign content: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".claude", "skills"), 0o755); err != nil {
+		t.Fatalf("mkdir .claude/skills: %v", err)
+	}
+	if err := os.Symlink(filepath.Join("..", "..", ".agents", "skills", "codegraph"), filepath.Join(home, ".claude", "skills", "codegraph")); err != nil {
+		t.Fatalf("symlink claude skill dir: %v", err)
+	}
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global", "--pretool-nudge"); err != nil {
+		t.Fatalf("install --pretool-nudge: %v", err)
+	}
+	guardPath := filepath.Join(home, ".claude", "hooks", "pretooluse-nudge.sh")
+	if _, err := os.Stat(guardPath); err != nil {
+		t.Fatalf("precondition: guard was not written despite the foreign skill dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "codegraph", ".codegraph-manifest.json")); !os.IsNotExist(err) {
+		t.Fatalf("precondition broken: a manifest exists despite foreign content — this test no longer isolates the gap")
+	}
+
+	// The gap: ConfiguredSkillLocations-driven refresh cannot discover this
+	// location, so it leaves the guard untouched for a new binary path.
+	if err := refreshInstalledSkills("/opt/new/codegraph", io.Discard); err != nil {
+		t.Fatalf("refreshInstalledSkills: %v", err)
+	}
+	afterBlindRefresh := readFileString(t, guardPath)
+	if strings.Contains(afterBlindRefresh, "opt/new/codegraph") {
+		t.Fatal("refreshInstalledSkills unexpectedly reached the foreign-skill-dir location; the accepted-limitation premise this test pins no longer holds — update this test and 06-REVIEW-FIX.md")
+	}
+
+	// The documented recovery: calling Install directly for the location
+	// (exactly what a plain `codegraph install` run from there does) DOES
+	// refresh it, because preToolNudgeEvidenced widens "recorded" to
+	// settings.json's own registration (CR-01's actual fix).
+	targets, err := agents.ResolveTargetFlag(string(agents.Claude), agents.LocationGlobal)
+	if err != nil {
+		t.Fatalf("ResolveTargetFlag: %v", err)
+	}
+	for _, tg := range targets {
+		result := tg.Install(agents.LocationGlobal, agents.InstallOptions{
+			ExecPath:     "/opt/new/codegraph",
+			PreToolNudge: agents.PreToolNudgeKeep,
+		})
+		if len(result.Errors) != 0 {
+			t.Fatalf("recovery Install returned errors: %v", result.Errors)
+		}
+	}
+	afterRecovery := readFileString(t, guardPath)
+	if !strings.Contains(afterRecovery, "opt/new/codegraph") {
+		t.Fatalf("a direct Keep install did not refresh the guard for the new binary despite CR-01's fix; guard:\n%s", afterRecovery)
 	}
 }

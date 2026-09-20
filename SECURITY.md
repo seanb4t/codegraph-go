@@ -71,6 +71,10 @@ What this project defends against:
   (for example, a `shadcn-svelte add`-style copy-in) does not appear in that
   lockfile at all and is invisible to this scan — see the vendored-component
   gap noted below.
+  `govulncheck` blocks merges on the main module graph only; the build tools
+  pinned in the isolated tool modfiles (`go.tool*.mod`) are scanned
+  separately by the advisory `tool-vuln` job in `ci.yml`, which reports
+  findings and never fails the build.
 
 What it does **not** defend against, stated plainly:
 

@@ -1,0 +1,2 @@
+Installed git post-commit, post-merge, post-checkout hooks — the index refreshes in the background after each.
+Run `codegraph sync` anytime to refresh immediately.

@@ -246,10 +246,17 @@ class FakeCore {
 		return this.on(event, handler);
 	}
 	layout(_opts: unknown) {
+		// CR-01 fix: production code registers 'layoutstop' on THIS layout
+		// instance (via `.one()` below), not on the fake's own `cy`-level
+		// `this.listeners` map — track it locally per instance to match.
+		const layoutstopListeners: Array<() => void> = [];
 		return {
+			one(event: string, handler: () => void) {
+				if (event === 'layoutstop') layoutstopListeners.push(handler);
+			},
 			run: () => {
 				queueMicrotask(() => {
-					for (const h of this.listeners.get('layoutstop') ?? []) h();
+					for (const h of layoutstopListeners.splice(0)) h();
 				});
 			}
 		};
@@ -270,7 +277,11 @@ class FakeCore {
 		};
 	}
 	edges() {
-		return { length: this.elements.filter((e) => 'source' in e.data).length };
+		return {
+			length: this.elements.filter((e) => 'source' in e.data).length,
+			style: () => {},
+			removeStyle: () => {}
+		};
 	}
 	collection() {
 		return new FakeCollection([]);

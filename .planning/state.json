@@ -1,36 +1,41 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.13.0 — Guard Hardening & UI Follow-through",
+  "milestone": "v0.14.0 — Polish & Agent Reach",
   "phases": [
     {
+      "number": "1",
+      "name": "Defect & Flake Burn-down",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Guards, CI Wiring & Docs Burn-down",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Verb Fold",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "CLI Glow-up",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Agent Reach — Capability Model & Skill in Every Harness",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Claude Code PreToolUse Nudge",
+      "status": "complete"
+    },
+    {
       "number": "7",
-      "name": "Guards That Cannot Fire",
-      "status": "complete"
-    },
-    {
-      "number": "8",
-      "name": "tmux Real-PTY Harness",
-      "status": "complete"
-    },
-    {
-      "number": "9",
-      "name": "Source View Follow-Through — Breadcrumb & Editor Handoff",
-      "status": "complete"
-    },
-    {
-      "number": "10",
-      "name": "Index Health — The Coverage Denominator",
-      "status": "complete"
-    },
-    {
-      "number": "11",
-      "name": "Graph View — Community Clustering",
-      "status": "complete"
-    },
-    {
-      "number": "12",
-      "name": "CLI Reference & Docs Tail",
+      "name": "Codex Parity",
       "status": "complete"
     }
   ],
@@ -39,5 +44,5 @@
     "label": "Show progress",
     "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-13T22:47:12.589Z"
+  "updated_at": "2026-09-20T05:34:36.210Z"
 }

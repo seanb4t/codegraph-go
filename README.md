@@ -126,6 +126,9 @@ CODEGRAPH_MCP_TOOLS= codegraph serve --mcp              # explore alone
 list means something else entirely: this repo has no index yet, so run
 `codegraph init`.
 
+See [`docs/AGENT-CAPABILITIES.md`](docs/AGENT-CAPABILITIES.md) for what each supported agent
+receives at each scope (MCP config, instructions, skill, hooks).
+
 ## Commands
 
 | | |

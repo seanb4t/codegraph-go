@@ -17,9 +17,57 @@ func init() {
 	registerTarget(geminiTarget{})
 }
 
-func (geminiTarget) ID() TargetID                   { return Gemini }
-func (geminiTarget) DisplayName() string            { return "Gemini CLI" }
-func (geminiTarget) SupportsLocation(Location) bool { return true }
+func (geminiTarget) ID() TargetID        { return Gemini }
+func (geminiTarget) DisplayName() string { return "Gemini CLI" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t geminiTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
+
+// Capabilities is Gemini's capability table entry (D-01, D-02): both
+// scopes, JSON config, no hooks, and geminiSkillDirs for its skill
+// directory (AGENT-10, D-06 correction (a)).
+func (geminiTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksNone,
+		MCPConfig:    geminiConfigPath,
+		Instructions: geminiInstructionsPath,
+		SkillDirs:    geminiSkillDirs,
+	}
+}
+
+// geminiSkillDirs resolves Gemini CLI's skill directories (AGENT-10, D-06
+// correction (a); [CITED: raw.githubusercontent.com/google-gemini/
+// gemini-cli/main/docs/cli/skills.md, fetched 2026-09-18]): index 0 — the
+// harness-specific `.gemini/skills/codegraph/` directory AGENT-10 names —
+// is the one this target WRITES via installDeclaredSkill/
+// uninstallDeclaredSkill; index 1, the shared `.agents/skills/codegraph/`
+// alias, is a DOCUMENTED READ PATH ONLY, never written here. Per the cited
+// docs, Gemini CLI reads both at the same tier and the `.agents/skills/`
+// alias actually outranks `.gemini/skills/` on a name collision within a
+// tier — so a coexisting shared package (written by Cursor/opencode, same
+// embedded content) is harmless: Gemini's own same-tier precedence makes
+// the duplicate a silent no-op, never a conflict.
+func geminiSkillDirs(loc Location) ([]string, error) {
+	var harnessDir string
+	if loc == LocationLocal {
+		harnessDir = filepath.Join(".gemini", "skills", "codegraph")
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		harnessDir = filepath.Join(home, ".gemini", "skills", "codegraph")
+	}
+	shared, err := sharedSkillDirPath(loc)
+	if err != nil {
+		return nil, err
+	}
+	return []string{harnessDir, shared}, nil
+}
 
 func geminiConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
@@ -45,8 +93,13 @@ func geminiInstructionsPath(loc Location) (string, error) {
 	return filepath.Join(home, ".gemini", "GEMINI.md"), nil
 }
 
-func (geminiTarget) Detect(loc Location) DetectionResult {
-	configPath, err := geminiConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t geminiTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
@@ -61,7 +114,7 @@ func (geminiTarget) Detect(loc Location) DetectionResult {
 	}
 }
 
-func (geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
+func (t geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
 	if configPath, err := geminiConfigPath(loc); err != nil {
@@ -80,10 +133,12 @@ func (geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		recordFile(&result, instrPath, fr, err)
 	}
 
+	installDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
-func (geminiTarget) Uninstall(loc Location) WriteResult {
+func (t geminiTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 
 	if configPath, err := geminiConfigPath(loc); err != nil {
@@ -100,16 +155,12 @@ func (geminiTarget) Uninstall(loc Location) WriteResult {
 		recordAction(&result, instrPath, action, err)
 	}
 
+	uninstallDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
-func (geminiTarget) DescribePaths(loc Location) []string {
-	var paths []string
-	if p, err := geminiConfigPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := geminiInstructionsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t geminiTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

@@ -1,0 +1,71 @@
+**Exploration: Alpha**
+
+Found 2 symbols across 2 files.
+
+**Blast radius — what depends on these (update/verify before editing)**
+
+- `Alpha` (pkga/pkga.go:13) — 1 caller in `pkga/pkga.go`; ⚠️ no covering tests found
+- `Run` (pkgb/pkgb.go:8) — 1 caller in `pkgb/pkgb.go`; ⚠️ no covering tests found
+
+**Source Code**
+
+> The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.
+
+**`pkga/pkga.go`** — Alpha(function)
+
+```go
+1	// Package pkga exercises the constructs the extractor/resolver must handle:
+2	// exported/unexported functions, intra-package calls, value/pointer
+3	// receiver methods, constants, and package-level variables.
+4	package pkga
+5	
+6	// Version is the fixture package's exported constant.
+7	const Version = "1"
+8	
+9	// Registry is an exported package-level variable.
+10	var Registry = map[string]int{}
+11	
+12	// Alpha is an exported function that calls the unexported helper.
+13	func Alpha() int {
+14		return helper()
+15	}
+16	
+17	// helper is an unexported function called intra-package by Alpha.
+18	func helper() int {
+19		return 1
+20	}
+21	
+22	// Widget is an exported struct with both a value-receiver and a
+23	// pointer-receiver method.
+24	type Widget struct {
+25		Name string
+26	}
+27	
+28	// Describe is a value-receiver method.
+29	func (w Widget) Describe() string {
+30		return w.Name
+31	}
+32	
+33	// Rename is a pointer-receiver method.
+34	func (w *Widget) Rename(n string) {
+35		w.Name = n
+36	}
+```
+
+**`pkgb/pkgb.go`** — Run(function)
+
+```go
+1	// Package pkgb exercises a cross-package qualified call into pkga.
+2	package pkgb
+3	
+4	import "example.com/gofixture/pkga"
+5	
+6	// Run calls pkga.Alpha (cross-package qualified call) and constructs a
+7	// pkga.Widget literal before calling its value-receiver method.
+8	func Run() {
+9		_ = pkga.Alpha()
+10		w := pkga.Widget{}
+11		_ = w.Describe()
+12	}
+```
+

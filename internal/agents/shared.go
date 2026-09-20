@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
@@ -171,6 +172,52 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 	return out, true, nil
 }
 
+// blockOwnsAnyCommand reports whether block's own hooks[] sub-array
+// contains any command in ownCommands — the single ownership-identity test
+// writeHookEntry's isOwned call site, removeHookEntry's isOwnCommand
+// closure, and hasOwnHookBlock all apply (code review WR-02, 06-REVIEW.md:
+// three independent copies of this rule were kept in sync only by
+// TestOwnershipExactIdentity and developer discipline, not by the
+// compiler). Ownership keys on exact hooks[i]["command"] string equality
+// against ownCommands, ignoring matcher, if, and any other field — a block
+// that fails to cast to map[string]any, or whose "hooks" key fails to cast
+// to []any, is never owned.
+func blockOwnsAnyCommand(block any, ownCommands []string) bool {
+	obj, ok := block.(map[string]any)
+	if !ok {
+		return false
+	}
+	blockHooks, ok := obj["hooks"].([]any)
+	if !ok {
+		return false
+	}
+	for _, h := range blockHooks {
+		hObj, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		cmd, _ := hObj["command"].(string)
+		if commandIsOwned(cmd, ownCommands) {
+			return true
+		}
+	}
+	return false
+}
+
+// commandIsOwned reports whether cmd exactly matches one of ownCommands —
+// the single hook-level identity check blockOwnsAnyCommand (and, through
+// it, writeHookEntry's isOwned call site and hasOwnHookBlock) and
+// removeHookEntry's isOwnCommand closure both reduce to (WR-02,
+// 06-REVIEW.md).
+func commandIsOwned(cmd string, ownCommands []string) bool {
+	for _, own := range ownCommands {
+		if cmd == own {
+			return true
+		}
+	}
+	return false
+}
+
 // writeHookEntry is the array-scoped analog of writeMcpEntry for
 // hooks.<event>, an array of independent {matcher, hooks[]} blocks rather
 // than a single named map key (RESEARCH Pitfall 1). It reads path via
@@ -195,10 +242,17 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 // acceptable trade to avoid it.
 //
 // If the owned partition already jsonDeepEquals the normalized ownBlocks,
-// nothing is written (ActionUnchanged); otherwise the array is rebuilt as
-// the unowned blocks in their original relative order followed by
-// ownBlocks. Every unrelated event key and every unowned block under the
-// same event is carried through untouched.
+// nothing is written (ActionUnchanged). Otherwise the array is rebuilt: if
+// an owned block already existed, ownBlocks is spliced back in at the
+// index its first owned block originally occupied among the unowned
+// blocks, preserving the position of any foreign block that already
+// followed it (WR-01, 07-REVIEW.md) — Codex's hook trust is keyed on
+// array position, so leapfrogging an untouched foreign block to a new
+// index spuriously re-flags it for review. Only a genuine first install —
+// no owned block existed before this call — appends ownBlocks after every
+// existing block, preserving D-23's "codegraph's group is appended last on
+// first install" guarantee. Every unrelated event key and every unowned
+// block under the same event is carried through untouched.
 func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
 	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
@@ -211,33 +265,13 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 	}
 	events, _ := hooks[event].([]any)
 
-	isOwned := func(block any) bool {
-		obj, ok := block.(map[string]any)
-		if !ok {
-			return false
-		}
-		blockHooks, ok := obj["hooks"].([]any)
-		if !ok {
-			return false
-		}
-		for _, h := range blockHooks {
-			hObj, ok := h.(map[string]any)
-			if !ok {
-				continue
-			}
-			cmd, _ := hObj["command"].(string)
-			for _, own := range ownCommands {
-				if cmd == own {
-					return true
-				}
-			}
-		}
-		return false
-	}
-
 	var owned, unowned []any
+	ownedInsertAt := -1
 	for _, b := range events {
-		if isOwned(b) {
+		if blockOwnsAnyCommand(b, ownCommands) {
+			if ownedInsertAt == -1 {
+				ownedInsertAt = len(unowned)
+			}
 			owned = append(owned, b)
 		} else {
 			unowned = append(unowned, b)
@@ -254,7 +288,15 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 		return FileResult{Path: path, Action: ActionUnchanged}, nil
 	}
 
-	newEvents := append(append([]any{}, unowned...), normalizedOwn...)
+	var newEvents []any
+	if ownedInsertAt == -1 {
+		// First install: no owned block existed to preserve the position
+		// of, so codegraph's group goes after every existing block (D-23).
+		newEvents = append(append([]any{}, unowned...), normalizedOwn...)
+	} else {
+		newEvents = append(append([]any{}, unowned[:ownedInsertAt]...), normalizedOwn...)
+		newEvents = append(newEvents, unowned[ownedInsertAt:]...)
+	}
 	hooks[event] = newEvents
 	existing["hooks"] = hooks
 
@@ -379,12 +421,7 @@ func removeHookEntry(path, event string, ownCommands []string) (FileResult, erro
 	}
 
 	isOwnCommand := func(cmd string) bool {
-		for _, own := range ownCommands {
-			if cmd == own {
-				return true
-			}
-		}
-		return false
+		return commandIsOwned(cmd, ownCommands)
 	}
 
 	var anyRemoved bool
@@ -461,6 +498,41 @@ func removeHookEntry(path, event string, ownCommands []string) (FileResult, erro
 	return FileResult{Path: path, Action: ActionRemoved}, nil
 }
 
+// hasOwnHookBlock is a READ-ONLY probe over hooks.<event>, used by callers
+// that need to know whether codegraph's own registration is already present
+// without writing or removing anything (code review CR-01, 06-REVIEW.md:
+// the PreToolUse opt-in can be evidenced by settings.json even when the
+// manifest never recorded it, e.g. a foreign/unmanifested D-14 skill
+// directory). Ownership is determined by blockOwnsAnyCommand, the same
+// command-string identity test writeHookEntry's own isOwned call site and
+// removeHookEntry's own isOwnCommand closure reduce to (WR-02, 06-REVIEW.md
+// — this used to be a third independent duplicate of the identity rule,
+// kept in sync only by TestOwnershipExactIdentity and developer discipline;
+// it is now the same code path the compiler enforces). A malformed or
+// unreadable file surfaces its error unwritten, exactly like
+// readJSONFileStrict's other callers; a missing file, missing hooks
+// object, or missing event key is (false, nil), never an error.
+func hasOwnHookBlock(path, event string, ownCommands []string) (bool, error) {
+	existing, present, err := readJSONFileStrict(path)
+	if err != nil {
+		return false, err
+	}
+	if !present {
+		return false, nil
+	}
+	hooks, _ := existing["hooks"].(map[string]any)
+	if hooks == nil {
+		return false, nil
+	}
+	events, _ := hooks[event].([]any)
+	for _, b := range events {
+		if blockOwnsAnyCommand(b, ownCommands) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // removeEmbeddedFile removes path if it exists, reporting ActionRemoved.
 // Reports ActionNotFound (never an error) when path does not exist,
 // matching the pre-existing D-08 invariant; any other os.Remove error is
@@ -487,7 +559,26 @@ func removeEmbeddedFile(path string) (FileResult, error) {
 // codegraph-named but not codegraph-exclusive, and losing a user's file
 // there is irreversible while leaving an empty directory behind is not
 // (this plan's must_haves.prohibitions).
+//
+// D-17 / RESEARCH Pitfall 2: dir may be a symlink a user manages
+// themselves — e.g. a `npx skills`-style
+// `~/.claude/skills/codegraph -> ../../.agents/skills/codegraph` link.
+// os.Remove on a symlink unlinks the LINK regardless of whether its
+// TARGET is empty (unlike a plain directory, whose removal genuinely
+// requires emptiness), so calling it here would silently destroy
+// user-owned structure this package does not own, breaking that link for
+// good the moment codegraph's own last requester leaves. Checking
+// os.Lstat first and returning early restores "only when empty" for the
+// case it was always meant to cover — removing a plain directory — without
+// changing D-08's semantics: a symlinked directory's package removal is
+// still correct (the writer functions operate on the manifest/SKILL.md
+// through the link, which the OS resolves transparently), only the
+// directory-empty SWEEP is skipped for a link, exactly as it already is
+// for a non-empty plain directory.
 func removeSkillDirIfEmpty(dir string) error {
+	if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
 	err := os.Remove(dir)
 	if err == nil || os.IsNotExist(err) {
 		return nil
@@ -669,10 +760,14 @@ func removeMarkedSection(filePath, startMarker, endMarker string) (FileAction, e
 
 // upsertInstructionsEntry binds a marker-fenced instructions block
 // (startMarker + content + endMarker) to replaceOrAppendMarkedSection,
-// for the 4 of 8 agent targets that get an instructions file (Claude,
-// Codex, opencode, Gemini). Marker text and block content are passed in
-// by the caller rather than imported from instructions.go, keeping this
-// helper agnostic of the specific codegraph marker constants.
+// for the 4 of 8 agent targets that declare an instructions file (Claude,
+// Codex, opencode, Gemini). Codex and opencode share the repo-root
+// AGENTS.md at local scope, which is why every uninstall on that path must
+// check instructionsRequestedElsewhere (D-11) before removing the marked
+// section — the other target sharing that file may still need it. Marker
+// text and block content are passed in by the caller rather than imported
+// from instructions.go, keeping this helper agnostic of the specific
+// codegraph marker constants.
 func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (FileResult, error) {
 	body := startMarker + "\n" + content + "\n" + endMarker
 	action, err := replaceOrAppendMarkedSection(filePath, body, startMarker, endMarker)
@@ -680,6 +775,78 @@ func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (
 		return FileResult{}, err
 	}
 	return FileResult{Path: filePath, Action: action}, nil
+}
+
+// instructionsRequestedElsewhere reports which OTHER registered targets
+// (excluding self) still declare path as their own instructions file at
+// loc and report Detect(loc).AlreadyConfigured (D-11): the gate
+// codexTarget.Uninstall and opencodeTarget.Uninstall both call BEFORE
+// removeMarkedSection, so removing codegraph's marker block from a shared
+// instructions file — repo-root AGENTS.md, written by both Codex and
+// opencode at local scope — never silently degrades a still-configured
+// sibling target that reads the same file.
+//
+// The requester set is DERIVED from the registry (AllTargets()) on EVERY
+// call, never cached or stored in a manifest (07-RESEARCH "Don't Hand-
+// Roll"): a target's own Detect result already reflects the current,
+// on-disk truth, so re-deriving it here can never drift from what
+// AllTargets() actually contains.
+//
+// Both paths are resolved to their absolute, cleaned form before
+// comparison — path and every candidate target's own InstructionsPath(loc)
+// — so a relative "AGENTS.md" (the local-scope convention) still compares
+// correctly against another relative "AGENTS.md" resolved from the same
+// cwd. A target that does not support loc, declares no instructions path,
+// or whose path fails to resolve is silently skipped, exactly like every
+// other Capabilities-derived helper in this package.
+func instructionsRequestedElsewhere(path string, loc Location, self TargetID) []TargetID {
+	absPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return nil
+	}
+
+	var ids []TargetID
+	for _, t := range AllTargets() {
+		if t.ID() == self {
+			continue
+		}
+		caps := t.Capabilities()
+		if !caps.Supports(loc) {
+			continue
+		}
+		p, err := caps.InstructionsPath(loc)
+		if err != nil || p == "" {
+			continue
+		}
+		absP, err := filepath.Abs(filepath.Clean(p))
+		if err != nil || absP != absPath {
+			continue
+		}
+		if t.Detect(loc).AlreadyConfigured {
+			ids = append(ids, t.ID())
+		}
+	}
+	return ids
+}
+
+// instructionsKeptNote renders the D-11 advisory Note codexTarget.Uninstall
+// and opencodeTarget.Uninstall both append when instructionsRequestedElsewhere
+// returns a non-empty requester set: path's marker block is left in place
+// (ActionKept, never removed) because these other targets still declare it
+// and report AlreadyConfigured. Falls back to the bare TargetID string if a
+// requester is somehow no longer registered (defensive; AllTargets() and
+// GetTarget share the same registry, so this should never happen in
+// practice).
+func instructionsKeptNote(path string, others []TargetID) string {
+	names := make([]string, len(others))
+	for i, id := range others {
+		name := string(id)
+		if t, ok := GetTarget(id); ok {
+			name = t.DisplayName()
+		}
+		names[i] = name
+	}
+	return fmt.Sprintf("%s keeps its codegraph block: still used by %s", path, strings.Join(names, ", "))
 }
 
 // atomicWriteFile writes content to path via a temp file created in the

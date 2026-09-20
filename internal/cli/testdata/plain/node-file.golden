@@ -1,0 +1,38 @@
+```go
+1	// Package pkga exercises the constructs the extractor/resolver must handle:
+2	// exported/unexported functions, intra-package calls, value/pointer
+3	// receiver methods, constants, and package-level variables.
+4	package pkga
+5	
+6	// Version is the fixture package's exported constant.
+7	const Version = "1"
+8	
+9	// Registry is an exported package-level variable.
+10	var Registry = map[string]int{}
+11	
+12	// Alpha is an exported function that calls the unexported helper.
+13	func Alpha() int {
+14		return helper()
+15	}
+16	
+17	// helper is an unexported function called intra-package by Alpha.
+18	func helper() int {
+19		return 1
+20	}
+21	
+22	// Widget is an exported struct with both a value-receiver and a
+23	// pointer-receiver method.
+24	type Widget struct {
+25		Name string
+26	}
+27	
+28	// Describe is a value-receiver method.
+29	func (w Widget) Describe() string {
+30		return w.Name
+31	}
+32	
+33	// Rename is a pointer-receiver method.
+34	func (w *Widget) Rename(n string) {
+35		w.Name = n
+36	}
+```

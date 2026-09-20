@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // setupIndexedFixture copies the shared gofixture (copyFixture,
@@ -15,19 +17,26 @@ func setupIndexedFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := copyFixture(t)
+	pruneGOOSSuffixedFiles(t, dir)
 	if _, _, err := execCmd("init", dir); err != nil {
 		t.Fatalf("init fixture: unexpected error: %v", err)
 	}
 	return dir
 }
 
-func TestQueryCmd(t *testing.T) {
+// TestSearchFullCmd covers VERB-01/VERB-03's `search --full` behavior — the
+// fold target of the old TestQueryCmd, now expressed against `search --full`
+// instead of the removed `query` verb.
+func TestSearchFullCmd(t *testing.T) {
 	dir := setupIndexedFixture(t)
 
-	t.Run("--json emits the golden query.json envelope shape", func(t *testing.T) {
-		out, _, err := execCmd("query", "main", "-p", dir, "--json")
+	t.Run("--full --json emits the MarshalQueryJSON envelope", func(t *testing.T) {
+		out, _, err := execCmd("search", "main", "-p", dir, "--full", "--json")
 		if err != nil {
-			t.Fatalf("query: unexpected error: %v", err)
+			t.Fatalf("search --full --json: unexpected error: %v", err)
+		}
+		if !strings.HasPrefix(out, `[{"node":`) {
+			t.Fatalf("search --full --json: expected output to start with %q, got %q", `[{"node":`, out)
 		}
 
 		var envelopes []struct {
@@ -37,7 +46,7 @@ func TestQueryCmd(t *testing.T) {
 			} `json:"node"`
 		}
 		if err := json.Unmarshal([]byte(out), &envelopes); err != nil {
-			t.Fatalf("query --json: invalid JSON: %v\noutput: %s", err, out)
+			t.Fatalf("search --full --json: invalid JSON: %v\noutput: %s", err, out)
 		}
 		found := false
 		for _, e := range envelopes {
@@ -46,37 +55,222 @@ func TestQueryCmd(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatalf("query --json: expected a %q match, got %+v", "main", envelopes)
+			t.Fatalf("search --full --json: expected a %q match, got %+v", "main", envelopes)
 		}
 	})
 
-	t.Run("default output is human-readable, not JSON", func(t *testing.T) {
-		out, _, err := execCmd("query", "main", "-p", dir)
+	t.Run("default --json stays the Location array", func(t *testing.T) {
+		out, _, err := execCmd("search", "main", "-p", dir, "--json")
 		if err != nil {
-			t.Fatalf("query: unexpected error: %v", err)
+			t.Fatalf("search --json: unexpected error: %v", err)
 		}
-		if !strings.Contains(out, "main") {
-			t.Fatalf("query: expected output to mention %q, got %q", "main", out)
+		if !strings.HasPrefix(out, `[{"name":`) {
+			t.Fatalf("search --json: expected output to start with %q, got %q", `[{"name":`, out)
 		}
-		if strings.HasPrefix(strings.TrimSpace(out), "[") {
-			t.Fatalf("query (no --json): expected human-readable output, got JSON: %q", out)
+		if strings.Contains(out, `"node"`) {
+			t.Fatalf("search --json: expected no %q key, got %q", "node", out)
+		}
+	})
+
+	t.Run("--full human branch is two lines per hit (D-01)", func(t *testing.T) {
+		defaultOut, _, err := execCmd("search", "Alpha", "-p", dir)
+		if err != nil {
+			t.Fatalf("search Alpha: unexpected error: %v", err)
+		}
+		fullOut, _, err := execCmd("search", "Alpha", "-p", dir, "--full")
+		if err != nil {
+			t.Fatalf("search Alpha --full: unexpected error: %v", err)
+		}
+		want := defaultOut + "    Alpha  () int\n"
+		if fullOut != want {
+			t.Fatalf("search Alpha --full = %q, want %q", fullOut, want)
+		}
+	})
+
+	t.Run("empty Signature renders just the qualified name", func(t *testing.T) {
+		out, _, err := execCmd("search", "pkga", "-p", dir, "--full")
+		if err != nil {
+			t.Fatalf("search pkga --full: unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "    example.com/gofixture/pkga") {
+			t.Fatalf("search pkga --full: expected qualified-name-only line, got %q", out)
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if line != strings.TrimRight(line, " \t") {
+				t.Fatalf("search pkga --full: line has trailing whitespace: %q", line)
+			}
+		}
+	})
+
+	t.Run("non-indented lines of --full equal default output", func(t *testing.T) {
+		for _, term := range []string{"Alpha", "pkga", "helper"} {
+			defaultOut, _, err := execCmd("search", term, "-p", dir)
+			if err != nil {
+				t.Fatalf("search %s: unexpected error: %v", term, err)
+			}
+			fullOut, _, err := execCmd("search", term, "-p", dir, "--full")
+			if err != nil {
+				t.Fatalf("search %s --full: unexpected error: %v", term, err)
+			}
+			var nonIndented []string
+			for _, line := range strings.Split(fullOut, "\n") {
+				if line == "" {
+					continue
+				}
+				if !strings.HasPrefix(line, " ") {
+					nonIndented = append(nonIndented, line)
+				}
+			}
+			got := strings.Join(nonIndented, "\n")
+			if got != "" {
+				got += "\n"
+			}
+			if got != defaultOut {
+				t.Fatalf("search %s --full non-indented lines = %q, want default output %q", term, got, defaultOut)
+			}
+		}
+	})
+
+	t.Run("zero hits: --json prints [] and human prints nothing", func(t *testing.T) {
+		jsonOut, _, err := execCmd("search", "zzz-no-such-symbol", "-p", dir, "--full", "--json")
+		if err != nil {
+			t.Fatalf("search zzz --full --json: unexpected error: %v", err)
+		}
+		if strings.TrimSpace(jsonOut) != "[]" {
+			t.Fatalf("search zzz --full --json = %q, want %q", jsonOut, "[]")
+		}
+		humanOut, _, err := execCmd("search", "zzz-no-such-symbol", "-p", dir, "--full")
+		if err != nil {
+			t.Fatalf("search zzz --full: unexpected error: %v", err)
+		}
+		if humanOut != "" {
+			t.Fatalf("search zzz --full = %q, want empty", humanOut)
+		}
+		defaultJSONOut, _, err := execCmd("search", "zzz-no-such-symbol", "-p", dir, "--json")
+		if err != nil {
+			t.Fatalf("search zzz --json: unexpected error: %v", err)
+		}
+		if strings.TrimSpace(defaultJSONOut) != "[]" {
+			t.Fatalf("search zzz --json = %q, want %q", defaultJSONOut, "[]")
 		}
 	})
 
 	t.Run("--kind rejects an unknown kind", func(t *testing.T) {
-		_, _, err := execCmd("query", "main", "-p", dir, "--kind", "bogus")
+		_, _, err := execCmd("search", "main", "-p", dir, "--full", "--kind", "bogus")
 		if err == nil {
-			t.Fatal("query --kind bogus: expected an error, got nil")
+			t.Fatal("search --full --kind bogus: expected an error, got nil")
 		}
 	})
 
 	t.Run("not initialized directory errors", func(t *testing.T) {
 		fresh := t.TempDir()
-		_, _, err := execCmd("query", "main", "-p", fresh)
+		_, _, err := execCmd("search", "main", "-p", fresh, "--full")
 		if err == nil {
-			t.Fatal("query against uninitialized dir: expected an error, got nil")
+			t.Fatal("search --full against uninitialized dir: expected an error, got nil")
 		}
 	})
+}
+
+// TestRenderFullLine pins D-01's exact whitespace for the --full human
+// branch's second line: no truncation, escaping, or normalisation of the
+// QualifiedName/Signature bytes.
+func TestRenderFullLine(t *testing.T) {
+	tests := []struct {
+		name string
+		node *schema.Node
+		want string
+	}{
+		{
+			name: "signature present: qualified name and signature separated by two spaces",
+			node: &schema.Node{QualifiedName: "a.B", Signature: "(x int) error"},
+			want: "    a.B  (x int) error",
+		},
+		{
+			name: "empty signature: qualified name only",
+			node: &schema.Node{QualifiedName: "example.com/x", Signature: ""},
+			want: "    example.com/x",
+		},
+		{
+			name: "signature bytes verbatim: no truncation, escaping, or normalisation",
+			node: &schema.Node{QualifiedName: "q", Signature: "(s string) (résumé, error)"},
+			want: "    q  (s string) (résumé, error)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := renderFullLine(tt.node); got != tt.want {
+				t.Fatalf("renderFullLine(%+v) = %q, want %q", tt.node, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSearchFlagShortForms covers VERB-02/VERB-04: `search` gains `query`'s
+// short flags (-k/-l/-j alongside the existing -p), on both the default and
+// --full branches, byte-identical to their long forms.
+func TestSearchFlagShortForms(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	type flagPair struct {
+		name  string
+		long  []string
+		short []string
+	}
+	pairs := []flagPair{
+		{"kind", []string{"--kind", "function"}, []string{"-k", "function"}},
+		{"limit", []string{"--limit", "1"}, []string{"-l", "1"}},
+		{"json", []string{"--json"}, []string{"-j"}},
+		{"path", []string{"--path", dir}, []string{"-p", dir}},
+	}
+
+	modes := []struct {
+		name string
+		flag []string
+	}{
+		{"default", nil},
+		{"full", []string{"--full"}},
+	}
+
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			for _, p := range pairs {
+				t.Run(p.name, func(t *testing.T) {
+					longArgs := append([]string{"search", "main"}, mode.flag...)
+					longArgs = append(longArgs, p.long...)
+					shortArgs := append([]string{"search", "main"}, mode.flag...)
+					shortArgs = append(shortArgs, p.short...)
+					if p.name != "path" {
+						longArgs = append(longArgs, "-p", dir)
+						shortArgs = append(shortArgs, "-p", dir)
+					}
+
+					longOut, _, longErr := execCmd(longArgs...)
+					if longErr != nil {
+						t.Fatalf("long form %v: unexpected error: %v", longArgs, longErr)
+					}
+					shortOut, _, shortErr := execCmd(shortArgs...)
+					if shortErr != nil {
+						t.Fatalf("short form %v: unexpected error: %v", shortArgs, shortErr)
+					}
+					if longOut == "" {
+						t.Fatalf("long form %v: expected non-empty output", longArgs)
+					}
+					if longOut != shortOut {
+						t.Fatalf("long form %v = %q, short form %v = %q: expected byte-identical output", longArgs, longOut, shortArgs, shortOut)
+					}
+					if p.name == "json" {
+						wantPrefix := `[{"name":`
+						if mode.name == "full" {
+							wantPrefix = `[{"node":`
+						}
+						if !strings.HasPrefix(longOut, wantPrefix) {
+							t.Fatalf("mode=%s json output = %q, want prefix %q", mode.name, longOut, wantPrefix)
+						}
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestSearchCmd(t *testing.T) {

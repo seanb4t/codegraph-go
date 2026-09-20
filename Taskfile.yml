@@ -1813,6 +1813,57 @@ tasks:
       - node web/scripts/check-no-force-layout.mjs --self-test
       - node web/scripts/check-no-force-layout.mjs
 
+  check:workflow-output-delimiter:
+    desc: >-
+      D-17's local, BLOCKING, positive-controlled proof (FIX-10, GH #15) that
+      neither pull_request_target workflow's multi-line $GITHUB_OUTPUT write
+      is terminable by a fork-authored file path matching the heredoc
+      delimiter. Extracts and runs the shell block each of
+      require-issue-link.yml and pr-template-format.yml actually ships (not
+      a hand-copied duplicate), against a payload containing a path named
+      after the old fixed delimiter, and asserts the round trip is intact.
+      Runs --self-test FIRST: a harness that can no longer observe the OLD
+      fixed-delimiter form corrupting the payload, or that cannot show two
+      generated delimiters differ, must never be trusted. Not wired into
+      any workflow — CI wiring is a later phase's scope.
+    preconditions:
+      - sh: command -v openssl
+        msg: "openssl not found — both workflows and this harness's --self-test entropy check derive the per-run delimiter via openssl rand -hex 16."
+      - sh: command -v awk
+        msg: "awk not found — check-workflow-output-delimiter.sh extracts each workflow's run: body with awk, not a YAML parser dependency."
+    cmds:
+      - bash scripts/check-workflow-output-delimiter.sh --self-test
+      - bash scripts/check-workflow-output-delimiter.sh
+
+  check:graph-console:
+    desc: >-
+      D-09's permanent, self-tested, live-Chromium `/graph` console gate
+      (FIX-04/FIX-05): boots the real `./codegraph` binary, loads `/graph` on
+      this repo's own index and on the pinned guava corpus, and asserts
+      D-08's bar — zero uncaught page errors and zero console.warn/
+      console.error originating from our code — on both. Runs the script's
+      own --self-test first (a capture harness that cannot see a planted
+      console entry must never be trusted), then the real two-corpus check.
+      NOT wired into any .github/workflows/ file (D-09: guava is too heavy
+      for every CI run) — run this locally or via a manually-dispatched job.
+    preconditions:
+      - sh: command -v node
+        msg: "node not found — check:graph-console drives a real Chromium session via Playwright."
+      - sh: test -x ./codegraph
+        msg: "./codegraph not found or not executable — run `task build:release` first."
+      - sh: test -d .codegraph/store
+        msg: "no index at .codegraph/store — run `./codegraph index --force .` first."
+      - sh: |
+          REPO=google/guava
+          SHA=$(jq -r '.lockedSet[] | select(startswith("google/guava@")) | split("@")[1]' corpora/selection.json)
+          DIGEST=$(printf '%s' "$REPO" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-8)
+          if [ -n "${CODEGRAPH_CORPUS_DIR:-}" ]; then ROOT="$CODEGRAPH_CORPUS_DIR"; elif [ -n "${XDG_CACHE_HOME:-}" ]; then ROOT="$XDG_CACHE_HOME/codegraph/corpora"; else ROOT="$HOME/.cache/codegraph/corpora"; fi
+          test -d "$ROOT/${REPO/\//-}-${DIGEST}@${SHA}"
+        msg: "pinned guava corpus not fetched — run `task corpora:fetch` first."
+    cmds:
+      - node web/scripts/graph-console-check.mjs --self-test
+      - node web/scripts/graph-console-check.mjs --out corpora/graph-console-check.json
+
   check:darwin-toolchain:
     desc: >-
       Prove a native darwin host can CGo-build both release arches — the D-08

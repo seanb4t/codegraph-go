@@ -6,7 +6,9 @@ CodeGraph Go is a Go implementation of a pre-indexed code knowledge graph for co
 
 **v0.12.0 (Local Graph UI) shipped 2026-09-07.** Every consumer of the graph until now was a program — a CLI invocation or an agent over MCP. This milestone gave the graph a human face: `codegraph ui` serves a local, read-only web UI from the binary itself, so a developer can browse, visualize, query and health-check a `.codegraph/` index without going through an agent. It is deliberately a **third consumer** of `internal/query.Engine`, never a second implementation — the cross-phase integration check found no duplicated traversal logic in `internal/uiserver`, with every handler routing through one `withEngine` seam. The wire is ConnectRPC over Protobuf (maintainer directive), the app is a `pnpm`-built Svelte SPA committed and `go:embed`'d so the signed release path stays pure Go, and the whole surface binds loopback with exact-match Origin/Host validation because loopback binding alone has already been walked through by a documented CVE class. 51/51 requirements, 6/6 phases verified *and* validated, six per-phase SECURITY.md files all at `threats_open: 0`.
 
-**v0.13.0 (Guard Hardening & UI Follow-through) shipped 2026-09-13.** A deferral burn-down in two coherent sets. First, every known guard that cannot fire — this repo's own recurring defect shape is an assertion that is true but non-discriminating, so it passes whether the property holds or not (rule `84d1gfpywd`) — closed with a recorded RED demonstration each, plus the real-PTY testing gap: a tmux harness that drives the release binary in a genuine pane and gates CI on an exact executed count. Second, the four contained UI follow-ons v0.12.0 deliberately left — scroll breadcrumb and editor handoff, the coverage denominator that answers "why is my file missing", and community clustering on the graph view — all on the unchanged 16-rpc read-only wire with every proto change additive. The documentation tail became a `cobra/doc`-generated `docs/CLI-REFERENCE.md` under a drift gate plus an allowlist guard for the generator's one blind spot, after the maintainer reset that phase's scope at discuss time. 26/26 requirements, 6/6 phases verified (re-verified to canonical `passed` at close), 21 mutation families, six SECURITY.md files at `threats_open: 0`, a `verified_closeout`. Promoted and delivered backlog **999.2** and **999.4**. **Phase numbering continues from 13.**
+**v0.13.0 (Guard Hardening & UI Follow-through) shipped 2026-09-13.** A deferral burn-down in two coherent sets. First, every known guard that cannot fire — this repo's own recurring defect shape is an assertion that is true but non-discriminating, so it passes whether the property holds or not (rule `84d1gfpywd`) — closed with a recorded RED demonstration each, plus the real-PTY testing gap: a tmux harness that drives the release binary in a genuine pane and gates CI on an exact executed count. Second, the four contained UI follow-ons v0.12.0 deliberately left — scroll breadcrumb and editor handoff, the coverage denominator that answers "why is my file missing", and community clustering on the graph view — all on the unchanged 16-rpc read-only wire with every proto change additive. The documentation tail became a `cobra/doc`-generated `docs/CLI-REFERENCE.md` under a drift gate plus an allowlist guard for the generator's one blind spot, after the maintainer reset that phase's scope at discuss time. 26/26 requirements, 6/6 phases verified (re-verified to canonical `passed` at close), 21 mutation families, six SECURITY.md files at `threats_open: 0`, a `verified_closeout`. Promoted and delivered backlog **999.2** and **999.4**.
+
+**v0.14.0 (Polish & Agent Reach) shipped 2026-09-20.** Three milestones of feature work had left a ledger of small, known, individually-cheap defects that were expensive together. This milestone burned them down and, on the same pass, gave the CLI a colour-and-structure glow-up on a folded verb surface and took agent reach from Claude-Code-shaped to harness-shaped: one capability table drives install/uninstall for all 8 targets, the skill package and instructions block go wherever each harness reads them, an opt-in PreToolUse nudge serves Claude Code and Codex from one core, and Codex reached parity at both scopes — each mechanism live-verified against codex-cli 0.155.0 before any code changed. Two data-loss-class bugs surfaced and were fixed on the way: the Codex TOML splice and a terminal escape injection through install notes.
 
 **Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line reached `v0.2.0` at v1.0's close and has since advanced through `v0.3.0`, `v0.4.0`, `v0.5.0` … `v0.9.0`, plus `v0.10.0` and `v0.11.0`, each computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestone labels track the release line but carry **no git tag**: release-please remains the sole tag authority, pinned by `TestGsdTagCreationIsDisabled`. A hand-created `v*` tag would additionally match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline. The milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
 
@@ -20,7 +22,8 @@ CodeGraph Go is a Go implementation of a pre-indexed code knowledge graph for co
 - ✅ **v0.11.0 — Standalone Project Identity** — Phases 1–6 (shipped 2026-08-16) — origin acknowledged once in `NOTICE` plus one README License clause; comparison framing removed tree-wide to a proven zero; golden corpora re-selected by measurement, re-frozen from codegraph-go's own output, and re-proven non-vacuous; benchmarks published as mechanically-generated absolute numbers; `codegraph migrate` and the `modernc.org/sqlite` dependency removed (D-04); Compatibility retired as a constraint
 - ✅ **v0.12.0 — Local Graph UI** — Phases 1–6 (shipped 2026-09-07) — `codegraph ui` serves a read-only, loopback-bound, ConnectRPC-backed Svelte SPA embedded in the binary: browse and inspect symbols with verbatim source and blast radius, a deep-linkable navigation model, an interactive query workbench, a visual index-health verdict, a file/package graph view, and live push from the watcher over a server-streaming rpc on the same schema and client as every other call. Consumed SEED-001; folded in the CR-01 `pendingWriter` fix
 - ✅ **v0.13.0 — Guard Hardening & UI Follow-through** — Phases 7–12 (shipped 2026-09-13) — every known guard that cannot fire closed with a recorded RED demonstration (21 mutation families across six phases); a tmux real-PTY harness gating CI on an exact executed count; v0.12.0's four UI follow-ons (breadcrumb + editor handoff, coverage denominator, community clustering) on the unchanged 16-rpc read-only wire; `docs/CLI-REFERENCE.md` generated from the live Cobra tree under a drift gate plus an allowlist guard for hidden flags; brew-trust wording narrowed. Verified closeout after re-verifying all six phases at HEAD. Archived to `milestones/v0.13.0-*`
-- 📋 **Later** — unscoped. Candidates: v0.10.0's v2 deferrals (PreToolUse guard hook GUARD-HOOK-01/02, multi-agent skill+hooks porting AGENT-04…07), GRF-07 (opt-in whole-symbol graph — parked on the v0.12.0 Phase 5 evidence that a 3,233-node file view never converged; revisit only with a measured budget), v0.13.0's own v2 deferrals (BRW-14 nested scope-stack breadcrumb; GRD-07 `requiredCheckNames` vs the live `protect-main` ruleset and GRD-08 root `SECURITY.md`'s govulncheck claim, both *declined for this milestone* by the maintainer rather than forgotten; VOCAB-01 was *declined* at v0.11.0, not deferred), the v0.5.x deferrals (DIST-06 stapled offline-safe container, BREW-07 homebrew-core), Team Scale (central server, CI-distributed indexes), SEED-003 (markdown in the index), MRTR/elicitation (MRTR-01), annotations (embeddings/export)
+- ✅ **v0.14.0 — Polish & Agent Reach** — Phases 1–7 (shipped 2026-09-20) — every known defect, vacuous guard, flake and doc drift burned down; the verb surface folded and every human-output verb styled through `present`; the skill, capability model and an opt-in PreToolUse nudge delivered across all 8 harnesses with a published drift-tested table; Codex brought to parity at both scopes, live-verified before any `codex.go` change
+- 📋 **Later** — unscoped. Still parked: GRF-07 (opt-in whole-symbol graph — on the v0.12.0 Phase 5 evidence that a 3,233-node file view never converged; revisit only with a measured budget), Team Scale (central server, CI-distributed indexes), SEED-003 (markdown in the index), DIST-06 (stapled offline-safe container), BREW-07 (homebrew-core), MRTR-01 (elicitation), GH #23 (gsd-pi install target), GH #9 (open-gsd workflow chore), the v0.14.0 v2 deferrals (NUDGE-07…10 nudge hooks for Cursor, Kiro, Gemini CLI, opencode and Antigravity — deferred by maintainer decision 2026-09-14; AGENT-12 Hermes — no public documentation found, nothing claimed until verified by non-web means), BRW-14 (nested scope-stack breadcrumb), annotations (embeddings/export). VOCAB-01 was *declined* at v0.11.0, not deferred
 
 ## Phases
 
@@ -115,10 +118,23 @@ Archived: [`milestones/v0.13.0-ROADMAP.md`](./milestones/v0.13.0-ROADMAP.md) · 
 
 </details>
 
+<details>
+<summary>✅ v0.14.0 Polish &amp; Agent Reach (Phases 1–7) — SHIPPED 2026-09-20</summary>
+
+Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · audit: [`milestones/v0.14.0-MILESTONE-AUDIT.md`](./milestones/v0.14.0-MILESTONE-AUDIT.md) · phase directories: `milestones/v0.14.0-phases/`
+
+7 phases, 53 plans, 55/55 requirements. All phases verified, validated and security-audited (0 threats open at or above `high`). Phase numbering restarted at 1 for this milestone.
+
+</details>
+
 ## Progress
 
-**Execution Order:** no milestone is scoped. 8 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0). Phase numbering continues from 13 for the next milestone; `.planning/phases/` holds only the two `999.x` backlog directories (both consumed by v0.13.0 and kept, annotated, by the 2026-09-08 bookkeeping decision). Backlog below is preserved across the milestone close.
+8 milestones shipped through v0.13.0; **v0.14.0 shipped 2026-09-20** — 7 phases (1–7), 53 plans, 55/55 requirements,
+all phases verified, validated and security-audited. Per-phase detail lives in the archive
+([`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md)) and the audit
+([`milestones/v0.14.0-MILESTONE-AUDIT.md`](./milestones/v0.14.0-MILESTONE-AUDIT.md)).
 
+No milestone is currently scoped. Start the next one with `/gsd-new-milestone`.
 
 ## Backlog
 
@@ -145,3 +161,14 @@ Plans:
 Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.5: remove the query/unlock rename stubs
+
+**Goal:** Remove the hidden `query` and `unlock` rename stubs registered by Phase 3 (VERB-03/VERB-04, D-05/D-09; feat commit 5d69ee2ea3c6276ed73c946b24be93612fae1698) in v0.15.0, the minor after the fold: delete `internal/cli/renamed.go` and `internal/cli/renamed_test.go`, drop `newQueryCmd()` and `newUnlockCmd()` from `internal/cli/root.go`'s AddCommand list, remove the two `codegraph query` / `codegraph unlock` lines from `internal/cli/testdata/cli-reference-allowlist.txt`, run `task docs:cli` (no reference change expected — the stubs are hidden), and re-run the Phase 3 census instrument (03-MUTATION-LOG.md Family (c)) expecting zero hits.
+**Requirements**: TBD
+**Depends on:** Phase TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 999.5 to break down)

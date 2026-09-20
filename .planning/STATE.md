@@ -1,37 +1,37 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.13.0
-milestone_name: Guard Hardening & UI Follow-through
+milestone: v0.14.0
+milestone_name: Polish & Agent Reach
 status: Awaiting next milestone
-stopped_at: Phase 12 complete — all phases complete
-last_updated: "2026-09-13T22:47:12.517Z"
-last_activity: 2026-09-13
-last_activity_desc: Milestone v0.13.0 completed and archived
-state_head: d15f45af45e27978d1618309b53db1b63c0e6ece
+stopped_at: Phase 7 complete — all phases complete
+last_updated: "2026-09-20T05:34:36.191Z"
+last_activity: 2026-09-20
+last_activity_desc: Milestone v0.14.0 completed and archived
+state_head: f90160f06e88bdfd661b79ad8171166aa15b2771
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 29
-  completed_plans: 29
+  total_phases: 7
+  completed_phases: 7
+  total_plans: 53
+  completed_plans: 53
   percent: 100
-current_phase: 12
+current_phase: 7
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-13 after v0.13.0 milestone)
+See: .planning/PROJECT.md (updated 2026-09-20 at the v0.14.0 close)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Planning next milestone (v0.13.0 shipped 2026-09-13, verified closeout)
+**Current focus:** No milestone scoped — v0.14.0 shipped 2026-09-20. Start the next one with `/gsd-new-milestone`.
 
 ## Current Position
 
-Phase: Milestone v0.13.0 complete
+Phase: Milestone v0.14.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-13 — Milestone v0.13.0 completed and archived
+Last activity: 2026-09-20 — Milestone v0.14.0 completed and archived
 
 ## Performance Metrics
 
@@ -43,13 +43,13 @@ Last activity: 2026-09-13 — Milestone v0.13.0 completed and archived
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 11 | - | - |
+| 01 | 9 | - | - |
 | 02 | 7 | - | - |
-| 03 | 10 | - | - |
-| 04 | 7 | - | - |
-| 5 | 8 | - | - |
-| 6 | 8 | - | - |
-| 7 | 4 | - | - |
+| 03 | 4 | - | - |
+| 4 | 8 | - | - |
+| 5 | 7 | - | - |
+| 6 | 7 | - | - |
+| 7 | 11 | - | - |
 | 08 | 5 | - | - |
 | 09 | 6 | - | - |
 | 10 | 6 | - | - |
@@ -134,6 +134,55 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 10 P04 | 55min | 2 tasks | 5 files |
 | Phase 10-index-health-the-coverage-denominator P05 | 55min | 2 tasks | 3 files |
 | Phase 10 P06 | 50min | 2 tasks | 3 files |
+| Phase 01 P01 | 45min | 2 tasks | 20 files |
+| Phase 01 P02 | 35 min | 3 tasks | 6 files |
+| Phase 01 P03 | 7min | 2 tasks | 2 files |
+| Phase 01 P04 | 20min | 2 tasks | 2 files |
+| Phase 01 P06 | ~30min | 2 tasks | 21 files |
+| Phase 01 P07 | 20 min | 2 tasks | 4 files |
+| Phase 01 P05 | 40min | 3 tasks | 1 files |
+| Phase 01 P08 | 55min | 3 tasks | 2 files |
+| Phase 01 P09 | ~40min | 2 tasks | 2 files |
+| Phase 02 P01 | 7min | 2 tasks | 3 files |
+| Phase 02 P03 | 25min | 2 tasks | 4 files |
+| Phase 02 P05 | 15min | 2 tasks | 45 files |
+| Phase 02 P06 | 20 min | 3 tasks | 2 files |
+| Phase 02 P02 | 55min | 2 tasks | 4 files |
+| Phase 02 P07 | ~25min | 3 tasks | 4 files |
+| Phase 02 P04 | 12min | 2 tasks | 4 files |
+| Phase 04 P01 | 22min | 3 tasks | 32 files |
+| Phase 04 P02 | ~20min | 2 tasks | 4 files |
+| Phase 04 P03 | 32min | 2 tasks | 15 files |
+| Phase 4 P04 | 15min | 2 tasks | 7 files |
+| Phase 04 P05 | 38min | 2 tasks | 6 files |
+| Phase 04 P06 | 42min | 2 tasks | 7 files |
+| Phase 04 P07 | 37min | 2 tasks | 7 files |
+| Phase 04 P08 | 20min | 3 tasks | 7 files |
+| Phase 05 P01 | 33min | 3 tasks | 21 files |
+| Phase 05 P02 | 55min | 2 tasks | 5 files |
+| Phase 5 P03 | 55min | 2 tasks | 5 files |
+| Phase 5 P04 | 38min | 2 tasks | 13 files |
+| Phase 05 P05 | ~40min | 2 tasks | 11 files |
+| Phase 05 P06 | 1h32m | 3 tasks | 1 files |
+| Phase 05 P07 | 13min | 3 tasks | 9 files |
+| Phase 06 P01 | 10min | 2 tasks | 17 files |
+| Phase 06 P02 | 5min | 2 tasks | 6 files |
+| Phase 06 P03 | 10min | 3 tasks | 5 files |
+| Phase 06 P04 | 46min | 3 tasks | 11 files |
+| Phase 06 P05 | 11min | 3 tasks | 11 files |
+| Phase 06 P06 | 4h | 3 tasks | 1 files |
+| Phase 06 P07 | 5min | 2 tasks | 3 files |
+| Phase 07 P01 | 51 min | 3 tasks | 7 files |
+| Phase 07 P02 | 15min | 2 tasks | 6 files |
+| Phase 07 P03 | ~15min | 3 tasks | 6 files |
+| Phase 07 P04 | ~15min | 3 tasks | 1 files |
+| Phase 7 P05 | ~55min | 3 tasks | 11 files |
+| Phase 07 P06 | ~25min | 3 tasks | 7 files |
+| Phase 07 P07 | ~40min | 3 tasks | 14 files |
+| Phase 07 P08 | ~50min | 3 tasks | 11 files |
+| Phase 7 P09 | ~15min | 3 tasks | 1 files |
+| Phase 07 P10 | ~18min | 2 tasks | 4 files |
+| Phase 07 P11 | 14 min | 3 tasks | 44 files |
 
 ## Accumulated Context
 
@@ -290,31 +339,107 @@ Standing decisions that outlive every milestone:
 - [Phase 10]: Open Question 3 decided: /health Coverage verification stays at vitest level (health-page.test.ts / health-view.test.ts) — no Playwright gate added.
 - [Phase 10]: Fixed CoverageRows pagination cursor to skip-until-seen-cursor-path per segment (was comparing paths lexically against the store's non-lexical length-prefixed key order). — The store's real iteration order for ExcludedFile/File records is length-prefixed (keys.go appendSegment), not lexical path order; a lexical <= cursor comparison silently broke once paging crossed segments, causing infinite duplicate rows.
 - [Phase 10]: Merged colliding threat ids across Plans 01-05 (T-10-01/03/04/05/06/07/08/10/15) into single 10-SECURITY.md rows citing every contributing plan's mitigation — The read_first instructions required deduplicating by id and merging mitigation text rather than dropping or inventing ids
+- [Phase 01]: 01-01: Added window.__codegraphFileGraphCy debug seam to GraphCanvas.svelte (Rule 2 deviation) — no existing seam exposed live cytoscape edge/node state needed for the FIX-05 overlap diagnosis.
+- [Phase 01]: 01-01: Guava's invalid-endpoints warnings trace to one directory pair whose settled bounding boxes do not overlap, suggesting the warning fires during an earlier render pass before ELK's async write-back lands — recorded for plan 01-09 to investigate.
+- [Phase 01]: 01-02: getppid seam made per-instance (unexported Daemon fields getppid/watchdogTicks) per RESEARCH.md's correction of D-13's literal wording, matching onSync/onSyncStart/syncFn/onWatchOpen rather than a new exported Option
+- [Phase 01]: 01-02: GH #13's leaked-goroutine half REFUTED (both RunWithRetry spawn sites in soak_test.go already joined via joinDaemonRun; 5x -race iterations zero leak/race) — recorded as absence-of-symptom evidence (RESEARCH A5), not positive falsification, no test changed
+- [Phase 01]: 01-02: unrelated pre-existing flake TestDaemonFlushLockRequeueGivesUpPerEpisode surfaced under this session's high local machine load during full-suite -race verification — logged to deferred-items.md, not fixed (out of scope; D-14 forbids widening any internal/daemon timeout constant)
+- [Phase 01]: 01-03: CheckRegression's Repo guard closes GH #16 — strict equality per D-16, no normalisation; GREEN commit uses fix(01-03) not feat(01-03) per the plan's own instruction since this closes a missing-guard bug
+- [Phase 01]: FIX-06: index --force now classifies prior-store errors three ways (ErrNotFound=silent floor 0, ErrStoreLocked=refuse before RemoveAll, other=warn+rebuild) via graphstore's exported sentinels, closing WINDOWS #36.
+- [Phase 01]: GH #20 follow-up 1 (Namespace cache volume, 8x16) closed WON'T-DO on the record: ubuntu-latest is free and 28.6x more stable than Namespace 4x8, matching the issue's own adoption bar; a cache volume cannot reach host-placement variance, the leading unrefuted explanation.
+- [Phase 01]: GH #20 follow-up 2's drift discriminator is fully specified in tools/bench/BASELINE.md (ref d4672cf5..., job rebless, -seed 42 -count 120000 -trials 7, ubuntu-latest) but NOT dispatched — dispatching requires pushing a temp branch and triggering CI, both outward-facing actions this session was not authorized to perform.
+- [Phase 01]: 01-06: rsvg-convert used for PNG rendering (no new devDependency); 16px legibility human-check deferred to end-of-phase per human_verify_mode, no autonomous geometry change made
+- [Phase 01]: FIX-10: per-run PRFILES_$(openssl rand -hex 16) delimiter inline in both pull_request_target workflows, not the researched shared-script extraction — require-issue-link.yml deliberately performs no checkout under pull_request_target; a shared script would need one, trading a narrow injection defect for a broader one
+- [Phase 01]: check-workflow-output-delimiter.sh compares $GITHUB_OUTPUT via diff against a file, not bash array iteration — bash 3.2 (macOS default /bin/bash, also env bash's resolution) raises unbound-variable on ${arr[@]} expansion of an empty array under set -euo pipefail
+- [Phase 01]: GH #20 baseline drift attributed to FLEET (+46.90% hardware vs +3.15% code, inside DefaultThroughputTolerance); Namespace cache volume follow-up closed won't-do; both recorded in tools/bench/BASELINE.md and GH #20 closed
+- [Phase 01]: 01-08: cytoscape teardown fix required TWO closures, not one — deferring GraphCanvas's own cy.destroy() alone was insufficient because cytoscape's Core constructor auto-destroys a prior instance registered on a reused container element (container._cyreg), bypassing this component's own teardown timing entirely. Fixed by giving every mount a dedicated, never-reused cytoscape container element in addition to the deferred-destroy gate. — Live reproduction (instance/generation tracing) proved cy.destroyed() was already true before this component's own destroyNow() ever ran, tracing to cytoscape's own container-reuse auto-destroy path in its Core constructor.
+- [Phase 01]: 01-09: guava invalid-endpoints race root-caused to cytoscape's own implicit default construction-time 'grid' layout (not an ELK option), fixed via layout:{name:'null'} on the Core constructor plus edge-hide/reveal defense-in-depth around ELK's real layout
+- [Phase 02]: No change to Taskfile.yml (D-01): web:drift already RED against 98cd41dd's exact incident shape on a clean checkout — Live replay confirmed CI's clean-checkout find enumeration already fails on the incident; a find-vs-git-ls-files paired assertion would only test staging hygiene, not close a real gate blind spot
+- [Phase 02]: [Phase 02]: GRD-12: requiredStatusChecksPath is a standalone top-level const, not folded into the existing multi-const block, so the plan's literal grep for the const declaration matches exactly.
+- [Phase 02]: [Phase 02]: GRD-12: left ci.yml's pre-existing goreleaser-check job name field untouched despite matching the plan's D-07 negative-grep verify gate -- that occurrence predates this plan and is structurally required for GitHub's ruleset job-name matching and for TestRequiredCheckNamesPreserved; fixed only the one true duplication this plan introduced (the script's own header comment).
+- [Phase 02]: GRD-10 re-vendor: regenerated directly in the real web/ tree (not a scratch copy), since pnpm's own packageManager self-management resolves the pinned 11.23.0 inside web/ without Corepack — D-09's fallback rule permits a local run whenever cd web && pnpm --version prints 11.23.0
+- [Phase 02]: pnpm dlx shadcn-svelte@1.5.1 add itself runs under bare pnpm v12.4.1 (dlx does not inherit the project's packageManager pin the way pnpm install does) — pre-existing Taskfile target behavior, not changed by this plan — The differing-file set produced was byte-for-byte identical to the Corepack-pinned CI run from 2026-09-14, confirming the drift is registry-side, not a toolchain artifact
+- [Phase 02]: DOCS-09 census proved zero live "provenance over checksums file" claims via a planted positive control (rule 84d1gfpywd); GH #14 closed on that evidence with no rewrite needed.
+- [Phase 02]: docs/RELEASE.md § 2 dropped all raw dependency counts and now credits modelcontextprotocol/go-sdk (D-13); SECURITY.md gained one sentence on the advisory tool-vuln job's scope (D-15). DOCS-08 stays unmarked pending 02-07 (shared-ID gate, #2388).
+- [Phase 02]: Fixed pre-existing grpc CVE (GO-2026-6348) via indirect dependency bump v1.82.1->v1.83.2, in a separate commit ahead of the ci.yml wiring commit, discovered because check:gonum had to pass locally before being wired into CI.
+- [Phase 02]: WINDOWS #13/#16/#29/#31/#33 closed via `gsd-tools windows fixed <id>` with evidence recorded in 02-07-SUMMARY.md (the verb accepts no note); #20/#21/#34 stay open as record-only deviations since the ledger has no annotate/record-only status.
+- [Phase 02]: STATE.md's Pending Todos table (17 stale rows) replaced wholesale with gsd-tools init todos' literal pending_todos_markdown render; the one genuinely open row (bench pinnedAt) filed as a real pending-todo file.
+- [Phase 02]: GRD-12 closed: maintainer authorized the prepared gh api PUT to grow protect-main's required contexts to 8; the continuation agent independently re-verified the live state read-only before growing the fixture — Precondition halts must never be satisfied on the orchestrator's word alone; the fixture must follow the live ruleset, never lead it
+- [Phase 03]: 03-02: the TDD runtime gate's RED commits were reconciled with D-15's one-feat!-commit decision at plan time — three test(03-02): RED commits (f6bd1ffb, 4215e42f, 4da74784; test files only, Task 1 plus a 4-line renderFullLine placeholder so the unit test compiles) precede the single GREEN feat(cli)!: commit 5d69ee2e; CONTEXT's Claude's-Discretion 'every commit go test-green' clause was clarified to exempt those RED commits (squash-merge collapses them on main) — workflow.tdd_mode=true halts any tdd="true" task without a prior test(NN-PP) commit; the planner's 'observe RED in the working tree, commit only GREEN' could not execute
+- [Phase 03]: 03-02/review: rename stubs return ONE error whose text IS the two-line D-06 message (no direct Fprintln, no 'codegraph:' prefix) so cmd/codegraph/main.go's single exit path prints it exactly once (WR-01, fa81672c); pinned end-to-end by test/integration/renamed_stubs_test.go against the real binary — the plan's literal 'two Fprintln + error' printed a duplicated third line that only the compiled binary showed — SilenceErrors on every command makes main.go the one place a returned error is printed; a stub that prints AND returns duplicates
+- [Phase 03]: 03-04: Backlog row 999.5 'remove the query/unlock rename stubs' (v0.15.0) written by gsd-tools phase add --id 999.5 (additions only, no version token in the heading, milestone phase filter unchanged) with the feat SHA and the exact files/lines to delete in its Goal value; check tdd-red-evidence returned INVALID_RED/zero_tests_discovered for all three Go RED records (TAP-only parser) — Go RED verified by --- FAIL transcript per the repo's documented precedent — planning-artifacts rule: tool-owned files get value edits in shapes the tool writes; the TDD evidence verb has no go test support (upstream gap)
+- [Phase 04]: Phase 4 P01: 29 plain-output goldens frozen (D-16); >=28 floors used throughout since D-16's own verb enumeration counts to 29. install-local/uninstall-local use --target claude (the real agents.TargetID), not the plan's literal claude-code. serve-mcp-stderr runs the real serve --mcp exactly once per test binary via sync.Once, working around internal/mcp's process-global os.Stdin close on session end. — Both TestPlainGolden/TestNoColorNonTTYRegression and TestShortFlagsConsistent demonstrated RED against confirmed mutations (04-MUTATION-LOG.md Families a/b) and reverted byte-clean; no production file touched.
+- [Phase 04]: [Phase 4]: 04-02: fang/v2 v2.0.1 declined - fang.Execute's DefaultErrorHandler wraps stderr in a *colorprofile.Writer with no Fd() method, so its own TTY-detection type assertion always fails and the plain non-TTY stderr branch is unreachable; every error renders styled, breaking D-03's exact-once stub contract (TestRenamedStubsPrintExactlyOnce failed under the real wrap). D-01/D-02/D-04 passed in isolation; the four criteria are conjunctive. Help stays hand-rolled per D-14.
+- [Phase 04]: 04-03: present/tty.go and present/styles.go doc comments reworded to drop the literal substrings os.Getenv/term.IsTerminal (same meaning) -- the D-03 env-blind grep gate was matching pre-existing prose describing the constraint, not code violating it (third instance of this project's own recurring substring-proxy gate defect).
+- [Phase 04]: 04-03: Task 2's literal whole-package verify cannot show zero FAIL lines because of the plan's own pre-announced --color-undocumented RED window (TestEveryRegisteredFlagIsAccountedFor, scheduled for plan 08) -- every other assertion in Task 2's chain was confirmed individually.
+- [Phase 4]: RenderNotice styles a multi-line worktree notice line-by-line, preserving trailing-newline structure — Matches query.WorktreeNotice's exact byte shape (possibly multi-line) rather than assuming a single line, so the stripped-styled == plain contract holds for any notice content
+- [Phase 4]: explore/node gain a styled branch consuming ExploreDetail/NodeDetail, pinned by a syntax-only markdown contract against the exported query renderers; NODE-02 multi-def budget constants (16/12000/20) duplicated in present, internal/query left at zero diff
+- [Phase 4]: [Phase 4] 04-06: printSummary/printSummaryMode split so printSyncSummary resolves colour exactly once per RunE (D-11) instead of double-querying the dark background when reused for a second styled line
+- [Phase 4]: [Phase 4] 04-06: uninit.go's codegraphDir sanitized via a package-local sanitizePathForDisplay before styling (CR-01), matching present/status.go's projectPath precedent though not spelled out in the plan text
+- [Phase 4]: install.go's per-file action role predicate treats ActionUnchanged/ActionKept/ActionNotFound as no-op (Label), everything else mutating (Warning)
+- [Phase 4]: Phase 4 complete: command tree grouped into D-13's four titled cobra.Groups, help hand-rolled via present.RenderHelp (fang declined per 04-02), docs/CLI-REFERENCE.md regenerated through the drift gate, fang verdict recorded in PROJECT.md Key Decisions
+- [Phase 5]: [Phase 04] fang/v2 declined: DefaultErrorHandler wraps stderr in *colorprofile.Writer (no Fd()), so its plain non-TTY branch is dead and rename stubs box-render on a pipe; help hand-rolled via present.RenderHelp; verdict committed alone (d722804a) before any renderer
+- [Phase 5]: [Phase 04] Colour is resolved ONCE per RunE in internal/cli/colorflag.go (single colorprofile.Detect over a rewritten environ; HasDarkBackground at most once, only when styled AND both fds are TTYs) and downsampled by colorprofile.Writer at the RunE boundary; present stays env-blind and tests assert only our environ rewrite/branch/GroupIDs/plain goldens (D-00: never charm/cobra behaviour or go.mod)
+- [Phase 5]: [Phase 04] Phase-end UAT (colour legibility, TERM matrix, help, pager) validated by the orchestrating agent in a Herdr PTY at the maintainer's direction — light palette proven to engage via an OSC 11 background flip, WCAG ≥ AA proxy; residuals recorded in 04-UAT.md
+- [Phase 5]: [Phase 05] 05-01: Narrowed antigravityConfigPath() to resolve unified path on a fresh machine (not just once migrated) — a real bug found by the D-03 test oracle
+- [Phase 5]: [Phase 05] 05-01: HookFiles hardcodes claude's settings/hooks paths for HooksClaudeJSON and errors loudly (errHookFilesUndeclared) for HooksCodexJSON rather than silently naming nothing
+- [Phase 5]: [Phase 05] 05-01: Split RED/GREEN across two commits — capabilities.go landed fully implemented in the RED commit while all eight targets' Capabilities() were zero-value placeholders, so the four named tests fail on assertion, never a build error
+- [Phase 05]: manifestRequesters reads BOTH an unreadable and a present-but-nil-Targets manifest as owned by [claude] (D-07 planner amendment) — never as unknown, since Claude was the sole writer before this phase
+- [Phase 05]: manifestSchemaVersion bumped 1->2 (costly, flagged for maintainer): a released binary older than 05-02 drops Targets on a schema-2 manifest, self-healed on the next new-binary install
+- [Phase 5]: [Phase 05] 05-03: TestSymlinkedSkillDir_ClaudeAndSharedAreOnePackage passed even at RED — 05-02's D-07 legacy-manifest-reads-as-claude rule already produces the correct merged requester set on the read side; the write-side gaps (uninstall, foreign content, dangling link) are what GREEN actually closes.
+- [Phase 5]: [Phase 05] 05-03: internal/daemon's TestConvergenceTwoSessions failed once during the full-module run (pre-existing WINDOWS.md #37 flake, unrelated to internal/agents changes) then passed on immediate retry.
+- [Phase 5]: [Phase 05] 05-04: TestOwnershipExactIdentity (32-leaf D-13 ownership table, citing 242ec0a by SHA) wires Cursor and opencode onto the shared skill package through installDeclaredSkill/uninstallDeclaredSkill; Family (b1)/(b2) prove the guard fails against both historical shapes of the 242ec0a-class ownership vulnerability. Found the plan's own Task 1 verify script undercounts due to an rg substring-inclusion footgun (uninstallDeclaredSkill contains installDeclaredSkill); documented and worked around with a lookbehind-corrected check rather than altering the design.
+- [Phase 5]: [Phase 05] Gemini writes its own .gemini/skills/codegraph dir (D-06 correction (a)); shared .agents/skills alias stays a documented read path only, never written
+- [Phase 5]: [Phase 05] Kiro writes only .kiro/skills/codegraph (no shared alias, no AGENTS.md); Antigravity writes only the agy CLI global dir, the [ASSUMED] 2.0/IDE path stays documented-only
+- [Phase 5]: 05-06: no Cursor account — Cursor and D-11 recorded not probed; Cursor stays [ASSUMED]; 05-07 takes the D-11 no-change branch
+- [Phase 5]: 05-06 2A: opencode duplicate-skill-name WARN accepted as an advisory (copies byte-identical; no guard on the shared write)
+- [Phase 5]: 05-06 1A: agy 1.2.6 reads user skills only from ~/.gemini/config/skills/ — Antigravity skill dir moves there in 05-07
+- [Phase 5]: 05-06 3A: Antigravity cleanup judged on codegraph-owned paths and recorded hashes; agy runtime state classified, not reverted
+- [Phase 5]: 05-07: D-11 recorded not probed, so Cursor keeps writing no instructions file (no-change branch)
+- [Phase 5]: 05-07 (1A): Antigravity's only skill dir is ~/.gemini/config/skills/codegraph; the antigravity-cli path is not declared and gets no migration (unreleased)
+- [Phase 6]: Phase 6 06-01: guard binary path delivered as one single-quoted token replaced with a POSIX-quoted absolute ExecPath (not text/template); the unrendered dogfood guard alone falls back to PATH
+- [Phase 6]: Phase 6 06-01: two bare allowlist lines (codegraph hook, codegraph hook pretooluse), both hidden commands carry --help
+- [Phase 6]: Phase 6 06-02: TestCorporaShape's logged fire rates are measured through Qualifies, not counted from the rows' want fields
+- [Phase 6]: Phase 6 06-03: Gate.Due Lstat-checks the sentinel dir after every Mkdir, not only on EEXIST, so a dir it just created is held to the same symlink/is-dir/uid test
+- [Phase 6]: Phase 6 06-03: a sentinel mtime in the future counts as due and is re-recorded, so a stepped-back clock cannot silence the nudge
+- [Phase 6]: Phase 6 06-04: the PreToolUse opt-in is recorded as manifest Files keys hooks/pretooluse-nudge.sh and settings.json#hooks.PreToolUse (no schema bump); Keep refreshes only while either key is present and the manifest is readable
+- [Phase 6]: Phase 6 06-04: an Off install reports only artifacts actually removed and drops both keys only when neither removal errored
+- [Phase 6]: Phase 6 06-05: the PreToolUse fragment registers one handler per block (three Bash blocks for grep/rg/find), so a hand-edit of any single own handler duplicates rather than being overwritten via its siblings; ownership code unchanged
+- [Phase 6]: Phase 6 06-05: --pretool-nudge is read through cobra Changed (not given = Keep); the D-09 note goes to stderr, plain, once, before the per-agent report
+- [Phase 6]: Phase 6 06-06: D-18 verdict PASS (C1-C7) in Claude Code 2.1.278; fire rate 9/18, 7/9 true positives
+- [Phase 6]: Phase 6 06-06: same-command PreToolUse handlers differing only in if are not deduplicated (validates 06-05 one-handler-per-block); subagents carry the parent session_id
+- [Phase 6]: Phase 6 06-07: install/uninstall help describe only what shipped and passed live (D-18 PASS); CLI-REFERENCE.md regenerated only via task docs:cli
+- [Phase 6]: Phase 6 06-07: mutation-family count is 19 (a1-a2, b1-b3, c1-c6, d1-d4, e1-e4) after the 06-05 amendment added (e4); each carries RED and revert proof
+- [Phase 07]: findTOMLTableRange rewritten as a line scanner (splitTOMLLines/tomlLine/tomlLineState) tracking multi-line-string and bracket-depth state across lines; codegraph's range end backs off past the contiguous blank/comment run before the next header (or EOF), a deliberate change from the pre-existing implementation.
+- [Phase 07]: tomlTableConflict is a separate scan from findTOMLTableRange with its own path normalization (tomlNormalizedHeaderPath/tomlKeyTablePath/tomlSplitDottedPath) that unquotes and trims dotted segments, refusing inline/dotted/quoted/spaced/array-of-tables/duplicate/detached-subtable forms of codegraph's own TOML table rather than duplicating a key.
+- [Phase 7]: Family (b) mutation tests appended at end of install_test.go rather than interleaved, preserving existing test line-number references
+- [Phase 7]: [Phase 07]: 07-03: Task 3 (Family c3 tmux RED/GREEN) not performed by maintainer decision (2026-09-19) — tmux replaced by herdr on the maintainer's machines; local tmux evidence skipped, CI tmux-e2e job is the only remaining real-PTY confirmation, follow-up filed at issue #75; 07-09's post-scope-flip tmux re-run is skipped under the same decision
+- [Phase 7]: [Phase 07]: 07-03: bubbles v2 list.populatedView already inserts a row separator — checkboxDelegate/daemonDelegate must render exactly one line and never append their own trailing newline, or every row costs 2 lines against the Height() budget (D-24)
+- [Phase 07]: CODEX-01 verdict PASS: all six pass-bar L-lines PASS in an isolated Codex scratch HOME before any codex.go change; real ~/.codex and ~/.agents files unchanged (L7).
+- [Phase 07]: D-15/D-16/A2: Codex reads both .codex/skills and $CODEX_HOME/skills; trust-gates project MCP servers and hooks but NOT AGENTS.md or project skills; the -c trust_level override does not grant trust.
+- [Phase 07]: A1: both the local D-20 hook command form and the single-quoted absolute global form (with a space in the path) are shell-expanded and executed; hook trust is keyed per hooks.json file+group+handler (D-23 append-last required).
+- [Phase 7]: [Phase 07-05]: codexTrustNote's wording follows 07-LIVE-SESSIONS.md's live verdicts exactly -- names the TUI trust prompt and the literal [projects."<root>"] trust_level = "trusted" key (never the -c projects...trust_level override, which CODEX-01 confirmed grants no trust), and explicitly says the codegraph skill and AGENTS.md block are read regardless of trust (D-16=no, A2=no)
+- [Phase 7]: [Phase 07-05]: codexSkillDirs declares BOTH D-15 read-only roots (.codex/skills locally, $CODEX_HOME/skills globally) since 07-LIVE-SESSIONS.md recorded both verdicts as yes -- codegraph never writes to either (D-14); DescribePaths never lists them
+- [Phase 7]: [Phase 07-05]: Task 3's own plan-authored verify precondition grep (rg -c -F 'installDeclaredSkill(&result, t, loc)') has a substring-collision bug -- it matches inside uninstallDeclaredSkill too, returning 2 instead of 1. Verified the substance with a corrected negative-lookbehind pattern and confirmed the actual perl mutation touches only the intended call site; documented rather than hand-editing the plan or the code to force a false match
+- [Phase 07]: [Phase 07-06]: instructionsRequestedElsewhere derives the shared-AGENTS.md requester set from AllTargets() on every Uninstall call — never a stored index — so codex/opencode's shared repo-root AGENTS.md is kept while a sibling still uses it and restored byte-for-byte only once the last sharer is gone
+- [Phase 7]: [Phase 07]: 07-07: TestCodexPreToolUseGuard's PWD-based negative control for D-22 needed a redesign -- faking $PWD alone does nothing since bash re-derives it from getcwd() when mismatched; fixed by making the child process's actual OS-level cwd itself wrong for local guard subtests (commits 5c930bb5, 602e30a3)
+- [Phase 7]: [Phase 07]: 07-07: capabilities.go's HookFiles switch generalized to wrap errHookFilesUndeclared for ANY unmapped HookMechanism (not just codex-json specifically), now that codex-json itself is a real declared case
+- [Phase 7]: [Phase 7]: 07-08: Codex's PreToolUse stickiness evidence is its own exact-identity hooks.json group, read directly via hasOwnHookBlock (D-23) -- unlike Claude's manifest-backed preToolNudgeEvidenced, Codex has no manifest concept for this opt-in, so Keep probes hooks.json unconditionally rather than gating on a manifest record.
+- [Phase 7]: [Phase 7]: 07-08: assertOwnEntriesGoneAfterUninstall's new Codex branch was moved out of that shared helper into runOwnershipLeaf after it broke TestOwnershipSharedInstructions -- that test calls the shared helper for Codex without ever planting the foreign ^Bash$ group this plan's guard checks for, so the assertion belongs only at the one call site that actually plants it.
+- [Phase 7]: CODEX-06 verdict: PASS — a fresh Codex session in an indexed repo reaches for codegraph unprompted (skill listed, codegraph CLI run), entry shown at both project and global scopes
+- [Phase 7]: CODEX-05 live verdict: PASS — nudge fires once then cools down (60s+ per session/subagent key), stays silent un-indexed, no hook error attributable to codegraph's hook
+- [Phase 7]: A4: Codex subagent PreToolUse stdin carries agent_id (UUIDv7) + agent_type alongside the parent's session_id; the main thread carries neither — D-21 session_id+agent_id (else main) keying holds unchanged on Codex
+- [Phase 7]: D-23: position-keyed hook trust re-flags a byte-identical foreign hook when its array index shifts; codegraph appends its group last so its own removal never shifts a foreign group
+- [Phase 7]: FIX-03's local real-PTY tmux re-run explicitly NOT performed (maintainer decision 2026-09-19, carried from 07-03, issue #75) — the 07-03 model-level footprint guard is the local FIX-03 evidence at this HEAD
+- [Phase 7]: [Phase 07] 07-10: docs/AGENT-CAPABILITIES.md published (16 rows, AllTargets() x [global,local]) with a Go drift test (TestCapabilityDoc_MirrorsCapabilities/VerificationColumn) that recomputes every code-derived cell from Capabilities() and never lets the doc overclaim [ASSUMED] rows as verified
+- [Phase 7]: [Phase 07] 07-10: Claude's global row is [ASSUMED] (code.claude.com/docs/en/mcp, fetched 2026-09-19) after confirming no 0[5-7]-LIVE-SESSIONS.md file ran a dedicated Claude-global install+read session — only Claude local scope was live-verified (06-LIVE-SESSIONS.md)
+- [Phase 7]: [Phase 07]: D-29 skill sentence rewritten harness-neutral ('...except Hermes.'), placed after the const's first sentence so it ends at byte 299 (was 554); whole const re-measured 582 bytes. 38 pre-edit transcripts (re-measured, not assumed) re-frozen in one reviewed diff.
+- [Phase 7]: [Phase 07]: D-30 comments corrected (instructions.go, shared.go, registry_test.go) without touching the byte-frozen codegraphInstructionsBlock text; block stays skill-agnostic because it's frozen, not because the skill's reach is narrow (skill now reaches 7 of 8 targets).
+- [Phase 7]: [Phase 07]: Phase 7 gate recorded green with one documented exception — the tmux picker re-run clause reads 'not run' per the maintainer's already-accepted 2026-09-19 decision (issue #75); every other gate clause (build, 53-package suite, daemon alone, docs:cli:drift, 28 mutation families, CODEX-01/05/06 PASS, no ci-skip, WINDOWS D-08 open) passes.
 
 ### Pending Todos
 
-5 listed — `/gsd-capture --list` to review. Phase 7 resolved three (dry-run-signed, post-release-verify, tap-secret distinctness) and code review filed one new. **This table has drifted from `.planning/todos/pending/`, which holds only 2 files** (brew-trust, graphstore archtest): the mcp flake, golangci-lint, `bench pinnedAt` and `CR-01` rows predate v0.13.0 and were never reconciled when their files moved or were folded into a milestone. Reconciling those four is out of Phase 7's scope and is left for a deliberate pass. None block v0.13.0.
-
-| Created | Area | Severity | Title |
-|---------|------|----------|-------|
-| 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
-| 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
-| 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces |
-| — | mcp | major | **CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications. NOW IN SCOPE as v0.12.0 `FIX-01`, Phase 1.** |
-
-Resolved and filed to `.planning/todos/completed/`:
-
-| Resolved | Area | Title |
-|----------|------|-------|
-| 2026-07-28 | docs | Document release procedures (maintainer runbook) — closed by 09-04's `docs/RELEASE-PROCEDURES.md` rewrite |
-| 2026-07-31 | perf | Bisect the indexer throughput regression — **REFUTED**; the regression did not exist (cross-platform baseline comparison) |
-| 2026-07-31 | perf | Rebless perf baseline on ubuntu-latest — **DONE**; gate green on main |
-| 2026-08-13 | agents | Author a codegraph usage skill for agents — closed by v0.10.0 Phases 6–8 |
-| 2026-09-08 | release | `dry-run-signed` additions-only diff guard passes vacuously — closed by Phase 7 `GRD-03` (`scripts/inject-cosign-key.sh` asserts exactly one injected `--key=` line) |
-| 2026-09-08 | ci | post-release-verify event-aware conclusion guard has no regression assertion — closed by Phase 7 `GRD-04` (`TestPostReleaseJobsDeclareConclusionGuard`) |
-| 2026-09-08 | ci | Tap App secret distinctness test is tautological and reads no workflow — closed by Phase 7 `GRD-05` by deleting the test, per maintainer decision |
-| 2026-09-13 | docs | `brew trust` instructions recommend broader tap grant with no security framing — closed by Phase 12 DOCS-07 (docs/RELEASE.md recommends the narrow `--cask` grant with one sentence of security framing; no test by decision D-12) |
-| 2026-09-13 | testing | `internal/graphstore/archtest` ignored per-package `go/packages` load errors — closed by quick task 260913-pkp (`packages.PrintErrors` guard in `TestNoPackageBypassesGraphStore`, demonstrated RED against an unresolvable import planted outside `internal/graphstore`; sibling of Phase 7 CR-01) |
+- [2026-08-14] [bench] tools/bench/runner pinnedAt() validates a checkout by git rev-parse HEAD alone — the HEAD-only anti… — [todo file](.planning/todos/pending/2026-08-14-bench-pinnedat-validates-a-checkout-by-git-rev-parse-head-alone.md)
 
 ### Blockers/Concerns
 
@@ -323,26 +448,41 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **CR-01 is no longer just carried — it is scoped.** `internal/mcp/server.go:225-349`'s `pendingWriter` "pending response" counter increments only on accepted client requests but decrements on every stdout `Write()`, including server-initiated notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that SPEC-09 routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable, not theoretical. Predates v0.10.0 (introduced in `13f2875`). Full trace and proposed fix in `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md` (archived under `milestones/`). Now `FIX-01`, Phase 1.
 - **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` and `999.6` were both promoted into v0.3.0, but all `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. Decide whether the promoted entries should be struck or annotated; nothing was removed pending that call. (`999.5` has since been consumed by v0.5.0; `999.2` and `999.4` remain.)
 - **Client-side `tools/list` caching bugs are a known confound.** Real, primary-source GitHub issues exist against Claude Code itself (anthropics/claude-code #41123, #40025, #50515; claude-ai-mcp #45).
-- **Open GitHub issues:** #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity).
 - **Advisory, unregistered surfaces** from the v1.0 Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
 - **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing. Native Windows support was dropped in `v0.4.0` (WSL2 only).
 - **GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling.** goreleaser's binary reaches `golang.org/x/crypto/openpgp` (110 vulnerable symbols) via pipe/ko → google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A). The advisory `tool-vuln` job surfaces it — reported, not resolved. **Relevant to `BLD-06`:** `pnpm audit` adds a second, disjoint scanner covering the JS tree neither `govulncheck` nor Syft can see; `SECURITY.md` must state both scanners' actual scope rather than implying one covers everything.
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode. `uat-predicate.cjs` accepts only `pass`/`passed` per test item, so a `skipped`-with-reason deferred follow-up blocks `phase uat-passed` even though the verify-work template calls that state `complete` and #1921 says a deferred follow-up must never block (P8 test 3). `gsd-verifier` declared every file in the phase dir — including `08-UAT.md` and `08-VALIDATION.md`, which verify-work and validate-phase WRITE — in `covered_files`, so the verification went `stale` by construction the moment its own downstream hooks ran; resolved by dropping those two outputs from the set and recomputing via `verification.fingerprint` (the verifier contract at `gsd-verifier.md:673` is PLAN/SUMMARY + requirements + impl files, not workflow outputs).
-- [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
-- ⚠️ [Phase 10] `priorCoverageGeneration` (`internal/cli/index.go:30-48`) collapses "store locked/corrupt at this instant" into the same floor-0 result as "never indexed": a live holder outlasting `graphstore.Open`'s ~400 ms retry during `codegraph index --force` re-admits the page-token aliasing shape in a narrow window. Accepted below the `high` gate; fix named in WINDOWS.md #36 / 10-SECURITY.md T-10-16.
 - ⚠️ [Phase 10] Phases 7 and 8 read `verification_status: stale` since Phase 9 completed: their `covered_files` include `.planning/REQUIREMENTS.md` (verifier contract #4155 — "mapped requirement"), which every later `phase.complete` rewrites. ROADMAP still shows them `[x]`; the tool-sanctioned repair is `/gsd-verify-work 07` / `08` re-verification. Will surface at the milestone audit.
-- ⚠️ [Phase 11] `check:gonum` and `check:no-force-layout` exist as Taskfile targets (GRF-10, GRF-06 D-12b) and pass locally, but are NOT wired into `ci.yml` — recorded as a follow-up in `11-SECURITY.md`; the CI govulncheck job still covers the main module, so the SBOM-name and cgo-closure halves are local-only until wired.
 - ⚠️ [Phase 11] `web/scripts/check-no-force-layout.mjs` proves only that no forbidden layout name appears as a string literal at the `name:` option position or as a `cytoscape-<x>` import/dependency specifier; a string-built or variable layout name is not detected. `GraphCanvas.svelte:374` spreads `LAYOUT_OPTIONS` (declared with literal `name: 'elk'`) and is reported as the one advisory `unresolvedLayoutNames` entry — non-fatal by design (WR-03).
 - ⚠️ [Phase 11] `gonum.org/v1/gonum` package legitimacy is `[ASSUMED]` (long-lived, already transitive via sigstore in `go.sum`; `package-legitimacy check` has no Go ecosystem support) — recorded in `11-SECURITY.md`, not a gap.
-- ⚠️ [Phase 11] The graph page's console shows four entries at load (CSP-blocked svelte-logo data-URI image; 2× cytoscape `text-valign: right` warning; a cytoscape `Cannot read properties of null (reading 'notify')` TypeError from `layoutPositions`) — all reproduced identically by a pre-phase build (`18ef2434`), so pre-existing and out of Phase 11 scope; unowned by any phase yet.
 - ⚠️ [Phase 11] Phases 7, 8, 9 AND 10 all read `verification_status: stale` after Phase 11's `phase.complete` by the #4155 mechanism (each `covered_files` list includes `.planning/REQUIREMENTS.md`, which every later `phase.complete` rewrites); only Phase 11's report was written without `REQUIREMENTS.md` in `covered_files` (its plans/summaries + implementation files only) and stays `passed`. Repair for 7–10 remains `/gsd-verify-work <phase>`; surfaces at the milestone audit.
 - ⚠️ [Phase 12] The DOCS-06 guard matches `--name` as a whole-document substring of the generated reference (anchored on the flag's own `--` prefix and a trailing delimiter); a future flag whose name is a strict prefix of another's is the one shape that could read as documented when it is not — recorded in 12-SECURITY.md as accepted residual, re-checked by the guard's own counts on every run.
 - ⚠️ [Phase 12] DOCS-07 has no ongoing gate by decision (D-12): nothing stops a future edit from re-introducing a copy-pasteable tap-wide `brew trust` instruction in `docs/RELEASE.md`; review of that file's diffs is the control.
 - ⚠️ [Phase 12] `DisableAutoGenTag = true` is set on the tree `NewRootCmd()` returns; `codegraph man` builds its own tree in `man.go` and still emits cobra's auto-gen date line — unchanged behaviour, noted so nobody expects the man pages to be byte-stable across days.
 - ⚠️ [Phase 9] Cursor and JetBrains editor-link URI templates are community-sourced, never officially documented (09-RESEARCH.md A1/A2) — shipped tagged `[ASSUMED]` in `editorpresets.go` with a visible note in the picker; WINDOWS.md #35 stays open until someone clicks through on a real Cursor/JetBrains install.
 - ⚠️ [Phase 9] Safari/WebKit and Firefox are UNVERIFIED for the gutter's async-rpc-then-`location.assign` sequence (transient user-activation window); the committed live gate is chromium-only and the header link is a plain resolved `<a href>` by design, so the risk is confined to gutter clicks. Recorded in `09-SECURITY.md` T-09-09 notes.
+- ⚠️ [Phase 1] `tools/bench/BASELINE.md` (lines ~439/477) links a specific CI run as the FIX-11 in-flight discriminator; GitHub prunes run logs/artifacts under its retention policy, so the link will rot — the conclusion is recorded inline, the link is convenience only (01-REVIEW.md IN-01, Info, left open by scope).
+- ⚠️ [Phase 1] Plan-level `<verify>` gates for web plans ran `pnpm check` but never `pnpm vitest run`; the FIX-05 reveal broke seven test fakes and only the deep code review caught it (exit 1 with 11 unhandled errors behind a 585-passed count). Phase 2's guard work should add the vitest exit-code assertion to the plan template or the Taskfile gate.
+- [Phase 2] WINDOWS #20, #21, #34 are open by decision, not pending work: #20 and #21 are Phase-2 (v0.12.0) deviations by design (no `svelte.config.js` in this SvelteKit toolchain; TypeScript pinned at 6.0.3 by the scaffold), #34 is a TTY-06 mutation-log finding whose assertion measures post-settle stability by design; the ledger has no annotate/record-only verb or status, so they stay `open` rather than being waived (a waiver reads as a deferred defect) or fixed (nothing was fixed). Plan 02-07, GRD-14.
+- Tooling gaps (GRD-14/DOCS-11, 02-07): (a) `gsd-tools windows` has no annotate/record-only verb or status; (b) `windows fixed <id>` accepts no note (`broken-windows.cjs` `markFixed`/`cmdWindowsMarkFixed`, lines 286-293/1068-1088: one positional, zero flags), so verification evidence can only live in plan SUMMARYs; (c) no CLI verb creates a pending-todo file (the add-todo workflow is agent-authored, not a `gsd-tools` command); (d) STATE.md's Pending Todos renderer (`init.cjs` `renderPendingTodosMarkdown`, line 2024) emits bullets, so the previous hand-authored table was not a tool shape and was replaced by the rendered body in 02-07. Filing on open-gsd/gsd-core is the maintainer's call; the drafted issue body is in 02-07-SUMMARY.md.
+- ⚠️ [Phase 3] WINDOWS #37: internal/daemon is load-flaky under cross-package go test (TestRunWatchdogCancelsRunOnSimulatedReparent 250s 'Run did not return after a simulated reparent', TestConvergenceTwoSessions 130s) — reproduced on the PRE-fold commit 5bc10ed8 (1/2 runs) and post-fold (1/3), passes alone every time; not a Phase 3 regression (4 message lines in lock.go) but it contradicts #12's 'fixed' (FIX-07 removed the ticker race, not the budget miss under load). Same session: tests/browse-page.test.ts hit its 15s vitest timeout in 2 of 3 full web runs at machine load ~35 and passed alone 2/2 with web/ untouched — load-induced, unrecorded.
+- ⚠️ [Phase 3] Phase 1 reads verification_status: stale after Phase 3's phase.complete and the VERB-01..08 checkbox bookkeeping (#4155 mechanism — its covered_files list includes .planning/REQUIREMENTS.md; Phase 2 still reads passed); Phase 3's own report was re-stamped with 'gsd-tools verification fingerprint' over the verifier's unchanged 28-file list after confirming REQUIREMENTS.md was the only covered file that changed. IN-01 (search has no Long describing --full) left as an advisory docs: follow-up by maintainer choice.
+- [Phase 4] Advisory (not a defect): after CR-02, lipgloss's own tab→4-space conversion (maybeConvertTabs) still applies on the styled explore/node path, and node_test.go models it with a styledTabWidth=4 constant mirroring a lipgloss internal (D-00 tension). One-line fix available at v2.0.5: Style.TabWidth(lipgloss.NoTabConversion) on the palette styles, then drop the constant so stripped-styled == plain byte-exact on tab-indented source.
+- [Phase 4] Not verified: the D-11 ~2 s OSC-11 timeout on a non-answering terminal (tmux without allow-passthrough / SSH) — tmux is not installed locally and SSH was not attempted; every measured run in Herdr's terminal answered OSC 11 in ≤0.16 s. IN-01 (status 'Project:' value unstyled) left open as Info.
+- [Phase 4] Phases 1–3 read verification_status: stale after Phase 4 — a GENUINE signal, not #4155 bookkeeping: their covered_files name internal/cli/{root,search,daemon,index,renamed}.go and docs/CLI-REFERENCE.md, all legitimately modified by the glow-up (plus REQUIREMENTS/ROADMAP via phase.complete). Phase 4's regression gate (52/52 pkgs, wire oracle, real-binary renamed_stubs test) covered the risk for this run; the digest was NOT re-stamped. Repair = /gsd-verify-work 02 / 03 (and 01) — surfaces at the milestone audit.
+- [Phase 5] One unidentified internal/cli test failure after 05-05 (2026-09-18): the package run took 53.6 s vs a normal ~18 s — the machine was under other load (likely the 05-05 executor's own full-suite run still finishing) — and the failing test's name was not captured (output piped through tail). Six reruns passed (2 standalone, 4 with internal/agents in parallel). Treat as a possible load-sensitive flake in internal/cli; next occurrence: capture the full output, then decide whether it is a WINDOWS.md row.
+- [Phase 5] The verify:post hooks (validate-phase, secure-phase) did NOT run at the Phase 4 transition: 04-VALIDATION.md is still status: draft / nyquist_compliant: false and there is no 04-SECURITY.md, although workflow.nyquist_validation and workflow.security_enforcement are both active. Run /gsd-validate-phase 4 and /gsd-secure-phase 4 before the milestone audit (audit-milestone §5.5 reports NOT-VALIDATED).
+- [Phase 5] Live-verification breadth deferred by maintainer decision (05-UAT.md, 2 deferred follow-ups): Cursor (no account — D-11 verdict 'not probed', so Cursor keeps writing no instructions file) and Gemini CLI/Kiro (not installed — D-10). Their rows stay [ASSUMED] from primary docs; AGENT-14 (Phase 7) must publish them as [ASSUMED].
+- [Phase 5] REQUIREMENTS.md AGENT-07 wording ('skill package via .agents/skills/ and the instructions block in AGENTS.md') is stale: live agy 1.2.6 reads user skills only from ~/.gemini/config/skills/ (maintainer decision 1A, shipped in 05-07) and Antigravity's instructions arrive via ~/.gemini/GEMINI.md (D-06(c)). Maintainer to reword at the milestone audit; the code is correct.
+- [Phase 5] Advisories carried forward: (1) install --yes discards an explicit --target (todo 2026-09-18-install-yes-discards-explicit-target.md); (2) uninstall leaves an empty parent skills dir it created (removing the parent unconditionally is wrong — 05-07 Family (c-i)); (3) review Info IN-01 (dead caps.MCPConfig nil-check, printconfigstyle.go) and IN-02 (ActionKeptForeign renders with the default role, untested); (4) gsd-tools frontmatter set re-serializes covered_files with a blank line after the key (harmless to the parser, observed twice).
+- [Phase 6] AR-06-08: the registered hook commands (SessionStart and PreToolUse) are unquoted shell-form paths — a project dir or $HOME containing whitespace splits them before the guard runs, giving a non-blocking 'hook error' notice (never a block, never injection). The exec-form/quoting fix changes the owned command identity (duplicates on upgrade), so it is a deferred decision (06-CONTEXT Deferred Ideas); CODEX-05 should decide its own form deliberately.
+- [Phase 6] codegraph upgrade cannot reach a Claude location whose skill dir is fully foreign/unmanifested: its PreToolUse guard keeps the old ExecPath with NO user-visible signal (test-pinned: TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation; recovery = re-run codegraph install there). Open proposal (06-REVIEW-FIX WR-03): a one-line upgrade note naming such a location.
+- [Phase 6] Tooling gaps (not blocking, not hand-edited): (a) plan-gate commands that pick a base via git log --grep='^test\\(NN-PP\\): ' | tail -1 resolve to EARLIER milestones' same-numbered plans (hit in 06-04, 06-05, 06-07 — verified against the phase base instead); (b) stale .git/gsd-plan-head-before-NN-PP markers from earlier milestones had to be removed; (c) state.update-progress warns on every plan that STATE.md has no 'Progress:' body line; (d) frontmatter set re-serializes covered_files with a blank line after the key (parser tolerates it).
+- [Phase 6] Phase 5 now reads verification_status: stale — a GENUINE signal (like Phase 4 → Phases 1–3): Phase 6 legitimately modified files in Phase 5's covered_files (internal/agents/claude.go, capabilities.go, skillshared.go, manifest.go, types.go, shared.go, ownership/capabilities tests, internal/cli/install.go, uninstall.go, docs/CLI-REFERENCE.md). Re-verify Phases 1–5 at the milestone audit (/gsd-verify-work), together with Phase 4's missing validate-phase/secure-phase runs.
+- [Phase 7] Released codegraph binaries carry a Codex TOML data-loss bug: findTOMLTableRange ends a table only at a column-0 '[', so an indented [mcp_servers.codegraph] swallows every sibling table up to the next column-0 header. Do NOT run 'codegraph install' or 'uninstall' with --target codex or --target all on a machine whose ~/.codex/config.toml indents headers until the Phase 7 fix (07-CONTEXT D-07/D-08) ships; no patch release (maintainer decision B2, 2026-09-19)
+- [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
 
 ### Quick Tasks Completed
 
@@ -450,25 +590,17 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-13T14:17:49.000Z
-Stopped at: v0.13.0 milestone complete and archived (verified closeout); no milestone scoped
-  NEXT: `/gsd-cleanup` (autonomous run's last lifecycle step), then push the branch + open the phases 9–12 PR, then `/gsd-new-milestone`
-  CARRY-OVER:
+Last session: 2026-09-19T22:35:01.950Z
+Stopped at: Phase 7 complete — all phases complete
+  CARRY-OVER (v0.14.0):
 
-    - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
-    - **Backlog 999.2 and 999.4 are promoted, not deleted.** Both entries stay in `ROADMAP.md` → Backlog, annotated with the phase that consumed them (999.2 → Phase 8 as TTY-01…07; 999.4 → Phase 7 as GRD-01). This closes the standing "backlog bookkeeping inconsistency" recorded in Blockers above.
-    - **Phase 7 gates Phase 10.** `GRD-02`'s archtest fixes the dependency-direction rule `internal/query` must obey, and `HLT-05`'s discovery-exclusion helper has to be wired inside it. The open question of whether the archtest also forbids a `query`→`indexer` edge is resolved in Phase 7, not discovered in Phase 10.
-    - **`GRF-09`'s threshold is committed BEFORE its measurement, in its own commit** — `GRF-01`'s precedent, where the threshold file has exactly one commit that is an ancestor of both observation commits, so the ordering is checkable rather than assertable. A failing measurement triggers the documented index-time-persistence fallback into the reserved 50-59 field range, never a raised bar.
-    - **Every guard in this milestone carries a positive assertion that it did its work** (rule `84d1gfpywd`) and is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation before it is trusted green. `GRD-06` is that proof committed rather than asserted.
-    - **The tmux harness (Phase 8) lands before the UI work** so that work has a real-terminal rung. `TTY-02`'s capture-twice-and-compare stability poll is the single highest flake risk in the milestone; no assertion may run against one capture.
-    - **`branching_strategy: milestone`** — this milestone lives on one branch. Amended 2026-09-12: the maintainer merged phases 7-8 mid-milestone as PR #69 (squash `3da59354`, title `test(tmux): …`, so release-please cut no release); the branch was rebased onto that squash commit (`git rebase --onto origin/main 5ffdc2a0`, the 4 post-merge `.planning/` commits replayed conflict-free) and continues for phases 9-12. Any later PR from this branch diffs against `3da59354`.
-    - **No `v0.13.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline. The label is a prediction that holds because the UI follow-through lands `feat:` commits.
-    - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
+    - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
+    - **Go toolchain:** ambient Homebrew `go` is 1.27.1; `go.mod` pins 1.26.6 and `cockroachdb/swiss` is `!go1.27` — every local `go build`/`go test` gate needs `GOTOOLCHAIN=go1.26.6` (CI is unaffected: `go-version-file: go.mod`).
+    - **Web gates:** `pnpm vitest run` must assert exit 0 AND zero "unhandled errors" lines; a pass count alone is negative-only. Piped `svelte-check` is MACHINE format (uppercase ERRORS).
+    - **WINDOWS.md** is tool-owned — close rows with `gsd-tools windows fixed <id>`, never by hand; the phase-1 rows (#12/#26/#28/#30/#36) were closed at 900d64cc and the verifier treats "in the ledger" as part of the phase goal.
+    - **No `v0.14.0` git tag** — release-please owns tagging (D-06R).
+    - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings; only the single active-milestone heading under `## Phases`.
 
 ## Operator Next Steps
 
-- v0.13.0 SHIPPED 2026-09-13 as a `verified_closeout` — 6/6 phases canonical `passed` after re-verification, 26/26 requirements, both pre-close open artefacts resolved (tty03 debug session; graphstore archtest vacuity fixed as quick task `260913-pkp`); archived under `milestones/v0.13.0-*`
-- Push the branch (~180 commits ahead of origin) and open the phases 9–12 PR with a `feat:` title and `Resolves #N`; CI will run `docs:cli:drift` and the tmux `expected=6` gate at HEAD for the first time
-- Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go`
-- Cheap follow-ups: wire `task check:gonum` and `task check:no-force-layout` into `ci.yml`; run `/gsd-validate-phase` against the archived 09–12 VALIDATION files if a `validated` record is wanted; reconcile the Pending Todos table; inspect and remove the stale `.claude/worktrees/agent-aebfa7de95041ec86` worktree
-- Start the next milestone with /gsd-new-milestone (Phase numbering continues from 13)
+- Start the next milestone with /gsd-new-milestone

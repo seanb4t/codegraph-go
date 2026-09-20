@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "success": true,
+  "generatedAt": "2026-09-15T18:52:28.309Z",
+  "browserIdentity": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  },
+  "runs": [
+    {
+      "corpus": "self",
+      "repo": "seanb4t/codegraph-go",
+      "sha": "676b2540c4802eb966bc940191c456fbef9d68c1",
+      "url": "http://127.0.0.1:53756/graph",
+      "pageErrorCount": 0,
+      "pageErrors": [],
+      "consoleWarnCount": 0,
+      "consoleErrorCount": 0,
+      "consoleMessages": [],
+      "allowlistedCount": 0,
+      "nodeCount": 111,
+      "edgeCount": 159,
+      "collapsedNodeCount": 110,
+      "invalidEndpointDiagnostics": []
+    },
+    {
+      "corpus": "guava",
+      "repo": "google/guava",
+      "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
+      "url": "http://127.0.0.1:53765/graph",
+      "pageErrorCount": 0,
+      "pageErrors": [],
+      "consoleWarnCount": 0,
+      "consoleErrorCount": 0,
+      "consoleMessages": [],
+      "allowlistedCount": 0,
+      "nodeCount": 134,
+      "edgeCount": 819,
+      "collapsedNodeCount": 134,
+      "invalidEndpointDiagnostics": []
+    }
+  ],
+  "error": null
+}

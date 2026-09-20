@@ -1,0 +1,4 @@
+files=4 nodes=20 edges=22 duration=<DURATION>
+Live file watching is disabled here — CODEGRAPH_NO_WATCH=1 is set.
+Until you re-sync, the CodeGraph index stays frozen — it will not pick up edits on its own.
+Run `codegraph sync` after changing files to refresh the index.

@@ -1,0 +1,4 @@
+Alpha impact (depth=2): 3 node(s), 2 edge(s)
+  main (function) main.go:6
+  Alpha (function) pkga/pkga.go:13
+  Run (function) pkgb/pkgb.go:8

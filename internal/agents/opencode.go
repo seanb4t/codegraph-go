@@ -29,9 +29,29 @@ func init() {
 	registerTarget(opencodeTarget{})
 }
 
-func (opencodeTarget) ID() TargetID                   { return Opencode }
-func (opencodeTarget) DisplayName() string            { return "opencode" }
-func (opencodeTarget) SupportsLocation(Location) bool { return true }
+func (opencodeTarget) ID() TargetID        { return Opencode }
+func (opencodeTarget) DisplayName() string { return "opencode" }
+
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t opencodeTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
+
+// Capabilities is opencode's capability table entry (D-01, D-02): both
+// scopes, JSONC config, no hooks. SkillDirs is the shared package (D-06:
+// opencode relies on the shared .agents/skills/codegraph path — a
+// opencode-specific directory is added only if a live session shows the
+// shared path is not read).
+func (opencodeTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal, LocationLocal},
+		ConfigFormat: ConfigFormatJSONC,
+		Hooks:        HooksNone,
+		MCPConfig:    opencodeConfigPath,
+		Instructions: opencodeInstructionsPath,
+		SkillDirs:    sharedSkillDirs,
+	}
+}
 
 // resolveOpencodeConfigDir returns the base config directory opencode
 // itself resolves to: XDG_CONFIG_HOME if set and non-empty, else
@@ -253,8 +273,13 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 	}
 }
 
-func (opencodeTarget) Detect(loc Location) DetectionResult {
-	configPath, err := opencodeConfigPath(loc)
+// Detect is a derivation of the capability table (D-02, D-03).
+func (t opencodeTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
+		return DetectionResult{}
+	}
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
@@ -269,7 +294,7 @@ func (opencodeTarget) Detect(loc Location) DetectionResult {
 	}
 }
 
-func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
+func (t opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
 	if configPath, err := opencodeConfigPath(loc); err != nil {
@@ -286,6 +311,8 @@ func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		recordFile(&result, instrPath, fr, err)
 	}
 
+	installDeclaredSkill(&result, t, loc)
+
 	if loc == LocationGlobal {
 		if cfgDir, err := resolveOpencodeConfigDir(); err == nil {
 			opencodeSweepStaleAppData(cfgDir)
@@ -295,7 +322,7 @@ func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	return result
 }
 
-func (opencodeTarget) Uninstall(loc Location) WriteResult {
+func (t opencodeTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 
 	if configPath, err := opencodeConfigPath(loc); err != nil {
@@ -307,21 +334,24 @@ func (opencodeTarget) Uninstall(loc Location) WriteResult {
 
 	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
+	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {
+		// D-11: the repo-root AGENTS.md is shared with codex at local
+		// scope — leave the marker block in place while another
+		// registered target still declares this same file and reports
+		// itself configured there.
+		result.Files = append(result.Files, FileResult{Path: instrPath, Action: ActionKept})
+		result.Notes = append(result.Notes, instructionsKeptNote(instrPath, others))
 	} else {
 		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
 		recordAction(&result, instrPath, action, err)
 	}
 
+	uninstallDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
-func (opencodeTarget) DescribePaths(loc Location) []string {
-	var paths []string
-	if p, err := opencodeConfigPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	if p, err := opencodeInstructionsPath(loc); err == nil {
-		paths = append(paths, p)
-	}
-	return paths
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t opencodeTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

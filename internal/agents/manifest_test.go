@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -392,6 +393,70 @@ func TestConfiguredSkillLocations_IncludesLocationWithCorruptedManifest(t *testi
 	}
 	if !found {
 		t.Fatalf("ConfiguredSkillLocations dropped a location with a corrupted-but-present manifest: got %v", locs)
+	}
+}
+
+// TestManifest_TargetsRoundTripAndSetEquality (D-07): writeManifest treats
+// Targets as a SET, not an ordered slice — reordering the same requesters
+// is a byte-level no-op, but adding a genuinely new requester still
+// updates the file. A manifest with a nil Targets field (no target has
+// been recorded yet) serializes with no "targets" key at all, keeping a
+// schema_version 1-shaped manifest byte-identical.
+func TestManifest_TargetsRoundTripAndSetEquality(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".codegraph-manifest.json")
+
+	m1 := skillManifest{
+		SchemaVersion:    manifestSchemaVersion,
+		CodegraphVersion: "v0.14.0",
+		Location:         string(LocationGlobal),
+		Files:            map[string]string{manifestKeySkillMD: "sha256:aaaa"},
+		Targets:          []TargetID{Cursor, Opencode},
+	}
+	fr, err := writeManifest(path, m1)
+	if err != nil {
+		t.Fatalf("writeManifest: %v", err)
+	}
+	if fr.Action != ActionCreated {
+		t.Fatalf("first writeManifest action = %q, want %q", fr.Action, ActionCreated)
+	}
+
+	m2 := m1
+	m2.Targets = []TargetID{Opencode, Cursor}
+	fr, err = writeManifest(path, m2)
+	if err != nil {
+		t.Fatalf("second writeManifest (reordered targets): %v", err)
+	}
+	if fr.Action != ActionUnchanged {
+		t.Fatalf("reordered-targets writeManifest action = %q, want %q", fr.Action, ActionUnchanged)
+	}
+
+	m3 := m1
+	m3.Targets = []TargetID{Cursor, Opencode, Gemini}
+	fr, err = writeManifest(path, m3)
+	if err != nil {
+		t.Fatalf("third writeManifest (added target): %v", err)
+	}
+	if fr.Action != ActionUpdated {
+		t.Fatalf("added-target writeManifest action = %q, want %q", fr.Action, ActionUpdated)
+	}
+
+	dir2 := t.TempDir()
+	path2 := filepath.Join(dir2, ".codegraph-manifest.json")
+	if _, err := writeManifest(path2, skillManifest{
+		SchemaVersion:    manifestSchemaVersion,
+		CodegraphVersion: "v0.14.0",
+		Location:         string(LocationGlobal),
+		Files:            map[string]string{},
+	}); err != nil {
+		t.Fatalf("writeManifest with nil Targets: %v", err)
+	}
+	raw, err := os.ReadFile(path2)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	if strings.Contains(string(raw), `"targets"`) {
+		t.Fatalf("manifest with nil Targets serialized a targets key: %s", raw)
 	}
 }
 

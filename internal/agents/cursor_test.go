@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 func TestCursor_ID(t *testing.T) {
@@ -129,13 +131,188 @@ func TestCursor_RoundTrip_ByteInvariantWithSibling(t *testing.T) {
 	}
 }
 
-func TestCursor_DescribePaths_ListsOnlyMcpConfig(t *testing.T) {
+// TestCursor_DescribePaths_ListsMcpConfigAndSharedSkill supersedes
+// TestCursor_DescribePaths_ListsOnlyMcpConfig: Cursor now declares
+// SkillDirs: sharedSkillDirs (D-06), so DescribePaths grows from 1 path to
+// 3 — the MCP config, the shared SKILL.md, and its sidecar manifest.
+func TestCursor_DescribePaths_ListsMcpConfigAndSharedSkill(t *testing.T) {
 	c := cursorTarget{}
 	paths := c.DescribePaths(LocationGlobal)
-	if len(paths) != 1 {
-		t.Fatalf("want exactly 1 path (the MCP config), got %v", paths)
+	if len(paths) != 3 {
+		t.Fatalf("want exactly 3 paths (mcp config + shared SKILL.md + manifest), got %v", paths)
 	}
-	if !strings.HasSuffix(paths[0], filepath.Join(".cursor", "mcp.json")) {
-		t.Fatalf("unexpected DescribePaths entry: %v", paths)
+	var sawMCP, sawSkillMD, sawManifest bool
+	for _, p := range paths {
+		switch {
+		case strings.HasSuffix(p, filepath.Join(".cursor", "mcp.json")):
+			sawMCP = true
+		case strings.HasSuffix(p, filepath.Join(".agents", "skills", "codegraph", "SKILL.md")):
+			sawSkillMD = true
+		case strings.HasSuffix(p, filepath.Join(".agents", "skills", "codegraph", ".codegraph-manifest.json")):
+			sawManifest = true
+		}
+	}
+	if !sawMCP || !sawSkillMD || !sawManifest {
+		t.Fatalf("DescribePaths missing an expected entry (mcp=%v skillmd=%v manifest=%v): %v", sawMCP, sawSkillMD, sawManifest, paths)
+	}
+}
+
+// TestCursor_Install_WritesSharedSkillPackage (AGENT-04, D-06): Cursor
+// installs the codegraph skill through the shared .agents/skills/codegraph
+// package (installDeclaredSkill -> installSkillPackage), never a
+// Cursor-specific directory — and Uninstall reverses it completely.
+func TestCursor_Install_WritesSharedSkillPackage(t *testing.T) {
+	for _, loc := range []Location{LocationGlobal, LocationLocal} {
+		t.Run(string(loc), func(t *testing.T) {
+			fakeHome(t)
+			if loc == LocationLocal {
+				dir := t.TempDir()
+				t.Chdir(dir)
+			}
+			c := cursorTarget{}
+			c.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+			dir, err := sharedSkillDirPath(loc)
+			if err != nil {
+				t.Fatalf("sharedSkillDirPath: %v", err)
+			}
+			skillPath := filepath.Join(dir, "SKILL.md")
+			want, err := claudeassets.SkillMarkdown()
+			if err != nil {
+				t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+			}
+			if got := readFile(t, skillPath); got != string(want) {
+				t.Fatalf("shared SKILL.md at %s does not match the embed", skillPath)
+			}
+			m, present, err := readManifest(skillManifestPath(dir))
+			if err != nil || !present {
+				t.Fatalf("expected a manifest at %s (present=%v err=%v)", dir, present, err)
+			}
+			if len(m.Targets) != 1 || !containsTarget(m.Targets, Cursor) {
+				t.Fatalf("manifest targets = %v, want exactly [cursor]", m.Targets)
+			}
+
+			c.Uninstall(loc)
+			if fileExists(skillPath) {
+				t.Fatalf("shared SKILL.md not removed after uninstall")
+			}
+			if fileExists(skillManifestPath(dir)) {
+				t.Fatalf("shared manifest not removed after uninstall")
+			}
+			if fileExists(dir) {
+				t.Fatalf("shared skill dir not swept after uninstall")
+			}
+		})
+	}
+}
+
+// TestCursor_CorruptedManifestAtSharedDir_NoClaudePresent_DoesNotFalselyAttributeClaude
+// pins CR-01 (05-REVIEW.md) on the shared directory: unlike
+// TestGemini_CorruptedManifestAtHarnessExclusiveDir_DoesNotFalselyAttributeClaude,
+// which covers a harness-exclusive directory, this drives the production
+// path -- cursorTarget{}.Install()/Uninstall() through
+// installDeclaredSkill/uninstallDeclaredSkill and declaredSkillFallback --
+// with no Claude directory and no D-17 symlink. Cursor's declared skill
+// directory is the shared path, but it is not Claude's directory on this
+// machine, so a corrupted manifest must self-heal to [cursor], not
+// [claude cursor], and uninstalling Cursor must remove the package.
+func TestCursor_CorruptedManifestAtSharedDir_NoClaudePresent_DoesNotFalselyAttributeClaude(t *testing.T) {
+	fakeHome(t)
+
+	c := cursorTarget{}
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	sharedDir, err := sharedSkillDirPath(LocationGlobal)
+	if err != nil {
+		t.Fatalf("sharedSkillDirPath: %v", err)
+	}
+	manifestPath := skillManifestPath(sharedDir)
+	if !fileExists(manifestPath) {
+		t.Fatalf("manifest not written by first install: %s", manifestPath)
+	}
+	if err := os.WriteFile(manifestPath, []byte("{not valid json"), 0o644); err != nil {
+		t.Fatalf("corrupt manifest: %v", err)
+	}
+
+	// Re-run install over the corrupted manifest: self-healing must not
+	// invent Claude as a co-owner of a directory Claude never wrote to and
+	// is not symlinked onto.
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	m, present, err := readManifest(manifestPath)
+	if err != nil || !present {
+		t.Fatalf("manifest not present after self-heal reinstall: present=%v err=%v", present, err)
+	}
+	if containsTarget(m.Targets, Claude) {
+		t.Fatalf("CONFIRMED BUG: Claude falsely attributed as requester of %s with no claude install/symlink ever present: targets=%v", sharedDir, m.Targets)
+	}
+	if !targetSetEqual(m.Targets, []TargetID{Cursor}) {
+		t.Fatalf("Targets after self-heal reinstall (no claude ever involved) = %v, want [cursor]", m.Targets)
+	}
+
+	// Cursor is the only real requester -- uninstalling it must fully remove
+	// the shared package (D-08: deleted only when targets becomes empty).
+	c.Uninstall(LocationGlobal)
+
+	if fileExists(sharedDir) {
+		t.Fatalf("CONFIRMED BUG: shared skill dir survived uninstall of its only real requester (cursor) due to phantom claude attribution")
+	}
+}
+
+// TestCursor_CorruptedManifestAtSharedDir_ClaudeSymlinked_StillAttributesClaude
+// is the positive control for the fix above: when Claude's own skill
+// directory really IS a symlink onto the shared directory (D-17's `npx
+// skills` layout, symlinkedClaudeLayout), a legacy manifest (no targets
+// key -- the pre-05-02 schema, which manifestRequesters' D-07 rule already
+// reads as owned by Claude) at the shared directory must still resolve
+// "assume Claude" to [Claude] here -- this is the genuine case
+// declaredSkillFallback exists to preserve. Uninstalling Cursor (a
+// non-owner of a package it never requested through this path) must leave
+// Claude's package fully intact.
+func TestCursor_CorruptedManifestAtSharedDir_ClaudeSymlinked_StillAttributesClaude(t *testing.T) {
+	symlinkedClaudeLayout(t)
+
+	sharedDir, err := sharedSkillDirPath(LocationGlobal)
+	if err != nil {
+		t.Fatalf("sharedSkillDirPath: %v", err)
+	}
+	manifestPath := skillManifestPath(sharedDir)
+	if _, err := writeManifest(manifestPath, skillManifest{
+		SchemaVersion:    1,
+		CodegraphVersion: "v0.10.0",
+		Location:         string(LocationGlobal),
+		Files:            map[string]string{manifestKeySkillMD: "sha256:aaaa"},
+		// No Targets key: the legacy pre-05-02 schema.
+	}); err != nil {
+		t.Fatalf("seed legacy manifest: %v", err)
+	}
+
+	c := cursorTarget{}
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	m, present, err := readManifest(manifestPath)
+	if err != nil || !present {
+		t.Fatalf("manifest not present after install over legacy manifest: present=%v err=%v", present, err)
+	}
+	if !containsTarget(m.Targets, Claude) {
+		t.Fatalf("Claude's own skill dir is symlinked onto %s, but the legacy-manifest fallback did not attribute Claude: targets=%v", sharedDir, m.Targets)
+	}
+	if !targetSetEqual(m.Targets, []TargetID{Claude, Cursor}) {
+		t.Fatalf("Targets after install over legacy manifest = %v, want [claude cursor]", m.Targets)
+	}
+
+	// Cursor uninstalls; Claude's package (SKILL.md + manifest, still
+	// naming Claude) must survive since Claude never relinquished it.
+	c.Uninstall(LocationGlobal)
+
+	if !fileExists(sharedDir) {
+		t.Fatalf("shared skill dir removed after cursor uninstall, but claude still owns the package")
+	}
+	afterM, present, err := readManifest(manifestPath)
+	if err != nil || !present {
+		t.Fatalf("manifest missing after cursor uninstall, but claude still owns the package: present=%v err=%v", present, err)
+	}
+	if !targetSetEqual(afterM.Targets, []TargetID{Claude}) {
+		t.Fatalf("Targets after cursor uninstall = %v, want [claude]", afterM.Targets)
 	}
 }

@@ -274,15 +274,59 @@ Every guard in the repo's known cannot-fire set closed with a recorded RED demon
 - Notable: 249 commits in 6 calendar days — the densest milestone yet; 21 mutation families; 5 code-review fix passes (Phase 10's needed user authorization for a fourth); 1 live UAT performed by the orchestrator; 2 UX interruptions about question visibility, 2 about scope.
 - Notable: three engram records written at Phase 11 (`qc5kkp2457` covered_files trap, `mjqcmvnrwm` phase decisions, `npwg333n9h` Taskfile template escaping) and one at Phase 12 (`a2t6qe2171` the two maintainer questions) — the close's re-verification would have been avoidable had `qc5kkp2457` existed at Phase 7.
 
+## Milestone: v0.14.0 — Polish & Agent Reach
+
+**Shipped:** 2026-09-20
+**Phases:** 7 (1–7) | **Plans:** 53 | **Calendar days:** 7 (2026-09-14 → 09-20) | **Commits:** 398 | **Requirements:** 55/55
+
+### What Was Built
+Every known defect, vacuous guard, flake and doc drift in the survey burned down (Phases 1–2); the verb surface folded so `query` became `search --full` and `unlock` became `daemon unlock`, with rename stubs that exit non-zero (Phase 3); every human-output verb styled through `present` behind a TTY and `NO_COLOR` gate, with 31 plain goldens frozen before any renderer and the agent/MCP path proven byte-identical (Phase 4); one `Capabilities()` literal per target driving install, uninstall, `Detect` and `--print-config-style` for all 8 harnesses, with the skill package written once to a shared path (Phase 5); an opt-in PreToolUse nudge for Claude Code that adds context on a search and never denies (Phase 6); and Codex brought to parity at both scopes — project-local MCP config through a repaired TOML splice, the shared repo-root `AGENTS.md`, the skill, and the same nudge through a second harness envelope on one core — plus a published, drift-tested capability table (Phase 7).
+
+### What Worked
+- **Verifying the harness live before editing its code overturned two premises in one session.** CODEX-01 ran before any `codex.go` line changed and found that Codex trust-gates project config and hooks but NOT `AGENTS.md` or skills, and that a `-c projects…trust_level` override grants no trust at all. Both had been assumed the other way; the trust Note users will read says what is actually true because the evidence came first.
+- **Fixing the data-loss bug as plan 01 of 11.** The Codex TOML splice ended a table only at a column-0 `[`, so an indented `[mcp_servers.codegraph]` swallowed every sibling MCP server. It was found during discussion, reproduced against the maintainer's real config shape, and fixed RED-first before the scope flip that would have exercised it daily.
+- **Deep code review kept paying, including on its own fixes.** Phase 7's review found a BOM variant of the same splice bug (duplicate table, unremovable entry) and a hook-position regression; the re-review pass then found a second-order bug introduced by the first fix (a BOM-only residual defeating keep-clean removal). Three findings, three fixes, each RED-first with a planted-mutation control.
+- **An independent audit read a commit message as a claim and checked it.** The integration check caught that the T-04-24 fix's stated parity with "the sibling file and error lines" was false for the plain branch. The invariant now applies before the branch, so the two arms cannot disagree.
+- **Retroactively clearing a phase's missed gates found a live bug.** Phase 4 never ran its `verify:post` hooks. Running them at the milestone audit produced a security register that caught terminal escape injection through install notes — dormant when Phase 4 shipped, live once Phases 5 and 7 added path-bearing notes.
+- **Writing the adapter to accept either outcome unblocked a question the evidence could not yet answer.** Codex's docs listed no `agent_id` on PreToolUse, so the cooldown key was written to handle both cases and the live session recorded which one held (it carries `agent_id`; the per-subagent cooldown works).
+
+### What Was Inefficient
+- **A blind Enter on a TUI prompt started a package upgrade.** Codex re-offered its update with a different default, and a keypress sent without reading the screen selected "Update now", running `brew upgrade --cask codex` until it was interrupted. Every later keypress went through a helper that refuses unless the highlighted line matches.
+- **`codex exec` blocks on stdin.** The first `features.hooks=false` probe sat until its timeout and produced an inconclusive result that looked like a pass. It was discarded and re-run with `< /dev/null`, plus a discriminating control.
+- **A test fixture froze a bug.** The BOM fix's own fixture encoded the residual `"\ufeff\n"` as expected output, which would have guarded the bug in place had the re-review not caught it.
+- **A vacuous negative control nearly shipped.** A guard "proved" the local root derivation by faking `$PWD`, which bash re-derives from `getcwd()`; the executor caught it and made the process's actual cwd wrong instead.
+- **Every phase's verification went `stale` again at the close** — the fourth milestone in a row. The cause is legitimate (later phases edit earlier covered files), but it means the close always includes a re-verification step.
+
+### Patterns Established
+- **A harness's behaviour is evidence, not documentation.** Live-check before editing code that depends on it, with the pass bar locked in writing before the session, absences positive-controlled, and a negative control that must stay silent.
+- **Sanitize before the branch, not inside one arm.** A two-branch renderer cannot keep an invariant that only one branch applies.
+- **`ActionRemoved` and friends describe what happened on disk; a label that can disagree with the filesystem is a defect worth recording even when harmless.**
+- **Append our own hook group last and update it in place.** Codex's hook trust is position-keyed, so an update that re-appends re-flags an untouched foreign hook.
+- **A skipped check is recorded as skipped, with its reason and follow-up, and its gate is left failing honestly rather than edited to green.** (FIX-03's tmux evidence, Family (c3), issue #75.)
+- **Re-measure counts the plan asserts.** "38 transcripts" was re-derived before the re-freeze; the disk held 42 goldens, 38 of them carrying the string.
+
+### Key Lessons
+1. **A premise worth a phase of work is worth an hour of live verification.** Two of Phase 7's locked decisions were wrong in the user-visible direction, and the only reason no wrong code shipped is that the live check came first.
+2. **Fixes create their own bugs at the layer above.** Preserving the BOM was right and broke the `updated == ""` predicate one call up; the second-order bug was invisible to the test that pinned the first fix.
+3. **Retroactive gates are not paperwork.** Phase 4's missed security hook, run three phases later, found a real escape-injection regression that no green suite reported.
+4. **Read the screen before every keypress in someone else's TUI.** Defaults move between prompts.
+5. **An honest "not run" is worth more than a green box.** The tmux evidence, the CODEX-01 unknowns and the FIX-03 override are all recorded as what they are, and the milestone audit is readable because of it.
+
+### Cost Observations
+- Model mix: opus for orchestration, planning and the security audits; sonnet for research, execution, review, fixes, verification, pattern mapping and the integration check; haiku for the plan checker.
+- Sessions: one long orchestrated session (the milestone's last four phases plus the close), with one rate-limit interruption that killed an integration check mid-run and was re-spawned.
+- Notable: 398 commits in 7 days; 32 mutation families in Phase 7 alone; 3 code-review findings plus 1 re-review finding plus 1 integration finding, all fixed; 2 data-loss-class bugs caught before release.
+- Notable: four engram records written during Phase 7 (`drc1dz6vee` phase decisions, `gqcsa5baqk` Codex live facts, `f6wp5rkwgx` the tmux/herdr decision, plus the Phase 6 record it extends).
+
 ## Cross-Milestone Trends
 
-| Metric | v0.1 | v1.0 | v0.5.0 | v0.10.0 | v0.11.0 | v0.12.0 | v0.13.0 |
-|--------|------|------|--------|---------|---------|---------|---------|
-| Phases | 8 | 10 | 4 | 4 | 6 | 6 | 6 (7–12) |
-| Plans | 66 | 72 | 24 | 15 | 30 | 51 | 29 (+1 quick) |
-| Tasks | 142 | — | — | 34 | 60 | — | 72 |
-| Calendar days | — | 20 (2026-07-14 → 08-03) | 3 (2026-08-08 → 08-11) | 2 (2026-08-12 → 08-13) | 4 (2026-08-13 → 08-16) | 17 (2026-08-22 → 09-07) | 6 (2026-09-08 → 09-13) |
-| Commits | — | 594 | ~80 | — | 261 | 498 | 249 |
+| Metric | v0.1 | v1.0 | v0.5.0 | v0.10.0 | v0.11.0 | v0.12.0 | v0.13.0 | v0.14.0 |
+|--------|------|------|--------|---------|---------|---------|---------|---------|
+| Phases | 8 | 10 | 4 | 4 | 6 | 6 | 6 (7–12) | 7 (1–7) |
+| Plans | 66 | 72 | 24 | 15 | 30 | 51 | 29 (+1 quick) | 53 |
+| Tasks | 142 | — | — | 34 | 60 | — | 72 | — |
+| Calendar days | — | 20 (2026-07-14 → 08-03) | 3 (2026-08-08 → 08-11) | 2 (2026-08-12 → 08-13) | 4 (2026-08-13 → 08-16) | 17 (2026-08-22 → 09-07) | 6 (2026-09-08 → 09-13) | 7 (2026-09-14 → 09-20) |
+| Commits | — | 594 | ~80 | — | 261 | 498 | 249 | 398 |
 | Net product LOC (outside `.planning/`) | — | — | — | — | **−806** (first shrinking milestone) | **+51,387** (first GUI milestone; `web/tests` > `web/src`) |
 | Releases cut during the milestone | 1 | 1 | 6 (`v0.5.0` … `v0.9.0`) | 0 (no milestone tag by design — D-06R) | 0 (same) | 0 (same) |
 | Deep-review bugs caught (green suite missed) | Phases 4/6/7/8 — recurring, high-value | Every phase touching I/O, concurrency, or CI — 10/10 recurrence | 29 findings across 6 convergence cycles on Phase 1 alone; cycle 3 caught a test pinning a *broken* invariant | Phase 7: 2 CRITICAL + 4 WARNING from a deep review after a green TDD suite; a separate independent security review caught 1 real vulnerability pre-merge | Retroactive secure+validate sweep across all 6 phases: 131 threats modelled, 2 CRITICAL; 3 phantom `-run` patterns found reading green | Live browser UAT found real defects in **4 consecutive phases** a green suite could not; 06-08 added *after* the phase verified 5/5 |

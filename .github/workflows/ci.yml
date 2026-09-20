@@ -202,6 +202,46 @@ jobs:
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
+      # GRD-11: check:gonum's SBOM half shells out to `syft` exactly as
+      # .goreleaser.yaml's sboms: block does; GitHub-hosted runners do not
+      # ship it. Same pin already trusted by release.yml and
+      # linux-cross-canary.yml — reused rather than re-derived.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      # GRD-11/GRF-10: this target's three positive-controlled halves
+      # (govulncheck source mode over the main module, syft SBOM by
+      # name+version, cgo-closure walk) ran only locally since v0.13.0
+      # Phase 11. `test` is already a required context, so this blocks
+      # merges the moment it lands — no ruleset edit needed (D-04). Needs
+      # `node` (Set up Node above) and `syft` (the step above).
+      - name: Gonum dependency-shape guard (GRD-11/GRF-10)
+        run: task check:gonum
+
+      # GRD-11/GRF-06: runs the script's --self-test first, then the real
+      # scan over web/src for forbidden force-directed layout names. Needs
+      # only `node`, no pnpm install.
+      - name: No-force-layout guard (GRD-11/GRF-06)
+        run: task check:no-force-layout
+
+      # GRD-12 (D-05/D-06): proves the required-status-check fixture this
+      # repo maintains (.github/required-status-checks.txt, D-07) still
+      # matches what GitHub ruleset 20157557 (protect-main) ACTUALLY
+      # requires, in both directions — a context required live but absent
+      # from the fixture under-asserts; a context in the fixture but not
+      # required live asserts a requirement that does not exist. This is
+      # deliberately CI-only (no Taskfile target, no Go test performs the
+      # live fetch, D-06): the "ground truth" side lives outside the git
+      # tree, at GitHub's ruleset API, so a local target could be invoked
+      # offline and misread as PASS — exactly the "skip-clean offline"
+      # clause GRD-07 was declined for at v0.13.0. Every API failure
+      # (non-200, empty body, unparseable JSON, non-active enforcement) is
+      # a named `::error::` and a hard exit 1, never a skip.
+      - name: Ruleset drift check (GRD-12)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/check-ruleset-drift.sh
+
       # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
       # by `go list ./...` above (it's a normal package, not testdata/), but
       # an explicit named step guards against a future refactor of that

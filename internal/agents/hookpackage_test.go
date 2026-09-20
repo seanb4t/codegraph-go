@@ -337,81 +337,168 @@ func walkEntries(dir string) ([]string, error) {
 	return entries, err
 }
 
-// sessionStartBlock decodes path's JSON and returns the value at
-// hooks.SessionStart, t.Fatalf'ing if the file is missing or the path is
-// absent — used to compare .claude/settings.json's live registration
-// against .claude/hooks/hooks.json's embed fragment (T-06 Task 2).
-func sessionStartBlock(t *testing.T, path string) any {
+// hookEventBlock decodes path's JSON and returns the value at
+// hooks.<event>, t.Fatalf'ing if the file is missing or the path is absent —
+// used to compare .claude/settings.json's live registration against
+// .claude/hooks/hooks.json's embed fragment (T-06 Task 2, v0.14.0 D-13).
+func hookEventBlock(t *testing.T, path, event string) any {
 	t.Helper()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("sessionStartBlock: read %s: %v", path, err)
+		t.Fatalf("hookEventBlock: read %s: %v", path, err)
 	}
 	var decoded map[string]any
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("sessionStartBlock: unmarshal %s: %v", path, err)
+		t.Fatalf("hookEventBlock: unmarshal %s: %v", path, err)
 	}
 	hooks, ok := decoded["hooks"].(map[string]any)
 	if !ok {
-		t.Fatalf("sessionStartBlock: %s has no top-level \"hooks\" object", path)
+		t.Fatalf("hookEventBlock: %s has no top-level \"hooks\" object", path)
 	}
-	sessionStart, ok := hooks["SessionStart"]
+	block, ok := hooks[event]
 	if !ok {
-		t.Fatalf("sessionStartBlock: %s has no hooks.SessionStart", path)
+		t.Fatalf("hookEventBlock: %s has no hooks.%s", path, event)
 	}
-	return sessionStart
+	return block
+}
+
+// sessionStartBlock returns hooks.SessionStart from path (see hookEventBlock).
+func sessionStartBlock(t *testing.T, path string) any {
+	t.Helper()
+	return hookEventBlock(t, path, "SessionStart")
 }
 
 // TestHookRegistrationMatchesFragmentAndScript pins Phase 7's embed
 // fragment equal to the live registration this repository actually runs
 // (D-04, A2), then proves every command path the registration names
 // resolves to a real, executable file on disk — so a rename of the script
-// fails this test instead of silently disabling the nudge.
+// fails this test instead of silently disabling the nudge. It covers
+// SessionStart and the dogfooded PreToolUse nudge (v0.14.0 Phase 6 D-13).
 func TestHookRegistrationMatchesFragmentAndScript(t *testing.T) {
-	settingsBlock := sessionStartBlock(t, claudeSettingsFilePath)
-	fragmentBlock := sessionStartBlock(t, claudeHooksFragmentPath)
+	for _, event := range []string{"SessionStart", "PreToolUse"} {
+		t.Run(event, func(t *testing.T) {
+			settingsBlock := hookEventBlock(t, claudeSettingsFilePath, event)
+			fragmentBlock := hookEventBlock(t, claudeHooksFragmentPath, event)
 
-	if !reflect.DeepEqual(settingsBlock, fragmentBlock) {
-		t.Fatalf("hooks.SessionStart differs between %s and %s — Phase 7 would embed a fragment that differs from what actually runs here.\nsettings.json: %#v\nhooks.json:    %#v",
-			claudeSettingsFilePath, claudeHooksFragmentPath, settingsBlock, fragmentBlock)
-	}
+			if !reflect.DeepEqual(settingsBlock, fragmentBlock) {
+				t.Fatalf("hooks.%s differs between %s and %s — Phase 7 would embed a fragment that differs from what actually runs here.\nsettings.json: %#v\nhooks.json:    %#v",
+					event, claudeSettingsFilePath, claudeHooksFragmentPath, settingsBlock, fragmentBlock)
+			}
 
-	entries, ok := settingsBlock.([]any)
-	if !ok {
-		t.Fatalf("hooks.SessionStart is not an array: %#v", settingsBlock)
-	}
-	if len(entries) == 0 {
-		t.Fatalf("hooks.SessionStart is empty")
-	}
-
-	for _, e := range entries {
-		entry, ok := e.(map[string]any)
-		if !ok {
-			t.Fatalf("SessionStart entry is not an object: %#v", e)
-		}
-		hooksArr, ok := entry["hooks"].([]any)
-		if !ok || len(hooksArr) == 0 {
-			t.Fatalf("SessionStart entry has no hooks array: %#v", entry)
-		}
-		for _, h := range hooksArr {
-			hookObj, ok := h.(map[string]any)
+			entries, ok := settingsBlock.([]any)
 			if !ok {
-				t.Fatalf("hook entry is not an object: %#v", h)
+				t.Fatalf("hooks.%s is not an array: %#v", event, settingsBlock)
 			}
-			command, _ := hookObj["command"].(string)
-			if command == "" {
-				t.Fatalf("hook entry has no command string: %#v", hookObj)
+			if len(entries) == 0 {
+				t.Fatalf("hooks.%s is empty", event)
 			}
-			resolved := strings.Replace(command, "${CLAUDE_PROJECT_DIR}", "../..", 1)
-			info, err := os.Stat(resolved)
-			if err != nil {
-				t.Fatalf("command path %q (resolved %q) does not exist: %v", command, resolved, err)
+
+			for _, e := range entries {
+				entry, ok := e.(map[string]any)
+				if !ok {
+					t.Fatalf("%s entry is not an object: %#v", event, e)
+				}
+				hooksArr, ok := entry["hooks"].([]any)
+				if !ok || len(hooksArr) == 0 {
+					t.Fatalf("%s entry has no hooks array: %#v", event, entry)
+				}
+				for _, h := range hooksArr {
+					hookObj, ok := h.(map[string]any)
+					if !ok {
+						t.Fatalf("hook entry is not an object: %#v", h)
+					}
+					command, _ := hookObj["command"].(string)
+					if command == "" {
+						t.Fatalf("hook entry has no command string: %#v", hookObj)
+					}
+					resolved := strings.Replace(command, "${CLAUDE_PROJECT_DIR}", "../..", 1)
+					info, err := os.Stat(resolved)
+					if err != nil {
+						t.Fatalf("command path %q (resolved %q) does not exist: %v", command, resolved, err)
+					}
+					if info.Mode()&0o111 == 0 {
+						t.Fatalf("command path %q (resolved %q) is not executable: mode %v", command, resolved, info.Mode())
+					}
+				}
 			}
-			if info.Mode()&0o111 == 0 {
-				t.Fatalf("command path %q (resolved %q) is not executable: mode %v", command, resolved, info.Mode())
+		})
+	}
+}
+
+// TestPreToolUseRegistrationShape pins the PreToolUse registration bytes
+// this repository writes, in both the dogfooded settings.json and the
+// embedded fragment (D-02, D-12). It asserts only our own registration
+// (D-00) — whether Claude Code matches it as intended is 06-06's live
+// check. One handler per block keeps the block, the unit writeHookEntry and
+// removeHookEntry own by exact command (242ec0a), the same as the handler,
+// so a hand-edit of any single handler duplicates rather than being
+// overwritten via its unedited siblings.
+func TestPreToolUseRegistrationShape(t *testing.T) {
+	const wantCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+	want := []struct{ matcher, ifRule string }{
+		{"Bash", "Bash(grep *)"},
+		{"Bash", "Bash(rg *)"},
+		{"Bash", "Bash(find *)"},
+		{"Grep", ""},
+		{"Glob", ""},
+		{"Read", ""},
+	}
+	for _, f := range []struct{ name, path string }{
+		{"settings.json", claudeSettingsFilePath},
+		{"hooks.json", claudeHooksFragmentPath},
+	} {
+		t.Run(f.name, func(t *testing.T) {
+			blocks, ok := hookEventBlock(t, f.path, "PreToolUse").([]any)
+			if !ok {
+				t.Fatalf("%s: hooks.PreToolUse is not an array", f.path)
 			}
-		}
+			if len(blocks) != len(want) {
+				t.Fatalf("%s: hooks.PreToolUse has %d blocks, want %d: %#v", f.path, len(blocks), len(want), blocks)
+			}
+			for i, b := range blocks {
+				block, ok := b.(map[string]any)
+				if !ok {
+					t.Fatalf("%s: block %d is not an object: %#v", f.path, i, b)
+				}
+				if len(block) != 2 || block["matcher"] != want[i].matcher {
+					t.Errorf("%s: block %d = %#v, want exactly {matcher: %q, hooks}", f.path, i, block, want[i].matcher)
+				}
+				handlers, _ := block["hooks"].([]any)
+				if len(handlers) != 1 {
+					t.Errorf("%s: block %d (%s) has %d handlers, want exactly 1: %#v", f.path, i, want[i].matcher, len(handlers), handlers)
+					continue
+				}
+				handler, ok := handlers[0].(map[string]any)
+				if !ok {
+					t.Fatalf("%s: block %d handler is not an object: %#v", f.path, i, handlers[0])
+				}
+				wantKeys := 3
+				if want[i].ifRule != "" {
+					wantKeys = 4
+					if handler["if"] != want[i].ifRule {
+						t.Errorf("%s: block %d if = %#v, want %q", f.path, i, handler["if"], want[i].ifRule)
+					}
+				} else if got, has := handler["if"]; has {
+					t.Errorf("%s: block %d (%s) has if = %#v, want none", f.path, i, want[i].matcher, got)
+				}
+				if handler["type"] != "command" {
+					t.Errorf("%s: block %d type = %#v, want command", f.path, i, handler["type"])
+				}
+				if handler["command"] != wantCommand {
+					t.Errorf("%s: block %d command = %#v, want %q", f.path, i, handler["command"], wantCommand)
+				}
+				if timeout, isNum := handler["timeout"].(float64); !isNum || timeout != 5 {
+					t.Errorf("%s: block %d timeout = %#v, want the JSON number 5 (seconds)", f.path, i, handler["timeout"])
+				}
+				if _, has := handler["statusMessage"]; has {
+					t.Errorf("%s: block %d carries statusMessage (D-12)", f.path, i)
+				}
+				if len(handler) != wantKeys {
+					t.Errorf("%s: block %d handler has keys %#v, want exactly type, command, timeout%s", f.path, i, handler, map[bool]string{true: ", if", false: ""}[want[i].ifRule != ""])
+				}
+			}
+		})
 	}
 }
 

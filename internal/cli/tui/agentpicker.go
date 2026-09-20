@@ -47,7 +47,10 @@ func (d *checkboxDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 }
 
 // Render draws one row: a "> " cursor on the focused row, a "[x]"/"[ ]"
-// checkbox reflecting d.checked, then the target's display name.
+// checkbox reflecting d.checked, then the target's display name. No
+// trailing newline (D-24/FIX-03): bubbles/v2/list's populatedView already
+// inserts its own separator between rows, so a delegate-written newline
+// here would cost each row 2 lines instead of the 1 Height() declares.
 func (d *checkboxDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	ai, ok := item.(agentItem)
 	if !ok {
@@ -61,7 +64,7 @@ func (d *checkboxDelegate) Render(w io.Writer, m list.Model, index int, item lis
 	if index == m.Index() {
 		cursor = "> "
 	}
-	fmt.Fprintf(w, "%s%s %s\n", cursor, box, ai.target.DisplayName())
+	fmt.Fprintf(w, "%s%s %s", cursor, box, ai.target.DisplayName())
 }
 
 // agentPickerModel is the bubbletea Model backing RunAgentPicker: a

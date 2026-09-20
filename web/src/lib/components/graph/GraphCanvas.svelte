@@ -139,6 +139,16 @@
 	const LAYOUT_OPTIONS = {
 		name: 'elk',
 		fit: true,
+		// FIX-05 (plan 01-09) turned out to be a first-render-tick race in
+		// OUR OWN mount flow, not a layout-option lever at all — see the
+		// FIX-05 comment on createFileGraphRenderer's start()/runLayout()
+		// below for the actual mechanism and fix, and .planning/STATE.md's
+		// Blockers/Concerns entry for the falsified-LAYOUT_OPTIONS
+		// investigation this superseded. `nodeDimensionsIncludeLabels` is
+		// kept here on its own merits — ELK should see these nodes' TRUE
+		// rendered size, not the pre-overflow style box — independent of
+		// that fix.
+		nodeDimensionsIncludeLabels: true,
 		elk: {
 			algorithm: 'layered',
 			'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
@@ -271,17 +281,65 @@
 		// NO geometry: without this, a live refresh arriving while a user
 		// expansion's layout is still running leaves two pending
 		// callbacks, each holding a DIFFERENT captured survivor map, each
-		// racing to restore positions and republish geometry — and
-		// cytoscape's layout events bubble from the LAYOUT instance up to
-		// `cy` (confirmed by reading the installed cytoscape's own
-		// extension.mjs this task: `bubble: function(){ return true; }`),
-		// so a `cy.one('layoutstop', ...)` registered by an OLDER call can
-		// genuinely be invoked by a NEWER layout's completion event —
-		// whichever lands last wins, and it may be the older one, which is
-		// exactly the movement this guard exists to prevent.
+		// racing to restore positions and republish geometry.
+		//
+		// The token check alone is NOT sufficient, though: cytoscape's
+		// layout events bubble from the LAYOUT instance up to `cy`
+		// (confirmed by reading the installed cytoscape's own
+		// extension.mjs: `bubble: function(){ return true; }`), and `cy`'s
+		// `emit()` invokes EVERY currently-registered listener for an
+		// event in one synchronous pass. A `cy.one('layoutstop', ...)`
+		// registered against `cy` itself — rather than against the layout
+		// instance — would therefore be invoked by ANY pending layout's
+		// completion, not just the one that registered it: an OLDER run's
+		// real completion could satisfy a NEWER run's callback (whose
+		// token check trivially passes, since it IS the current
+		// generation) before the newer run's own ELK computation has
+		// actually finished, self-unregister via `.one()`, and leave the
+		// newer generation's genuine completion with no listener left to
+		// catch it. That is why runLayout below registers its listener
+		// directly on the LAYOUT INSTANCE it just created (each layout is
+		// its own emitter, per `layoutProto.createEmitter()`), BEFORE
+		// calling `.run()` on it — only that instance's own `emit()` call,
+		// prior to any bubbling, can invoke it. The generation token
+		// remains as defense in depth for the other half of this hazard
+		// (a stale listener firing on its own, independently, after being
+		// superseded), but per-instance scoping is what actually prevents
+		// the bubble from crossing generations.
 		let layoutGeneration = 0;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		let activeLayoutRun: any;
+
+		// FIX-04 (WINDOWS #26): whether an ELK-backed layout run is
+		// currently outstanding — set true immediately before the .run()
+		// call below, cleared only inside the SAME generation-checked
+		// layoutstop callback that already exists above (never by a
+		// superseded run's own late callback, for the same reason the
+		// existing token check excludes superseded runs from every other
+		// side effect). The mount effect's cleanup below gates cy.destroy()
+		// on this — see that cleanup's own comment for the full mechanism.
+		let layoutInFlight = false;
+		// The mount effect's cleanup needs to be notified the MOMENT a
+		// deferred layout settles, so it can finally call cy.destroy().
+		// A single pending callback slot is sufficient: once teardown has
+		// begun, nothing in this component can start ANOTHER layout (every
+		// path that calls runLayout — start/replace/add/liveUpdate — is
+		// only ever invoked through the `renderer` returned below, and the
+		// mount effect nulls its own `renderer` reference before it can
+		// defer), so the CURRENT generation's layoutstop is always the
+		// last one that will ever fire for this instance.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		let pendingLayoutSettledCallback: (() => void) | undefined;
+
+		// FIX-05 (plan 01-09): whether this renderer's very first layout
+		// (start() below, which hides every edge before running it) has
+		// already revealed those edges — set true exactly once, inside the
+		// SAME generation-checked layoutstop callback runLayout already
+		// gates on below, so a superseded first run never reveals and
+		// whichever generation actually settles first does so exactly
+		// once. Irrelevant to every later replace()/add()/liveUpdate()
+		// layout, which never hides anything in the first place.
+		let firstPaintRevealed = false;
 
 		// runLayout always uses the SAME layered/hierarchyHandling elk
 		// algorithm configuration — never a different layout. Only `fit`
@@ -329,11 +387,38 @@
 			if (activeLayoutRun && typeof activeLayoutRun.stop === 'function') {
 				activeLayoutRun.stop();
 			}
-			opts.cy.one('layoutstop', () => {
-				// The token check is FIRST and unconditional: a superseded
-				// run does no resize, no metrics, no survivor restoration,
-				// and no geometry publish — it returns immediately.
+			// CR-01 fix: register the completion handler on the LAYOUT
+			// INSTANCE this call is about to run, not on `cy` — see the
+			// comment above `layoutGeneration`'s declaration for why a
+			// `cy`-level listener is not scoped to the run that registered
+			// it. Registered BEFORE `.run()` below so a synchronously-
+			// completing layout cannot fire before the listener exists.
+			const thisLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit });
+			thisLayoutRun.one('layoutstop', () => {
+				// The token check is FIRST and unconditional, kept as
+				// defense in depth: a superseded run does no resize, no
+				// metrics, no survivor restoration, and no geometry
+				// publish — it returns immediately.
 				if (myGeneration !== layoutGeneration) return;
+				// FIX-04: this generation's layout is no longer outstanding.
+				// If the mount effect's cleanup deferred cy.destroy() waiting
+				// on exactly this, run it now — the whole reason it deferred.
+				layoutInFlight = false;
+				// FIX-05 (plan 01-09): reveal the hidden edges the FIRST
+				// time any generation of this renderer's layout settles —
+				// every node now holds its real, ELK-settled position, so
+				// no edge can any longer observe an unresolved endpoint.
+				// Gated by the SAME token check above: a superseded run
+				// returns before ever reaching here.
+				if (!firstPaintRevealed) {
+					firstPaintRevealed = true;
+					opts.cy.edges().removeStyle('display');
+				}
+				if (pendingLayoutSettledCallback) {
+					const settled = pendingLayoutSettledCallback;
+					pendingLayoutSettledCallback = undefined;
+					settled();
+				}
 				if (survivorPositions) {
 					const nodeCollection = opts.cy.nodes();
 					if (typeof nodeCollection.forEach === 'function') {
@@ -371,7 +456,11 @@
 					opts.onGeometry(geometry);
 				}
 			});
-			activeLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit }).run();
+			// FIX-04: mark outstanding BEFORE the ELK-backed .run() call —
+			// this is the promise that, per 01-RESEARCH.md Investigation 1,
+			// can resolve after this component has already unmounted.
+			layoutInFlight = true;
+			activeLayoutRun = thisLayoutRun.run();
 		}
 
 		// swapElements is the ONE element-swap implementation replace()
@@ -401,6 +490,24 @@
 		}
 
 		return {
+			// FIX-04 (WINDOWS #26): the mount effect's cleanup needs both
+			// of these — isLayoutInFlight() to decide whether cy.destroy()
+			// must be deferred at all, and onLayoutSettled() to be notified
+			// the moment a deferred layout finishes so it can finally
+			// destroy. Neither reaches into cytoscape's own internals —
+			// both read only this closure's own layoutGeneration/
+			// layoutInFlight state, the same state runLayout()'s existing
+			// token check already maintains.
+			isLayoutInFlight() {
+				return layoutInFlight;
+			},
+			onLayoutSettled(cb: () => void) {
+				if (!layoutInFlight) {
+					cb();
+					return;
+				}
+				pendingLayoutSettledCallback = cb;
+			},
 			// start runs the FIRST layout, fitting the whole graph into
 			// the viewport — one of only two fits this component ever
 			// performs on its own initiative (the other is an explicit
@@ -409,6 +516,32 @@
 			// by a synthetic first "replace") — so the very first layout
 			// is not preceded by a remove/add cycle.
 			start() {
+				// FIX-05 (plan 01-09, .planning/STATE.md's Blockers/Concerns
+				// entry has the falsified-LAYOUT_OPTIONS investigation this
+				// supersedes): the guava
+				// android/guava-tests/.../util/concurrent <->
+				// android/guava/src/.../util/concurrent pair's edges trip
+				// cytoscape's own once-per-edge checkForInvalidEdgeWarning on
+				// the FIRST render tick after construction — before ELK's
+				// async layout Promise (cytoscape-elk/src/layout.js only
+				// ever calls nodes.layoutPositions(), never touching edge
+				// geometry) has written back real node positions, that
+				// pair's rscratch.endX/endY is still null. Hiding every edge
+				// via cytoscape's own `display` bypass (NOT css visibility
+				// on the container — cytoscape computes rscratch geometry
+				// independent of the container's paint visibility, so a
+				// css-only hide would not stop the warning) skips them
+				// entirely from findEdgeControlPoints' per-pair loop
+				// (takesUpSpace() is false once display !== 'element'), so
+				// no edge is ever drawn — or warned about — before this
+				// generation's first layoutstop reveals them below with
+				// every node's real, settled position (see the reveal in
+				// runLayout's layoutstop callback above). NODES are left
+				// untouched: layoutDimensions() zeroes a HIDDEN NODE's own
+				// width/height (used by ELK's own sizing), but never an
+				// edge's — hiding only edges cannot perturb what ELK lays
+				// out.
+				opts.cy.edges().style('display', 'none');
 				runLayout(performance.now(), true);
 			},
 			// replace swaps the live instance's element set in ONE batch
@@ -819,13 +952,70 @@
 	$effect(() => {
 		if (!container) return;
 
+		// Captured once, here, rather than read again from the reactive
+		// `container` binding inside the cleanup below — needs a stable
+		// reference, independent of whatever `container` holds by the time
+		// a LATER effect run or unmount fires this cleanup.
+		const containerEl = container;
+
+		// FIX-04 (WINDOWS #26), the part 01-RESEARCH.md/01-PATTERNS.md did
+		// NOT anticipate: this effect can run MORE THAN ONCE for the SAME
+		// component instance without Svelte ever recreating `containerEl`
+		// (confirmed live this task — a marker property planted on
+		// `containerEl` on one run is still present on the next). Handing
+		// cytoscape the SAME container twice is unsafe independent of this
+		// component's own cy.destroy() timing: cytoscape's own Core
+		// constructor (cytoscape.esm.mjs, read this task) keeps a registry
+		// on the container element itself (`container._cyreg`) and, if one
+		// is already registered there, calls `reg.cy.destroy()`
+		// UNCONDITIONALLY before constructing the new instance — a destroy
+		// call this component's cleanup below never sees or gates. A
+		// dedicated, brand-new mount element per effect run — appended
+		// inside the stable `containerEl`, never reused — means
+		// `container._cyreg` is never populated at construction, so
+		// cytoscape's own auto-destroy path can never fire against a prior,
+		// still-layout-pending instance. Sized via CSS to fill its parent,
+		// exactly like `containerEl` itself (`h-full w-full` in the
+		// template below).
+		const cyMountEl = document.createElement('div');
+		cyMountEl.style.width = '100%';
+		cyMountEl.style.height = '100%';
+		containerEl.appendChild(cyMountEl);
+
 		const initialElements = untrack(() => elements);
 		const cy = cytoscapeLib({
-			container,
+			container: cyMountEl,
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			elements: initialElements as any,
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			style: untrack(() => style) as any
+			style: untrack(() => style) as any,
+			// FIX-05 (plan 01-09): the ACTUAL first-render-tick race — found
+			// by instrumenting checkForInvalidEdgeWarning's own call site
+			// live and correlating its timestamp against this effect's own
+			// code, not by inspecting settled state after the fact. cytoscape
+			// core's OWN constructor runs a layout of its own before this
+			// call ever returns control to us (Core's setElesAndLayout:
+			// `options.layout = extend({name: head ? 'grid' : 'null'}, ...)`
+			// then `cy.layout(layoutOpts).run()`) — when no `layout` option
+			// is passed, that default is `'grid'`, which assigns every node
+			// a DISTINCT position and, for this guava pair specifically,
+			// produces a genuinely degenerate edge-endpoint computation
+			// during that grid layout's own construction-time
+			// getFitViewport()/boundingBox() call — entirely BEFORE
+			// createFileGraphRenderer's start() (below) ever runs, so no
+			// amount of hiding or gating inside start()/runLayout() can
+			// reach it. `layout: { name: 'null' }` replaces that default:
+			// cytoscape's own NullLayout (cytoscape.esm.mjs) puts every node
+			// at the SAME (0, 0) point rather than computing distinct grid
+			// positions, so every edge's nodesOverlap is true and
+			// checkForInvalidEdgeWarning's own overlap short-circuit
+			// (rs.nodesOverlap || ...) suppresses the warning outright —
+			// this is cytoscape's OWN sanctioned no-op state for "no layout
+			// has run yet", not a hack. start() below still hides every edge
+			// before running the REAL (elk) layout and reveals them on its
+			// first layoutstop, as defense in depth for the same class of
+			// race during ELK's own async completion.
+			layout: { name: 'null' }
 		});
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -879,6 +1069,27 @@
 		lastAppliedElements = initialElements;
 		renderer.start();
 
+		// window.__codegraphFileGraphCy — DEBUG-ONLY diagnostic seam (01-01
+		// Task 2, FIX-05's overlap diagnosis). Mirrors the existing
+		// __codegraphFileGraphMetrics/__codegraphFileGraphGeometry
+		// convention above: additive, read-only telemetry a real renderer
+		// always provides, never something the paint path depends on.
+		// Unlike those two (published on every layout settle), this is the
+		// live cytoscape instance itself — the only way graph-console-
+		// check.mjs's page.evaluate() can resolve an invalid-endpoints
+		// warning's edge id back to its source/target positions and
+		// bounding boxes (01-RESEARCH.md Investigation 2 has no other seam
+		// to read this from: canvas rendering leaves no per-node DOM
+		// element, and the warning text carries only the edge id).
+		// Assigning to `window` emits no console output and does not touch
+		// the CSP directives at internal/uiserver/spa.go (D-05). Cleared on
+		// teardown, before cy.destroy(), so a stale reference is never left
+		// dangling — the same "extra safe" discipline cytoscape's own
+		// destroyRenderer() applies to its internal renderer reference.
+		if (typeof window !== 'undefined') {
+			window.__codegraphFileGraphCy = cy;
+		}
+
 		// Cytoscape does not observe arbitrary container resize, only the
 		// `window` resize event (cytoscape.js core/resize.md) — an
 		// explicit ResizeObserver on the container is required so the
@@ -889,13 +1100,113 @@
 		let resizeObserver: ResizeObserver | undefined;
 		if (typeof ResizeObserver !== 'undefined') {
 			resizeObserver = new ResizeObserver(() => cy.resize());
-			resizeObserver.observe(container);
+			resizeObserver.observe(containerEl);
 		}
 
 		return () => {
+			// FIX-04 (WINDOWS #26): cytoscape 3.34.2's endBatch() dispatches
+			// to the renderer with NO null/destroyed guard — unlike its own
+			// sibling notify() method, which checks `this.destroyed() ||
+			// !renderer` before dispatching (cytoscape.esm.mjs, both methods
+			// read this task). endBatch() is exactly what fires at the end
+			// of the position write cytoscape-elk's ASYNC layout resolution
+			// triggers — nodes.positions() batches every node's coordinate
+			// write, and layoutPositions()'s non-animate branch (this file's
+			// LAYOUT_OPTIONS sets no `animate` key) calls it BEFORE emitting
+			// `layoutstop`, so the existing generation token above — which
+			// only guards the `layoutstop` callback THIS component
+			// registers — cannot reach it. cytoscape-elk's own Layout.stop()
+			// and destroy() are both literal no-ops (`return this;`), so
+			// the pending elkjs promise cannot be cancelled either: the only
+			// remaining lever is to not call cy.destroy() — which nulls the
+			// renderer `endBatch()` reads — while that promise is still
+			// outstanding, and instead wait for it to settle first.
+			//
+			// This alone is not sufficient, though — see the dedicated
+			// `cyMountEl` comment above the construction call: cytoscape's
+			// OWN container-reuse registry can ALSO destroy a prior instance
+			// with no involvement from this cleanup at all. That hazard is
+			// closed at construction time (a fresh mount element every run);
+			// this gate closes the remaining, ordinary case where THIS
+			// component's own cy.destroy() call below is what would race
+			// the pending promise.
+			const rendererAtTeardown = renderer;
+			// D-06 (our code only, no dependency patch): the safe parts of
+			// teardown run unconditionally and immediately, whether or not a
+			// layout is outstanding. `cy.off('tap')` removes every listener
+			// registered above regardless of selector (confirmed from
+			// cytoscape's own removeListener source this task) — none of
+			// this component's callbacks (onNodeSelected et al.) should fire
+			// again once it has started unmounting, deferred destroy or not.
+			// Optional-chained: a minimal cytoscape test double covering an
+			// earlier task's own path (a legitimate mock for that path) may
+			// not implement off() — the same test-double tolerance this
+			// file's tap handlers above already apply to source()/target().
 			resizeObserver?.disconnect();
+			cy.off?.('tap');
 			renderer = undefined;
-			cy.destroy();
+			if (typeof window !== 'undefined' && window.__codegraphFileGraphCy === cy) {
+				window.__codegraphFileGraphCy = undefined;
+			}
+
+			// destroyNow is idempotent via cy.destroyed() (never a parallel
+			// boolean — this is the SAME liveness predicate notify()'s own
+			// guard checks) because it can legitimately be reached from TWO
+			// races: the deferred layout settling normally, and the bounded
+			// fallback below firing first. Nothing here suppresses or
+			// swallows the notify TypeError — doing so would hide the exact
+			// defect this gate exists to prevent, not just this leak-bound's
+			// own destroy() call.
+			let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+			const destroyNow = () => {
+				if (fallbackTimer !== undefined) {
+					clearTimeout(fallbackTimer);
+					fallbackTimer = undefined;
+				}
+				// Same test-double tolerance as cy.off above: fall back to
+				// "assume not destroyed" only when destroyed() itself is not a
+				// function — real cytoscape always provides it.
+				if (typeof cy.destroyed !== 'function' || !cy.destroyed()) {
+					cy.destroy();
+				}
+			};
+
+			if (rendererAtTeardown?.isLayoutInFlight()) {
+				// Detach cyMountEl (never the stable, reused `containerEl`)
+				// now rather than leaving it to Svelte's own unmount — this
+				// instance stays alive (not destroyed) until the outstanding
+				// layout settles or the fallback below fires, and it should
+				// not keep rendering into a visible, still-attached canvas
+				// for that whole window. Safe specifically BECAUSE
+				// `cyMountEl` is this instance's own, never-shared element —
+				// removing it cannot affect any other cy instance the way
+				// removing the shared `containerEl` could.
+				cyMountEl.remove();
+				// EDGE-FIX-04-01 (flagged assumption, deliberately chosen
+				// here): 10s. cytoscape-elk's stop()/destroy() cannot cancel
+				// the pending elkjs promise, so a layout that never settles —
+				// a genuinely broken ELK worker, not normal operation — would
+				// otherwise leak this cy instance forever. Every ELK layout
+				// this codebase measures, including guava's collapsed
+				// 135-node/163-cycle scale (the largest corpus this app
+				// renders), settles in well under a second in practice — 10s
+				// is a deliberately generous multiple of that, chosen so
+				// this fallback can only ever fire against a layout that is
+				// genuinely stuck, never a slow-but-honest one. Firing early
+				// would force exactly the crash this gate exists to prevent
+				// (destroying while still in flight), so the bound is set
+				// generous rather than tight.
+				fallbackTimer = setTimeout(destroyNow, 10000);
+				rendererAtTeardown.onLayoutSettled(destroyNow);
+			} else {
+				destroyNow();
+				// No layout was outstanding, so cyMountEl's own destroy()
+				// call above already cleared its children and its cytoscape
+				// registry; explicitly detach it from `containerEl` too,
+				// same as the deferred branch, so a torn-down instance never
+				// leaves an empty wrapper element behind.
+				cyMountEl.remove();
+			}
 		};
 	});
 

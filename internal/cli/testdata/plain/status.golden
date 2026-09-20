@@ -1,0 +1,31 @@
+CodeGraph Status
+
+Project: <FIXTURE>
+
+Index Statistics:
+  Files:     4
+  Nodes:     20
+  Edges:     22
+  DB Size:   <SIZE> MB
+  Backend:   pebble
+Nodes by Kind:
+  file            4
+  function        4
+  struct          3
+  interface       2
+  method          2
+  package         2
+  constant        1
+  type_alias      1
+  variable        1
+Edges by Kind:
+  contains        14
+  calls           3
+  imports         2
+  embeds          1
+  extends         1
+  instantiates    1
+Files by Language:
+  go              4
+
+Index is up to date.

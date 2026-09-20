@@ -345,7 +345,7 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 		queryTerm = entry.QueryTerms[0]
 	}
 	queryResult, err := medianOfN(medianRuns, func() (measuredRun, error) {
-		return runOnce(binary, []string{"query", queryTerm, "-p", workDir}, workDir)
+		return runOnce(binary, []string{"search", "--full", queryTerm, "-p", workDir}, workDir)
 	})
 	if err != nil {
 		return bench.Metrics{}, fmt.Errorf("measure query: %w", err)
@@ -666,7 +666,7 @@ func measureRegressionTrial(cfg config, scratchDir string, trialIdx int) (bench.
 	}
 
 	queryResult, err := medianOfN(medianRuns, func() (measuredRun, error) {
-		return runOnce(cfg.goBinary, []string{"query", regressionQueryTerm, "-p", corpusDir}, corpusDir)
+		return runOnce(cfg.goBinary, []string{"search", "--full", regressionQueryTerm, "-p", corpusDir}, corpusDir)
 	})
 	if err != nil {
 		return bench.Metrics{}, fmt.Errorf("measure query: %w", err)

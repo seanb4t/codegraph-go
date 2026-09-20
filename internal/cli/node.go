@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -49,6 +50,26 @@ func newNodeCmd() *cobra.Command {
 				return err
 			}
 			defer closer.Close()
+
+			// Styled branch (D-07/D-09/D-10, CLI-01): lives strictly
+			// before the eng.Node markdown call below, so a styled run
+			// never computes the markdown string and a plain run never
+			// builds the NodeDetail struct. present.RenderNode strips
+			// back byte-for-byte to that plain path's markdown
+			// (04-05-SUMMARY.md's contract tests).
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				d, err := eng.NodeDetail(symbol, file, lineHint)
+				if err != nil {
+					return err
+				}
+				w := mode.Writer(cmd.OutOrStdout())
+				pal := present.NewPalette(mode.Dark)
+				if err := present.RenderNotice(query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())), pal, w); err != nil {
+					return err
+				}
+				return present.RenderNode(d, pal, w)
+			}
 
 			out, err := eng.Node(symbol, file, lineHint)
 			if err != nil {

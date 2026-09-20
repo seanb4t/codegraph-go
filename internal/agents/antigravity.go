@@ -22,8 +22,52 @@ func init() {
 func (antigravityTarget) ID() TargetID        { return Antigravity }
 func (antigravityTarget) DisplayName() string { return "Antigravity" }
 
-func (antigravityTarget) SupportsLocation(loc Location) bool {
-	return loc == LocationGlobal
+// SupportsLocation is a derivation of the capability table (D-02, D-03).
+func (t antigravityTarget) SupportsLocation(loc Location) bool {
+	return t.Capabilities().Supports(loc)
+}
+
+// Capabilities is Antigravity's capability table entry (D-01, D-02):
+// global-only, JSON config, no hooks, antigravitySkillDirs for its skill
+// directory (AGENT-07). Its instructions reach Antigravity only through
+// Gemini's ~/.gemini/GEMINI.md (D-06(c)) — it declares none of its own.
+func (antigravityTarget) Capabilities() Capabilities {
+	return Capabilities{
+		Scopes:       []Location{LocationGlobal},
+		ConfigFormat: ConfigFormatJSON,
+		Hooks:        HooksNone,
+		MCPConfig:    globalOnlyPath(antigravityConfigPath),
+		SkillDirs:    antigravitySkillDirs,
+	}
+}
+
+// antigravitySkillDirs resolves Antigravity's one skill directory, GLOBAL
+// ONLY (AGENT-07, maintainer decision 1A): `~/.gemini/config/skills/
+// codegraph/`. The live `agy` 1.2.6 session (05-LIVE-SESSIONS.md,
+// 2026-09-18) listed skills only from `~/.gemini/config/skills/` — a
+// renamed copy of this SKILL.md placed there was listed, while the copy at
+// `~/.gemini/antigravity-cli/skills/codegraph/` (the docs' "CLI path") never
+// was — so this is the one written directory, and the antigravity-cli path
+// is not declared at all because it is proven unread. Antigravity's own
+// docs list `.agents/skills/` only at WORKSPACE scope (never global), which
+// this global-only target never writes, and its instructions arrive solely
+// through Gemini's own `~/.gemini/GEMINI.md` write (D-06(c)) — no new
+// AGENTS.md here. At LocationLocal (unsupported — Antigravity is
+// global-only) this returns nil, nil: Capabilities.Supports/
+// WrittenSkillDir/ReadOnlySkillDirs never call it for local in normal use,
+// but a caller error surfaces as "no skill dirs" rather than a resolved
+// local path.
+func antigravitySkillDirs(loc Location) ([]string, error) {
+	if loc != LocationGlobal {
+		return nil, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		filepath.Join(home, ".gemini", "config", "skills", "codegraph"),
+	}, nil
 }
 
 // antigravityUnifiedPath is the post-migration config location a current
@@ -57,11 +101,18 @@ func antigravityMigratedMarker() (string, error) {
 	return filepath.Join(home, ".gemini", "config", ".migrated"), nil
 }
 
-// antigravityConfigPath resolves the config path Detect/Uninstall target:
-// the unified path once migration has happened (marker present or the
-// unified file already exists), else the legacy path.
+// antigravityConfigPath resolves the config path Detect/Uninstall/the
+// capability table target: the unified path once migration has happened
+// (marker present or the unified file already exists) OR on a machine with
+// NO Antigravity config at all (the table must print the path Install
+// actually writes on a fresh machine — D-02); the legacy path ONLY for an
+// unmigrated machine whose legacy file exists.
 func antigravityConfigPath() (string, error) {
 	unified, err := antigravityUnifiedPath()
+	if err != nil {
+		return "", err
+	}
+	legacy, err := antigravityLegacyPath()
 	if err != nil {
 		return "", err
 	}
@@ -69,10 +120,10 @@ func antigravityConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if fileExists(marker) || fileExists(unified) {
+	if fileExists(marker) || fileExists(unified) || !fileExists(legacy) {
 		return unified, nil
 	}
-	return antigravityLegacyPath()
+	return legacy, nil
 }
 
 // antigravityEntry builds the entry shape WITHOUT a "type" field
@@ -98,19 +149,21 @@ func readMcpEntry(path string) (any, bool) {
 	return entry, ok
 }
 
-func (antigravityTarget) Detect(loc Location) DetectionResult {
-	if loc != LocationGlobal {
+// Detect is a derivation of the capability table (D-02, D-03): the
+// installed-evidence fallback is filepath.Dir(filepath.Dir(configPath)) —
+// ~/.gemini for both the unified and the legacy config path.
+func (t antigravityTarget) Detect(loc Location) DetectionResult {
+	caps := t.Capabilities()
+	if !caps.Supports(loc) {
 		return DetectionResult{}
 	}
-	configPath, err := antigravityConfigPath()
+	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
 		return DetectionResult{}
 	}
 	installed := fileExists(configPath)
 	if !installed {
-		if home, herr := os.UserHomeDir(); herr == nil {
-			installed = fileExists(filepath.Join(home, ".gemini"))
-		}
+		installed = fileExists(filepath.Dir(filepath.Dir(configPath)))
 	}
 	return DetectionResult{
 		Installed:         installed,
@@ -119,7 +172,7 @@ func (antigravityTarget) Detect(loc Location) DetectionResult {
 	}
 }
 
-func (antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult {
+func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 	if loc != LocationGlobal {
 		return result
@@ -206,10 +259,12 @@ func (antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult 
 		}
 	}
 
+	installDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
-func (antigravityTarget) Uninstall(loc Location) WriteResult {
+func (t antigravityTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 	if loc != LocationGlobal {
 		return result
@@ -217,19 +272,17 @@ func (antigravityTarget) Uninstall(loc Location) WriteResult {
 	configPath, err := antigravityConfigPath()
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity config path: %w", err))
-		return result
+	} else {
+		fr, err := removeMcpEntry(configPath)
+		recordFile(&result, configPath, fr, err)
 	}
-	fr, err := removeMcpEntry(configPath)
-	recordFile(&result, configPath, fr, err)
+
+	uninstallDeclaredSkill(&result, t, loc)
+
 	return result
 }
 
-func (antigravityTarget) DescribePaths(loc Location) []string {
-	if loc != LocationGlobal {
-		return nil
-	}
-	if p, err := antigravityConfigPath(); err == nil {
-		return []string{p}
-	}
-	return nil
+// DescribePaths is a derivation of the capability table (D-02, D-03).
+func (t antigravityTarget) DescribePaths(loc Location) []string {
+	return describeDeclaredPaths(t, loc)
 }

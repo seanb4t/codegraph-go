@@ -3,10 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -67,11 +65,22 @@ func newFilesCmd() *cobra.Command {
 			// the human-output branch, AFTER the --json early return above —
 			// see explore.go's call site for the full rationale.
 			notice := query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context()))
-			fmt.Fprint(out, notice)
-
-			if present.ChoosePresentation(term.IsTerminal(int(os.Stdout.Fd())), os.Getenv("NO_COLOR")) {
-				return present.RenderFiles(result, out)
+			mode := resolveColor(cmd)
+			if mode.Styled {
+				// WR-01 (04-REVIEW.md): route the notice through
+				// present.RenderNotice on the styled branch, exactly as
+				// every sibling read command (explore/node/search/
+				// callers/callees/impact/affected) does, so it renders in
+				// the Warning role instead of unstyled plain text.
+				w := mode.Writer(out)
+				pal := present.NewPalette(mode.Dark)
+				if err := present.RenderNotice(notice, pal, w); err != nil {
+					return err
+				}
+				return present.RenderFiles(result, pal, w)
 			}
+
+			fmt.Fprint(out, notice)
 
 			if result.Format == "tree" {
 				printFileTree(out, result.Tree, "")

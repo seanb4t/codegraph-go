@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -450,5 +451,358 @@ func TestSharedWriteJSONFile_FormatsWithIndentAndTrailingNewline(t *testing.T) {
 	want := "{\n  \"a\": 1\n}\n"
 	if got != want {
 		t.Fatalf("unexpected format:\ngot=%q\nwant=%q", got, want)
+	}
+}
+
+// --- Shared repo-root AGENTS.md (D-11, 07-06): instructionsRequestedElsewhere
+// gates codexTarget.Uninstall and opencodeTarget.Uninstall so a shared
+// instructions file's marker block survives while ANOTHER registered target
+// still declares that path at that location and reports
+// Detect(loc).AlreadyConfigured. ---
+
+// assertAgentsMDKept fails the test unless r's Files contains a FileResult
+// for path with Action ActionKept — the D-11 "left alone, another agent
+// still uses it" outcome.
+func assertAgentsMDKept(t *testing.T, r WriteResult, path string) {
+	t.Helper()
+	for _, f := range r.Files {
+		if f.Path == path && f.Action == ActionKept {
+			return
+		}
+	}
+	t.Fatalf("expected %s kept (ActionKept) in result, got %+v", path, r.Files)
+}
+
+// TestSharedAgentsMD_UninstallOrders (D-11) is the full order x pre-state
+// table: for each of codex_then_opencode, opencode_then_codex, and
+// target_all (every registered target's Uninstall(local), AllTargets
+// order), and for each of a pre-existing foreign AGENTS.md and no
+// pre-existing file, install codex and opencode at local scope, uninstall
+// in the named order, and assert AGENTS.md is restored to its exact
+// pre-install state once the last sharer is gone — a two-step order's
+// FIRST uninstall must report the file kept while the block is still
+// present.
+func TestSharedAgentsMD_UninstallOrders(t *testing.T) {
+	orders := []string{"codex_then_opencode", "opencode_then_codex", "target_all"}
+	pres := []string{"preexisting", "absent"}
+	executed := 0
+	for _, order := range orders {
+		order := order
+		for _, pre := range pres {
+			pre := pre
+			t.Run(order+"/"+pre, func(t *testing.T) {
+				executed++
+				fakeHome(t)
+				dir := t.TempDir()
+				t.Chdir(dir)
+
+				agentsPath := filepath.Join(dir, "AGENTS.md")
+				var preBytes string
+				if pre == "preexisting" {
+					preBytes = "# Team Notes\n\nParagraph one, written before codegraph ever ran.\n\n" +
+						"Paragraph two, also pre-existing.\n"
+					writeFile(t, agentsPath, preBytes)
+				}
+
+				codex := codexTarget{}
+				opencode := opencodeTarget{}
+				opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+				if r := codex.Install(LocationLocal, opts); len(r.Errors) != 0 {
+					t.Fatalf("codex install: %v", r.Errors)
+				}
+				if r := opencode.Install(LocationLocal, opts); len(r.Errors) != 0 {
+					t.Fatalf("opencode install: %v", r.Errors)
+				}
+				if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
+					t.Fatalf("expected codegraph block present after both installs: %q", got)
+				}
+
+				switch order {
+				case "codex_then_opencode":
+					r1 := codex.Uninstall(LocationLocal)
+					assertAgentsMDKept(t, r1, "AGENTS.md")
+					if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
+						t.Fatalf("block removed after the FIRST uninstall (codex), want kept: %q", got)
+					}
+					opencode.Uninstall(LocationLocal)
+				case "opencode_then_codex":
+					r1 := opencode.Uninstall(LocationLocal)
+					assertAgentsMDKept(t, r1, "AGENTS.md")
+					if got := readFile(t, agentsPath); !strings.Contains(got, codegraphSectionStart) {
+						t.Fatalf("block removed after the FIRST uninstall (opencode), want kept: %q", got)
+					}
+					codex.Uninstall(LocationLocal)
+				case "target_all":
+					for _, target := range AllTargets() {
+						target.Uninstall(LocationLocal)
+					}
+				}
+
+				if pre == "preexisting" {
+					got := readFile(t, agentsPath)
+					if got != preBytes {
+						t.Fatalf("AGENTS.md not byte-identical to pre-install bytes after the last uninstall:\ngot=%q\nwant=%q", got, preBytes)
+					}
+				} else if fileExists(agentsPath) {
+					t.Fatalf("AGENTS.md should not exist after the last uninstall (never existed pre-install), got=%q", readFile(t, agentsPath))
+				}
+			})
+		}
+	}
+	if executed != 6 {
+		t.Fatalf("executed %d order/pre leaves, want 6", executed)
+	}
+}
+
+// TestSharedAgentsMD_KeptWhileOtherConfigured (D-11) pins the single-step
+// case in isolation: after installing both codex and opencode at local
+// scope, uninstalling codex alone reports AGENTS.md kept with a Note
+// naming opencode, the file is byte-identical to its pre-uninstall bytes,
+// and codex's OWN config table is still removed (the gate only affects the
+// shared instructions file, never codex's other steps).
+func TestSharedAgentsMD_KeptWhileOtherConfigured(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	codex := codexTarget{}
+	opencode := opencodeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	if r := codex.Install(LocationLocal, opts); len(r.Errors) != 0 {
+		t.Fatalf("codex install: %v", r.Errors)
+	}
+	if r := opencode.Install(LocationLocal, opts); len(r.Errors) != 0 {
+		t.Fatalf("opencode install: %v", r.Errors)
+	}
+
+	agentsPath := filepath.Join(dir, "AGENTS.md")
+	preUninstall := readFile(t, agentsPath)
+
+	result := codex.Uninstall(LocationLocal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("codex uninstall: %v", result.Errors)
+	}
+	assertAgentsMDKept(t, result, "AGENTS.md")
+
+	foundNote := false
+	for _, n := range result.Notes {
+		if strings.Contains(n, "opencode") {
+			foundNote = true
+		}
+	}
+	if !foundNote {
+		t.Fatalf("expected a Note naming opencode, got %v", result.Notes)
+	}
+
+	if got := readFile(t, agentsPath); got != preUninstall {
+		t.Fatalf("AGENTS.md not byte-identical to its pre-uninstall bytes:\ngot=%q\nwant=%q", got, preUninstall)
+	}
+
+	configPath := filepath.Join(dir, ".codex", "config.toml")
+	if _, _, found := findTOMLTableRange(readFileOrEmpty(configPath), codexTOMLTable); found {
+		t.Fatalf("codex's own config table should still have been removed, got: %s", readFileOrEmpty(configPath))
+	}
+}
+
+// TestSharedAgentsMD_GlobalPathsNotShared (D-11) confirms the gate is a
+// no-op at global scope, where codex and opencode declare DIFFERENT
+// instructions paths (~/.codex/AGENTS.md vs <cfgdir>/opencode/AGENTS.md):
+// uninstalling codex globally removes its own block even while opencode is
+// configured globally too.
+func TestSharedAgentsMD_GlobalPathsNotShared(t *testing.T) {
+	home := fakeHome(t)
+
+	codex := codexTarget{}
+	opencode := opencodeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	if r := codex.Install(LocationGlobal, opts); len(r.Errors) != 0 {
+		t.Fatalf("codex install: %v", r.Errors)
+	}
+	if r := opencode.Install(LocationGlobal, opts); len(r.Errors) != 0 {
+		t.Fatalf("opencode install: %v", r.Errors)
+	}
+
+	codexInstrPath := filepath.Join(home, ".codex", "AGENTS.md")
+	result := codex.Uninstall(LocationGlobal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("codex uninstall: %v", result.Errors)
+	}
+	if fileExists(codexInstrPath) {
+		t.Fatalf("codex's own global AGENTS.md should have been removed entirely (never pre-existed), got: %s", readFile(t, codexInstrPath))
+	}
+}
+
+// --- blockOwnsAnyCommand (WR-02, 06-REVIEW.md: shared ownership-identity
+// predicate for writeHookEntry, removeHookEntry, and hasOwnHookBlock) ---
+
+func TestBlockOwnsAnyCommand(t *testing.T) {
+	own := []string{"codegraph hook pretooluse"}
+
+	t.Run("own command in multi-handler block", func(t *testing.T) {
+		block := map[string]any{
+			"matcher": "startup",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "some-other-command"},
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse"},
+			},
+		}
+		if !blockOwnsAnyCommand(block, own) {
+			t.Fatal("expected a block containing an own command among multiple hooks to be owned")
+		}
+	})
+
+	t.Run("foreign-only block is not owned", func(t *testing.T) {
+		block := map[string]any{
+			"matcher": "startup",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "some-other-command"},
+			},
+		}
+		if blockOwnsAnyCommand(block, own) {
+			t.Fatal("expected a block with no own command to be reported as not owned")
+		}
+	})
+
+	t.Run("matcher and if differences are ignored", func(t *testing.T) {
+		block := map[string]any{
+			"matcher": "totally-different-matcher",
+			"if":      "some-condition-codegraph-never-writes",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse"},
+			},
+		}
+		if !blockOwnsAnyCommand(block, own) {
+			t.Fatal("expected ownership to be determined by command identity alone, ignoring matcher/if")
+		}
+	})
+}
+
+// --- writeHookEntry (WR-01, 07-REVIEW.md: updating an owned block must
+// preserve its original array position, never reposition a foreign block
+// that follows it) ---
+
+// hookEventFromFile decodes path's hooks.<event> array for assertions.
+func hookEventFromFile(t *testing.T, path, event string) []any {
+	t.Helper()
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, path)), &decoded); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	hooks, ok := decoded["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s: hooks missing: %#v", path, decoded)
+	}
+	events, ok := hooks[event].([]any)
+	if !ok {
+		t.Fatalf("%s: hooks.%s is not an array: %#v", path, event, hooks[event])
+	}
+	return events
+}
+
+// blockCommand returns the sole handler's "command" field of a hooks.json
+// block, for assertions on block identity/order.
+func blockCommand(t *testing.T, block any) string {
+	t.Helper()
+	obj, ok := block.(map[string]any)
+	if !ok {
+		t.Fatalf("block is not an object: %#v", block)
+	}
+	handlers, ok := obj["hooks"].([]any)
+	if !ok || len(handlers) == 0 {
+		t.Fatalf("block has no hooks[]: %#v", block)
+	}
+	handler, ok := handlers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("handler is not an object: %#v", handlers[0])
+	}
+	cmd, _ := handler["command"].(string)
+	return cmd
+}
+
+// TestWriteHookEntry_UpdatePreservesForeignBlockPosition pins the exact
+// regression 07-REVIEW.md WR-01 verified live (07-LIVE-SESSIONS.md T3):
+// updating codegraph's own PreToolUse block in place must never reposition
+// a foreign block that already follows it, since Codex's hook trust is
+// keyed on array position (<path>:pre_tool_use:<groupIdx>:<handlerIdx>). A
+// naive rebuild that always appends the owned blocks last would swap the
+// two blocks' indices even though the foreign block's own bytes never
+// changed, spuriously re-flagging it for review.
+func TestWriteHookEntry_UpdatePreservesForeignBlockPosition(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hooks.json")
+	writeFile(t, path, `{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "codegraph hook pretooluse", "timeout": 5}]},
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "/foreign/hook.sh"}]}
+    ]
+  }
+}
+`)
+
+	newOwn := []any{
+		map[string]any{
+			"matcher": "Bash",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse", "timeout": float64(10)},
+			},
+		},
+	}
+	if _, err := writeHookEntry(path, "PreToolUse", newOwn, []string{"codegraph hook pretooluse"}); err != nil {
+		t.Fatalf("writeHookEntry: %v", err)
+	}
+
+	events := hookEventFromFile(t, path, "PreToolUse")
+	if len(events) != 2 {
+		t.Fatalf("want 2 PreToolUse blocks, got %d: %#v", len(events), events)
+	}
+	if got := blockCommand(t, events[0]); got != "codegraph hook pretooluse" {
+		t.Fatalf("expected codegraph's own (updated) block to stay at index 0, got command %q: %#v", got, events)
+	}
+	if got := blockCommand(t, events[1]); got != "/foreign/hook.sh" {
+		t.Fatalf("foreign block must stay at index 1 (its original position) across an update to codegraph's own block, got command %q: %#v", got, events)
+	}
+}
+
+// TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks is the control
+// alongside the fix above: D-23's "codegraph's group is appended last on
+// first install" guarantee must still hold when there is no prior owned
+// block to preserve the position of.
+func TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hooks.json")
+	writeFile(t, path, `{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "/foreign/hook.sh"}]}
+    ]
+  }
+}
+`)
+
+	newOwn := []any{
+		map[string]any{
+			"matcher": "Bash",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "codegraph hook pretooluse"},
+			},
+		},
+	}
+	if _, err := writeHookEntry(path, "PreToolUse", newOwn, []string{"codegraph hook pretooluse"}); err != nil {
+		t.Fatalf("writeHookEntry: %v", err)
+	}
+
+	events := hookEventFromFile(t, path, "PreToolUse")
+	if len(events) != 2 {
+		t.Fatalf("want 2 PreToolUse blocks, got %d: %#v", len(events), events)
+	}
+	if got := blockCommand(t, events[0]); got != "/foreign/hook.sh" {
+		t.Fatalf("D-23: a first install must leave existing foreign blocks before codegraph's new group, got %q at index 0", got)
+	}
+	if got := blockCommand(t, events[1]); got != "codegraph hook pretooluse" {
+		t.Fatalf("D-23: codegraph's own new group must be appended last on first install, got %q at index 1", got)
 	}
 }

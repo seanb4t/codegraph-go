@@ -1,0 +1,87 @@
+{
+  "name": "protect-main",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "required_reviewers": [],
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "require_extra_approval_for_unattributed_changes": true,
+        "allowed_merge_methods": [
+          "squash"
+        ]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "test",
+            "integration_id": 15368
+          },
+          {
+            "context": "actionlint (workflow static analysis)",
+            "integration_id": 15368
+          },
+          {
+            "context": "perf regression gate (PERF-02, INDX-06)",
+            "integration_id": 15368
+          },
+          {
+            "context": "pr-title",
+            "integration_id": 15368
+          },
+          {
+            "context": "reproducibility (double-build hash-diff, DIST-04)",
+            "integration_id": 15368
+          },
+          {
+            "context": "govulncheck (DIST-03, blocking)",
+            "integration_id": 15368
+          },
+          {
+            "context": "goreleaser check (config validation, DIST-01)",
+            "integration_id": 15368
+          },
+          {
+            "context": "tmux e2e (real-pty harness, TTY-01..TTY-07)",
+            "integration_id": 15368
+          }
+        ]
+      }
+    },
+    {
+      "type": "required_linear_history"
+    }
+  ]
+}

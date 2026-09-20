@@ -535,6 +535,139 @@ func TestCheckRegression(t *testing.T) {
 			ceiling: ceiling,
 			wantErr: false,
 		},
+		{
+			// Repo is the corpus-identity guard (D-16 / GH #16): a baseline
+			// recorded against one synthetic corpus must never be compared
+			// against a current run on a different one, for the identical
+			// reason a runner-class or scratch_fs change refuses above. An
+			// empty repo means "predates repo recording", which is not a
+			// wildcard match against a recorded one — the same treatment
+			// an empty runner and an empty scratch_fs already get.
+			name: "repo mismatch between baseline and current fails even when runner, scratch_fs and GOOS/GOARCH match",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				Repo:         "synthetic-seed42-count120000",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				Repo:         "synthetic-seed7-count5000",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "corpus",
+		},
+		{
+			// The "no more" side of the repo guard: matching repos on both
+			// sides must still pass.
+			name: "matching repo on both sides passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				Repo:         "synthetic-seed42-count120000",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				Repo:         "synthetic-seed42-count120000",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
+		{
+			// An empty repo is "never recorded", not a wildcard: a
+			// baseline that predates repo recording must not silently
+			// validate against an attributed current run.
+			name: "empty baseline repo against non-empty current repo fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				Repo:         "synthetic-seed42-count120000",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "corpus",
+		},
+		{
+			// The mirror case: a measurement that itself never recorded
+			// its own repo must not silently validate against an
+			// attributed baseline either.
+			name: "non-empty baseline repo against empty current repo fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				Repo:         "synthetic-seed42-count120000",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "corpus",
+		},
+		{
+			// Unattributed repo on BOTH sides matches and is allowed —
+			// mirrors the runner/scratch_fs precedent above. This subtest
+			// must be present or the guard could be written as "refuse
+			// whenever either is empty" and still pass.
+			name: "both repos empty passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

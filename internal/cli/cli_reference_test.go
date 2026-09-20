@@ -280,3 +280,103 @@ func hasAllowEntry(allow map[string]string, key string) bool {
 	_, ok := allow[key]
 	return ok
 }
+
+// commandGroupIDs returns the set of group IDs registered on root via
+// AddGroup — the closed universe TestEveryCommandHasGroupID checks every
+// visible command's GroupID against (D-13, CLI-06).
+func commandGroupIDs(root *cobra.Command) map[string]bool {
+	ids := make(map[string]bool, len(root.Groups()))
+	for _, g := range root.Groups() {
+		ids[g.ID] = true
+	}
+	return ids
+}
+
+// cliReferenceMinVisibleCommands is CLI-06's positive floor (rule
+// 84d1gfpywd): the real tree today registers 22 explicitly-grouped
+// top-level commands plus the default help/completion commands = 24
+// visible commands at root. This floor exists so a walk that silently
+// inspects zero (or too few) commands can never read as a passing test.
+const cliReferenceMinVisibleCommands = 24
+
+// wantGroupOrder is D-13's four group IDs in AddGroup registration order —
+// the order cobra's own help template (and, when fang is declined,
+// present.RenderHelp) walks root.Groups() in.
+var wantGroupOrder = []string{"query", "build", "agents", "maintenance"}
+
+// TestEveryCommandHasGroupID is CLI-06/D-13's guard: it asserts OUR data —
+// which GroupID each of our commands carries, and that the four groups
+// are registered in the right order with at least one member each — never
+// cobra's own rendering behaviour (D-00). Whether cobra (or, when fang is
+// declined, present.RenderHelp) actually draws the four titles is not
+// tested here; that is present/help_test.go's job. Built on the same
+// walk-the-tree idiom as TestEveryRegisteredFlagIsAccountedFor above, but
+// deliberately root.Commands()-only (not recursive): cobra groups are
+// per-parent, so daemon start|stop and githooks install|remove|status are
+// never grouped and are out of scope for this guard.
+func TestEveryCommandHasGroupID(t *testing.T) {
+	root := NewRootCmd()
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
+
+	groups := root.Groups()
+	if len(groups) != len(wantGroupOrder) {
+		t.Fatalf("root.Groups() has %d groups, want %d %v", len(groups), len(wantGroupOrder), wantGroupOrder)
+	}
+	for i, g := range groups {
+		if g.ID != wantGroupOrder[i] {
+			t.Fatalf("root.Groups()[%d].ID = %q, want %q (registration order matters — D-13)", i, g.ID, wantGroupOrder[i])
+		}
+	}
+
+	registered := commandGroupIDs(root)
+
+	members := make(map[string]int, len(wantGroupOrder))
+	visibleCount := 0
+	for _, c := range root.Commands() {
+		visible := c.IsAvailableCommand() && !c.IsAdditionalHelpTopicCommand()
+		// cobra's own default help command is deliberately excluded from
+		// IsAvailableCommand() (command.go:1612's `c.Parent().helpCommand
+		// == c` check) so it is never double-counted alongside cobra's
+		// separate, hardcoded help-command print — but cobra's own usage
+		// template still lists it as a real, visible command (`sub.
+		// IsAvailableCommand() || sub == c.helpCommand`, command.go:1285/
+		// 1378/1996). Treat it as visible here to match that behavior;
+		// this is citing cobra's own documented split, not testing it
+		// (D-00) — our assertion is only that OUR help command carries
+		// GroupID "maintenance".
+		if c.Name() == "help" {
+			visible = true
+		}
+		if !visible {
+			if c.GroupID != "" {
+				t.Errorf("hidden command %q has GroupID %q, want \"\" (hidden commands stay groupless — D-13)", c.Name(), c.GroupID)
+			}
+			continue
+		}
+
+		visibleCount++
+		if !registered[c.GroupID] {
+			t.Errorf("visible command %q has GroupID %q, which is not one of the four registered groups %v", c.Name(), c.GroupID, wantGroupOrder)
+			continue
+		}
+		members[c.GroupID]++
+
+		if c.Name() == "help" || c.Name() == "completion" {
+			if c.GroupID != "maintenance" {
+				t.Errorf("command %q has GroupID %q, want %q (SetHelpCommandGroupID/SetCompletionCommandGroupID)", c.Name(), c.GroupID, "maintenance")
+			}
+		}
+	}
+
+	for _, id := range wantGroupOrder {
+		if members[id] == 0 {
+			t.Errorf("group %q has zero visible members", id)
+		}
+	}
+
+	t.Logf("inspected %d visible commands across %d groups", visibleCount, len(groups))
+	if visibleCount < cliReferenceMinVisibleCommands {
+		t.Fatalf("inspected only %d visible commands — expected at least %d (CLI-06 floor)", visibleCount, cliReferenceMinVisibleCommands)
+	}
+}

@@ -1,0 +1,7 @@
+Claude Code: configured
+  created: .mcp.json
+  created: .claude/CLAUDE.md
+  created: .claude/skills/codegraph/SKILL.md
+  created: .claude/hooks/session-nudge.sh
+  created: .claude/settings.json
+  created: .claude/skills/codegraph/.codegraph-manifest.json

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 func TestKiro_ID(t *testing.T) {
@@ -125,10 +127,111 @@ func TestKiro_RoundTrip_ByteInvariant(t *testing.T) {
 	}
 }
 
-func TestKiro_DescribePaths_ListsOnlyMcpConfig(t *testing.T) {
+// TestKiro_DescribePaths_ListsMcpConfigAndSkill supersedes
+// TestKiro_DescribePaths_ListsOnlyMcpConfig: Kiro now declares
+// SkillDirs: kiroSkillDirs (AGENT-11, D-06 correction (d)), so
+// DescribePaths grows from 1 path to 3 — the MCP config, the Kiro
+// SKILL.md, and its sidecar manifest.
+func TestKiro_DescribePaths_ListsMcpConfigAndSkill(t *testing.T) {
 	k := kiroTarget{}
 	paths := k.DescribePaths(LocationGlobal)
-	if len(paths) != 1 {
-		t.Fatalf("want exactly 1 path (the MCP config), got %v", paths)
+	if len(paths) != 3 {
+		t.Fatalf("want exactly 3 paths (mcp config + Kiro SKILL.md + manifest), got %v", paths)
+	}
+	var sawMCP, sawSkillMD, sawManifest bool
+	for _, p := range paths {
+		switch {
+		case strings.HasSuffix(p, filepath.Join(".kiro", "settings", "mcp.json")):
+			sawMCP = true
+		case strings.HasSuffix(p, filepath.Join(".kiro", "skills", "codegraph", "SKILL.md")):
+			sawSkillMD = true
+		case strings.HasSuffix(p, filepath.Join(".kiro", "skills", "codegraph", ".codegraph-manifest.json")):
+			sawManifest = true
+		}
+	}
+	if !sawMCP || !sawSkillMD || !sawManifest {
+		t.Fatalf("DescribePaths missing an expected entry (mcp=%v skillmd=%v manifest=%v): %v", sawMCP, sawSkillMD, sawManifest, paths)
+	}
+}
+
+// TestKiro_Install_WritesHarnessSkillDir (AGENT-11, D-06 correction (d),
+// kiro.dev/docs/steering, fetched 2026-09-18): Kiro installs the codegraph
+// skill at its own harness-specific directory (.kiro/skills/codegraph) —
+// the only entry in kiroSkillDirs — reversed completely by Uninstall.
+func TestKiro_Install_WritesHarnessSkillDir(t *testing.T) {
+	for _, loc := range []Location{LocationGlobal, LocationLocal} {
+		t.Run(string(loc), func(t *testing.T) {
+			fakeHome(t)
+			if loc == LocationLocal {
+				dir := t.TempDir()
+				t.Chdir(dir)
+			}
+			k := kiroTarget{}
+			k.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+			harnessDir, err := k.Capabilities().WrittenSkillDir(loc)
+			if err != nil {
+				t.Fatalf("WrittenSkillDir: %v", err)
+			}
+			skillPath := filepath.Join(harnessDir, "SKILL.md")
+			want, err := claudeassets.SkillMarkdown()
+			if err != nil {
+				t.Fatalf("claudeassets.SkillMarkdown: %v", err)
+			}
+			if got := readFile(t, skillPath); got != string(want) {
+				t.Fatalf("harness SKILL.md at %s does not match the embed", skillPath)
+			}
+			m, present, err := readManifest(skillManifestPath(harnessDir))
+			if err != nil || !present {
+				t.Fatalf("expected a manifest at %s (present=%v err=%v)", harnessDir, present, err)
+			}
+			if len(m.Targets) != 1 || !containsTarget(m.Targets, Kiro) {
+				t.Fatalf("manifest targets = %v, want exactly [kiro]", m.Targets)
+			}
+
+			k.Uninstall(loc)
+			if fileExists(skillPath) {
+				t.Fatalf("harness SKILL.md not removed after uninstall")
+			}
+			if fileExists(skillManifestPath(harnessDir)) {
+				t.Fatalf("harness manifest not removed after uninstall")
+			}
+			if fileExists(harnessDir) {
+				t.Fatalf("harness skill dir not swept after uninstall")
+			}
+		})
+	}
+}
+
+// TestKiro_Install_WritesNoAgentsMd (D-06(d)): Kiro's own instructions
+// handling is unchanged by this plan — it writes NO AGENTS.md at either
+// scope (its own reads of ./AGENTS.md / ~/.kiro/steering/AGENTS.md,
+// written by other targets, are advisory-only per kiro.dev/docs/steering)
+// and it writes no shared .agents/skills/codegraph alias.
+func TestKiro_Install_WritesNoAgentsMd(t *testing.T) {
+	for _, loc := range []Location{LocationGlobal, LocationLocal} {
+		t.Run(string(loc), func(t *testing.T) {
+			home := fakeHome(t)
+			if loc == LocationLocal {
+				dir := t.TempDir()
+				t.Chdir(dir)
+			}
+			k := kiroTarget{}
+			k.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+			if fileExists("AGENTS.md") {
+				t.Fatalf("kiro install must not write a project-root AGENTS.md")
+			}
+			if fileExists(filepath.Join(home, ".kiro", "steering", "AGENTS.md")) {
+				t.Fatalf("kiro install must not write a global steering AGENTS.md")
+			}
+			sharedDir, err := sharedSkillDirPath(loc)
+			if err != nil {
+				t.Fatalf("sharedSkillDirPath: %v", err)
+			}
+			if fileExists(sharedDir) {
+				t.Fatalf("kiro must not write the shared .agents/skills/codegraph alias, found %s", sharedDir)
+			}
+		})
 	}
 }

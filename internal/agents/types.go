@@ -119,7 +119,32 @@ type InstallOptions struct {
 	// every agent's MCP command entry launches the exact binary the user
 	// ran `install` from, not a PATH guess (D-04).
 	ExecPath string
+	// PreToolNudge selects what this run does with the opt-in Claude Code
+	// PreToolUse nudge (Claude-only; a no-op for every other target,
+	// v0.14.0 Phase 6 D-09). PreToolNudgeOn writes the rendered guard
+	// script and its hooks.PreToolUse registration and records both in the
+	// Claude skill manifest. PreToolNudgeKeep refreshes them only while the
+	// opt-in is recorded — either in the manifest, or (CR-01, 06-REVIEW.md)
+	// evidenced by settings.json's own PreToolUse registration when the
+	// manifest step could not run (a foreign/unmanifested skill directory,
+	// D-14); PreToolNudgeOff removes them and drops the record (D-10).
+	PreToolNudge PreToolNudgeMode
 }
+
+// PreToolNudgeMode is InstallOptions.PreToolNudge's tri-state: an install
+// run either keeps whatever the manifest records (the zero value, so every
+// caller that never mentions the nudge keeps it), turns it on, or turns it
+// off (D-10).
+type PreToolNudgeMode int
+
+const (
+	// PreToolNudgeKeep leaves the recorded opt-in as it is (D-10, 06-04).
+	PreToolNudgeKeep PreToolNudgeMode = iota
+	// PreToolNudgeOn installs the PreToolUse nudge (D-09).
+	PreToolNudgeOn
+	// PreToolNudgeOff removes a recorded opt-in (D-10, 06-04).
+	PreToolNudgeOff
+)
 
 // AgentTarget is the interface every roster agent implements; the
 // registry (registry.go) iterates it so install/uninstall never branch on
@@ -157,4 +182,13 @@ type AgentTarget interface {
 	// target reads or writes at loc, for --print-config-style reporting
 	// and test assertions.
 	DescribePaths(loc Location) []string
+
+	// Capabilities returns this target's per-target capability table
+	// (D-01, D-02): the scopes it supports, its config file format, its
+	// hook mechanism, and per-location path resolvers for its MCP config,
+	// instructions file, and skill directories. SupportsLocation,
+	// DescribePaths, and Detect's path inputs are all derivations of this
+	// table — no target keeps a second hand-written copy of any path the
+	// table holds (D-03's guard enforces this in both directions).
+	Capabilities() Capabilities
 }

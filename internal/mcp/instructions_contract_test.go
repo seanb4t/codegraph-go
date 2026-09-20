@@ -44,12 +44,13 @@ const instructionsMaxBytes = 600
 const resourcesAnchor = "resources/list"
 
 // skillAnchor is WIRE-03's skill half — the literal substring the rewritten
-// instructions const must carry so a client is pointed at the Claude Code
-// codegraph skill. Scoped to Claude Code deliberately (08-RESEARCH.md
-// Pitfall 1, resolution 1): Phase 7 shipped the skill for Claude Code only,
-// so an unscoped claim reaching a Codex/opencode/Gemini/Cursor/Kiro/
-// Hermes/Antigravity client would be a new unbacked promise inside the
-// phase that exists to retire them.
+// instructions const must carry so a client is pointed at the codegraph
+// skill. As of this phase (D-29, docs/AGENT-CAPABILITIES.md) the skill
+// package reaches 7 of the 8 registered targets — every target but Hermes,
+// which has no skill mechanism at either scope — so the sentence carrying
+// this anchor is harness-neutral rather than scoped to Claude Code, and
+// TestInstructionsSkillSentenceWithinFirst512Bytes below asserts both that
+// neutrality and Codex's 512-byte placement window.
 const skillAnchor = "codegraph skill"
 
 // TestInstructionsNamesTheNarrowingFilter pins the wire contract against
@@ -114,7 +115,7 @@ func TestInstructionsDescribesEveryVisibilityMechanism(t *testing.T) {
 		{"the CODEGRAPH_MCP_TOOLS narrowing filter", allowlistEnvName},
 		{"the missing-index remedy (MCP-03)", "codegraph init"},
 		{"the resources reference surface", resourcesAnchor},
-		{"the Claude Code skill pointer", skillAnchor},
+		{"the codegraph skill pointer", skillAnchor},
 	}
 
 	for _, m := range mechanisms {
@@ -128,7 +129,7 @@ func TestInstructionsDescribesEveryVisibilityMechanism(t *testing.T) {
 // TestInstructionsStaysWithinWireBudget enforces server.go's stated
 // constraints on the instructions constant. These are boundary neighbors
 // for the fix above, not incidental style checks: the string is
-// JSON-encoded verbatim into 24 frozen wire-oracle transcripts, so a
+// JSON-encoded verbatim into 38 frozen wire-oracle transcripts, so a
 // newline becomes an escape sequence in every one of them and unbounded
 // growth inflates every transcript diff forever.
 func TestInstructionsStaysWithinWireBudget(t *testing.T) {
@@ -241,6 +242,36 @@ func skillClaimResolves(claim string, read func() ([]byte, error)) error {
 func TestInstructionsSkillClaimIsResolvable(t *testing.T) {
 	if err := skillClaimResolves(instructions, claudeassets.SkillMarkdown); err != nil {
 		t.Fatalf("%v (source: %s)", err, claudeassets.SkillMarkdownPath)
+	}
+}
+
+// TestInstructionsSkillSentenceWithinFirst512Bytes pins D-29's rewrite:
+// Codex documents a roughly 512-byte instructions-truncation window
+// (07-RESEARCH.md, developers.openai.com/codex/*), so the sentence carrying
+// skillAnchor must end at or before that offset, and it must be
+// harness-neutral — true for the 7 skill-receiving targets
+// (docs/AGENT-CAPABILITIES.md), not scoped to Claude Code specifically.
+// Before this test the sentence read "in Claude Code, codegraph install
+// also adds the codegraph skill." and ended at byte 554, past Codex's
+// window and false for the 6 non-Claude skill-receiving targets.
+func TestInstructionsSkillSentenceWithinFirst512Bytes(t *testing.T) {
+	idx := strings.Index(instructions, skillAnchor)
+	if idx == -1 {
+		t.Fatalf("instructions never contains %q", skillAnchor)
+	}
+	dot := strings.Index(instructions[idx:], ".")
+	if dot == -1 {
+		t.Fatalf("no sentence-ending %q found after %q in instructions", ".", skillAnchor)
+	}
+	end := idx + dot + 1
+	if end > 512 {
+		t.Errorf("the sentence containing %q ends at byte %d, past Codex's 512-byte instructions window; instructions = %q", skillAnchor, end, instructions)
+	}
+	if strings.Contains(instructions, "Claude Code") {
+		t.Errorf("instructions still names Claude Code specifically; the skill sentence must be harness-neutral, true for every skill-receiving target (D-29). instructions = %q", instructions)
+	}
+	if strings.Contains(instructions, "Hermes") && !strings.Contains(instructions, "except Hermes") {
+		t.Errorf("instructions names Hermes but not as the stated exception (Hermes is the one target with no skill mechanism); instructions = %q", instructions)
 	}
 }
 
