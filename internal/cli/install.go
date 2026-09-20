@@ -235,19 +235,21 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc age
 			fmt.Fprintf(out, "%s: %s\n", t.DisplayName(), statusOf(result))
 		}
 		for _, f := range result.Files {
+			// CR-01/T-04-24: f.Path is filesystem-derived (a resolved
+			// config location, absolute at global scope) — sanitized in
+			// BOTH branches, since a plain render reaches a terminal too
+			// whenever NO_COLOR or --color=never is set on a TTY.
+			path := sanitizePathForDisplay(f.Path)
 			if mode.Styled {
-				// CR-01/T-04-24: f.Path is filesystem-derived (a resolved
-				// config location) — sanitized before pal.Path.Render like
-				// every other adversarial-capable path this phase styles.
 				actionRole := present.RoleWarning
 				switch f.Action {
 				case agents.ActionUnchanged, agents.ActionKept, agents.ActionNotFound:
 					actionRole = present.RoleLabel
 				}
 				_, _ = io.WriteString(w, "  "+pal.Style(actionRole).Render(string(f.Action)+":")+" "+
-					pal.Path.Render(sanitizePathForDisplay(f.Path))+"\n")
+					pal.Path.Render(path)+"\n")
 			} else {
-				fmt.Fprintf(out, "  %s: %s\n", f.Action, f.Path)
+				fmt.Fprintf(out, "  %s: %s\n", f.Action, path)
 			}
 		}
 		for _, note := range result.Notes {
@@ -264,10 +266,13 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc age
 			}
 		}
 		for _, e := range result.Errors {
+			// T-04-24: an error string carries the path it failed on, so
+			// it is sanitized in both branches for the same reason.
+			msg := sanitizePathForDisplay(e.Error())
 			if mode.Styled {
-				_, _ = io.WriteString(w, "  "+pal.Error.Render("error: "+sanitizePathForDisplay(e.Error()))+"\n")
+				_, _ = io.WriteString(w, "  "+pal.Error.Render("error: "+msg)+"\n")
 			} else {
-				fmt.Fprintf(out, "  error: %v\n", e)
+				fmt.Fprintf(out, "  error: %s\n", msg)
 			}
 			errs = append(errs, fmt.Errorf("%s: %w", t.DisplayName(), e))
 		}
