@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.14.0
 milestone_name: Polish & Agent Reach
-current_phase: 7
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 7 complete — all phases complete
-last_updated: "2026-09-20T00:49:30.985Z"
-last_activity: 2026-09-19
-last_activity_desc: Phase 7 complete
-state_head: 768db3e9cafe56c49bdb34af1bc3892e57aa2461
+last_updated: "2026-09-20T05:34:36.191Z"
+last_activity: 2026-09-20
+last_activity_desc: Milestone v0.14.0 completed and archived
+state_head: f90160f06e88bdfd661b79ad8171166aa15b2771
 progress:
   total_phases: 7
   completed_phases: 7
   total_plans: 53
   completed_plans: 53
   percent: 100
+current_phase: 7
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
 
 ## Current Position
 
-Phase: 7
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-09-19 — Phase 7 complete
+Phase: Milestone v0.14.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-20 — Milestone v0.14.0 completed and archived
 
 ## Performance Metrics
 
@@ -603,8 +603,4 @@ Stopped at: Phase 7 complete — all phases complete
 
 ## Operator Next Steps
 
-- v0.13.0 SHIPPED 2026-09-13 as a `verified_closeout` — 6/6 phases canonical `passed` after re-verification, 26/26 requirements, both pre-close open artefacts resolved (tty03 debug session; graphstore archtest vacuity fixed as quick task `260913-pkp`); archived under `milestones/v0.13.0-*`
-- Push the branch (~180 commits ahead of origin) and open the phases 9–12 PR with a `feat:` title and `Resolves #N`; CI will run `docs:cli:drift` and the tmux `expected=6` gate at HEAD for the first time
-- Repository-settings action still open (no agent can do it): add the required-status-check context `tmux e2e (real-pty harness, TTY-01..TTY-07)` to ruleset 20157557, then add the same string to `requiredCheckNames` in `internal/upgrade/taskfile_shape_test.go`
-- Cheap follow-ups: wire `task check:gonum` and `task check:no-force-layout` into `ci.yml`; run `/gsd-validate-phase` against the archived 09–12 VALIDATION files if a `validated` record is wanted; reconcile the Pending Todos table; inspect and remove the stale `.claude/worktrees/agent-aebfa7de95041ec86` worktree
-- Start the next milestone with /gsd-new-milestone (Phase numbering continues from 13)
+- Start the next milestone with /gsd-new-milestone

@@ -4,7 +4,12 @@ title: tools/bench/runner pinnedAt() validates a checkout by git rev-parse HEAD 
 area: bench
 severity: minor
 files:
+
   - tools/bench/runner/main.go:435-441
+
+audit_acknowledged:
+  milestone: v0.14.0
+  at: 2026-09-20
 ---
 
 ## Problem

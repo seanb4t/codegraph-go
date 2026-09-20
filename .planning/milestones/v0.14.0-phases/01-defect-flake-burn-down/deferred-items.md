@@ -1,13 +1,13 @@
 ## Deferred Items
 
 - `TestDaemonFlushLockRequeueGivesUpPerEpisode` (internal/daemon/daemon_test.go) timed out twice during 01-02's full-suite `-race` verification runs, on an unrelated mechanism (the WR-01/IN-03 lock-lost requeue backoff, not the watchdog/getppid seam this plan touches).
-  status: open
+  status: acknowledged
   **What:** `awaitEpisode`'s `testBudget(10 * time.Second)` deadline was exceeded waiting for a lock-lost sync attempt, under this session's unusually high local machine load (`uptime` reported load averages 7.23/11.61/19.50 with 1248 processes and 11 users at the time). A third full-suite run (non-verbose) passed cleanly with zero FAIL/DATA RACE lines across all ~55 packages, and a subsequent verbose run failed on the SAME test again while `TestRunWatchdogCancelsRunOnSimulatedReparent` (this plan's target) passed in 0.19s both times — confirming the failure is unrelated to 01-02's changes.
   **Why deferred, not fixed:** out of scope (Scope Boundary rule — this task touches only FIX-07/FIX-08's watchdog seam) and D-14 explicitly forbids widening any timeout or interval constant under `internal/daemon` as a fix for anything in this phase. This matches the pre-existing, already-accepted "Daemon extreme-load tail" class recorded in `.planning/STATE.md`'s Blockers/Concerns (CI load, not local session load, is the governing standard per maintainer ruling 2026-08-06).
   **Where:** `internal/daemon/daemon_test.go:586` (`TestDaemonFlushLockRequeueGivesUpPerEpisode`), `awaitEpisode`'s `testBudget(10 * time.Second)` deadline.
 
 - `internal/daemon` package FAILED once during 01-04's full-suite `go test ./... -count=1` verification pass (this plan touches only `internal/cli/index.go` and `internal/cli/index_lock_test.go`; it does not import or modify anything under `internal/daemon`).
-  status: open
+  status: acknowledged
   **What:** the tail of the failing run showed repeated `daemon: sync: graphstore: store lock held: injected contention` lines followed by `daemon: sync lost the store-lock race 6 consecutive times; giving up until the next event` — a store-lock-contention requeue/backoff mechanism, the same family as the already-deferred `TestDaemonFlushLockRequeueGivesUpPerEpisode` entry above, not the watchdog/getppid seam 01-02 fixed. The full-suite run's own tail was truncated by the verification command's own `tail -60`, so the specific failing test name was not captured. An immediate isolated re-run of `go test ./internal/daemon/... -count=1` (no other packages competing for CPU) passed cleanly in 65s, confirming this is load-sensitive under full-suite parallelism rather than a regression from this plan's changes.
   **Why deferred, not fixed:** out of scope (Scope Boundary rule — 01-04's file set is `internal/cli` only) and this is the same accepted "Daemon extreme-load tail" class already recorded above and in `.planning/STATE.md`'s Blockers/Concerns.
   **Where:** `internal/daemon` package, exact test name not captured this run (truncated by `tail -60`); re-run with full `-v` output (no `tail`) if this needs to be pinned to a specific test in a future flake-burn-down pass.
