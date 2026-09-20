@@ -1041,3 +1041,72 @@ func TestUninstall_YesWithExplicitTarget_HonoursTarget(t *testing.T) {
 		t.Fatalf("expected %s to be removed entirely (emptied by stripping the sole codegraph table), stat err: %v", codexConfigPath, statErr)
 	}
 }
+
+// TestInstall_NotesAreControlCharacterSanitized pins T-04-24 (Phase 4's
+// security audit, found 2026-09-19): result.Notes reached the terminal
+// unsanitized while the sibling files and error lines were sanitized.
+// Phase 4 shipped with only a constant note, so nothing carried a path;
+// Phases 5 and 7 then added path-bearing notes (codexTrustNote embeds the
+// absolute repo root), which turned the gap into a live escape-injection:
+// installing from a directory whose NAME carries an OSC-0 set-title
+// sequence emitted that sequence raw to stdout. Both output modes are
+// pinned — a user with NO_COLOR on a real terminal takes the plain branch.
+func TestInstall_NotesAreControlCharacterSanitized(t *testing.T) {
+	const osc = "\x1b]0;PWNED\x07"
+
+	run := func(t *testing.T, extraArgs ...string) string {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+		t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
+
+		project := filepath.Join(t.TempDir(), "repo"+osc+"x")
+		if err := os.MkdirAll(project, 0o755); err != nil {
+			t.Fatalf("mkdir control-character project dir: %v", err)
+		}
+		t.Chdir(project)
+
+		args := append([]string{"install", "--target", "codex", "--location", "local", "--yes"}, extraArgs...)
+		out, _, err := execCmd(args...)
+		if err != nil {
+			t.Fatalf("install --target codex --location local: %v\n%s", err, out)
+		}
+		if !strings.Contains(out, "note:") {
+			t.Fatalf("expected a note: line (codexTrustNote) in the output, got:\n%q", out)
+		}
+		return out
+	}
+
+	// The note must still name the project — the sanitizer strips control
+	// characters, it does not drop the path (positive control: without this
+	// the assertion below would pass on an empty note).
+	assertSanitized := func(t *testing.T, label, out string) {
+		t.Helper()
+		if strings.Contains(out, osc) {
+			t.Errorf("%s output carries the raw OSC-0 set-title sequence (T-04-24): %q", label, out)
+		}
+		noteLine := ""
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, "note:") {
+				noteLine = line
+				break
+			}
+		}
+		if !strings.Contains(noteLine, "repo") || !strings.Contains(noteLine, "trusted") {
+			t.Errorf("%s note line lost its content while sanitizing: %q", label, noteLine)
+		}
+	}
+
+	t.Run("plain", func(t *testing.T) {
+		assertSanitized(t, "plain", run(t))
+	})
+	t.Run("styled", func(t *testing.T) {
+		out := run(t, "--color=always")
+		if !strings.Contains(out, "\x1b[") {
+			t.Fatalf("expected styled output to carry SGR escapes, got:\n%q", out)
+		}
+		// Strip the renderer's own SGR sequences; anything left must be clean.
+		assertSanitized(t, "styled", stripInstallSGR(out))
+	})
+}
