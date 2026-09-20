@@ -20,6 +20,8 @@
   BOM handling in `splitTOMLLines`; (j2) WR-01's owned-block position
   preservation in `writeHookEntry`; (j3) WR-03's (07-REVIEW-FIX.md re-review
   pass 2) BOM-only-residual drop in `stripTOMLTable`.
+- Family (k) — plan 07-13 (milestone-audit fix, 04-SECURITY.md T-04-24): the
+  install/upgrade note sanitizer.
 
 ## Pre-mutation cleanliness gate — the convention this log follows
 
@@ -2213,3 +2215,49 @@ Full-package re-check after the revert: `GOTOOLCHAIN=go1.26.6 go test ./internal
 Family (j) verdict: the BOM-special-case disablement (j1), the always-append-last reversion
 (j2), and the BOM-only-residual narrowing (j3) each demonstrated RED against a real planted
 mutation and reverted byte-clean; the agents/cli/mcp packages are GREEN after every revert.
+
+---
+
+## Family (k1) — T-04-24: dropping the note sanitizer turns TestInstall_NotesAreControlCharacterSanitized RED
+
+**Test/guard:** `TestInstall_NotesAreControlCharacterSanitized` (`internal/cli/install_test.go`)
+— runs a real local Codex install from a project directory whose NAME carries an
+OSC-0 set-title sequence, in both the plain and the styled branch, and asserts the
+rendered `note:` line carries no raw control characters while still naming the project.
+
+**What are we testing, and why?** Phase 4's retroactive security audit (2026-09-19) found
+`result.Notes` rendered through `pal.Value.Render(note)` with no sanitizer, while the sibling
+file and error lines sanitize. Phase 4 itself shipped only a constant note, so nothing carried
+a path; Phases 5 and 7 then added path-bearing notes (`codexTrustNote` interpolates the
+absolute repo root), which turned the gap into a live escape injection.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/cli/install.go` — exit 0 (clean).
+
+**Mutation applied:** `perl -0pi -e 's/\t\t\tnote = sanitizePathForDisplay\(note\)\n//' internal/cli/install.go`
+(removes the single sanitize call added by `27dd6311`).
+
+**Observed failure** (verbatim, `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1 -run 'TestInstall_NotesAreControlCharacterSanitized'`):
+
+```
+--- FAIL: TestInstall_NotesAreControlCharacterSanitized (0.01s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/cli	0.486s
+```
+
+Before the fix, the same test reported the payload verbatim on both branches:
+`plain output carries the raw OSC-0 set-title sequence (T-04-24)` and
+`styled output carries the raw OSC-0 set-title sequence (T-04-24)`.
+
+**Pre-revert gate:** `git diff --quiet -- internal/cli/install.go` — exit 1 (only the planted diff).
+
+**Revert:** `git checkout -- internal/cli/install.go`, then `git diff --quiet` — exit 0 (byte-clean).
+
+**Green control:** `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -count=1 -run 'TestInstall_NotesAreControlCharacterSanitized'` →
+`ok  	github.com/seanb4t/codegraph-go/internal/cli	0.448s`.
+
+**Real-binary confirmation:** installing from `repo<ESC>]0;PWNED<BEL>x` emitted the raw
+OSC-0 sequence before the fix (`xxd` showed `1b5d 30 3b 5057 4e45 44 07`) and zero OSC-0
+sequences after; the literal text "PWNED" remains as inert characters, which is the
+sanitizer's contract — strip control characters, keep content.
+
+Family (k) verdict: the note-sanitizer guard is not vacuous.
