@@ -276,7 +276,12 @@ func plainCases(_ *testing.T) []plainCase {
 			return plainRun{args: []string{"telemetry"}}
 		}},
 		{name: "init", setup: func(t *testing.T) plainRun {
+			// init is the command under test here, so this case cannot go
+			// through setupIndexedFixture — it still needs the same
+			// platform-portable corpus, or its files= count differs
+			// between darwin and linux.
 			dir := copyFixture(t)
+			pruneGOOSSuffixedFiles(t, dir)
 			return plainRun{
 				args: []string{"init", dir},
 				env:  []string{"CODEGRAPH_NO_WATCH=1"},
