@@ -107,6 +107,8 @@ None blocking. Notable, already-documented, accepted deviations (not defects):
 
 #### 1. FIX-03's post-flip real-PTY tmux assertion
 
+**CI EVIDENCE LANDED 2026-09-20.** The branch was pushed as PR #76 and the `tmux e2e (real-pty harness, TTY-01..TTY-07)` job ran green against this code at commit `91dc81b1`, so the override's outstanding half is discharged: the re-anchored TTY-05 footer assertion has now executed in a real PTY after the scope flip. (Getting there took three CI-only fixes the local loop could not see — golangci-lint, the perf runner's stale `query` verb, and linux-vs-darwin golden portability.)
+
 **RESOLVED 2026-09-19 — override accepted by the maintainer (sean):** the model-level footprint guard is accepted as sufficient evidence for this phase; CI's `tmux-e2e` job remains the outstanding real-PTY confirmation and runs on push/PR. Recorded in the frontmatter `overrides:` block, in STATE.md, and in GitHub issue #75. No further action blocks Phase 7.
 
 **Test:** Push the branch (or otherwise get CI running) and observe the `tmux-e2e` GitHub Actions job, or manually run `task test:tmux` on a machine with tmux installed, at this HEAD.
