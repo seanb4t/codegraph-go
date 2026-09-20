@@ -21,10 +21,10 @@ current_phase: 7
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-19 after Phase 6)
+See: .planning/PROJECT.md (updated 2026-09-20 at the v0.14.0 close)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 7 — Codex Parity
+**Current focus:** No milestone scoped — v0.14.0 shipped 2026-09-20. Start the next one with `/gsd-new-milestone`.
 
 ## Current Position
 
