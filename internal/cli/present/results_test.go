@@ -147,7 +147,7 @@ func plainSearchFull(nodes []*schema.Node) string {
 
 func plainCallers(symbol string, locs []query.Location) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s has %d caller(s):\n", sanitizeControlForTest(symbol), len(locs)))
+	fmt.Fprintf(&b, "%s has %d caller(s):\n", sanitizeControlForTest(symbol), len(locs))
 	for _, l := range locs {
 		b.WriteString(plainLocationLine("  ", l))
 	}
@@ -156,7 +156,7 @@ func plainCallers(symbol string, locs []query.Location) string {
 
 func plainCallees(symbol string, locs []query.Location) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s calls %d callee(s):\n", sanitizeControlForTest(symbol), len(locs)))
+	fmt.Fprintf(&b, "%s calls %d callee(s):\n", sanitizeControlForTest(symbol), len(locs))
 	for _, l := range locs {
 		b.WriteString(plainLocationLine("  ", l))
 	}
@@ -165,8 +165,8 @@ func plainCallees(symbol string, locs []query.Location) string {
 
 func plainImpact(symbol string, depth, nodeCount, edgeCount int, locs []query.Location) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s impact (depth=%d): %d node(s), %d edge(s)\n",
-		sanitizeControlForTest(symbol), depth, nodeCount, edgeCount))
+	fmt.Fprintf(&b, "%s impact (depth=%d): %d node(s), %d edge(s)\n",
+		sanitizeControlForTest(symbol), depth, nodeCount, edgeCount)
 	for _, l := range locs {
 		b.WriteString(plainLocationLine("  ", l))
 	}
@@ -179,7 +179,7 @@ func plainAffected(locs []query.Location) string {
 		b.WriteString("no test files affected\n")
 		return b.String()
 	}
-	b.WriteString(fmt.Sprintf("%d affected test(s):\n", len(locs)))
+	fmt.Fprintf(&b, "%d affected test(s):\n", len(locs))
 	for _, l := range locs {
 		b.WriteString(plainLocationLine("  ", l))
 	}

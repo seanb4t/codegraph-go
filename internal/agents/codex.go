@@ -303,10 +303,10 @@ func (t codexTarget) Uninstall(loc Location) WriteResult {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, cerr))
 		} else {
 			updated := stripTOMLTable(existing, codexTOMLTable)
-			switch {
-			case updated == existing:
+			switch updated {
+			case existing:
 				result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
-			case updated == "":
+			case "":
 				if err := os.Remove(configPath); err != nil {
 					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
 				} else {

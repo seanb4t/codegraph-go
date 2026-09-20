@@ -165,15 +165,6 @@ func claudeSkillDirPath(loc Location) (string, error) {
 	return filepath.Join(home, ".claude", "skills", "codegraph"), nil
 }
 
-// claudeSkillFilePath is claudeSkillDirPath(loc) joined with SKILL.md.
-func claudeSkillFilePath(loc Location) (string, error) {
-	dir, err := claudeSkillDirPath(loc)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "SKILL.md"), nil
-}
-
 // claudeManifestPath is claudeSkillDirPath(loc) joined with the sidecar
 // manifest filename (D-03). The dot prefix keeps the file out of any
 // future recursive skill-content scan and signals "codegraph-internal, not

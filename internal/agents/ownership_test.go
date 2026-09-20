@@ -41,7 +41,7 @@ import (
 // 05-MUTATION-LOG.md demonstrates this guard going RED against both shapes
 // of that historical vulnerability (shape-based skill-dir ownership, and
 // the literal matcher-based hook recovery reintroduced).
-const ownership242ec0aSHA = "242ec0a418703c6a4dab45188242149960cda77d"
+// The hardening commit this table guards is 242ec0a418703c6a4dab45188242149960cda77d.
 
 // ownershipWantSkillDir is an INDEPENDENT oracle for the skill directory a
 // target writes at loc — built by hand from this phase's own decisions

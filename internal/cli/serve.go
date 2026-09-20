@@ -264,7 +264,7 @@ tools appear on the next request, with no client restart.`,
 			// ever wraps — stdout (the MCP JSON-RPC stream) is never
 			// touched, and resolveColorStderr never queries the terminal
 			// (T-04-22, T-04-25).
-			var watchStderr io.Writer = cmd.ErrOrStderr()
+			watchStderr := cmd.ErrOrStderr()
 			if mode := resolveColorStderr(cmd); mode.Styled {
 				watchStderr = present.NewLineWriter(mode.Writer(cmd.ErrOrStderr()), present.NewPalette(true), present.RoleWarning)
 			}
