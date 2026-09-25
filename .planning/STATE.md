@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
 status: planning
-last_updated: "2026-09-25T17:27:09.526Z"
+last_updated: "2026-09-25T18:00:00.000Z"
 last_activity: 2026-09-25
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-25 after scoping v0.15.0)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Milestone v0.15.0 Changie Release Management — defining requirements
+**Current focus:** Milestone v0.15.0 Changie Release Management — roadmap created, Phase 1 (Changie Baseline) next
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 of 6 (Changie Baseline)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-09-25 — Milestone v0.15.0 started
+Status: Ready to plan
+Last activity: 2026-09-25 — Roadmap created: 6 phases, 29/29 v1 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -599,4 +601,4 @@ Stopped at: Phase 7 complete — all phases complete
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Discuss Phase 1 with /gsd-discuss-phase 1
