@@ -1,12 +1,43 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.15.0",
-  "phases": [],
+  "milestone": "v0.15.0 — Changie Release Management",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Changie Baseline",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "Phase-Close Fragment Capability",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Rename-Stub Removal",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Fragment-Required Gate",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Release Chain & release-please Retirement",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "First Release Through the Chain",
+      "status": "pending"
+    }
+  ],
   "next": {
-    "command": "/gsd:discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 6 · 0% · executing"
   },
-  "updated_at": "2026-09-25T17:27:09.531Z"
+  "updated_at": "2026-09-25T19:39:14.300Z"
 }
