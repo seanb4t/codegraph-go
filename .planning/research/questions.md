@@ -34,3 +34,16 @@ the disposition it left the exploration with.
 - **go-sdk streamable HTTP handler constructor** and whether go-github v92 ships its own
   App-auth transport (else ghinstallation v2.19.0). *Unresolved — unverifiable / non-authoritative
   in the research pass; pin at plan time.*
+
+## 2026-09-25 — changie adoption (see notes/changie-release-management.md)
+
+- **Where does the phase-close `changie new` step live?** Decision D3 has GSD's verify/close
+  write one fragment per user-visible change. Does gsd-core expose a capability/hook at phase
+  verify or close (the way `execute:wave:post` and `ship:post` exist) where a project-local
+  step can run `CI=true changie new -k … -b … -m PR=…`? If not, this is an upstream feature
+  request to open-gsd/gsd-core — per the planning-artifacts rule, never invent a local step
+  inside a tool-owned workflow file. *Unresolved — check gsd-core capabilities registry.*
+- **Fragment-required gate implementation.** changie has no check subcommand (research pass,
+  abstain). Extend `scripts/pr_template_policy.py` (already path-aware, fails closed) or add a
+  sibling script; decide whether the exemption is a body marker (`changelog-exempt`) only or
+  also a label. *Design question.*
