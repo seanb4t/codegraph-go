@@ -121,10 +121,12 @@ Every command CI runs is defined exactly once, as a `task` target — see
   completes, rather than run standalone locally.
 - CI calls these same fine-grained targets directly — a contributor and CI
   run identical command bodies, never a divergent local approximation.
-- `task`, `goreleaser`, and `actionlint` build on demand from `go.tool.mod`
-  and `go.tool-lint.mod` — there is nothing to install first, only Go and
-  whatever toolchain the target itself needs. Version bumps for those two
-  files are manual: neither Dependabot nor Renovate is configured for this
+- `task`, `goreleaser`, `actionlint`, and `changie` build on demand from
+  `go.tool.mod`, `go.tool-lint.mod`, and `go.tool-changie.mod` — there is
+  nothing to install first, only Go and whatever toolchain the target
+  itself needs. changie runs as `task changie`, for example
+  `task changie -- latest`. Version bumps for those three files are
+  manual: neither Dependabot nor Renovate is configured for this
   repository at all, so nothing updates them automatically.
 
 ## Pull requests
