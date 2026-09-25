@@ -2,9 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
+current_phase: 1
+current_phase_name: Changie Baseline
 status: planning
-last_updated: "2026-09-25T18:00:00.000Z"
+stopped_at: Phase 1 context gathered
+last_updated: "2026-09-25T18:28:44.950Z"
 last_activity: 2026-09-25
+last_activity_desc: "Roadmap created: 6 phases, 29/29 v1 requirements mapped"
+state_head: ee0c28c7b360885e7a4ccde04f2d9034f943f139
 progress:
   total_phases: 6
   completed_phases: 0
@@ -586,10 +591,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** None
+**Resume file:** .planning/phases/01-changie-baseline/01-CONTEXT.md
 
-Last session: 2026-09-19T22:35:01.950Z
-Stopped at: Phase 7 complete — all phases complete
+Last session: 2026-09-25T18:28:44.935Z
+Stopped at: Phase 1 context gathered
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
