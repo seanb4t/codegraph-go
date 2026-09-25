@@ -190,11 +190,28 @@ Plans:
   4. codegraph-go has the capability installed at project scope from `git+ssh://git@github.com/seanb4t/gsd-capability-changie.git#<tag>`, `workflow.changie_fragments` is set in `.planning/config.json`, `.gsd/` stays gitignored, and `CONTRIBUTING.md` documents the one-time per-clone install (CAP-04)
 
 **Notes**: `CHG-01` makes `PR` a required field (`minInt: 1`), but at phase close on the milestone branch no milestone PR number may exist yet — where the skill gets `<n>` (a draft milestone PR opened early, a lookup, or a config value) is an open design question for discuss-phase, not something to paper over with a placeholder number. The capability manifest is the sanctioned extension vocabulary; no gsd-core workflow file is edited (out of scope by requirement), and `.planning/config.json` is written through the tool's own config verb, never by hand. A `contribution` or `ref.command` step is out of scope — a skill step is the least-privilege sanctioned shape. The scratch-project proofs in criteria 1–3 are the capability's own tests; the in-repo proof that it fires on this repository is `CAP-05` at Phase 3's close.
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 2 to break down)
+- [ ] 02-01-PLAN.md — Capability repo tracer, RED first: manifest installs on a scratch project, gated `verify:post` step, fragment writer with every named skip, idempotency trailers, rollback and lock, proven by a 29-leg `test/run.sh` (CAP-01, CAP-02, CAP-03)
+
+**Wave 2**
+
+- [ ] 02-02-PLAN.md — README, verbatim MIT LICENSE, a pre-publication judgment rehearsal of SKILL.md, and three RED mutation families (CAP-01, CAP-03)
+
+**Wave 3**
+
+- [ ] 02-03-PLAN.md — Maintainer-approved publish: private repo, annotated tag `v0.1.0` proven from a clean clone, draft milestone PR, `/gsd-ship` hazard recorded (CAP-01, CAP-04)
+
+**Wave 4**
+
+- [ ] 02-04-PLAN.md — Project-scope install from the tag, config-set, ledger ignored, live preflight; maintainer-decided Claude skill materialization (CAP-04)
+
+**Wave 5**
+
+- [ ] 02-05-PLAN.md — Real `Skill(gsd-changie-fragments)` dispatch proof, and the CONTRIBUTING D-12 subsection (CAP-03, CAP-04)
 
 #### Phase 3: Rename-Stub Removal
 
