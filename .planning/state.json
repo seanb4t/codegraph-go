@@ -1,48 +1,12 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.14.0 — Polish & Agent Reach",
-  "phases": [
-    {
-      "number": "1",
-      "name": "Defect & Flake Burn-down",
-      "status": "complete"
-    },
-    {
-      "number": "2",
-      "name": "Guards, CI Wiring & Docs Burn-down",
-      "status": "complete"
-    },
-    {
-      "number": "3",
-      "name": "Verb Fold",
-      "status": "complete"
-    },
-    {
-      "number": "4",
-      "name": "CLI Glow-up",
-      "status": "complete"
-    },
-    {
-      "number": "5",
-      "name": "Agent Reach — Capability Model & Skill in Every Harness",
-      "status": "complete"
-    },
-    {
-      "number": "6",
-      "name": "Claude Code PreToolUse Nudge",
-      "status": "complete"
-    },
-    {
-      "number": "7",
-      "name": "Codex Parity",
-      "status": "complete"
-    }
-  ],
+  "milestone": "v0.15.0",
+  "phases": [],
   "next": {
-    "command": "/gsd:progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd:discuss-phase",
+    "label": "Discuss the first phase",
+    "reason": "Project initialized — plan your first phase"
   },
-  "updated_at": "2026-09-20T05:34:36.210Z"
+  "updated_at": "2026-09-25T17:27:09.531Z"
 }

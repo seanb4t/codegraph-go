@@ -1,37 +1,33 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.14.0
-milestone_name: Polish & Agent Reach
-status: Awaiting next milestone
-stopped_at: Phase 7 complete — all phases complete
-last_updated: "2026-09-20T05:34:36.191Z"
-last_activity: 2026-09-20
-last_activity_desc: Milestone v0.14.0 completed and archived
-state_head: f90160f06e88bdfd661b79ad8171166aa15b2771
+milestone: v0.15.0
+milestone_name: Changie Release Management
+status: planning
+last_updated: "2026-09-25T17:27:09.526Z"
+last_activity: 2026-09-25
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 53
-  completed_plans: 53
-  percent: 100
-current_phase: 7
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-20 at the v0.14.0 close)
+See: .planning/PROJECT.md (updated 2026-09-25 after scoping v0.15.0)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** No milestone scoped — v0.14.0 shipped 2026-09-20. Start the next one with `/gsd-new-milestone`.
+**Current focus:** Milestone v0.15.0 Changie Release Management — defining requirements
 
 ## Current Position
 
-Phase: Milestone v0.14.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-20 — Milestone v0.14.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-09-25 — Milestone v0.15.0 started
 
 ## Performance Metrics
 
