@@ -525,3 +525,101 @@ func TestChangieShapeParsersFailLoudly(t *testing.T) {
 		})
 	}
 }
+
+// --- TestChangieCheckWiredIntoCI (CHG-03, D-07, D-08) -----------------------
+
+// TestChangieCheckWiredIntoCI asserts ci.yml's test job runs `task
+// check:changie` immediately after `task docs:cli:drift` (D-08), and that
+// Taskfile.yml's check:changie block declares actionable preconditions and
+// builds from the pinned go.tool-changie.mod (D-07).
+func TestChangieCheckWiredIntoCI(t *testing.T) {
+	ciData, err := os.ReadFile(ciWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", ciWorkflowPath, err)
+	}
+	steps, err := parseWorkflowJobSteps(string(ciData), "test")
+	if err != nil {
+		t.Fatalf("parseWorkflowJobSteps(%s, %q): %v", ciWorkflowPath, "test", err)
+	}
+
+	docsDriftIdx, checkChangieIdx := -1, -1
+	var stripped []string
+	for i, step := range steps {
+		s := stripRunBodyNoise(step.Run)
+		stripped = append(stripped, s)
+		switch s {
+		case "task docs:cli:drift":
+			if docsDriftIdx != -1 {
+				t.Fatalf("%s job %q: more than one step's run: body strips to %q (indices %d and %d): %v", ciWorkflowPath, "test", "task docs:cli:drift", docsDriftIdx, i, stripped)
+			}
+			docsDriftIdx = i
+		case "task check:changie":
+			if checkChangieIdx != -1 {
+				t.Fatalf("%s job %q: more than one step's run: body strips to %q (indices %d and %d): %v", ciWorkflowPath, "test", "task check:changie", checkChangieIdx, i, stripped)
+			}
+			checkChangieIdx = i
+		}
+	}
+	if docsDriftIdx == -1 {
+		t.Fatalf("%s job %q: no step's run: body strips to %q — observed steps: %v", ciWorkflowPath, "test", "task docs:cli:drift", stripped)
+	}
+	if checkChangieIdx == -1 {
+		t.Fatalf("%s job %q: no step's run: body strips to %q — observed steps: %v", ciWorkflowPath, "test", "task check:changie", stripped)
+	}
+	if checkChangieIdx != docsDriftIdx+1 {
+		t.Fatalf("%s job %q: %q is at index %d, want %d (immediately after %q at index %d, D-08) — observed steps: %v", ciWorkflowPath, "test", "task check:changie", checkChangieIdx, docsDriftIdx+1, "task docs:cli:drift", docsDriftIdx, stripped)
+	}
+
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	src := string(taskfileData)
+	blocks := mustParseTaskBlocks(t, src)
+	block, ok := blocks["check:changie"]
+	if !ok {
+		t.Fatalf("%s: no top-level %q task", taskfilePath, "check:changie")
+	}
+	msgs, err := parsePreconditionMessages(block)
+	if err != nil {
+		t.Fatalf("parsePreconditionMessages(check:changie): %v", err)
+	}
+	if len(msgs) == 0 {
+		t.Fatalf("check:changie task block declares preconditions: but no non-empty msg: values")
+	}
+	const wantModfileToken = "-modfile=go.tool-changie.mod"
+	if !strings.Contains(block, wantModfileToken) {
+		t.Fatalf("check:changie task block does not contain %q (D-07: must build from the pinned modfile)", wantModfileToken)
+	}
+}
+
+// --- TestChangieBinaryInToolVulnScan (CHG-01) -------------------------------
+
+// changieVulnForLoopRe matches the vuln target's for-loop name list line
+// naming changie as a whole word — the shape TestChangieBinaryInToolVulnScan
+// requires so a future edit that drops changie from the loop, or renames it
+// to something ambiguous, fails loudly here.
+var changieVulnForLoopRe = regexp.MustCompile(`(?m)^\s*for name in .*\bchangie\b.*; do$`)
+
+func TestChangieBinaryInToolVulnScan(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(data))
+	block, ok := blocks["vuln"]
+	if !ok {
+		t.Fatalf("%s: no top-level %q task", taskfilePath, "vuln")
+	}
+
+	const wantModfileToken = "-modfile=go.tool-changie.mod"
+	if !strings.Contains(block, wantModfileToken) {
+		t.Fatalf("vuln task block does not contain %q — changie is not built from the pinned modfile", wantModfileToken)
+	}
+	if !strings.Contains(block, changieToolPackage) {
+		t.Fatalf("vuln task block does not contain %q — changie's package is not built for the scan", changieToolPackage)
+	}
+	if !changieVulnForLoopRe.MatchString(block) {
+		t.Fatalf("vuln task block has no 'for name in ...changie...; do' loop line naming changie as a whole word:\n%s", block)
+	}
+}
