@@ -166,11 +166,16 @@ Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · 
   4. `CI=true changie new -k <Kind> -b "<sentence>" -m PR=<n>` writes a `.changes/unreleased/*.yaml` without prompting, while a fragment missing `PR` and a fragment naming an undeclared kind are each refused — both directions shown, with the refusal cases confirmed to have executed rather than inferred from a green exit (CHG-04)
 
 **Notes**: `changie merge` regenerates `CHANGELOG.md` from the header plus every `.changes/v*.md` file, so byte-reproducing today's history is not automatic when only `.changes/v0.14.0.md` is seeded — how the pre-v0.14.0 entries survive a merge (where they live, and whether that stays inside "no historical rewrite") is this phase's first research question, answered by a real `changie merge --dry-run`, not by reading the docs. The uniform regeneration of historical entries from GitHub Release notes is `CHG-05`, deferred to v2. `CHANGELOG.md` is tool-owned (today by release-please, from this phase by changie); no entry is hand-edited. The two install paths are recorded where contributors and CI will find them — `CONTRIBUTING.md`'s prose rewrite belongs to `DOCS-12` in Phase 5.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 1 to break down)
+- [ ] 01-01-PLAN.md — Pinned changie renders the seeded `v0.14.0` baseline byte-for-byte (tracer): D-06 shape guards RED-first, `.changie.yaml`, 14 verbatim seeds, isolated `go.tool-changie.mod`, `task changie` wrapper, CONTRIBUTING install path (CHG-01, CHG-02)
+
+**Wave 2**
+
+- [ ] 01-02-PLAN.md — `check:changie` 11-leg live-tool guard wired into ci.yml after `docs:cli:drift`, changie added to `task vuln`, and the RED mutation log for the byte-reproduction, missing-PR, collision and seed-set guards (CHG-01, CHG-03, CHG-04)
 
 #### Phase 2: Phase-Close Fragment Capability
 
