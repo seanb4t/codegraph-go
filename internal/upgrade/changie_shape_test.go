@@ -19,21 +19,21 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/mod/semver"
 	yaml "go.yaml.in/yaml/v3"
+	"golang.org/x/mod/semver"
 )
 
 // --- fixture paths and locked vocabulary (D-06, D-10) -----------------------
 
 const (
-	changieConfigPath     = "../../.changie.yaml"
-	changieChangesDir     = "../../.changes"
-	changieChangelogPath  = "../../CHANGELOG.md"
-	changieModfilePath    = "../../go.tool-changie.mod"
-	changieToolPackage    = "github.com/miniscruff/changie"
-	changieMinVersion     = "v1.26.0"
+	changieConfigPath      = "../../.changie.yaml"
+	changieChangesDir      = "../../.changes"
+	changieChangelogPath   = "../../CHANGELOG.md"
+	changieModfilePath     = "../../go.tool-changie.mod"
+	changieToolPackage     = "github.com/miniscruff/changie"
+	changieMinVersion      = "v1.26.0"
 	changieBaselineVersion = "v0.14.0"
-	changieSeedFloor      = 14
+	changieSeedFloor       = 14
 )
 
 // changieVersionFormat, changieKindFormat and changieChangeFormat are

@@ -10,6 +10,7 @@ vars:
   GO_TOOL_LINT: GOWORK=off go tool -modfile=go.tool-lint.mod
   GO_TOOL_PROTO: GOWORK=off go tool -modfile=go.tool-proto.mod
   GO_TOOL_GOLANGCI: GOWORK=off go tool -modfile=go.tool-golangci.mod
+  GO_TOOL_CHANGIE: GOWORK=off go tool -modfile=go.tool-changie.mod
 
   # BLD-03 (02-06): the source-tree and output-tree hashing pipeline shared
   # VERBATIM by web:build (which WRITES web/build/.build-manifest) and
@@ -533,6 +534,19 @@ tasks:
         fi
 
         echo "docs:cli:drift: docs/CLI-REFERENCE.md byte-identical to a fresh regeneration (temporary file only — source tree untouched)"
+
+  changie:
+    desc: >-
+      CHG-01's recorded install path (D-05): the single, identical command
+      body a contributor and CI both run to invoke the pinned changie
+      v1.26.0 from the isolated go.tool-changie.mod (see that file's own
+      header for the isolation rationale and measured module counts).
+      Everything after `--` passes straight through to changie. Examples:
+      `task changie -- latest` and
+      `task changie -- new -k Fixes -b "<sentence>" -m PR=<n>`.
+    silent: true
+    cmds:
+      - "{{.GO_TOOL_CHANGIE}} changie {{.CLI_ARGS}}"
 
   web:deps:
     desc: >-
