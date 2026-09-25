@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Changie Baseline",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "2",
@@ -36,8 +36,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 1 of 6 · 0% · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 1 of 6 · 0% · ready to verify"
   },
-  "updated_at": "2026-09-25T19:39:14.300Z"
+  "updated_at": "2026-09-25T20:26:18.561Z"
 }

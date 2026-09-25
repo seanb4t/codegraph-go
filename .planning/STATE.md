@@ -4,17 +4,17 @@ milestone: v0.15.0
 milestone_name: Changie Release Management
 current_phase: 1
 current_phase_name: Changie Baseline
-status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-09-25T19:59:08.642Z"
+status: verifying
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-09-25T20:26:27.477Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 1 execution started
-state_head: 9f1a6293ccb76e57856fe264a3184a24ae4e9c08
+state_head: 4e0ba2c019aa20264d471f9abb6e6c4cfe31193e
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-25 after scoping v0.15.0)
 
 Phase: 1 (Changie Baseline) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-25 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -187,6 +187,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P10 | ~18min | 2 tasks | 4 files |
 | Phase 07 P11 | 14 min | 3 tasks | 44 files |
 | Phase 01 P01 | 30min | 2 tasks | 23 files |
+| Phase 01 P02 | 30min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -441,6 +442,9 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: [Phase 07]: D-30 comments corrected (instructions.go, shared.go, registry_test.go) without touching the byte-frozen codegraphInstructionsBlock text; block stays skill-agnostic because it's frozen, not because the skill's reach is narrow (skill now reaches 7 of 8 targets).
 - [Phase 7]: [Phase 07]: Phase 7 gate recorded green with one documented exception — the tmux picker re-run clause reads 'not run' per the maintainer's already-accepted 2026-09-19 decision (issue #75); every other gate clause (build, 53-package suite, daemon alone, docs:cli:drift, 28 mutation families, CODEX-01/05/06 PASS, no ci-skip, WINDOWS D-08 open) passes.
 - [Phase 1]: Changie config+baseline seeded (D-01..D-11): 14 verbatim seeds byte-reproduce CHANGELOG.md; changie v1.26.0 pinned in a fifth isolated go.tool-changie.mod; single task changie install path for CI+contributors
+- [Phase 1]: check:changie needed silent:true to satisfy the plan's own exact-count verify commands (go-task's default mode echoes the whole cmds: script, doubling literal-text matches)
+- [Phase 1]: vuln module-count re-measured live: 1257 across the first four modfiles (1261 with go.tool-changie.mod), not the stale 571 figure
+- [Phase 1]: Family (d)'s v0.5.1 deletion needed a floor-compensating filler seed to reach the set-mismatch branch that names the missing version (changieSeedFloor=14 fires first on a bare deletion)
 
 ### Pending Todos
 
@@ -595,8 +599,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-25T19:59:08.626Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-09-25T20:26:27.460Z
+Stopped at: Completed 01-02-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

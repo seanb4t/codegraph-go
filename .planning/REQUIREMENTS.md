@@ -15,10 +15,10 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Changie Baseline
 
-- [ ] **CHG-01**: `.changie.yaml` exists with kinds `Breaking` (`auto: minor` until 1.0, with the flip-to-major note in the file), `Features` (`minor`), `Fixes`, `Performance`, `Dependencies` (`patch`), a required custom `PR` field (`type: int`, `minInt: 1`), and the version/kind/change formats from `notes/changie-release-management.md`; `changie` itself is pinned (v1.26.0 or later, one recorded install path for CI and one for contributors)
+- [x] **CHG-01**: `.changie.yaml` exists with kinds `Breaking` (`auto: minor` until 1.0, with the flip-to-major note in the file), `Features` (`minor`), `Fixes`, `Performance`, `Dependencies` (`patch`), a required custom `PR` field (`type: int`, `minInt: 1`), and the version/kind/change formats from `notes/changie-release-management.md`; `changie` itself is pinned (v1.26.0 or later, one recorded install path for CI and one for contributors)
 - [x] **CHG-02**: `.changes/header.tpl.md`, `.changes/unreleased/.gitkeep` and `.changes/v0.14.0.md` exist; `CHANGELOG.md` keeps every existing entry verbatim below the changie header, byte-diffable against `main` — baseline only, no historical rewrite
-- [ ] **CHG-03**: `changie latest` answers `v0.14.0`; `changie next auto` with no fragments fails (the expected "nothing to release" outcome, recorded); `changie merge --dry-run` reproduces the current `CHANGELOG.md` byte-for-byte — all three captured as a test or task, not a one-off shell transcript
-- [ ] **CHG-04**: A fragment written with `CI=true changie new -k <Kind> -b "<sentence>" -m PR=<n>` is non-interactive and lands as `.changes/unreleased/*.yaml`; a fragment missing `PR` or using an undeclared kind is refused — proven both ways
+- [x] **CHG-03**: `changie latest` answers `v0.14.0`; `changie next auto` with no fragments fails (the expected "nothing to release" outcome, recorded); `changie merge --dry-run` reproduces the current `CHANGELOG.md` byte-for-byte — all three captured as a test or task, not a one-off shell transcript
+- [x] **CHG-04**: A fragment written with `CI=true changie new -k <Kind> -b "<sentence>" -m PR=<n>` is non-interactive and lands as `.changes/unreleased/*.yaml`; a fragment missing `PR` or using an undeclared kind is refused — proven both ways
 
 ### Release Chain
 
@@ -96,10 +96,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHG-01 | Phase 1 | Pending |
+| CHG-01 | Phase 1 | Complete |
 | CHG-02 | Phase 1 | Complete |
-| CHG-03 | Phase 1 | Pending |
-| CHG-04 | Phase 1 | Pending |
+| CHG-03 | Phase 1 | Complete |
+| CHG-04 | Phase 1 | Complete |
 | REL-10 | Phase 5 | Pending |
 | REL-11 | Phase 5 | Pending |
 | REL-12 | Phase 5 | Pending |

@@ -166,7 +166,7 @@ Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · 
   4. `CI=true changie new -k <Kind> -b "<sentence>" -m PR=<n>` writes a `.changes/unreleased/*.yaml` without prompting, while a fragment missing `PR` and a fragment naming an undeclared kind are each refused — both directions shown, with the refusal cases confirmed to have executed rather than inferred from a green exit (CHG-04)
 
 **Notes**: `changie merge` regenerates `CHANGELOG.md` from the header plus every `.changes/v*.md` file, so byte-reproducing today's history is not automatic when only `.changes/v0.14.0.md` is seeded — how the pre-v0.14.0 entries survive a merge (where they live, and whether that stays inside "no historical rewrite") is this phase's first research question, answered by a real `changie merge --dry-run`, not by reading the docs. The uniform regeneration of historical entries from GitHub Release notes is `CHG-05`, deferred to v2. `CHANGELOG.md` is tool-owned (today by release-please, from this phase by changie); no entry is hand-edited. The two install paths are recorded where contributors and CI will find them — `CONTRIBUTING.md`'s prose rewrite belongs to `DOCS-12` in Phase 5.
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
@@ -175,7 +175,7 @@ Plans:
 
 **Wave 2**
 
-- [ ] 01-02-PLAN.md — `check:changie` 11-leg live-tool guard wired into ci.yml after `docs:cli:drift`, changie added to `task vuln`, and the RED mutation log for the byte-reproduction, missing-PR, collision and seed-set guards (CHG-01, CHG-03, CHG-04)
+- [x] 01-02-PLAN.md — `check:changie` 11-leg live-tool guard wired into ci.yml after `docs:cli:drift`, changie added to `task vuln`, and the RED mutation log for the byte-reproduction, missing-PR, collision and seed-set guards (CHG-01, CHG-03, CHG-04)
 
 #### Phase 2: Phase-Close Fragment Capability
 
@@ -281,7 +281,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Changie Baseline | 1/2 | In Progress|  |
+| 1. Changie Baseline | 2/2 | In Progress|  |
 | 2. Phase-Close Fragment Capability | 0/TBD | Not started | - |
 | 3. Rename-Stub Removal | 0/TBD | Not started | - |
 | 4. Fragment-Required Gate | 0/TBD | Not started | - |
