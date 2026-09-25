@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 1
 current_phase_name: Changie Baseline
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-25T19:39:14.281Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-25T19:59:08.642Z"
 last_activity: 2026-09-25
-last_activity_desc: "Roadmap created: 6 phases, 29/29 v1 requirements mapped"
-state_head: 4261a79b1b799f8cd3d144ae0fd753aeebfbb171
+last_activity_desc: Phase 1 execution started
+state_head: 9f1a6293ccb76e57856fe264a3184a24ae4e9c08
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-25 after scoping v0.15.0)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Milestone v0.15.0 Changie Release Management — roadmap created, Phase 1 (Changie Baseline) next
+**Current focus:** Phase 1 — Changie Baseline
 
 ## Current Position
 
-Phase: 1 (Changie Baseline) — READY TO EXECUTE
-Plan: —
+Phase: 1 (Changie Baseline) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-09-25 — Roadmap created: 6 phases, 29/29 v1 requirements mapped
+Last activity: 2026-09-25 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -186,6 +186,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 7 P09 | ~15min | 3 tasks | 1 files |
 | Phase 07 P10 | ~18min | 2 tasks | 4 files |
 | Phase 07 P11 | 14 min | 3 tasks | 44 files |
+| Phase 01 P01 | 30min | 2 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -439,6 +440,7 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: [Phase 07]: D-29 skill sentence rewritten harness-neutral ('...except Hermes.'), placed after the const's first sentence so it ends at byte 299 (was 554); whole const re-measured 582 bytes. 38 pre-edit transcripts (re-measured, not assumed) re-frozen in one reviewed diff.
 - [Phase 7]: [Phase 07]: D-30 comments corrected (instructions.go, shared.go, registry_test.go) without touching the byte-frozen codegraphInstructionsBlock text; block stays skill-agnostic because it's frozen, not because the skill's reach is narrow (skill now reaches 7 of 8 targets).
 - [Phase 7]: [Phase 07]: Phase 7 gate recorded green with one documented exception — the tmux picker re-run clause reads 'not run' per the maintainer's already-accepted 2026-09-19 decision (issue #75); every other gate clause (build, 53-package suite, daemon alone, docs:cli:drift, 28 mutation families, CODEX-01/05/06 PASS, no ci-skip, WINDOWS D-08 open) passes.
+- [Phase 1]: Changie config+baseline seeded (D-01..D-11): 14 verbatim seeds byte-reproduce CHANGELOG.md; changie v1.26.0 pinned in a fifth isolated go.tool-changie.mod; single task changie install path for CI+contributors
 
 ### Pending Todos
 
@@ -591,10 +593,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/01-changie-baseline/01-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-25T18:28:44.935Z
-Stopped at: Phase 1 context gathered
+Last session: 2026-09-25T19:59:08.626Z
+Stopped at: Completed 01-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
