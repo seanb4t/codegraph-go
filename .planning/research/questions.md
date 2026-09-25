@@ -22,6 +22,15 @@ the disposition it left the exploration with.
 - **Manifest store.** bbolt vs a Pebble "meta" DB for graph status/retention/last-queried;
   whether per-graph `Export` is the transport for CI-distributed indexes (SEED-004).
   *Design question.*
+- **Symbol history / blame as a mirror-backed RPC, not index data.** codegraph records one
+  `Meta.commit_sha` per graph and nothing temporal on nodes/edges/files (no author, no blame,
+  no per-symbol commit); `internal/gitmeta` only does worktree/remote introspection. With a
+  bare mirror per repo (D2), "who last changed this symbol" is
+  `git log -L <start>,<end>:<path> <sha>` against the mirror — on demand, correct by
+  construction, nothing new to keep in sync in Pebble. Candidate RPC
+  `SymbolHistory(repo, sha, symbol) → commits[]` (author, date, subject, sha). Decide: is this
+  in the fovea cutover scope (reviewer routing / context), and does it need a cache keyed by
+  (sha, path, range) since `git log -L` walks history? *Design question, no source needed.*
 - **go-sdk streamable HTTP handler constructor** and whether go-github v92 ships its own
   App-auth transport (else ghinstallation v2.19.0). *Unresolved — unverifiable / non-authoritative
   in the research pass; pin at plan time.*

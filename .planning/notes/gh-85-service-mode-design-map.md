@@ -162,6 +162,9 @@ DATA_7K2QX9MW_END
   CI-distributed indexes (SEED-004).
 - Chart shape on the fovea side is fovea's; codegraph ships a container image and a documented
   config schema.
+- Symbol history / blame: not index data today (one `Meta.commit_sha` per graph; nodes carry
+  no authorship). Candidate mirror-backed RPC `SymbolHistory(repo, sha, symbol)` via
+  `git log -L` — see research/questions.md.
 
 ## Milestone sketch (input to /gsd-new-milestone, not a roadmap)
 
