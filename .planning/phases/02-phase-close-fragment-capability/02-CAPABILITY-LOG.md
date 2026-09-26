@@ -158,6 +158,181 @@ run.sh: 29 of 29 legs passed against a scratch project
 `shellcheck` (0.11.0) remains clean on all four executables after the Task 2 changes.
 `git -C $CAP status --porcelain` is empty after the Task 2 commit.
 
+## 02-06 Task 1 — no-PR tracer
+
+### `$CAP` commit trail since v0.1.0 (RED so far)
+
+```
+57dcbc4 test(02-06): add failing no-open-PR note and no-PR write proofs
+```
+
+(`git -C $CAP log --reverse --format='%h %s' v0.1.0..HEAD` at this point in the
+task; the GREEN commit is appended below once written.)
+
+### Environmental finding: global capability install pollutes `test/run.sh`'s `[ordering]` leg (Rule 3 deviation)
+
+**Found during:** Task 1, step 6 (running `test/run.sh` for the first time in this
+plan, before any of Task 1's intended edits to `write-fragments.sh`).
+
+**Issue:** `test/run.sh`'s `[ordering]` leg asserts that
+`workflow.changie_command` is an *unknown* config key in a fresh scratch
+project, before that project has run `capability install`. On this machine,
+that assertion now fails unconditionally: `gsd-core`'s `capability-loader.cjs`
+deliberately overlays BOTH the global (`${GSD_HOME:-$HOME}/.gsd/capabilities`)
+and the project capability roots when resolving a project's federated config
+schema (`loadRegistry({ includeInstalled: true, cwd, ... })`,
+`config-loader.cjs:453`). Because 02-04 (D-14) installed this very capability
+at **global** scope on this machine, `workflow.changie_command` and
+`workflow.changie_fragments` are valid config keys in *every* project on this
+machine — including a brand-new scratch project that has installed nothing
+itself. This is not a bug in `write-fragments.sh` or in the re-pointed guards
+this plan is editing; it is a side effect of 02-04's own (maintainer-approved)
+global-install decision, discovered only now because this is the first time
+`test/run.sh` has been re-run since that global install happened.
+
+**Fix:** `test/run.sh` now exports an isolated `GSD_HOME` (a fresh scratch
+directory, created empty) before building the fixture project. `gsd-core`'s
+overlay resolves the global capability root from `GSD_HOME`, so pointing it at
+an empty directory removes the leak without touching the executing machine's
+real `~/.gsd` state. Re-verified: with the isolated `GSD_HOME`,
+`[ordering]` passes again exactly as it did when 02-01/02-02 first wrote it
+(before the global install existed).
+
+**Files modified:** `test/run.sh` (added the `GSD_HOME` export, 7 lines).
+
+**Verification:** re-ran `test/run.sh` with the isolated `GSD_HOME`; `[ordering]`
+passed, and the run proceeded to the true RED point for this task
+(`[note:no-open-pr]`, below).
+
+**Committed in:** the same `test(02-06)` commit as the RED-first leg/fixture
+changes for this task (Rule 3 fixes ship in the task's own commit, per the
+shared deviation process).
+
+### RED transcript
+
+Command: `CHANGIE_BIN=<pinned changie build path> /bin/bash $CAP/test/run.sh`,
+run after `test/run.sh` and `test/fixtures/changie.yaml` were updated for D-13
+(the `[note:no-open-pr]` and `[write-no-pr]` legs added, `EXPECTED_LEGS=30`),
+but before `write-fragments.sh` implemented the no-PR note path.
+
+```
+run.sh: changie /Users/sean/Library/Caches/go-build/2f/2fe2f32e74fb59c69ef1f4f6661faa9bf90386be2fe91a042a6356f109956249-d/changie (changie version vdev)
+run.sh: found 2 fixture SUMMARY files (floor 2)
+run.sh: init.phase-op 1 --pick phase_dir = /private/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.rQLd9ccpGp/work/.planning/phases/01-fixture
+ok [ordering] config-set workflow.changie_command is rejected before install
+ok [install] capability install stages capability.json, SKILL.md, write-fragments.sh and the ledger
+ok [manifest] installed capability.json has id/role/engines/runtimeCompat/steps/config exactly as required
+run.sh: [dispatch-default] matching changie steps (key absent) = 1
+ok [dispatch-default] render-hooks verify:post lists exactly one changie step with the key absent
+run.sh: [dispatch-false] matching changie steps (key false) = 0
+ok [dispatch-false] render-hooks verify:post omits the changie step when the key is false
+run.sh: [dispatch-true] matching changie steps (key true) = 1
+ok [dispatch-true] render-hooks verify:post lists exactly one changie step with the key true
+ok [skip:gsd-tools-missing] GSD_TOOLS pointing at a nonexistent path skips cleanly
+ok [skip:disabled] workflow.changie_fragments=false skips cleanly
+ok [skip:changie-unavailable] an unresolvable configured changie command skips cleanly, naming the command
+ok [skip:changie-empty] an empty workflow.changie_command is rejected or skips as changie-unavailable
+ok [skip:no-changie-config] a missing .changie.yaml skips cleanly
+ok [skip:phase-not-found] an unknown phase number skips cleanly
+ok [skip:no-summaries] a phase directory with no SUMMARY files skips cleanly
+ok [skip:gh-missing] an unresolvable gh executable skips cleanly
+ok [skip:pr-lookup-failed] a failing gh lookup skips cleanly, detail carries gh's stderr
+::error::run.sh: [note:no-open-pr] expected no skip: line, got: changie-fragments: skip: no-open-pr: no open PR found for branch gsd/fixture-milestone
+```
+
+Exit code 1. Legs 1-15 pass, then the script fails exactly at `[note:no-open-pr]`
+because `write-fragments.sh` still calls `skip no-open-pr` instead of
+`note no-open-pr` — a genuine assertion failure on planned behavior, not a
+harness crash.
+
+### `$CAP` commit trail (RED + GREEN)
+
+```
+57dcbc4 test(02-06): add failing no-open-PR note and no-PR write proofs
+5e1b9d0 feat(02-06): write fragments without a PR number when no open PR is found (D-13)
+```
+
+(`git -C $CAP log --reverse --format='%h %s' v0.1.0..HEAD`.)
+
+### GREEN transcript
+
+Command: `CHANGIE_BIN=<pinned changie build path> /bin/bash $CAP/test/run.sh`, run
+after `write-fragments.sh` implemented the `note()` helper and the no-open-pr
+note path.
+
+```
+run.sh: changie /Users/sean/Library/Caches/go-build/2f/2fe2f32e74fb59c69ef1f4f6661faa9bf90386be2fe91a042a6356f109956249-d/changie (changie version vdev)
+run.sh: found 2 fixture SUMMARY files (floor 2)
+run.sh: init.phase-op 1 --pick phase_dir = /private/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.QvKzKL1mQJ/work/.planning/phases/01-fixture
+ok [ordering] config-set workflow.changie_command is rejected before install
+ok [install] capability install stages capability.json, SKILL.md, write-fragments.sh and the ledger
+ok [manifest] installed capability.json has id/role/engines/runtimeCompat/steps/config exactly as required
+run.sh: [dispatch-default] matching changie steps (key absent) = 1
+ok [dispatch-default] render-hooks verify:post lists exactly one changie step with the key absent
+run.sh: [dispatch-false] matching changie steps (key false) = 0
+ok [dispatch-false] render-hooks verify:post omits the changie step when the key is false
+run.sh: [dispatch-true] matching changie steps (key true) = 1
+ok [dispatch-true] render-hooks verify:post lists exactly one changie step with the key true
+ok [skip:gsd-tools-missing] GSD_TOOLS pointing at a nonexistent path skips cleanly
+ok [skip:disabled] workflow.changie_fragments=false skips cleanly
+ok [skip:changie-unavailable] an unresolvable configured changie command skips cleanly, naming the command
+ok [skip:changie-empty] an empty workflow.changie_command is rejected or skips as changie-unavailable
+ok [skip:no-changie-config] a missing .changie.yaml skips cleanly
+ok [skip:phase-not-found] an unknown phase number skips cleanly
+ok [skip:no-summaries] a phase directory with no SUMMARY files skips cleanly
+ok [skip:gh-missing] an unresolvable gh executable skips cleanly
+ok [skip:pr-lookup-failed] a failing gh lookup skips cleanly, detail carries gh's stderr
+ok [note:no-open-pr] no open PR for the branch is a note naming the branch, and --list continues with pr none
+ok [pr-override] an explicit --pr wins over the gh lookup, which is not consulted
+ok [bad-pr] --pr 0, --pr abc and --pr -5 all exit 2 with error: bad-pr
+ok [write] --list prints pr/pending/kinds and --write commits exactly 3 fragments with correct trailers
+ok [idempotent] re-running --list/--write for already-covered summaries yields skip: already-recorded, HEAD and fragment count unchanged
+ok [gap-closure] a SUMMARY added after the fragment commit is the only pending id
+ok [skip:no-user-visible-change] --write with an empty entries file skips cleanly, HEAD unchanged
+ok [undeclared-kind] an undeclared kind exits 2 with error: undeclared-kind, listing the declared kinds, no file written
+ok [malformed-entry] a line with no TAB exits 2 with error: malformed-entry, no file written
+ok [rollback] a changie failure on the second entry rolls back the first, releases the lock, exits 1 with error: changie-failed
+ok [skip:locked] a pre-held lock directory skips cleanly
+ok [argv-literal] a body with $(...), backticks, quotes, ; and * reaches the fragment literally and nothing runs
+ok [commit-scope] a pre-existing untracked fragment and an unstaged tracked edit are left exactly as they were
+ok [write-no-pr] with no PR the fragment is committed without a PR field and renders without a link
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 30 of 30 legs passed against a scratch project
+```
+
+`shellcheck` (via the pinned resolver) is clean on `write-fragments.sh`, `test/run.sh`,
+`test/fixtures/bin/gh` and `test/fixtures/bin/fake-task`.
+
+### `[write-no-pr]` evidence: fragment content and dry-run render
+
+Standalone rehearsal against a fresh scratch project (mirrors `test/run.sh`'s own
+fixture build), `--write --summaries 01-01,01-02` with `STUB_GH_MODE=none` and the
+single entry `Features<TAB>Added a --quiet flag to widget list.`:
+
+```
+=== --write output ===
+changie-fragments: note: no-open-pr: no open PR found for branch gsd/fixture-milestone
+changie-fragments: wrote 1 fragment(s) in 7139ece: .changes/unreleased/Features-20260926-110003.702849000.yaml
+=== fragment file content ===
+file: .changes/unreleased/Features-20260926-110003.702849000.yaml
+kind: Features
+body: Added a --quiet flag to widget list.
+time: 2026-09-26T11:00:03.702849-04:00
+=== trailers ===
+Changie-Phase: 1
+Changie-Summaries: 01-01,01-02
+subject: docs(01): add changelog fragments
+=== batch auto --dry-run ===
+## [v0.1.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.1.0) — 2026-09-26
+### Features
+- Added a --quiet flag to widget list.
+```
+
+No `PR:` line, no `custom:` block, and the render carries no link — exactly the
+D-13 no-PR contract.
+
+<!-- gsd:write-continue-cap -->
+
 ## Judgment rehearsal (SKILL.md followed by the executor, pre-publication)
 
 **Purpose (D-06, T-02-08):** the real Skill-tool dispatch comes in 02-05, after
