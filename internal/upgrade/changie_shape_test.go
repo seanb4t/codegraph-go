@@ -1,6 +1,6 @@
 // changie_shape_test.go binds .changie.yaml, the .changes/ baseline seed
 // layout, and the isolated go.tool-changie.mod pin to CHG-01/CHG-02's
-// locked vocabulary (01-01-PLAN.md, D-06, D-10, D-11). These guards land
+// locked vocabulary (01-01-PLAN.md, D-06, D-10, D-11, D-13). These guards land
 // RED first per rule x1cjy9vyhq: committed before .changie.yaml/.changes/
 // exist, so the resulting failure is a real assertion failure, not a
 // build error. Never gate on `gsd-tools check tdd-red-evidence` — it
@@ -254,14 +254,15 @@ func TestChangieConfigShape(t *testing.T) {
 		t.Fatalf("%s: custom must be a sequence of exactly one entry", changieConfigPath)
 	}
 	prNode := customNode.Content[0]
-	wantCustomKeys := []string{"key", "minInt", "type"}
+	wantCustomKeys := []string{"key", "minInt", "optional", "type"}
 	sort.Strings(wantCustomKeys)
 	if gotKeys := yamlMappingKeys(prNode); !slices.Equal(gotKeys, wantCustomKeys) {
-		t.Fatalf("%s: custom[0] key set = %v, want exactly %v (an added optional key must fail — D-11)", changieConfigPath, gotKeys, wantCustomKeys)
+		t.Fatalf("%s: custom[0] key set = %v, want exactly %v (an absent optional key, or any other key, must fail — 02-CONTEXT D-13, which supersedes D-11)", changieConfigPath, gotKeys, wantCustomKeys)
 	}
 	keyNode, _ := yamlMappingValue(prNode, "key")
 	typeNode, _ := yamlMappingValue(prNode, "type")
 	minIntNode, _ := yamlMappingValue(prNode, "minInt")
+	optionalNode, _ := yamlMappingValue(prNode, "optional")
 	if keyNode.Value != "PR" {
 		t.Fatalf("%s: custom[0].key = %q, want %q", changieConfigPath, keyNode.Value, "PR")
 	}
@@ -270,6 +271,9 @@ func TestChangieConfigShape(t *testing.T) {
 	}
 	if minIntNode.Value != "1" {
 		t.Fatalf("%s: custom[0].minInt = %q, want %q", changieConfigPath, minIntNode.Value, "1")
+	}
+	if optionalNode.Value != "true" {
+		t.Fatalf("%s: custom[0].optional = %q, want %q (D-13: PR becomes optional)", changieConfigPath, optionalNode.Value, "true")
 	}
 
 	newlinesNode, ok := yamlMappingValue(root, "newlines")
