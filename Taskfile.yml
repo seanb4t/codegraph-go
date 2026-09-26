@@ -554,16 +554,17 @@ tasks:
       builds changie from the pinned go.tool-changie.mod, copies
       .changie.yaml and the seeded baseline (.changes/header.tpl.md,
       .changes/v*.md, .changes/unreleased/.gitkeep — never the repo's
-      real fragments) into a mktemp scratch directory, and runs eleven
+      real fragments) into a mktemp scratch directory, and runs twelve
       numbered checks there, so the source tree is never mutated. A
       before/after checksum snapshot of .changie.yaml, .changes/ and
       CHANGELOG.md asserts this. Reports the seeded version-file count
       (floor 14) before comparing anything. Every refusal is asserted on
       changie's own stderr text plus a non-zero exit, never a bare exit
-      code, and an executed-leg counter must reach 11 (rule 84d1gfpywd). A
+      code, and an executed-leg counter must reach 12 (rule 84d1gfpywd). A
       one-byte or whitespace-only difference between changie merge
-      --dry-run and CHANGELOG.md IS drift. Wired into ci.yml's test job
-      immediately after docs:cli:drift (D-08).
+      --dry-run and CHANGELOG.md IS drift. Leg 5 proves a fragment without
+      PR is accepted (D-13), and leg 12 proves it renders without a link.
+      Wired into ci.yml's test job immediately after docs:cli:drift (D-08).
     silent: true
     preconditions:
       - sh: command -v go
@@ -603,7 +604,7 @@ tasks:
         # Leg 1/11: latest
         expected=$(grep -m1 -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | sed -E 's/^## \[v?([0-9]+\.[0-9]+\.[0-9]+)\].*/v\1/')
         if [ -z "${expected}" ]; then
-          echo "::error::check:changie: [1/11] changie latest — CHANGELOG.md has no '## [x.y.z]' heading to derive the expected value from"
+          echo "::error::check:changie: [1/12] changie latest — CHANGELOG.md has no '## [x.y.z]' heading to derive the expected value from"
           exit 1
         fi
         set +e
@@ -611,26 +612,26 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [1/11] changie latest — exited ${status}: $(cat "${scratch}/leg1.err")"
+          echo "::error::check:changie: [1/12] changie latest — exited ${status}: $(cat "${scratch}/leg1.err")"
           exit 1
         fi
         if [ "${actual}" != "${expected}" ]; then
-          echo "::error::check:changie: [1/11] changie latest = ${actual}, want ${expected} (newest CHANGELOG.md heading)"
+          echo "::error::check:changie: [1/12] changie latest = ${actual}, want ${expected} (newest CHANGELOG.md heading)"
           exit 1
         fi
         lowest=$(printf '%s\n' v0.14.0 "${actual}" | sort -V | head -n1)
         if [ "${lowest}" != "v0.14.0" ]; then
-          echo "::error::check:changie: [1/11] changie latest = ${actual} fell below the v0.14.0 baseline"
+          echo "::error::check:changie: [1/12] changie latest = ${actual} fell below the v0.14.0 baseline"
           exit 1
         fi
-        echo "check:changie: [1/11] changie latest = ${actual} (newest CHANGELOG.md heading ${expected}; baseline v0.14.0) — ok"
+        echo "check:changie: [1/12] changie latest = ${actual} (newest CHANGELOG.md heading ${expected}; baseline v0.14.0) — ok"
         passed=$((passed + 1))
 
         # Leg 2/11: next auto, empty
         count=$(fragment_count)
-        echo "check:changie: [2/11] scratch unreleased/ holds ${count} fragments before next auto"
+        echo "check:changie: [2/12] scratch unreleased/ holds ${count} fragments before next auto"
         if [ "${count}" -ne 0 ]; then
-          echo "::error::check:changie: [2/11] scratch unreleased/ holds ${count} fragments, want 0 before the empty-next-auto leg"
+          echo "::error::check:changie: [2/12] scratch unreleased/ holds ${count} fragments, want 0 before the empty-next-auto leg"
           exit 1
         fi
         set +e
@@ -638,14 +639,14 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [2/11] changie next auto exited 0 against an empty unreleased/ (expected a refusal): ${out}"
+          echo "::error::check:changie: [2/12] changie next auto exited 0 against an empty unreleased/ (expected a refusal): ${out}"
           exit 1
         fi
         if ! printf '%s' "${out}" | grep -qF "no unreleased changes found for automatic bumping"; then
-          echo "::error::check:changie: [2/11] changie next auto (empty) — stderr does not contain the expected refusal text: ${out}"
+          echo "::error::check:changie: [2/12] changie next auto (empty) — stderr does not contain the expected refusal text: ${out}"
           exit 1
         fi
-        echo "check:changie: [2/11] changie next auto (empty unreleased/) refused: no unreleased changes found for automatic bumping — ok"
+        echo "check:changie: [2/12] changie next auto (empty unreleased/) refused: no unreleased changes found for automatic bumping — ok"
         passed=$((passed + 1))
 
         # Leg 3/11: merge --dry-run
@@ -654,19 +655,19 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [3/11] changie merge --dry-run exited ${status}: $(cat "${scratch}/leg3.err")"
+          echo "::error::check:changie: [3/12] changie merge --dry-run exited ${status}: $(cat "${scratch}/leg3.err")"
           exit 1
         fi
         if ! cmp -s CHANGELOG.md "${scratch}/merged.md"; then
-          echo "::error::check:changie: [3/11] changie merge --dry-run does not reproduce CHANGELOG.md byte-for-byte"
+          echo "::error::check:changie: [3/12] changie merge --dry-run does not reproduce CHANGELOG.md byte-for-byte"
           diff -u CHANGELOG.md "${scratch}/merged.md" | head -40 || true
           exit 1
         fi
         if [ -f "${work}/CHANGELOG.md" ]; then
-          echo "::error::check:changie: [3/11] changie merge --dry-run wrote ${work}/CHANGELOG.md — dry-run must write nothing"
+          echo "::error::check:changie: [3/12] changie merge --dry-run wrote ${work}/CHANGELOG.md — dry-run must write nothing"
           exit 1
         fi
-        echo "check:changie: [3/11] changie merge --dry-run byte-identical to CHANGELOG.md (dry run wrote nothing) — ok"
+        echo "check:changie: [3/12] changie merge --dry-run byte-identical to CHANGELOG.md (dry run wrote nothing) — ok"
         passed=$((passed + 1))
 
         # Leg 4/11: new, valid
@@ -675,21 +676,21 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [4/11] changie new (valid) exited ${status}: ${out}"
+          echo "::error::check:changie: [4/12] changie new (valid) exited ${status}: ${out}"
           exit 1
         fi
         count=$(fragment_count)
         if [ "${count}" -ne 1 ]; then
-          echo "::error::check:changie: [4/11] fragment count = ${count} after a valid new, want 1"
+          echo "::error::check:changie: [4/12] fragment count = ${count} after a valid new, want 1"
           exit 1
         fi
         frag=$(find "${work}/.changes/unreleased" -type f -name '*.yaml')
         if ! grep -qF "kind: Fixes" "${frag}" || ! grep -qF "body: check:changie probe fragment" "${frag}"; then
-          echo "::error::check:changie: [4/11] written fragment ${frag} missing expected kind/body lines"
+          echo "::error::check:changie: [4/12] written fragment ${frag} missing expected kind/body lines"
           cat "${frag}"
           exit 1
         fi
-        echo "check:changie: [4/11] changie new -k Fixes writes exactly one fragment with kind/body set — ok"
+        echo "check:changie: [4/12] changie new -k Fixes writes exactly one fragment with kind/body set — ok"
         passed=$((passed + 1))
 
         # Leg 5/11: no PR is accepted (D-13: PR field is optional)
@@ -698,33 +699,33 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [5/11] changie new with no -m PR= exited ${status} (expected acceptance, D-13): ${out}"
+          echo "::error::check:changie: [5/12] changie new with no -m PR= exited ${status} (expected acceptance, D-13): ${out}"
           exit 1
         fi
         count=$(fragment_count)
         if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [5/11] fragment count = ${count} after the no-PR new, want 2"
+          echo "::error::check:changie: [5/12] fragment count = ${count} after the no-PR new, want 2"
           exit 1
         fi
         frag5=$(grep -lF "check:changie probe without PR" "${work}/.changes/unreleased/"*.yaml || true)
         nfrag5=$(printf '%s\n' "${frag5}" | sed '/^$/d' | wc -l | tr -d ' ')
         if [ "${nfrag5}" -ne 1 ]; then
-          echo "::error::check:changie: [5/11] expected exactly one fragment matching the no-PR probe body, found ${nfrag5}: ${frag5}"
+          echo "::error::check:changie: [5/12] expected exactly one fragment matching the no-PR probe body, found ${nfrag5}: ${frag5}"
           exit 1
         fi
         if ! grep -qF "kind: Fixes" "${frag5}"; then
-          echo "::error::check:changie: [5/11] no-PR fragment ${frag5} missing 'kind: Fixes'"
+          echo "::error::check:changie: [5/12] no-PR fragment ${frag5} missing 'kind: Fixes'"
           exit 1
         fi
         if grep -q "PR:" "${frag5}"; then
-          echo "::error::check:changie: [5/11] no-PR fragment ${frag5} unexpectedly contains a PR: line"
+          echo "::error::check:changie: [5/12] no-PR fragment ${frag5} unexpectedly contains a PR: line"
           exit 1
         fi
         if grep -qF "custom:" "${frag5}"; then
-          echo "::error::check:changie: [5/11] no-PR fragment ${frag5} unexpectedly contains a custom: block"
+          echo "::error::check:changie: [5/12] no-PR fragment ${frag5} unexpectedly contains a custom: block"
           exit 1
         fi
-        echo "check:changie: [5/11] changie new with no PR accepted: fragment written without a PR field — ok"
+        echo "check:changie: [5/12] changie new with no PR accepted: fragment written without a PR field — ok"
         passed=$((passed + 1))
 
         # Leg 6/11: undeclared kind
@@ -733,19 +734,19 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [6/11] changie new -k Undeclared exited 0 (expected a refusal): ${out}"
+          echo "::error::check:changie: [6/12] changie new -k Undeclared exited 0 (expected a refusal): ${out}"
           exit 1
         fi
         if ! printf '%s' "${out}" | grep -qF "invalid kind: Undeclared"; then
-          echo "::error::check:changie: [6/11] undeclared-kind refusal — stderr does not contain the expected text: ${out}"
+          echo "::error::check:changie: [6/12] undeclared-kind refusal — stderr does not contain the expected text: ${out}"
           exit 1
         fi
         count=$(fragment_count)
         if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [6/11] fragment count = ${count} after the undeclared-kind refusal, want 2"
+          echo "::error::check:changie: [6/12] fragment count = ${count} after the undeclared-kind refusal, want 2"
           exit 1
         fi
-        echo "check:changie: [6/11] changie new -k Undeclared refused: invalid kind: Undeclared — ok"
+        echo "check:changie: [6/12] changie new -k Undeclared refused: invalid kind: Undeclared — ok"
         passed=$((passed + 1))
 
         # Leg 7/11: PR below minInt
@@ -754,19 +755,19 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [7/11] changie new -m PR=0 exited 0 (expected a refusal): ${out}"
+          echo "::error::check:changie: [7/12] changie new -m PR=0 exited 0 (expected a refusal): ${out}"
           exit 1
         fi
         if ! printf '%s' "${out}" | grep -qF "input below minimum: 0 < 1"; then
-          echo "::error::check:changie: [7/11] PR-below-minimum refusal — stderr does not contain the expected text: ${out}"
+          echo "::error::check:changie: [7/12] PR-below-minimum refusal — stderr does not contain the expected text: ${out}"
           exit 1
         fi
         count=$(fragment_count)
         if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [7/11] fragment count = ${count} after the PR-below-minimum refusal, want 2"
+          echo "::error::check:changie: [7/12] fragment count = ${count} after the PR-below-minimum refusal, want 2"
           exit 1
         fi
-        echo "check:changie: [7/11] changie new -m PR=0 refused: input below minimum: 0 < 1 — ok"
+        echo "check:changie: [7/12] changie new -m PR=0 refused: input below minimum: 0 < 1 — ok"
         passed=$((passed + 1))
 
         # Leg 8/11: non-integer PR
@@ -775,19 +776,19 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [8/11] changie new -m PR=abc exited 0 (expected a refusal): ${out}"
+          echo "::error::check:changie: [8/12] changie new -m PR=abc exited 0 (expected a refusal): ${out}"
           exit 1
         fi
         if ! printf '%s' "${out}" | grep -qF "invalid number"; then
-          echo "::error::check:changie: [8/11] non-integer-PR refusal — stderr does not contain the expected text: ${out}"
+          echo "::error::check:changie: [8/12] non-integer-PR refusal — stderr does not contain the expected text: ${out}"
           exit 1
         fi
         count=$(fragment_count)
         if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [8/11] fragment count = ${count} after the non-integer-PR refusal, want 2"
+          echo "::error::check:changie: [8/12] fragment count = ${count} after the non-integer-PR refusal, want 2"
           exit 1
         fi
-        echo "check:changie: [8/11] changie new -m PR=abc refused: invalid number — ok"
+        echo "check:changie: [8/12] changie new -m PR=abc refused: invalid number — ok"
         passed=$((passed + 1))
 
         # Leg 9/11: collision
@@ -798,15 +799,15 @@ tasks:
         status2=$?
         set -e
         if [ "${status1}" -ne 0 ] || [ "${status2}" -ne 0 ]; then
-          echo "::error::check:changie: [9/11] collision leg — one of the two back-to-back new calls failed (status1=${status1} status2=${status2}): ${out1} / ${out2}"
+          echo "::error::check:changie: [9/12] collision leg — one of the two back-to-back new calls failed (status1=${status1} status2=${status2}): ${out1} / ${out2}"
           exit 1
         fi
         count=$(fragment_count)
         if [ "${count}" -ne 4 ]; then
-          echo "::error::check:changie: [9/11] fragment count = ${count} after two back-to-back new calls, want 4 (collision — sub-second fragmentFileFormat not honored)"
+          echo "::error::check:changie: [9/12] fragment count = ${count} after two back-to-back new calls, want 4 (collision — sub-second fragmentFileFormat not honored)"
           exit 1
         fi
-        echo "check:changie: [9/11] two back-to-back new -k Fixes calls raised the fragment count to 4 (sub-second fragmentFileFormat holds) — ok"
+        echo "check:changie: [9/12] two back-to-back new -k Fixes calls raised the fragment count to 4 (sub-second fragmentFileFormat holds) — ok"
         passed=$((passed + 1))
 
         # Leg 10/11: patch successor (only Fixes fragments present)
@@ -815,7 +816,7 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [10/11] changie next auto exited ${status}: $(cat "${scratch}/leg10.err")"
+          echo "::error::check:changie: [10/12] changie next auto exited ${status}: $(cat "${scratch}/leg10.err")"
           exit 1
         fi
         major=$(printf '%s' "${actual#v}" | cut -d. -f1)
@@ -823,10 +824,10 @@ tasks:
         patch=$(printf '%s' "${actual#v}" | cut -d. -f3)
         want="v${major}.${minor}.$((patch + 1))"
         if [ "${next}" != "${want}" ]; then
-          echo "::error::check:changie: [10/11] changie next auto = ${next}, want the patch successor ${want} (only Fixes fragments present)"
+          echo "::error::check:changie: [10/12] changie next auto = ${next}, want the patch successor ${want} (only Fixes fragments present)"
           exit 1
         fi
-        echo "check:changie: [10/11] with only Fixes fragments present, next auto = ${next} (patch successor of ${actual}) — ok"
+        echo "check:changie: [10/12] with only Fixes fragments present, next auto = ${next} (patch successor of ${actual}) — ok"
         passed=$((passed + 1))
 
         # Leg 11/11: minor successor once a Breaking fragment is added
@@ -835,7 +836,7 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [11/11] changie new -k Breaking exited ${status}: ${out}"
+          echo "::error::check:changie: [11/12] changie new -k Breaking exited ${status}: ${out}"
           exit 1
         fi
         set +e
@@ -843,15 +844,47 @@ tasks:
         status=$?
         set -e
         if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [11/11] changie next auto (with Breaking fragment) exited ${status}: $(cat "${scratch}/leg11.err")"
+          echo "::error::check:changie: [11/12] changie next auto (with Breaking fragment) exited ${status}: $(cat "${scratch}/leg11.err")"
           exit 1
         fi
         want="v${major}.$((minor + 1)).0"
         if [ "${next}" != "${want}" ]; then
-          echo "::error::check:changie: [11/11] changie next auto = ${next}, want the minor successor ${want} (a Breaking fragment must not derive a major bump pre-1.0)"
+          echo "::error::check:changie: [11/12] changie next auto = ${next}, want the minor successor ${want} (a Breaking fragment must not derive a major bump pre-1.0)"
           exit 1
         fi
-        echo "check:changie: [11/11] a Breaking fragment derives the minor successor ${next} (pre-1.0: Breaking -> minor) — ok"
+        echo "check:changie: [11/12] a Breaking fragment derives the minor successor ${next} (pre-1.0: Breaking -> minor) — ok"
+        passed=$((passed + 1))
+
+        # Leg 12/12: batch auto --dry-run renders the no-PR and PR fragments (CHG-04, D-13)
+        set +e
+        (cd "${work}" && CI=true "${scratch}/changie" batch auto --dry-run) >"${scratch}/batch12.out" 2>"${scratch}/leg12.err"
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [12/12] changie batch auto --dry-run exited ${status}: $(cat "${scratch}/leg12.err")"
+          exit 1
+        fi
+        if ! grep -qxF -- "- check:changie probe without PR" "${scratch}/batch12.out"; then
+          echo "::error::check:changie: [12/12] batch auto --dry-run missing the exact no-PR line"
+          cat "${scratch}/batch12.out"
+          exit 1
+        fi
+        if ! grep -qxF -- "- check:changie probe fragment ([#1](https://github.com/seanb4t/codegraph-go/pull/1))" "${scratch}/batch12.out"; then
+          echo "::error::check:changie: [12/12] batch auto --dry-run missing the exact PR-linked line"
+          cat "${scratch}/batch12.out"
+          exit 1
+        fi
+        nseeds_after=$(find "${work}/.changes" -maxdepth 1 -type f -name 'v*.md' | wc -l | tr -d ' ')
+        if [ "${nseeds_after}" -ne "${nseeds}" ]; then
+          echo "::error::check:changie: [12/12] .changes/v*.md count changed from ${nseeds} to ${nseeds_after} — dry run must write nothing"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 5 ]; then
+          echo "::error::check:changie: [12/12] fragment count = ${count} after the dry-run render, want 5 (dry run must write nothing)"
+          exit 1
+        fi
+        echo "check:changie: [12/12] changie batch auto --dry-run renders the no-PR fragment without a link and a PR fragment with its link (dry run wrote nothing) — ok"
         passed=$((passed + 1))
 
         after=$(find .changie.yaml .changes CHANGELOG.md -type f -exec cksum {} + | LC_ALL=C sort)
@@ -860,12 +893,12 @@ tasks:
           exit 1
         fi
 
-        if [ "${passed}" -ne 11 ]; then
-          echo "::error::check:changie: only ${passed} of 11 checks executed"
+        if [ "${passed}" -ne 12 ]; then
+          echo "::error::check:changie: only ${passed} of 12 checks executed"
           exit 1
         fi
 
-        echo "check:changie: 11 of 11 checks passed against a scratch copy (source tree byte-unchanged)"
+        echo "check:changie: 12 of 12 checks passed against a scratch copy (source tree byte-unchanged)"
 
   web:deps:
     desc: >-
