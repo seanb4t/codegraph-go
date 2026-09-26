@@ -331,6 +331,111 @@ subject: docs(01): add changelog fragments
 No `PR:` line, no `custom:` block, and the render carries no link — exactly the
 D-13 no-PR contract.
 
+## 02-06 Task 2 — note legs and required-PR host
+
+### `$CAP` commit trail (RED + GREEN)
+
+```
+91c3754 test(02-06): add failing gh-failure note, redaction, invalid-lookup and required-PR-host proofs
+305c2c4 feat(02-06): turn gh failures into notes with redacted stderr and validate the looked-up PR (D-13)
+```
+
+(`git -C $CAP log --reverse --format='%h %s' v0.1.0..HEAD` at this point shows
+all four Task 1 + Task 2 commits in order — see the full trail note below.)
+
+### RED transcript
+
+Command: `CHANGIE_BIN=<pinned changie build path> /bin/bash $CAP/test/run.sh`,
+run after `test/fixtures/bin/gh` gained the `noauth-token` mode and `test/run.sh`
+gained `[note:pr-lookup-invalid]`, the `[pr-override]` no-note assertion, and
+`[no-pr-required-host]`, but before `write-fragments.sh` turned gh-missing and
+pr-lookup-failed into notes.
+
+```
+run.sh: changie /Users/sean/Library/Caches/go-build/2f/2fe2f32e74fb59c69ef1f4f6661faa9bf90386be2fe91a042a6356f109956249-d/changie (changie version vdev)
+run.sh: found 2 fixture SUMMARY files (floor 2)
+run.sh: init.phase-op 1 --pick phase_dir = /private/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.8ZjH4RTV9R/work/.planning/phases/01-fixture
+ok [ordering] config-set workflow.changie_command is rejected before install
+ok [install] capability install stages capability.json, SKILL.md, write-fragments.sh and the ledger
+ok [manifest] installed capability.json has id/role/engines/runtimeCompat/steps/config exactly as required
+run.sh: [dispatch-default] matching changie steps (key absent) = 1
+ok [dispatch-default] render-hooks verify:post lists exactly one changie step with the key absent
+run.sh: [dispatch-false] matching changie steps (key false) = 0
+ok [dispatch-false] render-hooks verify:post omits the changie step when the key is false
+run.sh: [dispatch-true] matching changie steps (key true) = 1
+ok [dispatch-true] render-hooks verify:post lists exactly one changie step with the key true
+ok [skip:gsd-tools-missing] GSD_TOOLS pointing at a nonexistent path skips cleanly
+ok [skip:disabled] workflow.changie_fragments=false skips cleanly
+ok [skip:changie-unavailable] an unresolvable configured changie command skips cleanly, naming the command
+ok [skip:changie-empty] an empty workflow.changie_command is rejected or skips as changie-unavailable
+ok [skip:no-changie-config] a missing .changie.yaml skips cleanly
+ok [skip:phase-not-found] an unknown phase number skips cleanly
+ok [skip:no-summaries] a phase directory with no SUMMARY files skips cleanly
+::error::run.sh: [note:gh-missing] expected no skip: line, got: changie-fragments: skip: gh-missing: gh executable '/no/such/gh-binary' not found
+```
+
+Exit code 1. Legs 1-15 pass, then the script fails exactly at `[note:gh-missing]`
+— a genuine assertion failure on planned behavior, not a harness crash.
+
+### GREEN transcript (32 of 32)
+
+Command: the same invocation, run after `write-fragments.sh` turned
+`gh-missing` and `pr-lookup-failed` into notes (with stderr redaction) and
+validated the looked-up PR against `^[1-9][0-9]*$`.
+
+```
+run.sh: changie /Users/sean/Library/Caches/go-build/2f/2fe2f32e74fb59c69ef1f4f6661faa9bf90386be2fe91a042a6356f109956249-d/changie (changie version vdev)
+run.sh: found 2 fixture SUMMARY files (floor 2)
+run.sh: init.phase-op 1 --pick phase_dir = /private/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.QYGVlj1Zr5/work/.planning/phases/01-fixture
+ok [ordering] config-set workflow.changie_command is rejected before install
+ok [install] capability install stages capability.json, SKILL.md, write-fragments.sh and the ledger
+ok [manifest] installed capability.json has id/role/engines/runtimeCompat/steps/config exactly as required
+run.sh: [dispatch-default] matching changie steps (key absent) = 1
+ok [dispatch-default] render-hooks verify:post lists exactly one changie step with the key absent
+run.sh: [dispatch-false] matching changie steps (key false) = 0
+ok [dispatch-false] render-hooks verify:post omits the changie step when the key is false
+run.sh: [dispatch-true] matching changie steps (key true) = 1
+ok [dispatch-true] render-hooks verify:post lists exactly one changie step with the key true
+ok [skip:gsd-tools-missing] GSD_TOOLS pointing at a nonexistent path skips cleanly
+ok [skip:disabled] workflow.changie_fragments=false skips cleanly
+ok [skip:changie-unavailable] an unresolvable configured changie command skips cleanly, naming the command
+ok [skip:changie-empty] an empty workflow.changie_command is rejected or skips as changie-unavailable
+ok [skip:no-changie-config] a missing .changie.yaml skips cleanly
+ok [skip:phase-not-found] an unknown phase number skips cleanly
+ok [skip:no-summaries] a phase directory with no SUMMARY files skips cleanly
+ok [note:gh-missing] an unresolvable gh executable is a note, and --list continues with pr none
+ok [note:pr-lookup-failed] a failing gh lookup is a note carrying gh's stderr with tokens redacted
+ok [note:no-open-pr] no open PR for the branch is a note naming the branch, and --list continues with pr none
+ok [note:pr-lookup-invalid] a gh lookup result that is not a positive integer is a note and never reaches a fragment
+ok [pr-override] an explicit --pr wins over the gh lookup, which is not consulted
+ok [bad-pr] --pr 0, --pr abc and --pr -5 all exit 2 with error: bad-pr
+ok [write] --list prints pr/pending/kinds and --write commits exactly 3 fragments with correct trailers
+ok [idempotent] re-running --list/--write for already-covered summaries yields skip: already-recorded, HEAD and fragment count unchanged
+ok [gap-closure] a SUMMARY added after the fragment commit is the only pending id
+ok [skip:no-user-visible-change] --write with an empty entries file skips cleanly, HEAD unchanged
+ok [undeclared-kind] an undeclared kind exits 2 with error: undeclared-kind, listing the declared kinds, no file written
+ok [malformed-entry] a line with no TAB exits 2 with error: malformed-entry, no file written
+ok [rollback] a changie failure on the second entry rolls back the first, releases the lock, exits 1 with error: changie-failed
+ok [skip:locked] a pre-held lock directory skips cleanly
+ok [argv-literal] a body with $(...), backticks, quotes, ; and * reaches the fragment literally and nothing runs
+ok [commit-scope] a pre-existing untracked fragment and an unstaged tracked edit are left exactly as they were
+ok [write-no-pr] with no PR the fragment is committed without a PR field and renders without a link
+ok [no-pr-required-host] a host that still requires PR refuses a no-PR write with error: changie-failed and nothing is written
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 32 of 32 legs passed against a scratch project
+```
+
+`shellcheck` remains clean on all four executables after the Task 2 changes.
+
+### Full `$CAP` commit trail, Tasks 1-2 (v0.1.0..HEAD)
+
+```
+57dcbc4 test(02-06): add failing no-open-PR note and no-PR write proofs
+5e1b9d0 feat(02-06): write fragments without a PR number when no open PR is found (D-13)
+91c3754 test(02-06): add failing gh-failure note, redaction, invalid-lookup and required-PR-host proofs
+305c2c4 feat(02-06): turn gh failures into notes with redacted stderr and validate the looked-up PR (D-13)
+```
+
 <!-- gsd:write-continue-cap -->
 
 ## Judgment rehearsal (SKILL.md followed by the executor, pre-publication)
