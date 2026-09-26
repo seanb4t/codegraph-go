@@ -6,10 +6,10 @@ current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
 status: executing
 stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-09-26T01:22:00.441Z"
+last_updated: "2026-09-26T13:11:15.281Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 02 execution started
-state_head: 3bf9a89bc181fb980a71b67fe9388909f821c06a
+state_head: 932ed8a50626c619ea3c6eb030fb015eced53baa
 progress:
   total_phases: 6
   completed_phases: 1
@@ -497,6 +497,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 6] Phase 5 now reads verification_status: stale — a GENUINE signal (like Phase 4 → Phases 1–3): Phase 6 legitimately modified files in Phase 5's covered_files (internal/agents/claude.go, capabilities.go, skillshared.go, manifest.go, types.go, shared.go, ownership/capabilities tests, internal/cli/install.go, uninstall.go, docs/CLI-REFERENCE.md). Re-verify Phases 1–5 at the milestone audit (/gsd-verify-work), together with Phase 4's missing validate-phase/secure-phase runs.
 - [Phase 7] Released codegraph binaries carry a Codex TOML data-loss bug: findTOMLTableRange ends a table only at a column-0 '[', so an indented [mcp_servers.codegraph] swallows every sibling table up to the next column-0 header. Do NOT run 'codegraph install' or 'uninstall' with --target codex or --target all on a machine whose ~/.codex/config.toml indents headers until the Phase 7 fix (07-CONTEXT D-07/D-08) ships; no patch release (maintainer decision B2, 2026-09-19)
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
+- [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
 
 ### Quick Tasks Completed
 
