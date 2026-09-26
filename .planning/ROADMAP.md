@@ -147,7 +147,7 @@ Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · 
 - **`v0.15.0` is a prediction, not a tag.** changie derives the real version from the fragments present at batch time; no phase schedules a `git tag` step.
 
 - [x] **Phase 1: Changie Baseline** - `.changie.yaml` and a `v0.14.0` baseline that reproduce today's `CHANGELOG.md` byte-for-byte, with fragments written non-interactively and malformed ones refused (completed 2026-09-25)
-- [ ] **Phase 2: Phase-Close Fragment Capability** - A private `gsd-capability-changie` feature capability writes a phase's fragments at `verify:post`, installed and configured in this repository at project scope
+- [x] **Phase 2: Phase-Close Fragment Capability** - A private `gsd-capability-changie` feature capability writes a phase's fragments at `verify:post`, installed and configured in this repository at project scope (completed 2026-09-26)
 - [ ] **Phase 3: Rename-Stub Removal** - The hidden `query`/`unlock` stubs are gone, and this phase's close is the capability's first observed firing, writing the milestone's `Breaking` fragment
 - [ ] **Phase 4: Fragment-Required Gate** - A pull request that changes shipped code cannot merge without a fragment or a reasoned exemption, and the check is required on `main`
 - [ ] **Phase 5: Release Chain & release-please Retirement** - A changie release-PR workflow tags through the GitHub App into the locked `release.yml`, every release-please guard is re-pointed, the docs describe the chain, and release-please is deleted
@@ -303,7 +303,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
-| 2. Phase-Close Fragment Capability | 6/6 | In Progress|  |
+| 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
 | 3. Rename-Stub Removal | 0/TBD | Not started | - |
 | 4. Fragment-Required Gate | 0/TBD | Not started | - |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
