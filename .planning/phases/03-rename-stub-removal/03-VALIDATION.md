@@ -3,9 +3,9 @@ phase: "3"
 slug: "rename-stub-removal"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-26"
 ---
 
@@ -44,10 +44,10 @@ Task IDs are filled in once plans exist; rows are seeded per requirement from 03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-01-T1 | 03-01 | 1 | VERB-09 (SC1) | T-03-01 | Removed verbs reach only cobra's unknown-command path; no alias or hint revives them | integration (spawned binary) | `GOTOOLCHAIN=go1.26.6 go test ./test/integration/ -run '^TestRemovedVerbsAreUnknownCommands$' -count=1 -v` | ❌ W0 (rewrite of `renamed_stubs_test.go` as `removed_verbs_test.go`, RED in Task 1) | ⬜ pending |
-| 03-01-T2 | 03-01 | 1 | VERB-09 (SC2) | T-03-02 | Mutations stay in a scratch worktree; the main checkout is never mutated | task + unit | `task docs:cli:drift`; `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -run 'TestEveryRegisteredFlagIsAccountedFor\|TestEveryCommandHasGroupID' -v` | ✅ | ⬜ pending |
-| 03-01-T3 | 03-01 | 1 | VERB-09 (SC2 census) | T-03-03 | Positive control is never tracked; `.github` is clean before and after | scripted census (positive control first) | `rg -nU -w --hidden 'codegraph\s+(query\|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .` → zero hits on the clean tree | ✅ (one-off instrument) | ⬜ pending |
-| phase close (verifier) | 03-01 must_haves | close | CAP-05, VERB-09 (SC3/SC4) | T-03-04, T-03-05 | Fragment written by the capability, not a task; kind and body accurate | process evidence at phase close | `git log --grep='Changie-Phase: 3' -1 --format='%H %(trailers:key=Changie-Phase,valueonly) %(trailers:key=Changie-Summaries,valueonly)'`; `task changie -- next auto` → `v0.15.0` | N/A (observed by the verifier) | ⬜ pending |
+| 03-01-T1 | 03-01 | 1 | VERB-09 (SC1) | T-03-01 | Removed verbs reach only cobra's unknown-command path; no alias or hint revives them | integration (spawned binary) | `GOTOOLCHAIN=go1.26.6 go test ./test/integration/ -run '^TestRemovedVerbsAreUnknownCommands$' -count=1 -v` | ✅ (`removed_verbs_test.go`, RED `c9df8e62` → GREEN `90dc419a`) | ✅ green |
+| 03-01-T2 | 03-01 | 1 | VERB-09 (SC2) | T-03-02 | Mutations stay in a scratch worktree; the main checkout is never mutated | task + unit | `task docs:cli:drift`; `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -run 'TestEveryRegisteredFlagIsAccountedFor\|TestEveryCommandHasGroupID' -v` | ✅ | ✅ green |
+| 03-01-T3 | 03-01 | 1 | VERB-09 (SC2 census) | T-03-03 | Positive control is never tracked; `.github` is clean before and after | scripted census (positive control first) | `rg -nU -w --hidden 'codegraph\s+(query\|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .` → zero hits on the clean tree | ✅ (one-off instrument) | ✅ green |
+| phase close (verifier) | 03-01 must_haves | close | CAP-05, VERB-09 (SC3/SC4) | T-03-04, T-03-05 | Fragment written by the capability, not a task; kind and body accurate | process evidence at phase close | `git log --grep='Changie-Phase: 3' -1 --format='%H %(trailers:key=Changie-Phase,valueonly) %(trailers:key=Changie-Summaries,valueonly)'`; `task changie -- next auto` → `v0.15.0` | N/A (observed at close: `d9892beb`, `Changie-Phase: 3`, `Changie-Summaries: 03-01`; `next auto` → `v0.15.0`) | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -55,8 +55,8 @@ Task IDs are filled in once plans exist; rows are seeded per requirement from 03
 
 ## Wave 0 Requirements
 
-- [ ] `test/integration/renamed_stubs_test.go` rewritten (or renamed) as the unknown-command guard, landing RED in a `test(03-NN):` commit before the `feat(cli)!:` removal (CONTEXT D-02, rule `x1cjy9vyhq`)
-- [ ] `.planning/phases/03-rename-stub-removal/03-MUTATION-LOG.md` created during execution with the census family entry (D-06)
+- [x] `test/integration/renamed_stubs_test.go` rewritten (or renamed) as the unknown-command guard, landing RED in a `test(03-NN):` commit before the `feat(cli)!:` removal (CONTEXT D-02, rule `x1cjy9vyhq`)
+- [x] `.planning/phases/03-rename-stub-removal/03-MUTATION-LOG.md` created during execution with the census family entry (D-06)
 
 ---
 
@@ -70,11 +70,19 @@ Task IDs are filled in once plans exist; rows are seeded per requirement from 03
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency within one full-suite run
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency within one full-suite run
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-09-26
+
+## Validation Audit 2026-09-26
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
