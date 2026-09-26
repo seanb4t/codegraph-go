@@ -358,3 +358,157 @@ $ git worktree list
 $ git status --porcelain -- internal cmd test docs tools
 ```
 (empty — the main checkout was never mutated.)
+
+## Family (c) — VERB-09: positive-controlled census BEFORE the removal
+
+**Test/guard:** the v0.14.0 census instrument, reused byte for byte (D-06):
+
+```
+rg -nU -w --hidden 'codegraph\s+(query|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .
+```
+
+**What are we testing, and why?** Whether the census can still find a planted reference in a
+hidden directory before its "4 hits" baseline is trusted, run on the tree at the `test(03-01)`
+commit — the guard is already rewritten there, but the stubs and their allowlist entries still
+exist. This proves the rewritten guard's own text does not itself trip the census (D-06's
+consequence for new text), and pins the exact "before" count this phase's removal must zero out.
+
+**Setup:** `T=c9df8e626acbfc428795f607bcfe98d0b3635f1d` (the `test(03-01):` commit from Task 1).
+`C="$(mktemp -d)/p03-census-wt"`, `git worktree add --detach "$C" "$T"`.
+
+```
+$ git worktree add --detach "$C" "$T"
+Preparing worktree (detached HEAD c9df8e62)
+HEAD is now at c9df8e62 test(03-01): expect the removed query and unlock verbs to be unknown commands (VERB-09)
+```
+
+**Pre-mutation gate:** `git -C "$C" status --porcelain .github` — empty; the control does not exist.
+
+**Mutation applied:** the untracked `.github/__census_control__.md`, three lines, inside a
+subshell with `trap 'rm -f .github/__census_control__.md' EXIT`, never `git add`ed:
+
+```
+run codegraph unlock now
+and also run codegraph
+query now
+```
+
+**Observed result** (verbatim, planted-tree run from `$C`):
+
+```
+./.github/__census_control__.md:1:run codegraph unlock now
+./.github/__census_control__.md:2:and also run codegraph
+./.github/__census_control__.md:3:query now
+./internal/cli/renamed.go:10:// this phase folds away (Phase 3 VERB-03/VERB-04): `codegraph query <term>`
+./internal/cli/renamed.go:11:// into `codegraph search --full <term>`, and `codegraph unlock [path]` into
+./internal/cli/testdata/cli-reference-allowlist.txt:8:codegraph query	hidden rename stub for `search --full` (VERB-03); removed in v0.15.0
+./internal/cli/testdata/cli-reference-allowlist.txt:9:codegraph unlock	hidden rename stub for `daemon unlock` (VERB-04); removed in v0.15.0
+exit: 0
+```
+
+The control was found on `:1:` and `:3:` exactly as required.
+
+**Revert:** through the trap (`rm -f .github/__census_control__.md`).
+
+**Byte-clean proof:** `git -C "$C" status --porcelain .github` — empty; the control is absent.
+
+**Real census** (verbatim, clean-tree run from `$C`):
+
+```
+./internal/cli/testdata/cli-reference-allowlist.txt:8:codegraph query	hidden rename stub for `search --full` (VERB-03); removed in v0.15.0
+./internal/cli/testdata/cli-reference-allowlist.txt:9:codegraph unlock	hidden rename stub for `daemon unlock` (VERB-04); removed in v0.15.0
+./internal/cli/renamed.go:10:// this phase folds away (Phase 3 VERB-03/VERB-04): `codegraph query <term>`
+./internal/cli/renamed.go:11:// into `codegraph search --full <term>`, and `codegraph unlock [path]` into
+```
+
+`before: 4 lines across 2 files`. No line from `test/integration` appears — the rewritten guard's
+own text obeys D-06.
+
+**Teardown:** `git worktree remove --force "$C"`.
+
+## Family (d) — VERB-09: positive-controlled census AFTER the removal
+
+**Test/guard:** the identical census instrument, byte for byte, run in the main checkout at HEAD
+(after both Task 1 commits and Task 2's regression-gate work):
+
+```
+rg -nU -w --hidden 'codegraph\s+(query|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .
+```
+
+**Pre-mutation gate:** `git status --porcelain .github` — empty; the control does not exist.
+
+**Mutation applied:** the same untracked `.github/__census_control__.md`, three lines, inside the
+same trapped subshell, never `git add`ed.
+
+**Observed result** (verbatim):
+
+```
+./.github/__census_control__.md:1:run codegraph unlock now
+./.github/__census_control__.md:2:and also run codegraph
+./.github/__census_control__.md:3:query now
+exit: 0
+```
+
+Only the control lines are reported, on `:1:` and `:3:` — no other line.
+
+**Revert:** through the trap.
+
+**Byte-clean proof:** `git status --porcelain .github` — empty; the control is absent.
+
+**Real census** (verbatim, clean-tree run at HEAD):
+
+```
+(no output)
+exit: 1
+```
+
+`after: 0 lines across 0 files`. `rg` exits 1 (no match), recorded with its exit status. At this
+point `.changes/unreleased/` holds only `.gitkeep` — the capability fragment, and the one expected
+D-07 hit, only appear at the phase close.
+
+## Commit-history audit (Task 3)
+
+```
+$ git log --format=%s 84778a829d54fdfa94a69c2da9c5c2774f9acffe..HEAD
+docs(03-01): record regression gates and the guard mutation families (VERB-09)
+docs(03-01): record the RED-first and GREEN transcripts for the removed-verb guard
+feat(cli)!: remove the query and unlock rename stubs
+test(03-01): expect the removed query and unlock verbs to be unknown commands (VERB-09)
+docs(03): begin phase execution
+docs(03): sync state.json with planned phase
+docs(03): create phase plan
+docs(03): create phase plan
+```
+
+```
+$ F=90dc419a1778dc8ebea77d5de8b5acd8ec6a8e17
+$ git log -1 --format=%B "$F"
+feat(cli)!: remove the query and unlock rename stubs
+
+v0.14.0 kept hidden query and unlock stubs for one minor release after
+folding them into search --full and daemon unlock. This commit removes
+the stubs, their unit tests, their registration and their two allowlist
+entries, and either name now fails with cobra's own unknown-command
+error and exits 1.
+
+BREAKING CHANGE: the query and unlock commands are removed and are now unknown commands (exit 1); use search --full <term> instead of query <term>, and daemon unlock [path] instead of unlock [path].
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VJZpxvJro4s7kAk5tQeuP8
+```
+
+**commit audit:** every subject in the range matches `pr-title.yml`'s
+`^(feat|fix|perf|refactor|docs|chore|ci|test|build|revert)(\([a-z0-9_-]+\))?!?: .+` grammar; there
+is exactly one `feat(` subject and exactly one `!:`, both on the same commit (`90dc419a`); its
+`BREAKING CHANGE:` footer names `search --full` and `daemon unlock`; the `test(03-01):` commit
+(`c9df8e62`) precedes it; no `ci skip`/`skip ci` marker appears anywhere in the range.
+
+## Verdict (Task 3)
+
+Before: 4 lines across 2 files. After: 0. The instrument is byte-identical between Families (c)
+and (d), and identical to the v0.14.0 copy in
+`.planning/milestones/v0.14.0-phases/03-verb-fold/03-MUTATION-LOG.md`, so the two counts answer
+the same question. Every before hit belonged to the removed stub's own declaration
+(`internal/cli/renamed.go:10-11`) or its two allowlist entries
+(`internal/cli/testdata/cli-reference-allowlist.txt:8-9`) — both now deleted. At the phase close, a
+hit confined to the capability-written `.changes/unreleased/` fragment is expected (D-07); the
+verifier records it and the instrument is not changed.
