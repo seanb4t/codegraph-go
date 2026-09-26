@@ -213,13 +213,13 @@ skill runs at verify:post. The configuration is already committed in
 One-time setup per clone:
 
 ```
-gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1 --scope project
+gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2 --scope project
 ```
 
 One-time setup per machine, so Claude Code can dispatch the skill:
 
 ```
-gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1 --scope global
+gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2 --scope global
 gsd-tools capability set changie --enable --runtime claude --scope global
 ```
 
