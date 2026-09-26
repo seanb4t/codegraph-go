@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
-current_phase: 2
+current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-09-25T23:00:38.251Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-26T00:01:20.549Z"
 last_activity: 2026-09-25
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: a5ac20ce7940d3c70f2f4b1200f8add5ee767244
+last_activity_desc: Phase 02 execution started
+state_head: b45edc48778380538a4742d1a57df07ede43e03c
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 7
-  completed_plans: 2
+  completed_plans: 3
   percent: 17
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-25 after Phase 1)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 2 — Phase-Close Fragment Capability
+**Current focus:** Phase 02 — Phase-Close Fragment Capability
 
 ## Current Position
 
-Phase: 2 (Phase-Close Fragment Capability) — READY TO EXECUTE
-Plan: Not started
+Phase: 02 (Phase-Close Fragment Capability) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-09-25 — Phase 1 complete, transitioned to Phase 2
+Last activity: 2026-09-25 — Phase 02 execution started
 
 Progress: [██░░░░░░░░] 17%
 
@@ -188,6 +188,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P11 | 14 min | 3 tasks | 44 files |
 | Phase 01 P01 | 30min | 2 tasks | 23 files |
 | Phase 01 P02 | 30min | 3 tasks | 4 files |
+| Phase 02 P01 | ~50min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -445,6 +446,8 @@ Standing decisions that outlive every milestone:
 - [Phase 1]: check:changie needed silent:true to satisfy the plan's own exact-count verify commands (go-task's default mode echoes the whole cmds: script, doubling literal-text matches)
 - [Phase 1]: vuln module-count re-measured live: 1257 across the first four modfiles (1261 with go.tool-changie.mod), not the stale 571 figure
 - [Phase 1]: Family (d)'s v0.5.1 deletion needed a floor-compensating filler seed to reach the set-mismatch branch that names the missing version (changieSeedFloor=14 fires first on a bare deletion)
+- [Phase 02]: D-02 changie-unavailable interpretation: fires on unresolvable/failing configured command, not literally bare PATH absence
+- [Phase 02]: D-05 external-tool reading: gsd-tools/gsd_run is the dispatching host, not a third-party parsing dependency
 
 ### Pending Todos
 
@@ -597,10 +600,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/02-phase-close-fragment-capability/02-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-25T20:53:01.305Z
-Stopped at: Phase 2 context gathered
+Last session: 2026-09-26T00:01:20.503Z
+Stopped at: Completed 02-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

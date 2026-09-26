@@ -44,7 +44,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Phase-Close Capability
 
 - [ ] **CAP-01**: A private repository `seanb4t/gsd-capability-changie` exists holding a `role: "feature"` capability whose `capability.json` validates under gsd-core 1.14.0 (`gsd_run capability install ./ --scope project` on a scratch project succeeds; id is not a reserved `gsd-` prefix), with `engines.gsd` pinned, a `README`, a `LICENSE` and a tagged release
-- [ ] **CAP-02**: The capability owns a `changie-fragments` skill and registers one `verify:post` step (`ref.skill`, `onError: skip`) gated on a federated config key `workflow.changie_fragments` (`boolean`, default `true`), so a project with the key `false` never dispatches it
+- [x] **CAP-02**: The capability owns a `changie-fragments` skill and registers one `verify:post` step (`ref.skill`, `onError: skip`) gated on a federated config key `workflow.changie_fragments` (`boolean`, default `true`), so a project with the key `false` never dispatches it
 - [ ] **CAP-03**: The skill, given a phase number, reads that phase's `*-SUMMARY.md` files, writes one fragment per user-visible change via `CI=true changie new` using only the kinds declared in the host repo's `.changie.yaml`, commits them with the phase's commit conventions, and skips with a printed reason when `changie` is not on `PATH`, no `.changie.yaml` exists, or the phase produced no user-visible change — never prompting, never blocking the workflow
 - [ ] **CAP-04**: codegraph-go installs the capability at project scope from `git+ssh://git@github.com/seanb4t/gsd-capability-changie.git#<tag>`, `workflow.changie_fragments` is set in `.planning/config.json`, and `CONTRIBUTING.md` documents the one-time per-clone install (`.gsd/` stays gitignored)
 - [ ] **CAP-05**: The step is observed firing at a real phase close inside this milestone: the fragment it wrote is in `.changes/unreleased/`, its commit is on the milestone branch, and the phase's VERIFICATION or SUMMARY records the dispatch — evidence, not assertion
@@ -113,7 +113,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GATE-04 | Phase 4 | Pending |
 | GATE-05 | Phase 4 | Pending |
 | CAP-01 | Phase 2 | Pending |
-| CAP-02 | Phase 2 | Pending |
+| CAP-02 | Phase 2 | Complete |
 | CAP-03 | Phase 2 | Pending |
 | CAP-04 | Phase 2 | Pending |
 | CAP-05 | Phase 3 | Pending |
