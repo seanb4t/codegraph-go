@@ -190,7 +190,7 @@ Plans:
   4. codegraph-go has the capability installed at project scope from `https://github.com/seanb4t/gsd-capability-changie.git#<tag>`, `workflow.changie_fragments` is set in `.planning/config.json`, `.gsd/` stays gitignored, and `CONTRIBUTING.md` documents the one-time per-clone install (CAP-04)
 
 **Notes**: `CHG-01` makes `PR` a required field (`minInt: 1`), but at phase close on the milestone branch no milestone PR number may exist yet — where the skill gets `<n>` (a draft milestone PR opened early, a lookup, or a config value) is an open design question for discuss-phase, not something to paper over with a placeholder number. The capability manifest is the sanctioned extension vocabulary; no gsd-core workflow file is edited (out of scope by requirement), and `.planning/config.json` is written through the tool's own config verb, never by hand. A `contribution` or `ref.command` step is out of scope — a skill step is the least-privilege sanctioned shape. The scratch-project proofs in criteria 1–3 are the capability's own tests; the in-repo proof that it fires on this repository is `CAP-05` at Phase 3's close.
-**Plans**: 4/5 plans executed
+**Plans**: 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -210,6 +210,10 @@ Plans:
 - [x] 02-04-PLAN.md — Project-scope install from the tag, config-set, ledger ignored, live preflight; maintainer-decided Claude skill materialization (CAP-04)
 
 **Wave 5**
+
+- [ ] 02-06-PLAN.md — PR field made optional (D-13): `.changie.yaml` `optional: true` with Phase 1's shape test and `check:changie` re-pointed RED-first, capability `v0.1.1` writes fragments without a PR when none is open, published and upgraded at project and global scope (CAP-03, CAP-04, CHG-01, CHG-04)
+
+**Wave 6**
 
 - [ ] 02-05-PLAN.md — Real `Skill(gsd-changie-fragments)` dispatch proof, and the CONTRIBUTING D-12 subsection (CAP-03, CAP-04)
 
@@ -299,7 +303,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
-| 2. Phase-Close Fragment Capability | 4/5 | In Progress|  |
+| 2. Phase-Close Fragment Capability | 4/6 | In Progress|  |
 | 3. Rename-Stub Removal | 0/TBD | Not started | - |
 | 4. Fragment-Required Gate | 0/TBD | Not started | - |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
