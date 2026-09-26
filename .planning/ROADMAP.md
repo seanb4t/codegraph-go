@@ -230,12 +230,12 @@ Plans:
   4. With that fragment present, `changie next auto` on the milestone branch answers a minor bump over `v0.14.0` (predicted `v0.15.0`), not a major (VERB-09)
 
 **Notes**: The census instrument is v0.14.0's own, reused verbatim, including its `--hidden` correction and positive control — a zero-hit result from an instrument not first shown able to find a planted hit is not evidence. If the step does not fire, `CAP-05` stays open and is re-attempted at Phase 4's close (and Phase 5's after that); VERB-09's `Breaking` fragment is still required, but a hand-written one is recorded as hand-written and does not satisfy `CAP-05`. The capability skipping at a later close that has no user-visible change (Phase 4's gate is CI-only) is a useful second observation of `CAP-03`'s skip path, not a failure.
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Tracer RED-first removal of the `query`/`unlock` stubs in one `feat(cli)!:` commit, both guards proven RED against a revived verb, and the v0.14.0 census before/after with its positive control; the `Breaking` fragment is left to the capability at the close (VERB-09, CAP-05)
+- [x] 03-01-PLAN.md — Tracer RED-first removal of the `query`/`unlock` stubs in one `feat(cli)!:` commit, both guards proven RED against a revived verb, and the v0.14.0 census before/after with its positive control; the `Breaking` fragment is left to the capability at the close (VERB-09, CAP-05)
 
 #### Phase 4: Fragment-Required Gate
 
@@ -305,7 +305,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 |-------|----------------|--------|-----------|
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
 | 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
-| 3. Rename-Stub Removal | 0/TBD | Not started | - |
+| 3. Rename-Stub Removal | 1/1 | In Progress|  |
 | 4. Fragment-Required Gate | 0/TBD | Not started | - |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
 | 6. First Release Through the Chain | 0/TBD | Not started | - |

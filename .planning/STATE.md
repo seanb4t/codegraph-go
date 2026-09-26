@@ -4,17 +4,17 @@ milestone: v0.15.0
 milestone_name: Changie Release Management
 current_phase: 3
 current_phase_name: Rename-Stub Removal
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-26T20:21:11.037Z"
+status: verifying
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-09-26T20:49:02.329Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 3 execution started
-state_head: d53e8135440a724a4f3027d718ae77c7f91d65d2
+state_head: 0ab1be618dbf28055f42263c12d2b3446d59dc49
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 33
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 2)
 
 Phase: 3 (Rename-Stub Removal) — EXECUTING
 Plan: 1 of 1
-Status: Executing Phase 3
+Status: Phase complete — ready for verification
 Last activity: 2026-09-26 — Phase 3 execution started
 
 Progress: [███░░░░░░░] 33%
@@ -194,6 +194,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P04 | 35min | 3 tasks | 2 files |
 | Phase 02 P06 | 70min | 3 tasks | 15 files |
 | Phase 02 P05 | 45min | 2 tasks | 2 files |
+| Phase 03 P01 | 25min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -460,6 +461,9 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: [Phase 02-06]: gsd-core 1.14.0 installs a git capability via a depth-1 clone of the default branch, so once main advances past a tag, that older tag stops installing (confirmed live: #v0.1.0 failed with "git checkout failed" after v0.1.1 was pushed). Every future capability release must move main to its new tag before publishing.
 - [Phase 02]: Task 1's per-task SUMMARY.md commit matches the plan's own file scoping (02-05) — The plan's Task 1 <files> was 02-05-SUMMARY.md, so the dispatch transcript was committed atomically as part of Task 1 rather than deferred to the end-of-plan write
 - [Phase 02]: Isolated GSD_HOME for the 02-05 fixture-project dispatch proof — The maintainer's global changie install (02-04, D-14) leaks workflow.changie_command/workflow.changie_fragments into a fresh scratch project's federated config schema on this machine, mirroring 02-06's fix
+- [Phase 3]: [Phase 03] Rewrote test/integration/renamed_stubs_test.go in place (git mv to removed_verbs_test.go) as the RED-first guard, rather than deleting it with no replacement.
+- [Phase 3]: [Phase 03] The query/unlock removal is one feat(cli)! commit with a BREAKING CHANGE footer naming both replacements, preceded by a single test(03-01) RED commit.
+- [Phase 3]: [Phase 03] No task wrote a changelog fragment. CAP-05 evidence is left entirely to the verify:post capability dispatch and the phase verifier (D-08).
 
 ### Pending Todos
 
@@ -618,10 +622,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/03-rename-stub-removal/03-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-26T19:33:01.316Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-09-26T20:49:02.229Z
+Stopped at: Completed 03-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

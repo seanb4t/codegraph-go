@@ -47,7 +47,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **CAP-02**: The capability owns a `changie-fragments` skill and registers one `verify:post` step (`ref.skill`, `onError: skip`) gated on a federated config key `workflow.changie_fragments` (`boolean`, default `true`), so a project with the key `false` never dispatches it
 - [x] **CAP-03**: The skill, given a phase number, reads that phase's `*-SUMMARY.md` files, writes one fragment per user-visible change via `CI=true changie new` using only the kinds declared in the host repo's `.changie.yaml`, commits them with the phase's commit conventions, and skips with a printed reason when `changie` is not on `PATH`, no `.changie.yaml` exists, or the phase produced no user-visible change — never prompting, never blocking the workflow
 - [x] **CAP-04**: codegraph-go installs the capability at project scope from `https://github.com/seanb4t/gsd-capability-changie.git#<tag>`, `workflow.changie_fragments` is set in `.planning/config.json`, and `CONTRIBUTING.md` documents the one-time per-clone install (`.gsd/` stays gitignored)
-- [ ] **CAP-05**: The step is observed firing at a real phase close inside this milestone: the fragment it wrote is in `.changes/unreleased/`, its commit is on the milestone branch, and the phase's VERIFICATION or SUMMARY records the dispatch — evidence, not assertion
+- [x] **CAP-05**: The step is observed firing at a real phase close inside this milestone: the fragment it wrote is in `.changes/unreleased/`, its commit is on the milestone branch, and the phase's VERIFICATION or SUMMARY records the dispatch — evidence, not assertion
 
 ### Docs
 
@@ -57,7 +57,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Verb Fold Close-out
 
-- [ ] **VERB-09**: The hidden `query` and `unlock` rename stubs are removed (999.5): `internal/cli/renamed.go` and `renamed_test.go` deleted, `newQueryCmd()`/`newUnlockCmd()` dropped from `root.go`, the two `cli-reference-allowlist.txt` lines removed, `task docs:cli` produces no reference change, and the Phase 3 census instrument (v0.14.0 `03-MUTATION-LOG.md` family (c)) reports zero hits — recorded as this milestone's `Breaking` fragment
+- [x] **VERB-09**: The hidden `query` and `unlock` rename stubs are removed (999.5): `internal/cli/renamed.go` and `renamed_test.go` deleted, `newQueryCmd()`/`newUnlockCmd()` dropped from `root.go`, the two `cli-reference-allowlist.txt` lines removed, `task docs:cli` produces no reference change, and the Phase 3 census instrument (v0.14.0 `03-MUTATION-LOG.md` family (c)) reports zero hits — recorded as this milestone's `Breaking` fragment
 
 ### First Release Through the Chain
 
@@ -116,11 +116,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAP-02 | Phase 2 | Complete |
 | CAP-03 | Phase 2 | Complete |
 | CAP-04 | Phase 2 | Complete |
-| CAP-05 | Phase 3 | Pending |
+| CAP-05 | Phase 3 | Complete |
 | DOCS-12 | Phase 5 | Pending |
 | DOCS-13 | Phase 5 | Pending |
 | DOCS-14 | Phase 5 | Pending |
-| VERB-09 | Phase 3 | Pending |
+| VERB-09 | Phase 3 | Complete |
 | SHIP-01 | Phase 6 | Pending |
 | SHIP-02 | Phase 6 | Pending |
 | SHIP-03 | Phase 6 | Pending |
