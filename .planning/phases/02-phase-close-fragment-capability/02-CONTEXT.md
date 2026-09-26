@@ -98,14 +98,15 @@ Out of this phase:
 - **D-10:** Repository metadata.
   - Private visibility, created with `gh repo create seanb4t/gsd-capability-changie --private`. It is named by CAP-01 and so is authorized scope. Visibility stays private.
   - MIT `LICENSE`, verbatim text, matching codegraph-go.
-  - A `README` covering: what the capability does, the config keys, install (`git+ssh…#<tag>`), manual re-run, skip reasons, and trailer semantics.
+  - A `README` covering: what the capability does, the config keys, install (`https://…git#<tag>`; the `v0.1.0` README still shows the `git+ssh` form, which also works), manual re-run, skip reasons, and trailer semantics.
   - The first tag is `v0.1.0`. Tags are annotated. A repository ruleset or branch protection is not required.
   - CI in the private repository is optional (Claude's discretion). The committed test script is the proof whether or not CI runs it.
   - — **Reversibility:** costly for the tag. CAP-04 and SHIP-04 pin it, so a re-tag means re-installing and re-recording.
 
 ### codegraph-go install (CAP-04)
 - **D-11:** Install and configure in this order:
-  1. `gsd_run capability install git+ssh://git@github.com/seanb4t/gsd-capability-changie.git#v0.1.0 --scope project` (consent granted).
+  - **Amended 2026-09-26 (maintainer, during 02-03):** the install spec is HTTPS, `https://github.com/seanb4t/gsd-capability-changie.git#v0.1.0`, not `git+ssh://git@github.com/...`. Why: installs must not block on SSH-agent access (a locked 1Password agent halted 02-03 once). The `gh` credential helper authenticates HTTPS for the private repo. This was verified on a scratch project with SSH disabled (`GIT_SSH_COMMAND=/usr/bin/false`): the install exited 0, and the `capability.json` it installed is byte-identical to `v0.1.0`'s. CAP-04's text in REQUIREMENTS.md and ROADMAP.md is updated to match. The capability repo's `v0.1.0` README still shows the `git+ssh` form, which also works; the next capability release updates it.
+  1. `gsd_run capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.0 --scope project` (consent granted).
   2. `workflow.changie_fragments=true` and `workflow.changie_command="task changie --"` written through `gsd_run query config-set`, never by hand-editing `.planning/config.json`.
 
   Install comes first because the federated keys may be rejected by the config schema until the capability that declares them is installed. The researcher verifies this.
@@ -148,7 +149,7 @@ Out of this phase:
 - `~/.claude/gsd-core/references/loop-hook-dispatch.md`: `step` dispatch (`Skill(gsd-<ref.skill>)`), advisory semantics, `onError`.
 - `~/.claude/gsd-core/workflows/execute-phase.md:1105`, `verify-work.md:562`, `autonomous.md:542`, `secure-phase.md:32`, `validate-phase.md:32`, `audit-milestone.md:162`: every `verify:post` call site. This is why D-07 exists.
 - `~/.claude/gsd-core/bin/lib/capability-validator.cjs`: manifest schema, config-slice validation (`type`/`default`/`description`), reserved ids, `activationKey`, `engines`.
-- `~/.claude/gsd-core/bin/lib/capability-loader.cjs`, `capability-writer.cjs`, `capability-source.cjs`, `capability-ledger.cjs`, `capability-consent.cjs`: install spec kinds (`./`, `git+ssh://…#ref`), skill materialization, the ledger, consent.
+- `~/.claude/gsd-core/bin/lib/capability-loader.cjs`, `capability-writer.cjs`, `capability-source.cjs`, `capability-ledger.cjs`, `capability-consent.cjs`: install spec kinds (`./`, `https://…git#ref`, `git+ssh://…#ref`), skill materialization, the ledger, consent.
 - Upstream `docs/reference/capability-manifest.md` in `open-gsd/gsd-core` (1.14.0 tag): the manifest reference that memory `f7m4ye3rkc` was verified against.
 
 ### codegraph-go integration points
