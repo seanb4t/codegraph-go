@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-09-26T15:47:12.634Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-09-26T15:54:17.108Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 02 execution started
-state_head: 99b2923d8d895e6fceaba4518e30a7432475b391
+state_head: 4cb1b182572d93fc79cee689ad1e9722b8c8f466
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 17
 ---
 
@@ -192,6 +192,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P02 | ~70min | 2 tasks | 4 files |
 | Phase 02 P03 | 35min | 2 tasks | 1 files |
 | Phase 02 P04 | 35min | 3 tasks | 2 files |
+| Phase 02 P06 | 70min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -454,6 +455,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: SKILL.md's no-`.claude/`-path rule contained the literal substring it forbade; reworded to describe the same restriction without self-violating it. — Caught by this task's own acceptance criteria (rg -F -o '.claude/' SKILL.md must print 0), not by the six rehearsal assertions, which all passed unmodified; fixed pre-publication per T-02-08.
 - [Phase 02]: Maintainer approved publish-both at Task 1's blocking-human checkpoint: publish the private gsd-capability-changie repo with tag v0.1.0 and open the draft milestone PR. — Both are outward-facing GitHub actions (CAP-01, D-04) that auto-mode cannot approve; the maintainer answered at the keyboard with the proposed title unchanged.
 - [Phase 02]: Task 2 checkpoint (blocking-human): maintainer chose global-install to materialize gsd-changie-fragments for Claude Code, recorded as D-14
+- [Phase 02]: [Phase 02-06]: GSD_HOME isolated in gsd-capability-changie's test/run.sh (Rule 3 deviation) — a machine with the capability already installed at global scope (02-04, D-14) leaked workflow.changie_command/workflow.changie_fragments into every scratch project's federated config schema, breaking the [ordering] leg. Fixed by exporting an isolated, empty GSD_HOME for the whole scratch test run.
+- [Phase 02]: [Phase 02-06]: gsd-core 1.14.0 installs a git capability via a depth-1 clone of the default branch, so once main advances past a tag, that older tag stops installing (confirmed live: #v0.1.0 failed with "git checkout failed" after v0.1.1 was pushed). Every future capability release must move main to its new tag before publishing.
 
 ### Pending Todos
 
@@ -610,8 +613,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-26T14:08:34.428Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-09-26T15:54:17.084Z
+Stopped at: Completed 02-06-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
