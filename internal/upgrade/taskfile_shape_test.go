@@ -117,20 +117,25 @@ func readRequiredCheckNames(path string) ([]string, error) {
 
 // forbiddenToolPackages are the build-tool import paths that must live
 // ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod /
-// go.tool-proto.mod / go.tool-golangci.mod), never as a tool directive or
-// a require line in the root go.mod (D-03). google.golang.org/protobuf and
-// connectrpc.com/connect are deliberately NOT here even though
-// go.tool-proto.mod also pins their cmd/ tool binaries: both are
-// legitimate RUNTIME dependencies of the main module (the generated
-// .pb.go/.connect.go files import them), so root go.mod requiring them is
-// correct, not a D-03 violation — only the buf CLI itself is pure build
-// tooling with no runtime import anywhere in this module.
+// go.tool-proto.mod / go.tool-golangci.mod / go.tool-changie.mod), never
+// as a tool directive or a require line in the root go.mod (D-03).
+// google.golang.org/protobuf and connectrpc.com/connect are deliberately
+// NOT here even though go.tool-proto.mod also pins their cmd/ tool
+// binaries: both are legitimate RUNTIME dependencies of the main module
+// (the generated .pb.go/.connect.go files import them), so root go.mod
+// requiring them is correct, not a D-03 violation — only the buf CLI
+// itself is pure build tooling with no runtime import anywhere in this
+// module.
 var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
 	"github.com/golangci/golangci-lint",
 	"github.com/bufbuild/buf",
+	// github.com/miniscruff/changie — 01-01-PLAN.md, D-04: changie has no
+	// runtime import anywhere in this module; changieModfilePath (declared
+	// in changie_shape_test.go) is the fifth isolated tool modfile.
+	"github.com/miniscruff/changie",
 }
 
 // forbiddenTaskfileGateKeys are the two go-task fields that silently SKIP
@@ -1054,7 +1059,12 @@ func TestGateStancesStated(t *testing.T) {
 // below, closes both the golangci-lint gap this plan adds AND the
 // pre-existing proto gap in the same change, rather than recording the
 // latter as accepted debt.
-var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath}
+// changieModfilePath (the fifth isolated tool modfile) is appended here
+// too — 01-01-PLAN.md, D-04 — but its path constant is declared in
+// changie_shape_test.go, not in this file's own const block, so that the
+// RED commit for that plan's guards compiles before go.tool-changie.mod
+// exists on disk.
+var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath, changieModfilePath}
 
 func TestToolModfilesRemainIsolated(t *testing.T) {
 	infos := make([]os.FileInfo, len(isolatedModfilePaths))

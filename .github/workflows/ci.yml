@@ -202,6 +202,15 @@ jobs:
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
+      # CHG-03/CHG-04, v0.15.0 Phase 1: proves the pinned changie
+      # (go.tool-changie.mod) answers the v0.14.0 baseline version,
+      # reproduces CHANGELOG.md from .changes/ byte for byte, writes a
+      # fragment non-interactively with CI=true, and refuses a malformed
+      # one (missing PR, undeclared kind) on changie's own stderr text —
+      # all inside a scratch copy that never mutates the tree.
+      - name: Changie baseline and fragment guard (CHG-03/CHG-04)
+        run: task check:changie
+
       # GRD-11: check:gonum's SBOM half shells out to `syft` exactly as
       # .goreleaser.yaml's sboms: block does; GitHub-hosted runners do not
       # ship it. Same pin already trusted by release.yml and

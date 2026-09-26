@@ -1,37 +1,40 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.14.0
-milestone_name: Polish & Agent Reach
-status: Awaiting next milestone
-stopped_at: Phase 7 complete — all phases complete
-last_updated: "2026-09-20T05:34:36.191Z"
-last_activity: 2026-09-20
-last_activity_desc: Milestone v0.14.0 completed and archived
-state_head: f90160f06e88bdfd661b79ad8171166aa15b2771
+milestone: v0.15.0
+milestone_name: Changie Release Management
+current_phase: 3
+current_phase_name: Rename-Stub Removal
+status: planning
+stopped_at: Phase 2 complete, ready to plan Phase 3
+last_updated: "2026-09-26T19:26:59.334Z"
+last_activity: 2026-09-26
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
+state_head: 4d6049a45a84a59602ef523ea0b28bd0f3018052
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 53
-  completed_plans: 53
-  percent: 100
-current_phase: 7
+  total_phases: 6
+  completed_phases: 2
+  total_plans: 8
+  completed_plans: 8
+  percent: 33
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-20 at the v0.14.0 close)
+See: .planning/PROJECT.md (updated 2026-09-26 after Phase 2)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** No milestone scoped — v0.14.0 shipped 2026-09-20. Start the next one with `/gsd-new-milestone`.
+**Current focus:** Phase 3 — Rename-Stub Removal
 
 ## Current Position
 
-Phase: Milestone v0.14.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-20 — Milestone v0.14.0 completed and archived
+Phase: 3 — Rename-Stub Removal
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-26 — Completed quick task 260926-it7: capability v0.1.2 (Phase 2 review findings WR-01, CR-01, IN-01) released and both installs repointed
+
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -43,8 +46,8 @@ Last activity: 2026-09-20 — Milestone v0.14.0 completed and archived
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 9 | - | - |
-| 02 | 7 | - | - |
+| 1 | 2 | - | - |
+| 2 | 6 | - | - |
 | 03 | 4 | - | - |
 | 4 | 8 | - | - |
 | 5 | 7 | - | - |
@@ -183,6 +186,14 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 7 P09 | ~15min | 3 tasks | 1 files |
 | Phase 07 P10 | ~18min | 2 tasks | 4 files |
 | Phase 07 P11 | 14 min | 3 tasks | 44 files |
+| Phase 01 P01 | 30min | 2 tasks | 23 files |
+| Phase 01 P02 | 30min | 3 tasks | 4 files |
+| Phase 02 P01 | ~50min | 2 tasks | 10 files |
+| Phase 02 P02 | ~70min | 2 tasks | 4 files |
+| Phase 02 P03 | 35min | 2 tasks | 1 files |
+| Phase 02 P04 | 35min | 3 tasks | 2 files |
+| Phase 02 P06 | 70min | 3 tasks | 15 files |
+| Phase 02 P05 | 45min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -436,10 +447,26 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: [Phase 07]: D-29 skill sentence rewritten harness-neutral ('...except Hermes.'), placed after the const's first sentence so it ends at byte 299 (was 554); whole const re-measured 582 bytes. 38 pre-edit transcripts (re-measured, not assumed) re-frozen in one reviewed diff.
 - [Phase 7]: [Phase 07]: D-30 comments corrected (instructions.go, shared.go, registry_test.go) without touching the byte-frozen codegraphInstructionsBlock text; block stays skill-agnostic because it's frozen, not because the skill's reach is narrow (skill now reaches 7 of 8 targets).
 - [Phase 7]: [Phase 07]: Phase 7 gate recorded green with one documented exception — the tmux picker re-run clause reads 'not run' per the maintainer's already-accepted 2026-09-19 decision (issue #75); every other gate clause (build, 53-package suite, daemon alone, docs:cli:drift, 28 mutation families, CODEX-01/05/06 PASS, no ci-skip, WINDOWS D-08 open) passes.
+- [Phase 1]: Changie config+baseline seeded (D-01..D-11): 14 verbatim seeds byte-reproduce CHANGELOG.md; changie v1.26.0 pinned in a fifth isolated go.tool-changie.mod; single task changie install path for CI+contributors
+- [Phase 1]: check:changie needed silent:true to satisfy the plan's own exact-count verify commands (go-task's default mode echoes the whole cmds: script, doubling literal-text matches)
+- [Phase 1]: vuln module-count re-measured live: 1257 across the first four modfiles (1261 with go.tool-changie.mod), not the stale 571 figure
+- [Phase 1]: Family (d)'s v0.5.1 deletion needed a floor-compensating filler seed to reach the set-mismatch branch that names the missing version (changieSeedFloor=14 fires first on a bare deletion)
+- [Phase 02]: D-02 changie-unavailable interpretation: fires on unresolvable/failing configured command, not literally bare PATH absence
+- [Phase 02]: D-05 external-tool reading: gsd-tools/gsd_run is the dispatching host, not a third-party parsing dependency
+- [Phase 02]: SKILL.md's no-`.claude/`-path rule contained the literal substring it forbade; reworded to describe the same restriction without self-violating it. — Caught by this task's own acceptance criteria (rg -F -o '.claude/' SKILL.md must print 0), not by the six rehearsal assertions, which all passed unmodified; fixed pre-publication per T-02-08.
+- [Phase 02]: Maintainer approved publish-both at Task 1's blocking-human checkpoint: publish the private gsd-capability-changie repo with tag v0.1.0 and open the draft milestone PR. — Both are outward-facing GitHub actions (CAP-01, D-04) that auto-mode cannot approve; the maintainer answered at the keyboard with the proposed title unchanged.
+- [Phase 02]: Task 2 checkpoint (blocking-human): maintainer chose global-install to materialize gsd-changie-fragments for Claude Code, recorded as D-14
+- [Phase 02]: [Phase 02-06]: GSD_HOME isolated in gsd-capability-changie's test/run.sh (Rule 3 deviation) — a machine with the capability already installed at global scope (02-04, D-14) leaked workflow.changie_command/workflow.changie_fragments into every scratch project's federated config schema, breaking the [ordering] leg. Fixed by exporting an isolated, empty GSD_HOME for the whole scratch test run.
+- [Phase 02]: [Phase 02-06]: gsd-core 1.14.0 installs a git capability via a depth-1 clone of the default branch, so once main advances past a tag, that older tag stops installing (confirmed live: #v0.1.0 failed with "git checkout failed" after v0.1.1 was pushed). Every future capability release must move main to its new tag before publishing.
+- [Phase 02]: Task 1's per-task SUMMARY.md commit matches the plan's own file scoping (02-05) — The plan's Task 1 <files> was 02-05-SUMMARY.md, so the dispatch transcript was committed atomically as part of Task 1 rather than deferred to the end-of-plan write
+- [Phase 02]: Isolated GSD_HOME for the 02-05 fixture-project dispatch proof — The maintainer's global changie install (02-04, D-14) leaks workflow.changie_command/workflow.changie_fragments into a fresh scratch project's federated config schema on this machine, mirroring 02-06's fix
 
 ### Pending Todos
 
 - [2026-08-14] [bench] tools/bench/runner pinnedAt() validates a checkout by git rev-parse HEAD alone — the HEAD-only anti… — [todo file](.planning/todos/pending/2026-08-14-bench-pinnedat-validates-a-checkout-by-git-rev-parse-head-alone.md)
+- [2026-09-25] [release] Adopt changie for changelog + version and replace release-please with a changie release-PR workflow — [todo file](.planning/todos/pending/2026-09-25-adopt-changie-replace-release-please.md)
+- [2026-09-25] [server-mode] Reply on GH #85 / #82 / #80 with the reshaped contract from the 2026-09-25 exploration so fovea's Phase 15 plan updates — [todo file](.planning/todos/pending/2026-09-25-reply-on-gh-85-with-reshaped-contract.md)
+- [2026-09-26] [build] Pin the Go toolchain so Go 1.27 can build codegraph-go — [todo file](.planning/todos/pending/2026-09-26-pin-the-go-toolchain-so-go-1-27-can-build-codegraph-go.md)
 
 ### Blockers/Concerns
 
@@ -483,6 +510,8 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 6] Phase 5 now reads verification_status: stale — a GENUINE signal (like Phase 4 → Phases 1–3): Phase 6 legitimately modified files in Phase 5's covered_files (internal/agents/claude.go, capabilities.go, skillshared.go, manifest.go, types.go, shared.go, ownership/capabilities tests, internal/cli/install.go, uninstall.go, docs/CLI-REFERENCE.md). Re-verify Phases 1–5 at the milestone audit (/gsd-verify-work), together with Phase 4's missing validate-phase/secure-phase runs.
 - [Phase 7] Released codegraph binaries carry a Codex TOML data-loss bug: findTOMLTableRange ends a table only at a column-0 '[', so an indented [mcp_servers.codegraph] swallows every sibling table up to the next column-0 header. Do NOT run 'codegraph install' or 'uninstall' with --target codex or --target all on a machine whose ~/.codex/config.toml indents headers until the Phase 7 fix (07-CONTEXT D-07/D-08) ships; no patch release (maintainer decision B2, 2026-09-19)
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
+- [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
+- gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
 
 ### Quick Tasks Completed
 
@@ -491,6 +520,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 | 260807-gho | Drop native Windows support — WSL2 only | 2026-08-07 | 085b7a3 | [260807-gho-drop-native-windows-support-wsl2-only](./quick/260807-gho-drop-native-windows-support-wsl2-only/) |
 | 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
 | 260913-pkp | Fix graphstore archtest to fail closed on per-package go/packages load errors (CR-01 sibling of a90b5457); todo 2026-09-08 resolved | 2026-09-13 | 2b553b62 | [260913-pkp-fix-graphstore-archtest-to-fail-closed-o](./quick/260913-pkp-fix-graphstore-archtest-to-fail-closed-o/) |
+| 260926-it7 | Release gsd-capability-changie v0.1.2 fixing Phase 2 review findings (WR-01 whole-string --pr, CR-01 check:changie leg 13, IN-01) and repoint project + global installs | 2026-09-26 | 4d6049a4 | [260926-it7-release-gsd-capability-changie-v0-1-2-fi](./quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/) |
 
 ## Deferred Items
 
@@ -590,8 +620,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-19T22:35:01.950Z
-Stopped at: Phase 7 complete — all phases complete
+Last session: 2026-09-26T16:10:21.706Z
+Stopped at: Phase 2 complete, ready to plan Phase 3
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
@@ -603,4 +633,4 @@ Stopped at: Phase 7 complete — all phases complete
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Discuss Phase 1 with /gsd-discuss-phase 1

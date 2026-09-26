@@ -1,48 +1,43 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.14.0 — Polish & Agent Reach",
+  "milestone": "v0.15.0 — Changie Release Management",
   "phases": [
     {
       "number": "1",
-      "name": "Defect & Flake Burn-down",
+      "name": "Changie Baseline",
       "status": "complete"
     },
     {
       "number": "2",
-      "name": "Guards, CI Wiring & Docs Burn-down",
+      "name": "Phase-Close Fragment Capability",
       "status": "complete"
     },
     {
       "number": "3",
-      "name": "Verb Fold",
-      "status": "complete"
+      "name": "Rename-Stub Removal",
+      "status": "pending"
     },
     {
       "number": "4",
-      "name": "CLI Glow-up",
-      "status": "complete"
+      "name": "Fragment-Required Gate",
+      "status": "pending"
     },
     {
       "number": "5",
-      "name": "Agent Reach — Capability Model & Skill in Every Harness",
-      "status": "complete"
+      "name": "Release Chain & release-please Retirement",
+      "status": "pending"
     },
     {
       "number": "6",
-      "name": "Claude Code PreToolUse Nudge",
-      "status": "complete"
-    },
-    {
-      "number": "7",
-      "name": "Codex Parity",
-      "status": "complete"
+      "name": "First Release Through the Chain",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 6 — needs a plan"
   },
-  "updated_at": "2026-09-20T05:34:36.210Z"
+  "updated_at": "2026-09-26T17:25:10.357Z"
 }

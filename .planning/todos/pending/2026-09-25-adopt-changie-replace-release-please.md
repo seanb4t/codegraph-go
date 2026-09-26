@@ -3,6 +3,7 @@ created: 2026-09-25T00:00:00.000Z
 title: Adopt changie for changelog + version and replace release-please with a changie release-PR workflow
 area: release
 severity: major
+resolves_phase: 5
 files:
   - .planning/notes/changie-release-management.md
   - .github/workflows/release-please.yml

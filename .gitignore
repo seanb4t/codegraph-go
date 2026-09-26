@@ -45,6 +45,11 @@ __pycache__/
 # GSD run-scoped dispatch-isolation sentinel (ephemeral session state)
 .gsd/
 
+# gsd-core capability install ledger (project scope) — lands at the project
+# root beside .gsd/, not inside it (capability-ledger.cjs joins it to the
+# project root directly), so the .gsd/ line above does not cover it.
+.gsd-capabilities.json
+
 # Local secret-reference file consumed via `op run --env-file=.env`.
 # Holds 1Password `op://` references, never literal secrets — still never committed.
 .env
