@@ -283,3 +283,13 @@ Each finding was re-checked against the live system before routing. The reviewer
 - This needs a new tag push, which is not pre-approved.
 
 **Net status:** 0 critical, 1 warning, 2 info. The WARNING is carried as a follow-up. It does not block the phase goal (CAP-01..04).
+
+## Resolution (quick 260926-it7, 2026-09-26)
+
+| Finding | Resolution | Evidence |
+|---------|-----------|----------|
+| WR-01 | Fixed in gsd-capability-changie `v0.1.2`. `--pr` and the looked-up PR are validated with a single whole-string `is_positive_int` helper, so an embedded or trailing newline, a sign, a leading zero or any non-digit character is refused before anything runs. `[bad-pr:multiline]` went RED first at test commit `801c5df` (19 `ok [` lines, then `expected exit 2, got 0`), then GREEN at fix commit `24abce3` (`33 of 33`). The suite passes 33 of 33 at HEAD (tag `v0.1.2`, commit `2631063`) and from a clean HTTPS clone. T-02-03's premise now holds. | `.planning/quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/260926-it7-SUMMARY.md` |
+| CR-01 (residual) | Closed as test coverage. codegraph-go commit `79f13598` adds `check:changie` leg 13, which drives the real `task changie -- new --dry-run -k Fixes -b "<payload>" -m PR=1` from a scratch copy with a body carrying `$(...)`, a backticked command and a trailing `;`. The body arrives byte-literal (`body: <payload>`) and no marker file is created. The leg was proven able to fail: a confirmed-applied unquoted-splice mutation of the `changie:` task's `{{.CLI_ARGS}}` rendering, run in a disposable detached worktree, sent leg 13 RED with `re-shelled the fragment body`; the worktree was reverted byte-cleanly and re-ran GREEN. | `.planning/quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/260926-it7-SUMMARY.md` |
+| IN-01 | Fixed in codegraph-go commit `79f13598`. All `# Leg N/11` and `# Leg N/12` comments, and every `[N/12]` string, in `check:changie` are renumbered to `/13` for the new 13-leg total; `desc:` and the pass-count guard were updated to match. | codegraph-go commit `79f13598` |
+
+Both the codegraph-go project install and the maintainer's global install are repointed to `v0.1.2` through `gsd-tools capability install`/`capability set`, and `CONTRIBUTING.md` now names `#v0.1.2` in both install specs (commit `2d229c0d`). Full transcripts, including the RED/GREEN pastes and the mutation proof, are in `.planning/quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/260926-it7-SUMMARY.md`.
