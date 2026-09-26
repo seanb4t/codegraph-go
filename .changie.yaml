@@ -4,12 +4,15 @@
 #
 # Record a user-visible change with:
 #   task changie -- new -k <Kind> -b "<sentence>" -m PR=<n>
+# -m PR=<n> is optional.
 #
-# Kinds, their auto bumps, the required PR field and the three format
-# strings below are locked by CHG-01 (01-CONTEXT.md D-10) — this file
-# copies that design, it does not redesign it. PR stays required
-# (D-11): a phase-close fragment with no PR number yet is Phase 2's
-# problem to solve, not this file's optional: escape hatch.
+# Kinds, their auto bumps, the PR field and the three format strings
+# below are locked by CHG-01 (01-CONTEXT.md D-10) — this file copies
+# that design, it does not redesign it. PR is optional per 02-CONTEXT
+# D-13, which supersedes D-11: every fragment of a milestone would
+# carry the same milestone-PR number, so a fragment may omit it.
+# changeFormat's PR conditional renders such an entry without a link,
+# and minInt still refuses PR=0.
 #
 # newlines.afterChangelogHeader is the ONLY newlines override. The
 # seeded .changes/v*.md baseline files already carry their own
@@ -46,5 +49,6 @@ custom:
   - key: PR
     type: int
     minInt: 1
+    optional: true
 newlines:
   afterChangelogHeader: 1

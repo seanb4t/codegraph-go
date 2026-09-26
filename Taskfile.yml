@@ -692,25 +692,39 @@ tasks:
         echo "check:changie: [4/11] changie new -k Fixes writes exactly one fragment with kind/body set — ok"
         passed=$((passed + 1))
 
-        # Leg 5/11: missing PR
+        # Leg 5/11: no PR is accepted (D-13: PR field is optional)
         set +e
         out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie probe without PR" 2>&1)
         status=$?
         set -e
-        if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [5/11] changie new with no -m PR= exited 0 (expected a refusal): ${out}"
-          exit 1
-        fi
-        if ! printf '%s' "${out}" | grep -qF "custom missing and prompt is disabled: custom key 'PR'"; then
-          echo "::error::check:changie: [5/11] missing-PR refusal — stderr does not contain the expected text: ${out}"
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [5/11] changie new with no -m PR= exited ${status} (expected acceptance, D-13): ${out}"
           exit 1
         fi
         count=$(fragment_count)
-        if [ "${count}" -ne 1 ]; then
-          echo "::error::check:changie: [5/11] fragment count = ${count} after the missing-PR refusal, want 1 (no file written)"
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [5/11] fragment count = ${count} after the no-PR new, want 2"
           exit 1
         fi
-        echo "check:changie: [5/11] changie new with no PR refused: custom missing and prompt is disabled: custom key 'PR' — ok"
+        frag5=$(grep -lF "check:changie probe without PR" "${work}/.changes/unreleased/"*.yaml || true)
+        nfrag5=$(printf '%s\n' "${frag5}" | sed '/^$/d' | wc -l | tr -d ' ')
+        if [ "${nfrag5}" -ne 1 ]; then
+          echo "::error::check:changie: [5/11] expected exactly one fragment matching the no-PR probe body, found ${nfrag5}: ${frag5}"
+          exit 1
+        fi
+        if ! grep -qF "kind: Fixes" "${frag5}"; then
+          echo "::error::check:changie: [5/11] no-PR fragment ${frag5} missing 'kind: Fixes'"
+          exit 1
+        fi
+        if grep -q "PR:" "${frag5}"; then
+          echo "::error::check:changie: [5/11] no-PR fragment ${frag5} unexpectedly contains a PR: line"
+          exit 1
+        fi
+        if grep -qF "custom:" "${frag5}"; then
+          echo "::error::check:changie: [5/11] no-PR fragment ${frag5} unexpectedly contains a custom: block"
+          exit 1
+        fi
+        echo "check:changie: [5/11] changie new with no PR accepted: fragment written without a PR field — ok"
         passed=$((passed + 1))
 
         # Leg 6/11: undeclared kind
@@ -727,8 +741,8 @@ tasks:
           exit 1
         fi
         count=$(fragment_count)
-        if [ "${count}" -ne 1 ]; then
-          echo "::error::check:changie: [6/11] fragment count = ${count} after the undeclared-kind refusal, want 1"
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [6/11] fragment count = ${count} after the undeclared-kind refusal, want 2"
           exit 1
         fi
         echo "check:changie: [6/11] changie new -k Undeclared refused: invalid kind: Undeclared — ok"
@@ -748,8 +762,8 @@ tasks:
           exit 1
         fi
         count=$(fragment_count)
-        if [ "${count}" -ne 1 ]; then
-          echo "::error::check:changie: [7/11] fragment count = ${count} after the PR-below-minimum refusal, want 1"
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [7/11] fragment count = ${count} after the PR-below-minimum refusal, want 2"
           exit 1
         fi
         echo "check:changie: [7/11] changie new -m PR=0 refused: input below minimum: 0 < 1 — ok"
@@ -769,8 +783,8 @@ tasks:
           exit 1
         fi
         count=$(fragment_count)
-        if [ "${count}" -ne 1 ]; then
-          echo "::error::check:changie: [8/11] fragment count = ${count} after the non-integer-PR refusal, want 1"
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [8/11] fragment count = ${count} after the non-integer-PR refusal, want 2"
           exit 1
         fi
         echo "check:changie: [8/11] changie new -m PR=abc refused: invalid number — ok"
@@ -788,11 +802,11 @@ tasks:
           exit 1
         fi
         count=$(fragment_count)
-        if [ "${count}" -ne 3 ]; then
-          echo "::error::check:changie: [9/11] fragment count = ${count} after two back-to-back new calls, want 3 (collision — sub-second fragmentFileFormat not honored)"
+        if [ "${count}" -ne 4 ]; then
+          echo "::error::check:changie: [9/11] fragment count = ${count} after two back-to-back new calls, want 4 (collision — sub-second fragmentFileFormat not honored)"
           exit 1
         fi
-        echo "check:changie: [9/11] two back-to-back new -k Fixes calls raised the fragment count to 3 (sub-second fragmentFileFormat holds) — ok"
+        echo "check:changie: [9/11] two back-to-back new -k Fixes calls raised the fragment count to 4 (sub-second fragmentFileFormat holds) — ok"
         passed=$((passed + 1))
 
         # Leg 10/11: patch successor (only Fixes fragments present)
