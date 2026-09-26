@@ -122,6 +122,27 @@ Out of this phase:
 
   — **Reversibility:** reversible.
 
+### PR field made optional (maintainer decision, 2026-09-26, during 02-04)
+- **D-13:** The `PR` custom field becomes **optional**. This supersedes D-03's "never make `PR` optional" and Phase 1 D-11's "leave `optional` unset".
+  - **Why:** under the milestone-PR workflow, every fragment in a milestone carries the same PR number, so the per-line link is low-value. A required PR forced a draft milestone PR to be opened ahead of time at every milestone start, and that PR then conflicts with `/gsd-ship`'s create step at close.
+  - **Scope, delivered by new plan 02-06, which runs before 02-05:**
+    1. **codegraph-go.**
+       - `.changie.yaml`: `PR` gets `optional: true`, keeping `type: int` and `minInt: 1`. Its header comment is updated. `changeFormat`'s `{{if .Custom.PR}}` already renders an entry with no PR cleanly.
+       - REQUIREMENTS: CHG-01 and CHG-04 are amended in place. CHG-04's "missing `PR` is refused" becomes "a fragment without `PR` is accepted, and `PR=0` is still refused by `minInt: 1`".
+       - Guards: Phase 1's shape test (`internal/upgrade/changie_shape_test.go`) and the `check:changie` refusal leg are re-pointed. Each re-pointed guard is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation (rule `84d1gfpywd`). The Go test change lands RED-first (rule `x1cjy9vyhq`). `check:changie`'s pass-count line is updated.
+       - Phase 1's CHANGELOG byte-reproduction must stay green.
+    2. **Capability `v0.1.1`.**
+       - PR resolution becomes: explicit `--pr <n>`, else the open PR for the current branch, else **no PR**, meaning `changie new` runs without `-m PR=`. It prints a note, never a skip.
+       - `gh` missing, `gh` auth failure and `no-open-pr` stop being skip reasons. When `gh` is present but errors, the run notes it and continues without a PR.
+       - `--pr 0` is still refused.
+       - `test/run.sh` legs are updated: RED first, then GREEN, with an executed-leg count.
+       - The README's install line switches to HTTPS (D-11 amendment), and a CHANGELOG or release note is added in the capability repo if one exists.
+    3. **Publish.** Push `main` and annotated tag `v0.1.1` to the PRIVATE repo, **pre-approved by the maintainer** (no checkpoint). Prove the tag from a clean HTTPS clone. Never re-point `v0.1.0`; never change visibility.
+    4. **Upgrade.** Upgrade codegraph-go's project-scope install AND the global install (added by 02-04's `global-install` answer) to `v0.1.1` through gsd-core verbs. Re-verify: the `capability.json` byte identity, `render-hooks verify:post`, and `~/.claude/skills/gsd-changie-fragments/` materialization.
+  - **Kept:** draft PR #88 stays open as the eventual milestone PR. This milestone's fragments may still carry `#88` via the open-PR lookup. The Phase 4 `fragment-required` gate remains the backstop that a fragment exists.
+  - **Reversibility:** reversible. Re-adding the requirement is a one-line config change plus guard re-points.
+- **D-14:** 02-04 Task 2 was answered **`global-install`** by the maintainer. `/gsd-changie-fragments` is materialized from a global-scope install, and this machine's global `~/.gsd` and `~/.claude/skills` gain the capability. 02-05's CONTRIBUTING text documents this per-machine step.
+
 ### Claude's Discretion
 - Script and test file names and layout inside the capability repository. SKILL.md wording beyond the rules above.
 - Whether the capability repository gets a minimal CI (shellcheck plus `test/run.sh`).
