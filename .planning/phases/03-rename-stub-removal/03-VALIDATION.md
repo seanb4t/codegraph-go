@@ -44,10 +44,10 @@ Task IDs are filled in once plans exist; rows are seeded per requirement from 03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | VERB-09 (SC1) | — | N/A | integration (spawned binary) | `GOTOOLCHAIN=go1.26.6 go test ./test/integration/... -run <rewritten-guard-name> -v` | ❌ W0 (rewrite of `renamed_stubs_test.go`) | ⬜ pending |
-| TBD | TBD | TBD | VERB-09 (SC2) | — | N/A | task + unit | `task docs:cli:drift`; `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -run 'TestEveryRegisteredFlagIsAccountedFor\|TestEveryCommandHasGroupID' -v` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | VERB-09 (SC2 census) | — | N/A | scripted census (positive control first) | `rg -nU -w --hidden 'codegraph\s+(query\|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .` → zero hits on the clean tree | ✅ (one-off instrument) | ⬜ pending |
-| TBD | TBD | TBD | CAP-05, VERB-09 (SC3/SC4) | — | N/A | process evidence at phase close | `git log --grep='Changie-Phase: 3' -1 --format='%H %(trailers:key=Changie-Phase,valueonly) %(trailers:key=Changie-Summaries,valueonly)'`; `task changie -- next auto` → `v0.15.0` | N/A (observed by the verifier) | ⬜ pending |
+| 03-01-T1 | 03-01 | 1 | VERB-09 (SC1) | T-03-01 | Removed verbs reach only cobra's unknown-command path; no alias or hint revives them | integration (spawned binary) | `GOTOOLCHAIN=go1.26.6 go test ./test/integration/ -run '^TestRemovedVerbsAreUnknownCommands$' -count=1 -v` | ❌ W0 (rewrite of `renamed_stubs_test.go` as `removed_verbs_test.go`, RED in Task 1) | ⬜ pending |
+| 03-01-T2 | 03-01 | 1 | VERB-09 (SC2) | T-03-02 | Mutations stay in a scratch worktree; the main checkout is never mutated | task + unit | `task docs:cli:drift`; `GOTOOLCHAIN=go1.26.6 go test ./internal/cli/ -run 'TestEveryRegisteredFlagIsAccountedFor\|TestEveryCommandHasGroupID' -v` | ✅ | ⬜ pending |
+| 03-01-T3 | 03-01 | 1 | VERB-09 (SC2 census) | T-03-03 | Positive control is never tracked; `.github` is clean before and after | scripted census (positive control first) | `rg -nU -w --hidden 'codegraph\s+(query\|unlock)' --glob '!.planning/**' --glob '!CHANGELOG.md' --glob '!web/build/**' --glob '!.git/**' .` → zero hits on the clean tree | ✅ (one-off instrument) | ⬜ pending |
+| phase close (verifier) | 03-01 must_haves | close | CAP-05, VERB-09 (SC3/SC4) | T-03-04, T-03-05 | Fragment written by the capability, not a task; kind and body accurate | process evidence at phase close | `git log --grep='Changie-Phase: 3' -1 --format='%H %(trailers:key=Changie-Phase,valueonly) %(trailers:key=Changie-Summaries,valueonly)'`; `task changie -- next auto` → `v0.15.0` | N/A (observed by the verifier) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

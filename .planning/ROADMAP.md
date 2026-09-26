@@ -230,11 +230,12 @@ Plans:
   4. With that fragment present, `changie next auto` on the milestone branch answers a minor bump over `v0.14.0` (predicted `v0.15.0`), not a major (VERB-09)
 
 **Notes**: The census instrument is v0.14.0's own, reused verbatim, including its `--hidden` correction and positive control — a zero-hit result from an instrument not first shown able to find a planted hit is not evidence. If the step does not fire, `CAP-05` stays open and is re-attempted at Phase 4's close (and Phase 5's after that); VERB-09's `Breaking` fragment is still required, but a hand-written one is recorded as hand-written and does not satisfy `CAP-05`. The capability skipping at a later close that has no user-visible change (Phase 4's gate is CI-only) is a useful second observation of `CAP-03`'s skip path, not a failure.
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 3 to break down)
+- [ ] 03-01-PLAN.md — Tracer RED-first removal of the `query`/`unlock` stubs in one `feat(cli)!:` commit, both guards proven RED against a revived verb, and the v0.14.0 census before/after with its positive control; the `Breaking` fragment is left to the capability at the close (VERB-09, CAP-05)
 
 #### Phase 4: Fragment-Required Gate
 
