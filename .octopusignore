@@ -1,0 +1,15 @@
+# Paths Octopus skips for review and indexing. Syntax: .gitignore.
+# Octopus reads this file from the PR base commit.
+
+# GSD planning artifacts
+.planning/
+
+# Built SvelteKit bundle, embedded by web/embed.go. The source is web/src/.
+web/build/
+
+# Protobuf codegen that the built-in list does not match (it matches *.pb.go)
+*.connect.go
+web/src/lib/gen/
+
+# Checksums of the isolated tool modfiles (the built-in list matches only go.sum)
+go.tool*.sum
