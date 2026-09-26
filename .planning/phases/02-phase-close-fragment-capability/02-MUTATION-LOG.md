@@ -161,9 +161,9 @@ Names the `custom[0]` key set, exactly as predicted.
 
 **Byte-clean revert proof:** `git -C "$S/wt" status --porcelain` — empty.
 
-**GREEN re-run (both):** `task -d "$S/wt" check:changie` ends "12 of 12 checks
-passed against a scratch copy (source tree byte-unchanged)"; the Go test prints
-`--- PASS: TestChangieConfigShape (0.00s)`.
+**GREEN re-run (both):** `task -d "$S/wt" check:changie` ends
+"check:changie: 12 of 12 checks passed against a scratch copy (source tree
+byte-unchanged)"; the Go test prints `--- PASS: TestChangieConfigShape (0.00s)`.
 
 ---
 
@@ -236,9 +236,9 @@ Fails on the `changeFormat` mismatch, exactly as predicted.
 
 **Byte-clean revert proof:** `git -C "$S/wt" status --porcelain` — empty.
 
-**GREEN re-run (both):** `task -d "$S/wt" check:changie` ends "12 of 12 checks
-passed against a scratch copy (source tree byte-unchanged)"; the Go test prints
-`--- PASS: TestChangieConfigShape (0.00s)`.
+**GREEN re-run (both):** `task -d "$S/wt" check:changie` ends
+"check:changie: 12 of 12 checks passed against a scratch copy (source tree
+byte-unchanged)"; the Go test prints `--- PASS: TestChangieConfigShape (0.00s)`.
 
 ---
 
@@ -293,9 +293,9 @@ Fails on the key set, exactly as predicted.
 
 **Byte-clean revert proof:** `git -C "$S/wt" status --porcelain` — empty.
 
-**GREEN re-run (both):** `task -d "$S/wt" check:changie` ends "12 of 12 checks
-passed against a scratch copy (source tree byte-unchanged)"; the Go test prints
-`--- PASS: TestChangieConfigShape (0.00s)`.
+**GREEN re-run (both):** `task -d "$S/wt" check:changie` ends
+"check:changie: 12 of 12 checks passed against a scratch copy (source tree
+byte-unchanged)"; the Go test prints `--- PASS: TestChangieConfigShape (0.00s)`.
 
 ---
 
