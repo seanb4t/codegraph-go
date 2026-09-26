@@ -6,10 +6,10 @@ current_phase: 3
 current_phase_name: Rename-Stub Removal
 status: planning
 stopped_at: Phase 2 complete, ready to plan Phase 3
-last_updated: "2026-09-26T17:25:10.323Z"
+last_updated: "2026-09-26T19:26:59.334Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
-state_head: 8ac92b1d689019fd14904a140c9ce80e5839b892
+state_head: 4d6049a45a84a59602ef523ea0b28bd0f3018052
 progress:
   total_phases: 6
   completed_phases: 2
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 2)
 Phase: 3 — Rename-Stub Removal
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-09-26 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-09-26 — Completed quick task 260926-it7: capability v0.1.2 (Phase 2 review findings WR-01, CR-01, IN-01) released and both installs repointed
 
 Progress: [███░░░░░░░] 33%
 
@@ -520,6 +520,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 | 260807-gho | Drop native Windows support — WSL2 only | 2026-08-07 | 085b7a3 | [260807-gho-drop-native-windows-support-wsl2-only](./quick/260807-gho-drop-native-windows-support-wsl2-only/) |
 | 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
 | 260913-pkp | Fix graphstore archtest to fail closed on per-package go/packages load errors (CR-01 sibling of a90b5457); todo 2026-09-08 resolved | 2026-09-13 | 2b553b62 | [260913-pkp-fix-graphstore-archtest-to-fail-closed-o](./quick/260913-pkp-fix-graphstore-archtest-to-fail-closed-o/) |
+| 260926-it7 | Release gsd-capability-changie v0.1.2 fixing Phase 2 review findings (WR-01 whole-string --pr, CR-01 check:changie leg 13, IN-01) and repoint project + global installs | 2026-09-26 | 4d6049a4 | [260926-it7-release-gsd-capability-changie-v0-1-2-fi](./quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/) |
 
 ## Deferred Items
 
