@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-25 after Phase 1)
+See: .planning/PROJECT.md (updated 2026-09-26 after Phase 2)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 02 — Phase-Close Fragment Capability
+**Current focus:** Phase 3 — Rename-Stub Removal
 
 ## Current Position
 
