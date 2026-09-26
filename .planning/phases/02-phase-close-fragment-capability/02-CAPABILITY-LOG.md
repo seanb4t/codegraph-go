@@ -345,3 +345,235 @@ custom:
 Both scratch projects (`$R`, `$R2`) and their capability installs were discarded (`mktemp -d`,
 never committed, never touched `$CAP` or codegraph-go's own working trees) — confirmed by `git
 status --porcelain` being clean in both real repositories immediately after each rehearsal run.
+
+## Mutation families
+
+**Scope:** per D-09, a guard is not trusted until it is shown RED. All three mutations below
+happened only in a disposable, detached `git worktree` under `mktemp -d` — `$CAP`'s own working
+tree was never touched. This log follows `01-MUTATION-LOG.md`'s convention (pre-mutation
+cleanliness gate, applied confirmation, verbatim RED transcript, byte-clean revert, GREEN
+re-run).
+
+## Pre-mutation cleanliness gate — the convention this log follows
+
+Before every tracked-file mutation, and before every revert, `git -C "$S/wt" diff --quiet`
+(scoped to the one mutated file) is asserted to exit 0 (clean). This proves no pre-existing
+tracked edit was overwritten by the mutation, and no revert was a destructive blind checkout of
+someone else's in-flight work. Every family entry below records this gate's result at the point
+it was checked.
+
+## Setup
+
+```
+$ git -C $CAP worktree list
+/Volumes/Code/github.com/seanb4t/gsd-capability-changie  5700e60 [main]
+
+$ git -C $CAP rev-parse HEAD
+5700e60fb497e033d87ff953c4e957444993628a
+
+$ S=$(mktemp -d)
+$ git -C $CAP worktree add --detach "$S/wt" HEAD
+Preparing worktree (detached HEAD 5700e60)
+HEAD is now at 5700e60 fix(02-02): reword the no-.claude/-path rule to avoid the literal substring it forbids
+```
+
+**Positive control** (`CHANGIE_BIN=<pinned changie build path> /bin/bash "$S/wt/test/run.sh"` —
+`test/run.sh` resolves `CAP_ROOT` from its own location, so this installs and exercises the
+worktree's own copy, not `$CAP`'s):
+
+```
+run.sh: changie <pinned changie build path> (changie version vdev)
+run.sh: found 2 fixture SUMMARY files (floor 2)
+...
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 29 of 29 legs passed against a scratch project
+```
+
+---
+
+## Family (a) — disabled-key skip guard (D-09, rule 84d1gfpywd)
+
+**What is tested, and why?** Whether the `[skip:disabled]` leg has teeth — that the script
+actually refuses to continue when `workflow.changie_fragments` is `false`, rather than the leg
+passing vacuously because the fixture never reaches that branch.
+
+**Pre-mutation gate:** `git -C "$S/wt" diff --quiet -- skills/changie-fragments/scripts/write-fragments.sh` exited 0 (clean).
+
+**Mutation applied:** changed the disabled-branch condition in
+`skills/changie-fragments/scripts/write-fragments.sh` line 158 from
+`if [ "${FRAGMENTS_ON}" = "false" ]; then` to
+`if [ "${FRAGMENTS_ON}" = "THIS_NEVER_MATCHES" ]; then` — the branch can never fire, so the
+script falls through past the disabled check regardless of the config value.
+
+**Applied confirmation:** `git -C "$S/wt" diff --numstat` showed exactly one file:
+
+```
+1	1	skills/changie-fragments/scripts/write-fragments.sh
+```
+
+**RED transcript** (verbatim):
+
+```
+run.sh: changie <pinned changie build path> (changie version vdev)
+run.sh: found 2 fixture SUMMARY files (floor 2)
+run.sh: init.phase-op 1 --pick phase_dir = <scratch work dir>/.planning/phases/01-fixture
+ok [ordering] config-set workflow.changie_command is rejected before install
+ok [install] capability install stages capability.json, SKILL.md, write-fragments.sh and the ledger
+ok [manifest] installed capability.json has id/role/engines/runtimeCompat/steps/config exactly as required
+run.sh: [dispatch-default] matching changie steps (key absent) = 1
+ok [dispatch-default] render-hooks verify:post lists exactly one changie step with the key absent
+run.sh: [dispatch-false] matching changie steps (key false) = 0
+ok [dispatch-false] render-hooks verify:post omits the changie step when the key is false
+run.sh: [dispatch-true] matching changie steps (key true) = 1
+ok [dispatch-true] render-hooks verify:post lists exactly one changie step with the key true
+ok [skip:gsd-tools-missing] GSD_TOOLS pointing at a nonexistent path skips cleanly
+::error::run.sh: [skip:disabled] expected 'skip: disabled:' in output, got: changie-fragments: skip: changie-unavailable: configured command 'changie' resolves to 'changie', which is not found
+```
+
+Exit code: 1. With the disabled branch neutralized, the script fell through to the next
+preflight check (`changie-unavailable`, because the fixture at this point in the run has not
+yet configured a resolvable `changie` command) instead of skipping with `disabled` — a genuine
+assertion failure on planned behavior, not a harness crash.
+
+**Revert:** `git -C "$S/wt" checkout -- skills/changie-fragments/scripts/write-fragments.sh`.
+
+**Byte-clean revert proof:** `git -C "$S/wt" diff --quiet` exited 0; `git -C "$S/wt" status
+--porcelain` — empty.
+
+**GREEN re-run:**
+
+```
+...
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 29 of 29 legs passed against a scratch project
+```
+
+---
+
+## Family (b) — explicit-pathspec write guard (D-09, D-08, rule 84d1gfpywd)
+
+**What is tested, and why?** Whether the `[write]`/`[commit-scope]` legs have teeth — that the
+fragment commit really is scoped to only the fragment files this run wrote (D-08: "never `git
+add -A` or `git add .`"), rather than the legs passing vacuously because nothing else happens
+to be dirty in the fixture at write time.
+
+**Pre-mutation gate:** `git -C "$S/wt" diff --quiet -- skills/changie-fragments/scripts/write-fragments.sh` exited 0 (clean).
+
+**Mutation applied:** broadened the staging call in
+`skills/changie-fragments/scripts/write-fragments.sh` line 455 from
+`git add -- "${WRITTEN_FILES[@]}"` to `git add -A` — stages the whole working tree instead of
+only the fragment files this run wrote.
+
+**Applied confirmation:** `git -C "$S/wt" diff --numstat` showed exactly one file:
+
+```
+1	1	skills/changie-fragments/scripts/write-fragments.sh
+```
+
+**RED transcript** (verbatim, truncated to the failing leg and its context):
+
+```
+...
+ok [bad-pr] --pr 0, --pr abc and --pr -5 all exit 2 with error: bad-pr
+::error::run.sh: [write] HEAD's file set does not equal the 3 new fragment files
+  HEAD files: .changes/unreleased/Features-20260925-210407.905589000.yaml
+.changes/unreleased/Features-20260925-210407.956593000.yaml
+.changes/unreleased/Fixes-20260925-210408.008645000.yaml
+.gsd-capabilities.json
+.gsd/capabilities/changie
+.planning/ROADMAP.md
+.planning/config.json
+  new files:  .changes/unreleased/Features-20260925-210407.905589000.yaml
+.changes/unreleased/Features-20260925-210407.956593000.yaml
+.changes/unreleased/Fixes-20260925-210408.008645000.yaml
+```
+
+Exit code: 1. **[write] fired** (not [commit-scope]) — with `git add -A`, the fragment commit
+picked up the fixture's own untracked install artifacts (`.gsd-capabilities.json`,
+`.gsd/capabilities/changie`) and unrelated tracked edits (`.planning/ROADMAP.md`,
+`.planning/config.json`) alongside the 3 fragment files, so the first leg to compare HEAD's file
+set against the expected 3-file set (`[write]`) caught it before `[commit-scope]` ever ran.
+
+**Revert:** `git -C "$S/wt" checkout -- skills/changie-fragments/scripts/write-fragments.sh`.
+
+**Byte-clean revert proof:** `git -C "$S/wt" diff --quiet` exited 0; `git -C "$S/wt" status
+--porcelain` — empty.
+
+**GREEN re-run:**
+
+```
+...
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 29 of 29 legs passed against a scratch project
+```
+
+---
+
+## Family (c) — trailer idempotency guard (D-07, D-09, rule 84d1gfpywd)
+
+**What is tested, and why?** Whether the `[idempotent]` leg has teeth — that a re-run for
+already-covered summaries really is recognized as covered via the `Changie-Phase`/
+`Changie-Summaries` trailers, rather than the leg passing vacuously because the covered set
+happens to already be empty going in.
+
+**Pre-mutation gate:** `git -C "$S/wt" diff --quiet -- skills/changie-fragments/scripts/write-fragments.sh` exited 0 (clean).
+
+**Mutation applied:** replaced the covered-set computation in
+`skills/changie-fragments/scripts/write-fragments.sh` line 282 —
+`COVERED=$(printf '%s' "${COVERED_RAW}" | tr ',' '\n' | sed '/^$/d' | sort -u)` — with
+`COVERED=""`, so the trailer read is discarded and every summary always reads as pending.
+
+**Applied confirmation:** `git -C "$S/wt" diff --numstat` showed exactly one file:
+
+```
+1	1	skills/changie-fragments/scripts/write-fragments.sh
+```
+
+**RED transcript** (verbatim, truncated to the failing leg and its context):
+
+```
+...
+ok [write] --list prints pr/pending/kinds and --write commits exactly 3 fragments with correct trailers
+::error::run.sh: [idempotent] expected 'skip: already-recorded:' in output, got: changie-fragments: phase 01 <scratch work dir>/.planning/phases/01-fixture
+changie-fragments: range main..HEAD
+changie-fragments: kinds Breaking,Features,Fixes,Performance,Dependencies
+changie-fragments: pr 4242
+changie-fragments: pending 01-01 <scratch work dir>/.planning/phases/01-fixture/01-01-SUMMARY.md
+changie-fragments: pending 01-02 <scratch work dir>/.planning/phases/01-fixture/01-02-SUMMARY.md
+```
+
+Exit code: 1. With `COVERED` forced empty, the already-written fragment commit's trailers are
+never consulted, so both summaries read as pending again on the re-run — exactly the double-write
+hazard D-07's idempotency check exists to catch.
+
+**Revert:** `git -C "$S/wt" checkout -- skills/changie-fragments/scripts/write-fragments.sh`.
+
+**Byte-clean revert proof:** `git -C "$S/wt" diff --quiet` exited 0; `git -C "$S/wt" status
+--porcelain` — empty.
+
+**GREEN re-run:**
+
+```
+...
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 29 of 29 legs passed against a scratch project
+```
+
+---
+
+## Teardown
+
+```
+$ git -C $CAP worktree remove "$S/wt"
+$ git -C $CAP worktree list
+/Volumes/Code/github.com/seanb4t/gsd-capability-changie  5700e60 [main]
+
+$ git -C $CAP status --porcelain
+(empty)
+
+$ git -C $CAP rev-parse HEAD
+5700e60fb497e033d87ff953c4e957444993628a
+```
+
+One worktree, a clean status, and HEAD unchanged from the pre-mutation value recorded in Setup —
+no worktree or edit was left behind.
