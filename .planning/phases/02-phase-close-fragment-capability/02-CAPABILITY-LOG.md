@@ -436,6 +436,157 @@ run.sh: 32 of 32 legs passed against a scratch project
 305c2c4 feat(02-06): turn gh failures into notes with redacted stderr and validate the looked-up PR (D-13)
 ```
 
+## 02-06 Task 3 — v0.1.1 publish and upgrade
+
+### `$CAP` commit trail v0.1.0..v0.1.1
+
+```
+57dcbc4 test(02-06): add failing no-open-PR note and no-PR write proofs
+5e1b9d0 feat(02-06): write fragments without a PR number when no open PR is found (D-13)
+91c3754 test(02-06): add failing gh-failure note, redaction, invalid-lookup and required-PR-host proofs
+305c2c4 feat(02-06): turn gh failures into notes with redacted stderr and validate the looked-up PR (D-13)
+35b674e docs(02-06): document the optional PR, HTTPS install and notes for v0.1.1
+```
+
+### Tag creation, fast-forward push, and ls-remote proof
+
+```
+$ git -C $CAP -c tag.gpgsign=false tag -a v0.1.1 -F <release-note-file>
+$ git -C $CAP fetch origin
+$ git -C $CAP merge-base --is-ancestor origin/main main   # exit 0: fast-forward-safe
+$ git -C $CAP push origin main
+   5700e60..35b674e  main -> main
+$ git -C $CAP push origin refs/tags/v0.1.1
+ * [new tag]         v0.1.1 -> v0.1.1
+```
+
+```
+$ gh repo view seanb4t/gsd-capability-changie --json visibility --jq .visibility
+PRIVATE
+
+$ GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/seanb4t/gsd-capability-changie.git
+35b674eb13a7dbd64932648840dc9f447c95dda3	HEAD
+35b674eb13a7dbd64932648840dc9f447c95dda3	refs/heads/main
+60d4967ad300643b30f4d947e64a459974c9ed9f	refs/tags/v0.1.0
+5700e60fb497e033d87ff953c4e957444993628a	refs/tags/v0.1.0^{}
+7305b9e46a5a60e62a2b9ec4b94b6561c3367ea9	refs/tags/v0.1.1
+35b674eb13a7dbd64932648840dc9f447c95dda3	refs/tags/v0.1.1^{}
+```
+
+`v0.1.0`'s tag object and its peeled commit are byte-identical to their
+pre-publish values (unchanged). `v0.1.1` peels to the same commit as
+`refs/heads/main`. The repository is still PRIVATE.
+
+### Clean HTTPS clone at v0.1.1 (32 of 32)
+
+```
+$ GIT_TERMINAL_PROMPT=0 git clone --branch v0.1.1 https://github.com/seanb4t/gsd-capability-changie.git <scratch>
+$ CHANGIE_BIN=<pinned changie build path> /bin/bash <scratch>/test/run.sh
+...
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 32 of 32 legs passed against a scratch project
+```
+
+### Scratch-install transcripts
+
+At v0.1.1, in a fresh scratch GSD project:
+
+```
+$ gsd-tools capability install "https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1" --scope project --raw
+{
+  "status": "installed",
+  "id": "changie",
+  "version": "0.1.1",
+  "scope": "project",
+  ...
+}
+```
+
+`cmp` of the installed `capability.json` against `git -C $CAP show
+v0.1.1:capability.json` — exit 0, byte-identical.
+
+At v0.1.0, in another fresh scratch GSD project (the `<interfaces>`
+prediction):
+
+```
+$ gsd-tools capability install "https://github.com/seanb4t/gsd-capability-changie.git#v0.1.0" --scope project --raw
+Error: capability install blocked: git checkout "v0.1.0" failed (exit 128): fatal: invalid reference: v0.1.0
+```
+
+Exit 1. The `<interfaces>` prediction held: once `main` moved past `v0.1.0`,
+the depth-1 clone no longer sees that tag.
+
+### Project install upgrade (codegraph-go)
+
+**Before:** `{"version":"0.1.0","source":"https://github.com/seanb4t/gsd-capability-changie.git#v0.1.0"}`;
+`git status --porcelain --untracked-files=all -- . ':(exclude).planning/phases'` — empty.
+
+```
+$ gsd-tools capability install "https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1" --scope project --raw
+{
+  "status": "installed",
+  "id": "changie",
+  "version": "0.1.1",
+  "scope": "project",
+  ...
+}
+```
+
+**After:** `.gsd/capabilities/changie/capability.json` `cmp`s equal to `git -C
+$CAP show v0.1.1:capability.json`. Ledger reads
+`{"version":"0.1.1","source":"https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1"}`.
+`workflow.changie_fragments` = `true`, `workflow.changie_command` = `task
+changie --`. `render-hooks verify:post` changie-step count = 1.
+
+Live no-checkpoint proof (`--list` twice, tree porcelain identical before and
+after both):
+
+```
+$ bash .gsd/capabilities/changie/skills/changie-fragments/scripts/write-fragments.sh --phase 2 --list
+changie-fragments: phase 02 .../02-phase-close-fragment-capability
+changie-fragments: range main..HEAD
+changie-fragments: kinds Breaking,Features,Fixes,Performance,Dependencies
+changie-fragments: pr 88
+changie-fragments: pending 02-01 ...
+changie-fragments: pending 02-02 ...
+changie-fragments: pending 02-03 ...
+changie-fragments: pending 02-04 ...
+
+$ CHANGIE_FRAGMENTS_GH=/no/such/gh-binary bash .../write-fragments.sh --phase 2 --list
+changie-fragments: note: gh-missing: gh executable '/no/such/gh-binary' not found
+changie-fragments: phase 02 ...
+changie-fragments: pr none
+...
+```
+
+`pr 88` while draft PR #88 is open (live no-PR path proven with the
+gh-missing override). `git status --porcelain --untracked-files=all -- . :
+(exclude).planning/phases` was empty before and after both runs.
+
+### Global install upgrade
+
+**Before:** `{"version":"0.1.0","source":"https://github.com/seanb4t/gsd-capability-changie.git#v0.1.0"}`.
+Global skills listing: 142 entries. Content snapshot (cksum of every regular
+file outside `gsd-changie-fragments/`): 1193 lines.
+
+```
+$ gsd-tools capability install "https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1" --scope global --raw
+{ "status": "installed", "id": "changie", "version": "0.1.1", "scope": "global", ... }
+
+$ gsd-tools capability set changie --enable --runtime claude --scope global
+{ "id": "changie", "enabled": true, "surfaced": true, "installed": true }
+```
+
+**After:**
+- `comm -3` of the before/after skills-directory names listings — empty (nothing added, nothing removed).
+- The content snapshot (cksum of every file outside `gsd-changie-fragments/`) — byte-identical before and after (`diff` empty).
+- The materialized `SKILL.md` differs from the saved before-copy (as expected — it changed), and `cmp`s equal to `git -C $CAP show v0.1.1:skills/changie-fragments/SKILL.md`.
+- `.gsd-capability-skill` marker contains `changie`.
+- `~/.gsd/capabilities/changie/capability.json` `cmp`s equal to `git -C $CAP show v0.1.1:capability.json`.
+- Global ledger reads `{"version":"0.1.1","source":"https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1"}`.
+- codegraph-go's `render-hooks verify:post` changie-step count is still 1.
+- codegraph-go's tracked-file check (`git status --porcelain --untracked-files=all -- . ':(exclude).planning/phases'`) remained empty after both upgrades.
+
 <!-- gsd:write-continue-cap -->
 
 ## Judgment rehearsal (SKILL.md followed by the executor, pre-publication)
