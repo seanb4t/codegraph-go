@@ -157,3 +157,191 @@ run.sh: 29 of 29 legs passed against a scratch project
 
 `shellcheck` (0.11.0) remains clean on all four executables after the Task 2 changes.
 `git -C $CAP status --porcelain` is empty after the Task 2 commit.
+
+## Judgment rehearsal (SKILL.md followed by the executor, pre-publication)
+
+**Purpose (D-06, T-02-08):** the real Skill-tool dispatch comes in 02-05, after
+materialization. This rehearsal follows `$CAP/skills/changie-fragments/SKILL.md` exactly as
+written, pre-publication, so a wording defect is caught while the tag is still free to move.
+The executor acted as the model half here, using no knowledge SKILL.md itself did not supply.
+
+**SKILL.md commit it ran against:** `715cc9a docs(02-02): add README and MIT license` (SKILL.md
+itself was last touched in `8a6de32`, Task 2 of 02-01; unchanged since).
+
+**Fixture project setup** (mirrors `test/run.sh`'s own fixture build, in a fresh `mktemp -d`
+scratch directory `$R`):
+
+```
+$ cd "$R"
+$ git init -b main -q
+$ git config user.email "test@example.com"
+$ git config user.name "test"
+$ git config commit.gpgsign false
+$ mkdir -p .changes/unreleased
+$ cp $CAP/test/fixtures/changie.yaml .changie.yaml
+$ touch .changes/unreleased/.gitkeep
+$ gsd-tools config-new-project
+{
+  "created": true,
+  "path": ".planning/config.json"
+}
+$ mkdir -p .planning/phases/01-fixture
+$ cat > .planning/ROADMAP.md <<'EOF'
+# Roadmap
+
+## Phases
+
+### Phase 1: Fixture
+EOF
+$ cp $CAP/test/fixtures/phase/01-01-SUMMARY.md .planning/phases/01-fixture/01-01-SUMMARY.md
+$ cp $CAP/test/fixtures/phase/01-02-SUMMARY.md .planning/phases/01-fixture/01-02-SUMMARY.md
+$ git add -A && git commit -q -m "baseline"
+$ git checkout -b gsd/fixture-milestone -q
+```
+
+**Capability install and config, at project scope:**
+
+```
+$ gsd-tools capability install $CAP --scope project --raw
+{
+  "status": "installed",
+  "id": "changie",
+  "version": "0.1.0",
+  "scope": "project",
+  "disclosure": [...]
+}
+$ CHB="$(cd /Volumes/Code/github.com/seanb4t/codegraph-go && GOWORK=off go tool -modfile=go.tool-changie.mod -n changie)"
+# CHB = /Users/sean/Library/Caches/go-build/2f/2fe2f32e74fb59c69ef1f4f6661faa9bf90386be2fe91a042a6356f109956249-d/changie
+$ gsd-tools query config-set workflow.changie_command "$CHB" --raw
+workflow.changie_command=<CHB path>
+```
+
+**Skill dispatch, followed exactly as SKILL.md steps 1-7, arguments `1 --pr 4242 --repo "$R"`:**
+
+Step 2 (locate the script) resolved to
+`$R/.gsd/capabilities/changie/skills/changie-fragments/scripts/write-fragments.sh`, which
+existed and was executable.
+
+Step 3 `--list` output:
+
+```
+changie-fragments: phase 01 <R>/.planning/phases/01-fixture
+changie-fragments: range main..HEAD
+changie-fragments: kinds Breaking,Features,Fixes,Performance,Dependencies
+changie-fragments: pr 4242
+changie-fragments: pending 01-01 <R>/.planning/phases/01-fixture/01-01-SUMMARY.md
+changie-fragments: pending 01-02 <R>/.planning/phases/01-fixture/01-02-SUMMARY.md
+```
+
+No `skip:` line — both SUMMARYs were read (step 4).
+
+Step 5 judgment: `01-01` (WIDGET-03, "Added a `--json` flag to `widget list`...") is
+user-visible — a CLI flag a user can observe. Kind `Features` (from the `kinds` line). `01-02`
+("Added a shellcheck CI job, refactored an internal test helper, and updated planning docs —
+no user-visible change") is CI/test/planning-only — not user-visible, no entry written for it.
+
+Step 6 entries file (one line, `<Kind><TAB><Body>`, written with the file tool, no shell
+string):
+
+```
+Features	Added a --json flag to widget list that prints one JSON object per widget, one per line.
+```
+
+Step 7 write, `--summaries 01-01,01-02` (both pending ids, per SKILL.md's instruction to pass
+"the exact ids from the pending lines"):
+
+```
+$ bash <script> --phase 1 --pr 4242 --repo "$R" --write --summaries 01-01,01-02 --entries <file>
+changie-fragments: wrote 1 fragment(s) in bf67b90: .changes/unreleased/Features-20260925-203052.882197000.yaml
+```
+
+Script's last line, reported verbatim: `changie-fragments: wrote 1 fragment(s) in bf67b90:
+.changes/unreleased/Features-20260925-203052.882197000.yaml`
+
+**Trailer read** (own-line transcript):
+
+```
+$ git -C "$R" log -1 --format='%(trailers:key=Changie-Summaries,valueonly)'
+01-01,01-02
+```
+
+**Assertions and results:**
+
+| Assertion | Result |
+|---|---|
+| `git -C "$R" log -1 --format=%s` is `docs(01): add changelog fragments` | PASS — `docs(01): add changelog fragments` |
+| Changie-Summaries trailer is `01-01,01-02` | PASS — `01-01,01-02` |
+| `git -C "$R" show --name-only --format= HEAD` lists exactly one file | PASS — `.changes/unreleased/Features-20260925-203052.882197000.yaml` |
+| That file contains `kind: Features` and `PR: "4242"` | PASS |
+| Its `body:` line contains `--json` | PASS |
+| `rg '^body:' <file> \| rg -o 'WIDGET-\|\bD-[0-9]+\|\b0[0-9]-0[0-9]\b' \| wc -l` prints 0 | PASS — `0` |
+
+Fragment file content:
+
+```yaml
+kind: Features
+body: Added a --json flag to widget list that prints one JSON object per widget, one per line.
+time: 2026-09-25T20:30:52.882197-04:00
+custom:
+    PR: "4242"
+```
+
+**Outcome, first pass:** all six rehearsal assertions above passed. But this task's own
+acceptance criteria include a separate, broader check — `rg -F -o '.claude/' SKILL.md | wc -l`
+prints 0 — and that one FAILED: SKILL.md's own Rules section carried the line "Keep any
+`` `.claude/` `` path out of this file's body — the script resolves its own location without
+one," which names the very substring it forbids. This is SKILL.md's wording defect, per the
+plan's own framing (the rule *about* not referencing a `.claude/` path violated itself).
+
+**Fix applied in `$CAP`:** reworded the line to describe the same restriction without the
+literal substring:
+
+```diff
+-- Keep any `.claude/` path out of this file's body — the script resolves
+-  its own location without one.
++- Keep any host-specific installed-skill directory path out of this file's
++  body — the script resolves its own location without one.
+```
+
+Committed as `fix(02-02): reword the no-.claude/-path rule to avoid the literal substring it
+forbids` (`5700e60`). `rg -F -o '.claude/' SKILL.md | wc -l` now prints `0`.
+
+**Re-run to 29 of 29** (`CHANGIE_BIN=<pinned changie build path> bash $CAP/test/run.sh`, HEAD
+`5700e60`):
+
+```
+...
+ok [no-side-effects] $CAP_ROOT and the global Claude skills listing are unchanged
+run.sh: 29 of 29 legs passed against a scratch project
+```
+
+**Repeat rehearsal, fresh scratch project `$R2`** (identical setup to `$R`, install at HEAD
+`5700e60`), same arguments `1 --pr 4242 --repo "$R2"`:
+
+```
+$ bash <script> --phase 1 --pr 4242 --repo "$R2" --write --summaries 01-01,01-02 --entries <file>
+changie-fragments: wrote 1 fragment(s) in dc2b4ed: .changes/unreleased/Features-20260925-204931.456062000.yaml
+```
+
+| Assertion | Result |
+|---|---|
+| `git -C "$R2" log -1 --format=%s` is `docs(01): add changelog fragments` | PASS |
+| Changie-Summaries trailer is `01-01,01-02` | PASS — `01-01,01-02` |
+| `git -C "$R2" show --name-only --format= HEAD` lists exactly one file | PASS — `.changes/unreleased/Features-20260925-204931.456062000.yaml` |
+| That file contains `kind: Features` and `PR: "4242"` | PASS |
+| Its `body:` line contains `--json` | PASS |
+| `rg '^body:' <file> \| rg -o 'WIDGET-\|\bD-[0-9]+\|\b0[0-9]-0[0-9]\b' \| wc -l` prints 0 | PASS — `0` |
+
+Fragment file content (`$R2`):
+
+```yaml
+kind: Features
+body: Added a --json flag to widget list that prints one JSON object per widget, one per line.
+time: 2026-09-25T20:49:31.456062-04:00
+custom:
+    PR: "4242"
+```
+
+Both scratch projects (`$R`, `$R2`) and their capability installs were discarded (`mktemp -d`,
+never committed, never touched `$CAP` or codegraph-go's own working trees) — confirmed by `git
+status --porcelain` being clean in both real repositories immediately after each rehearsal run.
