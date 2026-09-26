@@ -464,6 +464,9 @@ Standing decisions that outlive every milestone:
 ### Pending Todos
 
 - [2026-08-14] [bench] tools/bench/runner pinnedAt() validates a checkout by git rev-parse HEAD alone — the HEAD-only anti… — [todo file](.planning/todos/pending/2026-08-14-bench-pinnedat-validates-a-checkout-by-git-rev-parse-head-alone.md)
+- [2026-09-25] [release] Adopt changie for changelog + version and replace release-please with a changie release-PR workflow — [todo file](.planning/todos/pending/2026-09-25-adopt-changie-replace-release-please.md)
+- [2026-09-25] [server-mode] Reply on GH #85 / #82 / #80 with the reshaped contract from the 2026-09-25 exploration so fovea's Phase 15 plan updates — [todo file](.planning/todos/pending/2026-09-25-reply-on-gh-85-with-reshaped-contract.md)
+- [2026-09-26] [build] Pin the Go toolchain so Go 1.27 can build codegraph-go — [todo file](.planning/todos/pending/2026-09-26-pin-the-go-toolchain-so-go-1-27-can-build-codegraph-go.md)
 
 ### Blockers/Concerns
 
