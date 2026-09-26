@@ -1,12 +1,135 @@
 ---
 phase: 02-phase-close-fragment-capability
 plan: 05
-status: in-progress
+subsystem: infra
+tags: [gsd-core, capability, changie, skills, docs, contributing]
+
+# Dependency graph
+requires:
+  - phase: 02-phase-close-fragment-capability
+    provides: "changie capability v0.1.1 installed and materialized at project and global scope, with the PR field optional (02-01..02-04, 02-06)"
+provides:
+  - "Real Skill(gsd-changie-fragments) dispatch proof against a fixture phase, through the exact resolution a phase close uses"
+  - "CONTRIBUTING.md documents the one-time per-clone and per-machine capability setup, the manual fallback, the fragment-required backstop, and the manual re-run"
+affects: [phase-03-close]
+
+# Actuals (#2632)
+actuals:
+  tokens: 4318
+  tasks: 2
+  commits: 2
+plan_head_before: ecd9a939834b0f516dcca9b086a0aee9a4f41495
+
+# Tech tracking
+tech-stack:
+  added: []
+  patterns:
+    - "Fixture-project Skill-tool dispatch proof: build a throwaway git repo with an isolated GSD_HOME, install the pinned capability tag at project scope, then invoke the skill by name through the Skill tool exactly as a real phase close would."
+
+key-files:
+  created: []
+  modified:
+    - CONTRIBUTING.md
+
+key-decisions:
+  - "Task 1's own <files> is 02-05-SUMMARY.md, so its Task-1 commit deliberately wrote the '## Real skill dispatch' section as an atomic per-task commit (docs(02-05): record real skill dispatch transcript), ahead of this plan's final metadata revision — matching the plan's own task-level file scoping rather than deferring all SUMMARY content to the standard end-of-plan write."
+  - "The fixture project's GSD_HOME was isolated to an empty scratch directory for the whole build and dispatch, mirroring 02-06's fix — the maintainer's own global changie install (02-04, D-14) otherwise leaks workflow.changie_command/workflow.changie_fragments into a fresh scratch project's federated config schema on this machine. No real global state was touched."
+
+patterns-established: []
+
+requirements-completed: [CAP-03, CAP-04]
+
+coverage:
+  - id: D1
+    description: "Real Skill(gsd-changie-fragments) dispatch against a fixture phase writes exactly one plain, jargon-free Features fragment with the D-07 trailers (Changie-Phase, Changie-Summaries) and the requested PR number, and writes nothing for the planning-only change"
+    requirement: "CAP-03"
+    verification:
+      - kind: other
+        ref: "Skill-tool dispatch transcript in 02-05-SUMMARY.md '## Real skill dispatch (judgment half)' — 8/8 assertions PASS"
+        status: pass
+    human_judgment: false
+  - id: D2
+    description: "A second dispatch with the same arguments reports skip: already-recorded (D-07 idempotency) through the real dispatch path, with no second commit"
+    requirement: "CAP-03"
+    verification:
+      - kind: other
+        ref: "second `--list` invocation transcript in 02-05-SUMMARY.md"
+        status: pass
+    human_judgment: false
+  - id: D3
+    description: "CONTRIBUTING.md documents the one-time per-clone and per-machine capability install (D-12), the private-repository manual fallback, the fragment-required backstop, and the manual re-run including the no-open-PR case; the change is one hunk and TestContributingReferencesRealTaskTargets still passes"
+    requirement: "CAP-04"
+    verification:
+      - kind: integration
+        ref: "internal/upgrade/taskfile_shape_test.go#TestContributingReferencesRealTaskTargets"
+        status: pass
+      - kind: other
+        ref: "diff hunk count (1), section ordering check, commit-subject check"
+        status: pass
+    human_judgment: false
+
+# Metrics
+duration: ~45min
+completed: 2026-09-26
+status: complete
 ---
 
 # Phase 2 Plan 5: Real Skill Dispatch and Contributor Documentation Summary
 
-_(Task 1 of 2 committed. This file is completed after Task 2.)_
+**Proved the changie-fragments capability's judgment half through the real `Skill(gsd-changie-fragments)` dispatch path against a fixture phase, and documented the per-clone/per-machine capability setup in CONTRIBUTING.md.**
+
+## Performance
+
+- **Duration:** ~45 min
+- **Tasks:** 2/2 completed
+- **Files modified:** 2 (`02-05-SUMMARY.md` created, `CONTRIBUTING.md` modified)
+
+## Accomplishments
+
+- **Task 1 — real Skill-tool dispatch.** Invoked `Skill(skill="gsd-changie-fragments", args="1 --pr 4242 --repo <R>")` against a fresh, GSD_HOME-isolated fixture project built from the `gsd-capability-changie` v0.1.1 fixtures. The dispatch wrote exactly one `Features` fragment for the user-visible `WIDGET-03` change, none for the planning-only change, with correct `Changie-Phase`/`Changie-Summaries` trailers, `PR: "4242"`, a jargon-free body containing `--json`, and a second dispatch reporting `skip: already-recorded`. All 8 assertions passed on the first attempt — no `SKILL.md` wording defect found, so no `v0.1.2` tag was needed.
+- **Task 2 — CONTRIBUTING documentation.** Added `### Changelog fragments at phase close` under `## What .planning/ is`, documenting the one-time per-clone install, the one-time per-machine global install (and why both are needed), the private-repository manual fallback (`task changie -- new`), the `fragment-required` backstop, and the manual `/gsd-changie-fragments` re-run including the no-open-PR note behavior. The change is a single diff hunk and `TestContributingReferencesRealTaskTargets` still passes.
+
+## Task Commits
+
+Each task was committed atomically:
+
+1. **Task 1: Dispatch gsd-changie-fragments through the Skill tool against the fixture phase and assert the judgment outcome** — `9ff51d0f` (docs)
+2. **Task 2: Document the per-clone and per-machine capability setup in CONTRIBUTING (D-12)** — `0d2410f1` (docs)
+
+**Plan metadata:** this SUMMARY's own commit (below).
+
+## Files Created/Modified
+
+- `.planning/phases/02-phase-close-fragment-capability/02-05-SUMMARY.md` — this file; created by Task 1, completed here.
+- `CONTRIBUTING.md` — added the `### Changelog fragments at phase close` subsection (D-12).
+
+## Decisions Made
+
+- See `key-decisions` in frontmatter: the GSD_HOME isolation for the fixture project, and Task 1's per-task SUMMARY.md commit matching the plan's own file scoping.
+
+## Deviations from Plan
+
+None - plan executed exactly as written. Both tasks' assertions and acceptance criteria passed without needing a fix-and-retry cycle.
+
+## Issues Encountered
+
+One near-miss, self-corrected before commit: the first draft of the CONTRIBUTING subsection wrapped the literal phrase "without a PR number" across a line break, which would have silently failed the plan's `rg -F -o -- "without a PR number"` acceptance check (a fixed-string search does not span line breaks). Caught by running the plan's own acceptance-criteria commands before committing; reworded to keep the phrase on one line. No commit was made with the defect present.
+
+## Threat Flags
+
+None — this plan's threat register (T-02-01, T-02-20, T-02-21) was verified directly: the fixture dispatch ran in a throwaway `mktemp -d` repository (never codegraph-go itself), the outcome was asserted against the exact expected fragment/trailers with a stop-and-decide path available had it failed, and CONTRIBUTING.md publishes only the name and install spec already public via CAP-01/CAP-04.
+
+## User Setup Required
+
+None — CONTRIBUTING.md documents the setup for other contributors/clones; no action required on this machine beyond what 02-04/02-06 already performed.
+
+## Next Phase Readiness
+
+CAP-03's judgment half and CAP-04's documentation half are both proven and committed. Phase 3's close remains where CAP-05 (the capability's first real, non-fixture firing) is proven — its fragment will resolve `pr 88` from the still-open draft milestone PR, or write without a PR number if that PR has since merged or closed.
+
+---
+*Phase: 02-phase-close-fragment-capability*
+*Completed: 2026-09-26*
 
 ## Real skill dispatch (judgment half)
 
@@ -184,3 +307,12 @@ surfaced, so no `checkpoint:decision` was needed and no `v0.1.2` tag is required
 / `.gsd-capabilities.json` install output — the fragment commit itself touched
 exactly the one fragment file (D-08 explicit-pathspec discipline held). No
 `changie-fragments.lock` directory was left behind under `$R/.git`.
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/02-phase-close-fragment-capability/02-05-SUMMARY.md`, `CONTRIBUTING.md`.
+- FOUND commits in `git log --oneline --all`: `9ff51d0f` (Task 1), `0d2410f1` (Task 2).
+- Re-ran Task 1's plan-level `<verify>` (docs(01) subject + skip: already-recorded) — PASS.
+- Re-ran Task 1's acceptance criteria (heading present, `kind: Features`, `01-01,01-02`, `gsd-changie-fragments`) — all present.
+- Re-ran Task 2's plan-level `<verify>` — `TestContributingReferencesRealTaskTargets` PASS; all 8 required literal strings present in `CONTRIBUTING.md`.
+- Re-ran Task 2's acceptance criteria — subsection sits inside `## What .planning/ is` (lines 196 < 206 < 246), the documenting commit is one hunk, and the commit subject matches exactly.

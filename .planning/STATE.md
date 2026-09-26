@@ -4,17 +4,17 @@ milestone: v0.15.0
 milestone_name: Changie Release Management
 current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
-status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-09-26T15:54:17.108Z"
+status: verifying
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-09-26T16:10:21.727Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 02 execution started
-state_head: 4cb1b182572d93fc79cee689ad1e9722b8c8f466
+state_head: 0d2410f15a390d8c6af1a96b625be946b4c2f008
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 17
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-25 after Phase 1)
 
 Phase: 02 (Phase-Close Fragment Capability) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-25 — Phase 02 execution started
 
 Progress: [██░░░░░░░░] 17%
@@ -193,6 +193,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P03 | 35min | 2 tasks | 1 files |
 | Phase 02 P04 | 35min | 3 tasks | 2 files |
 | Phase 02 P06 | 70min | 3 tasks | 15 files |
+| Phase 02 P05 | 45min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -457,6 +458,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: Task 2 checkpoint (blocking-human): maintainer chose global-install to materialize gsd-changie-fragments for Claude Code, recorded as D-14
 - [Phase 02]: [Phase 02-06]: GSD_HOME isolated in gsd-capability-changie's test/run.sh (Rule 3 deviation) — a machine with the capability already installed at global scope (02-04, D-14) leaked workflow.changie_command/workflow.changie_fragments into every scratch project's federated config schema, breaking the [ordering] leg. Fixed by exporting an isolated, empty GSD_HOME for the whole scratch test run.
 - [Phase 02]: [Phase 02-06]: gsd-core 1.14.0 installs a git capability via a depth-1 clone of the default branch, so once main advances past a tag, that older tag stops installing (confirmed live: #v0.1.0 failed with "git checkout failed" after v0.1.1 was pushed). Every future capability release must move main to its new tag before publishing.
+- [Phase 02]: Task 1's per-task SUMMARY.md commit matches the plan's own file scoping (02-05) — The plan's Task 1 <files> was 02-05-SUMMARY.md, so the dispatch transcript was committed atomically as part of Task 1 rather than deferred to the end-of-plan write
+- [Phase 02]: Isolated GSD_HOME for the 02-05 fixture-project dispatch proof — The maintainer's global changie install (02-04, D-14) leaks workflow.changie_command/workflow.changie_fragments into a fresh scratch project's federated config schema on this machine, mirroring 02-06's fix
 
 ### Pending Todos
 
@@ -613,8 +616,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-26T15:54:17.084Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-09-26T16:10:21.706Z
+Stopped at: Completed 02-05-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

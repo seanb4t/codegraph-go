@@ -190,7 +190,7 @@ Plans:
   4. codegraph-go has the capability installed at project scope from `https://github.com/seanb4t/gsd-capability-changie.git#<tag>`, `workflow.changie_fragments` is set in `.planning/config.json`, `.gsd/` stays gitignored, and `CONTRIBUTING.md` documents the one-time per-clone install (CAP-04)
 
 **Notes**: At phase close on the milestone branch no milestone PR number may exist yet; D-03 and D-13 resolve it: the skill uses an explicit `--pr`, else the branch's open PR, else writes the fragment without a PR number (`PR` is optional since D-13 and `minInt: 1` still refuses `PR=0`), never a placeholder number. The capability manifest is the sanctioned extension vocabulary; no gsd-core workflow file is edited (out of scope by requirement), and `.planning/config.json` is written through the tool's own config verb, never by hand. A `contribution` or `ref.command` step is out of scope — a skill step is the least-privilege sanctioned shape. The scratch-project proofs in criteria 1–3 are the capability's own tests; the in-repo proof that it fires on this repository is `CAP-05` at Phase 3's close.
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -215,7 +215,7 @@ Plans:
 
 **Wave 6**
 
-- [ ] 02-05-PLAN.md — Real `Skill(gsd-changie-fragments)` dispatch proof, and the CONTRIBUTING D-12 subsection (CAP-03, CAP-04)
+- [x] 02-05-PLAN.md — Real `Skill(gsd-changie-fragments)` dispatch proof, and the CONTRIBUTING D-12 subsection (CAP-03, CAP-04)
 
 #### Phase 3: Rename-Stub Removal
 
@@ -303,7 +303,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
-| 2. Phase-Close Fragment Capability | 5/6 | In Progress|  |
+| 2. Phase-Close Fragment Capability | 6/6 | In Progress|  |
 | 3. Rename-Stub Removal | 0/TBD | Not started | - |
 | 4. Fragment-Required Gate | 0/TBD | Not started | - |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
