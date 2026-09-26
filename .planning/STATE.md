@@ -6,14 +6,14 @@ current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
 status: executing
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-09-26T14:08:34.457Z"
+last_updated: "2026-09-26T15:47:12.634Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 02 execution started
-state_head: b79a77724070910c514e5664cdc947fa588a1c7c
+state_head: 99b2923d8d895e6fceaba4518e30a7432475b391
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 7
+  total_plans: 8
   completed_plans: 6
   percent: 17
 ---
@@ -502,6 +502,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 7] Released codegraph binaries carry a Codex TOML data-loss bug: findTOMLTableRange ends a table only at a column-0 '[', so an indented [mcp_servers.codegraph] swallows every sibling table up to the next column-0 header. Do NOT run 'codegraph install' or 'uninstall' with --target codex or --target all on a machine whose ~/.codex/config.toml indents headers until the Phase 7 fix (07-CONTEXT D-07/D-08) ships; no patch release (maintainer decision B2, 2026-09-19)
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
 - [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
+- gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
 
 ### Quick Tasks Completed
 
