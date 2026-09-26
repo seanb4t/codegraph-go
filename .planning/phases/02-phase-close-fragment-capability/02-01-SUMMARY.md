@@ -15,7 +15,8 @@ affects: ["02-02", "02-03", "02-04", "02-05"]
 actuals:
   tokens: 17100
   tasks: 2
-  commits: 6
+  commits: 7
+  plan_head_before: 1f51c611c2ab01bae75b49ac944a879cc3d6d927
 
 tech-stack:
   added: []
@@ -137,6 +138,7 @@ Task commits live in **two repositories** (D-09 — `$CAP`'s history is outside 
 **codegraph-go** (evidence + metadata, this plan's own repo):
 5. `04cd21e3` — `docs(02-01): record capability tracer evidence`
 6. `b45edc48` — `docs(02-01): record capability expansion evidence`
+7. `bdc19879` — `docs(02-01): complete changie capability manifest, skill and fragment writer plan` (plan metadata: this SUMMARY, STATE.md, ROADMAP.md, REQUIREMENTS.md)
 
 ## TDD Gate Compliance
 
@@ -253,9 +255,9 @@ None - no external service configuration required. This plan publishes nothing (
 ## Self-Check: PASSED
 
 All 9 `gsd-capability-changie:` files and both codegraph-go artifacts (`02-CAPABILITY-LOG.md`,
-this file) exist on disk. All 6 commit hashes (`b1291df`, `464510b`, `5c00c09`, `8a6de32` in
-`gsd-capability-changie`; `04cd21e3`, `b45edc48` in codegraph-go) resolve via `git log --oneline
---all`. `test/run.sh` reports `29 of 29 legs passed against a scratch project`. `shellcheck` is
-clean on all four executables. `git -C $CAP log --reverse --format=%s` shows
+this file) exist on disk. All 7 commit hashes (`b1291df`, `464510b`, `5c00c09`, `8a6de32` in
+`gsd-capability-changie`; `04cd21e3`, `b45edc48`, `bdc19879` in codegraph-go) resolve via `git
+log --oneline --all`. `test/run.sh` reports `29 of 29 legs passed against a scratch project`.
+`shellcheck` is clean on all four executables. `git -C $CAP log --reverse --format=%s` shows
 `test(02-01) feat(02-01) test(02-01) feat(02-01)`, and `git -C $CAP status --porcelain` is
 empty.
