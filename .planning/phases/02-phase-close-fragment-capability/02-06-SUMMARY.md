@@ -287,3 +287,11 @@ D-13's four parts are complete: codegraph-go's config and guards, capability `v0
 ---
 *Phase: 02-phase-close-fragment-capability*
 *Completed: 2026-09-26*
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/02-phase-close-fragment-capability/02-06-SUMMARY.md`, `02-MUTATION-LOG.md`.
+- FOUND: `.changie.yaml` contains `optional: true`.
+- FOUND commits in `git log --oneline --all`: `4093ccbf`, `0c27260d`, `6dfa4739` (codegraph-go); `35b674e` (`gsd-capability-changie`).
+- Re-ran every plan-level `<verify>` command across all three tasks (see body above) — all passed at the time of this SUMMARY.
+- Re-ran the plan-level `<verification>` block: Go tests pass, `check:changie` 12 of 12, `merge --dry-run` byte-identical to `CHANGELOG.md`, capability suite 32 of 32 at HEAD, shellcheck clean on all four executables.
