@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-26T00:01:20.549Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-26T01:22:00.441Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 02 execution started
-state_head: b45edc48778380538a4742d1a57df07ede43e03c
+state_head: 3bf9a89bc181fb980a71b67fe9388909f821c06a
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 7
-  completed_plans: 3
+  completed_plans: 4
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-25 after Phase 1)
 ## Current Position
 
 Phase: 02 (Phase-Close Fragment Capability) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-09-25 — Phase 02 execution started
 
@@ -189,6 +189,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 01 P01 | 30min | 2 tasks | 23 files |
 | Phase 01 P02 | 30min | 3 tasks | 4 files |
 | Phase 02 P01 | ~50min | 2 tasks | 10 files |
+| Phase 02 P02 | ~70min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -448,6 +449,7 @@ Standing decisions that outlive every milestone:
 - [Phase 1]: Family (d)'s v0.5.1 deletion needed a floor-compensating filler seed to reach the set-mismatch branch that names the missing version (changieSeedFloor=14 fires first on a bare deletion)
 - [Phase 02]: D-02 changie-unavailable interpretation: fires on unresolvable/failing configured command, not literally bare PATH absence
 - [Phase 02]: D-05 external-tool reading: gsd-tools/gsd_run is the dispatching host, not a third-party parsing dependency
+- [Phase 02]: SKILL.md's no-`.claude/`-path rule contained the literal substring it forbade; reworded to describe the same restriction without self-violating it. — Caught by this task's own acceptance criteria (rg -F -o '.claude/' SKILL.md must print 0), not by the six rehearsal assertions, which all passed unmodified; fixed pre-publication per T-02-08.
 
 ### Pending Todos
 
@@ -602,8 +604,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-26T00:01:20.503Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-09-26T01:22:00.410Z
+Stopped at: Completed 02-02-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
