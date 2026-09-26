@@ -203,6 +203,46 @@ It is published deliberately. If you want to know *why* something is the way it
 is, the answer is usually there, and it is usually more candid than a commit
 message. You are not expected to add to it, and PRs are not judged on it.
 
+### Changelog fragments at phase close
+
+Closing a GSD phase in this repository writes that phase's changelog fragments
+automatically. A private gsd-core capability does it: its `gsd-changie-fragments`
+skill runs at verify:post. The configuration is already committed in
+`.planning/config.json` — there is nothing to set up beyond the install below.
+
+One-time setup per clone:
+
+```
+gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1 --scope project
+```
+
+One-time setup per machine, so Claude Code can dispatch the skill:
+
+```
+gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.1 --scope global
+gsd-tools capability set changie --enable --runtime claude --scope global
+```
+
+Both commands are needed because gsd-core surfaces a third-party Claude Code
+skill only from the global capability root — a project-scope install alone is
+invisible to the skill materializer.
+
+The repository is **private**, so the capability is optional. Contributors
+without access write fragments by hand instead, the same way any manual
+fragment is written (see `task changie` above):
+
+```
+task changie -- new -k <Kind> -b "<sentence>" -m PR=<n>
+```
+
+Either way, the `fragment-required` pull-request check, added by Phase 4 of
+this milestone, is the backstop that a fragment exists.
+
+To re-run the skill by hand: `/gsd-changie-fragments <phase> [--pr <n>]`. An
+explicit `--pr` is used as given. Otherwise the skill uses the branch's open PR
+if there is one; when no PR is open, it writes the fragment without a PR number
+and prints a note saying so.
+
 ## Code of conduct
 
 Participation is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
