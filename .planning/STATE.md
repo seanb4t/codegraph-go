@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 02
 current_phase_name: Phase-Close Fragment Capability
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-09-26T13:15:47.459Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-09-26T14:08:34.457Z"
 last_activity: 2026-09-25
 last_activity_desc: Phase 02 execution started
-state_head: b9914c7ad62c05094824bb437253c2ba73b444dd
+state_head: b79a77724070910c514e5664cdc947fa588a1c7c
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-25 after Phase 1)
 ## Current Position
 
 Phase: 02 (Phase-Close Fragment Capability) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-09-25 — Phase 02 execution started
 
@@ -191,6 +191,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P01 | ~50min | 2 tasks | 10 files |
 | Phase 02 P02 | ~70min | 2 tasks | 4 files |
 | Phase 02 P03 | 35min | 2 tasks | 1 files |
+| Phase 02 P04 | 35min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -452,6 +453,7 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: D-05 external-tool reading: gsd-tools/gsd_run is the dispatching host, not a third-party parsing dependency
 - [Phase 02]: SKILL.md's no-`.claude/`-path rule contained the literal substring it forbade; reworded to describe the same restriction without self-violating it. — Caught by this task's own acceptance criteria (rg -F -o '.claude/' SKILL.md must print 0), not by the six rehearsal assertions, which all passed unmodified; fixed pre-publication per T-02-08.
 - [Phase 02]: Maintainer approved publish-both at Task 1's blocking-human checkpoint: publish the private gsd-capability-changie repo with tag v0.1.0 and open the draft milestone PR. — Both are outward-facing GitHub actions (CAP-01, D-04) that auto-mode cannot approve; the maintainer answered at the keyboard with the proposed title unchanged.
+- [Phase 02]: Task 2 checkpoint (blocking-human): maintainer chose global-install to materialize gsd-changie-fragments for Claude Code, recorded as D-14
 
 ### Pending Todos
 
@@ -607,8 +609,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-26T13:15:47.438Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-09-26T14:08:34.428Z
+Stopped at: Completed 02-04-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
