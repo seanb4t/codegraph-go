@@ -1851,6 +1851,48 @@ tasks:
     cmds:
       - python3 scripts/fragment_policy.py
 
+  check:fragment-policy:
+    desc: >-
+      GATE-04's offline guard (D-01, D-10). It runs
+      scripts/test_fragment_policy.py's stdlib unittest suite over literal
+      inputs, never gh, git or a pull request. It passes only when unittest's
+      executed count equals the number of `def test_` methods defined in the
+      file, the defined count is at least 36, and the result line is exactly
+      OK, so a skipped or undiscovered test cannot pass (rule 84d1gfpywd). It
+      is wired into ci.yml's test job.
+    silent: true
+    preconditions:
+      - sh: command -v python3
+        msg: "python3 not found — check:fragment-policy runs scripts/test_fragment_policy.py."
+    cmds:
+      - |
+        set -euo pipefail
+        floor=36
+        defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' scripts/test_fragment_policy.py || true; } | wc -l | tr -d ' ')
+        if [ "${defined}" -lt "${floor}" ]; then
+          echo "::error::check:fragment-policy: found only ${defined} test methods (floor ${floor}) — a gutted suite must fail loud"
+          exit 1
+        fi
+
+        status=0
+        out=$(python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v 2>&1) || status=$?
+        printf '%s\n' "${out}"
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:fragment-policy: unittest exited ${status}"
+          exit 1
+        fi
+
+        ran=$(printf '%s\n' "${out}" | sed -nE 's/^Ran ([0-9]+) tests? in .*/\1/p')
+        if [ -z "${ran}" ] || [ "${ran}" != "${defined}" ]; then
+          echo "::error::check:fragment-policy: unittest ran ${ran:-0} of ${defined} defined test methods"
+          exit 1
+        fi
+        if ! printf '%s\n' "${out}" | grep -x 'OK' > /dev/null; then
+          echo "::error::check:fragment-policy: result line is not exactly OK (skips are not executions)"
+          exit 1
+        fi
+        echo "check:fragment-policy: executed ${ran} of ${defined} defined test methods (floor ${floor})"
+
   check:graph-console:
     desc: >-
       D-09's permanent, self-tested, live-Chromium `/graph` console gate
