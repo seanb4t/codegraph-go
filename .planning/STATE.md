@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 04
 current_phase_name: Fragment-Required Gate
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-10-11T23:33:08.383Z"
+stopped_at: "Completed 04-03-PLAN.md (PR #95 open, awaiting maintainer merge in 04-04)"
+last_updated: "2026-10-11T23:43:18.190Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 04 execution started
-state_head: 6e7d9ed0ff819b469f8bffe4cfb80b6713422e69
+state_head: 4c7d0361fd013e8406fcd6494342414e26b1fd2f
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 ## Current Position
 
 Phase: 04 (Fragment-Required Gate) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-10-11 — Phase 04 execution started
 
@@ -197,6 +197,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P01 | 25min | 3 tasks | 7 files |
 | Phase 04 P01 | 8 min | 3 tasks | 7 files |
 | Phase 04 P02 | 8 min | 3 tasks | 9 files |
+| Phase 04 P03 | 2 sessions | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -471,6 +472,7 @@ Standing decisions that outlive every milestone:
 - [Phase 04]: 04-01: fragment_policy.main fetches pulls/{n}/files with gh --paginate --slurp and cross-checks the count against changed_files so a truncated list fails closed
 - [Phase 04]: 04-01: a rename counts through previous_path, so moving a file out of cmd/** or internal/** still needs a fragment
 - [Phase 04]: 04-02: D-08 retires the ruleset-drift guard and required-check fixture in one code-only ci(04-02) commit (565e3e25) for 04-03 to cherry-pick; ten mutations of our own gate code all went RED (04-MUTATION-LOG.md)
+- [Phase 04]: 04-03: maintainer chose open-new-issue; issue #94 opened and landing PR #95 carries Closes #94 (ci/fragment-required-gate, nine paths, ci/test commits)
 
 ### Pending Todos
 
@@ -631,8 +633,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-11T23:33:08.352Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-10-11T23:43:18.092Z
+Stopped at: Completed 04-03-PLAN.md (PR #95 open, awaiting maintainer merge in 04-04)
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
