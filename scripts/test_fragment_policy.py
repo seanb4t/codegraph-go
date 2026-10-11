@@ -21,6 +21,7 @@ import json
 import unittest
 
 import fragment_policy
+import pr_template_policy
 
 FRAGMENT_PATH = ".changes/unreleased/Fixes-20260926-120000.000000000.yaml"
 
@@ -32,6 +33,9 @@ BASE_SHAPE = (
 )
 
 REPO_ENV = {"GITHUB_REPOSITORY": "example/repo", "PR_NUMBER": "7", "PR_BODY": ""}
+
+EXEMPT_REASON = "comment-only change, no behavior"
+EXEMPT_BODY = f"Refactor only.\n<!-- changelog-exempt: {EXEMPT_REASON} -->"
 
 
 def _change(path, status="modified", previous_path=None):
@@ -127,6 +131,195 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(verdict.code, "no-shipped-code")
 
 
+    # GATE-02: the exemption marker.
+
+    def test_exempt_marker_with_reason_passes(self):
+        verdict = fragment_policy.evaluate(BASE_SHAPE, EXEMPT_BODY)
+        self.assertTrue(verdict.ok)
+        self.assertEqual(verdict.code, "exempt")
+        self.assertIn(EXEMPT_REASON, verdict.message)
+
+    def test_exempt_marker_is_case_insensitive(self):
+        body = "<!-- CHANGELOG-EXEMPT: internal rename -->"
+        verdict = fragment_policy.evaluate(BASE_SHAPE, body)
+        self.assertTrue(verdict.ok)
+        self.assertEqual(verdict.code, "exempt")
+
+    def test_exempt_marker_without_reason_does_not_exempt(self):
+        bodies = (
+            "<!-- changelog-exempt: -->",
+            "<!-- changelog-exempt:    -->",
+            "<!--changelog-exempt:-->",
+        )
+        for body in bodies:
+            with self.subTest(body=body):
+                verdict = fragment_policy.evaluate(BASE_SHAPE, body)
+                self.assertFalse(verdict.ok)
+                self.assertEqual(verdict.code, "missing-fragment")
+
+    def test_other_marker_names_do_not_exempt(self):
+        bodies = (
+            "<!-- pr-template-exempt: x -->",
+            "<!-- pr-issue-exempt: x -->",
+            "changelog-exempt: x",
+        )
+        for body in bodies:
+            with self.subTest(body=body):
+                verdict = fragment_policy.evaluate(BASE_SHAPE, body)
+                self.assertFalse(verdict.ok)
+                self.assertEqual(verdict.code, "missing-fragment")
+
+    def test_marker_grammar_mirrors_pr_template_exempt(self):
+        self.assertTrue(hasattr(fragment_policy, "CHANGELOG_EXEMPT_MARKER"))
+        mine = fragment_policy.CHANGELOG_EXEMPT_MARKER
+        theirs = pr_template_policy.EXEMPT_MARKER
+        self.assertEqual(
+            mine.pattern, theirs.pattern.replace("pr-template-exempt", "changelog-exempt")
+        )
+        self.assertNotEqual(mine.pattern, theirs.pattern)
+        self.assertEqual(mine.flags, theirs.flags)
+
+    # GATE-03: the three states in which the change cannot be seen.
+
+    def test_empty_file_list_fails_closed(self):
+        verdict = fragment_policy.evaluate([], EXEMPT_BODY)
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.code, "empty-file-list")
+
+    def test_api_error_fails_closed(self):
+        files = BASE_SHAPE + (_change(FRAGMENT_PATH, "added"),)
+        verdict = fragment_policy.evaluate(files, EXEMPT_BODY, api_error="HTTP 502")
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.code, "api-error")
+        self.assertIn("HTTP 502", verdict.message)
+
+    def test_unreadable_body_fails_closed(self):
+        files = BASE_SHAPE + (_change(FRAGMENT_PATH, "added"),)
+        verdict = fragment_policy.evaluate(files, None)
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.code, "body-unreadable")
+
+    def test_empty_body_is_readable(self):
+        with_fragment = BASE_SHAPE + (_change(FRAGMENT_PATH, "added"),)
+        self.assertEqual(fragment_policy.evaluate(with_fragment, "").code, "has-fragment")
+        self.assertEqual(fragment_policy.evaluate(BASE_SHAPE, "").code, "missing-fragment")
+
+    def test_fail_closed_messages_are_distinct(self):
+        verdicts = (
+            fragment_policy.evaluate(BASE_SHAPE, "", api_error="HTTP 502"),
+            fragment_policy.evaluate([], ""),
+            fragment_policy.evaluate(BASE_SHAPE, None),
+        )
+        for verdict in verdicts:
+            self.assertFalse(verdict.ok)
+        self.assertEqual(len({v.code for v in verdicts}), 3)
+        self.assertEqual(len({v.message for v in verdicts}), 3)
+
+    def test_fail_closed_precedence(self):
+        self.assertEqual(
+            fragment_policy.evaluate([], None, api_error="x").code, "api-error"
+        )
+        self.assertEqual(fragment_policy.evaluate([], None).code, "empty-file-list")
+        self.assertEqual(
+            fragment_policy.evaluate(BASE_SHAPE, None).code, "body-unreadable"
+        )
+
+    # Fragment and path rules.
+
+    def test_fragment_must_be_added(self):
+        for status in ("modified", "renamed", "removed", "copied", "changed"):
+            with self.subTest(status=status):
+                files = BASE_SHAPE + (_change(".changes/unreleased/x.yaml", status),)
+                verdict = fragment_policy.evaluate(files, "")
+                self.assertFalse(verdict.ok)
+                self.assertEqual(verdict.code, "missing-fragment")
+
+    def test_gitkeep_is_not_a_fragment(self):
+        files = BASE_SHAPE + (_change(".changes/unreleased/.gitkeep", "added"),)
+        verdict = fragment_policy.evaluate(files, "")
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.code, "missing-fragment")
+
+    def test_status_comparison_ignores_case(self):
+        files = BASE_SHAPE + (_change(FRAGMENT_PATH, "ADDED"),)
+        verdict = fragment_policy.evaluate(files, "")
+        self.assertTrue(verdict.ok)
+        self.assertEqual(verdict.code, "has-fragment")
+
+    def test_path_rule_boundaries(self):
+        shipped = (
+            "cmd/codegraph/main.go",
+            "internal/cli/root.go",
+            "internal/testdata.go",
+            "internal/x/testdata",
+            "internal/web/static/app.js",
+            "internal/x/y_test.go.orig",
+        )
+        not_shipped = (
+            "cmdx/foo.go",
+            "internalx/a.go",
+            "Internal/a.go",
+            "cmd",
+            "pkg/internal/a.go",
+            "internal/x/testdata/y.go",
+            "internal/x/y_test.go",
+            ".changes/unreleased/a.yaml",
+        )
+        for path in shipped:
+            with self.subTest(shipped=path):
+                self.assertTrue(fragment_policy.is_shipped_code(path))
+        for path in not_shipped:
+            with self.subTest(not_shipped=path):
+                self.assertFalse(fragment_policy.is_shipped_code(path))
+
+    def test_rename_out_of_shipped_code_counts(self):
+        files = [_change("pkg/root.go", "renamed", previous_path="internal/cli/root.go")]
+        verdict = fragment_policy.evaluate(files, "")
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.code, "missing-fragment")
+        self.assertEqual(verdict.shipped, ("internal/cli/root.go",))
+
+    def test_removed_shipped_file_counts(self):
+        verdict = fragment_policy.evaluate(
+            [_change("internal/cli/renamed.go", "removed")], ""
+        )
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.code, "missing-fragment")
+
+    def test_fragment_outside_unreleased_does_not_count(self):
+        for path in (".changes/v0.15.0.md", ".changes/unreleasedX/a.yaml"):
+            with self.subTest(path=path):
+                files = BASE_SHAPE + (_change(path, "added"),)
+                verdict = fragment_policy.evaluate(files, "")
+                self.assertFalse(verdict.ok)
+                self.assertEqual(verdict.code, "missing-fragment")
+
+    # Ordering and purity.
+
+    def test_verdict_ignores_file_order(self):
+        files = list(BASE_SHAPE)
+        self.assertEqual(
+            fragment_policy.evaluate(files, ""),
+            fragment_policy.evaluate(list(reversed(files)), ""),
+        )
+        doubled = [
+            _change("internal/a.go"),
+            _change("internal/a.go"),
+            _change("internal/a.go", "renamed", previous_path="internal/a.go"),
+        ]
+        self.assertEqual(
+            fragment_policy.evaluate(doubled, "").shipped, ("internal/a.go",)
+        )
+
+    def test_evaluate_does_not_mutate_input(self):
+        files = list(BASE_SHAPE)
+        before = list(files)
+        first = fragment_policy.evaluate(files, "")
+        second = fragment_policy.evaluate(files, "")
+        self.assertEqual(files, before)
+        self.assertEqual(first, second)
+
+
 class MainTests(unittest.TestCase):
     def test_main_fails_and_names_paths_when_fragment_missing(self):
         rc, output, _ = _run_main(
@@ -177,6 +370,84 @@ class MainTests(unittest.TestCase):
                         line.startswith("::error::fragment-required:")
                         or line.startswith("::notice::fragment-required:")
                     )
+
+
+    def test_main_fails_closed_on_truncated_file_list(self):
+        files = _files_result(
+            [("internal/a.go", "modified"), (FRAGMENT_PATH, "added")]
+        )
+        rc, output, _ = _run_main(REPO_ENV, files, _meta_result(3))
+        self.assertEqual(rc, 1, output)
+        self.assertIn("FAIL (api-error)", output)
+        self.assertIn("fetched 2 of 3", output)
+        self.assertNotIn("PASS", output)
+
+    def test_main_fails_closed_on_malformed_json(self):
+        rc, output, _ = _run_main(REPO_ENV, (0, "not json", ""), _meta_result(1))
+        self.assertIsNotNone(rc, output)
+        self.assertEqual(rc, 1, output)
+        self.assertIn("FAIL (api-error)", output)
+
+    def test_main_fails_closed_without_pr_body(self):
+        environ = {k: v for k, v in REPO_ENV.items() if k != "PR_BODY"}
+        files = _files_result(
+            [("internal/a.go", "modified"), (FRAGMENT_PATH, "added")]
+        )
+        rc, output, _ = _run_main(environ, files)
+        self.assertEqual(rc, 1, output)
+        self.assertIn("FAIL (body-unreadable)", output)
+
+    def test_main_rejects_malformed_pr_context(self):
+        files = _files_result([("internal/a.go", "modified")])
+        cases = (
+            {"PR_NUMBER": ""},
+            {"PR_NUMBER": "0"},
+            {"PR_NUMBER": "07"},
+            {"PR_NUMBER": "7; rm -rf /"},
+            {"GITHUB_REPOSITORY": ""},
+            {"GITHUB_REPOSITORY": "noslash"},
+        )
+        for override in cases:
+            with self.subTest(override=override):
+                environ = {**REPO_ENV, **override}
+                rc, output, calls = _run_main(environ, files)
+                self.assertEqual(rc, 1, output)
+                self.assertIn("FAIL (api-error)", output)
+                self.assertEqual(calls, [])
+
+    def test_main_flattens_paginated_pages(self):
+        files = _files_result(
+            [("internal/a.go", "modified")], [(FRAGMENT_PATH, "added")]
+        )
+        rc, output, _ = _run_main(REPO_ENV, files, _meta_result(2))
+        self.assertEqual(rc, 0, output)
+        self.assertIn("PASS (has-fragment)", output)
+
+    def test_main_uses_paginated_rest_listing(self):
+        files = _files_result([("docs/a.md", "modified")])
+        rc, output, calls = _run_main(REPO_ENV, files, _meta_result(1))
+        self.assertEqual(rc, 0, output)
+        self.assertIn(["gh", "api", "repos/example/repo/pulls/7"], calls)
+        self.assertIn(
+            [
+                "gh",
+                "api",
+                "--paginate",
+                "--slurp",
+                "repos/example/repo/pulls/7/files?per_page=100",
+            ],
+            calls,
+        )
+
+    def test_main_reports_exemption_reason_as_notice(self):
+        environ = {**REPO_ENV, "PR_BODY": EXEMPT_BODY}
+        files = _files_result([("internal/a.go", "modified")])
+        rc, output, _ = _run_main(environ, files)
+        self.assertEqual(rc, 0, output)
+        self.assertIn(
+            f"::notice::fragment-required: exempt: {EXEMPT_REASON}",
+            output.splitlines(),
+        )
 
 
 if __name__ == "__main__":
