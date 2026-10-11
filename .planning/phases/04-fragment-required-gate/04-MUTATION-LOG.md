@@ -472,3 +472,52 @@ Ran 36 tests in 0.001s
 
 OK
 ```
+
+## Executed-count guard (04-01 Task 3)
+
+Commit: `484a8e27` (`ci(04-01): run the fragment-policy suite in the test job with an executed-count guard (GATE-04)`). Command: `task check:fragment-policy`. The target prints the suite, then its own summary line; the 04-02 Family (d) mutation shows the guard RED.
+
+```
+test_api_error_fails_closed (test_fragment_policy.EvaluateTests.test_api_error_fails_closed) ... ok
+test_empty_body_is_readable (test_fragment_policy.EvaluateTests.test_empty_body_is_readable) ... ok
+test_empty_file_list_fails_closed (test_fragment_policy.EvaluateTests.test_empty_file_list_fails_closed) ... ok
+test_evaluate_does_not_mutate_input (test_fragment_policy.EvaluateTests.test_evaluate_does_not_mutate_input) ... ok
+test_exempt_marker_is_case_insensitive (test_fragment_policy.EvaluateTests.test_exempt_marker_is_case_insensitive) ... ok
+test_exempt_marker_with_reason_passes (test_fragment_policy.EvaluateTests.test_exempt_marker_with_reason_passes) ... ok
+test_exempt_marker_without_reason_does_not_exempt (test_fragment_policy.EvaluateTests.test_exempt_marker_without_reason_does_not_exempt) ... ok
+test_fail_closed_messages_are_distinct (test_fragment_policy.EvaluateTests.test_fail_closed_messages_are_distinct) ... ok
+test_fail_closed_precedence (test_fragment_policy.EvaluateTests.test_fail_closed_precedence) ... ok
+test_fragment_must_be_added (test_fragment_policy.EvaluateTests.test_fragment_must_be_added) ... ok
+test_fragment_outside_unreleased_does_not_count (test_fragment_policy.EvaluateTests.test_fragment_outside_unreleased_does_not_count) ... ok
+test_gitkeep_is_not_a_fragment (test_fragment_policy.EvaluateTests.test_gitkeep_is_not_a_fragment) ... ok
+test_identical_shape_with_fragment_passes (test_fragment_policy.EvaluateTests.test_identical_shape_with_fragment_passes) ... ok
+test_marker_grammar_mirrors_pr_template_exempt (test_fragment_policy.EvaluateTests.test_marker_grammar_mirrors_pr_template_exempt) ... ok
+test_no_shipped_code_passes_without_fragment (test_fragment_policy.EvaluateTests.test_no_shipped_code_passes_without_fragment) ... ok
+test_other_marker_names_do_not_exempt (test_fragment_policy.EvaluateTests.test_other_marker_names_do_not_exempt) ... ok
+test_path_rule_boundaries (test_fragment_policy.EvaluateTests.test_path_rule_boundaries) ... ok
+test_removed_shipped_file_counts (test_fragment_policy.EvaluateTests.test_removed_shipped_file_counts) ... ok
+test_rename_out_of_shipped_code_counts (test_fragment_policy.EvaluateTests.test_rename_out_of_shipped_code_counts) ... ok
+test_shape_without_fragment_fails (test_fragment_policy.EvaluateTests.test_shape_without_fragment_fails) ... ok
+test_status_comparison_ignores_case (test_fragment_policy.EvaluateTests.test_status_comparison_ignores_case) ... ok
+test_test_files_and_testdata_are_not_shipped_code (test_fragment_policy.EvaluateTests.test_test_files_and_testdata_are_not_shipped_code) ... ok
+test_unreadable_body_fails_closed (test_fragment_policy.EvaluateTests.test_unreadable_body_fails_closed) ... ok
+test_verdict_ignores_file_order (test_fragment_policy.EvaluateTests.test_verdict_ignores_file_order) ... ok
+test_escape_data_encodes_command_characters (test_fragment_policy.MainTests.test_escape_data_encodes_command_characters) ... ok
+test_main_fails_and_names_paths_when_fragment_missing (test_fragment_policy.MainTests.test_main_fails_and_names_paths_when_fragment_missing) ... ok
+test_main_fails_closed_on_malformed_json (test_fragment_policy.MainTests.test_main_fails_closed_on_malformed_json) ... ok
+test_main_fails_closed_on_truncated_file_list (test_fragment_policy.MainTests.test_main_fails_closed_on_truncated_file_list) ... ok
+test_main_fails_closed_when_gh_exits_nonzero (test_fragment_policy.MainTests.test_main_fails_closed_when_gh_exits_nonzero) ... ok
+test_main_fails_closed_without_pr_body (test_fragment_policy.MainTests.test_main_fails_closed_without_pr_body) ... ok
+test_main_flattens_paginated_pages (test_fragment_policy.MainTests.test_main_flattens_paginated_pages) ... ok
+test_main_passes_when_fragment_added (test_fragment_policy.MainTests.test_main_passes_when_fragment_added) ... ok
+test_main_rejects_malformed_pr_context (test_fragment_policy.MainTests.test_main_rejects_malformed_pr_context) ... ok
+test_main_reports_exemption_reason_as_notice (test_fragment_policy.MainTests.test_main_reports_exemption_reason_as_notice) ... ok
+test_main_uses_paginated_rest_listing (test_fragment_policy.MainTests.test_main_uses_paginated_rest_listing) ... ok
+test_untrusted_paths_cannot_start_workflow_commands (test_fragment_policy.MainTests.test_untrusted_paths_cannot_start_workflow_commands) ... ok
+
+----------------------------------------------------------------------
+Ran 36 tests in 0.001s
+
+OK
+check:fragment-policy: executed 36 of 36 defined test methods (floor 36)
+```
