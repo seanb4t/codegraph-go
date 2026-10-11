@@ -1835,6 +1835,22 @@ tasks:
       - bash scripts/check-workflow-output-delimiter.sh --self-test
       - bash scripts/check-workflow-output-delimiter.sh
 
+  check:fragment-required:
+    desc: >-
+      GATE-01..GATE-03's production entry point. CI-only by nature: it needs
+      PR_NUMBER, PR_BODY and GH_TOKEN, and it runs from fragment-required.yml
+      under pull_request_target with main's checkout (D-02). It fetches the
+      complete changed-file list through gh's paginated REST listing, and the
+      exit status is the verdict (D-03).
+    silent: true
+    preconditions:
+      - sh: command -v python3
+        msg: "python3 not found — check:fragment-required runs scripts/fragment_policy.py."
+      - sh: command -v gh
+        msg: "gh not found — check:fragment-required fetches the pull request's changed files with gh api."
+    cmds:
+      - python3 scripts/fragment_policy.py
+
   check:graph-console:
     desc: >-
       D-09's permanent, self-tested, live-Chromium `/graph` console gate
