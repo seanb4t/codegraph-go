@@ -36,8 +36,8 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Fragment-Required Gate
 
 - [ ] **GATE-01**: A `fragment-required` workflow runs on every pull request and fails when the PR's changed files touch `cmd/**` or `internal/**` (excluding `*_test.go` and `testdata/`) and add no file under `.changes/unreleased/`; the path rule lives in one place shared with the gate's tests
-- [ ] **GATE-02**: A PR body carrying `<!-- changelog-exempt: <reason> -->` with a non-empty reason passes the gate; the marker's grammar mirrors `pr-template-exempt` and an empty reason does not exempt
-- [ ] **GATE-03**: The gate fails closed: an empty changed-file list, an API error, or an unreadable body each fail with a distinct message, never pass (the `require-issue-link` precedent)
+- [x] **GATE-02**: A PR body carrying `<!-- changelog-exempt: <reason> -->` with a non-empty reason passes the gate; the marker's grammar mirrors `pr-template-exempt` and an empty reason does not exempt
+- [x] **GATE-03**: The gate fails closed: an empty changed-file list, an API error, or an unreadable body each fail with a distinct message, never pass (the `require-issue-link` precedent)
 - [ ] **GATE-04**: The gate is demonstrated in both directions against real fixtures — a PR shape with a fragment passes and the identical shape without one fails — with the run or test output recorded, and the count of executed cases asserted (rule `84d1gfpywd`)
 - [ ] **GATE-05**: `fragment-required` is added to ruleset `protect-main`'s required status checks (7 contexts), the `.github/required-status-checks` fixture updated in the same change, and `TestRequiredCheckNamesPreserved` plus `scripts/check-ruleset-drift.sh` pass against the live ruleset — the ruleset edit is a repository-settings action recorded with its timestamp
 
@@ -108,8 +108,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRD-15 | Phase 5 | Pending |
 | GRD-16 | Phase 5 | Pending |
 | GATE-01 | Phase 4 | Pending |
-| GATE-02 | Phase 4 | Pending |
-| GATE-03 | Phase 4 | Pending |
+| GATE-02 | Phase 4 | Complete |
+| GATE-03 | Phase 4 | Complete |
 | GATE-04 | Phase 4 | Pending |
 | GATE-05 | Phase 4 | Pending |
 | CAP-01 | Phase 2 | Complete |

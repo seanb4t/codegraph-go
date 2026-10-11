@@ -251,12 +251,12 @@ Plans:
   5. **Checkpoint (repository-settings action, maintainer):** `fragment-required` is in ruleset `protect-main`'s required status checks, with the ruleset edit's timestamp recorded; `.github/required-status-checks.txt` and `TestRequiredCheckNamesPreserved` change in the same commit as that edit, and `TestRequiredCheckNamesPreserved` plus `scripts/check-ruleset-drift.sh` pass against the live ruleset (GATE-05)
 
 **Notes**: `GATE-05` says "7 contexts", but `.github/required-status-checks.txt` already lists 8 (v0.14.0 `GRD-12` grew it from 7 to 8 with `tmux e2e`), so adding `fragment-required` makes 9 — re-verify the live count read-only before the edit rather than trusting either number. Timing hazard for discuss-phase: a required check whose workflow exists only on the milestone branch never reports on any other pull request to `main`, so marking it required before the workflow is on `main` blocks every other PR until the milestone merges; the ruleset edit, the fixture commit and the workflow's arrival on `main` need one deliberate sequence (landing the gate on `main` mid-milestone, as v0.13.0 merged Phases 7–8 as PR #69, is one option). Precedents to reuse rather than reinvent: `require-issue-link.yml`'s fail-closed empty-list handling, `scripts/pr_template_policy.py`'s path-aware exemption, and FIX-10's per-run `$GITHUB_OUTPUT` delimiter for any fork-controlled file list. Planning-only pull requests touch neither `cmd/**` nor `internal/**` and pass without a marker.
-**Plans**: 5 plans
+**Plans**: 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Tracer, RED first: `fragment-required` gate end to end (`scripts/fragment_policy.py` verdict + paginated gh fetch, `check:fragment-required`, `pull_request_target` workflow, shape-test registration), then TDD exemptions and fail-closed states, and the 36-case suite with an executed-count guard in ci.yml's test job (GATE-01, GATE-02, GATE-03, GATE-04)
+- [x] 04-01-PLAN.md — Tracer, RED first: `fragment-required` gate end to end (`scripts/fragment_policy.py` verdict + paginated gh fetch, `check:fragment-required`, `pull_request_target` workflow, shape-test registration), then TDD exemptions and fail-closed states, and the 36-case suite with an executed-count guard in ci.yml's test job (GATE-01, GATE-02, GATE-03, GATE-04)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -323,7 +323,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
 | 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
-| 4. Fragment-Required Gate | 0/5 | Not started | - |
+| 4. Fragment-Required Gate | 1/5 | In Progress | - |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
 | 6. First Release Through the Chain | 0/TBD | Not started | - |
 

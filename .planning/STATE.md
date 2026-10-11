@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 04
 current_phase_name: Fragment-Required Gate
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-10-11T23:12:25.661Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-10-11T23:20:44.988Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 04 execution started
-state_head: 0d39b9b4a3c7d4efdef59d5dffc14a3b63698adb
+state_head: 341c2d3ea5d3eafc0241a8104d63d22e40ab6dec
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 10
   percent: 50
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 ## Current Position
 
 Phase: 04 (Fragment-Required Gate) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 04
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-10-11 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
@@ -195,6 +195,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P06 | 70min | 3 tasks | 15 files |
 | Phase 02 P05 | 45min | 2 tasks | 2 files |
 | Phase 03 P01 | 25min | 3 tasks | 7 files |
+| Phase 04 P01 | 8 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -465,6 +466,9 @@ Standing decisions that outlive every milestone:
 - [Phase 3]: [Phase 03] The query/unlock removal is one feat(cli)! commit with a BREAKING CHANGE footer naming both replacements, preceded by a single test(03-01) RED commit.
 - [Phase 3]: [Phase 03] No task wrote a changelog fragment. CAP-05 evidence is left entirely to the verify:post capability dispatch and the phase verifier (D-08).
 - [Phase 3]: [Phase 03] CAP-05 met at this close: execute-phase's verify:post dispatch ran gsd-changie-fragments, which wrote the milestone's Breaking fragment in d9892beb (Changie-Phase: 3, Changie-Summaries: 03-01, PR 88); task changie -- next auto answers v0.15.0. No D-10 correction or D-11 fallback was needed.
+- [Phase 04]: 04-01: unreadable PR body is exactly PR_BODY absent from the environment; a present empty string is readable
+- [Phase 04]: 04-01: fragment_policy.main fetches pulls/{n}/files with gh --paginate --slurp and cross-checks the count against changed_files so a truncated list fails closed
+- [Phase 04]: 04-01: a rename counts through previous_path, so moving a file out of cmd/** or internal/** still needs a fragment
 
 ### Pending Todos
 
@@ -623,10 +627,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/04-fragment-required-gate/04-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-26T22:53:21.318Z
-Stopped at: Phase 4 context gathered
+Last session: 2026-10-11T23:20:44.955Z
+Stopped at: Completed 04-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
