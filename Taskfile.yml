@@ -1805,9 +1805,9 @@ tasks:
 
       Runs from a schedule/workflow_dispatch-only workflow
       (.github/workflows/components-drift.yml), never from ci.yml's
-      PR-triggered jobs, never from release.yml, and never in
-      requiredCheckNames (D-16) — a live registry fetch has no place in a
-      merge gate.
+      PR-triggered jobs, never from release.yml, and
+      never a required status check (D-16) — a live registry fetch has no
+      place in a merge gate.
     preconditions:
       - sh: command -v git
         msg: "git not found — web:components:drift enumerates the committed component file set via git ls-files."
