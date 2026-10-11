@@ -233,6 +233,12 @@ jobs:
       - name: No-force-layout guard (GRD-11/GRF-06)
         run: task check:no-force-layout
 
+      # GATE-01..GATE-04 (v0.15.0 Phase 4): runs the fragment gate's offline
+      # unittest suite and asserts that every defined test executed. The gate
+      # itself runs from fragment-required.yml under pull_request_target.
+      - name: Fragment policy unit suite (GATE-01..GATE-04)
+        run: task check:fragment-policy
+
       # GRD-12 (D-05/D-06): proves the required-status-check fixture this
       # repo maintains (.github/required-status-checks.txt, D-07) still
       # matches what GitHub ruleset 20157557 (protect-main) ACTUALLY
