@@ -1,3 +1,5 @@
+Closes #94
+
 ## What this adds
 
 A `fragment-required` check that fails a pull request when it changes shipped code and neither adds a changelog fragment nor explains why it needs none.
