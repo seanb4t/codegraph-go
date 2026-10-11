@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 04
 current_phase_name: Fragment-Required Gate
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-10-11T23:20:44.988Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-10-11T23:33:08.383Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 04 execution started
-state_head: 341c2d3ea5d3eafc0241a8104d63d22e40ab6dec
+state_head: 6e7d9ed0ff819b469f8bffe4cfb80b6713422e69
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 14
-  completed_plans: 10
+  completed_plans: 11
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 ## Current Position
 
 Phase: 04 (Fragment-Required Gate) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-11 — Phase 04 execution started
 
@@ -196,6 +196,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P05 | 45min | 2 tasks | 2 files |
 | Phase 03 P01 | 25min | 3 tasks | 7 files |
 | Phase 04 P01 | 8 min | 3 tasks | 7 files |
+| Phase 04 P02 | 8 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -469,6 +470,7 @@ Standing decisions that outlive every milestone:
 - [Phase 04]: 04-01: unreadable PR body is exactly PR_BODY absent from the environment; a present empty string is readable
 - [Phase 04]: 04-01: fragment_policy.main fetches pulls/{n}/files with gh --paginate --slurp and cross-checks the count against changed_files so a truncated list fails closed
 - [Phase 04]: 04-01: a rename counts through previous_path, so moving a file out of cmd/** or internal/** still needs a fragment
+- [Phase 04]: 04-02: D-08 retires the ruleset-drift guard and required-check fixture in one code-only ci(04-02) commit (565e3e25) for 04-03 to cherry-pick; ten mutations of our own gate code all went RED (04-MUTATION-LOG.md)
 
 ### Pending Todos
 
@@ -629,8 +631,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-11T23:20:44.955Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-10-11T23:33:08.352Z
+Stopped at: Completed 04-02-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
