@@ -5,11 +5,11 @@ milestone_name: Changie Release Management
 current_phase: 04
 current_phase_name: Fragment-Required Gate
 status: executing
-stopped_at: "Completed 04-03-PLAN.md (PR #95 open, awaiting maintainer merge in 04-04)"
-last_updated: "2026-10-11T23:43:18.190Z"
+stopped_at: "Phase 4 paused at 04-04: PR #95 blocked by pre-existing advisory failures (fix-needed)"
+last_updated: "2026-10-12T00:12:40.888Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 04 execution started
-state_head: 4c7d0361fd013e8406fcd6494342414e26b1fd2f
+state_head: 22df4434f540ee78ff07d8951aee7c5c4373a956
 progress:
   total_phases: 6
   completed_phases: 3
@@ -525,6 +525,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
 - [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
 - gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
+- Phase 4 paused at 04-04 Task 1 (maintainer merge of PR #95). Maintainer answer, verbatim: "fix-needed (Recommended)". PR #95 is BLOCKED by two required checks that fail for pre-existing reasons unrelated to its 9 files: govulncheck (GO-2026-6612/6613/6617: golang.org/x/net v0.58.0 -> v0.60.0; stdlib net/http go1.26.6 -> go1.26.9) and test (web:audit: pnpm audit reports 18 advisories in web/). Resolve with a separate dependency PR to main; once #95's checks are green (the test job then also exercises 04-01 assumption A-1, python3 on the runner), re-run /gsd-execute-phase 4 to resume at 04-04 and answer "merged".
 
 ### Quick Tasks Completed
 
@@ -631,10 +632,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** None
+**Resume file:** .planning/phases/04-fragment-required-gate/04-04-PLAN.md
 
-Last session: 2026-10-11T23:43:18.092Z
-Stopped at: Completed 04-03-PLAN.md (PR #95 open, awaiting maintainer merge in 04-04)
+Last session: 2026-10-12T00:12:35.420Z
+Stopped at: Phase 4 paused at 04-04: PR #95 blocked by pre-existing advisory failures (fix-needed)
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
