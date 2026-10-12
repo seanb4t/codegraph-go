@@ -21,11 +21,11 @@
 // package means updating that constant in the SAME commit.
 //
 // A local `go build`/`go test` against this package requires a Go toolchain
-// resolving to go.mod's pinned 1.26.6. Anything newer fails inside
+// resolving to go.mod's pinned 1.26.9. Anything newer fails inside
 // github.com/cockroachdb/swiss with `undefined: hashFn` / `undefined:
 // fastrand64` — a pre-existing toolchain landmine (see
 // .github/workflows/ci.yml:260-272), not a tmux, bubbletea, or test-logic
-// problem. Prefix local invocations with GOTOOLCHAIN=go1.26.6, or set
+// problem. Prefix local invocations with GOTOOLCHAIN=go1.26.9, or set
 // CODEGRAPH_TEST_BIN to bypass the local build entirely.
 package tmux
 
