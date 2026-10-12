@@ -6,10 +6,10 @@ current_phase: 4
 current_phase_name: Fragment-Required Gate
 status: executing
 stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-10-12T14:25:19.951Z"
+last_updated: "2026-10-12T14:40:11.445Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 4 execution started
-state_head: b47a52ce9da52e66f5d3c36d0271e33c08c47d87
+state_head: 88b07d761535792966d0d0d9918bc950d1c1a645
 progress:
   total_phases: 6
   completed_phases: 3
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 Phase: 4 (Fragment-Required Gate) — EXECUTING
 Plan: 5 of 5
 Status: Ready to execute
-Last activity: 2026-10-12 — Phase 4 execution started
+Last activity: 2026-10-12 — Completed quick task 261011-sor: Fix PR 95 dependency advisories: x/net, Go 1.26.9, web audit
 
 Progress: [█████░░░░░] 50%
 
@@ -538,6 +538,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 | 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
 | 260913-pkp | Fix graphstore archtest to fail closed on per-package go/packages load errors (CR-01 sibling of a90b5457); todo 2026-09-08 resolved | 2026-09-13 | 2b553b62 | [260913-pkp-fix-graphstore-archtest-to-fail-closed-o](./quick/260913-pkp-fix-graphstore-archtest-to-fail-closed-o/) |
 | 260926-it7 | Release gsd-capability-changie v0.1.2 fixing Phase 2 review findings (WR-01 whole-string --pr, CR-01 check:changie leg 13, IN-01) and repoint project + global installs | 2026-09-26 | 4d6049a4 | [260926-it7-release-gsd-capability-changie-v0-1-2-fi](./quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/) |
+| 261011-sor | Fix PR 95 dependency advisories: x/net, Go 1.26.9, web audit | 2026-10-12 | 88b07d76 | [261011-sor-fix-pr-95-dependency-advisories-x-net-go](./quick/261011-sor-fix-pr-95-dependency-advisories-x-net-go/) |
 
 ## Deferred Items
 
