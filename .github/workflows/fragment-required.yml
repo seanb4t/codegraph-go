@@ -1,0 +1,65 @@
+# GATE-01..GATE-03: a pull request that changes shipped code (cmd/** or
+# internal/**, excluding *_test.go and testdata/) must add a changelog fragment
+# under .changes/unreleased/ or carry a reasoned
+# `<!-- changelog-exempt: <reason> -->` marker in its body. The gate fails
+# closed whenever it cannot see the whole change.
+#
+# pull_request_target, checking out the BASE branch (no ref:), exactly as
+# pr-template-format.yml does (D-02): the policy that judges a pull request is
+# always the one on main, so a fork cannot weaken its own gate by editing it.
+# Untrusted input (the PR body, the changed paths) reaches Python only through
+# the environment, never through a shell.
+#
+# The workflow posts no comment and holds only read scopes (D-03). The check
+# log is the whole of the guidance, and the exit status is the verdict.
+#
+# The job body is a single `task` call (D-10), so it stays under
+# TestWorkflowRunBodiesInvokeTask. The changed-file list is fetched by the
+# script itself, through gh's paginated REST listing: `gh pr view --json files`
+# stops at 100 files, and a $GITHUB_OUTPUT heredoc step would put fork-authored
+# paths into a delimiter-sensitive write that check-workflow-output-delimiter
+# does not cover.
+#
+# The job's `name:` is the ruleset's required-check context string. Keep it
+# `fragment-required`.
+name: Fragment Required
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  fragment-required:
+    name: fragment-required
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out policy from the base branch
+        # No `ref:` on purpose: this checks out the base, not the PR head.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          # No cache is read or written under pull_request_target.
+          cache: false
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Evaluate fragment policy
+        env:
+          # Untrusted input reaches Python via the environment only.
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: task check:fragment-required

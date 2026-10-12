@@ -16,11 +16,8 @@
 # artifact with no network dependency at all. Wiring a network-dependent
 # check into a PR-required gate would make an unreachable third-party
 # service a merge blocker, and per rule f18zrdsgx5 a wedged required check on
-# protect-main is painful to recover from. This job's name is therefore
-# deliberately NOT added to requiredCheckNames
-# (internal/upgrade/taskfile_shape_test.go) — that fixture mirrors a GitHub
-# ruleset outside this repository, and it must keep asserting the truth, not
-# a wish.
+# protect-main is painful to recover from. This job is therefore
+# deliberately never a required status check in the protect-main ruleset.
 #
 # WHY NOT release.yml. That file carries a LOCKED contract: its name, path
 # and tag-only trigger are anchored by releaseWorkflowRefPattern
