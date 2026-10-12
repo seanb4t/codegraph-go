@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
-current_phase: 04
+current_phase: 4
 current_phase_name: Fragment-Required Gate
 status: executing
-stopped_at: "Phase 4 paused at 04-04: PR #95 blocked by pre-existing advisory failures (fix-needed)"
-last_updated: "2026-10-12T00:12:40.888Z"
-last_activity: 2026-10-11
-last_activity_desc: Phase 04 execution started
-state_head: 22df4434f540ee78ff07d8951aee7c5c4373a956
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-10-12T14:25:19.951Z"
+last_activity: 2026-10-12
+last_activity_desc: Phase 4 execution started
+state_head: b47a52ce9da52e66f5d3c36d0271e33c08c47d87
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
   percent: 50
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 04 — Fragment-Required Gate
+**Current focus:** Phase 4 — Fragment-Required Gate
 
 ## Current Position
 
-Phase: 04 (Fragment-Required Gate) — EXECUTING
-Plan: 4 of 5
+Phase: 4 (Fragment-Required Gate) — EXECUTING
+Plan: 5 of 5
 Status: Ready to execute
-Last activity: 2026-10-11 — Phase 04 execution started
+Last activity: 2026-10-12 — Phase 4 execution started
 
 Progress: [█████░░░░░] 50%
 
@@ -198,6 +198,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P01 | 8 min | 3 tasks | 7 files |
 | Phase 04 P02 | 8 min | 3 tasks | 9 files |
 | Phase 04 P03 | 2 sessions | 3 tasks | 1 files |
+| Phase 04 P04 | 5 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -473,6 +474,8 @@ Standing decisions that outlive every milestone:
 - [Phase 04]: 04-01: a rename counts through previous_path, so moving a file out of cmd/** or internal/** still needs a fragment
 - [Phase 04]: 04-02: D-08 retires the ruleset-drift guard and required-check fixture in one code-only ci(04-02) commit (565e3e25) for 04-03 to cherry-pick; ten mutations of our own gate code all went RED (04-MUTATION-LOG.md)
 - [Phase 04]: 04-03: maintainer chose open-new-issue; issue #94 opened and landing PR #95 carries Closes #94 (ci/fragment-required-gate, nine paths, ci/test commits)
+- [Phase 04]: Plan 04-04: the maintainer merged PR #95 with govulncheck and test red from pre-existing dependency advisories (x/net v0.58.0, go1.26.6 stdlib, 18 pnpm advisories); the in-PR fix (quick 261011-sor) was dropped and the advisories remain an open follow-up
+- [Phase 04]: Plan 04-04: main merged back into the milestone with one clean git merge --no-ff commit (b47a52ce, D-06); the milestone tree was unchanged because main's squash carried the same nine Phase 4 paths
 
 ### Pending Todos
 
@@ -632,10 +635,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/04-fragment-required-gate/04-04-PLAN.md
+**Resume file:** None
 
-Last session: 2026-10-12T00:12:35.420Z
-Stopped at: Phase 4 paused at 04-04: PR #95 blocked by pre-existing advisory failures (fix-needed)
+Last session: 2026-10-12T14:25:19.920Z
+Stopped at: Completed 04-04-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
