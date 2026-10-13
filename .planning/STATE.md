@@ -6,10 +6,10 @@ current_phase: 4
 current_phase_name: Fragment-Required Gate
 status: verifying
 stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-10-13T16:18:05.913Z"
+last_updated: "2026-10-13T16:30:01.080Z"
 last_activity: 2026-10-13
 last_activity_desc: Phase 4 execution started
-state_head: 0f2643b4d6be6e917dda315747f1b1a1e1a75d43
+state_head: c5f6ac378161054e89ad8bf0d0361f8c4698c25a
 progress:
   total_phases: 6
   completed_phases: 3
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 Phase: 4 (Fragment-Required Gate) — EXECUTING
 Plan: 5 of 5
 Status: Phase complete — ready for verification
-Last activity: 2026-10-13 — Completed quick task 261013-esj: Reconcile v0.14.1 release into the milestone: merge main and seed .changes/v0.14.1.md
+Last activity: 2026-10-13 — Completed quick task 261013-h27: Disable setup-zig's mutable cache in the release job (use-cache: false), PR to main
 
 Progress: [█████░░░░░] 50%
 
@@ -542,6 +542,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 | 260926-it7 | Release gsd-capability-changie v0.1.2 fixing Phase 2 review findings (WR-01 whole-string --pr, CR-01 check:changie leg 13, IN-01) and repoint project + global installs | 2026-09-26 | 4d6049a4 | [260926-it7-release-gsd-capability-changie-v0-1-2-fi](./quick/260926-it7-release-gsd-capability-changie-v0-1-2-fi/) |
 | 261011-sor | Fix PR 95 dependency advisories: x/net, Go 1.26.9, web audit | 2026-10-12 | 88b07d76 | [261011-sor-fix-pr-95-dependency-advisories-x-net-go](./quick/261011-sor-fix-pr-95-dependency-advisories-x-net-go/) |
 | 261013-esj | Reconcile v0.14.1 release into the milestone: merge main and seed .changes/v0.14.1.md | 2026-10-13 | 3b21f39d | [261013-esj-reconcile-v0-14-1-release-into-the-miles](./quick/261013-esj-reconcile-v0-14-1-release-into-the-miles/) |
+| 261013-h27 | Disable setup-zig's mutable cache in the release job (use-cache: false), PR to main | 2026-10-13 | 38e4f676 | [261013-h27-disable-setup-zig-s-mutable-cache-in-the](./quick/261013-h27-disable-setup-zig-s-mutable-cache-in-the/) |
 
 ## Deferred Items
 
