@@ -4,17 +4,17 @@ milestone: v0.15.0
 milestone_name: Changie Release Management
 current_phase: 4
 current_phase_name: Fragment-Required Gate
-status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-10-13T14:52:07.431Z"
-last_activity: 2026-10-12
+status: verifying
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-10-13T16:18:05.913Z"
+last_activity: 2026-10-13
 last_activity_desc: Phase 4 execution started
-state_head: 3b21f39dae3f89f055760c0b09928f30dd7e46ac
+state_head: 0f2643b4d6be6e917dda315747f1b1a1e1a75d43
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
   percent: 50
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 
 Phase: 4 (Fragment-Required Gate) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-13 — Completed quick task 261013-esj: Reconcile v0.14.1 release into the milestone: merge main and seed .changes/v0.14.1.md
 
 Progress: [█████░░░░░] 50%
@@ -199,6 +199,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P02 | 8 min | 3 tasks | 9 files |
 | Phase 04 P03 | 2 sessions | 3 tasks | 1 files |
 | Phase 04 P04 | 5 min | 2 tasks | 1 files |
+| Phase 04 P05 | 4 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -476,6 +477,7 @@ Standing decisions that outlive every milestone:
 - [Phase 04]: 04-03: maintainer chose open-new-issue; issue #94 opened and landing PR #95 carries Closes #94 (ci/fragment-required-gate, nine paths, ci/test commits)
 - [Phase 04]: Plan 04-04: the maintainer merged PR #95 with govulncheck and test red from pre-existing dependency advisories (x/net v0.58.0, go1.26.6 stdlib, 18 pnpm advisories); the in-PR fix (quick 261011-sor) was dropped and the advisories remain an open follow-up
 - [Phase 04]: Plan 04-04: main merged back into the milestone with one clean git merge --no-ff commit (b47a52ce, D-06); the milestone tree was unchanged because main's squash carried the same nine Phase 4 paths
+- [Phase 04]: 04-05: protect-main (ruleset 20157557) now requires fragment-required (8 to 9 contexts), applied by one maintainer-authorized run-prepared PUT; edit updated_at 2026-10-13T12:16:55.257-04:00
 
 ### Pending Todos
 
@@ -639,8 +641,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-12T14:25:19.920Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-10-13T16:18:05.469Z
+Stopped at: Completed 04-05-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

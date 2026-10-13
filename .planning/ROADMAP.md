@@ -251,7 +251,7 @@ Plans:
   5. **Checkpoint (repository-settings action, maintainer):** `fragment-required` is in ruleset `protect-main`'s required status checks, with the ruleset edit's timestamp recorded, and the live ruleset is re-read read-only before and after the edit (GATE-05, amended by D-09)
 
 **Notes**: The live required-context count is re-read read-only before and after the ruleset edit rather than assumed (8 on 2026-09-26); D-08 retired `.github/required-status-checks.txt`, `TestRequiredCheckNamesPreserved` and `scripts/check-ruleset-drift.sh`, so the ruleset itself is the only record of its contexts. Timing hazard for discuss-phase: a required check whose workflow exists only on the milestone branch never reports on any other pull request to `main`, so marking it required before the workflow is on `main` blocks every other PR until the milestone merges; D-05 settles the sequence: the gate reaches `main` through one PR off `main`, and only then is the check made required. Precedents to reuse rather than reinvent: `require-issue-link.yml`'s fail-closed empty-list handling, `scripts/pr_template_policy.py`'s path-aware exemption, and FIX-10's per-run `$GITHUB_OUTPUT` delimiter for any fork-controlled file list. Planning-only pull requests touch neither `cmd/**` nor `internal/**` and pass without a marker.
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -272,7 +272,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 04-05-PLAN.md — Live ruleset re-read, a one-context PUT body, the maintainer's `protect-main` edit, and the timestamp recorded (GATE-05)
+- [x] 04-05-PLAN.md — Live ruleset re-read, a one-context PUT body, the maintainer's `protect-main` edit, and the timestamp recorded (GATE-05)
 
 #### Phase 5: Release Chain & release-please Retirement
 
@@ -323,7 +323,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
 | 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
-| 4. Fragment-Required Gate | 4/5 | In Progress | - |
+| 4. Fragment-Required Gate | 5/5 | In Progress | - |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
 | 6. First Release Through the Chain | 0/TBD | Not started | - |
 
