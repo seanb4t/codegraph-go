@@ -124,9 +124,20 @@ jobs:
         # now cross via zig cc/zig c++ from this one darwin host — the
         # per-leg `if: matrix.needs_zig` guard the old build matrix used
         # no longer applies now that there is no matrix.
+        #
+        # use-cache is disabled for the same reason as setup-go's
+        # cache: false and the nscloud-cache-action note above (S2;
+        # T-01-29): the action's default caches the zig global/local
+        # cache dirs, which would put a mutable cache any branch can
+        # populate inside this signing job. A restored .zig-cache/ also
+        # dirtied the workspace and failed GoReleaser's git-state check
+        # on a same-tag re-run (v0.14.1, run 38414831563); ignoring
+        # .zig-cache would only hide that. Machine-checked by
+        # TestReleaseJobSetupZigDisablesCache (release_workflow_shape_test.go).
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: "0.15.1"
+          use-cache: false
 
       - name: Install cosign
         # Moved up from the deleted assemble job: .goreleaser.yaml's
