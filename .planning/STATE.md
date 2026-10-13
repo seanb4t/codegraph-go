@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
-current_phase: 4
-current_phase_name: Fragment-Required Gate
-status: verifying
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-10-13T16:30:01.080Z"
+current_phase: 5
+current_phase_name: Release Chain & release-please Retirement
+status: planning
+stopped_at: Phase 4 complete, ready to plan Phase 5
+last_updated: "2026-10-13T16:41:20.987Z"
 last_activity: 2026-10-13
-last_activity_desc: Phase 4 execution started
-state_head: c5f6ac378161054e89ad8bf0d0361f8c4698c25a
+last_activity_desc: Phase 4 complete, transitioned to Phase 5
+state_head: c3d184821217d9c89cc94ef401914d3ab7d616cf
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
   completed_plans: 14
-  percent: 50
+  percent: 67
 ---
 
 # Project State
@@ -29,12 +29,12 @@ See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
 
 ## Current Position
 
-Phase: 4 (Fragment-Required Gate) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-10-13 — Completed quick task 261013-h27: Disable setup-zig's mutable cache in the release job (use-cache: false), PR to main
+Phase: 5 — Release Chain & release-please Retirement
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-13 — Phase 4 complete, transitioned to Phase 5
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -49,7 +49,7 @@ Progress: [█████░░░░░] 50%
 | 1 | 2 | - | - |
 | 2 | 6 | - | - |
 | 3 | 1 | - | - |
-| 4 | 8 | - | - |
+| 4 | 5 | - | - |
 | 5 | 7 | - | - |
 | 6 | 7 | - | - |
 | 7 | 11 | - | - |
@@ -643,7 +643,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-10-13T16:18:05.469Z
-Stopped at: Completed 04-05-PLAN.md
+Stopped at: Phase 4 complete, ready to plan Phase 5
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

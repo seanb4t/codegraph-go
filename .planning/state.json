@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Fragment-Required Gate",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -36,8 +36,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 4 of 6 · 50% · ready to verify"
+    "label": "Advance to the next step (plan phase 5)",
+    "reason": "Phase 5 of 6 — needs a plan"
   },
-  "updated_at": "2026-10-13T16:17:59.094Z"
+  "updated_at": "2026-10-13T16:41:21.010Z"
 }

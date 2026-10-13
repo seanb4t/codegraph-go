@@ -149,7 +149,7 @@ Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · 
 - [x] **Phase 1: Changie Baseline** - `.changie.yaml` and a `v0.14.0` baseline that reproduce today's `CHANGELOG.md` byte-for-byte, with fragments written non-interactively and malformed ones refused (completed 2026-09-25)
 - [x] **Phase 2: Phase-Close Fragment Capability** - A private `gsd-capability-changie` feature capability writes a phase's fragments at `verify:post`, installed and configured in this repository at project scope (completed 2026-09-26)
 - [x] **Phase 3: Rename-Stub Removal** - The hidden `query`/`unlock` stubs are gone, and this phase's close is the capability's first observed firing, writing the milestone's `Breaking` fragment (completed 2026-09-26)
-- [ ] **Phase 4: Fragment-Required Gate** - A pull request that changes shipped code cannot merge without a fragment or a reasoned exemption, and the check is required on `main`
+- [x] **Phase 4: Fragment-Required Gate** - A pull request that changes shipped code cannot merge without a fragment or a reasoned exemption, and the check is required on `main` (completed 2026-10-13)
 - [ ] **Phase 5: Release Chain & release-please Retirement** - A changie release-PR workflow tags through the GitHub App into the locked `release.yml`, every release-please guard is re-pointed, the docs describe the chain, and release-please is deleted
 - [ ] **Phase 6: First Release Through the Chain** - A real release is cut through the new chain end to end, and an installed v0.14.0 upgrades to it with verification
 
@@ -251,7 +251,7 @@ Plans:
   5. **Checkpoint (repository-settings action, maintainer):** `fragment-required` is in ruleset `protect-main`'s required status checks, with the ruleset edit's timestamp recorded, and the live ruleset is re-read read-only before and after the edit (GATE-05, amended by D-09)
 
 **Notes**: The live required-context count is re-read read-only before and after the ruleset edit rather than assumed (8 on 2026-09-26); D-08 retired `.github/required-status-checks.txt`, `TestRequiredCheckNamesPreserved` and `scripts/check-ruleset-drift.sh`, so the ruleset itself is the only record of its contexts. Timing hazard for discuss-phase: a required check whose workflow exists only on the milestone branch never reports on any other pull request to `main`, so marking it required before the workflow is on `main` blocks every other PR until the milestone merges; D-05 settles the sequence: the gate reaches `main` through one PR off `main`, and only then is the check made required. Precedents to reuse rather than reinvent: `require-issue-link.yml`'s fail-closed empty-list handling, `scripts/pr_template_policy.py`'s path-aware exemption, and FIX-10's per-run `$GITHUB_OUTPUT` delimiter for any fork-controlled file list. Planning-only pull requests touch neither `cmd/**` nor `internal/**` and pass without a marker.
-**Plans**: 5/5 plans executed
+**Plans**: 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -323,7 +323,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
 | 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
-| 4. Fragment-Required Gate | 5/5 | In Progress | - |
+| 4. Fragment-Required Gate | 5/5 | Complete    | 2026-10-13 |
 | 5. Release Chain & release-please Retirement | 0/TBD | Not started | - |
 | 6. First Release Through the Chain | 0/TBD | Not started | - |
 
