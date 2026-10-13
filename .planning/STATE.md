@@ -6,10 +6,10 @@ current_phase: 5
 current_phase_name: Release Chain & release-please Retirement
 status: planning
 stopped_at: Phase 4 complete, ready to plan Phase 5
-last_updated: "2026-10-13T16:41:20.987Z"
+last_updated: "2026-10-13T19:17:42.335Z"
 last_activity: 2026-10-13
 last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: c3d184821217d9c89cc94ef401914d3ab7d616cf
+state_head: a30759579db73f371dc64c6be62d17814d0056a7
 progress:
   total_phases: 6
   completed_phases: 4
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
 Phase: 5 — Release Chain & release-please Retirement
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-13 — Phase 4 complete, transitioned to Phase 5
+Last activity: 2026-10-13 - Completed quick task 261013-l08: Merge main (PR #99 setup-zig use-cache: false) back into the milestone for REL-12
 
 Progress: [███████░░░] 67%
 
@@ -536,7 +536,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
 - gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
 - [Phase 4] WR-01 (04-REVIEW.md, open): CHANGELOG_EXEMPT_MARKER backtracks cubically, so a crafted PR body can hang the gate; the same pattern is in scripts/pr_template_policy.py. Fix both together alongside Phase 5 GRD-15, which already edits pr_template_policy.py, and relax or update the marker-mirror test. WR-02/WR-03 (untested fail-closed and escape branches) and IN-01…06 are also open (04-REVIEW-DISPOSITION.md).
-- [Phase 4] PR #99 (ci(release): setup-zig use-cache: false, quick 261013-h27) is open against main. Once merged, merge main back into the milestone before Phase 5 verifies REL-12 (release.yml differs from main by exactly one change).
+- [Phase 4] Resolved 2026-10-13: PR #99 (ci(release): setup-zig use-cache: false, quick 261013-h27) merged to main as 7b12cb92, and quick 261013-l08 merged main back into the milestone (merge commit a3075957). release.yml and release_workflow_shape_test.go now match main byte for byte, so Phase 5's REL-12 check (release.yml differs from main by exactly one change) measures against current main.
 
 ### Quick Tasks Completed
 
@@ -549,6 +549,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 | 261011-sor | Fix PR 95 dependency advisories: x/net, Go 1.26.9, web audit | 2026-10-12 | 88b07d76 | [261011-sor-fix-pr-95-dependency-advisories-x-net-go](./quick/261011-sor-fix-pr-95-dependency-advisories-x-net-go/) |
 | 261013-esj | Reconcile v0.14.1 release into the milestone: merge main and seed .changes/v0.14.1.md | 2026-10-13 | 3b21f39d | [261013-esj-reconcile-v0-14-1-release-into-the-miles](./quick/261013-esj-reconcile-v0-14-1-release-into-the-miles/) |
 | 261013-h27 | Disable setup-zig's mutable cache in the release job (use-cache: false), PR to main | 2026-10-13 | 38e4f676 | [261013-h27-disable-setup-zig-s-mutable-cache-in-the](./quick/261013-h27-disable-setup-zig-s-mutable-cache-in-the/) |
+| 261013-l08 | Merge main (PR #99 setup-zig use-cache: false) back into the milestone for REL-12 | 2026-10-13 | a3075957 | [261013-l08-merge-main-pr-99-setup-zig-use-cache-fal](./quick/261013-l08-merge-main-pr-99-setup-zig-use-cache-fal/) |
 
 ## Deferred Items
 
