@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/seanb4t/codegraph-go/compare/v0.14.0...v0.14.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **deps:** clear govulncheck and pnpm audit advisories (x/net v0.60.0, Go 1.26.9) ([#96](https://github.com/seanb4t/codegraph-go/issues/96)) ([d465f8e](https://github.com/seanb4t/codegraph-go/commit/d465f8edbe987d1e0e201fc76b19904838a22d98))
+
 ## [0.14.0](https://github.com/seanb4t/codegraph-go/compare/v0.13.0...v0.14.0) (2026-09-20)
 
 
