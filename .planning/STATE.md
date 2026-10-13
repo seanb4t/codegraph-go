@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-26 after Phase 3)
+See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 4 — Fragment-Required Gate
+**Current focus:** Phase 5 — Release Chain & release-please Retirement
 
 ## Current Position
 
@@ -478,6 +478,11 @@ Standing decisions that outlive every milestone:
 - [Phase 04]: Plan 04-04: the maintainer merged PR #95 with govulncheck and test red from pre-existing dependency advisories (x/net v0.58.0, go1.26.6 stdlib, 18 pnpm advisories); the in-PR fix (quick 261011-sor) was dropped and the advisories remain an open follow-up
 - [Phase 04]: Plan 04-04: main merged back into the milestone with one clean git merge --no-ff commit (b47a52ce, D-06); the milestone tree was unchanged because main's squash carried the same nine Phase 4 paths
 - [Phase 04]: 04-05: protect-main (ruleset 20157557) now requires fragment-required (8 to 9 contexts), applied by one maintainer-authorized run-prepared PUT; edit updated_at 2026-10-13T12:16:55.257-04:00
+- [Phase 4]: [Phase 04] D-02/D-05/D-06: the gate judges with main's own policy — pull_request_target with a base checkout (no ref:) — so a PR cannot weaken it by editing it; that forces it onto main first, through one gate-only PR (#95), with main merged back into the milestone (b47a52ce, --no-ff, no rebase).
+- [Phase 4]: [Phase 04] D-08/D-09: the ruleset-drift guards (check-ruleset-drift.sh, required-status-checks.txt, TestRequiredCheckNamesPreserved) are retired, not extended, and GATE-05 is amended to "fragment-required is a required check in protect-main, edit timestamp recorded".
+- [Phase 4]: [Phase 04] D-04/D-10: a fragment is an ADDED file under .changes/unreleased/ (not .gitkeep; a modified or renamed one does not count); the policy is its own scripts/fragment_policy.py with a stdlib unittest suite (36 cases, executed-count guard, ten mutations RED), leaving pr_template_policy.py untouched.
+- [Phase 4]: [Phase 04] Fails closed on an empty file list, an API error, an unreadable body or a truncated listing; untrusted PR body and paths reach Python only through env; the workflow posts no comment and holds read-only token scopes.
+- [Phase 4]: [Phase 04] Close: the changie-fragments capability skipped with no-user-visible-change (the phase is CI-only), the second observation of its CAP-03 skip path.
 
 ### Pending Todos
 
@@ -530,7 +535,8 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
 - [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
 - gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
-- Phase 4 paused at 04-04 Task 1 (maintainer merge of PR #95). Maintainer answer, verbatim: "fix-needed (Recommended)". PR #95 is BLOCKED by two required checks that fail for pre-existing reasons unrelated to its 9 files: govulncheck (GO-2026-6612/6613/6617: golang.org/x/net v0.58.0 -> v0.60.0; stdlib net/http go1.26.6 -> go1.26.9) and test (web:audit: pnpm audit reports 18 advisories in web/). Resolve with a separate dependency PR to main; once #95's checks are green (the test job then also exercises 04-01 assumption A-1, python3 on the runner), re-run /gsd-execute-phase 4 to resume at 04-04 and answer "merged".
+- [Phase 4] WR-01 (04-REVIEW.md, open): CHANGELOG_EXEMPT_MARKER backtracks cubically, so a crafted PR body can hang the gate; the same pattern is in scripts/pr_template_policy.py. Fix both together alongside Phase 5 GRD-15, which already edits pr_template_policy.py, and relax or update the marker-mirror test. WR-02/WR-03 (untested fail-closed and escape branches) and IN-01…06 are also open (04-REVIEW-DISPOSITION.md).
+- [Phase 4] PR #99 (ci(release): setup-zig use-cache: false, quick 261013-h27) is open against main. Once merged, merge main back into the milestone before Phase 5 verifies REL-12 (release.yml differs from main by exactly one change).
 
 ### Quick Tasks Completed
 
@@ -642,12 +648,12 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-13T16:18:05.469Z
+Last session: 2026-10-13T16:44:12.000Z
 Stopped at: Phase 4 complete, ready to plan Phase 5
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
-    - **Go toolchain:** ambient Homebrew `go` is 1.27.1; `go.mod` pins 1.26.6 and `cockroachdb/swiss` is `!go1.27` — every local `go build`/`go test` gate needs `GOTOOLCHAIN=go1.26.6` (CI is unaffected: `go-version-file: go.mod`).
+    - **Go toolchain:** ambient Homebrew `go` is 1.27.1; `go.mod` pins 1.26.9 (PR #96) and `cockroachdb/swiss` is `!go1.27` — every local `go build`/`go test` gate needs `GOTOOLCHAIN=go1.26.9` (CI is unaffected: `go-version-file: go.mod`).
     - **Web gates:** `pnpm vitest run` must assert exit 0 AND zero "unhandled errors" lines; a pass count alone is negative-only. Piped `svelte-check` is MACHINE format (uppercase ERRORS).
     - **WINDOWS.md** is tool-owned — close rows with `gsd-tools windows fixed <id>`, never by hand; the phase-1 rows (#12/#26/#28/#30/#36) were closed at 900d64cc and the verifier treats "in the ledger" as part of the phase goal.
     - **No `v0.14.0` git tag** — release-please owns tagging (D-06R).
