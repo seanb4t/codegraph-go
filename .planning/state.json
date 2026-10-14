@@ -26,7 +26,7 @@
     {
       "number": "5",
       "name": "Release Chain & release-please Retirement",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "6",
@@ -39,5 +39,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 05 of 6 · 67% · executing"
   },
-  "updated_at": "2026-10-14T21:17:26.770Z"
+  "updated_at": "2026-10-14T21:34:53.493Z"
 }
