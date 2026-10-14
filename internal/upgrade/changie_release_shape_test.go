@@ -44,12 +44,12 @@ const (
 )
 
 // releaseChainExpectedPins is the exact set of pinned (non-local) `uses:`
-// values a release workflow in this plan may carry.
+// values a release workflow in this plan may carry, in sorted order.
 var releaseChainExpectedPins = []string{
-	releaseChainPinAppToken,
 	releaseChainPinCheckout,
-	releaseChainPinCreatePR,
+	releaseChainPinAppToken,
 	releaseChainPinSetupGo,
+	releaseChainPinCreatePR,
 }
 
 // releaseChainUsesLineRe matches a `uses:` line in raw workflow source,
