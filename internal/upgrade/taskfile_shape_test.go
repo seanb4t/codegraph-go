@@ -153,6 +153,8 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "fragment-required.yml", JobID: "fragment-required"},
 	{Workflow: "release-pr.yml", JobID: "pretag-gate"},
 	{Workflow: "release-pr.yml", JobID: "release-pr"},
+	{Workflow: "release-tag.yml", JobID: "pretag-gate"},
+	{Workflow: "release-tag.yml", JobID: "tag"},
 }
 
 // runBodyException is one literal, reasoned carve-out from the
@@ -1461,7 +1463,7 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 // shape criterion 2 already fixed one level down (job population). Every
 // file on disk must now appear in EXACTLY ONE of inScopeWorkflowFiles or
 // workflowFileExceptions, or that test fails, naming it.
-var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml", "components-drift.yml", "fragment-required.yml", "release-pr.yml"}
+var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml", "components-drift.yml", "fragment-required.yml", "release-pr.yml", "release-tag.yml"}
 
 // workflowFileException names one workflow file, by its filename under
 // workflowsDir, that is deliberately OUT of inScopeWorkflowFiles's

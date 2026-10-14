@@ -12,8 +12,11 @@
 // They never exercise how changie, peter-evans/create-pull-request or GitHub
 // behave (rule eyva2svrcz).
 //
-// Plans 05-02 and 05-03 extend this file, so the YAML decoder below is
-// general and every package-level identifier carries the releaseChain prefix
+// Plan 05-02 adds the tag half to this file: release-tag.yml (REL-11, D-06,
+// D-07), the Taskfile.yml `release:tag` target, and the GRD-16 scan that holds
+// release:tag as the repository's only tag-creating command. Plan 05-03
+// extends it further, so the YAML decoder below is general and every
+// package-level identifier carries the releaseChain or tagCreation prefix
 // (package upgrade is shared by many test files).
 package upgrade
 
@@ -21,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -526,4 +530,978 @@ func TestReleaseBatchTargetShape(t *testing.T) {
 		t.Errorf("release:batch invokes changie through GO_TOOL_CHANGIE %d times, want at least 3 (batch, merge, latest)", invocations)
 	}
 	t.Logf("release:batch: %d of %d ordered tokens found; %d changie invocations; %d workflow files scanned", tokens, len(releaseChainBatchTokens), invocations, scanned)
+}
+
+// --- release-tag.yml (REL-11, D-06, D-07) ------------------------------------
+
+const releaseChainTagWorkflowPath = "../../.github/workflows/release-tag.yml"
+
+// releaseChainTagExpectedPins is the exact set of pinned (non-local) `uses:`
+// values release-tag.yml may carry, in sorted order: no create-pull-request,
+// because the tag half opens no PR.
+var releaseChainTagExpectedPins = []string{
+	releaseChainPinCheckout,
+	releaseChainPinAppToken,
+	releaseChainPinSetupGo,
+}
+
+// releaseChainAppTokenOutput is the only credential the tag job's checkout
+// may carry (T-05-06): a tag pushed with the default workflow token never
+// starts release.yml.
+const releaseChainAppTokenOutput = "${{ steps.app-token.outputs.token }}"
+
+// releaseChainSeqValues returns the scalar values of a YAML sequence node.
+func releaseChainSeqValues(t *testing.T, what string, n *yaml.Node) []string {
+	t.Helper()
+	if n.Kind != yaml.SequenceNode {
+		t.Fatalf("%s is not a sequence (kind=%v)", what, n.Kind)
+	}
+	var out []string
+	for _, e := range n.Content {
+		out = append(out, e.Value)
+	}
+	return out
+}
+
+// releaseChainPinnedUses reads every non-comment `uses:` line of nonComment,
+// reports a failure for any non-local value that is not a full 40-hex SHA pin
+// followed by ` # vX.Y.Z`, and returns the number of uses: lines and the
+// sorted distinct pins.
+func releaseChainPinnedUses(t *testing.T, nonComment []string) (int, []string) {
+	t.Helper()
+	usesLines := 0
+	pins := map[string]bool{}
+	for _, line := range nonComment {
+		m := releaseChainUsesLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		usesLines++
+		v := m[1]
+		if v == releaseChainInstallTask {
+			continue
+		}
+		if !releaseChainPinnedUsesRe.MatchString(v) {
+			t.Errorf("uses: %q is not a full 40-hex SHA pin followed by ` # vX.Y.Z`", v)
+			continue
+		}
+		pins[v] = true
+	}
+	var got []string
+	for p := range pins {
+		got = append(got, p)
+	}
+	sort.Strings(got)
+	return usesLines, got
+}
+
+// --- TestReleaseTagWorkflowShape (REL-11, D-06, D-07) ------------------------
+
+func TestReleaseTagWorkflowShape(t *testing.T) {
+	wf, src := mustReleaseChainWorkflow(t, releaseChainTagWorkflowPath)
+	prWf, _ := mustReleaseChainWorkflow(t, releaseChainPRWorkflowPath)
+	checked := 0
+
+	// The display name must never be `release`: post-release-verify.yml keys
+	// on workflow_run of "release".
+	if wf.Name != "release-tag" {
+		t.Errorf("top-level name = %q, want %q", wf.Name, "release-tag")
+	}
+	checked++
+
+	// Trigger (D-06): changie's documented release trigger, a push to main
+	// that changes CHANGELOG.md, and nothing else.
+	onKeys := releaseChainMappingKeys(t, "on:", &wf.On)
+	if !slices.Equal(onKeys, []string{"push"}) {
+		t.Errorf("on: keys = %v, want exactly [push]", onKeys)
+	} else {
+		pushNode, _ := yamlMappingValue(&wf.On, "push")
+		pushKeys := releaseChainMappingKeys(t, "on.push", pushNode)
+		if !slices.Equal(pushKeys, []string{"branches", "paths"}) {
+			t.Errorf("on.push keys = %v, want exactly [branches paths]", pushKeys)
+		} else {
+			branches, _ := yamlMappingValue(pushNode, "branches")
+			if got := releaseChainSeqValues(t, "on.push.branches", branches); !slices.Equal(got, []string{"main"}) {
+				t.Errorf("on.push.branches = %v, want exactly [main]", got)
+			}
+			paths, _ := yamlMappingValue(pushNode, "paths")
+			if got := releaseChainSeqValues(t, "on.push.paths", paths); !slices.Equal(got, []string{"CHANGELOG.md"}) {
+				t.Errorf("on.push.paths = %v, want exactly [CHANGELOG.md] (changie's documented release trigger, D-06)", got)
+			}
+		}
+	}
+	checked++
+
+	if !mapsEqualReleaseChain(wf.Permissions, map[string]string{"contents": "read"}) {
+		t.Errorf("top-level permissions = %v, want exactly {contents: read}", wf.Permissions)
+	}
+	checked++
+
+	// A tag push is never cancelled mid-flight.
+	if !mapsEqualReleaseChain(wf.Concurrency, map[string]string{"group": "release-tag", "cancel-in-progress": "false"}) {
+		t.Errorf("concurrency = %v, want {group: release-tag, cancel-in-progress: false}", wf.Concurrency)
+	}
+	checked++
+
+	var jobIDs []string
+	for id := range wf.Jobs {
+		jobIDs = append(jobIDs, id)
+	}
+	sort.Strings(jobIDs)
+	if !slices.Equal(jobIDs, []string{"pretag-gate", "tag"}) {
+		t.Fatalf("jobs = %v, want exactly [pretag-gate tag]", jobIDs)
+	}
+	checked++
+
+	// D-07: pretag-gate is the same job release-pr.yml runs, decoded equal.
+	gate, prGate := wf.Jobs["pretag-gate"], prWf.Jobs["pretag-gate"]
+	if len(gate.Steps) == 0 || len(prGate.Steps) == 0 {
+		t.Fatalf("pretag-gate has %d steps here and %d in release-pr.yml — this comparison would vacuously pass", len(gate.Steps), len(prGate.Steps))
+	}
+	if !reflect.DeepEqual(gate, prGate) {
+		t.Errorf("pretag-gate differs from release-pr.yml's (D-07 moves it verbatim):\n  release-tag.yml: %+v\n  release-pr.yml:  %+v", gate, prGate)
+	}
+	if last := gate.Steps[len(gate.Steps)-1]; stripRunBodyNoise(last.Run) != "task check:cross" {
+		t.Errorf("pretag-gate last step run body = %q, want %q", stripRunBodyNoise(last.Run), "task check:cross")
+	}
+	checked += len(gate.Steps) + 1
+
+	// The tag job: needs pretag-gate and runs the five steps in order, with
+	// the App-token mint before the checkout that persists its credential.
+	tag := wf.Jobs["tag"]
+	if got := releaseChainNeeds(tag.Needs); !slices.Equal(got, []string{"pretag-gate"}) {
+		t.Errorf("tag needs = %v, want [pretag-gate]", got)
+	}
+	if tag.RunsOn != "ubuntu-latest" {
+		t.Errorf("tag runs-on = %q, want ubuntu-latest", tag.RunsOn)
+	}
+	if len(tag.Permissions) != 0 {
+		t.Errorf("tag declares job-level permissions %v, want none", tag.Permissions)
+	}
+	checked += 3
+	checked += releaseChainCheckSteps(t, "tag", tag.Steps, []releaseChainStepWanted{
+		{
+			Name: "Mint GitHub App installation token",
+			ID:   "app-token",
+			Uses: strings.SplitN(releaseChainPinAppToken, " #", 2)[0],
+			With: map[string]string{"app-id": "${{ secrets.APP_ID }}", "private-key": "${{ secrets.APP_PRIVATE_KEY }}"},
+		},
+		{
+			// The credential `git push` uses. persist-credentials stays at its
+			// default: a With key for it would fail this comparison.
+			Name: "Checkout",
+			Uses: strings.SplitN(releaseChainPinCheckout, " #", 2)[0],
+			With: map[string]string{"token": releaseChainAppTokenOutput},
+		},
+		{Name: "Set up Go", Uses: strings.SplitN(releaseChainPinSetupGo, " #", 2)[0], With: map[string]string{"go-version-file": "go.mod"}},
+		{Name: "Install Task", Uses: releaseChainInstallTask},
+		{Name: "Tag the release", Run: "task release:tag"},
+	})
+
+	nonComment := releaseChainNonCommentLines(src)
+	usesLines, gotPins := releaseChainPinnedUses(t, nonComment)
+	if usesLines == 0 {
+		t.Fatalf("%s: found zero uses: lines — this guard would vacuously pass", releaseChainTagWorkflowPath)
+	}
+	if !slices.Equal(gotPins, releaseChainTagExpectedPins) {
+		t.Errorf("distinct pinned uses = %v, want exactly %v", gotPins, releaseChainTagExpectedPins)
+	}
+	checked += usesLines
+
+	// Run bodies: exactly two, each a single task call, no expression inside.
+	var runBodies []string
+	for _, id := range jobIDs {
+		for _, s := range wf.Jobs[id].Steps {
+			if s.Run == "" {
+				continue
+			}
+			runBodies = append(runBodies, stripRunBodyNoise(s.Run))
+			if strings.Contains(s.Run, "${{") {
+				t.Errorf("job %q step %q: run body contains a ${{ }} expression: %q", id, s.Name, s.Run)
+			}
+		}
+	}
+	sort.Strings(runBodies)
+	if !slices.Equal(runBodies, []string{"task check:cross", "task release:tag"}) {
+		t.Errorf("run bodies = %v, want exactly [task check:cross task release:tag]", runBodies)
+	}
+	checked += len(runBodies)
+
+	// T-05-06: no non-comment line names the default token, and none touches
+	// persist-credentials (comments may explain both).
+	for i, line := range nonComment {
+		if strings.Contains(line, "GITHUB_TOKEN") || strings.Contains(line, "github.token") {
+			t.Errorf("non-comment line %d names the default token (REL-11): %q", i+1, line)
+		}
+		if strings.Contains(line, "persist-credentials") {
+			t.Errorf("non-comment line %d overrides persist-credentials (it must stay at its default): %q", i+1, line)
+		}
+	}
+	checked += len(nonComment)
+
+	if checked == 0 {
+		t.Fatalf("checked zero items — this guard would vacuously pass")
+	}
+	t.Logf("%s: %d fields, lines and uses checked (%d uses: lines, %d distinct pins, %d run bodies)", releaseChainTagWorkflowPath, checked, usesLines, len(gotPins), len(runBodies))
+}
+
+// --- TestReleaseTagTargetShape (REL-11, D-06, C3, C8) ------------------------
+
+// releaseChainTagTokens are the tokens of release:tag's body, in the order
+// they must appear: the tag, the origin lookup, the three case arms, the
+// local tag, and the single-ref push.
+var releaseChainTagTokens = []struct {
+	label string
+	token string
+}{
+	{"tag from changie latest", `tag=$({{.GO_TOOL_CHANGIE}} changie latest)`},
+	{"origin lookup", `git ls-remote --exit-code --tags origin "refs/tags/${tag}"`},
+	{"existing-tag arm", `0) echo "release:tag: ${tag} already exists on origin`},
+	{"absent-tag arm", `2) ;;`},
+	{"transport-error arm", `*) echo "::error::release:tag:`},
+	{"local tag", `git tag "${tag}"`},
+	{"single-ref push", `git push origin "refs/tags/${tag}"`},
+}
+
+func TestReleaseTagTargetShape(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(data))
+	block, ok := blocks["release:tag"]
+	if !ok {
+		t.Fatalf("%s: no top-level %q task", taskfilePath, "release:tag")
+	}
+
+	if !regexp.MustCompile(`(?m)^    silent: true\s*$`).MatchString(block) {
+		t.Errorf("release:tag does not declare `silent: true`:\n%s", block)
+	}
+	desc, err := parseTaskDescription(block)
+	if err != nil {
+		t.Errorf("parseTaskDescription(release:tag): %v", err)
+	} else if !strings.Contains(desc, "REL-11") {
+		t.Errorf("release:tag desc does not cite REL-11: %q", desc)
+	}
+
+	cmdsIdx := regexp.MustCompile(`(?m)^    cmds:\s*$`).FindStringIndex(block)
+	if cmdsIdx == nil {
+		t.Fatalf("release:tag block has no cmds: key:\n%s", block)
+	}
+	preconds, cmds := block[:cmdsIdx[0]], block[cmdsIdx[1]:]
+
+	// C8: the target runs only under GitHub Actions (D-06R: no human git tag).
+	if !strings.Contains(preconds, `sh: '[ "${GITHUB_ACTIONS:-}" = "true" ]'`) {
+		t.Errorf("release:tag has no GITHUB_ACTIONS=true precondition (C8, D-06R):\n%s", preconds)
+	}
+	msgs, err := parsePreconditionMessages(block)
+	if err != nil {
+		t.Errorf("parsePreconditionMessages(release:tag): %v", err)
+	} else if !strings.Contains(strings.Join(msgs, "\n"), "runs only in release-tag.yml") {
+		t.Errorf("release:tag precondition messages %q do not say it runs only in release-tag.yml", msgs)
+	}
+
+	lines := releaseChainNonCommentLines(cmds)
+	var body []string
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			body = append(body, strings.TrimSpace(l))
+		}
+	}
+	if len(body) == 0 || body[0] != "set -euo pipefail" {
+		t.Errorf("release:tag cmds do not start with `set -euo pipefail`: first line %q", firstOrEmpty(body))
+	}
+
+	// The tokens, at strictly increasing byte offsets.
+	offset := 0
+	found := 0
+	for _, tk := range releaseChainTagTokens {
+		i := strings.Index(cmds[offset:], tk.token)
+		if i < 0 {
+			t.Errorf("release:tag cmds: token %q (%s) not found at or after byte offset %d", tk.token, tk.label, offset)
+			continue
+		}
+		offset += i + len(tk.token)
+		found++
+	}
+
+	// Per-line contracts the ordered tokens cannot express.
+	var lsRemote, existingArm, errorArm int
+	var tagLines, pushLines []string
+	for _, l := range body {
+		switch {
+		case strings.HasPrefix(l, "git ls-remote"):
+			lsRemote++
+			if !strings.HasSuffix(l, "|| rc=$?") {
+				t.Errorf("release:tag ls-remote line does not capture its status with `|| rc=$?`: %q", l)
+			}
+		case strings.HasPrefix(l, "0) echo"):
+			existingArm++
+			if !strings.Contains(l, "already exists on origin") || !strings.HasSuffix(strings.TrimSpace(l), "exit 0 ;;") {
+				t.Errorf("release:tag existing-tag arm must say `already exists on origin` and exit 0: %q", l)
+			}
+		case strings.HasPrefix(l, "*) echo"):
+			errorArm++
+			if !strings.Contains(l, "git ls-remote exited") || !strings.HasSuffix(strings.TrimSpace(l), "exit 1 ;;") {
+				t.Errorf("release:tag transport-error arm must say `git ls-remote exited` and exit 1: %q", l)
+			}
+		}
+		if regexp.MustCompile(`^git\s+tag\s`).MatchString(l) {
+			tagLines = append(tagLines, l)
+		}
+		if regexp.MustCompile(`^git\s+push\s`).MatchString(l) {
+			pushLines = append(pushLines, l)
+		}
+	}
+	if lsRemote != 1 || existingArm != 1 || errorArm != 1 {
+		t.Errorf("release:tag has %d ls-remote lines, %d existing-tag arms and %d transport-error arms, want 1 of each", lsRemote, existingArm, errorArm)
+	}
+	if len(tagLines) != 1 || len(pushLines) != 1 {
+		t.Errorf("release:tag has %d `git tag` lines and %d `git push` lines, want exactly 1 of each: tag=%q push=%q", len(tagLines), len(pushLines), tagLines, pushLines)
+	}
+	for _, l := range pushLines {
+		for _, flag := range []string{"--tags", "--follow-tags", "--all", "--mirror"} {
+			if strings.Contains(l, flag) {
+				t.Errorf("release:tag push widens past the one tag ref (%s): %q", flag, l)
+			}
+		}
+	}
+
+	// changie is reached only through GO_TOOL_CHANGIE (CHG-01's one install path).
+	invocations := 0
+	for _, l := range lines {
+		if !releaseChainChangieVerbRe.MatchString(l) || strings.Contains(l, "echo ") || strings.Contains(l, "::error::") {
+			continue
+		}
+		invocations++
+		if !strings.Contains(l, "{{.GO_TOOL_CHANGIE}} changie ") {
+			t.Errorf("release:tag invokes changie without the {{.GO_TOOL_CHANGIE}} prefix: %q", strings.TrimSpace(l))
+		}
+	}
+	if invocations != 1 {
+		t.Errorf("release:tag invokes changie %d times, want exactly 1 (latest)", invocations)
+	}
+	t.Logf("release:tag: %d of %d ordered tokens found; %d body lines; %d changie invocation", found, len(releaseChainTagTokens), len(body), invocations)
+}
+
+func firstOrEmpty(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return lines[0]
+}
+
+// --- GRD-16: one tag-creating site, holding the App-token credential ----------
+
+// The four tag-creating command shapes (RESEARCH Pitfall 6). Each is matched
+// against one logical line of an executed body, after full-line comments are
+// dropped. A script invoked by path is not opened; this mirrors
+// resolveReleasePathClosure's recorded boundary 1 (T-05-10, accepted). A
+// non-`sh:` Taskfile var value is not scanned either, because only cmds, cmd,
+// sh, deps and defer are executed positions.
+var (
+	tagCreationGitTagRe          = regexp.MustCompile(`(^|[;&|(\s])git(\s+-[cC]\s+\S+)*\s+tag(\s|$)`)
+	tagCreationGitPushRe         = regexp.MustCompile(`(^|[;&|(\s])git(\s+-[cC]\s+\S+)*\s+push(\s|$)`)
+	tagCreationGhReleaseCreateRe = regexp.MustCompile(`\bgh\s+release\s+create\b`)
+	tagCreationGhAPIRefsRe       = regexp.MustCompile(`\bgh\s+api\b.*\bgit/(refs|tags)\b`)
+)
+
+var tagCreationPatterns = []*regexp.Regexp{
+	tagCreationGitTagRe,
+	tagCreationGitPushRe,
+	tagCreationGhReleaseCreateRe,
+	tagCreationGhAPIRefsRe,
+}
+
+// tagCreationPushWordRe picks a push command out of release:tag's site lines
+// for the validator, independent of the scanner's own patterns.
+var tagCreationPushWordRe = regexp.MustCompile(`\bpush\b`)
+
+const (
+	// tagCreationSoleUnit is the one unit that may create or push a tag.
+	tagCreationSoleUnit = "task:release:tag"
+	// tagCreationSoleInvoker is the one place that unit may be invoked from.
+	tagCreationSoleInvoker = "release-tag.yml/tag/Tag the release"
+)
+
+type tagCreationSite struct {
+	Unit string // "workflow:<file>/<job>/<step>", "action:<path>/<step>" or "task:<target>"
+	Line string
+}
+
+type tagCreationScan struct {
+	WorkflowFiles   int
+	RunBodies       int
+	LocalActions    int
+	TaskTargets     int
+	ExecutedScalars int
+	Sites           []tagCreationSite
+	// TaskInvocations maps a Taskfile target to every place that invokes it:
+	// "<file>/<job>/<step>" for a workflow step, "Taskfile:<target>" for a
+	// `task:` reference or `task <target>` line inside the Taskfile.
+	TaskInvocations map[string][]string
+}
+
+func tagCreationLineCreates(line string) bool {
+	for _, re := range tagCreationPatterns {
+		if re.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// scanBody records every tag-creating line of one executed body under unit,
+// and every `task <target>` line under invoker.
+func (s *tagCreationScan) scanBody(unit, invoker, body string) {
+	for _, line := range strings.Split(stripRunBodyNoise(body), "\n") {
+		if line != "" && tagCreationLineCreates(line) {
+			s.Sites = append(s.Sites, tagCreationSite{Unit: unit, Line: line})
+		}
+	}
+	for _, target := range taskTargetsInRunBody(body) {
+		s.TaskInvocations[target] = append(s.TaskInvocations[target], invoker)
+	}
+}
+
+func tagCreationStepLabel(name string, i int) string {
+	if name != "" {
+		return name
+	}
+	return fmt.Sprintf("step-%d", i+1)
+}
+
+func tagCreationDeref(n *yaml.Node) *yaml.Node {
+	for n != nil && n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	return n
+}
+
+// execTask records one executed Taskfile scalar attributed to task name.
+func (s *tagCreationScan) execTask(name, body string) {
+	s.ExecutedScalars++
+	s.scanBody("task:"+name, "Taskfile:"+name, body)
+}
+
+func (s *tagCreationScan) invokeFromTask(name, target string) {
+	s.TaskInvocations[target] = append(s.TaskInvocations[target], "Taskfile:"+name)
+}
+
+// cmdEntry handles one element of a `cmds` (or `defer`) value: a shell
+// string, or a mapping holding `cmd`, `task` or `defer`.
+func (s *tagCreationScan) cmdEntry(name string, n *yaml.Node) {
+	n = tagCreationDeref(n)
+	switch n.Kind {
+	case yaml.ScalarNode:
+		s.execTask(name, n.Value)
+	case yaml.MappingNode:
+		if v, ok := yamlMappingValue(n, "cmd"); ok {
+			s.execTask(name, tagCreationDeref(v).Value)
+		}
+		if v, ok := yamlMappingValue(n, "task"); ok {
+			s.invokeFromTask(name, tagCreationDeref(v).Value)
+		}
+		if v, ok := yamlMappingValue(n, "defer"); ok {
+			s.cmdEntry(name, v)
+		}
+	}
+}
+
+// shEntry executes a mapping's `sh:` value, if it has one (a dynamic var or a
+// precondition).
+func (s *tagCreationScan) shEntry(name string, n *yaml.Node) {
+	n = tagCreationDeref(n)
+	switch n.Kind {
+	case yaml.ScalarNode:
+		s.execTask(name, n.Value) // precondition shorthand: a bare shell string
+	case yaml.MappingNode:
+		if v, ok := yamlMappingValue(n, "sh"); ok {
+			s.execTask(name, tagCreationDeref(v).Value)
+		}
+	}
+}
+
+func (s *tagCreationScan) varsEntries(name string, n *yaml.Node) {
+	n = tagCreationDeref(n)
+	if n.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if v := tagCreationDeref(n.Content[i+1]); v.Kind == yaml.MappingNode {
+			s.shEntry(name, v)
+		}
+	}
+}
+
+func (s *tagCreationScan) scanTask(name string, n *yaml.Node) {
+	n = tagCreationDeref(n)
+	switch n.Kind {
+	case yaml.ScalarNode:
+		s.execTask(name, n.Value)
+	case yaml.SequenceNode:
+		for _, e := range n.Content {
+			s.cmdEntry(name, e)
+		}
+	case yaml.MappingNode:
+		if v, ok := yamlMappingValue(n, "cmds"); ok {
+			for _, e := range tagCreationDeref(v).Content {
+				s.cmdEntry(name, e)
+			}
+		}
+		if v, ok := yamlMappingValue(n, "cmd"); ok {
+			s.execTask(name, tagCreationDeref(v).Value)
+		}
+		if v, ok := yamlMappingValue(n, "deps"); ok {
+			for _, e := range tagCreationDeref(v).Content {
+				e = tagCreationDeref(e)
+				switch e.Kind {
+				case yaml.ScalarNode:
+					s.invokeFromTask(name, e.Value)
+				case yaml.MappingNode:
+					if tv, ok := yamlMappingValue(e, "task"); ok {
+						s.invokeFromTask(name, tagCreationDeref(tv).Value)
+					}
+				}
+			}
+		}
+		if v, ok := yamlMappingValue(n, "preconditions"); ok {
+			for _, e := range tagCreationDeref(v).Content {
+				s.shEntry(name, e)
+			}
+		}
+		if v, ok := yamlMappingValue(n, "vars"); ok {
+			s.varsEntries(name, v)
+		}
+	}
+}
+
+type tagCreationActionFile struct {
+	Runs struct {
+		Steps []struct {
+			Name string `yaml:"name"`
+			Run  string `yaml:"run"`
+		} `yaml:"steps"`
+	} `yaml:"runs"`
+}
+
+// scanTagCreationSites reads every workflow run body, every local action run
+// step and every command Task executes, and reports the tag-creating ones. It
+// never reads `desc:` or `msg:` text and never a full-line comment. It
+// returns an error for zero workflows, zero run bodies or zero task targets
+// decoded: a scan of nothing must not pass (rule 84d1gfpywd).
+func scanTagCreationSites(workflows map[string][]byte, actions map[string][]byte, taskfile []byte) (tagCreationScan, error) {
+	scan := tagCreationScan{TaskInvocations: map[string][]string{}}
+
+	files := make([]string, 0, len(workflows))
+	for f := range workflows {
+		files = append(files, f)
+	}
+	sort.Strings(files)
+	for _, file := range files {
+		jobs, err := parseWorkflowJobsAllSteps(string(workflows[file]))
+		if err != nil {
+			return scan, fmt.Errorf("scanTagCreationSites: workflow %s: %w", file, err)
+		}
+		scan.WorkflowFiles++
+		jobIDs := make([]string, 0, len(jobs))
+		for id := range jobs {
+			jobIDs = append(jobIDs, id)
+		}
+		sort.Strings(jobIDs)
+		for _, id := range jobIDs {
+			for i, step := range jobs[id] {
+				if step.Run == "" {
+					continue
+				}
+				scan.RunBodies++
+				label := file + "/" + id + "/" + tagCreationStepLabel(step.Name, i)
+				scan.scanBody("workflow:"+label, label, step.Run)
+			}
+		}
+	}
+
+	paths := make([]string, 0, len(actions))
+	for p := range actions {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		var act tagCreationActionFile
+		if err := yaml.Unmarshal(actions[p], &act); err != nil {
+			return scan, fmt.Errorf("scanTagCreationSites: action %s: %w", p, err)
+		}
+		scan.LocalActions++
+		for i, step := range act.Runs.Steps {
+			if step.Run == "" {
+				continue
+			}
+			scan.RunBodies++
+			label := p + "/" + tagCreationStepLabel(step.Name, i)
+			scan.scanBody("action:"+label, "action:"+label, step.Run)
+		}
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(taskfile, &doc); err != nil {
+		return scan, fmt.Errorf("scanTagCreationSites: Taskfile: %w", err)
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return scan, fmt.Errorf("scanTagCreationSites: Taskfile has no top-level mapping")
+	}
+	root := doc.Content[0]
+	if v, ok := yamlMappingValue(root, "vars"); ok {
+		scan.varsEntries("<taskfile>", v)
+	}
+	tasks, ok := yamlMappingValue(root, "tasks")
+	if !ok || tagCreationDeref(tasks).Kind != yaml.MappingNode {
+		return scan, fmt.Errorf("scanTagCreationSites: Taskfile has no tasks: mapping")
+	}
+	tasks = tagCreationDeref(tasks)
+	for i := 0; i+1 < len(tasks.Content); i += 2 {
+		scan.TaskTargets++
+		scan.scanTask(tasks.Content[i].Value, tasks.Content[i+1])
+	}
+
+	switch {
+	case scan.WorkflowFiles == 0:
+		return scan, fmt.Errorf("scanTagCreationSites: decoded zero workflow files — this scan would vacuously pass")
+	case scan.RunBodies == 0:
+		return scan, fmt.Errorf("scanTagCreationSites: decoded zero run bodies — this scan would vacuously pass")
+	case scan.TaskTargets == 0:
+		return scan, fmt.Errorf("scanTagCreationSites: decoded zero Taskfile targets — this scan would vacuously pass")
+	}
+	return scan, nil
+}
+
+// tagCreationForbiddenPushFlags are the flags that would widen release:tag's
+// push past the one tag it just made.
+var tagCreationForbiddenPushFlags = []string{"--tags", "--follow-tags", "--all", "--mirror"}
+
+// validateTagCreationScan enforces GRD-16: exactly one unit holds a
+// tag-creating command, task:release:tag; its push names refs/tags/ and no
+// widening flag; and the only invocation of release:tag is release-tag.yml's
+// tag job. Every violation is reported, each naming the offending unit.
+func validateTagCreationScan(scan tagCreationScan) error {
+	var problems []string
+
+	byUnit := map[string][]string{}
+	var order []string
+	for _, site := range scan.Sites {
+		if _, seen := byUnit[site.Unit]; !seen {
+			order = append(order, site.Unit)
+		}
+		byUnit[site.Unit] = append(byUnit[site.Unit], site.Line)
+	}
+	for _, unit := range order {
+		if unit != tagCreationSoleUnit {
+			problems = append(problems, fmt.Sprintf("unit %q holds a tag-creating command %q; only %s may (GRD-16, D-06R)", unit, byUnit[unit][0], tagCreationSoleUnit))
+		}
+	}
+
+	lines, found := byUnit[tagCreationSoleUnit]
+	if !found {
+		problems = append(problems, fmt.Sprintf("found zero tag-creating commands in %s, want exactly that one unit", tagCreationSoleUnit))
+	} else {
+		pushes := 0
+		for _, line := range lines {
+			if !tagCreationPushWordRe.MatchString(line) {
+				continue
+			}
+			pushes++
+			if !strings.Contains(line, "refs/tags/") {
+				problems = append(problems, fmt.Sprintf("unit %q pushes without naming refs/tags/: %q", tagCreationSoleUnit, line))
+			}
+			for _, flag := range tagCreationForbiddenPushFlags {
+				if strings.Contains(line, flag) {
+					problems = append(problems, fmt.Sprintf("unit %q push uses %s, which widens past the one tag: %q", tagCreationSoleUnit, flag, line))
+				}
+			}
+		}
+		if pushes == 0 {
+			problems = append(problems, fmt.Sprintf("unit %q holds no push line to check", tagCreationSoleUnit))
+		}
+	}
+
+	invokers := scan.TaskInvocations["release:tag"]
+	if !slices.Equal(invokers, []string{tagCreationSoleInvoker}) {
+		problems = append(problems, fmt.Sprintf("task release:tag is invoked from %q, want exactly [%q]", invokers, tagCreationSoleInvoker))
+	}
+	for _, inv := range invokers {
+		if strings.HasPrefix(inv, "Taskfile:") {
+			problems = append(problems, fmt.Sprintf("%s references release:tag; only a workflow step may", inv))
+		}
+	}
+
+	if len(problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s", strings.Join(problems, "; "))
+}
+
+// validateTagJobCredential checks that the tag job's checkout credential is
+// the output of the App-token mint that precedes it (T-05-06).
+func validateTagJobCredential(wf *releaseChainWorkflow) error {
+	job, ok := wf.Jobs["tag"]
+	if !ok {
+		return fmt.Errorf("release-tag.yml has no job %q", "tag")
+	}
+	mint, checkout := -1, -1
+	for i, s := range job.Steps {
+		switch {
+		case s.ID == "app-token" && strings.HasPrefix(s.Uses, "actions/create-github-app-token@"):
+			mint = i
+		case strings.HasPrefix(s.Uses, "actions/checkout@"):
+			checkout = i
+		}
+	}
+	if mint < 0 || checkout < 0 || mint > checkout {
+		return fmt.Errorf("tag job: App-token mint at step %d must precede the checkout at step %d", mint, checkout)
+	}
+	if got := job.Steps[checkout].With["token"]; got != releaseChainAppTokenOutput {
+		return fmt.Errorf("tag job checkout token = %q, want %q", got, releaseChainAppTokenOutput)
+	}
+	return nil
+}
+
+const releaseChainActionsDir = "../../.github/actions"
+
+func TestTagCreationHasSingleAppTokenSite(t *testing.T) {
+	entries, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", workflowsDir, err)
+	}
+	workflows := map[string][]byte{}
+	onDisk := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yml") {
+			continue
+		}
+		onDisk++
+		data, err := os.ReadFile(filepath.Join(workflowsDir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		workflows[e.Name()] = data
+	}
+
+	actions := map[string][]byte{}
+	actionDirs, err := os.ReadDir(releaseChainActionsDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseChainActionsDir, err)
+	}
+	for _, d := range actionDirs {
+		if !d.IsDir() {
+			continue
+		}
+		for _, name := range []string{"action.yml", "action.yaml"} {
+			data, err := os.ReadFile(filepath.Join(releaseChainActionsDir, d.Name(), name))
+			if err == nil {
+				actions[d.Name()+"/"+name] = data
+				break
+			}
+		}
+	}
+	taskfile, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+
+	scan, err := scanTagCreationSites(workflows, actions, taskfile)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	// Positive assertions (rule 84d1gfpywd): the scan saw a real population.
+	if scan.WorkflowFiles != onDisk {
+		t.Errorf("scanned %d workflow files, but %d *.yml files are on disk", scan.WorkflowFiles, onDisk)
+	}
+	if scan.RunBodies <= 0 {
+		t.Errorf("scanned %d run bodies, want more than 0", scan.RunBodies)
+	}
+	if scan.LocalActions < 1 {
+		t.Errorf("scanned %d local actions, want at least 1", scan.LocalActions)
+	}
+	if scan.TaskTargets <= 50 {
+		t.Errorf("scanned %d Taskfile targets, want more than 50", scan.TaskTargets)
+	}
+	units := map[string]bool{}
+	for _, s := range scan.Sites {
+		units[s.Unit] = true
+	}
+	if len(units) != 1 {
+		t.Errorf("found %d tag-creating units %v, want exactly 1 (%s)", len(units), units, tagCreationSoleUnit)
+	}
+
+	if err := validateTagCreationScan(scan); err != nil {
+		t.Errorf("GRD-16: %v", err)
+	}
+
+	// The credential `git push` uses is the App token.
+	if src, ok := workflows["release-tag.yml"]; !ok {
+		t.Errorf("release-tag.yml is not among the %d workflow files on disk", onDisk)
+	} else if wf, err := parseReleaseChainWorkflow(src); err != nil {
+		t.Errorf("release-tag.yml: %v", err)
+	} else if err := validateTagJobCredential(wf); err != nil {
+		t.Errorf("T-05-06: %v", err)
+	}
+
+	t.Logf("tag-creation scan: %d workflow files (%d on disk), %d run bodies, %d local actions, %d Taskfile targets, %d executed Taskfile scalars, %d tag-creating lines in %d unit(s), release:tag invoked from %q",
+		scan.WorkflowFiles, onDisk, scan.RunBodies, scan.LocalActions, scan.TaskTargets, scan.ExecutedScalars, len(scan.Sites), len(units), scan.TaskInvocations["release:tag"])
+}
+
+// --- TestTagCreationScanFlagsPlantedSites: the scanner over literal inputs ----
+
+const (
+	tagCreationPlantedTagWorkflow = `name: release-tag
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tag the release
+        run: task release:tag
+`
+	tagCreationPlantedAction = `name: Install Task
+runs:
+  using: composite
+  steps:
+    - name: Verify Task
+      shell: bash
+      run: task --version
+`
+)
+
+// tagCreationPlantedCI returns a ci.yml whose `test` job holds one extra step
+// named "planted" running body.
+func tagCreationPlantedCI(body string) []byte {
+	return []byte("name: ci\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - name: planted\n        run: |\n          " + body + "\n")
+}
+
+// tagCreationPlantedTaskfile returns a Taskfile whose release:tag runs
+// releaseTagCmds and which carries extra verbatim after its tasks.
+func tagCreationPlantedTaskfile(releaseTagCmds, extra string) []byte {
+	return []byte(`version: "3"
+tasks:
+  release:tag:
+    desc: tags the release
+    cmds:
+      - |
+` + releaseTagCmds + `
+  check:
+    desc: a harmless target
+    cmds:
+      - echo hi
+` + extra)
+}
+
+const tagCreationBaselineCmds = `        git tag "${tag}"
+        git push origin "refs/tags/${tag}"`
+
+func TestTagCreationScanFlagsPlantedSites(t *testing.T) {
+	baselineWorkflows := func(extra map[string][]byte) map[string][]byte {
+		m := map[string][]byte{"release-tag.yml": []byte(tagCreationPlantedTagWorkflow)}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	actions := map[string][]byte{"install-task/action.yml": []byte(tagCreationPlantedAction)}
+
+	cases := []struct {
+		name      string
+		workflows map[string][]byte
+		taskfile  []byte
+		// wantErr is a substring the validator's error must contain; "" means
+		// the scan must validate cleanly.
+		wantErr string
+		// wantUnits, for the cases that must validate, is the exact set of
+		// tag-creating units the scan must have seen: positive evidence that
+		// an ignored comment or desc was read and skipped, not unread.
+		wantUnits []string
+	}{
+		{
+			name:      "baseline_single_site",
+			workflows: baselineWorkflows(nil),
+			taskfile:  tagCreationPlantedTaskfile(tagCreationBaselineCmds, ""),
+			wantUnits: []string{tagCreationSoleUnit},
+		},
+		{
+			name:      "reject_second_workflow_push_tags",
+			workflows: baselineWorkflows(map[string][]byte{"ci.yml": tagCreationPlantedCI("git push origin --tags")}),
+			taskfile:  tagCreationPlantedTaskfile(tagCreationBaselineCmds, ""),
+			wantErr:   "workflow:ci.yml/test/planted",
+		},
+		{
+			name:      "reject_second_taskfile_git_tag",
+			workflows: baselineWorkflows(nil),
+			taskfile:  tagCreationPlantedTaskfile(tagCreationBaselineCmds, "  rogue:\n    cmds:\n      - git tag v9.9.9\n"),
+			wantErr:   "task:rogue",
+		},
+		{
+			name:      "reject_gh_release_create",
+			workflows: baselineWorkflows(map[string][]byte{"ci.yml": tagCreationPlantedCI("gh release create v9.9.9 --notes x")}),
+			taskfile:  tagCreationPlantedTaskfile(tagCreationBaselineCmds, ""),
+			wantErr:   "workflow:ci.yml/test/planted",
+		},
+		{
+			name:      "reject_second_release_tag_invocation",
+			workflows: baselineWorkflows(map[string][]byte{"ci.yml": tagCreationPlantedCI("task release:tag")}),
+			taskfile:  tagCreationPlantedTaskfile(tagCreationBaselineCmds, ""),
+			wantErr:   "ci.yml/test/planted",
+		},
+		{
+			name:      "reject_release_tag_push_widened",
+			workflows: baselineWorkflows(nil),
+			taskfile: tagCreationPlantedTaskfile(`        git tag "${tag}"
+        git push origin "refs/tags/${tag}" --tags`, ""),
+			wantErr: "task:release:tag",
+		},
+		{
+			name:      "ignore_comment_git_tag",
+			workflows: baselineWorkflows(map[string][]byte{"ci.yml": tagCreationPlantedCI("# git tag v1.0.0\n          echo done")}),
+			taskfile: tagCreationPlantedTaskfile(`        # git push origin --tags
+`+tagCreationBaselineCmds, ""),
+			wantUnits: []string{tagCreationSoleUnit},
+		},
+		{
+			name:      "ignore_desc_git_tag",
+			workflows: baselineWorkflows(nil),
+			taskfile:  tagCreationPlantedTaskfile(tagCreationBaselineCmds, "  docs:\n    desc: explains how to git tag a release\n    cmds:\n      - echo hi\n"),
+			wantUnits: []string{tagCreationSoleUnit},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			scan, err := scanTagCreationSites(c.workflows, actions, c.taskfile)
+			if err != nil {
+				t.Fatalf("scanTagCreationSites: %v", err)
+			}
+			verr := validateTagCreationScan(scan)
+			if c.wantErr == "" {
+				if verr != nil {
+					t.Errorf("validateTagCreationScan rejected a clean scan: %v", verr)
+				}
+				units := map[string]bool{}
+				for _, s := range scan.Sites {
+					units[s.Unit] = true
+				}
+				var got []string
+				for u := range units {
+					got = append(got, u)
+				}
+				sort.Strings(got)
+				if !slices.Equal(got, c.wantUnits) {
+					t.Errorf("tag-creating units = %v, want exactly %v", got, c.wantUnits)
+				}
+				return
+			}
+			if verr == nil {
+				t.Fatalf("validateTagCreationScan returned no error, want one naming %q (sites: %v)", c.wantErr, scan.Sites)
+			}
+			if !strings.Contains(verr.Error(), c.wantErr) {
+				t.Errorf("validateTagCreationScan error %q does not name the offending unit %q", verr, c.wantErr)
+			}
+		})
+	}
 }
