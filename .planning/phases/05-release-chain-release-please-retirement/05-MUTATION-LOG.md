@@ -1821,3 +1821,93 @@ OK
 `task check:fragment-policy` (floor still 36 at this commit) printed
 `check:fragment-policy: executed 42 of 42 defined test methods (floor 36)`. `task lint:actions` exited 0.
 The three hygiene files hold no census hit, and `.changes/*) ;;` appears once in require-issue-link.yml.
+
+## 05-04 RED transcript (WR-01)
+
+Commit: the `test(05-04): expect linear-time exemption markers with mirrored grammar` commit, before either pattern
+changes and before `pr_template_policy.find_exemption` exists. Command, from the repository root:
+`python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v`. `Ran 46 tests`, `FAILED (failures=7)`
+(four timing subTests plus the three grammar tests), zero `ERROR:` lines. The run took 13.5 s: the old patterns take
+2.9 to 3.8 s per adversarial call, measured below.
+
+Old-pattern measurements (`.search` on the bodies the timing test builds), from the failure messages:
+
+| marker | body | old-pattern time |
+|---|---|---|
+| changelog-exempt | `<!-- changelog-exempt:` + 2,500 spaces (cubic shape, 2522 chars) | 2.89 s |
+| changelog-exempt | `<!-- changelog-exempt: a` + 60,000 spaces (quadratic shape, 60024 chars) | 3.83 s |
+| pr-template-exempt | `<!-- pr-template-exempt:` + 2,500 spaces (cubic shape, 2524 chars) | 2.95 s |
+| pr-template-exempt | `<!-- pr-template-exempt: a` + 60,000 spaces (quadratic shape, 60026 chars) | 3.82 s |
+
+The timing test fails on its own elapsed-time assertion. The other three tests fail on their
+`hasattr(pr_template_policy, "find_exemption")` check, because the name does not exist yet. That proves commit order
+only (rule x1cjy9vyhq); their own-assertion RED is Family 05-04/f.
+
+```
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='changelog-exempt', shape='cubic shape')
+    self.assertLess(
+AssertionError: 2.893123999936506 not less than 1.0 : changelog-exempt cubic shape: search took 2.89s on a 2522-char body
+
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='changelog-exempt', shape='quadratic shape')
+    self.assertLess(
+AssertionError: 3.828044166089967 not less than 1.0 : changelog-exempt quadratic shape: search took 3.83s on a 60024-char body
+
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='pr-template-exempt', shape='cubic shape')
+    self.assertLess(
+AssertionError: 2.9537973750848323 not less than 1.0 : pr-template-exempt cubic shape: search took 2.95s on a 2524-char body
+
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='pr-template-exempt', shape='quadratic shape')
+    self.assertLess(
+AssertionError: 3.8166788339149207 not less than 1.0 : pr-template-exempt quadratic shape: search took 3.82s on a 60026-char body
+
+FAIL: test_marker_reason_starting_with_dash_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_reason_starting_with_dash_does_not_exempt)
+    self.assertTrue(hasattr(pr_template_policy, "find_exemption"))
+AssertionError: False is not true
+
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt)
+    self.assertTrue(hasattr(pr_template_policy, "find_exemption"))
+AssertionError: False is not true
+
+FAIL: test_unterminated_marker_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_unterminated_marker_does_not_exempt)
+    self.assertTrue(hasattr(pr_template_policy, "find_exemption"))
+AssertionError: False is not true
+
+Ran 46 tests in 13.494s
+
+FAILED (failures=7)
+```
+
+## 05-04 GREEN (WR-01)
+
+Commits: `ci(05-04): make both exemption markers linear and keep their grammar in lockstep`, then
+`ci(05-04): raise the fragment-policy floor to the 46 defined tests`, both after the `test(05-04):` commit above.
+`python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` prints `Ran 46 tests` and `OK`; the existing
+GATE-02 tests, including `test_marker_grammar_mirrors_pr_template_exempt`, are unchanged and green. The four WR-01 tests:
+
+```
+test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) ... ok
+test_marker_reason_starting_with_dash_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_reason_starting_with_dash_does_not_exempt) ... ok
+test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) ... ok
+test_unterminated_marker_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_unterminated_marker_does_not_exempt) ... ok
+```
+
+`task check:fragment-policy`:
+
+```
+Ran 46 tests in 0.002s
+
+OK
+check:fragment-policy: executed 46 of 46 defined test methods (floor 46)
+```
+
+Old versus new `.search` time on the same four adversarial bodies (new patterns, measured with `time.perf_counter`):
+
+| marker | body | old pattern | new pattern |
+|---|---|---|---|
+| changelog-exempt | 2,500 spaces after the opener (2522 chars) | 2.89 s | 0.018 ms |
+| changelog-exempt | `a` then 60,000 spaces (60024 chars) | 3.83 s | 0.291 ms |
+| pr-template-exempt | 2,500 spaces after the opener (2524 chars) | 2.95 s | 0.012 ms |
+| pr-template-exempt | `a` then 60,000 spaces (60026 chars) | 3.82 s | 0.293 ms |
+
+The test bound is 1.0 s per call, so the margin over the new patterns is about three orders of magnitude.
+`GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1` stays `ok` after the Taskfile.yml change.
