@@ -1911,3 +1911,377 @@ Old versus new `.search` time on the same four adversarial bodies (new patterns,
 
 The test bound is 1.0 s per call, so the margin over the new patterns is about three orders of magnitude.
 `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1` stays `ok` after the Taskfile.yml change.
+
+## Families 05-04/a-f — setup
+
+All six mutations run in one detached scratch worktree of HEAD (`cf430a6d`) whose path contains
+`p05-scratch-wt`, created with `git worktree add -q --detach "$S" HEAD`; the main checkout is never
+mutated. Each family follows the cleanliness-gate convention above: pre-mutation gate, applied-confirmation
+(numstat and `-U0` hunk), the guard run RED, the revert, the byte-clean proof, then the guard GREEN. A
+family whose mutation did not change the file aborts with `MUTATION DID NOT LAND`; none did.
+Families e and f edit one function body each, so every `hasattr` check in the new tests passes and each
+`FAIL:` below is the test's own assertion (`assertTrue`, `assertFalse`, `assertIsNone` or `assertEqual`).
+Under the `unittest` runner a subTest failure prints one `FAIL:` header per failing subTest.
+
+## Family 05-04/a — retired manifest name re-added
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- scripts/pr_template_policy.py` exit 0
+
+Mutation: add the release manifest filename (`.release-please-manifest.json`) back to EXEMPT_EXACT in pr_template_policy.py.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	0	scripts/pr_template_policy.py
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/scripts/pr_template_policy.py b/scripts/pr_template_policy.py
+index 1060c418..4fbf7135 100644
+--- a/scripts/pr_template_policy.py
++++ b/scripts/pr_template_policy.py
+@@ -52,0 +53 @@ EXEMPT_EXACT = {
++    ".release-please-manifest.json",
+```
+
+RED guard: `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (from `$S`):
+
+```
+FAIL: test_exempt_sets_are_the_documented_sets (test_fragment_policy.HygieneAllowlistTests.test_exempt_sets_are_the_documented_sets)
+AssertionError: Items in the first set but not the second:
+'.release-please-manifest.json'
+FAIL: test_hygiene_allowlists_mirror_require_issue_link (test_fragment_policy.HygieneAllowlistTests.test_hygiene_allowlists_mirror_require_issue_link)
+AssertionError: Items in the second set but not the first:
+'.release-please-manifest.json' : exact side differs: only in workflow [], only in pr_template_policy ['.release-please-manifest.json']
+Ran 46 tests in 0.002s
+FAILED (failures=2)
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- scripts/pr_template_policy.py`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (last lines):
+
+```
+Ran 46 tests in 0.002s
+OK
+```
+
+## Family 05-04/b — shell arm removed
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .github/workflows/require-issue-link.yml` exit 0
+
+Mutation: delete the `.changes/*) ;;` arm from require-issue-link.yml.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+0	1	.github/workflows/require-issue-link.yml
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/.github/workflows/require-issue-link.yml b/.github/workflows/require-issue-link.yml
+index 1909d9a1..df430555 100644
+--- a/.github/workflows/require-issue-link.yml
++++ b/.github/workflows/require-issue-link.yml
+@@ -85 +84,0 @@ jobs:
+-              .changes/*) ;;
+```
+
+RED guard: `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (from `$S`). The prefix floor trips first and prints the parsed prefix side:
+
+```
+FAIL: test_hygiene_allowlists_mirror_require_issue_link (test_fragment_policy.HygieneAllowlistTests.test_hygiene_allowlists_mirror_require_issue_link)
+AssertionError: 3 not greater than or equal to 4 : parsed prefixes: ['.github/', '.planning/', 'docs/']
+Ran 46 tests in 0.002s
+FAILED (failures=1)
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .github/workflows/require-issue-link.yml`; `git -C "$S" diff --quiet` exit 0
+
+Variant, so the prefix set comparison itself is seen RED: rename the arm to `.changesx/*) ;;`, which keeps the parsed prefix count at 4.
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .github/workflows/require-issue-link.yml` exit 0
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	.github/workflows/require-issue-link.yml
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/.github/workflows/require-issue-link.yml b/.github/workflows/require-issue-link.yml
+index 1909d9a1..b5edd802 100644
+--- a/.github/workflows/require-issue-link.yml
++++ b/.github/workflows/require-issue-link.yml
+@@ -85 +85 @@ jobs:
+-              .changes/*) ;;
++              .changesx/*) ;;
+```
+
+RED guard (variant): `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (from `$S`):
+
+```
+FAIL: test_hygiene_allowlists_mirror_require_issue_link (test_fragment_policy.HygieneAllowlistTests.test_hygiene_allowlists_mirror_require_issue_link)
+AssertionError: Items in the first set but not the second:
+'.changesx/'
+Items in the second set but not the first:
+'.changes/' : prefix side differs: only in workflow ['.changesx/'], only in pr_template_policy ['.changes/']
+Ran 46 tests in 0.002s
+FAILED (failures=1)
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .github/workflows/require-issue-link.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (last lines):
+
+```
+Ran 46 tests in 0.002s
+OK
+```
+
+## Family 05-04/c — cubic marker restored
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- scripts/pr_template_policy.py scripts/fragment_policy.py` exit 0
+
+Mutation: restore the old marker text in both policies (the `EXEMPT_MARKER` and `CHANGELOG_EXEMPT_MARKER` patterns of `5a8603f5`).
+
+The restored pr-template text is byte-identical to the pattern line in `git show 5a8603f5:scripts/pr_template_policy.py` (checked with `rg -F`).
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	scripts/fragment_policy.py
+1	1	scripts/pr_template_policy.py
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/scripts/fragment_policy.py b/scripts/fragment_policy.py
+index de725d8b..6e9b8b52 100644
+--- a/scripts/fragment_policy.py
++++ b/scripts/fragment_policy.py
+@@ -50 +50 @@ FRAGMENT_STATUS = "added"
+-CHANGELOG_EXEMPT_MARKER = re.compile(r"<!--\s*changelog-exempt:(?P<reason>[^>]*?)-->", re.I)
++CHANGELOG_EXEMPT_MARKER = re.compile(r"<!--\s*changelog-exempt:\s*(?P<reason>[^->][^>]*?)\s*-->", re.I)
+diff --git a/scripts/pr_template_policy.py b/scripts/pr_template_policy.py
+index 1060c418..2f454dee 100644
+--- a/scripts/pr_template_policy.py
++++ b/scripts/pr_template_policy.py
+@@ -86 +86 @@ TEMPLATE_SIGNALS = (
+-EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:(?P<reason>[^>]*?)-->", re.I)
++EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:\s*(?P<reason>[^->][^>]*?)\s*-->", re.I)
+```
+
+RED guard: `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (from `$S`). The measured times are in the assertion messages:
+
+```
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='changelog-exempt', shape='cubic shape')
+AssertionError: 2.728640625020489 not less than 1.0 : changelog-exempt cubic shape: search took 2.73s on a 2522-char body
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='changelog-exempt', shape='quadratic shape')
+AssertionError: 3.6668732911348343 not less than 1.0 : changelog-exempt quadratic shape: search took 3.67s on a 60024-char body
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='pr-template-exempt', shape='cubic shape')
+AssertionError: 2.776931040920317 not less than 1.0 : pr-template-exempt cubic shape: search took 2.78s on a 2524-char body
+FAIL: test_exempt_markers_are_linear_on_adversarial_bodies (test_fragment_policy.MarkerGrammarTests.test_exempt_markers_are_linear_on_adversarial_bodies) (marker='pr-template-exempt', shape='quadratic shape')
+AssertionError: 3.8168191669974476 not less than 1.0 : pr-template-exempt quadratic shape: search took 3.82s on a 60026-char body
+Ran 46 tests in 12.992s
+FAILED (failures=4)
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- scripts/pr_template_policy.py scripts/fragment_policy.py`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (last lines):
+
+```
+Ran 46 tests in 0.002s
+OK
+```
+
+## Family 05-04/d — suite gutted below the floor
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- scripts/test_fragment_policy.py` exit 0
+
+Mutation: decorate `test_empty_path_list_is_not_housekeeping` with `@unittest.skip("x")`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	0	scripts/test_fragment_policy.py
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/scripts/test_fragment_policy.py b/scripts/test_fragment_policy.py
+index c923c67e..645795b4 100644
+--- a/scripts/test_fragment_policy.py
++++ b/scripts/test_fragment_policy.py
+@@ -514,0 +515 @@ class HygieneAllowlistTests(unittest.TestCase):
++    @unittest.skip("x")
+```
+
+RED guard: `task check:fragment-policy` (from `$S`):
+
+```
+Ran 46 tests in 0.002s
+OK (skipped=1)
+::error::check:fragment-policy: result line is not exactly OK (skips are not executions)
+task exit=201
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- scripts/test_fragment_policy.py`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `task check:fragment-policy` (last lines):
+
+```
+Ran 46 tests in 0.002s
+OK
+check:fragment-policy: executed 46 of 46 defined test methods (floor 46)
+task exit=0
+```
+
+## Family 05-04/e — is_housekeeping inverted
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- scripts/pr_template_policy.py` exit 0
+
+Mutation: in pr_template_policy.py, make `is_housekeeping` return the logical negation of its expression; nothing else changes.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+2	2	scripts/pr_template_policy.py
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/scripts/pr_template_policy.py b/scripts/pr_template_policy.py
+index 1060c418..507c941d 100644
+--- a/scripts/pr_template_policy.py
++++ b/scripts/pr_template_policy.py
+@@ -96 +96 @@ def is_housekeeping(paths: Sequence[str]) -> bool:
+-    return bool(paths) and all(
++    return not (bool(paths) and all(
+@@ -98 +98 @@ def is_housekeeping(paths: Sequence[str]) -> bool:
+-    )
++    ))
+```
+
+RED guard: `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (from `$S`). Only function-body lines changed, so every `hasattr` check passes and each `FAIL:` is the test's own assertion:
+
+```
+FAIL: test_empty_path_list_is_not_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_empty_path_list_is_not_housekeeping)
+AssertionError: True is not false
+FAIL: test_fragment_only_pr_is_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_fragment_only_pr_is_housekeeping)
+AssertionError: False is not true
+FAIL: test_release_pr_paths_are_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_release_pr_paths_are_housekeeping)
+AssertionError: False is not true
+FAIL: test_shipped_code_beside_changes_is_not_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_shipped_code_beside_changes_is_not_housekeeping)
+AssertionError: True is not false
+Ran 46 tests in 0.002s
+FAILED (failures=4)
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- scripts/pr_template_policy.py`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (last lines):
+
+```
+Ran 46 tests in 0.002s
+OK
+```
+
+## Family 05-04/f — pr_template_policy.find_exemption always exempts
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- scripts/pr_template_policy.py` exit 0
+
+Mutation: in pr_template_policy.py, replace the body of `find_exemption` after its docstring with `return "mutated"`; nothing else changes.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	7	scripts/pr_template_policy.py
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/scripts/pr_template_policy.py b/scripts/pr_template_policy.py
+index 1060c418..22258f42 100644
+--- a/scripts/pr_template_policy.py
++++ b/scripts/pr_template_policy.py
+@@ -107,7 +107 @@ def find_exemption(body: str) -> str | None:
+-    match = EXEMPT_MARKER.search(body)
+-    if match is None:
+-        return None
+-    reason = match.group("reason").strip()
+-    if not reason or reason.startswith("-"):
+-        return None
+-    return reason
++    return "mutated"
+```
+
+RED guard: `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (from `$S`). Only function-body lines changed, so every `hasattr` check passes and each `FAIL:` is the test's own assertion:
+
+```
+FAIL: test_marker_reason_starting_with_dash_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_reason_starting_with_dash_does_not_exempt) (marker='pr-template-exempt', body='<!-- pr-template-exempt: - -->')
+AssertionError: 'mutated' is not None
+FAIL: test_marker_reason_starting_with_dash_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_reason_starting_with_dash_does_not_exempt) (marker='pr-template-exempt', body='<!-- pr-template-exempt: --x -->')
+AssertionError: 'mutated' is not None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: docs only -->')
+AssertionError: 'mutated' != 'docs only'
+- mutated
++ docs only
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: -->')
+AssertionError: 'mutated' != None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}:     -->')
+AssertionError: 'mutated' != None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {N}: Mixed Case Name -->')
+AssertionError: 'mutated' != 'Mixed Case Name'
+- mutated
++ Mixed Case Name
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: - -->')
+AssertionError: 'mutated' != None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: --x -->')
+AssertionError: 'mutated' != None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: reason with no closer')
+AssertionError: 'mutated' != None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: --> text <!-- {n}: second marker is ignored -->')
+AssertionError: 'mutated' != None
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='<!-- {n}: a - b -->')
+AssertionError: 'mutated' != 'a - b'
+- mutated
++ a - b
+FAIL: test_marker_semantics_mirror_pr_template_exempt (test_fragment_policy.MarkerGrammarTests.test_marker_semantics_mirror_pr_template_exempt) (body='no marker at all')
+AssertionError: 'mutated' != None
+FAIL: test_unterminated_marker_does_not_exempt (test_fragment_policy.MarkerGrammarTests.test_unterminated_marker_does_not_exempt) (marker='pr-template-exempt')
+AssertionError: 'mutated' is not None
+Ran 46 tests in 0.003s
+FAILED (failures=13)
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- scripts/pr_template_policy.py`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v` (last lines):
+
+```
+Ran 46 tests in 0.002s
+OK
+```
+
+## Teardown (05-04 families)
+
+`git worktree remove --force "$S"` and `git worktree prune`, then `git worktree list`:
+
+```
+/Volumes/Code/github.com/seanb4t/codegraph-go                        cf430a6d [gsd/v0.15.0-milestone]
+/Volumes/Code/herdr-worktrees/codegraph-go/worktree-brave-river-a240 2df78be0 [chore/octopusignore]
+```
+
+No `p05-scratch-wt` entry remains.
