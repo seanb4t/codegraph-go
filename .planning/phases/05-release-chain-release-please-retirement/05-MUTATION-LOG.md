@@ -1753,3 +1753,71 @@ release:dry-run exit=0
 The worktree's `git status --short` was the same before and after the dry run: the three lines `release:batch` writes (` D .changes/unreleased/Breaking-20260926-165849.599611000.yaml`, ` M CHANGELOG.md`, `?? .changes/v0.15.0.md`), nothing else outside the gitignored dist/. The worktree was then removed with `git worktree remove --force "$S"` and `git worktree prune`.
 
 Deferred CI check (open): linux-cross-canary.yml on pull_request (paths filter includes Taskfile.yml), PR #88, first push after ci(05-03) b390a9d2bda1b7d96aabb7607fc3367974daf11f (comment-only follow-up c4adcfd5ffb43bf13feee5a287cce86bf0bb5d5a); phase verification confirms the run is green before the phase closes. This host's two runs do not cover the CI consumer of release:dry-run; that run does, and this plan does not push to start it.
+
+## 05-04 RED transcript (exemption swap)
+
+Commit: the `test(05-04): expect the release PR's own paths to be housekeeping in both hygiene gates` commit, before
+`is_housekeeping`, the `.changes/` prefix and the `.changes/*` shell arm exist. Command, from the repository root:
+`python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v`. `Ran 42 tests`, `FAILED (failures=6)`,
+zero `ERROR:` lines. Every failure is an assertion; there is no import or load error.
+
+The four `is_housekeeping` tests fail on their `hasattr(pr_template_policy, "is_housekeeping")` check, because the name
+does not exist yet. That proves commit order only (rule x1cjy9vyhq); their own-assertion RED is Family 05-04/e.
+`test_exempt_sets_are_the_documented_sets` fails on its own set-equality assertion: `.changes/` is missing from
+EXEMPT_PREFIXES. The parity test also fails at RED, on its population floor (3 prefixes parsed, floor 4), because the
+shell list has no `.changes/*` arm yet. The plan predicted it would pass at RED; the prefix floor makes it fail, which is
+the stronger guard. Its own-assertion RED on the set comparison is Family 05-04/b.
+
+```
+FAIL: test_empty_path_list_is_not_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_empty_path_list_is_not_housekeeping)
+    self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+AssertionError: False is not true
+
+FAIL: test_exempt_sets_are_the_documented_sets (test_fragment_policy.HygieneAllowlistTests.test_exempt_sets_are_the_documented_sets)
+AssertionError: Items in the second set but not the first:
+'.changes/'
+
+FAIL: test_fragment_only_pr_is_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_fragment_only_pr_is_housekeeping)
+    self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+AssertionError: False is not true
+
+FAIL: test_hygiene_allowlists_mirror_require_issue_link (test_fragment_policy.HygieneAllowlistTests.test_hygiene_allowlists_mirror_require_issue_link)
+    self.assertGreaterEqual(len(prefixes), 4, f"parsed prefixes: {sorted(prefixes)}")
+AssertionError: 3 not greater than or equal to 4 : parsed prefixes: ['.github/', '.planning/', 'docs/']
+
+FAIL: test_release_pr_paths_are_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_release_pr_paths_are_housekeeping)
+    self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+AssertionError: False is not true
+
+FAIL: test_shipped_code_beside_changes_is_not_housekeeping (test_fragment_policy.HygieneAllowlistTests.test_shipped_code_beside_changes_is_not_housekeeping)
+    self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+AssertionError: False is not true
+
+Ran 42 tests in 0.002s
+
+FAILED (failures=6)
+```
+
+## 05-04 GREEN (exemption swap)
+
+Commit: `ci(05-04): exempt the changie release PR by path in both hygiene gates`, after the `test(05-04):` commit above.
+`git log --first-parent --no-merges --reverse` over scripts/pr_template_policy.py and scripts/test_fragment_policy.py
+since `5a8603f5` orders them test(05-04), ci(05-04). Command, from the repository root:
+`python3 -B -m unittest discover -s scripts -p 'test_fragment_policy.py' -v`. The six named tests, from that run:
+
+```
+test_empty_path_list_is_not_housekeeping ... ok
+test_exempt_sets_are_the_documented_sets ... ok
+test_fragment_only_pr_is_housekeeping ... ok
+test_hygiene_allowlists_mirror_require_issue_link ... ok
+test_release_pr_paths_are_housekeeping ... ok
+test_shipped_code_beside_changes_is_not_housekeeping ... ok
+
+Ran 42 tests in 0.001s
+
+OK
+```
+
+`task check:fragment-policy` (floor still 36 at this commit) printed
+`check:fragment-policy: executed 42 of 42 defined test methods (floor 36)`. `task lint:actions` exited 0.
+The three hygiene files hold no census hit, and `.changes/*) ;;` appears once in require-issue-link.yml.
