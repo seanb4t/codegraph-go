@@ -24,8 +24,8 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 - [x] **REL-10**: A new release workflow replaces `release-please.yml`: on push to `main` with a non-empty `.changes/unreleased/`, it runs `pretag-gate` (`task check:cross`, moved verbatim) and then `changie batch auto && changie merge` and opens or updates one `chore(main): release vX.Y.Z` PR carrying the rendered `.changes/vX.Y.Z.md` and `CHANGELOG.md`; a push with no unreleased fragments does nothing
 - [x] **REL-11**: When a release PR merges (detected by changie's documented release trigger, a push to `main` that changes `CHANGELOG.md`, which only a release-PR merge does; amended by Phase 5 D-06, 2026-10-13), the workflow mints a GitHub App installation token with the existing `APP_ID`/`APP_PRIVATE_KEY` secrets and pushes tag `vX.Y.Z` with it, skipping with success when that tag already exists — never the default `GITHUB_TOKEN`, which cannot fire `release.yml`
-- [ ] **REL-12**: `release.yml`'s trigger, its SLSA/cosign/notarization/SBOM steps and its job shape are byte-identical; `goreleaser release`, which its `task release:goreleaser` step runs, receives `--release-notes .changes/${TAG}.md` (amended by Phase 5 D-12, 2026-10-14: the flag lives in `Taskfile.yml`'s `release:goreleaser`, the single definition of that step's body, so `release.yml` itself changes by one census comment hunk only); the GoReleaser config never sets `changelog.disable: true` (which would empty the body), asserted by a shape test
-- [ ] **REL-13**: `release:goreleaser` and `release:dry-run` pass `--release-notes .changes/${TAG}.md` for the tag being released, the repository's own guard refuses a missing or empty notes file, and a captured `task release:dry-run` run exits 0 before the first real tag exists (amended by Phase 5 D-14, 2026-10-14: REL-13 tests only this repository's wiring; how GoReleaser renders the Release body is GoReleaser's behavior and is not asserted)
+- [x] **REL-12**: `release.yml`'s trigger, its SLSA/cosign/notarization/SBOM steps and its job shape are byte-identical; `goreleaser release`, which its `task release:goreleaser` step runs, receives `--release-notes .changes/${TAG}.md` (amended by Phase 5 D-12, 2026-10-14: the flag lives in `Taskfile.yml`'s `release:goreleaser`, the single definition of that step's body, so `release.yml` itself changes by one census comment hunk only); the GoReleaser config never sets `changelog.disable: true` (which would empty the body), asserted by a shape test
+- [x] **REL-13**: `release:goreleaser` and `release:dry-run` pass `--release-notes .changes/${TAG}.md` for the tag being released, the repository's own guard refuses a missing or empty notes file, and a captured `task release:dry-run` run exits 0 before the first real tag exists (amended by Phase 5 D-14, 2026-10-14: REL-13 tests only this repository's wiring; how GoReleaser renders the Release body is GoReleaser's behavior and is not asserted)
 - [ ] **REL-14**: `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted; the version source of truth is `changie latest`; a positive-controlled census reports zero `release-please` references outside `.planning/`, `CHANGELOG.md` history and this milestone's own notes
 
 ### Guards Re-pointed
@@ -102,8 +102,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHG-04 | Phase 1 | Complete |
 | REL-10 | Phase 5 | Complete |
 | REL-11 | Phase 5 | Complete |
-| REL-12 | Phase 5 | Pending |
-| REL-13 | Phase 5 | Pending |
+| REL-12 | Phase 5 | Complete |
+| REL-13 | Phase 5 | Complete |
 | REL-14 | Phase 5 | Pending |
 | GRD-15 | Phase 5 | Pending |
 | GRD-16 | Phase 5 | Pending |

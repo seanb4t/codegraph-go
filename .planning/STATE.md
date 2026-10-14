@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 05
 current_phase_name: Release Chain & release-please Retirement
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-10-14T21:35:08.023Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-10-14T21:50:49.956Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 05 execution started
-state_head: d77bd112c978f9a47e8e533b5a2edc1a5bccd896
+state_head: 0a48d4deb56bd3fc15a7094dd177792ed9c008c1
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
 ## Current Position
 
 Phase: 05 (Release Chain & release-please Retirement) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-10-14 — Phase 05 execution started
 
@@ -202,6 +202,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P05 | 4 min | 3 tasks | 4 files |
 | Phase 05 P01 | 12 min | 2 tasks | 7 files |
 | Phase 5 P02 | 6 min | 3 tasks | 7 files |
+| Phase 05 P03 | 8 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -489,6 +490,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: 05-01: release:batch is held by a static shape test plus worktree rehearsals, not by check:changie legs — A Taskfile target always runs in the Taskfile's own directory, so running it from check:changie would batch the real tree
 - [Phase 5]: C8 (Phase 5 05-02): release:tag declares a precondition that GITHUB_ACTIONS is true. Forcing constraint: D-06R's standing no-human-git-tag rule; without it task release:tag on a laptop would push a tag with the maintainer's own credentials. — New custom logic named per D-01; rehearsal run 4 shows the refusal.
 - [Phase 5]: GRD-16 scan (Phase 5 05-02) covers every workflow run body, local action step and executed Taskfile command and requires exactly one tag-creating unit, task:release:tag, invoked only from release-tag.yml/tag. tag_authority_test.go stays untouched. — A Taskfile target is itself a human-runnable entry point. Stated boundary: a script invoked by path is not opened (T-05-10, accepted).
+- [Phase 05]: 05-03: the release-notes flag lives in Taskfile.yml release:goreleaser (D-12) and REL-13 asserts only this repository wiring (D-14); release.yml changed by one comment line — Both release:goreleaser and release:dry-run refuse an absent or empty .changes/TAG.md (C6), because GoReleaser alone only warns on an empty notes file
 
 ### Pending Todos
 
@@ -655,8 +657,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-14T21:35:00.787Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-10-14T21:50:41.931Z
+Stopped at: Completed 05-03-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
