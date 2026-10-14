@@ -45,8 +45,9 @@ FRAGMENT_KEEP_FILE = ".gitkeep"
 FRAGMENT_STATUS = "added"
 
 # Mirrors pr_template_policy.EXEMPT_MARKER with only the marker name changed (GATE-02):
-# case-insensitive, and a reason that is empty after strip does not exempt.
-CHANGELOG_EXEMPT_MARKER = re.compile(r"<!--\s*changelog-exempt:\s*(?P<reason>[^->][^>]*?)\s*-->", re.I)
+# case-insensitive, linear-time, and the reason is validated after the match (a reason
+# that is empty after strip, or starts with `-`, does not exempt; see find_exemption).
+CHANGELOG_EXEMPT_MARKER = re.compile(r"<!--\s*changelog-exempt:(?P<reason>[^>]*?)-->", re.I)
 
 API_ERROR = "api-error"
 EMPTY_FILE_LIST = "empty-file-list"
@@ -138,13 +139,16 @@ def is_fragment(change: FileChange) -> bool:
 def find_exemption(body: str) -> str | None:
     """The stripped reason of the first changelog-exempt marker, or None.
 
-    Mirrors pr_template_policy.main: the first marker decides, and a reason that is
-    empty after strip does not exempt.
+    Mirrors pr_template_policy.find_exemption: the first marker decides, and a reason
+    that is empty after strip, or starts with `-`, does not exempt.
     """
     match = CHANGELOG_EXEMPT_MARKER.search(body)
     if match is None:
         return None
-    return match.group("reason").strip() or None
+    reason = match.group("reason").strip()
+    if not reason or reason.startswith("-"):
+        return None
+    return reason
 
 
 def evaluate(

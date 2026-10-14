@@ -79,7 +79,11 @@ TEMPLATE_SIGNALS = (
     re.compile(r"^##\s+Checklist", re.I | re.M),
 )
 
-EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:\s*(?P<reason>[^->][^>]*?)\s*-->", re.I)
+# The reason is captured whole and validated after the match (stripped, non-empty,
+# not starting with `-`). The old pattern spent its backtracking budget on `\s*`
+# beside `[^>]*?` and ran in cubic time on a body of spaces (WR-01). This one
+# runs once per `<!--` opener.
+EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:(?P<reason>[^>]*?)-->", re.I)
 ROUTER_MARKER = re.compile(r"Wrong template\s*—\s*please pick", re.I)
 
 
@@ -92,6 +96,21 @@ def is_housekeeping(paths: Sequence[str]) -> bool:
     return bool(paths) and all(
         p in EXEMPT_EXACT or p.startswith(EXEMPT_PREFIXES) for p in paths
     )
+
+
+def find_exemption(body: str) -> str | None:
+    """The stripped reason of the first pr-template-exempt marker, or None.
+
+    The first marker decides. A reason that is empty after strip, or starts
+    with `-`, does not exempt. scripts/fragment_policy.find_exemption mirrors this.
+    """
+    match = EXEMPT_MARKER.search(body)
+    if match is None:
+        return None
+    reason = match.group("reason").strip()
+    if not reason or reason.startswith("-"):
+        return None
+    return reason
 
 
 def emit(action: str, reason: str) -> None:
@@ -109,9 +128,9 @@ def main() -> int:
     assoc = (os.environ.get("AUTHOR_ASSOCIATION") or "NONE").upper()
     changed = [p.strip() for p in (os.environ.get("CHANGED_FILES") or "").splitlines() if p.strip()]
 
-    marker = EXEMPT_MARKER.search(body)
-    if marker and marker.group("reason").strip():
-        emit("pass", f"explicitly exempt: {marker.group('reason').strip()}")
+    reason = find_exemption(body)
+    if reason is not None:
+        emit("pass", f"explicitly exempt: {reason}")
         return 0
 
     if is_housekeeping(changed):
