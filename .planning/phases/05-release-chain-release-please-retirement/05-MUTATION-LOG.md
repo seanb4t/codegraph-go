@@ -769,3 +769,523 @@ real-repo tag --list 'v0.15*' before=[] after=[] equal
 real-repo refs/tags sha256 before=6d900e5f187b3d9c27c888e29b8e62b624fd5b9d164be219af6730a41f2bc8fd after=6d900e5f187b3d9c27c888e29b8e62b624fd5b9d164be219af6730a41f2bc8fd equal
 rc: 0 0 201 201
 ```
+
+## Families 05-02/a-i — setup
+
+Convention as above (Pre-mutation cleanliness gate). The scratch worktree was created with
+`git worktree add -q --detach "$S" HEAD` at the commit that holds `release-tag.yml`, `release:tag` and the four tests,
+with `S` a directory named `p05-scratch-wt` under the session scratchpad. Each family runs in `$S` only; the main
+checkout is never mutated. Families a-f mutate the subject files and are held by the shape tests and the GRD-16 scan.
+Families g-i mutate the scanner and validator inside `changie_release_shape_test.go`, so
+`TestTagCreationScanFlagsPlantedSites`, which passes at RED by design, is seen failing on its own assertion: a named
+rejection subtest fails because `validateTagCreationScan` returned no error, or an error that does not name the
+planted unit. Under g, `baseline_single_site` and both `ignore_*` subtests also go RED, because release:tag then has
+no push line the validator can check; that is recorded and does not replace the named subtest's RED.
+Under h and i, `baseline_single_site` and `TestTagCreationHasSingleAppTokenSite` stay green.
+
+## Family 05-02/a — tag job checkout uses the default token
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .github/workflows/release-tag.yml` exit 0
+
+Mutation: replace release-tag.yml's checkout `token:` value with the default token context `${{ github.token }}`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	.github/workflows/release-tag.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- .github/workflows/release-tag.yml`:
+
+```diff
+diff --git a/.github/workflows/release-tag.yml b/.github/workflows/release-tag.yml
+index 3155d586..75ff419a 100644
+--- a/.github/workflows/release-tag.yml
++++ b/.github/workflows/release-tag.yml
+@@ -79 +79 @@ jobs:
+-          token: ${{ steps.app-token.outputs.token }}
++          token: ${{ github.token }}
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestReleaseTagWorkflowShape|TestTagCreationHasSingleAppTokenSite)$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:682: job "tag" step 2 (Checkout): with = map[token:${{ github.token }}], want map[token:${{ steps.app-token.outputs.token }}]
+    changie_release_shape_test.go:734: non-comment line 50 names the default token (REL-11): "          token: ${{ github.token }}"
+    changie_release_shape_test.go:745: ../../.github/workflows/release-tag.yml: 114 fields, lines and uses checked (7 uses: lines, 3 distinct pins, 2 run bodies)
+--- FAIL: TestReleaseTagWorkflowShape (0.00s)
+    changie_release_shape_test.go:1347: T-05-06: tag job checkout token = "${{ github.token }}", want "${{ steps.app-token.outputs.token }}"
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- FAIL: TestTagCreationHasSingleAppTokenSite (0.03s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.269s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .github/workflows/release-tag.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:745: ../../.github/workflows/release-tag.yml: 114 fields, lines and uses checked (7 uses: lines, 3 distinct pins, 2 run bodies)
+--- PASS: TestReleaseTagWorkflowShape (0.00s)
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.195s
+```
+
+## Family 05-02/b — planted second tag push in a workflow run body
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .github/workflows/ci.yml` exit 0
+
+Mutation: append a step to ci.yml's `test` job: `- name: planted` with the run body `git push origin --tags`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+3	0	.github/workflows/ci.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- .github/workflows/ci.yml`:
+
+```diff
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 85f59d6a..1d48f048 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -278,0 +279,3 @@ jobs:
++      - name: planted
++        run: git push origin --tags
++
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestTagCreationHasSingleAppTokenSite|TestWorkflowRunBodiesInvokeTask)$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:1334: found 2 tag-creating units map[task:release:tag:true workflow:ci.yml/test/planted:true], want exactly 1 (task:release:tag)
+    changie_release_shape_test.go:1338: GRD-16: unit "workflow:ci.yml/test/planted" holds a tag-creating command "git push origin --tags"; only task:release:tag may (GRD-16, D-06R)
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 86 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 3 tag-creating lines in 2 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- FAIL: TestTagCreationHasSingleAppTokenSite (0.02s)
+    taskfile_shape_test.go:1412: ci.yml job "test" step "planted"'s run: body is not a single 'task <target>' call after stripping comments/blanks (D-01): "git push origin --tags"
+--- FAIL: TestWorkflowRunBodiesInvokeTask (0.01s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.197s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .github/workflows/ci.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+--- PASS: TestWorkflowRunBodiesInvokeTask (0.01s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.176s
+```
+
+## Family 05-02/c — planted git tag in a Taskfile target a workflow calls
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- Taskfile.yml` exit 0
+
+Mutation: add the line `git tag v9.9.9` to check:cross's cmds block (release-pr.yml and release-tag.yml call check:cross).
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	0	Taskfile.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- Taskfile.yml`:
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index ee8c48b9..15ec7edb 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -5401,0 +5402 @@ tasks:
++        git tag v9.9.9
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^TestTagCreationHasSingleAppTokenSite$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:1334: found 2 tag-creating units map[task:check:cross:true task:release:tag:true], want exactly 1 (task:release:tag)
+    changie_release_shape_test.go:1338: GRD-16: unit "task:check:cross" holds a tag-creating command "git tag v9.9.9"; only task:release:tag may (GRD-16, D-06R)
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 3 tag-creating lines in 2 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- FAIL: TestTagCreationHasSingleAppTokenSite (0.02s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.188s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- Taskfile.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.193s
+```
+
+## Family 05-02/d — path filter dropped
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .github/workflows/release-tag.yml` exit 0
+
+Mutation: delete release-tag.yml's `paths: [CHANGELOG.md]` line.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+0	1	.github/workflows/release-tag.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- .github/workflows/release-tag.yml`:
+
+```diff
+diff --git a/.github/workflows/release-tag.yml b/.github/workflows/release-tag.yml
+index 3155d586..bde2368f 100644
+--- a/.github/workflows/release-tag.yml
++++ b/.github/workflows/release-tag.yml
+@@ -31 +30,0 @@ on:
+-    paths: [CHANGELOG.md]
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^TestReleaseTagWorkflowShape$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:621: on.push keys = [branches], want exactly [branches paths]
+    changie_release_shape_test.go:745: ../../.github/workflows/release-tag.yml: 113 fields, lines and uses checked (7 uses: lines, 3 distinct pins, 2 run bodies)
+--- FAIL: TestReleaseTagWorkflowShape (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.166s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .github/workflows/release-tag.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:745: ../../.github/workflows/release-tag.yml: 114 fields, lines and uses checked (7 uses: lines, 3 distinct pins, 2 run bodies)
+--- PASS: TestReleaseTagWorkflowShape (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.158s
+```
+
+## Family 05-02/e — skip-if-exists branch removed
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- Taskfile.yml` exit 0
+
+Mutation: delete release:tag's `0)` case arm.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+0	1	Taskfile.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- Taskfile.yml`:
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index ee8c48b9..4c041f81 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -1059 +1058,0 @@ tasks:
+-          0) echo "release:tag: ${tag} already exists on origin — nothing to do"; exit 0 ;;
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^TestReleaseTagTargetShape$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:822: release:tag cmds: token "0) echo \"release:tag: ${tag} already exists on origin" (existing-tag arm) not found at or after byte offset 167
+    changie_release_shape_test.go:858: release:tag has 1 ls-remote lines, 0 existing-tag arms and 1 transport-error arms, want 1 of each
+    changie_release_shape_test.go:885: release:tag: 6 of 7 ordered tokens found; 11 body lines; 1 changie invocation
+--- FAIL: TestReleaseTagTargetShape (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.159s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- Taskfile.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:885: release:tag: 7 of 7 ordered tokens found; 12 body lines; 1 changie invocation
+--- PASS: TestReleaseTagTargetShape (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.166s
+```
+
+## Family 05-02/f — push widened to all tags
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- Taskfile.yml` exit 0
+
+Mutation: change release:tag's push to `git push origin --tags`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	Taskfile.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- Taskfile.yml`:
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index ee8c48b9..0873de49 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -1064 +1064 @@ tasks:
+-        git push origin "refs/tags/${tag}"
++        git push origin --tags
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestReleaseTagTargetShape|TestTagCreationHasSingleAppTokenSite)$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:822: release:tag cmds: token "git push origin \"refs/tags/${tag}\"" (single-ref push) not found at or after byte offset 490
+    changie_release_shape_test.go:866: release:tag push widens past the one tag ref (--tags): "git push origin --tags"
+    changie_release_shape_test.go:885: release:tag: 6 of 7 ordered tokens found; 12 body lines; 1 changie invocation
+--- FAIL: TestReleaseTagTargetShape (0.00s)
+    changie_release_shape_test.go:1338: GRD-16: unit "task:release:tag" pushes without naming refs/tags/: "git push origin --tags"; unit "task:release:tag" push uses --tags, which widens past the one tag: "git push origin --tags"
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- FAIL: TestTagCreationHasSingleAppTokenSite (0.02s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.175s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- Taskfile.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:885: release:tag: 7 of 7 ordered tokens found; 12 body lines; 1 changie invocation
+--- PASS: TestReleaseTagTargetShape (0.00s)
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.181s
+```
+
+## Family 05-02/g — scanner's git push pattern disabled
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- internal/upgrade/changie_release_shape_test.go` exit 0
+
+Mutation: edit the `git ... push` pattern so it can no longer match: `push(\s|$)` becomes `pushMUTATED(\s|$)`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	internal/upgrade/changie_release_shape_test.go
+```
+
+Hunk, `git -C "$S" diff -U0 -- internal/upgrade/changie_release_shape_test.go`:
+
+```diff
+diff --git a/internal/upgrade/changie_release_shape_test.go b/internal/upgrade/changie_release_shape_test.go
+index b754ccc1..59da1b45 100644
+--- a/internal/upgrade/changie_release_shape_test.go
++++ b/internal/upgrade/changie_release_shape_test.go
+@@ -905 +905 @@ var (
+-	tagCreationGitPushRe         = regexp.MustCompile(`(^|[;&|(\s])git(\s+-[cC]\s+\S+)*\s+push(\s|$)`)
++	tagCreationGitPushRe         = regexp.MustCompile(`(^|[;&|(\s])git(\s+-[cC]\s+\S+)*\s+pushMUTATED(\s|$)`)
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestTagCreationScanFlagsPlantedSites|TestTagCreationHasSingleAppTokenSite)$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:1338: GRD-16: unit "task:release:tag" holds no push line to check
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 1 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- FAIL: TestTagCreationHasSingleAppTokenSite (0.03s)
+    changie_release_shape_test.go:1484: validateTagCreationScan rejected a clean scan: unit "task:release:tag" holds no push line to check
+    changie_release_shape_test.go:1504: validateTagCreationScan error "unit \"task:release:tag\" holds no push line to check" does not name the offending unit "workflow:ci.yml/test/planted"
+    changie_release_shape_test.go:1484: validateTagCreationScan rejected a clean scan: unit "task:release:tag" holds no push line to check
+    changie_release_shape_test.go:1484: validateTagCreationScan rejected a clean scan: unit "task:release:tag" holds no push line to check
+--- FAIL: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.219s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- internal/upgrade/changie_release_shape_test.go`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+--- PASS: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.192s
+```
+
+## Family 05-02/h — scanner's git tag and gh release create patterns disabled
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- internal/upgrade/changie_release_shape_test.go` exit 0
+
+Mutation: edit those two patterns the same way and leave the push pattern intact: `tag(\s|$)` becomes `tagMUTATED(\s|$)` and `create\b` becomes `createMUTATED\b`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+2	2	internal/upgrade/changie_release_shape_test.go
+```
+
+Hunk, `git -C "$S" diff -U0 -- internal/upgrade/changie_release_shape_test.go`:
+
+```diff
+diff --git a/internal/upgrade/changie_release_shape_test.go b/internal/upgrade/changie_release_shape_test.go
+index b754ccc1..c8f23445 100644
+--- a/internal/upgrade/changie_release_shape_test.go
++++ b/internal/upgrade/changie_release_shape_test.go
+@@ -904 +904 @@ var (
+-	tagCreationGitTagRe          = regexp.MustCompile(`(^|[;&|(\s])git(\s+-[cC]\s+\S+)*\s+tag(\s|$)`)
++	tagCreationGitTagRe          = regexp.MustCompile(`(^|[;&|(\s])git(\s+-[cC]\s+\S+)*\s+tagMUTATED(\s|$)`)
+@@ -906 +906 @@ var (
+-	tagCreationGhReleaseCreateRe = regexp.MustCompile(`\bgh\s+release\s+create\b`)
++	tagCreationGhReleaseCreateRe = regexp.MustCompile(`\bgh\s+release\s+createMUTATED\b`)
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestTagCreationScanFlagsPlantedSites|TestTagCreationHasSingleAppTokenSite)$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 1 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+    changie_release_shape_test.go:1501: validateTagCreationScan returned no error, want one naming "task:rogue" (sites: [{task:release:tag git push origin "refs/tags/${tag}"}])
+    changie_release_shape_test.go:1501: validateTagCreationScan returned no error, want one naming "workflow:ci.yml/test/planted" (sites: [{task:release:tag git push origin "refs/tags/${tag}"}])
+--- FAIL: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.208s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- internal/upgrade/changie_release_shape_test.go`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+--- PASS: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.193s
+```
+
+## Family 05-02/i — validator relaxed
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- internal/upgrade/changie_release_shape_test.go` exit 0
+
+Mutation: in validateTagCreationScan accept any non-empty TaskInvocations["release:tag"] instead of exactly the tag job's step, and remove `--tags` from the forbidden push flags (the other three stay).
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+2	2	internal/upgrade/changie_release_shape_test.go
+```
+
+Hunk, `git -C "$S" diff -U0 -- internal/upgrade/changie_release_shape_test.go`:
+
+```diff
+diff --git a/internal/upgrade/changie_release_shape_test.go b/internal/upgrade/changie_release_shape_test.go
+index b754ccc1..e3879ba7 100644
+--- a/internal/upgrade/changie_release_shape_test.go
++++ b/internal/upgrade/changie_release_shape_test.go
+@@ -1180 +1180 @@ func scanTagCreationSites(workflows map[string][]byte, actions map[string][]byte
+-var tagCreationForbiddenPushFlags = []string{"--tags", "--follow-tags", "--all", "--mirror"}
++var tagCreationForbiddenPushFlags = []string{"--follow-tags", "--all", "--mirror"}
+@@ -1228 +1228 @@ func validateTagCreationScan(scan tagCreationScan) error {
+-	if !slices.Equal(invokers, []string{tagCreationSoleInvoker}) {
++	if len(invokers) == 0 {
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestTagCreationScanFlagsPlantedSites|TestTagCreationHasSingleAppTokenSite)$' -count=1 -v` (from `$S`):
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+    changie_release_shape_test.go:1501: validateTagCreationScan returned no error, want one naming "ci.yml/test/planted" (sites: [{task:release:tag git tag "${tag}"} {task:release:tag git push origin "refs/tags/${tag}"}])
+    changie_release_shape_test.go:1501: validateTagCreationScan returned no error, want one naming "task:release:tag" (sites: [{task:release:tag git tag "${tag}"} {task:release:tag git push origin "refs/tags/${tag}" --tags}])
+--- FAIL: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- FAIL: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.223s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- internal/upgrade/changie_release_shape_test.go`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+--- PASS: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.198s
+```
+
+## Teardown (05-02)
+
+`git worktree remove --force "$S"` and `git worktree prune`, then `git worktree list`:
+
+```
+/Volumes/Code/github.com/seanb4t/codegraph-go                        67df2d1d [gsd/v0.15.0-milestone]
+/Volumes/Code/herdr-worktrees/codegraph-go/worktree-brave-river-a240 2df78be0 [chore/octopusignore]
+```
+
+No `p05-scratch-wt` entry remains.
