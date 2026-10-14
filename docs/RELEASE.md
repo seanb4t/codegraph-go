@@ -85,6 +85,11 @@ migration that added `.zip` archives and native build-provenance attestation
 or its `refs/tags/v[0-9]*` trigger — the SAN this command checks still
 resolves to the same workflow file and tag ref it always has.
 
+The tag this SAN names is pushed by the changie release workflow,
+`release-tag.yml`, with the release GitHub App's token, after a maintainer
+merges the release PR that `release-pr.yml` opens. `release.yml`'s filename and
+`refs/tags/v[0-9]*` trigger are unchanged by that chain.
+
 ### b) Verify build provenance
 
 Releases from **`v0.5.1`** onward are attested by GitHub's first-party

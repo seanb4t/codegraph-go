@@ -87,8 +87,9 @@ Every command CI runs is defined exactly once, as a `task` target — see
   `task test`: `task check:reproducibility:arm64` needs `zig`. It fails with
   an install instruction rather than skipping, so a green run means the same
   thing here and in CI.
-- `task check:cross` is the same pre-tag sweep `release-please.yml`'s
-  `pretag-gate` job runs before a tag can be created.
+- `task check:cross` is the same sweep the `pretag-gate` jobs in
+  `release-pr.yml` and `release-tag.yml` run before a release PR is opened or
+  a tag is pushed.
 - `task release:dry-run` proves the full `goreleaser release` composition —
   all four release targets in one invocation — on a native darwin host,
   without publishing or signing anything. Needs `zig`, `syft`, and `cosign`
@@ -131,21 +132,38 @@ Every command CI runs is defined exactly once, as a `task` target — see
 
 ## Pull requests
 
-**The PR title must be Conventional-Commits-shaped.** This is enforced by CI,
-and it is load-bearing — `release-please` derives the version and the changelog
-from merged PR titles, so a sloppy title becomes a permanent public release
-note.
+**Add a changelog fragment for every user-visible change.** Run
+`task changie -- new -k <Kind> -b "<one sentence>"`, optionally with
+`-m PR=<n>`. The kinds are declared in `.changie.yaml`: Breaking, Features,
+Fixes, Performance and Dependencies. The command writes a file under
+`.changes/unreleased/`; commit it with the change. The `fragment-required`
+check fails a PR that changes `cmd/**` or `internal/**` (outside tests and
+testdata) without one.
+
+A change with nothing user-visible carries
+`<!-- changelog-exempt: <reason> -->` in the PR body. The reason must not be
+empty; `fragment-required` enforces that.
+
+**The version is derived from the fragment kinds.** changie computes the next
+version from the unreleased fragments: Breaking and Features bump the minor
+version while the project is below 1.0, and Fixes, Performance and
+Dependencies bump the patch. On every push to `main`, `release-pr.yml` batches
+the fragments into one `chore(main): release vX.Y.Z` pull request. Merging that
+PR cuts the release: `release-tag.yml` pushes the tag and `release.yml` builds
+it. `task changie -- next auto` previews the next version locally. Never
+hand-write or edit `.changes/v*.md` or `CHANGELOG.md`; the release PR generates
+both.
+
+**The PR title stays Conventional-Commits-shaped.** CI enforces it as hygiene,
+so squash-merge commit subjects stay readable. It no longer decides the
+version or the changelog.
 
 ```
 ^(feat|fix|perf|refactor|docs|chore|ci|test|build|revert)(\(scope\))?!?: subject
 ```
 
-Scopes are lowercase, digits, `_` and `-` only. `feat` bumps the minor version;
-`fix` and `perf` bump the patch; `docs`, `chore`, `ci`, `test`, `build`,
-`refactor` are hidden from the changelog. A `!` marks a breaking change.
-
-Choose deliberately: `feat:` on an internal refactor advertises a feature that
-users cannot see.
+Scopes are lowercase, digits, `_` and `-` only. Choose deliberately: `feat:` on
+an internal refactor advertises a feature that users cannot see.
 
 Every PR opens with a default template whose only job is to send you to a typed
 one — GitHub does not offer them in its UI, so the default carries the links:
@@ -168,11 +186,10 @@ CI/tooling, dependency, and doc-only PRs are exempt; note
 
 ### Never do these
 
-- **Do not bump versions by hand.** No editing `.release-please-manifest.json`,
-  no `Release-As:` commit footer, no `release-as` config key, no manufactured
-  breaking-change marker. The version is *computed* from Conventional Commits.
-  If a computed version looks wrong, the honest lever is the commits that
-  produce it.
+- **Do not bump versions or write release files by hand.** No hand-written or
+  hand-edited `.changes/v*.md` or `CHANGELOG.md` (changie generates both in the
+  release PR), and no hand-pushed `v*` tag. If a computed version looks wrong,
+  the honest lever is the kinds of the fragments.
 - **Do not edit `tools/bench/baseline.json`.** It is written only by
   `runner -mode regression -rebless`, run on the CI runner class that spends it.
   A baseline recorded anywhere else is not comparable — a wrong-platform
