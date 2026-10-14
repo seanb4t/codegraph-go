@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 05
 current_phase_name: Release Chain & release-please Retirement
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-10-14T21:50:49.956Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-10-14T22:02:50.549Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 05 execution started
-state_head: 0a48d4deb56bd3fc15a7094dd177792ed9c008c1
+state_head: cb67754697235d3790e196e1a367ee37f5ef8a19
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 18
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
 ## Current Position
 
 Phase: 05 (Release Chain & release-please Retirement) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-10-14 — Phase 05 execution started
 
@@ -203,6 +203,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P01 | 12 min | 2 tasks | 7 files |
 | Phase 5 P02 | 6 min | 3 tasks | 7 files |
 | Phase 05 P03 | 8 min | 3 tasks | 8 files |
+| Phase 05 P04 | 10 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -491,6 +492,8 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: C8 (Phase 5 05-02): release:tag declares a precondition that GITHUB_ACTIONS is true. Forcing constraint: D-06R's standing no-human-git-tag rule; without it task release:tag on a laptop would push a tag with the maintainer's own credentials. — New custom logic named per D-01; rehearsal run 4 shows the refusal.
 - [Phase 5]: GRD-16 scan (Phase 5 05-02) covers every workflow run body, local action step and executed Taskfile command and requires exactly one tag-creating unit, task:release:tag, invoked only from release-tag.yml/tag. tag_authority_test.go stays untouched. — A Taskfile target is itself a human-runnable entry point. Stated boundary: a script invoked by path is not opened (T-05-10, accepted).
 - [Phase 05]: 05-03: the release-notes flag lives in Taskfile.yml release:goreleaser (D-12) and REL-13 asserts only this repository wiring (D-14); release.yml changed by one comment line — Both release:goreleaser and release:dry-run refuse an absent or empty .changes/TAG.md (C6), because GoReleaser alone only warns on an empty notes file
+- [Phase 05]: 05-04: a reason starting with a dash after strip does not exempt, in either hygiene policy (RESEARCH Pitfall 7; matches 04-REVIEW.md) — The old pattern's first character class was [^->]; acceptance of '- ' and '--x' through a leading space was accidental.
+- [Phase 05]: 05-04: require-issue-link.yml changes only for D-05 (allowlist arm), not WR-01; its marker check is a single grep -E, not a Python backtracking regex — Rule eyva2svrcz: no claims about third-party matcher behavior; maintainer may override.
 
 ### Pending Todos
 
@@ -657,8 +660,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-14T21:50:41.931Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-10-14T22:02:50.509Z
+Stopped at: Completed 05-04-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
