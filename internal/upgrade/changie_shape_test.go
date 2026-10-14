@@ -1,7 +1,11 @@
 // changie_shape_test.go binds .changie.yaml, the .changes/ baseline seed
 // layout, and the isolated go.tool-changie.mod pin to CHG-01/CHG-02's
-// locked vocabulary (01-01-PLAN.md, D-06, D-10, D-11, D-13). These guards land
-// RED first per rule x1cjy9vyhq: committed before .changie.yaml/.changes/
+// locked vocabulary (01-01-PLAN.md, D-06, D-10, D-11, D-13). Phase 5's
+// D-13 (05-01, maintainer decision of 2026-10-14) amends Phase 1 D-02's
+// newlines lock: the newlines mapping now holds four keys, not one, so a
+// freshly batched version file ends in a blank line (RESEARCH Pitfall 1).
+// These guards land RED first per rule x1cjy9vyhq: committed before
+// .changie.yaml/.changes/
 // exist, so the resulting failure is a real assertion failure, not a
 // build error. Never gate on `gsd-tools check tdd-red-evidence` — it
 // parses TAP only and always reports INVALID_RED for `go test`; the RED
@@ -110,7 +114,7 @@ func yamlMappingValue(n *yaml.Node, key string) (*yaml.Node, bool) {
 	return nil, false
 }
 
-// changelogHeadingRe matches a release-please-authored or changie-merged
+// changelogHeadingRe matches a historical seed heading or a changie-merged
 // version heading. The optional "v" accepts the `## [v0.15.0](…)` shape
 // changie batches write under the locked versionFormat (D-03) from this
 // phase's first real release on, so the guard survives it.
@@ -280,13 +284,21 @@ func TestChangieConfigShape(t *testing.T) {
 	if !ok || newlinesNode.Kind != yaml.MappingNode {
 		t.Fatalf("%s: newlines is not a mapping", changieConfigPath)
 	}
-	wantNewlinesKeys := []string{"afterChangelogHeader"}
-	if gotKeys := yamlMappingKeys(newlinesNode); !slices.Equal(gotKeys, wantNewlinesKeys) {
-		t.Fatalf("%s: newlines key set = %v, want exactly %v (D-02: no other newlines key — seeds already carry their own trailing blank-line separator)", changieConfigPath, gotKeys, wantNewlinesKeys)
+	wantNewlines := map[string]string{
+		"afterChangelogHeader": "1",
+		"beforeKind":           "1",
+		"afterKind":            "1",
+		"endOfVersion":         "2",
 	}
-	afterNode, _ := yamlMappingValue(newlinesNode, "afterChangelogHeader")
-	if afterNode.Value != "1" {
-		t.Fatalf("%s: newlines.afterChangelogHeader = %q, want %q", changieConfigPath, afterNode.Value, "1")
+	wantNewlinesKeys := sortedMapKeys(wantNewlines)
+	if gotKeys := yamlMappingKeys(newlinesNode); !slices.Equal(gotKeys, wantNewlinesKeys) {
+		t.Fatalf("%s: newlines key set = %v, want exactly %v (D-13, Phase 5 05-01, amends Phase 1 D-02: beforeKind, afterKind and endOfVersion make a batched version file end in a blank line, so changie merge never glues a `## [` heading onto the last bullet — RESEARCH Pitfall 1)", changieConfigPath, gotKeys, wantNewlinesKeys)
+	}
+	for _, key := range wantNewlinesKeys {
+		v, _ := yamlMappingValue(newlinesNode, key)
+		if v.Value != wantNewlines[key] {
+			t.Fatalf("%s: newlines.%s = %q, want %q (D-13)", changieConfigPath, key, v.Value, wantNewlines[key])
+		}
 	}
 }
 
