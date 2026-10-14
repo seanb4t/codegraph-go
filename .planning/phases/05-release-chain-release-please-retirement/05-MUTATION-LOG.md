@@ -2499,3 +2499,69 @@ Byte-clean proof: `git -C "$S" diff --quiet` exit 0
 ```
 
 No `p05-scratch-wt` entry remains.
+
+
+## Family 05-05/c — SAN fixture becomes the real workflow
+
+Scratch worktree: a detached checkout of HEAD (`91a75711`) at a path containing `p05-scratch-wt`.
+
+Finding recorded before the guard was strengthened: with the corpus exactly as the earlier 05-05 commit left it, the same mutation below left `go test ./internal/upgrade/ -count=1` at `ok` (measured in a scratch worktree of the preceding HEAD). `cosignIdentitySANCorpus.accept` was only counted by check 5 and never read against `releaseWorkflowRefPattern`, so the row was decoration. The `test(05-05):` commit `91a75711` adds the per-row assertion; the run below is against it.
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- internal/upgrade/taskfile_shape_test.go` exit 0
+
+Mutation: change the corpus row "different workflow filename, same repo, tag ref" from release-tag.yml to release.yml (its accept field stays false).
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	internal/upgrade/taskfile_shape_test.go
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/internal/upgrade/taskfile_shape_test.go b/internal/upgrade/taskfile_shape_test.go
+index 72a086a1..847955c3 100644
+--- a/internal/upgrade/taskfile_shape_test.go
++++ b/internal/upgrade/taskfile_shape_test.go
+@@ -2424 +2424 @@ var cosignIdentitySANCorpus = []struct {
+-		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-tag.yml@refs/tags/v1.2.3",
++		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yml@refs/tags/v1.2.3",
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^TestCosignIdentityPolicyBoundaryParityWithCompiledPattern$' -count=1 -v` (from `$S`); the consumer of cosignIdentitySANCorpus is TestCosignIdentityPolicyBoundaryParityWithCompiledPattern:
+
+```
+=== RUN   TestCosignIdentityPolicyBoundaryParityWithCompiledPattern
+    taskfile_shape_test.go:2572: corpus row "different workflow filename, same repo, tag ref": releaseWorkflowRefPattern match = true, but the row says accept = false (SAN "https://github.com/seanb4t/codegraph-go/.github/workflows/release.yml@refs/tags/v1.2.3")
+    taskfile_shape_test.go:2591: cosign identity literals: 7 total across 5 files (post-Task-1 floor: 7, pre-task baseline: 6)
+    taskfile_shape_test.go:2593:   ../../Taskfile.yml: 3 literal(s), 0 unmatched flag occurrence(s)
+    taskfile_shape_test.go:2593:   ../../README.md: 1 literal(s), 0 unmatched flag occurrence(s)
+    taskfile_shape_test.go:2593:   ../../docs/RELEASE.md: 1 literal(s), 0 unmatched flag occurrence(s)
+    taskfile_shape_test.go:2593:   ../../SECURITY.md: 1 literal(s), 0 unmatched flag occurrence(s)
+    taskfile_shape_test.go:2593:   ../../docs/RELEASE-PROCEDURES.md: 1 literal(s), 0 unmatched flag occurrence(s)
+--- FAIL: TestCosignIdentityPolicyBoundaryParityWithCompiledPattern (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.173s
+FAIL
+exit=1
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- internal/upgrade/taskfile_shape_test.go`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `go test ./internal/upgrade/ -run '^TestCosignIdentityPolicyBoundaryParityWithCompiledPattern$' -count=1 -v` (last lines):
+
+```
+--- PASS: TestCosignIdentityPolicyBoundaryParityWithCompiledPattern (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.193s
+```
+
+Teardown: `git worktree remove --force "$S"` and `git worktree prune`, then `git worktree list`:
+
+```
+/Volumes/Code/github.com/seanb4t/codegraph-go                        91a75711 [gsd/v0.15.0-milestone]
+/Volumes/Code/herdr-worktrees/codegraph-go/worktree-brave-river-a240 2df78be0 [chore/octopusignore]
+```
+
+No `p05-scratch-wt` entry remains.
