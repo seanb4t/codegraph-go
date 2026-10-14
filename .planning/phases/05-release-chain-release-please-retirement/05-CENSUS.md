@@ -55,3 +55,141 @@ Verdict vocabulary: `rewritten` (the text now describes the changie chain), `rem
 | R43 | 629 | §12 | not a reuse of it: the release-please App is installed on | rewritten | The release GitHub App is installed on this repository and authors the release PR branch, PR and tag. |
 | R44 | 647 | §12 | release-please App, applied to the tap App instead: | rewritten | Key rotation follows the shape of the release GitHub App section. |
 | R45 | 662 | §12 | §9's troubleshooting note describes for the release-please App): a | rewritten | The identity-check pattern is described for the release GitHub App. |
+
+## REL-14 census instrument
+
+Recorded verbatim, not committed as a Taskfile target or script. REL-14 is a one-time retirement proof; the instrument is
+re-run from this file the way Phase 3 re-ran v0.14.0's (04-02 precedent), and a permanent CI target would be ceremony D-01
+asks to avoid. It searches tracked content only (`git grep`) and tracked filenames (`git ls-files`); untracked local caches
+such as a tool's `.boost/` are not repository content and would make the result machine-dependent.
+
+```bash
+census() {
+  git -C "$1" grep -n -i -I -E 'release[-_ ]?please' -- . ':(exclude).planning/' ':(exclude)CHANGELOG.md' ':(exclude).changes/v*.md' ':(exclude).changes/unreleased/' 2>&1
+  f=$(git -C "$1" ls-files) || { echo "census: listing tracked files failed in $1"; return; }
+  printf '%s\n' "$f" | rg -i 'release[-_ ]?please' | rg -v '^\.planning/'
+}
+```
+
+Exclusions, one line per REL-14 clause. Nothing else is excluded, and the filename half excludes `.planning/` only:
+
+- `.planning/` is `':(exclude).planning/'`
+- `CHANGELOG.md` history (D-09) is `':(exclude)CHANGELOG.md'` and `':(exclude).changes/v*.md'`
+- this milestone's own notes (D-11) is `':(exclude).changes/unreleased/'`
+
+D-11 is the maintainer's decision (2026-10-14) that `.changes/unreleased/` is the concrete path of REL-14's and D-09's
+"this milestone's own notes" clause. Between releases that directory holds exactly the fragments `changie batch` turns into
+the next release's notes, which here are v0.15.0's. Once batched they become `.changes/v0.15.0.md`, which D-09 already counts as
+`CHANGELOG.md` history. Per D-11 no other `.changes/` path is excluded: `.changes/header.tpl.md` stays in scope, and the
+positive control below proves the boundary in both directions.
+
+Pass condition on a clean tree: `census <dir>` prints nothing. Exit codes are ignored (the last `rg -v` exits 1 on empty
+input), so callers capture with `x=$(census <dir>; true)`. An error message is output and therefore a failure.
+
+## Positive control
+
+Rule 84d1gfpywd: the instrument is shown to find planted references, and to skip planted references under the excluded paths,
+before its zero is trusted. Scratch worktree: a detached checkout of the post-deletion HEAD (`92a4ce15`) at a path containing
+`p05-scratch-wt`. Five plants are written and staged with `git add -f`: in-scope content `docs/__census_control__.md`;
+in-scope `.changes/` content, two lines prepended to the existing `.changes/header.tpl.md` (`planted Release Please reference`,
+`planted RELEASEPLEASE reference`); in-scope filename `scripts/__release_please_control__.txt` (empty file); excluded
+`.planning/__census_control__.md`; excluded `.changes/unreleased/__census_control__.yaml`. Excluded plants hold
+`planted release-please reference`.
+
+```
+worktree HEAD: 92a4ce15
+--- staged plants (git status --porcelain):
+M  .changes/header.tpl.md
+A  .changes/unreleased/__census_control__.yaml
+A  .planning/__census_control__.md
+A  docs/__census_control__.md
+A  scripts/__release_please_control__.txt
+--- unexcluded grep -l over the two excluded plant paths:
+.changes/unreleased/__census_control__.yaml
+.planning/__census_control__.md
+--- census "$W":
+.changes/header.tpl.md:1:planted Release Please reference
+.changes/header.tpl.md:2:planted RELEASEPLEASE reference
+docs/__census_control__.md:1:planted release-please reference
+scripts/__release_please_control__.txt
+--- revert: git reset -q --hard HEAD
+--- git status --porcelain --ignored --untracked-files=all (expect empty):
+[]
+```
+
+Reading: every plant landed (the staged list shows all five), and the unexcluded grep lists both excluded plants, so their
+absence from the census output is a real exclusion, not a vacuous one. The instrument prints exactly four lines. The two
+`.changes/header.tpl.md` lines show an in-scope `.changes/` file is searched, with case-insensitivity (`Release Please`,
+`RELEASEPLEASE`) and the space and empty separators. The docs line shows the `-` separator in content; the scripts line shows the
+filename half and the `_` separator. The `.changes/unreleased/` and `.planning/` plants are absent, so both exclusions hold.
+After `git reset -q --hard HEAD` the status with `--ignored --untracked-files=all` is empty; `git worktree remove --force "$W"` and
+`git worktree prune` followed, leaving only the main checkout and the pre-existing unrelated worktree.
+
+## Clean-tree census
+
+On the real tree at `92a4ce15`, which has the three retired files deleted by `ffd84c4a`:
+
+```
+$ x=$(census .; true); printf "[%s]\n" "$x"
+[]
+test ! -e .github/workflows/release-please.yml -> absent (ok)
+test ! -e release-please-config.json -> absent (ok)
+test ! -e .release-please-manifest.json -> absent (ok)
+$ git grep -l -i -I -E 'release[-_ ]?please' -- CHANGELOG.md ':(glob).changes/v*.md'
+.changes/v0.2.0.md
+CHANGELOG.md
+```
+
+The census prints nothing. The history files still hold exactly the hits the history exclusion exists to skip
+(`.changes/v0.2.0.md` and `CHANGELOG.md`), so that exclusion skips something real. Those files are history (D-09) and were
+not edited. `.changes/unreleased/` holds no hit on the real tree today; the exclusion is shown to work by the planted file above.
+
+Version source of truth: `changie latest` is the version source, and no tracked version manifest remains.
+
+```
+$ task changie -- latest
+v0.14.1
+$ ls .changes/v*.md | sort -V | tail -1
+.changes/v0.14.1.md
+```
+
+The remaining tracked paths whose names contain "manifest" (`corpora/manifest.json`, `internal/agents/manifest.go`,
+`internal/corpora/manifest.go`, `tools/bench/realcorpus/manifest.go`, `web/build/.build-manifest`, and their tests) are
+unrelated to versioning.
+
+## Phase gate
+
+Run on the real tree after the deletion commit (`ffd84c4a`) and the mutation-log commit (`92a4ce15`). Go commands are prefixed
+`GOTOOLCHAIN=go1.26.9`.
+
+```
+$ GOTOOLCHAIN=go1.26.9 task test
+(exit 0; 66 "ok" lines, no FAIL line; includes test:golden, test:daemon and test:race)
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.562s
+ok  	github.com/seanb4t/codegraph-go/internal/daemon	64.478s
+ok  	github.com/seanb4t/codegraph-go/testdata/golden	22.742s
+
+$ task check:changie
+check:changie: 14 of 14 checks passed against a scratch copy (source tree byte-unchanged)
+
+$ task check:fragment-policy
+check:fragment-policy: executed 46 of 46 defined test methods (floor 46)
+
+$ task lint:actions
+(no finding, exit 0)
+
+$ GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.587s
+```
+
+REL-12 single-hunk check, `git diff -U0 7b12cb92c407ae7e495a62b4ac38d8685e64307c -- .github/workflows/release.yml`:
+`hunks: 1`, and `non-comment changed lines: []` (the one hunk changes comment lines only).
+
+Byte-lock against `5a8603f5` (a lock on history and `header.tpl.md`, not a census pathspec):
+`git diff --quiet 5a8603f5 HEAD -- internal/upgrade/verify.go CHANGELOG.md ':(glob).changes/v*.md'` exits 0, and
+`git diff --quiet 5a8603f5 -- internal/upgrade/verify.go CHANGELOG.md ':(exclude).changes/unreleased' .changes` exits 0.
+
+No commit since `5a8603f5` carries `[skip ci]` or `[ci skip]` (checked over `git log --format=%B 5a8603f5..HEAD`). No
+`p05-scratch-wt` worktree remains. `gh api repos/seanb4t/codegraph-go/git/matching-refs/tags/v0.15 --jq 'length'` prints `0`
+(read-only): this phase created no tag. `git ls-remote origin refs/heads/main` still prints `7b12cb92c407ae7e495a62b4ac38d8685e64307c`,
+so `main` has cut no release since the phase began and no verbatim seed is needed for the milestone merge.
