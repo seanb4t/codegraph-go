@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 import unittest
 from pathlib import Path
 
@@ -558,6 +559,86 @@ class HygieneAllowlistTests(unittest.TestCase):
             f"exact side differs: only in workflow {sorted(exact - mine_exact)}, "
             f"only in pr_template_policy {sorted(mine_exact - exact)}",
         )
+
+
+LINEAR_BOUND_SECONDS = 1.0
+
+
+def _both_policies():
+    """(find_exemption, marker name) for each policy, pr_template_policy last.
+
+    pr_template_policy.find_exemption is reached by attribute so that its absence
+    is a failed assertion and never an AttributeError.
+    """
+    return (
+        (fragment_policy.find_exemption, "changelog-exempt"),
+        (getattr(pr_template_policy, "find_exemption", None), "pr-template-exempt"),
+    )
+
+
+class MarkerGrammarTests(unittest.TestCase):
+    """WR-01, GRD-15: both exemption markers are linear and share one grammar."""
+
+    def test_exempt_markers_are_linear_on_adversarial_bodies(self):
+        pairs = (
+            (fragment_policy.CHANGELOG_EXEMPT_MARKER, "changelog-exempt"),
+            (pr_template_policy.EXEMPT_MARKER, "pr-template-exempt"),
+        )
+        for marker, name in pairs:
+            bodies = (
+                ("cubic shape", "<!-- " + name + ":" + " " * 2500),
+                ("quadratic shape", "<!-- " + name + ": a" + " " * 60000),
+            )
+            for shape, body in bodies:
+                with self.subTest(marker=name, shape=shape):
+                    start = time.perf_counter()
+                    match = marker.search(body)
+                    elapsed = time.perf_counter() - start
+                    self.assertLess(
+                        elapsed,
+                        LINEAR_BOUND_SECONDS,
+                        f"{name} {shape}: search took {elapsed:.2f}s on a {len(body)}-char body",
+                    )
+                    self.assertIsNone(match)
+
+    def test_unterminated_marker_does_not_exempt(self):
+        self.assertTrue(hasattr(pr_template_policy, "find_exemption"))
+        for find, name in _both_policies():
+            with self.subTest(marker=name):
+                self.assertTrue(callable(find))
+                self.assertIsNone(find(f"<!-- {name}: reason"))
+
+    def test_marker_reason_starting_with_dash_does_not_exempt(self):
+        self.assertTrue(hasattr(pr_template_policy, "find_exemption"))
+        for find, name in _both_policies():
+            for body in (f"<!-- {name}: - -->", f"<!-- {name}: --x -->"):
+                with self.subTest(marker=name, body=body):
+                    self.assertTrue(callable(find))
+                    self.assertIsNone(find(body))
+
+    def test_marker_semantics_mirror_pr_template_exempt(self):
+        self.assertTrue(hasattr(pr_template_policy, "find_exemption"))
+        table = (
+            ("<!-- {n}: docs only -->", "docs only"),
+            ("<!-- {n}: -->", None),
+            ("<!-- {n}:     -->", None),
+            ("<!-- {N}: Mixed Case Name -->", "Mixed Case Name"),
+            ("<!-- {n}: - -->", None),
+            ("<!-- {n}: --x -->", None),
+            ("<!-- {n}: reason with no closer", None),
+            ("<!-- {n}: --> text <!-- {n}: second marker is ignored -->", None),
+            ("<!-- {n}: a - b -->", "a - b"),
+            ("no marker at all", None),
+        )
+        for template, expected in table:
+            with self.subTest(body=template):
+                pr_name, changelog_name = "pr-template-exempt", "changelog-exempt"
+                pr_body = template.format(n=pr_name, N=pr_name.upper())
+                changelog_body = template.format(n=changelog_name, N=changelog_name.upper())
+                theirs = getattr(pr_template_policy, "find_exemption", None)
+                self.assertTrue(callable(theirs))
+                self.assertEqual(theirs(pr_body), expected)
+                self.assertEqual(fragment_policy.find_exemption(changelog_body), expected)
 
 
 if __name__ == "__main__":
