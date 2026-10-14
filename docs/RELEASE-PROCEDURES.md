@@ -29,14 +29,15 @@ your dev machine's own `GOOS`/`GOARCH`) cannot see — do not tag until every
 target is green.
 
 > **Now also automated.** This exact sweep runs automatically as the
-> `pretag-gate` job in `.github/workflows/release-please.yml` on every push
-> to `main`, gating the `release-please` job behind it via `needs:`. The
-> job invokes it as `task check:cross` (D-15) — the sweep's one definition
-> lives in `Taskfile.yml`, not inlined in the workflow. Run `task
-> check:cross` locally for the same check the manual command block above
-> performs, before you ever push to `main` — but the enforcement point is
-> now CI, not this document. No human needs to remember to run this by hand
-> anymore.
+> `pretag-gate` job in both `.github/workflows/release-pr.yml` (on every push
+> to `main`, gating the release-PR job behind it via `needs:`) and
+> `.github/workflows/release-tag.yml` (on a push to `main` that changes
+> `CHANGELOG.md`, gating the tag job behind it via `needs:`). The job invokes
+> it as `task check:cross` (D-15) — the sweep's one definition lives in
+> `Taskfile.yml`, not inlined in either workflow. Run `task check:cross`
+> locally for the same check the manual command block above performs, before
+> you ever push to `main` — but the enforcement point is now CI, not this
+> document. No human needs to remember to run this by hand anymore.
 
 ## 2. Tag conventions
 
@@ -58,58 +59,59 @@ pipeline (one job, described in full in §4 below).
 
 1. Land all phase work on the integration branch
    (`gsd/v1.0-drop-in-parity-human-ux` for this milestone).
-2. The pre-tag gate (§1) now also runs automatically on every push to
-   `main` as release-please.yml's `pretag-gate` job (see the note added to
-   §1 above) — release-please can never open or merge a release PR from a
-   `main` state that fails it.
-3. **Fast-forward** the integration branch onto `main`, preserving its full
-   history — do **not** squash.
-4. The tag is created by release-please when its release PR merges (§4) —
+2. The pre-tag gate (§1) also runs automatically on every push to `main`, as
+   the `pretag-gate` job in `release-pr.yml` and in `release-tag.yml` (see the
+   note in §1 above) — a release PR can never be opened, and a tag never
+   pushed, from a `main` state that fails it.
+3. Merge the integration branch onto `main`. A squash merge is fine: the
+   changelog is built from the `.changes/unreleased/` fragments the work
+   carries, not from commit history, so nothing needs the individual commits
+   preserved.
+4. The tag is pushed by `release-tag.yml` when the release PR merges (§4) —
    never by hand.
 
-**Why fast-forward, not squash — the evidence, not a preference:**
-`main` contains **zero merge commits** (`git log --merges main` is empty)
-— the v0.1 milestone landed this same way — and `main` is an ancestor of
-the integration branch today, so a fast-forward is possible as-is. At the
-time this section was written the branch was roughly 477 commits ahead of
-`main`, of which roughly 160 are `feat`/`fix`/`perf` and roughly 217 are
-planning-only `docs(...)` commits. Under fast-forward, release-please walks
-all of those commits and generates a genuinely rich changelog from the 160
-substantive ones; its default `changelog-sections` hide `docs:`/`chore:`/
-`ci:`/`test:` automatically, so the planning commits are filtered out
-without any manual curation. A squash-merge would collapse all of that
-history into a single commit message and reduce the changelog to one line
-— discarding exactly the input release-please exists to consume.
+What still holds from the earlier model: the milestone's work lands on `main`
+before the tag exists, and the tag is cut at a commit on `main`, never on a
+feature or integration branch.
 
-**This supersedes Phase 8's `08-CONTEXT.md` D-08 "squash-merge to `main`"
-wording**, on repo evidence rather than preference (also independently
-recorded in engram `8sa948y0g4`: "fast-forward merge not squash"). Only the
-merge *mechanic* is superseded — D-08's substance (integration branch →
-`main` → tag on `main`) is honored in full; the milestone's work still
-lands on `main` before the tag exists, and the tag is still cut against
-`main`, never a feature/integration branch.
+## 4. Cutting a release (the changie release PR)
 
-## 4. Cutting a release (now automated by release-please)
+A release is cut by merging the release PR. There is no hand-run `git tag`.
 
-The release-PR merge is the trigger, not a hand-run `git tag`:
+The chain, end to end:
 
-1. Merge the integration branch to `main` (§3) — a normal fast-forward,
-   not a PR.
-2. `.github/workflows/release-please.yml` runs on that push: its
-   `pretag-gate` job (§1's automated sweep) must pass before
-   `release-please` runs. release-please then opens or updates a
-   `chore(main): release X.Y.Z` pull request proposing the next version and
-   the `CHANGELOG.md` entry.
-3. Review the PR's proposed version bump and changelog for accuracy.
-4. Merge the PR.
-5. release-please creates the tag **and** the GitHub Release in a single
-   API call — the Release object exists the instant the tag ref does, with
-   release-please's own changelog as the release body.
-6. The tag push, authored by the GitHub App token (not the default
-   `GITHUB_TOKEN` — App-authored refs *do* trigger downstream workflow
-   runs, which is exactly why this works), fires `release.yml`. It has
-   exactly ONE job, `release`, running natively on a real Apple-Silicon
-   macOS profile (`namespace-profile-macos-6x14-tahoe`) — no separate
+`.changes/unreleased/` fragment → release PR (release-pr.yml) → merge → App-token tag (release-tag.yml) → release.yml (unchanged)
+
+1. A change lands on `main` carrying its fragment in `.changes/unreleased/`
+   (see CONTRIBUTING.md, "Pull requests"). Merging the integration branch to
+   `main` (§3) lands its fragments the same way.
+2. `.github/workflows/release-pr.yml` runs on every push to `main`. Its
+   `pretag-gate` job (§1's automated sweep) must pass before the release-PR
+   job runs. That job runs `task release:batch`: `changie batch auto`,
+   `changie merge`, `changie latest`. This renders `.changes/vX.Y.Z.md` from
+   the fragments, merges it into `CHANGELOG.md`, and deletes the fragments.
+   The workflow then opens, or updates, one pull request on the fixed branch
+   `changie/release`, titled `chore(main): release vX.Y.Z`, whose body is
+   `.changes/vX.Y.Z.md`. The PR is opened ready for review, never as a draft,
+   and with the release GitHub App's token (§9), so every required check runs
+   on it.
+   `release:batch` fails when the rendered notes contain a GitHub skip-CI
+   phrase: the PR body becomes the squash commit message on `main` (a
+   repository setting), and such a phrase would suppress `release-tag.yml`.
+3. Review the PR's version and notes. If the version looks wrong, change the
+   kinds of the fragments on `main`; the next push regenerates the PR.
+4. Merge the PR. That push to `main` changes `CHANGELOG.md`.
+5. `.github/workflows/release-tag.yml` triggers on a push to `main` that
+   changes `CHANGELOG.md`, so only a release-PR merge fires it. Its
+   `pretag-gate` job runs first. Then `task release:tag` tags `changie latest`
+   at the pushed commit and pushes that tag with the release GitHub App's
+   token. A tag that already exists on origin is a successful no-op, so a
+   re-run is safe. The task runs only under GitHub Actions.
+6. The tag push, authored by the App token (not the default `GITHUB_TOKEN` —
+   App-authored refs *do* trigger downstream workflow runs, which is exactly
+   why this works), fires `release.yml`. It has exactly ONE job, `release`,
+   running natively on a real Apple-Silicon macOS profile
+   (`namespace-profile-macos-6x14-tahoe`) — no separate
    `build`/`assemble`/`provenance` jobs and no CI-artifact round trip
    between them (that three-job topology was collapsed by plan 01-03/01-04
    into a single `goreleaser release --clean` invocation, run via
@@ -133,10 +135,13 @@ The release-PR merge is the trigger, not a hand-run `git tag`:
      is required, same trust boundary as before.
    - **SBOM** — `sboms:` shells out to `syft`, per binary, publishing an
      SPDX SBOM alongside each.
-   - **Publish** — GoReleaser's declarative `release:` pipe uploads into
-     the Release release-please already created, idempotently
-     (`replace_existing_artifacts: true`), without rewriting
-     release-please's changelog body or prerelease flag.
+   - **Publish** — GoReleaser's declarative `release:` pipe creates the
+     GitHub Release for the tag and uploads into it, idempotently
+     (`replace_existing_artifacts: true`). The Release body is
+     `.changes/vX.Y.Z.md`, which `task release:goreleaser` hands to
+     GoReleaser with `--release-notes`; it refuses a tag whose
+     `.changes/<tag>.md` is missing or empty (REL-12). The prerelease flag
+     follows the tag (`prerelease: auto`).
    - **Attest** — `actions/attest-build-provenance` (GitHub's first-party
      attestor) runs as the job's last step, over the SAME 8 payloads the
      checksums file covers, publishing through GitHub's Attestations API
@@ -145,53 +150,31 @@ The release-PR merge is the trigger, not a hand-run `git tag`:
      `gh attestation verify` command that replaces `slsa-verifier
      verify-artifact` for releases cut by this pipeline).
 
-**The version is computed, not chosen.** The bump comes from accumulated
-Conventional Commits and that is the intended, default behaviour: while the
-project is on a `0.x` baseline, a `feat:` bumps the minor, and reaching `1.0.0`
-happens when the commits say so — not because a milestone is named "v1.0".
+**The version is derived from the fragment kinds, not chosen.** changie
+computes it from the kinds of the unreleased fragments: Breaking and Features
+bump the minor while the project is on a `0.x` baseline (`.changie.yaml` pins
+Breaking to a minor bump until 1.0), and Fixes, Performance and Dependencies
+bump the patch. `task changie -- next auto` previews the next version
+locally.
 
-> **Project directive (2026-07-29):** do **not** manufacture a version.
-> No `Release-As:` footer, no `release-as` config key, and no breaking-change
-> marker authored for the purpose of producing a bump. If you believe a release
-> needs a version the tool would not compute, that is a conversation to have
-> before the cut, not a footer to add during it. See `09-CONTEXT.md` D-06R.
+> **Project directive (2026-07-29):** do **not** manufacture a version. No
+> hand-edited version file and no hand-pushed tag authored for the purpose of
+> producing a bump. If you believe a release needs a version the fragments
+> would not compute, that is a conversation to have before the cut, not an
+> edit to make during it. See `09-CONTEXT.md` D-06R.
 
-**The override exists, for completeness.** A one-shot `Release-As:` footer on an
-empty commit forces a specific version for a single cut:
+**Expected silent no-op:** if there are no fragments in `.changes/unreleased/`,
+`task release:batch` prints a notice and exits 0, and no PR is opened or
+updated. This is expected, not a broken pipeline — check the `release-pr`
+workflow run's log rather than assuming a failure and reaching for a manual
+tag.
 
-```sh
-git commit --allow-empty -m "chore: release X.Y.Z" -m "Release-As: X.Y.Z"
-```
-
-Two constraints if it is ever used. It must begin a line to parse as a footer —
-mentioning `Release-As:` mid-sentence in a commit body does nothing (two commits
-in this repo do exactly that while documenting this section, harmlessly). And it
-must never move into `release-please-config.json`'s `release-as` field: a
-config-level setting is sticky and pins every subsequent release to that version
-until removed.
-
-**Expected silent no-op:** if there are no release-worthy commits since the
-last release, release-please opens **no PR at all**. This is expected, not
-a broken pipeline — check the `release-please.yml` workflow run's log
-rather than assuming a failure and reaching for a manual tag.
-
-**Escape hatch — `rc` prereleases only (D-10):** the hand-pushed tag is
-retained, explicitly labelled, for prerelease cuts only:
-
-```sh
-git checkout main
-git pull
-git tag v0.0.0-rc.N
-git push origin v0.0.0-rc.N
-```
-
-A `v0.0.0-rc.N` tag pushed by hand still matches `release.yml`'s
-`v[0-9]*` trigger and still fires the signed build; since no release-please
-Release exists yet for it, GoReleaser's declarative `release:` pipe
-**creates** the Release itself (marked prerelease, per `prerelease: auto`)
-rather than uploading into one that already exists. This is the only path
-in this repo where a human still runs `git tag` directly — stable releases
-never use it.
+**No hand-pushed prerelease tag (D-15).** The earlier `rc` escape hatch is
+removed. A human `git tag` contradicts the no-human-tag rule (`09-CONTEXT.md`
+D-06R), and `release:goreleaser` refuses any tag that has no
+`.changes/<tag>.md` (REL-12). changie can batch a prerelease with
+`changie batch auto -p rc.N`, but that is not wired into `release:batch`; no
+prerelease route is built.
 
 ## 5. The `verify.go` LOCKED contract
 
@@ -268,27 +251,27 @@ Both commands must succeed for at least one platform's artifacts before
 considering the release verified. A signature from any other issuer, any
 other workflow file, or any non-tag trigger will fail (a) — as it should.
 
-> **Mandatory, not optional, for the first automated cut.** Running these
-> two commands is not optional for the first release-please-automated
-> release and for the disposable live proof (§9) that precedes it — it is
-> the only evidence that the cosign identity survived the App-token
-> rewiring, and it is the direct evidence REL-02's second half is verified
-> against. Do not skip it because the pipeline "should" still be signing
-> correctly; prove it.
+> **Mandatory, not optional, for the first release cut by the changie
+> chain.** Running these two commands is not optional for that release and
+> for the live proof (§9) of the chain — it is the only evidence that the
+> cosign identity survived the App-token rewiring, and it is the direct
+> evidence REL-02's second half is verified against. Do not skip it because
+> the pipeline "should" still be signing correctly; prove it.
 
 ## 7. Rollback / cleanup
 
-**Recovery posture is PATCH FORWARD (D-07) — this section governs
-`rc`-prerelease cleanup only, never a stable (`vX.Y.Z`) release.** Do
-**not** delete or re-push a published tag or Release to "fix" a bad cut.
-Deleting and re-pushing a tag re-fires `release.yml` — a human touching tag
-authority release-please owns (D-06R) — and, more concretely, would destroy
-any un-notarized or otherwise deliberately-preserved asset a later phase
-depends on as its baseline (the exact mistake this note exists to prevent).
-A wrong stable release is fixed by the **next** release-please patch
-release, not by rewriting history. This section's delete-and-retry
-procedure below applies **only** to a disposable `rc`-shaped tag (§4's
-escape hatch, §9's disposable live proof) — never to a real `vX.Y.Z`.
+**Recovery posture is PATCH FORWARD (D-07) — this section governs cleanup of
+a disposable cut only (for example §9's live proof), never a published
+stable (`vX.Y.Z`) release a user may have resolved as latest.** Do **not**
+delete or re-push a published tag or Release to "fix" a bad cut. Deleting
+and re-pushing a tag re-fires `release.yml` — a human touching tag
+authority the release workflow owns (D-06R) — and, more concretely, would
+destroy any un-notarized or otherwise deliberately-preserved asset a later
+phase depends on as its baseline (the exact mistake this note exists to
+prevent). A wrong stable release is fixed by the **next** patch release,
+cut through the release PR, not by rewriting history. This section's
+delete-and-retry procedure below applies **only** to a disposable cut (§9's
+live proof) — never to a real `vX.Y.Z`.
 
 ### 7.1 Preserved baselines — do not delete or replace (dated)
 
@@ -309,34 +292,31 @@ already does — it drops both drafts and asset-less releases, and classifies
 "stable" using the GitHub `prerelease` flag rather than the semver suffix
 alone. Follow that precedent rather than rediscovering it.
 
-For an `rc` cleanup, a release-please cut leaves **up to three** artifacts
-behind (an `rc` tag pushed by hand per §4's escape hatch has no
-version-bump commit, so only the first two apply there):
+A release cut by the changie chain leaves **three** artifacts behind:
 
 1. the tag,
-2. the GitHub Release object created for it, and
-3. (release-please-cut releases only) the version-bump commit on `main`
-   (the `CHANGELOG.md` entry plus the `.release-please-manifest.json`
-   bump) together with its merged release PR.
+2. the GitHub Release object GoReleaser created for it, and
+3. the release commit on `main` (the `CHANGELOG.md` entry plus
+   `.changes/vX.Y.Z.md`, with the fragments it consumed deleted) together
+   with its merged release PR.
 
-For a release-please-cut release, deleting the tag alone is not
-sufficient — release-please's next run walks `main`'s history and, seeing
-the manifest already bumped, would believe the version already shipped.
+Deleting the tag alone is not sufficient: `main` would still carry the
+version's changelog entry, and the fragments that produced it would stay
+gone.
 
-**1. Delete the Release and its tag (`rc` cuts only):**
+**1. Delete the Release and its tag:**
 
 ```sh
-gh release delete v0.0.0-rc.N --cleanup-tag -y
+gh release delete vX.Y.Z --cleanup-tag -y
 ```
 
 If the tag was pushed but no Release was ever created (e.g. the build
 failed before GoReleaser's `release:` pipe ran), `gh release delete` has
 nothing to delete — in that case the tag itself is the only artifact left,
-and it is still an `rc` tag pushed by hand under §4's escape hatch, not a
-release-please-authored ref, so deleting just the tag is the correct and
-only step; skip straight to confirming with `git tag -l 'v0.0.0-rc.N'` and
-`git ls-remote --tags origin 'v0.0.0-rc.N'` that nothing remains, rather
-than assuming a Release exists to delete.
+and it is the tag `release-tag.yml` pushed, so deleting just the tag is the
+correct and only step for this part; skip straight to confirming with
+`git tag -l 'vX.Y.Z'` and `git ls-remote --tags origin 'vX.Y.Z'` that
+nothing remains, rather than assuming a Release exists to delete.
 
 Nothing is published to the GitHub release until every step in the single
 `release` job succeeds — a failed build produces no Sigstore
@@ -344,17 +324,14 @@ transparency-log entries and no public GitHub release, so deletion is a
 no-op beyond the tag itself when the failure happened before GoReleaser's
 `release:` pipe ran.
 
-**2. Revert the release commit on `main`:** so release-please's next run
-does not believe the version already shipped, revert the merged
-`chore(main): release X.Y.Z` commit (the `CHANGELOG.md` entry plus the
-manifest bump) with a normal `git revert` on `main`.
-
-**3. Check the `autorelease` label:** release-please re-labels its release
-PR `autorelease: tagged` once it believes a cut succeeded. A
-partially-completed cut may leave that label in place, which can prevent
-release-please from proposing a fresh release PR on its next run — remove
-the `autorelease: tagged` label from the PR (or close and let release-please
-re-open it) if a retry doesn't produce a new PR as expected.
+**2. Revert the release commit on `main`** through a normal pull request
+(title it `revert: ...`, which the title check accepts). Reverting the merged
+`chore(main): release vX.Y.Z` squash commit restores the fragments and
+removes `.changes/vX.Y.Z.md` and its `CHANGELOG.md` entry. `release-tag.yml`
+fires on that push too, because it changes `CHANGELOG.md`, but `changie
+latest` is then the previous version, whose tag already exists, so it does
+nothing. `release-pr.yml` then reopens a release PR from the restored
+fragments. Never re-tag by hand.
 
 Never reuse a tag name after deleting it for a **stable** (`vX.Y.Z`) release
 — once `codegraph upgrade` has resolved a version as "latest," retagging
@@ -362,9 +339,9 @@ the same name risks a confusing mismatch between what a user already
 verified and what the tag now points to. Prereleases (`-rc.N`) are safer to
 delete/retag since they are explicitly transient by convention.
 
-This same three-step procedure (delete release+tag, revert the release
-commit, check the `autorelease` label) is what tears down the disposable
-live-proof release described in §9.
+This same two-step procedure (delete release+tag, revert the release
+commit) is what tears down the disposable live-proof release described in
+§9.
 
 ## 8. Commit-signing fallback (automated pipeline commits only)
 
@@ -388,8 +365,11 @@ commit the user themselves is making interactively.
 
 **Why an App, not the default token, is required:** a tag pushed with the
 workflow's default `GITHUB_TOKEN` does not start other workflow runs — so
-`release.yml` would simply never fire on release-please's tag. A GitHub
-App installation token does trigger downstream workflow runs. This is not
+`release.yml` would simply never fire on the tag `release-tag.yml` pushes.
+For the same reason, a pull request opened or updated with the default token
+fires no `pull_request` workflows, so `protect-main`'s required checks would
+never report on the release PR and it could never merge. A GitHub App
+installation token does trigger downstream workflow runs. This is not
 optional plumbing; it is the single mechanism that makes §4's automated
 flow work at all.
 
@@ -400,19 +380,22 @@ repo (or once per organization if the App is installed org-wide):
    (`Settings → Developer settings → GitHub Apps → New GitHub App`). Any
    name is fine; it needs no webhook, no user-facing UI, and no public
    listing.
-2. **Grant it exactly three installation permissions:**
-   - **Contents: Read and write** — needed to push the version-bump commit
-     and create the tag.
+2. **Grant it the installation permissions the chain uses:**
+   - **Contents: Read and write** — needed to push the `changie/release`
+     branch and the release tag.
    - **Pull requests: Read and write** — needed to open/update the
-     `chore(main): release X.Y.Z` PR.
-   - **Issues: Read and write** — needed because release-please labels its
-     PR `autorelease: pending` / `autorelease: tagged`, and GitHub governs
-     PR labels under the Issues API scope in its App permission model, not
-     under Pull requests.
+     `chore(main): release vX.Y.Z` PR.
+
+   The previous release automation also held **Issues: Read and write**,
+   because it labelled its PR and GitHub governs PR labels under the Issues
+   API scope. The changie chain applies no labels and does not use that
+   scope.
 3. **Install the App** on `seanb4t/codegraph-go`. A single-purpose,
    per-repo App is the ideal — but reusing an existing release-automation
    App already installed on other repositories is acceptable practice as
-   long as its installation permissions are still exactly the three above.
+   long as its installation permissions are no broader than step 2 lists
+   (an Issues scope held over from before may remain until a maintainer
+   drops it).
    Reusing a shared App does change the blast radius of a key leak (every
    repository the App is installed on, not just this one), so record which
    shape was used (new vs. reused) when this step is actually performed —
@@ -426,13 +409,13 @@ repo (or once per organization if the App is installed org-wide):
 
 **These are two different permission systems — do not conflate them.** The
 App's *installation* permissions (step 2 above, set in the App's own
-settings) authorize everything release-please does with the minted App
-token. The `permissions:` block inside `.github/workflows/release-please.yml`
-governs only the default `GITHUB_TOKEN` and is a separate, unrelated scope.
-Configuring one correctly while under-scoping the other does not fail at
-config time — it produces a runtime authorization failure (a 403) the first
-time release-please actually tries to label a PR or push a commit, not
-before.
+settings) authorize everything the chain does with the minted App token.
+The `permissions:` blocks inside `.github/workflows/release-pr.yml` and
+`.github/workflows/release-tag.yml` govern only the default `GITHUB_TOKEN`
+and are a separate, unrelated scope. Configuring one correctly while
+under-scoping the other does not fail at config time — it produces a runtime
+authorization failure (a 403) the first time the release-PR job pushes its
+branch or opens its PR, or the tag job pushes the tag, not before.
 
 **Deprecated-input note:** `actions/create-github-app-token`'s *current*
 required input is `client-id` (the App's Client ID string). The `app-id`
@@ -459,28 +442,28 @@ gh secret list
 **"Allow GitHub Actions to create and approve pull requests" note:** this
 repository-level Actions setting (`can_approve_pull_request_reviews` in the
 API above) governs whether the default `GITHUB_TOKEN` may open/approve
-pull requests. `release-please-action`'s own README calls it out as a
-common blocker — but D-02's whole design point is that release-please
-authors its PR with the **App's** installation token, a distinct actor
-from `GITHUB_TOKEN`, so this setting is not load-bearing for this
-pipeline. Confirm its value here for the record (and prefer it enabled, as
-the safer default for this repo generally), but a disabled value does not
-by itself block release-please — only an under-scoped App installation
-(step 2 above) does that.
+pull requests, and is a common blocker for workflows that open pull
+requests with that token. But the release PR is authored with the **App's**
+installation token (D-03), a distinct actor from `GITHUB_TOKEN`, so this
+setting is not load-bearing for this pipeline. Confirm its value here for
+the record (and prefer it enabled, as the safer default for this repo
+generally), but a disabled value does not by itself block the release PR —
+only an under-scoped App installation (step 2 above) does that.
 
-**Branch protection note:** the repo has no rulesets today, so this does
-not currently apply. If branch protection is ever added to `main`, the App
-**must** be added to the bypass-actor list, or release-please will be
-unable to push its version-bump commit past the protection rule.
+**Branch protection note:** `main` is protected by the `protect-main`
+ruleset (squash-only, linear history, required status checks). The chain
+never pushes to `main`: the App pushes only the `changie/release` branch and
+the release tag, and a maintainer merges the release PR after its required
+checks pass. If the ruleset is ever extended to restrict creating branches or
+tags, the App **must** be added to the bypass-actor list, or the release PR
+branch and the tag push will be rejected.
 
-**The disposable live proof.** Because "does an App-token-authored tag
-push really fire `release.yml` in this repo's actual Actions
-configuration" cannot be proven statically, this pipeline is run once
-end-to-end against a disposable, prerelease-shaped tag on a scratch branch
-— never against the real `v1.0.0` as the first live test — before the real
-`v1.0.0` is ever cut. §6's post-release verification and §7's rollback
-procedure both apply to that disposable release exactly as they would to a
-real one; §7 is what tears it down afterward.
+**The live proof.** Because "does an App-token-authored tag push really fire
+`release.yml` in this repo's actual Actions configuration" cannot be proven
+statically, the chain's first real run is its live proof, and it is checked
+before the chain is relied upon. §6's post-release verification and §7's
+rollback procedure both apply to that release exactly as they would to any
+other; §7 is what tears it down afterward if it must be withdrawn.
 
 **Troubleshooting: 401 `A JSON web token could not be decoded`.** This
 error, surfaced from the "Mint GitHub App installation token" step, means
@@ -601,7 +584,7 @@ over-reacts:
 | (a) Hashes never recorded | The recording step failed (absent `dist/artifacts.json`, missing darwin binary, etc.) but assets are published | The `release` job's run log shows the `Record final local hashes` step red; the tag's GitHub Release has all expected assets | Manually `workflow_dispatch` `post-release-verify.yml` against the resolved tag (`gh workflow run post-release-verify.yml -f tag=<tag>`) to gather what verification IS still possible; SIGN-04's `final_local_sha256` provenance point for this tag is simply absent and must be recorded as such, not fabricated |
 | (b) Attestation never ran at all | The recording step's failure means the job never reached the `Attest build provenance` step, which follows it in the same job — the build-provenance claim is ABSENT from this release, not merely unverified | `gh attestation verify` against any asset of this tag returns no attestations found (not a verification failure — a genuine absence) | Same as (a): dispatch post-release-verify manually to confirm the absence directly rather than assume it; record the absence explicitly in the phase evidence |
 | (c) Manual dispatch surfaces both | A manual `workflow_dispatch` of `post-release-verify.yml` against this tag is expected to run every job — none skip — and the attestation-verification leg is expected to legitimately FAIL, since (b) means there is nothing for it to verify | The dispatched run's `verify-supply-chain` job (or equivalent) reports attestation verification failed, while other jobs (Gatekeeper, notarized-suite) may still pass if notarization and cosign both completed before the failure | This is the expected shape of (a)+(b) combined, not a new problem — do not re-run the dispatch hoping for a different result; move to (d) |
-| (d) A public supply-chain claim is genuinely absent | Either the byte-identity chain (SIGN-04) or the build-provenance attestation (or both) cannot be produced for this tag, confirmed by (a)-(c) above | Confirmed by the states above, not assumed | **Patch-forward, never re-cut (D-12/D-07).** Do not delete or re-push this release or tag. Cut a new patch release through the normal release-please flow (§4); that new tag's release job will produce a complete, provable chain. Record the incomplete tag's gap explicitly in the phase's evidence artifacts (never silently omit it or backfill a value nothing produced) |
+| (d) A public supply-chain claim is genuinely absent | Either the byte-identity chain (SIGN-04) or the build-provenance attestation (or both) cannot be produced for this tag, confirmed by (a)-(c) above | Confirmed by the states above, not assumed | **Patch-forward, never re-cut (D-12/D-07).** Do not delete or re-push this release or tag. Cut a new patch release through the normal release PR flow (§4); that new tag's release job will produce a complete, provable chain. Record the incomplete tag's gap explicitly in the phase's evidence artifacts (never silently omit it or backfill a value nothing produced) |
 
 The unifying rule across all four states, restated from §7 above: **a
 red release here is patched forward with a new version, never rewritten by
@@ -625,10 +608,10 @@ cask).
 publishing" (App id `4549710`) — installed on `seanb4t/homebrew-tap` alone,
 with exactly `contents: write` + the mandatory `metadata: read` (plan
 03-03). This is **deliberately a second, separate App from the
-release-please App** documented in §9 above (`APP_ID`/`APP_PRIVATE_KEY`),
-not a reuse of it: the release-please App is installed on
-`seanb4t/codegraph-go` and authors the version-bump/tag/PR-label actions
-that repository needs; the tap App is installed on `seanb4t/homebrew-tap`
+release GitHub App** documented in §9 above (`APP_ID`/`APP_PRIVATE_KEY`),
+not a reuse of it: the release GitHub App is installed on
+`seanb4t/codegraph-go` and authors the release-PR branch, release PR and
+tag actions that repository needs; the tap App is installed on `seanb4t/homebrew-tap`
 alone and can write nothing else, including `codegraph-go` itself — that
 scoping is the entire content of `BREW-02`/ROADMAP criterion 5, and it only
 holds if the two Apps stay separate. Its installation token is minted
@@ -644,7 +627,7 @@ App has no reason to hold its own credential inside the repo it publishes
 to).
 
 **Rotating the App's private key.** Follow the same shape as §9's
-release-please App, applied to the tap App instead:
+release GitHub App, applied to the tap App instead:
 
 1. In the tap App's own settings (`Settings → Developer settings →
    GitHub Apps → seanb4t homebrew tap publishing → Private keys`), generate
@@ -659,7 +642,7 @@ release-please App, applied to the tap App instead:
    itself was ever recreated rather than merely re-keyed.
 3. Confirm the new key mints tokens correctly before deleting the old one
    — mint a JWT with it and call `GET /app` (same identity-check pattern
-   §9's troubleshooting note describes for the release-please App): a
+   §9's troubleshooting note describes for the release GitHub App): a
    `200` response whose `id`/`slug` match the tap App confirms the new key
    is live and correctly scoped.
 4. Delete the old key from the App's settings page once the new one is
