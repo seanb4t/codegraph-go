@@ -2394,13 +2394,14 @@ tasks:
 
   check:fragment-policy:
     desc: >-
-      GATE-04's offline guard (D-01, D-10). It runs
+      GATE-04's and GRD-15's offline guard (D-01, D-10). It runs
       scripts/test_fragment_policy.py's stdlib unittest suite over literal
-      inputs, never gh, git or a pull request. It passes only when unittest's
-      executed count equals the number of `def test_` methods defined in the
-      file, the defined count is at least 36, and the result line is exactly
-      OK, so a skipped or undiscovered test cannot pass (rule 84d1gfpywd). It
-      is wired into ci.yml's test job.
+      inputs, never gh, git or a pull request. GRD-15's hygiene allowlist and
+      exemption-marker tests live in the same file. It passes only when
+      unittest's executed count equals the number of `def test_` methods
+      defined in the file, the defined count is at least 46, and the result
+      line is exactly OK, so a skipped or undiscovered test cannot pass (rule
+      84d1gfpywd). It is wired into ci.yml's test job.
     silent: true
     preconditions:
       - sh: command -v python3
@@ -2408,7 +2409,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        floor=36
+        floor=46
         defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' scripts/test_fragment_policy.py || true; } | wc -l | tr -d ' ')
         if [ "${defined}" -lt "${floor}" ]; then
           echo "::error::check:fragment-policy: found only ${defined} test methods (floor ${floor}) — a gutted suite must fail loud"
