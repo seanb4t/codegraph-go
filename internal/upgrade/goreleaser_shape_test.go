@@ -981,11 +981,13 @@ func TestReleaseBlockIsRerunIdempotent(t *testing.T) {
 	}
 }
 
-// TestReleaseBlockDoesNotRewriteReleaseBody holds T-01-30 / D-06R: within
+// TestReleaseBlockDoesNotRewriteReleaseBody holds T-01-30 / T-05-12: within
 // the release: block, prerelease is exactly the string "auto", and neither
-// a name_template nor a header/footer/draft/disable key is declared —
-// release-please authors the Release name and body, and GoReleaser must
-// only add assets to it.
+// a name_template nor a header/footer/draft/disable key is declared. The
+// Release body is .changes/${TAG}.md, passed to GoReleaser with
+// --release-notes (REL-12), so a header or footer key would add text to it,
+// a name_template key would rename the Release, and a draft or disable key
+// would leave it unpublished.
 func TestReleaseBlockDoesNotRewriteReleaseBody(t *testing.T) {
 	data, err := os.ReadFile(goreleaserConfigPath)
 	if err != nil {
@@ -1005,9 +1007,48 @@ func TestReleaseBlockDoesNotRewriteReleaseBody(t *testing.T) {
 
 	for _, forbidden := range []string{"name_template", "header", "footer", "draft", "disable"} {
 		if _, ok := block[forbidden]; ok {
-			t.Errorf("release: block declares forbidden key %q — release-please owns Release authorship (D-06R)", forbidden)
+			t.Errorf("release: block declares forbidden key %q — the Release body is .changes/${TAG}.md, passed to GoReleaser with --release-notes (REL-12); this key would add text to it, rename the Release or leave it unpublished", forbidden)
 		}
 	}
+}
+
+// TestGoreleaserChangelogNotDisabled holds REL-12: .goreleaser.yaml never sets
+// changelog.disable to anything but the boolean false. The Release body is
+// .changes/${TAG}.md, handed to GoReleaser with --release-notes; a disable
+// value of true, the string "true" or any template string would empty or
+// rewrite the changelog the release notes ride on. The key may be absent (it
+// is today: no changelog block exists). The positive assertion that the config
+// parsed is the required top-level release block, so an unreadable or empty
+// file cannot pass vacuously (rule 84d1gfpywd).
+func TestGoreleaserChangelogNotDisabled(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("%s: %v", goreleaserConfigPath, err)
+	}
+	rel, ok := doc["release"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s: no top-level release block (%T) — the config did not parse as expected", goreleaserConfigPath, doc["release"])
+	}
+
+	raw, present := doc["changelog"]
+	if !present || raw == nil {
+		t.Logf("%s parsed (%d top-level keys, release block with %d keys); no changelog block", goreleaserConfigPath, len(doc), len(rel))
+		return
+	}
+	block, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("%s: changelog is %T, want a mapping or absent", goreleaserConfigPath, raw)
+	}
+	if v, has := block["disable"]; has {
+		if b, isBool := v.(bool); !isBool || b {
+			t.Errorf("changelog.disable = %v (%T), want absent or the boolean false — a true, \"true\" or template value empties the Release body (REL-12)", v, v)
+		}
+	}
+	t.Logf("%s parsed (%d top-level keys, release block with %d keys); changelog block keys: %d", goreleaserConfigPath, len(doc), len(rel), len(block))
 }
 
 // ---------------------------------------------------------------------

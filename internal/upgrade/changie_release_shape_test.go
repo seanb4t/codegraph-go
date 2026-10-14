@@ -1506,3 +1506,182 @@ func TestTagCreationScanFlagsPlantedSites(t *testing.T) {
 		})
 	}
 }
+
+// --- release notes: release:goreleaser and release:dry-run (REL-12, REL-13) ----
+//
+// Plan 05-03. These guards read this repository's Taskfile.yml and
+// release.yml only. How GoReleaser renders a Release body from the file it is
+// handed is GoReleaser's behavior and is not asserted (D-14, rule eyva2svrcz).
+
+// releaseChainTaskBlock returns the named top-level task block and the text
+// after its `cmds:` key. It fails the test when the target or its cmds key is
+// absent, never returning an empty block.
+func releaseChainTaskBlock(t *testing.T, name string) (block, cmds string) {
+	t.Helper()
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(data))
+	block, ok := blocks[name]
+	if !ok {
+		t.Fatalf("%s: no top-level %q task", taskfilePath, name)
+	}
+	idx := regexp.MustCompile(`(?m)^    cmds:\s*$`).FindStringIndex(block)
+	if idx == nil {
+		t.Fatalf("%s block has no cmds: key:\n%s", name, block)
+	}
+	return block, block[idx[1]:]
+}
+
+// releaseChainOrderedTokens asserts each token appears in text at a strictly
+// increasing byte offset, reporting every miss. It returns how many it found.
+func releaseChainOrderedTokens(t *testing.T, what, text string, tokens []struct{ label, token string }) int {
+	t.Helper()
+	offset, found := 0, 0
+	for _, tk := range tokens {
+		i := strings.Index(text[offset:], tk.token)
+		if i < 0 {
+			t.Errorf("%s: token %q (%s) not found at or after byte offset %d", what, tk.token, tk.label, offset)
+			continue
+		}
+		offset += i + len(tk.token)
+		found++
+	}
+	return found
+}
+
+// releaseChainGoreleaserTokens are the tokens of release:goreleaser's body that
+// pass the changie version file to GoReleaser, in the order they must appear:
+// the tag at HEAD, the notes path derived from it, the refusal of an absent or
+// empty file, then the release call carrying the flag (REL-12, D-08, C6).
+var releaseChainGoreleaserTokens = []struct{ label, token string }{
+	{"tag at HEAD", `TAG="$(git describe --exact-match --tags HEAD)"`},
+	{"notes path from the tag", `NOTES=".changes/${TAG}.md"`},
+	{"empty-notes check", `[ ! -s "${NOTES}" ]`},
+	{"empty-notes error", `::error::release:goreleaser: ${NOTES} is missing or empty`},
+	{"empty-notes exit", `exit 1`},
+	{"release call with notes", `"${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"`},
+}
+
+func TestReleaseGoreleaserPassesReleaseNotes(t *testing.T) {
+	block, cmds := releaseChainTaskBlock(t, "release:goreleaser")
+	lines := releaseChainNonCommentLines(cmds)
+	body := strings.Join(lines, "\n")
+
+	// The ordered tokens, over non-comment text so a comment cannot satisfy one.
+	found := releaseChainOrderedTokens(t, "release:goreleaser cmds", body, releaseChainGoreleaserTokens)
+
+	// Exactly one non-comment release invocation, and it is the flagged one (C6).
+	var releaseCalls, tagDefs int
+	for _, l := range lines {
+		tl := strings.TrimSpace(l)
+		if strings.Contains(tl, `"${GORELEASER_BIN}" release`) {
+			releaseCalls++
+			if tl != `"${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"` {
+				t.Errorf("release:goreleaser release invocation is %q, want exactly `\"${GORELEASER_BIN}\" release --clean --release-notes \"${NOTES}\"`", tl)
+			}
+		}
+		if regexp.MustCompile(`^TAG=`).MatchString(tl) {
+			tagDefs++
+		}
+	}
+	if releaseCalls != 1 {
+		t.Errorf("release:goreleaser has %d non-comment release invocations, want exactly 1 (C6)", releaseCalls)
+	}
+	if tagDefs != 1 {
+		t.Errorf("release:goreleaser defines TAG on %d lines, want exactly 1 (the hoisted definition the GITHUB_OUTPUT block reuses)", tagDefs)
+	}
+
+	desc, err := parseTaskDescription(block)
+	if err != nil {
+		t.Errorf("parseTaskDescription(release:goreleaser): %v", err)
+	} else if !strings.Contains(desc, "REL-12") || !strings.Contains(desc, "--release-notes") {
+		t.Errorf("release:goreleaser desc does not cite REL-12 and --release-notes: %q", desc)
+	}
+
+	// D-12: the flag lives here, so release.yml's run bodies stay exactly the
+	// two task invocations (TestWorkflowRunBodiesInvokeTask holds the rule;
+	// this pins the set so a literal goreleaser line cannot appear there).
+	wfData, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	jobs, err := parseWorkflowJobsAllSteps(string(wfData))
+	if err != nil {
+		t.Fatalf("%s: %v", releaseWorkflowPath, err)
+	}
+	var runs []string
+	for _, steps := range jobs {
+		for _, s := range steps {
+			if r := stripRunBodyNoise(s.Run); r != "" {
+				runs = append(runs, r)
+			}
+		}
+	}
+	sort.Strings(runs)
+	if want := []string{"task release:goreleaser", "task release:record-final-hashes"}; !slices.Equal(runs, want) {
+		t.Errorf("%s run bodies = %q, want exactly %q", releaseWorkflowPath, runs, want)
+	}
+	t.Logf("release:goreleaser: %d of %d ordered tokens found; %d release invocation; %d TAG definition; %d release.yml run bodies", found, len(releaseChainGoreleaserTokens), releaseCalls, tagDefs, len(runs))
+}
+
+// releaseChainDryRunTokens are the tokens of release:dry-run's body that
+// rehearse the notes flag, in the order they must appear: the tag from changie,
+// the notes path, the refusal of an absent or empty file, the evidence line,
+// then the non-snapshot invocation (REL-13, D-14, Pitfall 2).
+var releaseChainDryRunTokens = []struct{ label, token string }{
+	{"tag from changie latest", `TAG="$({{.GO_TOOL_CHANGIE}} changie latest)"`},
+	{"notes path from the tag", `NOTES=".changes/${TAG}.md"`},
+	{"empty-notes check", `[ ! -s "${NOTES}" ]`},
+	{"empty-notes error", `::error::release:dry-run: ${NOTES} is missing or empty`},
+	{"evidence line", `RELEASE-NOTES-EVIDENCE tag=${TAG} file=${NOTES} bytes=`},
+	{"evidence hash", `sha256=`},
+	{"non-snapshot invocation", `GORELEASER_CURRENT_TAG="${TAG}" "${GORELEASER_BIN}" release --skip=publish,sign,validate --clean --release-notes "${NOTES}"`},
+}
+
+func TestReleaseDryRunRehearsesReleaseNotes(t *testing.T) {
+	block, cmds := releaseChainTaskBlock(t, "release:dry-run")
+	lines := releaseChainNonCommentLines(cmds)
+	body := strings.Join(lines, "\n")
+
+	found := releaseChainOrderedTokens(t, "release:dry-run cmds", body, releaseChainDryRunTokens)
+
+	// GoReleaser skips its changelog pipe under --snapshot, so a snapshot run
+	// would ignore --release-notes (Pitfall 2): no executed line may carry it.
+	for _, l := range lines {
+		if strings.Contains(l, "--snapshot") {
+			t.Errorf("release:dry-run runs a --snapshot line, which skips the notes pipe: %q", strings.TrimSpace(l))
+		}
+	}
+
+	// The four-binary assertions stay.
+	for _, keep := range []string{"BINARY_COUNT", "want exactly 4"} {
+		if !strings.Contains(body, keep) {
+			t.Errorf("release:dry-run cmds lost the four-binary assertion token %q", keep)
+		}
+	}
+
+	// changie is reached only through GO_TOOL_CHANGIE (CHG-01's one install path).
+	invocations := 0
+	for _, l := range lines {
+		if !releaseChainChangieVerbRe.MatchString(l) || strings.Contains(l, "echo ") || strings.Contains(l, "::error::") {
+			continue
+		}
+		invocations++
+		if !strings.Contains(l, "{{.GO_TOOL_CHANGIE}} changie ") {
+			t.Errorf("release:dry-run invokes changie without the {{.GO_TOOL_CHANGIE}} prefix: %q", strings.TrimSpace(l))
+		}
+	}
+	if invocations != 1 {
+		t.Errorf("release:dry-run invokes changie %d times, want exactly 1 (latest)", invocations)
+	}
+
+	desc, err := parseTaskDescription(block)
+	if err != nil {
+		t.Errorf("parseTaskDescription(release:dry-run): %v", err)
+	} else if !strings.Contains(desc, "REL-13") {
+		t.Errorf("release:dry-run desc does not cite REL-13: %q", desc)
+	}
+	t.Logf("release:dry-run: %d of %d ordered tokens found; %d changie invocation", found, len(releaseChainDryRunTokens), invocations)
+}
