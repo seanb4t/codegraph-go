@@ -1367,3 +1367,333 @@ ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.473s
 
 release.yml hunk count from `7b12cb92`: 1, and the only changed lines are comment lines (the plan's second verify command exits 0).
 Commit order on `internal/upgrade/goreleaser_shape_test.go` and `.goreleaser.yaml` since `5a8603f5`: `test(05-03):` then `ci(05-03):` (third verify command exits 0).
+
+## 05-03 REL-12 diff evidence
+
+REL-12 (D-08, D-12): the flag lives in Taskfile.yml's `release:goreleaser`; `release.yml` differs from post-#99 `main` (`7b12cb92`) by one comment hunk.
+
+`git diff 7b12cb92c407ae7e495a62b4ac38d8685e64307c -- .github/workflows/release.yml`:
+
+```diff
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index b511039d..b0499239 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -185,7 +185,7 @@ jobs:
+       # separate-job placement RESEARCH.md Open Question 2 recommended is
+       # not usable here. This step therefore mints inside the release job,
+       # immediately before the step that consumes it, pinned to the exact
+-      # same Action + SHA release-please.yml already carries. This places
++      # same Action + SHA release-pr.yml and release-tag.yml carry. This places
+       # one more Action inside the OIDC boundary (T-01-29's accepted
+       # surface, now widened by one step) — chosen because the alternative
+       # was measured not to work, not because it was preferred. Compensating
+```
+
+The `release:goreleaser` hunks of `git diff 5a8603f55537ebfac0461e652cdbe74359914909 -- Taskfile.yml` (the other hunks of that diff belong to `release:batch`, `release:tag`, `check:cross` and `release:dry-run`):
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index 8bf4f8ec..d464a8c3 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -2789,6 +2952,11 @@ tasks:
+       Meant to run in CI on a tag push, NOT casually from a laptop. For the
+       local, non-publishing equivalent, use `task release:dry-run`.
+ 
++      The release notes are `.changes/${TAG}.md`, passed with
++      --release-notes (REL-12, changie's documented GoReleaser integration).
++      A tag with no such file fails here, including a hand-pushed rc tag
++      (D-06R).
++
+       RELEASE CLASS, BOTH reachable (plan 02-02's goreleaser-caller
+       enumeration): this is the one target where `notarize:` and the
+       release-scoped `signs:` (cosign) pipe are BOTH live and BOTH expected
+@@ -2899,7 +3067,19 @@ tasks:
+         # entry's own goos:/goarch: list, not from the environment. A
+         # carried-over GOOS/GOARCH would be at best a no-op and at worst
+         # mask a misconfiguration.
+-        "${GORELEASER_BIN}" release --clean
++        #
++        # The Release body is the changie version file for the tag being
++        # released (REL-12, D-08), handed to GoReleaser with --release-notes.
++        # GoReleaser only warns on an empty notes file, so an absent or empty
++        # one stops here instead (C6): a Release published with an empty
++        # body cannot be repaired by re-cutting the tag (Phase 1 D-12).
++        TAG="$(git describe --exact-match --tags HEAD)"
++        NOTES=".changes/${TAG}.md"
++        if [ ! -s "${NOTES}" ]; then
++          echo "::error::release:goreleaser: ${NOTES} is missing or empty — GoReleaser would publish a release with an empty body (REL-12, C6)"
++          exit 1
++        fi
++        "${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"
+ 
+         # Emit the checksums-file hash as a $GITHUB_OUTPUT `hashes` value
+         # when running under GitHub Actions (GITHUB_OUTPUT is only set
+@@ -2912,7 +3092,6 @@ tasks:
+         # release.yml step, so the release job's Release step keeps
+         # exactly one run: body (T-01-14).
+         if [ -n "${GITHUB_OUTPUT:-}" ]; then
+-          TAG="$(git describe --exact-match --tags HEAD)"
+           CHECKSUMS_FILE="dist/codegraph_${TAG}_checksums.txt"
+           if [ ! -f "${CHECKSUMS_FILE}" ]; then
+             echo "::error::${CHECKSUMS_FILE} not found — expected GoReleaser's checksum: pipe to have produced it"
+```
+
+## Families 05-03/a-e — setup
+
+Scratch worktree: a detached checkout of HEAD (c4adcfd5) at `$S`, whose path contains `p05-scratch-wt`. The convention is the one at the top of this log: pre-mutation gate, applied-confirmation, verbatim RED, byte-clean revert, GREEN re-run.
+
+## Family 05-03/a — changelog disabled
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .goreleaser.yaml` exit 0
+
+Mutation: append `changelog:` with `  disable: true` to `.goreleaser.yaml`.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+2	0	.goreleaser.yaml
+```
+
+Hunk, `git -C "$S" diff -U0 -- .goreleaser.yaml`:
+
+```diff
+diff --git a/.goreleaser.yaml b/.goreleaser.yaml
+index 350a8ec6..f04adb12 100644
+--- a/.goreleaser.yaml
++++ b/.goreleaser.yaml
+@@ -642,0 +643,2 @@ homebrew_casks:
++changelog:
++  disable: true
+```
+
+RED guard: `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -run '^TestGoreleaserChangelogNotDisabled$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestGoreleaserChangelogNotDisabled
+    goreleaser_shape_test.go:1048: changelog.disable = true (bool), want absent or the boolean false — a true, "true" or template value empties the Release body (REL-12)
+    goreleaser_shape_test.go:1051: ../../.goreleaser.yaml parsed (11 top-level keys, release block with 2 keys); changelog block keys: 1
+--- FAIL: TestGoreleaserChangelogNotDisabled (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.192s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .goreleaser.yaml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+=== RUN   TestGoreleaserChangelogNotDisabled
+    goreleaser_shape_test.go:1039: ../../.goreleaser.yaml parsed (10 top-level keys, release block with 2 keys); no changelog block
+--- PASS: TestGoreleaserChangelogNotDisabled (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.163s
+```
+
+## Family 05-03/b — release notes flag dropped
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- Taskfile.yml` exit 0
+
+Mutation: remove ` --release-notes "${NOTES}"` from `release:goreleaser`'s invocation.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	Taskfile.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- Taskfile.yml`:
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index d464a8c3..b6d72bf7 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -3082 +3082 @@ tasks:
+-        "${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"
++        "${GORELEASER_BIN}" release --clean
+```
+
+RED guard: `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -run '^TestReleaseGoreleaserPassesReleaseNotes$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestReleaseGoreleaserPassesReleaseNotes
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "\"${GORELEASER_BIN}\" release --clean --release-notes \"${NOTES}\"" (release call with notes) not found at or after byte offset 1765
+    changie_release_shape_test.go:1582: release:goreleaser release invocation is "\"${GORELEASER_BIN}\" release --clean", want exactly `"${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"`
+    changie_release_shape_test.go:1626: release:goreleaser: 5 of 6 ordered tokens found; 1 release invocation; 1 TAG definition; 2 release.yml run bodies
+--- FAIL: TestReleaseGoreleaserPassesReleaseNotes (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.164s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- Taskfile.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+=== RUN   TestReleaseGoreleaserPassesReleaseNotes
+    changie_release_shape_test.go:1626: release:goreleaser: 6 of 6 ordered tokens found; 1 release invocation; 1 TAG definition; 2 release.yml run bodies
+--- PASS: TestReleaseGoreleaserPassesReleaseNotes (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.152s
+```
+
+## Family 05-03/c — empty-notes guard removed
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- Taskfile.yml` exit 0
+
+Mutation: delete `release:goreleaser`'s `[ ! -s` check block (the four-line `if` through `fi`).
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+0	4	Taskfile.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- Taskfile.yml`:
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index d464a8c3..188571f7 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -3078,4 +3077,0 @@ tasks:
+-        if [ ! -s "${NOTES}" ]; then
+-          echo "::error::release:goreleaser: ${NOTES} is missing or empty — GoReleaser would publish a release with an empty body (REL-12, C6)"
+-          exit 1
+-        fi
+```
+
+RED guard: `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -run '^TestReleaseGoreleaserPassesReleaseNotes$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestReleaseGoreleaserPassesReleaseNotes
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "[ ! -s \"${NOTES}\" ]" (empty-notes check) not found at or after byte offset 1565
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "::error::release:goreleaser: ${NOTES} is missing or empty" (empty-notes error) not found at or after byte offset 1565
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "\"${GORELEASER_BIN}\" release --clean --release-notes \"${NOTES}\"" (release call with notes) not found at or after byte offset 1929
+    changie_release_shape_test.go:1626: release:goreleaser: 3 of 6 ordered tokens found; 1 release invocation; 1 TAG definition; 2 release.yml run bodies
+--- FAIL: TestReleaseGoreleaserPassesReleaseNotes (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.169s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- Taskfile.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+=== RUN   TestReleaseGoreleaserPassesReleaseNotes
+    changie_release_shape_test.go:1626: release:goreleaser: 6 of 6 ordered tokens found; 1 release invocation; 1 TAG definition; 2 release.yml run bodies
+--- PASS: TestReleaseGoreleaserPassesReleaseNotes (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.173s
+```
+
+## Family 05-03/d — header key planted
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .goreleaser.yaml` exit 0
+
+Mutation: add `  header: "x"` under `.goreleaser.yaml`'s `release:` block, after `prerelease: auto`. The restated guard still bites.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	0	.goreleaser.yaml
+```
+
+Hunk, `git -C "$S" diff -U0 -- .goreleaser.yaml`:
+
+```diff
+diff --git a/.goreleaser.yaml b/.goreleaser.yaml
+index 350a8ec6..60c9abe6 100644
+--- a/.goreleaser.yaml
++++ b/.goreleaser.yaml
+@@ -403,0 +404 @@ release:
++  header: "x"
+```
+
+RED guard: `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -run '^TestReleaseBlockDoesNotRewriteReleaseBody$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestReleaseBlockDoesNotRewriteReleaseBody
+    goreleaser_shape_test.go:1010: release: block declares forbidden key "header" — the Release body is .changes/${TAG}.md, passed to GoReleaser with --release-notes (REL-12); this key would add text to it, rename the Release or leave it unpublished
+--- FAIL: TestReleaseBlockDoesNotRewriteReleaseBody (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.177s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .goreleaser.yaml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+=== RUN   TestReleaseBlockDoesNotRewriteReleaseBody
+--- PASS: TestReleaseBlockDoesNotRewriteReleaseBody (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.166s
+```
+
+## Family 05-03/e — dry run back to snapshot
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- Taskfile.yml` exit 0
+
+Mutation: add `--snapshot` to `release:dry-run`'s invocation.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	Taskfile.yml
+```
+
+Hunk, `git -C "$S" diff -U0 -- Taskfile.yml`:
+
+```diff
+diff --git a/Taskfile.yml b/Taskfile.yml
+index d464a8c3..c453b136 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -2702 +2702 @@ tasks:
+-        GORELEASER_CURRENT_TAG="${TAG}" "${GORELEASER_BIN}" release --skip=publish,sign,validate --clean --release-notes "${NOTES}"
++        GORELEASER_CURRENT_TAG="${TAG}" "${GORELEASER_BIN}" release --snapshot --skip=publish,sign,validate --clean --release-notes "${NOTES}"
+```
+
+RED guard: `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -run '^TestReleaseDryRunRehearsesReleaseNotes$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestReleaseDryRunRehearsesReleaseNotes
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "GORELEASER_CURRENT_TAG=\"${TAG}\" \"${GORELEASER_BIN}\" release --skip=publish,sign,validate --clean --release-notes \"${NOTES}\"" (non-snapshot invocation) not found at or after byte offset 917
+    changie_release_shape_test.go:1654: release:dry-run runs a --snapshot line, which skips the notes pipe: "GORELEASER_CURRENT_TAG=\"${TAG}\" \"${GORELEASER_BIN}\" release --snapshot --skip=publish,sign,validate --clean --release-notes \"${NOTES}\""
+    changie_release_shape_test.go:1686: release:dry-run: 6 of 7 ordered tokens found; 1 changie invocation
+--- FAIL: TestReleaseDryRunRehearsesReleaseNotes (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.162s
+FAIL
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- Taskfile.yml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, same command:
+
+```
+=== RUN   TestReleaseDryRunRehearsesReleaseNotes
+    changie_release_shape_test.go:1686: release:dry-run: 7 of 7 ordered tokens found; 1 changie invocation
+--- PASS: TestReleaseDryRunRehearsesReleaseNotes (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.165s
+```
+
+## Teardown (05-03 families)
+
+`git worktree remove --force "$S"` and `git worktree prune`, then `git worktree list`:
+
+```
+/Volumes/Code/github.com/seanb4t/codegraph-go                        c4adcfd5 [gsd/v0.15.0-milestone]
+/Volumes/Code/herdr-worktrees/codegraph-go/worktree-brave-river-a240 2df78be0 [chore/octopusignore]
+```
+
+No `p05-scratch-wt` entry remains.
