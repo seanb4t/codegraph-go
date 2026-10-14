@@ -1033,6 +1033,37 @@ tasks:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
         fi
 
+  release:tag:
+    desc: >-
+      REL-11's tag-job body (D-06). Tags HEAD with `changie latest` and pushes
+      only that ref. A tag already on origin is success, not failure (C3), so
+      the milestone merge and any re-run are no-ops. The push credential is
+      whatever the checkout persisted; in release-tag.yml that is the GitHub
+      App token, because a tag pushed with the default token never starts
+      release.yml. Runs only under GitHub Actions (C8, D-06R: no human
+      git tag). This target holds the repository's only tag-creating command
+      (GRD-16).
+    silent: true
+    preconditions:
+      - sh: '[ "${GITHUB_ACTIONS:-}" = "true" ]'
+        msg: "release:tag pushes a tag to origin and runs only in release-tag.yml (D-06R: no human git tag). Rehearse it against a scratch clone whose origin is a scratch bare repository, with GITHUB_ACTIONS=true set for that one command."
+      - sh: command -v git
+        msg: "git not found — release:tag tags and pushes with git."
+    cmds:
+      - |
+        set -euo pipefail
+        tag=$({{.GO_TOOL_CHANGIE}} changie latest)
+        rc=0
+        git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null || rc=$?
+        case "${rc}" in
+          0) echo "release:tag: ${tag} already exists on origin — nothing to do"; exit 0 ;;
+          2) ;;
+          *) echo "::error::release:tag: git ls-remote exited ${rc}; refusing to guess whether ${tag} exists on origin"; exit 1 ;;
+        esac
+        git tag "${tag}"
+        git push origin "refs/tags/${tag}"
+        echo "release:tag: pushed ${tag} at $(git rev-parse HEAD)"
+
   web:deps:
     desc: >-
       BLD-01's resolve-then-install step. Resolution order, reported so the
@@ -5355,9 +5386,10 @@ tasks:
 
   check:cross:
     desc: >-
-      4-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
-      gate release-please.yml's pretag-gate job runs before a tag can be
-      created. Run this locally before pushing to main to catch a
+      4-target go list -mod=readonly sanity sweep (D-15) — the same sweep the
+      pretag-gate jobs in release-pr.yml and release-tag.yml run before a
+      release PR is opened or a tag is pushed (D-07). Run this locally before
+      pushing to main to catch a
       platform-specific go.sum/build-constraint failure your own GOOS/GOARCH
       can't see (the exact failure class that reached the v0.1 rc.1 release
       candidate). The pair list is machine-held set-equal to
