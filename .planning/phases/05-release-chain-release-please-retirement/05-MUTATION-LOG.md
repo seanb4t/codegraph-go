@@ -721,3 +721,51 @@ The scanner's logged population counts are on the `TestTagCreationHasSingleAppTo
 PASS
 ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.211s
 ```
+
+## 05-02 release:tag rehearsal (scratch bare origin)
+
+Evidence, not a committed test (rule eyva2svrcz): it runs this repository's own `release:tag`, whose
+skip-if-tag-exists branch is the D-06 loop guard for the milestone merge, against a local bare repository only.
+Setup: `git init -q --bare "$T/origin.git"`, `git clone -q --no-tags "$R" "$T/clone"`, `git -C "$T/clone" remote set-url origin "$T/origin.git"`,
+with `T` a fresh directory under the session scratchpad and `R` the real checkout. Before every run an origin guard
+reads `git remote get-url origin` and `git remote get-url --push origin` in the clone and aborts unless both begin
+with `$T/` and name no `github.com`. Every run is `(cd "$T/clone" && GITHUB_ACTIONS=true task release:tag)`, so Task reads
+the clone's Taskfile.yml; `GITHUB_ACTIONS` is a prefix assignment on that one command and is never exported (the
+calling shell had it unset). Run 4 drops it. The tag is `changie latest` in the clone, the newest seed, `v0.14.1`.
+
+```
+### Run 1 (absent tag: tag and push)
+origin guard: fetch=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git push=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git ok
+$ (cd clone && GITHUB_ACTIONS=true task release:tag)
+To /private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git
+ * [new tag]           v0.14.1 -> v0.14.1
+release:tag: pushed v0.14.1 at e6850a48813e7c9f8ad6ca372bb92e7a750f08d4
+exit=0
+origin tags: v0.14.1 
+### Run 2 (tag now present on origin: skip)
+origin guard: fetch=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git push=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git ok
+$ (cd clone && GITHUB_ACTIONS=true task release:tag)
+release:tag: v0.14.1 already exists on origin — nothing to do
+exit=0
+### Run 3 (origin points at a missing path: transport error)
+origin guard: fetch=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/missing.git push=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/missing.git ok
+$ (cd clone && GITHUB_ACTIONS=true task release:tag)
+fatal: '/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/missing.git' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+::error::release:tag: git ls-remote exited 128; refusing to guess whether v0.14.1 exists on origin
+::error title=Task 'release:tag' failed::exit status 1
+task: Failed to run task "release:tag": exit status 1
+exit=201
+### Run 4 (without GITHUB_ACTIONS: refused by the precondition)
+origin guard: fetch=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git push=/private/tmp/claude-501/-Volumes-Code-github-com-seanb4t-codegraph-go/d5fbaa99-ed39-4562-985b-aad98b49b210/scratchpad/exec-05-02/rehearsal/origin.git ok
+$ (cd clone && task release:tag)   # GITHUB_ACTIONS unset
+task: release:tag pushes a tag to origin and runs only in release-tag.yml (D-06R: no human git tag). Rehearse it against a scratch clone whose origin is a scratch bare repository, with GITHUB_ACTIONS=true set for that one command.
+task: Failed to run task "release:tag": task: precondition not met
+exit=201
+real-repo tag --list 'v0.15*' before=[] after=[] equal
+real-repo refs/tags sha256 before=6d900e5f187b3d9c27c888e29b8e62b624fd5b9d164be219af6730a41f2bc8fd after=6d900e5f187b3d9c27c888e29b8e62b624fd5b9d164be219af6730a41f2bc8fd equal
+rc: 0 0 201 201
+```
