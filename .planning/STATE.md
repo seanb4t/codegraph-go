@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 05
 current_phase_name: Release Chain & release-please Retirement
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-10-14T21:05:25.605Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-10-14T21:17:33.372Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 05 execution started
-state_head: a9263045f835164276cfba61b020fa8dae55a1d6
+state_head: a7a8240c121cf53a33e783b850d7146a688faf82
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 14
+  completed_plans: 15
   percent: 67
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
 ## Current Position
 
 Phase: 05 (Release Chain & release-please Retirement) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 05
+Plan: 2 of 7
+Status: Ready to execute
 Last activity: 2026-10-14 — Phase 05 execution started
 
 Progress: [███████░░░] 67%
@@ -200,6 +200,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P03 | 2 sessions | 3 tasks | 1 files |
 | Phase 04 P04 | 5 min | 2 tasks | 1 files |
 | Phase 04 P05 | 4 min | 3 tasks | 4 files |
+| Phase 05 P01 | 12 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -483,6 +484,8 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: [Phase 04] D-04/D-10: a fragment is an ADDED file under .changes/unreleased/ (not .gitkeep; a modified or renamed one does not count); the policy is its own scripts/fragment_policy.py with a stdlib unittest suite (36 cases, executed-count guard, ten mutations RED), leaving pr_template_policy.py untouched.
 - [Phase 4]: [Phase 04] Fails closed on an empty file list, an API error, an unreadable body or a truncated listing; untrusted PR body and paths reach Python only through env; the workflow posts no comment and holds read-only token scopes.
 - [Phase 4]: [Phase 04] Close: the changie-fragments capability skipped with no-user-visible-change (the phase is CI-only), the second observation of its CAP-03 skip path.
+- [Phase 05]: 05-01: D-13 amends Phase 1 D-02; .changie.yaml newlines holds afterChangelogHeader 1, beforeKind 1, afterKind 1, endOfVersion 2 so a batched version file ends in a blank line — CHG-02 keeps the seeds verbatim; without the keys changie merge glues the next heading onto the last bullet and the release PR's required test check goes red
+- [Phase 05]: 05-01: release:batch is held by a static shape test plus worktree rehearsals, not by check:changie legs — A Taskfile target always runs in the Taskfile's own directory, so running it from check:changie would batch the real tree
 
 ### Pending Todos
 
@@ -647,10 +650,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/05-release-chain-release-please-retirement/05-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-13T20:21:28.217Z
-Stopped at: Phase 5 context gathered
+Last session: 2026-10-14T21:17:33.335Z
+Stopped at: Completed 05-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.

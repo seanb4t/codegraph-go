@@ -22,7 +22,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Release Chain
 
-- [ ] **REL-10**: A new release workflow replaces `release-please.yml`: on push to `main` with a non-empty `.changes/unreleased/`, it runs `pretag-gate` (`task check:cross`, moved verbatim) and then `changie batch auto && changie merge` and opens or updates one `chore(main): release vX.Y.Z` PR carrying the rendered `.changes/vX.Y.Z.md` and `CHANGELOG.md`; a push with no unreleased fragments does nothing
+- [x] **REL-10**: A new release workflow replaces `release-please.yml`: on push to `main` with a non-empty `.changes/unreleased/`, it runs `pretag-gate` (`task check:cross`, moved verbatim) and then `changie batch auto && changie merge` and opens or updates one `chore(main): release vX.Y.Z` PR carrying the rendered `.changes/vX.Y.Z.md` and `CHANGELOG.md`; a push with no unreleased fragments does nothing
 - [ ] **REL-11**: When a release PR merges (detected by a new `.changes/vX.Y.Z.md` on `main`), the workflow mints a GitHub App installation token with the existing `APP_ID`/`APP_PRIVATE_KEY` secrets and pushes tag `vX.Y.Z` with it — never the default `GITHUB_TOKEN`, which cannot fire `release.yml`
 - [ ] **REL-12**: `release.yml`'s trigger, its SLSA/cosign/notarization/SBOM steps and its job shape are byte-identical except for one change: `goreleaser release` receives `--release-notes .changes/${TAG}.md`; the GoReleaser config never sets `changelog.disable: true` (which would empty the body), asserted by the existing shape tests
 - [ ] **REL-13**: `task release:dry-run` renders the release body from a `.changes/vX.Y.Z.md` file and the rehearsal output is captured before the first real tag — the body is non-empty and equals the file
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHG-02 | Phase 1 | Complete |
 | CHG-03 | Phase 1 | Complete |
 | CHG-04 | Phase 1 | Complete |
-| REL-10 | Phase 5 | Pending |
+| REL-10 | Phase 5 | Complete |
 | REL-11 | Phase 5 | Pending |
 | REL-12 | Phase 5 | Pending |
 | REL-13 | Phase 5 | Pending |
