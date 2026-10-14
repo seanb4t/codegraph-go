@@ -26,11 +26,11 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [x] **REL-11**: When a release PR merges (detected by changie's documented release trigger, a push to `main` that changes `CHANGELOG.md`, which only a release-PR merge does; amended by Phase 5 D-06, 2026-10-13), the workflow mints a GitHub App installation token with the existing `APP_ID`/`APP_PRIVATE_KEY` secrets and pushes tag `vX.Y.Z` with it, skipping with success when that tag already exists — never the default `GITHUB_TOKEN`, which cannot fire `release.yml`
 - [x] **REL-12**: `release.yml`'s trigger, its SLSA/cosign/notarization/SBOM steps and its job shape are byte-identical; `goreleaser release`, which its `task release:goreleaser` step runs, receives `--release-notes .changes/${TAG}.md` (amended by Phase 5 D-12, 2026-10-14: the flag lives in `Taskfile.yml`'s `release:goreleaser`, the single definition of that step's body, so `release.yml` itself changes by one census comment hunk only); the GoReleaser config never sets `changelog.disable: true` (which would empty the body), asserted by a shape test
 - [x] **REL-13**: `release:goreleaser` and `release:dry-run` pass `--release-notes .changes/${TAG}.md` for the tag being released, the repository's own guard refuses a missing or empty notes file, and a captured `task release:dry-run` run exits 0 before the first real tag exists (amended by Phase 5 D-14, 2026-10-14: REL-13 tests only this repository's wiring; how GoReleaser renders the Release body is GoReleaser's behavior and is not asserted)
-- [ ] **REL-14**: `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted; the version source of truth is `changie latest`; a positive-controlled census reports zero `release-please` references outside `.planning/`, `CHANGELOG.md` history and this milestone's own notes
+- [x] **REL-14**: `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted; the version source of truth is `changie latest`; a positive-controlled census reports zero `release-please` references outside `.planning/`, `CHANGELOG.md` history and this milestone's own notes
 
 ### Guards Re-pointed
 
-- [ ] **GRD-15**: Every test that pins release-please as an authority is re-pointed at the changie chain and demonstrated RED first: `TestReleasePleaseStaysPreMajor` reads `.changie.yaml`'s `Breaking → minor` mapping instead of `bump-minor-pre-major`; `taskfile_shape_test.go`'s job registry names the new workflow's `pretag-gate`; `goreleaser_shape_test.go`'s forbidden-`release:`-keys rationale is restated for GoReleaser-authored Release bodies; `scripts/pr_template_policy.py` drops the release-please path exemptions and gains the release PR's own
+- [x] **GRD-15**: Every test that pins release-please as an authority is re-pointed at the changie chain and demonstrated RED first: `TestReleasePleaseStaysPreMajor` reads `.changie.yaml`'s `Breaking → minor` mapping instead of `bump-minor-pre-major`; `taskfile_shape_test.go`'s job registry names the new workflow's `pretag-gate`; `goreleaser_shape_test.go`'s forbidden-`release:`-keys rationale is restated for GoReleaser-authored Release bodies; `scripts/pr_template_policy.py` drops the release-please path exemptions and gains the release PR's own
 - [ ] **GRD-16**: `TestGsdTagCreationIsDisabled` still passes unchanged (`git.create_tag: false`), and a new assertion proves the only `git tag`/`git push --tags` in `.github/workflows/` is the App-token step of the release workflow — RED-demonstrated by planting a second tag push
 
 ### Fragment-Required Gate
@@ -104,8 +104,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REL-11 | Phase 5 | Complete |
 | REL-12 | Phase 5 | Complete |
 | REL-13 | Phase 5 | Complete |
-| REL-14 | Phase 5 | Pending |
-| GRD-15 | Phase 5 | Pending |
+| REL-14 | Phase 5 | Complete |
+| GRD-15 | Phase 5 | Complete |
 | GRD-16 | Phase 5 | Pending |
 | GATE-01 | Phase 4 | Complete |
 | GATE-02 | Phase 4 | Complete |
