@@ -996,6 +996,43 @@ tasks:
 
         echo "check:changie: 14 of 14 checks passed against a scratch copy (source tree byte-unchanged)"
 
+  release:batch:
+    desc: >-
+      REL-10's release-PR job body (D-02). Batches .changes/unreleased into
+      one version file, merges it into CHANGELOG.md, and writes the derived
+      version to GITHUB_OUTPUT as `version`. With no *.yaml fragment it
+      prints a notice and exits 0, because changie batch auto exits 1 on an
+      empty set (CHG-03, C1). It fails when the rendered notes carry a
+      GitHub skip-ci phrase, because the release PR's body becomes the
+      squash commit message on main (repository setting
+      squash_merge_commit_message PR_BODY) and would suppress
+      release-tag.yml (C2). CI-only by intent: run it in a disposable
+      worktree, never in a checkout you want to keep, because it rewrites
+      CHANGELOG.md and deletes the fragments.
+    silent: true
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — release:batch runs the pinned changie from go.tool-changie.mod (D-02)."
+    cmds:
+      - |
+        set -euo pipefail
+        count=$(find .changes/unreleased -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d ' ')
+        if [ "${count}" -eq 0 ]; then
+          echo "release:batch: no unreleased fragments under .changes/unreleased/ — nothing to release"
+          exit 0
+        fi
+        {{.GO_TOOL_CHANGIE}} changie batch auto
+        {{.GO_TOOL_CHANGIE}} changie merge
+        version=$({{.GO_TOOL_CHANGIE}} changie latest)
+        if grep -qiE '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]' ".changes/${version}.md"; then
+          echo "::error::release:batch: .changes/${version}.md contains a GitHub skip-ci phrase; the release PR body becomes the squash commit message on main and would suppress release-tag.yml"
+          exit 1
+        fi
+        echo "release:batch: rendered ${version} from ${count} fragment(s)"
+        if [ -n "${GITHUB_OUTPUT:-}" ]; then
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+        fi
+
   web:deps:
     desc: >-
       BLD-01's resolve-then-install step. Resolution order, reported so the

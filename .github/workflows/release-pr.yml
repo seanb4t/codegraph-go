@@ -1,0 +1,98 @@
+# release-pr: turns the unreleased changie fragments on main into one
+# reviewable release pull request (REL-10).
+#
+# On every push to main this workflow batches .changes/unreleased into a
+# new .changes/vX.Y.Z.md, merges it into CHANGELOG.md, and opens or updates
+# a single PR titled `chore(main): release vX.Y.Z` on the fixed branch
+# changie/release. It follows changie's documented release-PR pattern and
+# peter-evans/create-pull-request's documented token guidance (D-01).
+#
+# The GitHub App token is load-bearing (D-03): a PR opened or updated with
+# the default workflow token fires no pull_request workflows, so
+# protect-main's required checks would never report and the PR could never
+# merge. App-token-authored PRs do fire them.
+#
+# The PR body is the rendered .changes file, and the PR is opened ready for
+# review, never as a draft: close-draft-prs.yml closes drafts that the App
+# opens (D-04).
+#
+# With no fragments there is nothing to release, so no PR is opened or
+# updated (C1, CHG-03: changie batch auto fails on an empty set; the
+# release:batch Taskfile target checks first and exits 0).
+#
+# The display name above must never be `release`: post-release-verify.yml
+# keys on workflow_run of the workflow named "release".
+
+name: release-pr
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  # D-07: never open a release PR, and never cut a tag, from a main that
+  # fails cross-platform module resolution. Moved verbatim from the former
+  # release workflow; this is the exact check that would have caught the
+  # v0.1 rc.1 linux-only go.sum failure.
+  pretag-gate:
+    name: pre-tag 4-target go list sanity sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run check:cross sweep
+        run: task check:cross
+
+  release-pr:
+    name: release PR
+    needs: pretag-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Batch fragments into a release
+        id: batch
+        run: task release:batch
+
+      - name: Open or update the release PR
+        if: steps.batch.outputs.version != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: changie/release
+          title: "chore(main): release ${{ steps.batch.outputs.version }}"
+          commit-message: "chore(main): release ${{ steps.batch.outputs.version }}"
+          body-path: .changes/${{ steps.batch.outputs.version }}.md
+          draft: false
