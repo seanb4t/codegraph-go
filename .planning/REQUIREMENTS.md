@@ -51,9 +51,9 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Docs
 
-- [ ] **DOCS-12**: `CONTRIBUTING.md` §Pull requests replaces "release-please derives the version and the changelog from merged PR titles" and the Release-As rules with: add a fragment per user-visible change; never hand-write `.changes/v*.md`; how to exempt; how a version is derived
-- [ ] **DOCS-13**: `docs/RELEASE-PROCEDURES.md` describes the changie chain end to end (fragment → release PR → merge → App-token tag → locked `release.yml`), moves the `pretag-gate` description to the new workflow, and states that a release is cut by merging the release PR; its 45 release-please references are resolved one by one with a recorded verdict
-- [ ] **DOCS-14**: `pr-title.yml`'s header comment says it is hygiene only and carries no versioning weight; `Taskfile.yml`'s `release:dry-run-signed` comment and `docs/RELEASE.md`'s pipeline paragraph name the changie workflow
+- [x] **DOCS-12**: `CONTRIBUTING.md` §Pull requests replaces "release-please derives the version and the changelog from merged PR titles" and the Release-As rules with: add a fragment per user-visible change; never hand-write `.changes/v*.md`; how to exempt; how a version is derived
+- [x] **DOCS-13**: `docs/RELEASE-PROCEDURES.md` describes the changie chain end to end (fragment → release PR → merge → App-token tag → locked `release.yml`), moves the `pretag-gate` description to the new workflow, and states that a release is cut by merging the release PR; its 45 release-please references are resolved one by one with a recorded verdict
+- [x] **DOCS-14**: `pr-title.yml`'s header comment says it is hygiene only and carries no versioning weight; `Taskfile.yml`'s `release:dry-run-signed` comment and `docs/RELEASE.md`'s pipeline paragraph name the changie workflow
 
 ### Verb Fold Close-out
 
@@ -117,9 +117,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAP-03 | Phase 2 | Complete |
 | CAP-04 | Phase 2 | Complete |
 | CAP-05 | Phase 3 | Complete |
-| DOCS-12 | Phase 5 | Pending |
-| DOCS-13 | Phase 5 | Pending |
-| DOCS-14 | Phase 5 | Pending |
+| DOCS-12 | Phase 5 | Complete |
+| DOCS-13 | Phase 5 | Complete |
+| DOCS-14 | Phase 5 | Complete |
 | VERB-09 | Phase 3 | Complete |
 | SHIP-01 | Phase 6 | Pending |
 | SHIP-02 | Phase 6 | Pending |
