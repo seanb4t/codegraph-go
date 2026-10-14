@@ -658,3 +658,66 @@ ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.154s
 ```
 
 No `p05-scratch-wt` entry remains.
+
+## 05-02 RED-first transcript
+
+Commit: the `test(05-02):` commit, before `release-tag.yml` and `release:tag` exist. Command:
+`GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1 -v`. Every failure is an assertion or read failure
+on the missing subject; there is no build error. Exactly six tests fail in the whole package; the other
+tests, including `TestTagCreationScanFlagsPlantedSites` and `TestGsdTagCreationIsDisabled`, pass.
+`TestTagCreationScanFlagsPlantedSites` passes at RED by design: it feeds the scanner literal inputs only.
+Its RED evidence is Families 05-02/g, 05-02/h and 05-02/i below, which mutate the scanner (rule 84d1gfpywd).
+
+```
+    changie_release_shape_test.go:601: read ../../.github/workflows/release-tag.yml: open ../../.github/workflows/release-tag.yml: no such file or directory
+--- FAIL: TestReleaseTagWorkflowShape (0.00s)
+    changie_release_shape_test.go:774: ../../Taskfile.yml: no top-level "release:tag" task
+--- FAIL: TestReleaseTagTargetShape (0.00s)
+    changie_release_shape_test.go:1333: found 0 tag-creating units map[], want exactly 1 (task:release:tag)
+    changie_release_shape_test.go:1337: GRD-16: found zero tag-creating commands in task:release:tag, want exactly that one unit; task release:tag is invoked from [], want exactly ["release-tag.yml/tag/Tag the release"]
+    changie_release_shape_test.go:1342: release-tag.yml is not among the 17 workflow files on disk
+    changie_release_shape_test.go:1349: tag-creation scan: 17 workflow files (17 on disk), 83 run bodies, 1 local actions, 71 Taskfile targets, 241 executed Taskfile scalars, 0 tag-creating lines in 0 unit(s), release:tag invoked from []
+--- FAIL: TestTagCreationHasSingleAppTokenSite (0.02s)
+    taskfile_shape_test.go:1400: read ../../.github/workflows/release-tag.yml: open ../../.github/workflows/release-tag.yml: no such file or directory
+--- FAIL: TestWorkflowRunBodiesInvokeTask (0.01s)
+    taskfile_shape_test.go:1613: inScopeWorkflowFiles names "release-tag.yml", which no longer exists on disk
+--- FAIL: TestWorkflowFilePopulationMatchesDisk (0.00s)
+    taskfile_shape_test.go:1686: read ../../.github/workflows/release-tag.yml: open ../../.github/workflows/release-tag.yml: no such file or directory
+--- FAIL: TestInScopeJobsPopulationMatchesDisk (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.201s
+FAIL
+```
+
+## 05-02 GREEN
+
+Commits: `179aacb2` (`ci(05-02):` release-tag.yml, release:tag, check:cross desc) and `59fc881d` (`test(05-02):` the
+block-scalar-marker fix in TestReleaseTagTargetShape, a one-line test bug RED could not show because release:tag
+was absent). `git log --first-parent --no-merges --reverse` over release-tag.yml and
+changie_release_shape_test.go since `5a8603f5` orders the 05-02 commits test, ci, test; the first two are
+test(05-02) then ci(05-02). Command: the eight named tests, `-count=1 -v`; then `task lint:actions` (exit 0).
+The scanner's logged population counts are on the `TestTagCreationHasSingleAppTokenSite` line.
+
+```
+    changie_release_shape_test.go:745: ../../.github/workflows/release-tag.yml: 114 fields, lines and uses checked (7 uses: lines, 3 distinct pins, 2 run bodies)
+--- PASS: TestReleaseTagWorkflowShape (0.00s)
+    changie_release_shape_test.go:885: release:tag: 7 of 7 ordered tokens found; 12 body lines; 1 changie invocation
+--- PASS: TestReleaseTagTargetShape (0.00s)
+    changie_release_shape_test.go:1350: tag-creation scan: 18 workflow files (18 on disk), 85 run bodies, 1 local actions, 72 Taskfile targets, 244 executed Taskfile scalars, 2 tag-creating lines in 1 unit(s), release:tag invoked from ["release-tag.yml/tag/Tag the release"]
+--- PASS: TestTagCreationHasSingleAppTokenSite (0.02s)
+--- PASS: TestTagCreationScanFlagsPlantedSites (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/baseline_single_site (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_workflow_push_tags (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_taskfile_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_gh_release_create (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_second_release_tag_invocation (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/reject_release_tag_push_widened (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_comment_git_tag (0.00s)
+    --- PASS: TestTagCreationScanFlagsPlantedSites/ignore_desc_git_tag (0.00s)
+--- PASS: TestGsdTagCreationIsDisabled (0.00s)
+--- PASS: TestWorkflowRunBodiesInvokeTask (0.01s)
+--- PASS: TestWorkflowFilePopulationMatchesDisk (0.00s)
+--- PASS: TestInScopeJobsPopulationMatchesDisk (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.211s
+```
