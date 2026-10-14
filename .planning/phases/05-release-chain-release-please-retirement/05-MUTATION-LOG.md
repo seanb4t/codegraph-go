@@ -2565,3 +2565,50 @@ Teardown: `git worktree remove --force "$S"` and `git worktree prune`, then `git
 ```
 
 No `p05-scratch-wt` entry remains.
+
+## 05-07 Registry guards RED against the replacement
+
+Recorded before any edit of 05-07. Scratch worktree: a detached checkout of HEAD (`09bc14da`) at a path containing
+`p05-scratch-wt`, created with `git worktree add -q --detach "$S" HEAD`. REL-14's end state is simulated with
+`git -C "$S" rm -q .github/workflows/release-please.yml release-please-config.json .release-please-manifest.json`
+and nothing else. The main checkout is never mutated. Command, from `$S`:
+`GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1 -v` (exit 1). Exactly three tests fail
+(`rg -c '^--- FAIL'` = 3), each on its own assertion naming a deleted file. `TestChangieBreakingBumpsMinorPreOne`,
+`TestGsdTagCreationIsDisabled` and the rest of the package pass there, because 05-05 re-pointed them.
+
+```
+=== RUN   TestWorkflowRunBodiesInvokeTask
+    taskfile_shape_test.go:1400: read ../../.github/workflows/release-please.yml: open ../../.github/workflows/release-please.yml: no such file or directory
+--- FAIL: TestWorkflowRunBodiesInvokeTask (0.00s)
+=== RUN   TestWorkflowFilePopulationMatchesDisk
+    taskfile_shape_test.go:1613: inScopeWorkflowFiles names "release-please.yml", which no longer exists on disk
+--- FAIL: TestWorkflowFilePopulationMatchesDisk (0.00s)
+=== RUN   TestInScopeJobsPopulationMatchesDisk
+    taskfile_shape_test.go:1669: usesOnlyJobExceptions: release-please.yml/release-please: read ../../.github/workflows/release-please.yml: open ../../.github/workflows/release-please.yml: no such file or directory
+--- FAIL: TestInScopeJobsPopulationMatchesDisk (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.538s
+```
+
+Semantic assessment: each target test executed and failed on the assertion it exists to make (the deleted workflow is still
+named by a registry), not on a compile, load or unrelated fault. Under repo rule x1cjy9vyhq the TAP-only
+`check tdd-red-evidence` classifier was skipped for this Go RED; the `--- FAIL:` transcript above is the evidence.
+
+## 05-07 Registry re-pointed: package green with the retired files gone
+
+Same scratch worktree, same bare deletion, plus the three registry removals (`inScopeJobs`: the
+`release-please.yml`/`pretag-gate` entry; `usesOnlyJobExceptions`: the whole `release-please.yml`/`release-please` entry,
+`govulncheck` stays; `inScopeWorkflowFiles`: the `"release-please.yml"` element). Command, from `$S`:
+`GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1` (exit 0):
+
+```
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.535s
+```
+
+`git worktree remove --force "$S"` and `git worktree prune` followed; `git worktree list` showed no `p05-scratch-wt`.
+The same three files and the same registry edits were then applied on the real branch as one commit (`ffd84c4a`,
+`ci(05-07): delete the retired release workflow, config and manifest (REL-14)`), which touches exactly
+`.github/workflows/release-please.yml`, `.release-please-manifest.json`, `internal/upgrade/taskfile_shape_test.go` and
+`release-please-config.json`. At that commit `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1` printed
+`ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.541s`, `task lint:actions` reported no finding, and
+`rg -n -i 'release[-_ ]?please' internal/upgrade` printed nothing.
