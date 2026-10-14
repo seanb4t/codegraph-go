@@ -1289,3 +1289,81 @@ ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.198s
 ```
 
 No `p05-scratch-wt` entry remains.
+
+## 05-03 RED-first transcript
+
+Commit: the `test(05-03):` commit, before the Taskfile.yml, .goreleaser.yaml and release.yml edits. Command:
+`GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1 -v`. Every failure is an assertion on the missing
+wiring; there is no build error. Exactly two tests fail. `TestGoreleaserChangelogNotDisabled` passes at RED
+(no changelog block exists); its RED is Family 05-03/a. `TestReleaseBlockDoesNotRewriteReleaseBody` changed prose
+only and passes both before and after; Family 05-03/d shows its unchanged logic still bites. Two long desc
+strings in the failure lines are elided as `[desc text elided]`; every other character is verbatim.
+
+```
+=== RUN   TestReleaseGoreleaserPassesReleaseNotes
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "NOTES=\".changes/${TAG}.md\"" (notes path from the tag) not found at or after byte offset 1622
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "[ ! -s \"${NOTES}\" ]" (empty-notes check) not found at or after byte offset 1622
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "::error::release:goreleaser: ${NOTES} is missing or empty" (empty-notes error) not found at or after byte offset 1622
+    changie_release_shape_test.go:1573: release:goreleaser cmds: token "\"${GORELEASER_BIN}\" release --clean --release-notes \"${NOTES}\"" (release call with notes) not found at or after byte offset 1869
+    changie_release_shape_test.go:1582: release:goreleaser release invocation is "\"${GORELEASER_BIN}\" release --clean", want exactly `"${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"`
+    changie_release_shape_test.go:1600: release:goreleaser desc does not cite REL-12 and --release-notes: [desc text elided]
+    changie_release_shape_test.go:1626: release:goreleaser: 2 of 6 ordered tokens found; 1 release invocation; 1 TAG definition; 2 release.yml run bodies
+--- FAIL: TestReleaseGoreleaserPassesReleaseNotes (0.00s)
+=== RUN   TestReleaseDryRunRehearsesReleaseNotes
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "TAG=\"$({{.GO_TOOL_CHANGIE}} changie latest)\"" (tag from changie latest) not found at or after byte offset 0
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "NOTES=\".changes/${TAG}.md\"" (notes path from the tag) not found at or after byte offset 0
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "[ ! -s \"${NOTES}\" ]" (empty-notes check) not found at or after byte offset 0
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "::error::release:dry-run: ${NOTES} is missing or empty" (empty-notes error) not found at or after byte offset 0
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "RELEASE-NOTES-EVIDENCE tag=${TAG} file=${NOTES} bytes=" (evidence line) not found at or after byte offset 0
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "sha256=" (evidence hash) not found at or after byte offset 0
+    changie_release_shape_test.go:1648: release:dry-run cmds: token "GORELEASER_CURRENT_TAG=\"${TAG}\" \"${GORELEASER_BIN}\" release --skip=publish,sign,validate --clean --release-notes \"${NOTES}\"" (non-snapshot invocation) not found at or after byte offset 0
+    changie_release_shape_test.go:1654: release:dry-run runs a --snapshot line, which skips the notes pipe: "echo \"==> goreleaser release --snapshot --skip=publish,sign --clean\""
+    changie_release_shape_test.go:1654: release:dry-run runs a --snapshot line, which skips the notes pipe: "\"${GORELEASER_BIN}\" release --snapshot --skip=publish,sign --clean"
+    changie_release_shape_test.go:1677: release:dry-run invokes changie 0 times, want exactly 1 (latest)
+    changie_release_shape_test.go:1684: release:dry-run desc does not cite REL-13: [desc text elided]
+    changie_release_shape_test.go:1686: release:dry-run: 0 of 7 ordered tokens found; 0 changie invocation
+--- FAIL: TestReleaseDryRunRehearsesReleaseNotes (0.00s)
+=== RUN   TestGoreleaserChangelogNotDisabled
+    goreleaser_shape_test.go:1039: ../../.goreleaser.yaml parsed (10 top-level keys, release block with 2 keys); no changelog block
+--- PASS: TestGoreleaserChangelogNotDisabled (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.606s
+```
+
+## 05-03 GREEN
+
+Commit: the `ci(05-03):` commit, `b390a9d2`. Command (the seven named tests):
+`GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -run '^(TestReleaseGoreleaserPassesReleaseNotes|TestReleaseDryRunRehearsesReleaseNotes|TestGoreleaserChangelogNotDisabled|TestReleaseBlockDoesNotRewriteReleaseBody|TestWorkflowRunBodiesInvokeTask|TestReleaseWorkflowTriggerIsTagPushOnly|TestOIDCWriteScopedToSingleGoreleaserJob)$' -count=1 -v`
+
+```
+=== RUN   TestReleaseGoreleaserPassesReleaseNotes
+    changie_release_shape_test.go:1626: release:goreleaser: 6 of 6 ordered tokens found; 1 release invocation; 1 TAG definition; 2 release.yml run bodies
+--- PASS: TestReleaseGoreleaserPassesReleaseNotes (0.00s)
+=== RUN   TestReleaseDryRunRehearsesReleaseNotes
+    changie_release_shape_test.go:1686: release:dry-run: 7 of 7 ordered tokens found; 1 changie invocation
+--- PASS: TestReleaseDryRunRehearsesReleaseNotes (0.00s)
+=== RUN   TestReleaseBlockDoesNotRewriteReleaseBody
+--- PASS: TestReleaseBlockDoesNotRewriteReleaseBody (0.00s)
+=== RUN   TestGoreleaserChangelogNotDisabled
+    goreleaser_shape_test.go:1039: ../../.goreleaser.yaml parsed (10 top-level keys, release block with 2 keys); no changelog block
+--- PASS: TestGoreleaserChangelogNotDisabled (0.00s)
+=== RUN   TestOIDCWriteScopedToSingleGoreleaserJob
+--- PASS: TestOIDCWriteScopedToSingleGoreleaserJob (0.00s)
+=== RUN   TestReleaseWorkflowTriggerIsTagPushOnly
+--- PASS: TestReleaseWorkflowTriggerIsTagPushOnly (0.00s)
+=== RUN   TestWorkflowRunBodiesInvokeTask
+--- PASS: TestWorkflowRunBodiesInvokeTask (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.190s
+```
+
+The whole package, `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1`:
+
+```
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.473s
+```
+
+`task lint:actions` exit 0 (actionlint, no finding). `task check:goreleaser` exit 0 (`1 configuration file(s) validated`).
+
+release.yml hunk count from `7b12cb92`: 1, and the only changed lines are comment lines (the plan's second verify command exits 0).
+Commit order on `internal/upgrade/goreleaser_shape_test.go` and `.goreleaser.yaml` since `5a8603f5`: `test(05-03):` then `ci(05-03):` (third verify command exits 0).
