@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import json
 import unittest
+from pathlib import Path
 
 import fragment_policy
 import pr_template_policy
@@ -447,6 +448,115 @@ class MainTests(unittest.TestCase):
         self.assertIn(
             f"::notice::fragment-required: exempt: {EXEMPT_REASON}",
             output.splitlines(),
+        )
+
+
+REQUIRE_ISSUE_LINK_WORKFLOW = (
+    Path(__file__).resolve().parent.parent / ".github" / "workflows" / "require-issue-link.yml"
+)
+
+
+def _workflow_allowlist():
+    """The (prefix set, exact set) in require-issue-link.yml's housekeeping `case`.
+
+    Reads the workflow as text. Between `case "$f" in` and `esac`, an arm is a
+    line `<pattern>[|<pattern>...]) ;;` with an empty body; the `*)` default arm
+    has a body, so it is not an arm here. An item ending in `/*` is a prefix
+    (the `*` dropped); any other item is an exact name.
+    """
+    lines = REQUIRE_ISSUE_LINK_WORKFLOW.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == 'case "$f" in')
+    end = next(i for i, line in enumerate(lines) if i > start and line.strip() == "esac")
+    prefixes, exact = set(), set()
+    for line in lines[start + 1 : end]:
+        text = line.strip()
+        if text.startswith("#") or not text.endswith(";;"):
+            continue
+        head = text[:-2].rstrip()
+        if not head.endswith(")"):
+            continue
+        pattern = head[:-1]
+        if " " in pattern:
+            continue
+        for item in pattern.split("|"):
+            if item.endswith("/*"):
+                prefixes.add(item[:-1])
+            else:
+                exact.add(item)
+    return prefixes, exact
+
+
+class HygieneAllowlistTests(unittest.TestCase):
+    """GRD-15, D-05: the release PR's own paths are housekeeping in both hygiene gates."""
+
+    def test_release_pr_paths_are_housekeeping(self):
+        self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+        release_pr = [".changes/v0.15.0.md", ".changes/unreleased/Breaking-x.yaml", "CHANGELOG.md"]
+        self.assertTrue(pr_template_policy.is_housekeeping(release_pr))
+        for paths in ([".changesX/a.md"], [".Changes/a.md"]):
+            with self.subTest(paths=paths):
+                self.assertFalse(pr_template_policy.is_housekeeping(paths))
+
+    def test_fragment_only_pr_is_housekeeping(self):
+        self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+        self.assertTrue(
+            pr_template_policy.is_housekeeping([".changes/unreleased/Fixes-x.yaml"])
+        )
+
+    def test_shipped_code_beside_changes_is_not_housekeeping(self):
+        self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+        self.assertFalse(
+            pr_template_policy.is_housekeeping(
+                [".changes/unreleased/Fixes-x.yaml", "internal/cli/root.go"]
+            )
+        )
+
+    def test_empty_path_list_is_not_housekeeping(self):
+        self.assertTrue(hasattr(pr_template_policy, "is_housekeeping"))
+        self.assertFalse(pr_template_policy.is_housekeeping([]))
+
+    def test_exempt_sets_are_the_documented_sets(self):
+        self.assertEqual(
+            set(pr_template_policy.EXEMPT_PREFIXES),
+            {".github/", "docs/", ".planning/", ".changes/"},
+        )
+        self.assertEqual(
+            pr_template_policy.EXEMPT_EXACT,
+            {
+                "go.mod",
+                "go.sum",
+                "go.tool.mod",
+                "go.tool.sum",
+                "go.tool-lint.mod",
+                "go.tool-lint.sum",
+                ".gitignore",
+                "README.md",
+                "CONTRIBUTING.md",
+                "CODE_OF_CONDUCT.md",
+                "SECURITY.md",
+                "NOTICE",
+                "LICENSE",
+                "CHANGELOG.md",
+            },
+        )
+
+    def test_hygiene_allowlists_mirror_require_issue_link(self):
+        prefixes, exact = _workflow_allowlist()
+        self.assertGreaterEqual(len(prefixes), 4, f"parsed prefixes: {sorted(prefixes)}")
+        self.assertGreaterEqual(len(exact), 14, f"parsed exact names: {sorted(exact)}")
+        mine_prefixes = set(pr_template_policy.EXEMPT_PREFIXES)
+        mine_exact = set(pr_template_policy.EXEMPT_EXACT)
+        self.assertEqual(
+            prefixes,
+            mine_prefixes,
+            f"prefix side differs: only in workflow {sorted(prefixes - mine_prefixes)}, "
+            f"only in pr_template_policy {sorted(mine_prefixes - prefixes)}",
+        )
+        self.assertEqual(
+            exact,
+            mine_exact,
+            f"exact side differs: only in workflow {sorted(exact - mine_exact)}, "
+            f"only in pr_template_policy {sorted(mine_exact - exact)}",
         )
 
 
