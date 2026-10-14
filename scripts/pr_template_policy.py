@@ -27,20 +27,26 @@ import json
 import os
 import re
 import sys
+from collections.abc import Sequence
 
 TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
 
 # Paths whose PRs never need a typed template. Matched as prefixes.
+# .changes/ is the changie release PR's own tree: that PR touches only .changes/**
+# and CHANGELOG.md, and its body is the rendered notes, regenerated on every run,
+# so a manual exemption marker cannot survive there (D-05, GRD-15).
 EXEMPT_PREFIXES = (
     ".github/",
     "docs/",
     ".planning/",
+    ".changes/",
 )
 # Root-level machine-maintained manifests belong here by class, not by
 # accident: this set is an allowlist of literal names, so every new one is
-# gate-tripping until it is added by hand. Keep it in sync with the `case`
-# list in .github/workflows/require-issue-link.yml, which reimplements the
-# same policy in shell so that job stays dependency-free.
+# gate-tripping until it is added by hand. The `case` list in
+# .github/workflows/require-issue-link.yml reimplements the same policy in shell
+# so that job stays dependency-free; test_hygiene_allowlists_mirror_require_issue_link
+# asserts that both lists stay equal.
 EXEMPT_EXACT = {
     "go.mod",
     "go.sum",
@@ -51,13 +57,6 @@ EXEMPT_EXACT = {
     "go.tool.sum",
     "go.tool-lint.mod",
     "go.tool-lint.sum",
-    # release-please machinery. The manifest is rewritten by the bot on
-    # every release, so without this the release PR — which touches exactly
-    # {.release-please-manifest.json, CHANGELOG.md} — trips both hygiene
-    # gates every single time, and the bot regenerates its body on each run
-    # so a manual exemption marker cannot survive.
-    ".release-please-manifest.json",
-    "release-please-config.json",
     ".gitignore",
     "README.md",
     "CONTRIBUTING.md",
@@ -84,6 +83,17 @@ EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:\s*(?P<reason>[^->][^>]*?
 ROUTER_MARKER = re.compile(r"Wrong template\s*—\s*please pick", re.I)
 
 
+def is_housekeeping(paths: Sequence[str]) -> bool:
+    """True when the list is non-empty and every path is on the exempt allowlist.
+
+    Comparison is exact and case-sensitive. A prefix matches only as written, so
+    `.changesX/a.md` is not under `.changes/`.
+    """
+    return bool(paths) and all(
+        p in EXEMPT_EXACT or p.startswith(EXEMPT_PREFIXES) for p in paths
+    )
+
+
 def emit(action: str, reason: str) -> None:
     payload = json.dumps({"action": action, "reason": reason})
     out = os.environ.get("GITHUB_OUTPUT")
@@ -104,9 +114,7 @@ def main() -> int:
         emit("pass", f"explicitly exempt: {marker.group('reason').strip()}")
         return 0
 
-    if changed and all(
-        p in EXEMPT_EXACT or p.startswith(EXEMPT_PREFIXES) for p in changed
-    ):
+    if is_housekeeping(changed):
         emit("pass", "touches only CI, docs, planning, or dependency manifests")
         return 0
 
