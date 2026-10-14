@@ -1660,7 +1660,7 @@ func validateUsesOnlyJobExceptions(excs []usesOnlyJobException) error {
 // (TestWorkflowRunBodiesInvokeTask's `len(inScopeJobs) == 0` check) —
 // nothing asserted that every job actually declared in
 // inScopeWorkflowFiles appears in it. A new CI job added to ci.yml,
-// release-please.yml, or corpora.yml without a matching inScopeJobs entry
+// release-pr.yml, release-tag.yml, or corpora.yml without a matching inScopeJobs entry
 // was bound by nothing and the suite stayed green — the memory-v4zqxrz6b3
 // shape: a hand-enumerated population narrows silently because a new
 // subject passes by being absent.
@@ -2421,7 +2421,7 @@ var cosignIdentitySANCorpus = []struct {
 	},
 	{
 		name:   "different workflow filename, same repo, tag ref",
-		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-please.yml@refs/tags/v1.2.3",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-tag.yml@refs/tags/v1.2.3",
 		accept: false,
 	},
 	{
