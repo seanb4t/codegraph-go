@@ -619,30 +619,30 @@ and the same with `changelog-exempt` in `fragment_policy.py`, `find_exemption` u
 | A4 | The 3,000-file push-diff limit applies to the milestone merge such that the tag workflow may or may not run there | Pattern 1 | None: both outcomes are a no-op because of the skip-if-exists branch |
 | A5 | The planner/maintainer accepts amending the Phase 1 D-02 newlines pin (Pitfall 1) | Summary | If refused, the first release PR cannot pass its required `test` check; there is no alternative short of a different tool config |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Amend the Phase 1 `newlines` lock (Pitfall 1).**
+1. **Amend the Phase 1 `newlines` lock (Pitfall 1).** RESOLVED by CONTEXT D-13 (amend, as recommended).
    - What we know: the current config yields a corrupted CHANGELOG and a red `TestChangieVersionSeedsMatchChangelog` on the first release PR; the fix and its blast radius (one pinned test) are measured.
    - What's unclear: whether the maintainer wants it recorded as a Phase 5 decision (D-11) or a Phase 1 errata.
    - Recommendation: do it in this phase, RED-first, first plan; name it in the plan as amending Phase 1 D-02 under D-01's "forced by a locked constraint" clause (CHG-02 verbatim history).
 
-2. **"Exactly one change" versus the census (REL-12 vs REL-14).**
+2. **"Exactly one change" versus the census (REL-12 vs REL-14).** RESOLVED by CONTEXT D-12 (flag in Taskfile `release:goreleaser`).
    - What we know: the real one-line change is in `Taskfile.yml`'s `release:goreleaser`; `release.yml` has one census hit, a comment at line 188 ("pinned to the exact same Action + SHA release-please.yml already carries").
    - What's unclear: whether "byte-identical" tolerates a comment hunk.
    - Recommendation: read REL-12 as "no functional line of `release.yml` changes"; capture `git diff <post-#99 main> -- .github/workflows/release.yml` in the SUMMARY showing exactly one comment hunk, and the Taskfile diff showing the flag. The existing release guards (`TestReleaseWorkflowTriggerIsTagPushOnly`, `TestOIDCWriteScopedToSingleGoreleaserJob`, `TestReleaseJobSetupZigDisablesCache`, `TestAppleSecretsScopedToSingleReleaseJob`) already hold the locked parts; a hash-pin of the file would be a new, fragile guard, so do not add one.
 
-3. **What "equals the file" means for REL-13 and SHIP-02.**
+3. **What "equals the file" means for REL-13 and SHIP-02.** RESOLVED by CONTEXT D-14 (REL-13 tests only this repo's wiring; no body-equality relation).
    - What we know: GoReleaser's body is the file plus one newline; the file will end `\n\n` after the newlines fix; the body is never written to disk in a dry run.
-   - Recommendation: define equality as equal after trimming trailing whitespace on both sides; record that definition in `05-VALIDATION.md` and carry it to Phase 6. REL-13's captured evidence is the notes-path assertion plus the evidence line, not a GoReleaser-rendered body.
+   - Recommendation (withdrawn by D-14, 2026-10-14: REL-13 tests only this repository's wiring, so Phase 5 defines no body-equality relation and asserts none): REL-13's captured evidence is the notes-path assertion plus the evidence line, not a GoReleaser-rendered body.
 
-4. **The rc hand-tag escape hatch (Pitfall 4).**
+4. **The rc hand-tag escape hatch (Pitfall 4).** RESOLVED by CONTEXT D-15 (removed).
    - Recommendation: remove it from the runbook with a recorded verdict (hand `git tag` contradicts the milestone's "no human git tag" rule, and the new `release:goreleaser` rightly refuses a tag with no `.changes` file), noting that a prerelease can be batched with `changie batch auto -p rc.1` but is not wired into `release:batch`. Maintainer to confirm.
 
-5. **Phase 5's own fragment versus the census.**
+5. **Phase 5's own fragment versus the census.** RESOLVED by CONTEXT D-11 (`.changes/unreleased/` is this milestone's own notes).
    - What we know: the phase-close capability writes a fragment for this phase's user-visible change; natural wording mentions release-please; `.changes/unreleased/*.yaml` is not covered by D-09's `.changes/v*.md` exclusion; it becomes `CHANGELOG` history at release.
    - Recommendation: either word the fragment without the literal ("the previous release automation") or extend the census exclusion to `.changes/unreleased/` and record that. The second keeps the capability unconstrained; ask the maintainer which.
 
-6. **Layout: two files or one.** Claude's discretion per CONTEXT; this research recommends two (documented `paths:` filter, no custom path detection). The cost is a duplicated `pretag-gate` job and two more registry entries.
+6. **Layout: two files or one.** RESOLVED under CONTEXT Claude's Discretion (two files). Claude's discretion per CONTEXT; this research recommends two (documented `paths:` filter, no custom path detection). The cost is a duplicated `pretag-gate` job and two more registry entries.
 
 ## Environment Availability
 
