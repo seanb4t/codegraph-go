@@ -5,16 +5,16 @@ milestone_name: Changie Release Management
 current_phase: 05
 current_phase_name: Release Chain & release-please Retirement
 status: executing
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-10-14T22:10:08.970Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-10-14T22:17:39.630Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 05 execution started
-state_head: 01d32490030161f48ace1e34320071bf74af1c2e
+state_head: 013322f708c593301fa3f799889547928218abe6
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
 ## Current Position
 
 Phase: 05 (Release Chain & release-please Retirement) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-10-14 — Phase 05 execution started
 
@@ -205,6 +205,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P03 | 8 min | 3 tasks | 8 files |
 | Phase 05 P04 | 10 min | 3 tasks | 6 files |
 | Phase 05 P06 | 6 min | 2 tasks | 5 files |
+| Phase 05 P05 | 4 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -496,6 +497,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: 05-04: a reason starting with a dash after strip does not exempt, in either hygiene policy (RESEARCH Pitfall 7; matches 04-REVIEW.md) — The old pattern's first character class was [^->]; acceptance of '- ' and '--x' through a leading space was accidental.
 - [Phase 05]: 05-04: require-issue-link.yml changes only for D-05 (allowlist arm), not WR-01; its marker check is a single grep -E, not a Python backtracking regex — Rule eyva2svrcz: no claims about third-party matcher behavior; maintainer may override.
 - [Phase 05]: 05-06: rc escape hatch removed from the runbook (D-15); section 7 delete-and-retry now governs a disposable cut; stale no-rulesets note replaced with protect-main description
+- [Phase 05]: 05-05: TestChangieBreakingBumpsMinorPreOne pins exactly one Breaking kind with auto: minor in .changie.yaml; SAN negative fixtures name release-tag.yml; cosignIdentitySANCorpus accept verdicts now asserted against the compiled pattern
 
 ### Pending Todos
 
@@ -662,8 +664,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-14T22:10:08.930Z
-Stopped at: Completed 05-06-PLAN.md
+Last session: 2026-10-14T22:17:39.589Z
+Stopped at: Completed 05-05-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
