@@ -31,7 +31,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Guards Re-pointed
 
 - [x] **GRD-15**: Every test that pins release-please as an authority is re-pointed at the changie chain and demonstrated RED first: `TestReleasePleaseStaysPreMajor` reads `.changie.yaml`'s `Breaking → minor` mapping instead of `bump-minor-pre-major`; `taskfile_shape_test.go`'s job registry names the new workflow's `pretag-gate`; `goreleaser_shape_test.go`'s forbidden-`release:`-keys rationale is restated for GoReleaser-authored Release bodies; `scripts/pr_template_policy.py` drops the release-please path exemptions and gains the release PR's own
-- [ ] **GRD-16**: `TestGsdTagCreationIsDisabled` still passes unchanged (`git.create_tag: false`), and a new assertion proves the only `git tag`/`git push --tags` in `.github/workflows/` is the App-token step of the release workflow — RED-demonstrated by planting a second tag push
+- [x] **GRD-16**: `TestGsdTagCreationIsDisabled` still passes unchanged (`git.create_tag: false`), and a new assertion proves the only `git tag`/`git push --tags` in `.github/workflows/` is the App-token step of the release workflow — RED-demonstrated by planting a second tag push
 
 ### Fragment-Required Gate
 
@@ -106,7 +106,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REL-13 | Phase 5 | Complete |
 | REL-14 | Phase 5 | Complete |
 | GRD-15 | Phase 5 | Complete |
-| GRD-16 | Phase 5 | Pending |
+| GRD-16 | Phase 5 | Complete |
 | GATE-01 | Phase 4 | Complete |
 | GATE-02 | Phase 4 | Complete |
 | GATE-03 | Phase 4 | Complete |
