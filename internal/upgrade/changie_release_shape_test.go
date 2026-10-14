@@ -804,8 +804,9 @@ func TestReleaseTagTargetShape(t *testing.T) {
 	lines := releaseChainNonCommentLines(cmds)
 	var body []string
 	for _, l := range lines {
-		if strings.TrimSpace(l) != "" {
-			body = append(body, strings.TrimSpace(l))
+		// `- |` opens the block scalar; it is YAML, not part of the shell body.
+		if tl := strings.TrimSpace(l); tl != "" && tl != "- |" {
+			body = append(body, tl)
 		}
 	}
 	if len(body) == 0 || body[0] != "set -euo pipefail" {
