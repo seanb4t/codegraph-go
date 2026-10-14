@@ -2562,6 +2562,17 @@ func TestCosignIdentityPolicyBoundaryParityWithCompiledPattern(t *testing.T) {
 	// string comparison would fail on a legitimate difference and would
 	// still miss a semantic drift written in the same spelling.
 	compiled := regexp.MustCompile(releaseWorkflowRefPattern)
+
+	// Each corpus row's own accept verdict must hold against the compiled
+	// pattern. Without this the field was only counted (check 5) and never
+	// read against the pattern, so a row meant to be a negative fixture could
+	// be swapped for the real release.yml SAN and the suite stayed green.
+	for _, c := range cosignIdentitySANCorpus {
+		if got := compiled.MatchString(c.san); got != c.accept {
+			t.Errorf("corpus row %q: releaseWorkflowRefPattern match = %v, but the row says accept = %v (SAN %q)", c.name, got, c.accept, c.san)
+		}
+	}
+
 	for _, lit := range all {
 		litRe, err := regexp.Compile(lit.Value)
 		if err != nil {
