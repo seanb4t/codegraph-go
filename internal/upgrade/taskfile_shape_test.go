@@ -146,7 +146,6 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "transcript-freeze"},
 	{Workflow: "ci.yml", JobID: "tool-vuln"},
 	{Workflow: "ci.yml", JobID: "tmux-e2e"},
-	{Workflow: "release-please.yml", JobID: "pretag-gate"},
 	{Workflow: "corpora.yml", JobID: "corpora"},
 	{Workflow: "corpora.yml", JobID: "golden"},
 	{Workflow: "components-drift.yml", JobID: "components-drift"},
@@ -1442,11 +1441,6 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 		JobID:    "govulncheck",
 		Reason:   "runs via `uses: golang/govulncheck-action`, an action with no run: body at all",
 	},
-	{
-		Workflow: "release-please.yml",
-		JobID:    "release-please",
-		Reason:   "every step is `uses:` (create-github-app-token, release-please-action) — no run: body at all",
-	},
 }
 
 // inScopeWorkflowFiles is the SAME set of workflow files inScopeJobs
@@ -1463,7 +1457,7 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 // shape criterion 2 already fixed one level down (job population). Every
 // file on disk must now appear in EXACTLY ONE of inScopeWorkflowFiles or
 // workflowFileExceptions, or that test fails, naming it.
-var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml", "components-drift.yml", "fragment-required.yml", "release-pr.yml", "release-tag.yml"}
+var inScopeWorkflowFiles = []string{"ci.yml", "corpora.yml", "components-drift.yml", "fragment-required.yml", "release-pr.yml", "release-tag.yml"}
 
 // workflowFileException names one workflow file, by its filename under
 // workflowsDir, that is deliberately OUT of inScopeWorkflowFiles's
