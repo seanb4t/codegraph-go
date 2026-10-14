@@ -2285,3 +2285,217 @@ OK
 ```
 
 No `p05-scratch-wt` entry remains.
+
+## 05-05 RED against the replacement (retired files deleted in a scratch worktree)
+
+Recorded before any edit of 05-05. Scratch worktree: a detached checkout of HEAD (`521a7084`) at a path
+containing `p05-scratch-wt`, created with `git worktree add -q --detach "$S" HEAD`. REL-14's end state is simulated
+with `git -C "$S" rm -q .github/workflows/release-please.yml release-please-config.json .release-please-manifest.json`.
+The main checkout is never mutated. Command, from `$S`: `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1 -v`
+(exit 1). Exactly four tests fail, each on its own assertion (a read or population error naming a deleted file):
+
+```
+=== RUN   TestReleasePleaseStaysPreMajor
+    tag_authority_test.go:93: read ../../release-please-config.json: open ../../release-please-config.json: no such file or directory
+--- FAIL: TestReleasePleaseStaysPreMajor (0.00s)
+```
+
+```
+=== RUN   TestWorkflowRunBodiesInvokeTask
+    taskfile_shape_test.go:1400: read ../../.github/workflows/release-please.yml: open ../../.github/workflows/release-please.yml: no such file or directory
+--- FAIL: TestWorkflowRunBodiesInvokeTask (0.00s)
+=== RUN   TestWorkflowFilePopulationMatchesDisk
+    taskfile_shape_test.go:1613: inScopeWorkflowFiles names "release-please.yml", which no longer exists on disk
+--- FAIL: TestWorkflowFilePopulationMatchesDisk (0.00s)
+=== RUN   TestInScopeJobsPopulationMatchesDisk
+    taskfile_shape_test.go:1669: usesOnlyJobExceptions: release-please.yml/release-please: read ../../.github/workflows/release-please.yml: open ../../.github/workflows/release-please.yml: no such file or directory
+--- FAIL: TestInScopeJobsPopulationMatchesDisk (0.00s)
+```
+
+`TestReleasePleaseStaysPreMajor` is re-pointed in this plan (Task 1). The other three are registry tests whose
+entries 05-07 removes together with the files, so the suite is never red between commits (RESEARCH Pitfall 9).
+`git worktree remove --force "$S"` and `git worktree prune` followed; `git worktree list` showed no `p05-scratch-wt`.
+
+## 05-05 Re-pointed guards pass with the retired files gone
+
+Scratch worktree: a detached checkout of HEAD (`252d4096`, the commit that re-points the guards) at a path containing `p05-scratch-wt`,
+with `git -C "$S" rm -q .github/workflows/release-please.yml release-please-config.json .release-please-manifest.json` (REL-14's end state).
+Command, from `$S`: `go test ./internal/upgrade/ -run '^(TestChangieBreakingBumpsMinorPreOne|TestGsdTagCreationIsDisabled)$' -count=1 -v`
+
+```
+=== RUN   TestGsdTagCreationIsDisabled
+--- PASS: TestGsdTagCreationIsDisabled (0.00s)
+=== RUN   TestChangieBreakingBumpsMinorPreOne
+    tag_authority_test.go:129: scanned 5 kinds; Breaking auto = minor
+--- PASS: TestChangieBreakingBumpsMinorPreOne (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.251s
+exit=0
+```
+
+Both pass: neither depends on a retired file any more. `git worktree remove --force "$S"` and `git worktree prune` followed.
+
+## Families 05-05/a-c — setup
+
+Families a and b run in one detached scratch worktree of HEAD (`252d4096`) whose path contains `p05-scratch-wt`; family c runs in its own in the next task.
+Each follows the cleanliness-gate convention at the top of this log: pre-mutation gate, applied-confirmation (numstat and `-U0` hunk),
+the guard run RED, the revert, the byte-clean proof, then the guard GREEN. A mutation that did not change the file aborts with `MUTATION DID NOT LAND`; none did.
+
+## Family 05-05/a — Breaking flipped to major
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .changie.yaml` exit 0
+
+Mutation: change the Breaking kind's `auto: minor` to `auto: major` in .changie.yaml.
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	.changie.yaml
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/.changie.yaml b/.changie.yaml
+index 99db6edf..6a695d4b 100644
+--- a/.changie.yaml
++++ b/.changie.yaml
+@@ -46 +46 @@ kinds:
+-    auto: minor        # pre-1.0: breaking bumps minor. Flip to major at 1.0.
++    auto: major        # pre-1.0: breaking bumps minor. Flip to major at 1.0.
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^(TestChangieBreakingBumpsMinorPreOne|TestChangieConfigShape)$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestChangieConfigShape
+    changie_shape_test.go:249: ../../.changie.yaml: kinds[0].auto = "major", want "minor"
+--- FAIL: TestChangieConfigShape (0.00s)
+=== RUN   TestChangieBreakingBumpsMinorPreOne
+    tag_authority_test.go:126: ../../.changie.yaml: the Breaking kind has auto: "major", want "minor". Any other value breaks D-06R ("We are not going to jump to 1.0"): major leaves the 0.x line on one breaking fragment. If the project genuinely intends to reach 1.0 now, that is a maintainer decision: record it in PROJECT.md first, then update this test deliberately rather than flipping the key alone.
+--- FAIL: TestChangieBreakingBumpsMinorPreOne (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.204s
+FAIL
+exit=1
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .changie.yaml`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `go test ./internal/upgrade/ -run '^(TestChangieBreakingBumpsMinorPreOne|TestChangieConfigShape)$' -count=1 -v` (last lines):
+
+```
+--- PASS: TestChangieConfigShape (0.00s)
+--- PASS: TestChangieBreakingBumpsMinorPreOne (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.178s
+```
+
+## Family 05-05/b — milestone tagging re-enabled
+
+Pre-mutation gate: `git -C "$S" diff --quiet -- .planning/config.json` exit 0
+
+Mutation: set `"create_tag": true` in .planning/config.json (it is `false` in HEAD).
+
+Applied-confirmation, `git -C "$S" diff --numstat`:
+
+```
+1	1	.planning/config.json
+```
+
+Hunk, `git -C "$S" diff -U0`:
+
+```
+diff --git a/.planning/config.json b/.planning/config.json
+index ad74e367..6dd754da 100644
+--- a/.planning/config.json
++++ b/.planning/config.json
+@@ -15 +15 @@
+-    "create_tag": false,
++    "create_tag": true,
+```
+
+RED guard: `go test ./internal/upgrade/ -run '^TestGsdTagCreationIsDisabled$' -count=1 -v` (from `$S`):
+
+```
+=== RUN   TestGsdTagCreationIsDisabled
+    tag_authority_test.go:71: ../../.planning/config.json: git.create_tag is true, but the changie release workflow's App-token step is the sole tag authority (D-06R). GSD must not create milestone tags: a `v*` tag fires release.yml's `push: tags: "v[0-9]*"` trigger and publishes a release nobody cut. If this is a deliberate policy reversal, change D-06R in PROJECT.md first, then this test.
+--- FAIL: TestGsdTagCreationIsDisabled (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.174s
+FAIL
+exit=1
+```
+
+Byte-clean proof: reverted with `git -C "$S" checkout -- .planning/config.json`; `git -C "$S" diff --quiet` exit 0
+
+Re-run GREEN after the revert, `go test ./internal/upgrade/ -run '^TestGsdTagCreationIsDisabled$' -count=1 -v` (last lines):
+
+```
+--- PASS: TestGsdTagCreationIsDisabled (0.00s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.166s
+```
+
+## Family 05-05/a, count edges — Breaking kind duplicated, then missing
+
+Same scratch convention. The guard counts kinds labelled Breaking and demands exactly 1, so both edges are RED on the guard's own count assertion.
+
+Pre-mutation gate exit 0 (dup)
+Mutation: relabel the Features kind as Breaking (two Breaking kinds).
+
+```
+1	1	.changie.yaml
+@@ -47 +47 @@ kinds:
+-  - label: Features
++  - label: Breaking
+```
+
+RED, `go test ./internal/upgrade/ -run '^TestChangieBreakingBumpsMinorPreOne$' -count=1 -v`:
+
+```
+=== RUN   TestChangieBreakingBumpsMinorPreOne
+    tag_authority_test.go:118: ../../.changie.yaml: found 2 kinds labelled Breaking, want exactly 1. changie derives the version from this kind, so a missing or duplicated entry leaves the pre-1.0 rule (D-06R: "We are not going to jump to 1.0") unpinned.
+--- FAIL: TestChangieBreakingBumpsMinorPreOne (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.211s
+FAIL
+exit=1
+```
+
+Byte-clean proof: `git -C "$S" diff --quiet` exit 0
+
+Pre-mutation gate exit 0 (missing)
+Mutation: relabel the Breaking kind as Breakin (no Breaking kind).
+
+```
+1	1	.changie.yaml
+@@ -45 +45 @@ kinds:
+-  - label: Breaking
++  - label: Breakin
+```
+
+RED, `go test ./internal/upgrade/ -run '^TestChangieBreakingBumpsMinorPreOne$' -count=1 -v`:
+
+```
+=== RUN   TestChangieBreakingBumpsMinorPreOne
+    tag_authority_test.go:118: ../../.changie.yaml: found 0 kinds labelled Breaking, want exactly 1. changie derives the version from this kind, so a missing or duplicated entry leaves the pre-1.0 rule (D-06R: "We are not going to jump to 1.0") unpinned.
+--- FAIL: TestChangieBreakingBumpsMinorPreOne (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.157s
+FAIL
+exit=1
+```
+
+Byte-clean proof: `git -C "$S" diff --quiet` exit 0
+
+## Teardown (05-05 families a-b)
+
+`git worktree remove --force "$S"` and `git worktree prune`, then `git worktree list`:
+
+```
+/Volumes/Code/github.com/seanb4t/codegraph-go                        252d4096 [gsd/v0.15.0-milestone]
+/Volumes/Code/herdr-worktrees/codegraph-go/worktree-brave-river-a240 2df78be0 [chore/octopusignore]
+```
+
+No `p05-scratch-wt` entry remains.
