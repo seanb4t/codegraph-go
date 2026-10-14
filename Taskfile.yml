@@ -2611,12 +2611,18 @@ tasks:
       `build --single-target` darwin invocation; this target is the first
       thing in this repo to exercise `goreleaser release` itself, the
       single-runner shape the migrated release.yml (plan 01-03) will use.
-      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      Runs the release composition in changie's documented pre-tag form,
+      with GORELEASER_CURRENT_TAG taken from `changie latest` and
+      --skip=publish,sign,validate: a PR or dispatch HEAD carries no tag and
       GoReleaser hard-fails ("git tag ... was not made against commit ...")
-      without one — the resolved version string is the only thing --snapshot
-      changes, not the property this target verifies. Uses
-      --skip=publish,sign so nothing is published to GitHub and no signing
-      key/OIDC token is needed locally.
+      without one, and GORELEASER_CURRENT_TAG stands in for it. It does not
+      use --snapshot, because --snapshot skips GoReleaser's changelog pipe and
+      would ignore --release-notes (REL-13, Pitfall 2). It passes
+      `--release-notes .changes/${TAG}.md`, prints a RELEASE-NOTES-EVIDENCE
+      line naming that file, its size and its sha256, and refuses an absent or
+      empty notes file. --skip=publish,sign means nothing is published to
+      GitHub and no signing key/OIDC token is needed locally; --skip=validate
+      lets the run proceed on a HEAD that is not the tagged commit.
 
       RELEASE CLASS, notarize reachable (plan 02-02's goreleaser-caller
       enumeration): `--skip=sign` skips the release-scoped `signs:` pipe
@@ -2676,8 +2682,24 @@ tasks:
         # entry's own goos:/goarch: list, not from the environment. A
         # leftover GOOS/GOARCH would be at best a no-op and at worst mask a
         # misconfiguration (RESEARCH.md Pattern 5 / Pitfall 2).
-        echo "==> goreleaser release --snapshot --skip=publish,sign --clean"
-        "${GORELEASER_BIN}" release --snapshot --skip=publish,sign --clean
+
+        # The notes file for the version the release would carry. An absent
+        # or empty file stops the run here, because GoReleaser alone only
+        # warns on an empty one (C6, Pitfall 2). The evidence line records
+        # which file was passed, nothing more (D-14).
+        TAG="$({{.GO_TOOL_CHANGIE}} changie latest)"
+        NOTES=".changes/${TAG}.md"
+        if [ ! -s "${NOTES}" ]; then
+          echo "::error::release:dry-run: ${NOTES} is missing or empty — GoReleaser would publish a release with an empty body (REL-13, C6)"
+          exit 1
+        fi
+        echo "RELEASE-NOTES-EVIDENCE tag=${TAG} file=${NOTES} bytes=$(wc -c < "${NOTES}" | tr -d ' ') sha256=$(shasum -a 256 "${NOTES}" | cut -d' ' -f1)"
+
+        # Not --snapshot: it skips the changelog pipe and would ignore
+        # --release-notes (Pitfall 2). GORELEASER_CURRENT_TAG stands in for
+        # the tag a pre-tag HEAD does not carry.
+        echo "==> goreleaser release --skip=publish,sign,validate --clean --release-notes ${NOTES} (GORELEASER_CURRENT_TAG=${TAG})"
+        GORELEASER_CURRENT_TAG="${TAG}" "${GORELEASER_BIN}" release --skip=publish,sign,validate --clean --release-notes "${NOTES}"
 
         # Assert via dist/artifacts.json (GoReleaser's own documented stable
         # lookup, same as check:darwin-release-build) that exactly four
@@ -2755,6 +2777,10 @@ tasks:
       variables (MACOS_SIGN_P12 and siblings, .goreleaser.yaml) and is
       stopped on this canary by `enabled:` evaluating false, not by any
       `--skip` flag.
+
+      The release this rehearses is cut by merging the release PR that
+      release-pr.yml opens; release-tag.yml then pushes the tag that starts
+      release.yml, whose step runs release:goreleaser (DOCS-14).
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
@@ -2926,6 +2952,11 @@ tasks:
       Meant to run in CI on a tag push, NOT casually from a laptop. For the
       local, non-publishing equivalent, use `task release:dry-run`.
 
+      The release notes are `.changes/${TAG}.md`, passed with
+      --release-notes (REL-12, changie's documented GoReleaser integration).
+      A tag with no such file fails here, including a hand-pushed rc tag
+      (D-06R).
+
       RELEASE CLASS, BOTH reachable (plan 02-02's goreleaser-caller
       enumeration): this is the one target where `notarize:` and the
       release-scoped `signs:` (cosign) pipe are BOTH live and BOTH expected
@@ -3036,7 +3067,19 @@ tasks:
         # entry's own goos:/goarch: list, not from the environment. A
         # carried-over GOOS/GOARCH would be at best a no-op and at worst
         # mask a misconfiguration.
-        "${GORELEASER_BIN}" release --clean
+        #
+        # The Release body is the changie version file for the tag being
+        # released (REL-12, D-08), handed to GoReleaser with --release-notes.
+        # GoReleaser only warns on an empty notes file, so an absent or empty
+        # one stops here instead (C6): publishing a Release with an empty
+        # body cannot be withdrawn, and D-12 forbids re-cutting the tag.
+        TAG="$(git describe --exact-match --tags HEAD)"
+        NOTES=".changes/${TAG}.md"
+        if [ ! -s "${NOTES}" ]; then
+          echo "::error::release:goreleaser: ${NOTES} is missing or empty — GoReleaser would publish a release with an empty body (REL-12, C6)"
+          exit 1
+        fi
+        "${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"
 
         # Emit the checksums-file hash as a $GITHUB_OUTPUT `hashes` value
         # when running under GitHub Actions (GITHUB_OUTPUT is only set
@@ -3049,7 +3092,6 @@ tasks:
         # release.yml step, so the release job's Release step keeps
         # exactly one run: body (T-01-14).
         if [ -n "${GITHUB_OUTPUT:-}" ]; then
-          TAG="$(git describe --exact-match --tags HEAD)"
           CHECKSUMS_FILE="dist/codegraph_${TAG}_checksums.txt"
           if [ ! -f "${CHECKSUMS_FILE}" ]; then
             echo "::error::${CHECKSUMS_FILE} not found — expected GoReleaser's checksum: pipe to have produced it"

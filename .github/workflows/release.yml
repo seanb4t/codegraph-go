@@ -185,7 +185,7 @@ jobs:
       # separate-job placement RESEARCH.md Open Question 2 recommended is
       # not usable here. This step therefore mints inside the release job,
       # immediately before the step that consumes it, pinned to the exact
-      # same Action + SHA release-please.yml already carries. This places
+      # same Action + SHA release-pr.yml and release-tag.yml carry. This places
       # one more Action inside the OIDC boundary (T-01-29's accepted
       # surface, now widened by one step) — chosen because the alternative
       # was measured not to work, not because it was preferred. Compensating
