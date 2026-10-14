@@ -1697,3 +1697,59 @@ ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.165s
 ```
 
 No `p05-scratch-wt` entry remains.
+
+## 05-03 REL-13 rehearsal
+
+Evidence, not a committed test (rule eyva2svrcz). Host: darwin (`go env GOHOSTOS`), with zig, syft, cosign, jq and shasum on PATH. `gh api repos/seanb4t/codegraph-go/git/matching-refs/tags/v0.15 --jq length` (read-only) returned 0 before both runs, so no real v0.15 tag existed. The five `MACOS_*` variables are defined in this host's environment, which would turn notarization on locally (Pitfall 8), so each run is under `env -u` for the five names in .goreleaser.yaml's notarize block; no precondition was added (D-01). Each run's output went to a scratch file; below are the command line and the captured lines only. GoReleaser's own log text is not asserted by anything in this phase (D-14).
+
+Scope (D-14): this rehearsal proves the notes path passed for the tag, the repository's own non-empty guard and a zero exit before any real tag exists; how GoReleaser renders the Release body is GoReleaser's behavior and is not tested in this phase. The sha256 in each evidence line records which file was passed, nothing more.
+
+### Run A, on HEAD (the newest seed)
+
+Command: `env -u MACOS_SIGN_P12 -u MACOS_SIGN_PASSWORD -u MACOS_NOTARY_KEY -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_ISSUER_ID GOTOOLCHAIN=go1.26.9 task release:dry-run > "$T" 2>&1; echo "release:dry-run exit=$?" >> "$T"` from the main checkout at `c4adcfd5` (`changie latest` = v0.14.1).
+
+```
+RELEASE-NOTES-EVIDENCE tag=v0.14.1 file=.changes/v0.14.1.md bytes=353 sha256=c7703c6606ccff8991260605d9a5ab9a3fc0f9114109baaa300ea5d9f8c5479d
+==> goreleaser release --skip=publish,sign,validate --clean --release-notes .changes/v0.14.1.md (GORELEASER_CURRENT_TAG=v0.14.1)
+  • release succeeded after 16s
+    linux/amd64: dist/codegraph-linux-amd64_linux_amd64_v1/codegraph: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.0.0, with debug_info, not stripped
+    linux/arm64: dist/codegraph-linux-arm64_linux_arm64_v8.0/codegraph: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, for GNU/Linux 2.0.0, with debug_info, not stripped
+    darwin/amd64: dist/codegraph-darwin-amd64_darwin_amd64_v1/codegraph: Mach-O 64-bit executable x86_64
+    darwin/arm64: dist/codegraph-darwin-arm64_darwin_arm64_v8.0/codegraph: Mach-O 64-bit executable arm64
+release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation.
+release:dry-run exit=0
+```
+
+`shasum -a 256 .changes/v0.14.1.md` (the file passed):
+
+```
+c7703c6606ccff8991260605d9a5ab9a3fc0f9114109baaa300ea5d9f8c5479d  .changes/v0.14.1.md
+```
+
+`git status --porcelain --untracked-files=no` of the main checkout after the run: empty. dist/ is gitignored (`.gitignore:5:/dist/`).
+
+### Run B, after `task release:batch` (the version the first real release PR will carry)
+
+Commands, in a detached scratch worktree whose path contains `p05-scratch-wt`: `(cd "$S" && task release:batch)`, which printed `release:batch: rendered v0.15.0 from 1 fragment(s)` and exited 0, then `(cd "$S" && env -u MACOS_SIGN_P12 -u MACOS_SIGN_PASSWORD -u MACOS_NOTARY_KEY -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_ISSUER_ID GOTOOLCHAIN=go1.26.9 task release:dry-run > "$T" 2>&1; echo "release:dry-run exit=$?" >> "$T")`. `changie latest` = v0.15.0.
+
+```
+RELEASE-NOTES-EVIDENCE tag=v0.15.0 file=.changes/v0.15.0.md bytes=328 sha256=3dca5a9b89b3aebf73790697c91d4312c347c979bef9072a8c0a763ec7f67456
+==> goreleaser release --skip=publish,sign,validate --clean --release-notes .changes/v0.15.0.md (GORELEASER_CURRENT_TAG=v0.15.0)
+  • release succeeded after 15s
+    linux/amd64: dist/codegraph-linux-amd64_linux_amd64_v1/codegraph: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.0.0, with debug_info, not stripped
+    linux/arm64: dist/codegraph-linux-arm64_linux_arm64_v8.0/codegraph: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, for GNU/Linux 2.0.0, with debug_info, not stripped
+    darwin/amd64: dist/codegraph-darwin-amd64_darwin_amd64_v1/codegraph: Mach-O 64-bit executable x86_64
+    darwin/arm64: dist/codegraph-darwin-arm64_darwin_arm64_v8.0/codegraph: Mach-O 64-bit executable arm64
+release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation.
+release:dry-run exit=0
+```
+
+`shasum -a 256 "$S/.changes/v0.15.0.md"` (the file passed):
+
+```
+3dca5a9b89b3aebf73790697c91d4312c347c979bef9072a8c0a763ec7f67456  $S/.changes/v0.15.0.md
+```
+
+The worktree's `git status --short` was the same before and after the dry run: the three lines `release:batch` writes (` D .changes/unreleased/Breaking-20260926-165849.599611000.yaml`, ` M CHANGELOG.md`, `?? .changes/v0.15.0.md`), nothing else outside the gitignored dist/. The worktree was then removed with `git worktree remove --force "$S"` and `git worktree prune`.
+
+Deferred CI check (open): linux-cross-canary.yml on pull_request (paths filter includes Taskfile.yml), PR #88, first push after ci(05-03) b390a9d2bda1b7d96aabb7607fc3367974daf11f (comment-only follow-up c4adcfd5ffb43bf13feee5a287cce86bf0bb5d5a); phase verification confirms the run is green before the phase closes. This host's two runs do not cover the CI consumer of release:dry-run; that run does, and this plan does not push to start it.
