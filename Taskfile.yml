@@ -3071,8 +3071,8 @@ tasks:
         # The Release body is the changie version file for the tag being
         # released (REL-12, D-08), handed to GoReleaser with --release-notes.
         # GoReleaser only warns on an empty notes file, so an absent or empty
-        # one stops here instead (C6): publishing a Release with an empty
-        # body cannot be withdrawn, and D-12 forbids re-cutting the tag.
+        # one stops here instead (C6): a Release published with an empty
+        # body cannot be repaired by re-cutting the tag (Phase 1 D-12).
         TAG="$(git describe --exact-match --tags HEAD)"
         NOTES=".changes/${TAG}.md"
         if [ ! -s "${NOTES}" ]; then
