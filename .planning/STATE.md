@@ -22,10 +22,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-13 after Phase 4)
+See: .planning/PROJECT.md (updated 2026-10-16 after Phase 5)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 05 — Release Chain & release-please Retirement
+**Current focus:** Phase 6 — First Release Through the Chain
 
 ## Current Position
 
@@ -501,6 +501,8 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: 05-06: rc escape hatch removed from the runbook (D-15); section 7 delete-and-retry now governs a disposable cut; stale no-rulesets note replaced with protect-main description
 - [Phase 05]: 05-05: TestChangieBreakingBumpsMinorPreOne pins exactly one Breaking kind with auto: minor in .changie.yaml; SAN negative fixtures name release-tag.yml; cosignIdentitySANCorpus accept verdicts now asserted against the compiled pattern
 - [Phase 05]: 05-07: census recorded as an instrument in 05-CENSUS.md, exclusions exactly REL-14's three clauses (.changes/unreleased/ per D-11), header.tpl.md stays in scope
+- [Phase 5]: Gap plan 05-08 (G-05-1) completed D-15 in the runbook: §2 lists only the Stable and Internal milestone marker tag shapes and points to §4's D-15 paragraph; §1's prerelease parenthetical and §7's prerelease-retag sentence are gone (5653cbf9). Verifier re-run 2026-10-16: passed 5/5.
+- [Phase 5]: Close: the changie-fragments capability skipped with no-user-visible-change (CI, release tooling, tests and contributor docs only); validate-phase 18/18 green, secure-phase 30/30 closed (threats_open 0).
 
 ### Pending Todos
 
@@ -553,8 +555,10 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
 - [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
 - gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
-- [Phase 4] WR-01 (04-REVIEW.md, open): CHANGELOG_EXEMPT_MARKER backtracks cubically, so a crafted PR body can hang the gate; the same pattern is in scripts/pr_template_policy.py. Fix both together alongside Phase 5 GRD-15, which already edits pr_template_policy.py, and relax or update the marker-mirror test. WR-02/WR-03 (untested fail-closed and escape branches) and IN-01…06 are also open (04-REVIEW-DISPOSITION.md).
-- [Phase 4] Resolved 2026-10-13: PR #99 (ci(release): setup-zig use-cache: false, quick 261013-h27) merged to main as 7b12cb92, and quick 261013-l08 merged main back into the milestone (merge commit a3075957). release.yml and release_workflow_shape_test.go now match main byte for byte, so Phase 5's REL-12 check (release.yml differs from main by exactly one change) measures against current main.
+- [Phase 4] WR-02/WR-03 (untested fail-closed and escape branches) and IN-01…06 are still open (04-REVIEW-DISPOSITION.md). WR-01 (cubic backtracking in the exemption markers, here and in scripts/pr_template_policy.py) was fixed in Phase 5 plan 05-04 together with GRD-15: both markers are linear, test_exempt_markers_are_linear_on_adversarial_bodies passes, check:fragment-policy 46/46.
+- [Phase 5] Before Phase 6's live proof, decide review WR-02 (05-REVIEW.md, aa6af711): with the prerelease tag shape gone (D-15, gap plan 05-08), every cut is a stable vX.Y.Z, so docs/RELEASE-PROCEDURES.md §9's live-proof teardown (delete release + tag, revert, re-cut) collides with §7's "never reuse a stable tag name". The verifier judged it an advisory doc follow-up, not a DOCS-13 gap.
+- [Phase 5] The incremental re-review of 2026-10-16 reused finding IDs, so 05-REVIEW-DISPOSITION.md (b3739379) silently replaced seven still-open 2026-10-14 findings; only IN-05 survived (flagged). They now live only in `git show f05db688:.planning/phases/05-release-chain-release-please-retirement/05-REVIEW.md`. The ones that matter for Phase 6: WR-01 release-pr.yml leaves a stale open release PR when the fragment count drops to zero; WR-02 the path-based hygiene exemption fails open on PRs with more than 100 files; WR-03 pr_template_policy.emit writes the attacker-controlled exemption reason to stderr unescaped. Re-triage them; the ID reuse is an upstream gsd-core gap (incremental review should not restart numbering).
+- [Phase 5] internal/daemon TestConvergenceTwoSessions (WINDOWS #37) failed the post-merge gate under `go test -p 1 -count=1 ./...` (130.23 s, soak_test.go:238) with a docs-only diff, and passed isolated in 5.4 s; -p 1 alone is not a reliable full-suite gate. The regression gate used the Taskfile split (every package except internal/daemon with -p 1, then internal/daemon isolated): 54/54 ok.
 
 ### Quick Tasks Completed
 
@@ -667,17 +671,17 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-16T20:18:13.056Z
+Last session: 2026-10-16T20:45:24.000Z
 Stopped at: Phase 05 complete, ready to plan Phase 6
   CARRY-OVER (v0.14.0):
 
-    - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.14.0-milestone`; init computes `gsd/v0.14.0-polish-agent-reach` but the phase-1 work is on the former, so stay on it.
+    - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.15.0-milestone` (draft PR #88); init computes `gsd/v0.15.0-changie-release-management`, which does not exist — skip execute-phase's handle_branching and stay on the milestone branch.
     - **Go toolchain:** ambient Homebrew `go` is 1.27.1; `go.mod` pins 1.26.9 (PR #96) and `cockroachdb/swiss` is `!go1.27` — every local `go build`/`go test` gate needs `GOTOOLCHAIN=go1.26.9` (CI is unaffected: `go-version-file: go.mod`).
     - **Web gates:** `pnpm vitest run` must assert exit 0 AND zero "unhandled errors" lines; a pass count alone is negative-only. Piped `svelte-check` is MACHINE format (uppercase ERRORS).
     - **WINDOWS.md** is tool-owned — close rows with `gsd-tools windows fixed <id>`, never by hand; the phase-1 rows (#12/#26/#28/#30/#36) were closed at 900d64cc and the verifier treats "in the ledger" as part of the phase goal.
-    - **No `v0.14.0` git tag** — release-please owns tagging (D-06R).
+    - **No human `git tag`** — since Phase 5, `release-tag.yml` (`task release:tag`, App token) pushes every `v*` tag after a release-PR merge; release-please is deleted (D-06R as amended).
     - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings; only the single active-milestone heading under `## Phases`.
 
 ## Operator Next Steps
 
-- Discuss Phase 1 with /gsd-discuss-phase 1
+- Reconcile Phase 05's UAT with /gsd-verify-work 05 (G-05-1 is fixed by 05-08; the UAT file still reads diagnosed), then discuss Phase 6 with /gsd-discuss-phase 6
