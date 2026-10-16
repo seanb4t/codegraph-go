@@ -10,8 +10,8 @@ how the release gets cut in the first place.
 
 ## 1. Pre-tag gate (mandatory — D-09)
 
-Before tagging **anything** (rc or stable), run the following for **all 4**
-release targets. This is the exact check that would have caught the v0.1
+Before tagging **anything**, run the following for **all 4** release
+targets. This is the exact check that would have caught the v0.1
 `rc.1` failure: a **linux-only** `go.sum` hash (`prometheus/procfs`) that
 was invisible on a darwin-only dev machine and to green local CI.
 
@@ -41,13 +41,17 @@ target is green.
 
 ## 2. Tag conventions
 
-`release.yml` triggers on pushes matching `v[0-9]*`. Three distinct shapes:
+`release.yml` triggers on pushes matching `v[0-9]*`. Two distinct shapes:
 
 | Tag shape | Example | Meaning | Triggers `release.yml`? |
 |---|---|---|---|
-| Release candidate | `v0.0.0-rc.3` | Prerelease — the `-` suffix makes GoReleaser/GitHub mark it a prerelease | Yes |
 | Stable | `v1.0.0` | Full release, no `-` suffix — becomes `codegraph upgrade`'s resolved "latest" | Yes |
 | Internal milestone marker | `milestone-v1.0` | Documentation/planning marker only | **No** — deliberately does not match `v[0-9]*` |
+
+There is no hand-pushed prerelease tag shape (D-15). Every `v[0-9]*` tag
+is pushed by `release-tag.yml` when a release PR merges, and
+`release:goreleaser` refuses any tag that has no `.changes/<tag>.md`. See
+§4, "No hand-pushed prerelease tag (D-15)".
 
 Never use a `milestone-v*`-style name for anything you actually want
 `release.yml` to build and sign — it is intentionally shaped to never fire.
@@ -336,8 +340,7 @@ fragments. Never re-tag by hand.
 Never reuse a tag name after deleting it for a **stable** (`vX.Y.Z`) release
 — once `codegraph upgrade` has resolved a version as "latest," retagging
 the same name risks a confusing mismatch between what a user already
-verified and what the tag now points to. Prereleases (`-rc.N`) are safer to
-delete/retag since they are explicitly transient by convention.
+verified and what the tag now points to.
 
 This same two-step procedure (delete release+tag, revert the release
 commit) is what tears down the disposable live-proof release described in
