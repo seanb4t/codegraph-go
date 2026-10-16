@@ -67,6 +67,7 @@ created: "2026-10-14"
 | T-05-26 | Repudiation | a red suite or an unguarded window between deletion and re-pointing | medium | mitigate | deletion commit ffd84c4a touches exactly four paths (three files plus their registry entries); package green at that commit; RED against the replacement recorded first | closed |
 | T-05-27 | Repudiation | a vacuous census (blind instrument or over-broad exclusion) | medium | mitigate | recorded instrument in 05-CENSUS.md with exactly REL-14's three exclusion clauses; positive control found the `.changes/header.tpl.md` plant and not the excluded plants; real census empty | closed |
 | T-05-28 | Tampering | an outward-facing action during the phase (tag, push, PR) | high | mitigate | local tag list, remote tag refs, origin/main and the PR #88 head ref fingerprinted before and after the tag-touching plans: unchanged; remote v0.15 tag-ref count 0 | closed |
+| T-05-29 | Elevation of Privilege | runbook section 2's table and section 7's sentence presenting a hand-pushed prerelease tag as normal | low | mitigate | 5653cbf9 (05-08, G-05-1): section 2 lists only the Stable and Internal milestone marker shapes and points to section 4's D-15 paragraph; section 7's prerelease-retag sentence and section 1's prerelease parenthetical are removed; 05-08 automated verify exits 0; downstream `release:goreleaser` refuses a tag with no `.changes/<tag>.md` (T-05-13) | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -103,4 +104,12 @@ created: "2026-10-14"
 - [x] `threats_open: 0` confirmed
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-10-14
+**Approval:** verified 2026-10-16 (re-audit after gap closure 05-08)
+
+## Security Audit 2026-10-16
+
+| Metric | Count |
+|---|---|
+| Threats found | 30 |
+| Closed | 30 |
+| Open | 0 |
