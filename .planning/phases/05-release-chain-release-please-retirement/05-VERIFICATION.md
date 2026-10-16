@@ -1,31 +1,40 @@
 ---
 phase: 05-release-chain-release-please-retirement
-verified: 2026-10-14T23:30:00Z
-status: human_needed
+verified: 2026-10-16T21:10:00Z
+status: passed
 score: 5/5 must-haves verified
-covered_files: [".changie.yaml", ".github/workflows/ci.yml", ".github/workflows/post-release-verify.yml", ".github/workflows/pr-title.yml", ".github/workflows/release-pr.yml", ".github/workflows/release-tag.yml", ".github/workflows/release.yml", ".github/workflows/require-issue-link.yml", ".goreleaser.yaml", ".planning/phases/05-release-chain-release-please-retirement/05-01-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-01-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-02-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-02-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-03-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-03-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-04-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-04-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-05-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-05-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-06-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-06-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-07-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-07-SUMMARY.md", "CONTRIBUTING.md", "Taskfile.yml", "docs/RELEASE-PROCEDURES.md", "docs/RELEASE.md", "internal/upgrade/changie_release_shape_test.go", "internal/upgrade/changie_shape_test.go", "internal/upgrade/goreleaser_shape_test.go", "internal/upgrade/release_workflow_shape_test.go", "internal/upgrade/tag_authority_test.go", "internal/upgrade/taskfile_shape_test.go", "scripts/fragment_policy.py", "scripts/pr_template_policy.py", "scripts/test_fragment_policy.py"]
-covered_digest: "v3:sha256:c3f90bf9eb5b4bd4b1826be9f1dfb5baa877b691e050652357189c5e1d0543e5"
+covered_files: [".changie.yaml", ".github/workflows/ci.yml", ".github/workflows/post-release-verify.yml", ".github/workflows/pr-title.yml", ".github/workflows/release-pr.yml", ".github/workflows/release-tag.yml", ".github/workflows/release.yml", ".github/workflows/require-issue-link.yml", ".goreleaser.yaml", ".planning/phases/05-release-chain-release-please-retirement/05-01-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-01-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-02-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-02-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-03-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-03-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-04-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-04-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-05-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-05-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-06-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-06-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-07-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-07-SUMMARY.md", ".planning/phases/05-release-chain-release-please-retirement/05-08-PLAN.md", ".planning/phases/05-release-chain-release-please-retirement/05-08-SUMMARY.md", "CONTRIBUTING.md", "Taskfile.yml", "docs/RELEASE-PROCEDURES.md", "docs/RELEASE.md", "internal/upgrade/changie_release_shape_test.go", "internal/upgrade/changie_shape_test.go", "internal/upgrade/goreleaser_shape_test.go", "internal/upgrade/release_workflow_shape_test.go", "internal/upgrade/tag_authority_test.go", "internal/upgrade/taskfile_shape_test.go", "scripts/fragment_policy.py", "scripts/pr_template_policy.py", "scripts/test_fragment_policy.py"]
+covered_digest: "v3:sha256:2561fe1941c3bf849093108910cc75c524416edf5cb38cb147227043cd250b54"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Decide the fate of the stale release-candidate row in docs/RELEASE-PROCEDURES.md section 2 (IN-03): fix it now (one table row, plus the two rc mentions at lines 13 and 339) or accept it as a known residue"
-    expected: "Section 2 no longer presents a hand-pushed `v0.0.0-rc.N` tag as a normal, working tag shape, consistent with D-15 and with section 4's 'No hand-pushed prerelease tag' paragraph"
-    why_human: "D-15 is a maintainer decision and the residue is a judgment call on scope (fix inside Phase 5 versus defer); a doc row cannot be proven wrong by a test"
-  - test: "After the maintainer's next push to PR #88, read the linux-cross-canary run (its cross-build job runs `task release:dry-run` on the macOS runner class) using the read-only commands recorded in 05-03-SUMMARY.md"
-    expected: "The cross-build job exits 0 with the RELEASE-NOTES-EVIDENCE line for the newest .changes/v*.md and the four-binary success line, and the linux binaries run on linux/amd64 and linux/arm64"
-    why_human: "Needs a push this verification may not make; it is external CI on a runner class that is not available locally. The same target was re-run locally here and exited 0, so this confirms the CI runner class only"
+re_verification:
+  previous_status: human_needed
+  previous_score: 5/5
+  gaps_closed:
+    - "G-05-1 / prior human item 1 (IN-03, D-15 rc residue in docs/RELEASE-PROCEDURES.md sections 1, 2, 7) closed by 05-08, commit 5653cbf9"
+  gaps_remaining: []
+  regressions: []
+deferred:
+  - truth: "The live release PR is opened by the App on main and its required checks report; a release-PR merge fires the CHANGELOG.md path filter and the App-token tag push starts release.yml; the milestone merge is a no-op"
+    addressed_in: "Phase 6"
+    evidence: "Phase 6 success criteria 1 and 2 (SHIP-01, SHIP-02): after the milestone PR merges the workflow opens the release PR, the maintainer merges it, and the resulting tag is authored by the GitHub App with release.yml run on it. ROADMAP Phase 5 notes: 'the live proof is Phase 6'."
+  - truth: "PR #88 linux-cross-canary run exercises task release:dry-run on the macOS runner class"
+    addressed_in: "next push to PR #88 (CI observation, not a human check)"
+    evidence: "05-UAT.md Deferred Follow-Ups, test 2. The maintainer ruled this a CI observation that runs on its own and shows red on the PR; release:dry-run exited 0 locally here and in the prior verification."
 ---
 
 # Phase 5: Release Chain & release-please Retirement Verification Report
 
 **Phase Goal:** release-please is replaced end to end: a changie release workflow batches fragments into a reviewable release PR and, on its merge, pushes the tag with the GitHub App token into the unchanged `release.yml`; every guard that pinned release-please now pins the changie chain; the contributor and release docs describe the new chain; and release-please's files are gone.
-**Verified:** 2026-10-14T23:30:00Z
-**Status:** human_needed
-**Re-verification:** No, initial verification
+**Verified:** 2026-10-16T21:10:00Z
+**Status:** passed
+**Re-verification:** Yes. After gap-closure plan 05-08 (G-05-1). The prior report had no `gaps:` block (status `human_needed`), so every roadmap success criterion was re-checked against the tree at HEAD `b3739379`, not only the changed file.
 
-All five roadmap success criteria hold in the codebase. Two items need a human: one documentation residue that contradicts decision D-15, and one CI run that needs a push. Neither falsifies a success criterion. Live behavior of the chain (the merge push firing the `CHANGELOG.md` path filter, the App-token tag starting `release.yml`) is Phase 6 by design and is not counted as a gap here.
+## Re-verification focus
 
-SUMMARY.md claims were not used as evidence. Every row below was checked against the tree at HEAD `c3ea98af`, and the load-bearing guards were re-mutated on scratch copies (the real tree was never written, pushed or tagged).
+Between the prior verified commit (`c3ea98af`) and HEAD the only change outside `.planning/` is `docs/RELEASE-PROCEDURES.md` (`git diff --stat`: 1 file, 9 insertions, 6 deletions, commit `5653cbf9`). No Go, workflow, Taskfile, script or config file moved, so the earlier executed rehearsals (batch, tag, dry-run, six re-mutations) still describe the same code. I re-ran the guard suites and the census rather than carrying those results forward, and I read the changed file rather than the SUMMARY.
+
+SUMMARY.md claims were not used as evidence.
 
 ## Goal Achievement
 
@@ -33,78 +42,89 @@ SUMMARY.md claims were not used as evidence. Every row below was checked against
 
 | #  | Truth (roadmap contract) | Status | Evidence |
 |----|--------------------------|--------|----------|
-| SC1 | Release workflow is actionlint-clean, SHA-pinned, job bodies in `Taskfile.yml`. On push to `main` with fragments it runs `pretag-gate` then batch+merge and opens or updates one `chore(main): release vX.Y.Z` PR; with none it does nothing. On a push that changes `CHANGELOG.md` it mints an App token and pushes `vX.Y.Z`, skipping with success if the tag exists, never with `GITHUB_TOKEN` (REL-10, REL-11) | VERIFIED | `.github/workflows/release-pr.yml` and `release-tag.yml` read in full: both `pretag-gate` -> job via `needs:`, `pretag-gate` runs `task check:cross`; `release-pr` uses `peter-evans/create-pull-request@5f6978fa… # v8.1.1` with `token: steps.app-token.outputs.token`, branch `changie/release`, title `chore(main): release <version>`, `body-path: .changes/<version>.md`, `draft: false`; `release-tag.yml` triggers on `push: branches:[main] paths:[CHANGELOG.md]`, checkout `token` is the App-token output, tag step is `task release:tag`. `actionlint` exit 0 over all workflows. I ran `task release:batch` on a scratch copy of HEAD: prints `rendered v0.15.0 from 1 fragment(s)`, writes `version=v0.15.0` to `GITHUB_OUTPUT`, renders `.changes/v0.15.0.md`, merges `CHANGELOG.md` with the next `## [` heading at line start, and `go test ./internal/upgrade/` is green on that post-batch tree (the Pitfall 1 trap). With zero fragments it printed the no-op line, exit 0, empty `GITHUB_OUTPUT`. I ran `task release:tag` against a scratch bare origin: run 1 pushed `v0.15.0` (`[new tag]`), run 2 printed "already exists on origin — nothing to do" exit 0, run 3 without `GITHUB_ACTIONS=true` was refused by the precondition. Shape tests `TestReleasePRWorkflowShape`, `TestReleaseBatchTargetShape`, `TestReleaseTagWorkflowShape`, `TestReleaseTagTargetShape` pass. Re-mutated: tag-job checkout switched to `github.token` -> `TestReleaseTagWorkflowShape` and `TestTagCreationHasSingleAppTokenSite` FAIL; `paths: [CHANGELOG.md]` deleted -> `TestReleaseTagWorkflowShape` FAILS. |
-| SC2 | `release.yml` differs from `main` by one comment hunk only; `release:goreleaser` receives `--release-notes .changes/${TAG}.md`; shape test asserts `changelog.disable: true` absent; `release:dry-run` passes the same flag for the tag being released; both refuse a missing or empty notes file; a `task release:dry-run` run exits 0 before any real tag exists (REL-12, REL-13, amended by D-12 and D-14) | VERIFIED | `git diff 7b12cb92 HEAD -- .github/workflows/release.yml` is exactly one hunk of comment lines near line 188 (names `release-pr.yml and release-tag.yml`); trigger and steps untouched. `Taskfile.yml` `release:goreleaser` derives `TAG` from `git describe --exact-match --tags HEAD`, `NOTES=".changes/${TAG}.md"`, `[ ! -s "${NOTES}" ]` -> `::error::` exit 1, then `release --clean --release-notes "${NOTES}"`. `release:dry-run` derives `TAG` from `changie latest`, same refusal, prints `RELEASE-NOTES-EVIDENCE`, runs `GORELEASER_CURRENT_TAG=… release --skip=publish,sign,validate --clean --release-notes`, no `--snapshot`. I ran `task release:dry-run` on a scratch copy of the post-batch tree on this darwin host (zig, syft, cosign present): exit 0 in 28 s, `RELEASE-NOTES-EVIDENCE tag=v0.15.0 file=.changes/v0.15.0.md bytes=328 sha256=3dca5a9b…`, four correctly typed binaries, `rc=0`. Re-mutated: `--release-notes` dropped from `release:goreleaser` -> `TestReleaseGoreleaserPassesReleaseNotes` FAILS; `changelog: {disable: true}` appended to `.goreleaser.yaml` -> `TestGoreleaserChangelogNotDisabled` FAILS. No body-equality relation is asserted anywhere (D-14 honored). |
-| SC3 | Every test that pinned release-please went RED against the replacement and was re-pointed: pre-major guard reads `.changie.yaml`; Taskfile job registry names the new `pretag-gate`; forbidden-`release:`-keys rationale restated; `pr_template_policy.py` swaps exemptions for the release PR's own; `TestGsdTagCreationIsDisabled` passes unchanged; a new assertion that the App-token step is the only tag site goes RED against a planted second tag push (GRD-15, GRD-16) | VERIFIED | `TestChangieBreakingBumpsMinorPreOne` (renamed from the release-please name) reads `.changie.yaml`; re-mutated Breaking `auto: minor` -> `major` -> `TestChangieConfigShape` and `TestChangieBreakingBumpsMinorPreOne` FAIL. `taskfile_shape_test.go:153-156` registers `release-pr.yml` and `release-tag.yml` `pretag-gate`, `inScopeWorkflowFiles` lists both. `goreleaser_shape_test.go` `TestReleaseBlockDoesNotRewriteReleaseBody` restated for `.changes/${TAG}.md`. `pr_template_policy.py` `EXEMPT_PREFIXES` has `.changes/`, `require-issue-link.yml` has the mirrored `.changes/*)` arm, and `test_hygiene_allowlists_mirror_require_issue_link` holds the pair; `CHANGELOG.md` stays in the exact set, the release-please filenames are gone. `TestGsdTagCreationIsDisabled` passes; its code tokens are unchanged, only prose reworded under D-09. GRD-16: `TestTagCreationHasSingleAppTokenSite` passes (17 workflow files of 17 on disk, 84 run bodies, 72 Taskfile targets, 2 tag-creating lines in 1 unit, `release:tag` invoked from `release-tag.yml/tag/Tag the release`). I planted `run: git push origin --tags` in a scratch `ci.yml`: the test FAILED naming `workflow:ci.yml/test/Build`, and passed again after reverting. `TestTagCreationScanFlagsPlantedSites` also passes. No guard is red: `go test ./internal/upgrade/` ok, `task check:fragment-policy` ran 46 of 46 (floor 46), `task check:changie` 14 of 14. |
-| SC4 | `CONTRIBUTING.md` teaches fragment-per-change, never hand-write `.changes/v*.md`, how to exempt, how the version is derived; `docs/RELEASE-PROCEDURES.md` describes fragment -> release PR -> merge -> App-token tag -> locked `release.yml`, places `pretag-gate` in the new workflows, states a release is cut by merging the release PR, with 45 release-please references resolved under a recorded verdict; `pr-title.yml` header is hygiene only; `release:dry-run-signed` comment and `docs/RELEASE.md` pipeline paragraph name the changie workflow (DOCS-12, DOCS-13, DOCS-14) | VERIFIED (one residue, see Warnings) | `CONTRIBUTING.md` Pull requests section (lines 133-196) covers all four points, including the `<!-- changelog-exempt: <reason> -->` marker and "Never hand-write or edit `.changes/v*.md`". `docs/RELEASE-PROCEDURES.md` section 4 line 79 "A release is cut by merging the release PR" and the chain line; section 1 note names `pretag-gate` in both workflows. `05-CENSUS.md` holds 45 verdict rows R01-R45, each `rewritten`, `removed` or `reworded-history`, each with a resolution; the doc itself has zero release-please text (census empty). `pr-title.yml` lines 1-6 say "Hygiene only … carries no versioning weight". `Taskfile.yml` `release:dry-run-signed` desc names `release-pr.yml`, `release-tag.yml`, `release.yml`. `docs/RELEASE.md` lines 88-91 name the changie release workflow. |
-| SC5 | As the phase's last change, `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted, `changie latest` is the version source of truth, and a positive-controlled census reports zero references outside the three exclusions (REL-14) | VERIFIED | All three files absent (`ls` fails on each); commit `ffd84c4a` deletes them and follows all docs commits. `task changie -- latest` = `v0.14.1`. I re-ran the census on a fresh `git archive HEAD` copy: base prints nothing. Positive control in that copy: a planted line in `.changes/header.tpl.md` and a file named `release_please.txt` were both found (content half and filename half); a planted line in `.changes/unreleased/` was correctly not found. Boundary shown in both directions (D-11). The only remaining mentions are `CHANGELOG.md` (2) and `.changes/v0.2.0.md` (2), the excluded history. |
+| SC1 | Release workflow is actionlint-clean, SHA-pinned, job bodies in `Taskfile.yml`. Push to `main` with fragments runs `pretag-gate`, then batch+merge, and opens or updates one `chore(main): release vX.Y.Z` PR; with none it does nothing. A push to `main` that changes `CHANGELOG.md` mints an App token and pushes `vX.Y.Z`, skipping with success if the tag exists, never with `GITHUB_TOKEN` (REL-10, REL-11) | VERIFIED | `.github/workflows/release-pr.yml` and `release-tag.yml` exist; `task lint:actions` (actionlint) exits clean. `TestReleasePRWorkflowShape`, `TestReleaseBatchTargetShape`, `TestReleaseTagWorkflowShape`, `TestReleaseTagTargetShape` all `--- PASS` in this run. `go test -count=1 ./internal/upgrade/` ok. `task check:changie` 14 of 14 passed, including leg 14 (batch auto then merge renders v0.15.0 with every heading at line start, history byte-identical). The earlier scratch rehearsals of `release:batch` (v0.15.0 rendered, empty-set no-op) and `release:tag` (push, skip-if-exists, refuse outside Actions) apply unchanged since no code moved. |
+| SC2 | `release.yml` differs from `main` by one comment hunk only; `release:goreleaser` receives `--release-notes .changes/${TAG}.md`; shape test asserts `changelog.disable: true` absent; `release:dry-run` passes the same flag; both refuse a missing or empty notes file; `task release:dry-run` exits 0 before any real tag exists (REL-12, REL-13, amended by D-12 and D-14) | VERIFIED | `git diff 7b12cb92 HEAD -- .github/workflows/release.yml` has exactly 1 hunk (`rg -c '^@@'` = 1). `TestReleaseGoreleaserPassesReleaseNotes` and `TestGoreleaserChangelogNotDisabled` `--- PASS`. Dry-run exit 0 with the evidence line was observed in the prior verification on a scratch tree; `Taskfile.yml` is unchanged since, so the result stands. No body-equality relation asserted (D-14). |
+| SC3 | Every test that pinned release-please went RED against the replacement and was re-pointed: pre-major guard reads `.changie.yaml`; job registry names the new `pretag-gate`; forbidden-`release:`-keys rationale restated; `pr_template_policy.py` swaps exemptions for the release PR's own; `TestGsdTagCreationIsDisabled` passes unchanged; a new single-App-token-tag-site assertion goes RED against a planted second tag push; no guard left red (GRD-15, GRD-16) | VERIFIED | `TestChangieBreakingBumpsMinorPreOne`, `TestGsdTagCreationIsDisabled`, `TestTagCreationHasSingleAppTokenSite` `--- PASS` here. `task check:fragment-policy` ran 46 of 46 (floor 46). `05-MUTATION-LOG.md` holds the RED transcripts; the planted `git push origin --tags` RED was reproduced in the prior verification and the guard code is unchanged. Full `./internal/upgrade/` package green, so no guard is red. |
+| SC4 | `CONTRIBUTING.md` teaches fragment-per-change, never hand-write `.changes/v*.md`, how to exempt, how the version is derived; `docs/RELEASE-PROCEDURES.md` describes fragment, release PR, merge, App-token tag, locked `release.yml`, places `pretag-gate` in the new workflows, states a release is cut by merging the release PR, 45 release-please references resolved under a recorded verdict; `pr-title.yml` header is hygiene only; `release:dry-run-signed` comment and `docs/RELEASE.md` paragraph name the changie workflow (DOCS-12, DOCS-13, DOCS-14) | VERIFIED | Read in this run: runbook section 1 note names `pretag-gate` in both `release-pr.yml` and `release-tag.yml`; section 4 holds "A release is cut by merging the release PR" and the chain. `05-CENSUS.md` holds the 45 verdict rows. The doc has zero release-please text (census below). **The prior D-15 residue is closed in the file** (see "G-05-1 closure check"). The `CONTRIBUTING.md`, `pr-title.yml`, `Taskfile.yml` and `docs/RELEASE.md` content is unchanged since the prior verification; `TestContributingReferencesRealTaskTargets` is inside the passing package. |
+| SC5 | As the phase's last change, `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted, `changie latest` is the version source of truth, and a positive-controlled census reports zero references outside the three exclusions (REL-14) | VERIFIED (see ordering note) | All three paths absent (`ls` errors on each). Commit `ffd84c4a` deletes exactly those three files plus the `taskfile_shape_test.go` registry entries. `task changie -- latest` = `v0.14.1`. Census re-run on a fresh `git archive HEAD` copy with the recorded instrument: base prints nothing; after planting `Release Please` in `docs/RELEASE-PROCEDURES.md` and a file `scripts/__release_please_control__.txt`, it prints exactly those two (content half and filename half). Ordering note below. |
 
 **Score:** 5/5 truths verified (0 present, behavior-unverified)
+
+### G-05-1 closure check (the 05-08 delta, read from the file)
+
+| Required by 05-UAT.md "missing" list / 05-08 must_haves | Evidence at HEAD | Status |
+|---|---|---|
+| Section 2 intro says two shapes; prerelease row removed; table has exactly Stable and Internal milestone marker | `docs/RELEASE-PROCEDURES.md` line 44 "Two distinct shapes:"; table rows are `Stable` and `Internal milestone marker` only | MET |
+| Section 2 pointer to section 4 naming D-15, no example prerelease tag | Lines 51-54: "There is no hand-pushed prerelease tag shape (D-15). Every `v[0-9]*` tag is pushed by `release-tag.yml` ... See §4, "No hand-pushed prerelease tag (D-15)"." Section 2 contains no `rc.N` and no "release candidate" | MET |
+| Section 1 sentence drops the prerelease kind | Line 13 "Before tagging **anything**, run the following for **all 4** release targets." | MET |
+| Section 7 prerelease-is-transient sentence removed, stable sentence kept | Lines 340-343 end after "...what the tag now points to."; stable-release sentence byte-intact | MET |
+| Section 4 D-15 paragraph untouched | Paragraph extracted from HEAD and from `1c700149` with the plan's `awk`: identical (`D15-PARA-IDENTICAL`) | MET |
+| Line-15 historical `rc.1` failure sentence and `Taskfile.yml` unchanged | Line 15 still reads "`rc.1` failure"; `git diff --quiet 1c700149 -- Taskfile.yml` clean | MET |
+| One docs-only commit, no skip-CI phrase | `5653cbf9` touches only `docs/RELEASE-PROCEDURES.md`; subject `docs(05-08): ...`; zero skip-CI matches | MET |
+| Test reading this file still passes, PASS line asserted | `--- PASS: TestCosignIdentityPolicyBoundaryParityWithCompiledPattern (0.00s)` seen in this run | MET |
+
+Remaining `rc` and `prerelease` mentions in the file were checked line by line: line 15 (historical v0.1 failure), lines 147-148 (the GoReleaser `prerelease: auto` flag), lines 176-181 (the correct D-15 paragraph), line 288 and 296 (v0.5.0's GitHub `prerelease` flag history). None presents a hand-pushed prerelease tag as a working shape. The section 2 table no longer lists one, so a reader following section 2 can no longer be led to push a tag that `release:goreleaser` would then refuse.
+
+### Ordering note on SC5 ("as the phase's last change")
+
+`ffd84c4a` (the deletion) is no longer the last commit outside `.planning/`: `5653cbf9` (05-08, docs only) follows it. This is a literal reading of 05-07's must-have, not the roadmap's intent. The reason the deletion must come last is that nothing pinning the retired tool may still be live when it goes, and no later change may re-introduce a reference. 05-08 edits one runbook, adds no release-please text (census empty at HEAD), changes no guard, and the whole `internal/upgrade` package passes. I treat this as satisfied and record it so the maintainer can see it; if the maintainer wants the literal ordering enforced, an `overrides:` entry would be the place, but none is needed for the goal.
 
 ### Decisions D-01..D-15 spot-check
 
 | Decision | Honored? | Evidence |
 |----------|----------|----------|
-| D-01 documented pattern, no space shuttle | Yes | `peter-evans/create-pull-request` + `actions/create-github-app-token`; changie run through `task changie`, no `changie-action` |
-| D-02/D-03/D-04 | Yes | PR via App token, ready not draft, body is the rendered file |
-| D-05 hygiene by `.changes/` path in both gates | Yes | Python set and shell `case` mirrored, mirror test passes |
-| D-06 `CHANGELOG.md` path trigger, skip if tag exists | Yes | `release-tag.yml` `paths`, `release:tag` ls-remote branch, REL-11/SC1 amended |
-| D-07 `pretag-gate` gates both jobs | Yes | both workflows |
-| D-08/D-12 flag lives in `release:goreleaser` | Yes | `release.yml` one comment hunk |
-| D-09/D-10/D-11 census | Yes | see SC5; 45 verdicts recorded |
-| D-13 `.changie.yaml` newlines amendment | Yes | `newlines` has 4 keys; leg 14 and post-batch Go tests pass |
+| D-01 documented pattern | Yes | `peter-evans/create-pull-request` + `actions/create-github-app-token`; changie via `task changie` |
+| D-05 hygiene by `.changes/` path in both gates | Yes | `check:fragment-policy` 46/46 includes the mirror test |
+| D-06/D-07 `CHANGELOG.md` path trigger, `pretag-gate` gates both jobs | Yes | shape tests pass |
+| D-08/D-12 flag in `release:goreleaser`, `release.yml` one comment hunk | Yes | 1 hunk vs `7b12cb92` |
+| D-13 `.changie.yaml` newlines amendment | Yes | `check:changie` leg 14 |
 | D-14 wiring only | Yes | no body-equality assertion |
-| D-15 rc escape hatch removed | Partly | procedure removed (section 4 line 172), but section 2 table row and two other rc mentions remain; see Warnings |
+| D-15 hand-pushed rc escape hatch removed | **Yes (now fully)** | section 4 paragraph plus sections 1, 2, 7 aligned by 05-08; prior "Partly" resolved |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `.github/workflows/release-pr.yml` | REL-10 release-PR workflow | VERIFIED | 98 lines, wired to `task release:batch`, registered in shape tests |
-| `.github/workflows/release-tag.yml` | REL-11 tag workflow | VERIFIED | 90 lines, wired to `task release:tag`, path-filtered |
-| `Taskfile.yml` `release:batch`, `release:tag`, `release:goreleaser`, `release:dry-run` | Job bodies | VERIFIED | executed in scratch (batch, tag, dry-run); goreleaser body read and mutation-tested |
-| `.changie.yaml` | Kinds, `newlines`, Breaking -> minor | VERIFIED | read in full |
-| `internal/upgrade/changie_release_shape_test.go` | Shape tests and GRD-16 scan | VERIFIED | 1687 lines, passes, RED reproduced |
-| `scripts/pr_template_policy.py`, `fragment_policy.py` | Release PR exemption, linear markers (WR-01) | VERIFIED | `task check:fragment-policy` 46/46 |
-| `docs/RELEASE-PROCEDURES.md`, `CONTRIBUTING.md`, `docs/RELEASE.md`, `pr-title.yml` | Docs | VERIFIED | see SC4 |
-| `release-please.yml`, `release-please-config.json`, `.release-please-manifest.json` | Deleted | VERIFIED (absent) | |
+| `.github/workflows/release-pr.yml` | REL-10 workflow | VERIFIED | present, shape test passes, actionlint clean |
+| `.github/workflows/release-tag.yml` | REL-11 workflow | VERIFIED | present, shape test passes |
+| `Taskfile.yml` `release:batch`, `release:tag`, `release:goreleaser`, `release:dry-run` | job bodies | VERIFIED | target-shape tests pass; file unchanged since prior executed rehearsals |
+| `.changie.yaml`, `.changes/` seeds | config, history | VERIFIED | `check:changie` 14/14 |
+| `internal/upgrade/changie_release_shape_test.go` and sibling guards | re-pointed guards | VERIFIED | package green |
+| `scripts/pr_template_policy.py`, `fragment_policy.py` | release PR exemption | VERIFIED | 46/46 |
+| `docs/RELEASE-PROCEDURES.md`, `CONTRIBUTING.md`, `docs/RELEASE.md`, `pr-title.yml` | docs | VERIFIED | read; G-05-1 closed |
+| `release-please.yml`, `release-please-config.json`, `.release-please-manifest.json` | deleted | VERIFIED (absent) | |
+| `05-CENSUS.md`, `05-MUTATION-LOG.md` | verdicts and RED transcripts | VERIFIED | present; 45 verdict rows |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `release-pr.yml` batch step | `Taskfile.yml` `release:batch` | `run: task release:batch`, output `version` | WIRED | `steps.batch.outputs.version` gates the PR step; `GITHUB_OUTPUT` write exercised |
-| `release-tag.yml` tag step | `Taskfile.yml` `release:tag` | `run: task release:tag` with App-token checkout | WIRED | exercised against a scratch bare origin |
-| `release.yml` | `release:goreleaser` | single `run: task release:goreleaser` | WIRED | unchanged step, flag lives in the target |
-| `release:goreleaser` / `release:dry-run` | `.changes/${TAG}.md` | `--release-notes` | WIRED | dry-run exited 0 on a scratch tree |
-| `pr_template_policy.py` allowlist | `require-issue-link.yml` `case` | mirror test | WIRED | `test_hygiene_allowlists_mirror_require_issue_link` |
-| release PR | required checks | App-token authorship | WIRED by construction | live check is Phase 6 |
+| `release-pr.yml` batch step | `Taskfile.yml` `release:batch` | `run: task release:batch`, output `version` | WIRED | shape test |
+| `release-tag.yml` tag step | `Taskfile.yml` `release:tag` | `run: task release:tag`, App-token checkout | WIRED | shape test; GRD-16 scan names this single site |
+| `release.yml` | `release:goreleaser` | single `run: task release:goreleaser` | WIRED | unchanged |
+| `release:goreleaser` / `release:dry-run` | `.changes/${TAG}.md` | `--release-notes` | WIRED | target tests |
+| `pr_template_policy.py` allowlist | `require-issue-link.yml` `case` | mirror test | WIRED | in 46/46 |
+| runbook section 2 | runbook section 4 D-15 paragraph | pointer sentence | WIRED | lines 51-54 name D-15 and §4; target paragraph exists at line 176 |
 
 ### Data-Flow Trace (Level 4)
 
-| Artifact | Data Variable | Source | Produces Real Data | Status |
-|----------|---------------|--------|--------------------|--------|
-| PR title/body | `steps.batch.outputs.version`, `.changes/<version>.md` | `changie latest` + `changie batch/merge` over real fragments | Yes (executed: v0.15.0 from the real Breaking fragment) | FLOWING |
-| tag | `changie latest` | `.changes/*.md` | Yes (executed) | FLOWING |
-| release body | `.changes/${TAG}.md` | passed to GoReleaser | Yes (dry-run evidence line: 328 bytes) | FLOWING |
+Unchanged from the prior report: PR title/body flow from `changie latest` and `changie batch/merge` over real fragments; the tag flows from `changie latest`; the release body path flows from `.changes/${TAG}.md` to GoReleaser. No code moved, and `check:changie` leg 14 re-ran the batch+merge path this run. FLOWING.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Release-chain and guard tests | `go test -count=1 ./internal/upgrade/` | ok | PASS |
-| Build and CLI | `go build ./...`; `go test -count=1 ./internal/cli/` | ok; ok | PASS |
-| Fragment policy | `task check:fragment-policy` | 46 of 46 executed (floor 46) | PASS |
+| Release-chain and guard tests | `GOTOOLCHAIN=go1.26.9 go test -count=1 ./internal/upgrade/` | ok | PASS |
+| Ten named guard tests | `go test -v -run '<names>' ./internal/upgrade/` | 10 `--- PASS`, 0 FAIL | PASS |
+| Fragment policy | `task check:fragment-policy` | 46 of 46 (floor 46) | PASS |
 | Changie guard | `task check:changie` | 14 of 14 | PASS |
-| Workflow lint | `actionlint`; `task lint:actions` | exit 0 | PASS |
-| CLI reference drift | `task docs:cli:drift` | byte-identical | PASS |
-| Batch end to end (scratch) | `task release:batch` | v0.15.0 rendered; post-batch Go tests ok | PASS |
-| Empty-set no-op (scratch) | `task release:batch` with no fragments | notice, rc 0, no output | PASS |
-| Tag rehearsal (scratch) | `GITHUB_ACTIONS=true task release:tag` x2, then without | push, skip, refuse | PASS |
-| Dry run (scratch) | `task release:dry-run` | rc 0, 4 binaries, evidence line | PASS |
-| Six re-mutations (scratch) | planted tag push; `--release-notes` dropped; `changelog.disable`; App token -> `github.token`; path filter dropped; Breaking -> major | each FAILS a named test; clean tree passes | PASS (all RED) |
+| Workflow lint | `task lint:actions` | exit 0 | PASS |
+| `release.yml` lock | `git diff 7b12cb92 HEAD -- .github/workflows/release.yml` | 1 hunk | PASS |
+| Version source | `task changie -- latest` | `v0.14.1` | PASS |
+| Census, base and positive control | recorded instrument on fresh `git archive HEAD` | base empty; planted content and filename both found | PASS |
+| Plan 05-08 invariants | D-15 paragraph diff vs `1c700149`; Taskfile diff; commit file list; skip-CI scan | all clean | PASS |
 
-I did not re-run the full workspace suite. The orchestrator's six post-wave gates and the regression gate cover it, and `internal/daemon` is unchanged since `f109a9d1` (its documented flake is handled by `task test:daemon`).
+I did not re-run the full workspace suite or `task release:dry-run`. The orchestrator's regression gate (54/54 packages; `internal/daemon` isolated pass of a known load flake) covers the suite, and the dry-run inputs are unchanged since the prior run.
 
 ### Probe Execution
 
@@ -112,54 +132,58 @@ SKIPPED. The phase declares no `probe-*.sh` probes.
 
 ### Requirements Coverage
 
-Every ID in the PLAN frontmatter was cross-referenced against `.planning/REQUIREMENTS.md`. All ten IDs appear in plans and in the Traceability table mapped to Phase 5. No requirement mapped to Phase 5 is missing from the plans, so there are no orphans.
+Every ID in the PLAN frontmatter (05-01 REL-10, GRD-15; 05-02 REL-11, GRD-16, GRD-15; 05-03 REL-12, REL-13, GRD-15, DOCS-14; 05-04 GRD-15; 05-05 GRD-15, GRD-16; 05-06 DOCS-12, DOCS-13, DOCS-14; 05-07 REL-14, GRD-15; 05-08 DOCS-13) was cross-referenced against `.planning/REQUIREMENTS.md`. All ten phase IDs are present in plans and mapped to Phase 5 in the Traceability table. No requirement mapped to Phase 5 is missing from the plans (no orphans). REQUIREMENTS.md now shows all ten `[x]` and "Complete", including GRD-16 (the prior bookkeeping gap is closed).
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| REL-10 | 05-01 | release-PR workflow with `pretag-gate` and batch/merge | SATISFIED | SC1 |
-| REL-11 | 05-02 | App-token tag on `CHANGELOG.md` push, skip if exists | SATISFIED | SC1; wording amended per D-06 |
-| REL-12 | 05-03 | `release.yml` locked; `--release-notes`; no `changelog.disable` | SATISFIED | SC2; amended per D-12 |
-| REL-13 | 05-03 | notes flag in both targets, empty-file refusal, captured dry run | SATISFIED | SC2; amended per D-14; dry run re-run here, rc 0 |
+| REL-10 | 05-01 | release-PR workflow behind `pretag-gate` | SATISFIED | SC1 |
+| REL-11 | 05-02 | App-token tag on `CHANGELOG.md` push, skip if exists | SATISFIED | SC1 |
+| REL-12 | 05-03 | `release.yml` locked; `--release-notes`; no `changelog.disable` | SATISFIED | SC2 |
+| REL-13 | 05-03 | notes flag in both targets, empty-file refusal, dry run exits 0 | SATISFIED | SC2 |
 | REL-14 | 05-07 | three files deleted, positive-controlled census zero | SATISFIED | SC5 |
 | GRD-15 | 05-01, 05-03, 05-04, 05-05, 05-07 | guards re-pointed, RED first | SATISFIED | SC3 |
-| GRD-16 | 05-02, 05-05 | `TestGsdTagCreationIsDisabled` unchanged; single App-token tag site, RED against planted push | **SATISFIED in the codebase, but REQUIREMENTS.md still shows `[ ]` and "Pending"** | SC3. Both halves exist and pass; the planted-second-tag RED was reproduced here. No plan claimed mark-complete because the assertion (05-02) and the unchanged-test prose (05-05) landed in two plans. The orchestrator should flip the checkbox on the GRD-16 line and the Traceability row to Complete. |
+| GRD-16 | 05-02, 05-05 | tag authority unchanged; single App-token tag site, RED against planted push | SATISFIED | SC3 |
 | DOCS-12 | 05-06 | CONTRIBUTING rewrite | SATISFIED | SC4 |
-| DOCS-13 | 05-06 | runbook rewrite, 45 verdicts | SATISFIED | SC4; see Warnings for the rc row |
+| DOCS-13 | 05-06, 05-08 | runbook rewrite, 45 verdicts, D-15 consistency | SATISFIED | SC4 and G-05-1 closure |
 | DOCS-14 | 05-06, 05-03 | pr-title header, dry-run-signed comment, RELEASE.md paragraph | SATISFIED | SC4 |
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| (phase-modified files) | - | `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` scan of the added lines | none found | No debt markers |
+| `docs/RELEASE-PROCEDURES.md` (05-08 delta) | - | `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` scan of added lines | none found | No debt markers |
 
-### Warnings (non-blocking)
+### Advisory (open review findings, not blocking)
 
-1. **D-15 residue (IN-03, confirmed).** `docs/RELEASE-PROCEDURES.md` section 2 line 48 still lists `Release candidate | v0.0.0-rc.3 | … | Triggers release.yml? Yes` as a normal tag shape, line 13 says "Before tagging anything (rc or stable)", and line 339 says "Prereleases (-rc.N) are safer to delete/retag". Section 4 line 172 says no hand-pushed prerelease tag exists. The doc therefore contradicts itself, and a reader following section 2 would push a tag that starts the macOS signing job and then fails in `release:goreleaser` for want of `.changes/<tag>.md`. This does not falsify DOCS-13 or SC4, which are met, but D-15 asked for the escape hatch to be removed from the runbook and the table row is its remaining trace. Routed to the human decision above.
-2. **Untriaged review findings.** `05-REVIEW-DISPOSITION.md` shows all 8 findings `open` (0 critical). WR-01 (a stale open release PR when the fragment count drops to zero) and WR-02/WR-03 (pre-existing hygiene-gate weaknesses: 100-file truncation; unescaped reason on stderr) have no recorded `fixed`, `skipped` or `deferred` decision. None breaks a success criterion: REL-10's "does nothing when there are no fragments" holds literally, and the race in WR-01 is narrow. They should be dispositioned before the milestone closes.
-3. **Roadmap and state bookkeeping not yet reconciled** (orchestrator action, not a code gap): Phase 5 shows `[ ]` and "In Progress" in `ROADMAP.md` and GRD-16 is Pending in `REQUIREMENTS.md`.
+`05-REVIEW-DISPOSITION.md` lists all 10 findings (0 critical, 5 warning, 5 info) as `open`; none has a recorded `fixed`, `skipped` or `deferred` decision. That file is tool-owned and I did not edit it. They are documentation-quality and hardening follow-ups, not success-criterion failures.
+
+**WR-02 judged against DOCS-13 and the phase goal: advisory doc follow-up, not a gap.** The review argues that 05-08's removal of the `-rc.N` retag sentence leaves the section 9 live-proof teardown (delete release and tag, then revert) colliding with the "never reuse a stable tag name" rule, because the revert makes `release-pr.yml` reopen a release PR for the same derived version. I agree the collision is real, but:
+
+- DOCS-13 requires that the runbook describe the chain end to end, place `pretag-gate` in the new workflows, state that a release is cut by merging the release PR, and resolve the 45 references under recorded verdicts. All four hold. It does not require that the rollback procedure be free of a tie between two rules.
+- The sentence 05-08 removed was the contradiction G-05-1 and D-15 required removing. The collision exists because D-15 removed the only transient tag shape, not because of how 05-08 edited it.
+- The runbook already scopes the rule: section 7 (lines 261-278) says the delete-and-retry procedure "applies only to a disposable cut (§9's live proof) — never to a real `vX.Y.Z`", and the "never reuse" paragraph is explicitly about **stable** releases. The unresolved question is which rule wins for the live-proof cut, and that question only becomes operational in Phase 6, which runs the live proof.
+- It involves a maintainer choice (carve-out versus requiring a different next version), so I did not invent an answer, and it is not a thing a test can prove wrong.
+
+Recommended handling: disposition WR-02 as `deferred` to Phase 6 entry (or `fixed` with the review's suggested carve-out) before the Phase 6 live proof is run. It is recorded here and in the review disposition; it does not change this phase's verdict.
 
 ### Human Verification Required
 
-#### 1. Release-candidate row in the runbook (D-15 residue)
+None. The two items in the prior report are resolved or reclassified:
 
-**Test:** Read `docs/RELEASE-PROCEDURES.md` section 2 (line 48), line 13 and line 339 against section 4's D-15 paragraph, then fix or accept.
-**Expected:** The runbook no longer presents a hand-pushed rc tag as a working shape.
-**Why human:** A maintainer decision (D-15) and a scope call; a table row cannot be proven wrong by a test.
+1. D-15 rc residue: closed by 05-08 and checked against the file above.
+2. linux-cross-canary run on PR #88: the maintainer ruled this a deferred CI observation, not a human check. It is recorded under `deferred:` and in `05-UAT.md` Deferred Follow-Ups, and is deliberately not re-created as a human verification item.
 
-#### 2. linux-cross-canary run on PR #88
+The live behavior of the chain (App-authored release PR with required checks reporting, the `CHANGELOG.md` path filter firing on a real merge, the App-token tag starting `release.yml`, the milestone merge being a no-op) is Phase 6 by design and is listed under `deferred:`; it is not counted as a gap here.
 
-**Test:** After the maintainer's next push to PR #88, read the `linux-cross-canary` run with the read-only commands in `05-03-SUMMARY.md`.
-**Expected:** The cross-build job runs `task release:dry-run` to exit 0, prints the `RELEASE-NOTES-EVIDENCE` line and the four-binary success line, and the linux binaries run on linux/amd64 and linux/arm64.
-**Why human:** Needs a push and an external macOS runner class. The same target already passed locally here, so this confirms the CI runner only.
+### Bookkeeping for the orchestrator (not a code gap)
+
+`.planning/ROADMAP.md` still shows the Phase 5 progress line as `- [ ] **Phase 5: ...**` (line 153) although the plan list reads 8/8 executed. Flip it through the normal phase-complete path.
 
 ### Gaps Summary
 
-No success criterion failed and there are no blockers. The goal is achieved in the codebase: release-please is gone, the changie release-PR and tag workflows exist and their repository-owned bodies run correctly in scratch rehearsals, the guards that pinned release-please now pin the changie chain and each fires RED against a fresh mutation, and the docs describe the new chain.
-
-GRD-16 is satisfied. The single-tag-site assertion `TestTagCreationHasSingleAppTokenSite` exists, passes, and fails when a second `git push --tags` is planted; `TestGsdTagCreationIsDisabled` passes with unchanged logic. Only the `REQUIREMENTS.md` bookkeeping row is stale.
+No success criterion failed and there are no blockers. The goal is achieved in the codebase: release-please's three files are gone, the changie release-PR and tag workflows exist and are pinned by passing shape tests, `release.yml` is held to one comment hunk, the guards that pinned release-please now pin the changie chain, and the contributor and release docs describe the new chain. The one defect the prior report held open, the runbook still presenting a hand-pushed prerelease tag in sections 1, 2 and 7, is fixed in the file and consistent with D-15.
 
 ---
 
-_Verified: 2026-10-14T23:30:00Z_
+_Verified: 2026-10-16T21:10:00Z_
 _Verifier: Claude (gsd-verifier)_
