@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 05-release-chain-release-please-retirement
 source: [05-VERIFICATION.md]
 started: 2026-10-14T23:45:00Z
-updated: 2026-10-16T20:08:46.888Z
+updated: 2026-10-16T20:55:02.728Z
 ---
 
 ## Current Test
@@ -83,7 +83,7 @@ blocked: 0
 
 - gap_id: G-05-1
   truth: "Section 2 no longer presents a hand-pushed `v0.0.0-rc.N` tag as a normal, working tag shape, consistent with D-15 and with section 4's 'No hand-pushed prerelease tag' paragraph"
-  status: failed
+  status: resolved
   reason: "User reported: fix it"
   severity: major
   test: 1
@@ -101,6 +101,8 @@ blocked: 0
     - "Reword or remove the section 7 rc retag sentence"
     - "Leave historical rc.1 references (line 15, Taskfile.yml:5437) and the correct D-15 text (lines 172-177, Taskfile.yml:2958) unchanged"
   debug_session: ""
+  resolved_by: 05-08-PLAN.md
+  resolved_at: 2026-10-16
 
 ## Deferred Follow-Ups
 
