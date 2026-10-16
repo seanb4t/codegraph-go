@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 05-release-chain-release-please-retirement
 source: [05-VERIFICATION.md]
 started: 2026-10-14T23:45:00Z
-updated: 2026-10-16T19:48:17.065Z
+updated: 2026-10-16T20:08:46.888Z
 ---
 
 ## Current Test
@@ -23,13 +23,51 @@ expected: The cross-build job exits 0 with the RELEASE-NOTES-EVIDENCE line for t
 result: skipped
 reason: "Covered by PR #88's linux-cross-canary run on the next push (it triggers on Taskfile.yml); a deferred CI observation, not a human check. release:dry-run already exited 0 locally twice (05-03-SUMMARY)."
 
+### 3. 05-01 D6: The live release PR is opened by the App on main and its required checks report
+expected: The live release PR is opened by the App on main and its required checks report
+result: skipped
+reason: "Deferred to Phase 6 by 05-01 itself (needs the App secrets and a real push to main); the first natural release run on main shows it. Same disposition as test 2."
+
+### 4. 05-02 D7: A real release-PR merge fires the CHANGELOG.md path filter, the App-token tag push starts release.yml, and the milestone merge is a no-op
+expected: A real release-PR merge fires the CHANGELOG.md path filter, the App-token tag push starts release.yml, and the milestone merge is a no-op
+result: skipped
+reason: "Deferred to Phase 6 by 05-02 itself (live GitHub behavior needs the App secrets and a real push to main); the first natural release run on main shows it. Same disposition as test 2."
+
+### 5. 05-06 D5: Readability and accuracy of the rewritten docs/RELEASE-PROCEDURES.md runbook prose
+expected: Readability and accuracy of the rewritten prose against the chain as built and as it will run live
+result: pass
+
+### 6. One commit deletes the three retired files and removes their inScopeJobs entry, usesOnlyJobExceptions entry and inScopeWorkflowFiles element; it touches exactly those four paths and the package passes at that commit
+expected: One commit deletes the three retired files and removes their inScopeJobs entry, usesOnlyJobExceptions entry and inScopeWorkflowFiles element; it touches exactly those four paths and the package passes at that commit
+result: pass
+source: automated
+coverage_id: D2
+
+### 7. The census instrument finds planted content, filename and in-scope .changes/header.tpl.md references and skips the .planning/ and .changes/unreleased/ plants; on the real tree it prints nothing, and the history files still hold the hits the exclusion skips
+expected: The census instrument finds planted content, filename and in-scope .changes/header.tpl.md references and skips the .planning/ and .changes/unreleased/ plants (each confirmed to match under an unexcluded grep); on the real tree it prints nothing, and the history files still hold the hits the exclusion skips
+result: pass
+source: automated
+coverage_id: D3
+
+### 8. The deletion is the last change outside .planning/; no CI-skip phrase in any commit since 5a8603f5; no scratch worktree remains; changie latest is the version source
+expected: The deletion is the last change outside .planning/; no CI-skip phrase in any commit since 5a8603f5; no scratch worktree remains; changie latest is the version source
+result: pass
+source: automated
+coverage_id: D4
+
+### 9. Phase gate: task test, check:changie 14 of 14, check:fragment-policy 46 of 46, lint:actions, the upgrade package, release.yml one comment-only hunk against 7b12cb92, verify.go / CHANGELOG.md / .changes/v*.md equal to 5a8603f5
+expected: Phase gate: task test, check:changie 14 of 14, check:fragment-policy 46 of 46, lint:actions, the upgrade package, release.yml one comment-only hunk against 7b12cb92, verify.go / CHANGELOG.md / .changes/v*.md equal to 5a8603f5
+result: pass
+source: automated
+coverage_id: D5
+
 ## Summary
 
-total: 2
-passed: 0
+total: 9
+passed: 5
 issues: 1
 pending: 0
-skipped: 1
+skipped: 3
 blocked: 0
 
 ## Gaps
