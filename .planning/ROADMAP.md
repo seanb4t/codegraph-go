@@ -288,7 +288,7 @@ Plans:
   5. As the phase's last change, `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted, `changie latest` is the version source of truth, and a positive-controlled census — first shown to find a planted reference — reports zero `release-please` references outside `.planning/`, `CHANGELOG.md` history and this milestone's own notes (REL-14)
 
 **Notes**: Two token hazards shape the workflow, and both are why the App token exists: a tag pushed with `GITHUB_TOKEN` never fires `release.yml`, and a pull request opened or updated with `GITHUB_TOKEN` fires no `pull_request` workflows — so the release PR's required checks would never report and it could never merge. Which token authors the release PR is a discuss-phase decision that must answer the second hazard, not only the first. The workflow must also not loop: the release PR's own merge push carries a new `.changes/vX.Y.Z.md` and an empty `.changes/unreleased/`, so the tag path fires and the batch path does not. GitHub runs the workflow file from the pushed commit, so the milestone merge commit — which deletes `release-please.yml` — runs the new workflow and not the old one; that merge is Phase 6's entry. The census scope already excludes `.planning/`, so the Overview's versioning note and STATE.md's standing decisions naming release-please are updated at milestone close, not counted here. `release-please` references in `ci.yml`, `require-issue-link.yml`, `post-release-verify.yml`, `release.yml` comments and `.goreleaser.yaml` are part of the census and each gets a verdict. Before merge, criteria 1–2 are proven by shape tests, actionlint and the dry-run; the live proof is Phase 6.
-**Plans**: 7/7 plans executed
+**Plans**: 7/8 plans executed
 
 Plans:
 **Wave 1**
@@ -315,6 +315,10 @@ Plans:
 **Wave 6** *(blocked on Waves 4 and 5)*
 
 - [x] 05-07-PLAN.md — Last change: the three release-please files and their registry entries deleted in one commit, a positive-controlled census at zero, and the phase gate (REL-14, GRD-15)
+
+**Wave 7** *(gap closure — G-05-1, blocked on Wave 6 completion)*
+
+- [ ] 05-08-PLAN.md — close G-05-1 (IN-03): `docs/RELEASE-PROCEDURES.md` sections 1, 2 and 7 drop their stale hand-pushed prerelease-tag passages, section 2 pointing to section 4's D-15 paragraph; docs-only, one commit (DOCS-13)
 
 #### Phase 6: First Release Through the Chain
 
@@ -346,7 +350,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
 | 4. Fragment-Required Gate | 5/5 | Complete    | 2026-10-13 |
-| 5. Release Chain & release-please Retirement | 7/7 | In Progress | - |
+| 5. Release Chain & release-please Retirement | 7/8 | In Progress | - |
 | 6. First Release Through the Chain | 0/TBD | Not started | - |
 
 9 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0, v0.14.0). v0.15.0 scoped: 6 phases (1–6), 29 requirements, 0/6 phases complete (0%).
