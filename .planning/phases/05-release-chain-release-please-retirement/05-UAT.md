@@ -23,19 +23,19 @@ severity: major
 
 expected: The cross-build job exits 0 with the RELEASE-NOTES-EVIDENCE line for the newest .changes/v*.md and the four-binary success line, and the linux binaries run on linux/amd64 and linux/arm64
 result: skipped
-reason: "Covered by PR #88's linux-cross-canary run on the next push (it triggers on Taskfile.yml); a deferred CI observation, not a human check. release:dry-run already exited 0 locally twice (05-03-SUMMARY)."
+reason: "Deferred follow-up: read PR #88's linux-cross-canary run after the next push (it triggers on Taskfile.yml); a CI observation, not a human check. release:dry-run already exited 0 locally twice (05-03-SUMMARY)."
 
 ### 3. 05-01 D6: The live release PR is opened by the App on main and its required checks report
 
 expected: The live release PR is opened by the App on main and its required checks report
 result: skipped
-reason: "Deferred to Phase 6 by 05-01 itself (needs the App secrets and a real push to main); the first natural release run on main shows it. Same disposition as test 2."
+reason: "Deferred follow-up: Phase 6 live run, as 05-01 itself defers it (needs the App secrets and a real push to main); the first natural release run on main shows it."
 
 ### 4. 05-02 D7: A real release-PR merge fires the CHANGELOG.md path filter, the App-token tag push starts release.yml, and the milestone merge is a no-op
 
 expected: A real release-PR merge fires the CHANGELOG.md path filter, the App-token tag push starts release.yml, and the milestone merge is a no-op
 result: skipped
-reason: "Deferred to Phase 6 by 05-02 itself (live GitHub behavior needs the App secrets and a real push to main); the first natural release run on main shows it. Same disposition as test 2."
+reason: "Deferred follow-up: Phase 6 live run, as 05-02 itself defers it (live GitHub behavior needs the App secrets and a real push to main); the first natural release run on main shows it."
 
 ### 5. 05-06 D5: Readability and accuracy of the rewritten docs/RELEASE-PROCEDURES.md runbook prose
 
@@ -101,3 +101,15 @@ blocked: 0
     - "Reword or remove the section 7 rc retag sentence"
     - "Leave historical rc.1 references (line 15, Taskfile.yml:5437) and the correct D-15 text (lines 172-177, Taskfile.yml:2958) unchanged"
   debug_session: ""
+
+## Deferred Follow-Ups
+
+- test: 2
+  idea: "Read PR #88's linux-cross-canary run after the next push and confirm the cross-build job exits 0"
+  deferred_at: 2026-10-16
+- test: 3
+  idea: "Phase 6 live run: the App opens the release PR on main and its required checks report"
+  deferred_at: 2026-10-16
+- test: 4
+  idea: "Phase 6 live run: a release-PR merge fires the CHANGELOG.md path filter, the App-token tag push starts release.yml, and the milestone merge is a no-op"
+  deferred_at: 2026-10-16
