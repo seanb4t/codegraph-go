@@ -1,145 +1,151 @@
 ---
 phase: 05-release-chain-release-please-retirement
-reviewed: 2026-10-14T00:00:00Z
+reviewed: 2026-10-16T00:00:00Z
 depth: deep
-files_reviewed: 22
+files_reviewed: 1
 files_reviewed_list:
-  - .changie.yaml
-  - .github/workflows/ci.yml
-  - .github/workflows/post-release-verify.yml
-  - .github/workflows/pr-title.yml
-  - .github/workflows/release-pr.yml
-  - .github/workflows/release-tag.yml
-  - .github/workflows/release.yml
-  - .github/workflows/require-issue-link.yml
-  - .goreleaser.yaml
-  - CONTRIBUTING.md
-  - Taskfile.yml
   - docs/RELEASE-PROCEDURES.md
-  - docs/RELEASE.md
-  - internal/upgrade/changie_release_shape_test.go
-  - internal/upgrade/changie_shape_test.go
-  - internal/upgrade/goreleaser_shape_test.go
-  - internal/upgrade/release_workflow_shape_test.go
-  - internal/upgrade/tag_authority_test.go
-  - internal/upgrade/taskfile_shape_test.go
-  - scripts/fragment_policy.py
-  - scripts/pr_template_policy.py
-  - scripts/test_fragment_policy.py
 findings:
   critical: 0
-  warning: 3
-  info: 5
-  total: 8
+  warning: 5
+  info: 4
+  total: 9
 status: issues_found
 ---
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-10-14
+**Reviewed:** 2026-10-16
 **Depth:** deep
-**Files Reviewed:** 22
+**Files Reviewed:** 1
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the phase diff against `500cdc65` for every listed file, and traced the release chain end to end: `release-pr.yml` -> `task release:batch` -> `peter-evans/create-pull-request` (App token) -> merge -> `release-tag.yml` -> `task release:tag` (App token) -> `release.yml` -> `task release:goreleaser`.
+`docs/RELEASE-PROCEDURES.md` is a maintainer runbook, so I checked its claims against the code it describes. That meant `.github/workflows/release-pr.yml`, `release-tag.yml`, `release.yml`, `post-release-verify.yml`, the `Taskfile.yml` targets (`release:batch`, `release:tag`, `release:goreleaser`, `check:cross`), `.changie.yaml`, `.goreleaser.yaml`, and `internal/upgrade/verify.go`.
 
-Verified directly:
+The parts this phase rewrote (§1 to §4, §7, §9) match the workflows:
+- The `verify.go` constants in §5 are byte-identical to the source.
+- `check:cross` covers the four targets the doc lists.
+- `release:batch`, `release:tag` and `release:goreleaser` behave as described.
+- `app-id` is deprecated and `client-id` is current in the pinned `create-github-app-token` v3.2.0.
 
-- `task check:changie` passes 14 of 14 legs.
-- `task release:batch` run in a scratch copy of HEAD renders `.changes/v0.15.0.md`, merges `CHANGELOG.md` correctly, writes `version=v0.15.0` to `GITHUB_OUTPUT` and deletes the fragment.
-- `scripts/test_fragment_policy.py` runs 46 of 46 tests, matching the floor in `check:fragment-policy`.
-- `go test ./internal/upgrade` for the release-chain shape tests passes.
-- `release.yml` differs from `7b12cb92` by exactly one comment line (L188). No functional drift.
-- No `release-please` reference remains in any reviewed file.
-- The PR and the tag are authored with the App token, never `GITHUB_TOKEN`. Both mint steps precede the consuming step, and the shape tests pin that order.
+The defects below are internal contradictions and stale passages. The most important one is a section that describes a pipeline that no longer exists. Another is a rollback procedure that conflicts with a rule the diff just made unconditional. No BLOCKER-class defect was found: nothing in the doc causes data loss or a security regression if followed literally, but two of the items below can push a maintainer toward an action the same doc forbids.
 
-No blocker was found. The release chain is sound in its main path. The findings below are an edge-case race in the release-PR job, two hygiene-gate weaknesses (one of them touched by this phase), and documentation or test-fragility defects.
+Verification note: the `files` scope is a single document. I did not review `docs/RELEASE.md`, which the runbook cross-references.
 
 ## Warnings
 
-### WR-01: `release-pr` leaves a stale open release PR when the fragment count drops to zero
+### WR-01: §10(a) describes a pipeline that no longer exists and cites a step §4 does not contain
 
-**File:** `Taskfile.yml:1017-1022` (and `.github/workflows/release-pr.yml:89-98`)
-**Issue:** When `.changes/unreleased` holds no `*.yaml`, `release:batch` exits 0 with no `version` output, and the `Open or update the release PR` step is skipped. Nothing ever closes or refreshes an already-open `changie/release` PR in that state.
+**File:** `docs/RELEASE-PROCEDURES.md:504-516`
+**Issue:** §10(a) says:
+- "This repo has never run `goreleaser release`."
+- `archives:` and `checksum:` are "documented-inert".
+- Signing, SBOM and publishing "live in `release.yml`'s hand-written `assemble` job".
+- Idempotent replacement is satisfied by "§4's `gh release upload --clobber` step".
+- The reasons given are the "native darwin/linux two-OS matrix" and the "SLSA generic-generator handoff".
 
-Concrete sequence:
-1. Push P1 to `main` starts release-pr run R1, which pushes and updates the `changie/release` PR.
-2. A maintainer merges the previous version of that PR (push P2) before R1's PR step completes, or reverts or removes the fragments.
-3. R2 runs on P2, sees zero fragments, and does nothing.
+All of this is false for the current tree:
+- `release.yml:76` and `:143` say the `assemble` job is deleted.
+- `release.yml` has a single `release` job that runs `task release:goreleaser`, which runs `goreleaser release --clean`.
+- `.goreleaser.yaml:399` sets `replace_existing_artifacts: true`.
+- Provenance now uses `actions/attest-build-provenance`, not the SLSA generic generator.
+- §4 of this same document describes the collapsed single-job `goreleaser release` flow and contains no `gh release upload --clobber` step.
 
-The PR R1 left open now targets a `main` that already carries the same `.changes/vX.Y.Z.md` (or has lost the fragments it was built from). It conflicts or is empty, and no later run repairs it until a new fragment lands. Because `concurrency` uses `cancel-in-progress: false`, R1 runs to completion after P2 is pushed, so the window is real, though narrow. The stale PR also has a mergeable-looking title (`chore(main): release vX.Y.Z`), so a merge would re-touch `CHANGELOG.md` and fire `release-tag.yml`.
+A maintainer reading §10 gets the opposite architecture from §4 and a dangling cross-reference. The phase's goal was to remove stale passages, and this one was left behind.
+**Fix:** Rewrite §10(a) as a historical note, or delete it. For example: "Superseded: Phase 9 originally recorded a divergence from the `goreleaser release` upload model. Phase 1 (plans 01-03/01-04) collapsed the pipeline into a single `goreleaser release` job, so the divergence no longer exists. See §4." Also drop the "(§ below)" ROADMAP pointer if it has no target (see IN-03).
 
-**Fix:** In the zero-fragment path, close any open PR on `changie/release` (App token). For example, after the batch step:
-```yaml
-- name: Close a stale release PR
-  if: steps.batch.outputs.version == ''
-  env:
-    GH_TOKEN: ${{ steps.app-token.outputs.token }}
-  run: gh pr close changie/release --delete-branch --comment "No unreleased fragments remain." || true
-```
-Keep the `gh` call in a Taskfile target if the repo's "run bodies invoke task" rule applies. Alternatively, document the stale-PR case in `docs/RELEASE-PROCEDURES.md` §4 beside the "Expected silent no-op" paragraph.
+### WR-02: §7 forbids reusing a stable tag name, but its own rollback re-creates exactly that
 
-### WR-02: Path-based hygiene exemption fails open on PRs with more than 100 files
+**File:** `docs/RELEASE-PROCEDURES.md:340-347` (with `:176-181`, `:267-278`, `:464-469`)
+**Issue:** This phase's diff deleted "Prereleases (`-rc.N`) are safer to delete/retag". That sentence was the exemption that made the disposable live-proof teardown coherent. With the prerelease shape removed (§2, §4), every cut, including the §9 live proof, is a stable-shaped `vX.Y.Z`.
 
-**File:** `.github/workflows/require-issue-link.yml:45-62, 79-95` and `scripts/pr_template_policy.py:128-137`
-**Issue:** `CHANGED_FILES` comes from `gh pr view --json files`. `scripts/fragment_policy.py` documents in its own module docstring that this call "stops at 100 files", and was deliberately written to avoid it. `require-issue-link.yml` and `pr_template_policy.is_housekeeping` do not avoid it. A PR with 100 housekeeping paths (now including trivially creatable `.changes/**` files, which this phase added to both allowlists) plus shipped code beyond the first 100 entries is classified `all_exempt=true` and skips both the issue-link and the template gates. This phase widened the exempt set (`.changes/`) and added the mirror test, but left the truncation unhandled, so the two hygiene gates are weaker than the fragment gate in the same directory.
+§7 still says:
+- Never reuse a deleted stable tag name.
+- The delete-release-and-tag plus revert procedure applies to the §9 live-proof cut.
 
-**Fix:** Use the paginated REST listing as `fragment_policy.fetch_changed_files` does, and compare the count against `changed_files`. Fail closed (not exempt) on mismatch:
-```sh
-gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --jq '.[][].filename'
-```
-Then verify the count equals `gh api repos/.../pulls/N --jq .changed_files`.
+Following that procedure has this result:
+- The revert restores the fragments.
+- `release-pr.yml` reopens a release PR for the same derived version.
+- Merging it makes `release-tag.yml` push the same `vX.Y.Z` again.
 
-### WR-03: `pr_template_policy.emit` writes the attacker-controlled exemption reason to stderr unescaped
+So the documented teardown either violates "never reuse" or leaves the maintainer stuck. The doc never says which rule wins for a disposable cut.
+**Fix:** Add an explicit carve-out to the "Never reuse a tag name" paragraph. For example: "Exception: the §9 live-proof cut, which has no installed base, may be re-cut under the same name. If `codegraph upgrade` could already have resolved it as latest, patch forward instead." Alternatively, state that after a teardown the next release PR must produce a different version, for example by landing a new fragment first.
 
-**File:** `scripts/pr_template_policy.py:122-125, 131-133`
-**Issue:** `emit()` runs `print(f"{action}: {reason}", file=sys.stderr)`, and `main()` passes `f"explicitly exempt: {reason}"`. `reason` is the PR body text between the marker and `-->`. The regex `[^>]*?` allows embedded newlines. A body such as `<!-- pr-template-exempt: x` followed by a newline, then `::stop-commands::tok` or `::error::...`, then `-->`, puts a line starting with `::` into the step log, where the runner parses it as a workflow command (annotation spoofing, command suppression). `fragment_policy.report` already guards the identical hazard with `escape_data`, and its docstring says "Every untrusted value passes through escape_data first". This phase rewrote `find_exemption` and the call site in `pr_template_policy.py`, so the unescaped sink is inside the changed code.
+### WR-03: §12 tap-failure remedy re-runs the full `goreleaser release`, which replaces live signed and notarized assets, while claiming "nothing about the release needs to be touched"
 
-**Fix:** Escape the log line, or refuse multi-line reasons in `find_exemption` so both policies share one grammar:
-```python
-def escape_data(text: str) -> str:
-    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+**File:** `docs/RELEASE-PROCEDURES.md:673-682`
+**Issue:** The remedy is "re-run `goreleaser release` for the SAME tag". The doc does not say how:
+- `goreleaser release --clean` is only invoked through `task release:goreleaser`, which needs the macOS runner, the Apple notarization secrets and the tap token.
+- The documented mechanism is therefore re-running the `release` workflow job.
 
-print(f"{action}: {escape_data(reason)}", file=sys.stderr)
-```
-Better: move `escape_data` to a shared place, or reject a reason containing `\n` or `\r` in both `find_exemption` functions.
+A full re-run does more than push the cask:
+- It rebuilds, re-notarizes, re-signs and re-generates SBOMs, then re-uploads.
+- `release.replace_existing_artifacts: true` (`.goreleaser.yaml:399`) overwrites the live assets.
+- The `Attest` step then re-attests the new bytes.
+- If the rebuild is not byte-identical, the published assets, cosign bundles and checksums change under users who already verified them.
+- It also invalidates the SIGN-04 byte-identity record, and conflicts with §7.1's "do not replace" for preserved baselines.
+
+That contradicts the paragraph just above it, which says the release is untouched. Calling the cask push idempotent describes only the cask step, not the surrounding job.
+**Fix:** Either specify a tap-only re-publish (for example a documented `goreleaser` flag combination, or a manual push of the rendered cask from `dist/`) and note that it must not re-upload release assets. Or state plainly that a re-run replaces the assets and that the maintainer must re-verify per §6 afterward. Do not describe the re-run as leaving the release untouched.
+
+### WR-04: §4 step 5 says only a release-PR merge fires `release-tag.yml`, but the doc elsewhere and the workflow say otherwise
+
+**File:** `docs/RELEASE-PROCEDURES.md:108-113` (vs `:334-338`, and `.github/workflows/release-tag.yml:1-9`)
+**Issue:** §4 step 5 asserts the trigger is "a push to `main` that changes `CHANGELOG.md`, so only a release-PR merge fires it." The facts are:
+- §7 says a revert of the release commit also fires it.
+- `release-tag.yml`'s own header says the milestone/integration-branch merge, which changes `CHANGELOG.md`, also fires it as a no-op.
+- §3 step 3 never warns that merging the integration branch will trigger a tagging run.
+
+If the integration merge brings a `.changes/vX.Y.Z.md` and `CHANGELOG.md` entry whose tag is missing, `changie latest` resolves to an untagged version and the job tags it. The doc's "only" is wrong and hides that case.
+**Fix:** Reword to "a push to `main` that changes `CHANGELOG.md` (normally only a release-PR merge; an integration-branch merge or a revert also fires it and is a no-op when `changie latest` is already tagged)". Add one sentence to §3 step 3 saying the same.
+
+### WR-05: Decision IDs collide within the same edit and across sections, so cross-references are ambiguous
+
+**File:** `docs/RELEASE-PROCEDURES.md:11`, `:37`, `:51`, `:153`, `:450`, `:529`
+**Issue:** The same IDs mean different decisions in different sections, with no phase qualifier:
+- `D-15` appears at line 37 as `task check:cross (D-15)`, and at line 51 and the §4 heading as "No hand-pushed prerelease tag (D-15)". Both are in the section this diff edited.
+- `D-09` is the pre-tag gate at line 11 and the attestor swap at line 153.
+- `D-03` is the App authoring the release PR at line 450, but the `workflow_dispatch` fallback at line 529.
+- `D-07` is used for both the Phase 1 patch-forward rule and the Phase 5 pretag-gate in the workflows.
+
+A maintainer grepping for "D-15" cannot tell which decision is meant. The new text added in this phase made the collision worse.
+**Fix:** Qualify new references with the phase, for example `05-D-15` or "Phase 5 D-15", and at minimum disambiguate line 51 and the §4 heading.
 
 ## Info
 
-### IN-01: `CONTRIBUTING.md` and `.changie.yaml` give a fragment command that blocks without a TTY
+### IN-01: `rm -P` is BSD/macOS-only and does not securely erase on APFS or SSD
 
-**File:** `CONTRIBUTING.md:135-141`, `.changie.yaml:7-9`
-**Issue:** Both document `task changie -- new -k <Kind> -b "<sentence>"` with `-m PR=<n>` "optional". Run without `CI=true`, changie prompts interactively for the optional `PR` custom field. I reproduced a hang (killed by timeout, "model conversion failed") with stdin closed and `CI` unset. `scripts/fragment_policy.py` already prints the correct form (`CI=true task changie -- new ...`) in its failure message, and `check:changie` leg 5 uses `CI=true`. So the contributor docs and the gate's own guidance disagree, and any agent or scripted contributor following the docs hangs.
-**Fix:** Document `CI=true task changie -- new -k <Kind> -b "<sentence>"` in `CONTRIBUTING.md`. Optionally note the interactive prompt for a human on a terminal.
+**File:** `docs/RELEASE-PROCEDURES.md:655-656`
+**Issue:** The step tells the maintainer to "shred" key copies with `rm -P`. `-P` is a BSD option that GNU `rm` rejects and macOS has deprecated. On APFS and SSDs it gives no overwrite guarantee. The sentence gives false assurance about a private key.
+**Fix:** Say "delete the file (`rm -f`) and confirm it was never committed or logged". Add that secure erasure is not guaranteed on modern filesystems, so rotating the key is the real control.
 
-### IN-02: `check:changie` leg 14 silently depends on fragments left behind by legs 4-13
+### IN-02: Stale integration-branch name
 
-**File:** `Taskfile.yml` (leg 14 block, about lines 906-985)
-**Issue:** Leg 14's sub-check (iii) requires both `### Breaking` and `### Fixes` in the batched file. It gets them only because legs 4, 5, 9 and 11 left Fixes and Breaking fragments in the scratch copy. Sub-check (iv) also hard-codes `tail -n +3 CHANGELOG.md`, which assumes the header template is exactly one line plus one blank line. Reordering the legs, or adding a fragment-removing leg, breaks leg 14 for a reason unrelated to what it tests, and the failure message does not say why.
-**Fix:** Have leg 14 write its own Breaking and Fixes fragments (or assert the precondition with a labelled message before running). Derive the skip count from `wc -l < .changes/header.tpl.md` plus the one separator line rather than the literal `3`.
+**File:** `docs/RELEASE-PROCEDURES.md:64-65`
+**Issue:** The doc hard-codes `gsd/v1.0-drop-in-parity-human-ux` "for this milestone". The branch in use is `gsd/v0.15.0-milestone`, and the project has already shipped v0.x releases past that milestone.
+**Fix:** Replace with a generic "the milestone integration branch".
 
-### IN-03: `docs/RELEASE-PROCEDURES.md` §2 still lists a hand-pushed release candidate as a normal tag shape
+### IN-03: Dangling and opaque references
 
-**File:** `docs/RELEASE-PROCEDURES.md:48`
-**Issue:** The tag-conventions table row "Release candidate | `v0.0.0-rc.3` | ... | Triggers `release.yml`? Yes" contradicts §4's D-15 paragraph (no hand-pushed prerelease tag) and `release:goreleaser`, which refuses any tag lacking `.changes/<tag>.md`. A reader following §2 pushes an rc tag, starts the macOS signing job, and fails after the tap-token mint step.
-**Fix:** Change the row to say an `rc` tag does start `release.yml` but fails at `release:goreleaser` unless a matching `.changes/<tag>.md` exists, or remove the row and point to §4.
+**File:** `docs/RELEASE-PROCEDURES.md:354`, `:498`, `:515`, `:568`
+**Issue:** Four references cannot be resolved by a reader:
+- Line 354 cites "repo rule `xmz3xknbj0`", an opaque identifier with no location.
+- §10's heading says "(Phase 9)" and line 515 says "`.planning/ROADMAP.md` (§ below)" with no section below.
+- Line 568 says "gated to a `success` conclusion (§ above)" with no section named.
+- Line 54 points at "§4, 'No hand-pushed prerelease tag (D-15)'", which exists as a bold paragraph and not a heading, so it is hard to find.
 
-### IN-04: The "linear-time" claim for the exemption markers is not accurate
+**Fix:** Name the sections explicitly, for example "§4, paragraph 'No hand-pushed prerelease tag'", and cite the real file for the signing rule.
 
-**File:** `scripts/fragment_policy.py:48-50`, `scripts/pr_template_policy.py:82-86`, `scripts/test_fragment_policy.py` (`MarkerGrammarTests`)
-**Issue:** The comments and test name assert the new grammar `<!--\s*name:(?P<reason>[^>]*?)-->` is linear. It is linear per opener, and the comment says so, but a body that repeats the opener with no `>` (`<!--pr-template-exempt:` x 3000, about 64 KB) is quadratic. Measured: about 0.5 s for a 64 KB body, 0.26 s at 46 KB. Not exploitable at a 64 KB body cap, but the tests only cover two single-opener shapes (spaces after one opener), so the repeated-opener shape is untested and the 1.0 s bound has little headroom on a slow runner.
-**Fix:** Either reword the comments to "no catastrophic backtracking" and drop the "linear-time" claim, or add a repeated-opener case to `test_exempt_markers_are_linear_on_adversarial_bodies`. A single-pass `str.find("-->")` parse would be truly linear.
+### IN-04: `gh` commands omit the repository, so they target whatever checkout the maintainer is in
 
-### IN-05: The tag job keeps the App token in `.git/config` while `go tool` runs repository-pinned third-party code
-
-**File:** `.github/workflows/release-tag.yml:75-90`
-**Issue:** `actions/checkout` with `token: <App token>` persists the credential for the rest of the job. `task release:tag` then builds and runs changie via `go tool -modfile=go.tool-changie.mod` before it pushes. The module is pinned by `go.sum`, so this is an accepted-surface hardening point, not a defect. The App token has contents write on the repository for the whole job.
-**Fix (optional):** Check out with `persist-credentials: false` and have `release:tag` push with an explicit `git -c http.extraheader=...` or an authenticated remote URL supplied through `env:` only at the push. This conflicts with the current `validateTagJobCredential` test and the "persist-credentials stays at its default" comment, so it is a design decision, not a required fix.
+**File:** `docs/RELEASE-PROCEDURES.md:314`, `:442`
+**Issue:** `gh release delete vX.Y.Z --cleanup-tag -y` and `gh secret list` take no `-R seanb4t/codegraph-go`, unlike the neighbouring `gh api repos/...` calls. From a fork clone or another repository's checkout, the destructive `gh release delete ... -y` could act on the wrong repository, with no confirmation prompt.
+**Fix:** Add `-R seanb4t/codegraph-go` to both commands. For the destructive one, consider dropping `-y` so there is a prompt.
 
 ---
 
-_Reviewed: 2026-10-14_
+_Reviewed: 2026-10-16_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
