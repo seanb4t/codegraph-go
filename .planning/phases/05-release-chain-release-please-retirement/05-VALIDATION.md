@@ -57,6 +57,7 @@ created: "2026-10-14"
 | 05-06-T2 | 05-06 | 4 | DOCS-13 | T-05-23, T-05-24, T-05-25 | no hand-tag instruction survives | `rg` + verdict-table set equality | base-line set of R01-R45 equals the 45 lines at 5a8603f5; verdict vocabulary closed | ✅ (05-CENSUS.md) | ✅ green |
 | 05-07-T1 | 05-07 | 6 | REL-14, GRD-15 | T-05-26 | deletion never leaves the suite red | Go + deletion-commit shape | `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1`; deletion commit touches exactly four paths | ✅ | ✅ green |
 | 05-07-T2 | 05-07 | 6 | REL-14 | T-05-27, T-05-28 | census is not vacuous; no outward action | positive-controlled census + phase gate | census exclusions equal REL-14's three clauses; control prints exactly the four in-scope plant lines (incl. `.changes/header.tpl.md`) and neither excluded plant; real census empty; `task test`, `task check:changie`, `task check:fragment-policy`, `task lint:actions` | n/a | ✅ green |
+| 05-08-T1 | 05-08 | 7 | DOCS-13 | T-05-29 | no hand-pushed prerelease tag shape survives in runbook sections 1, 2 and 7 (gap G-05-1) | `rg`/`awk` section assertions + Go test reading the runbook | the plan's `<automated>` verify: section 4 D-15 paragraph byte-identical to 1c700149, section 2 two-shape table (4 table lines) with D-15 and §4 pointer, stale passages absent, Taskfile.yml unchanged, and `GOTOOLCHAIN=go1.26.9 go test ./internal/upgrade/ -count=1 -v` with the `--- PASS: TestCosignIdentityPolicyBoundaryParityWithCompiledPattern (` line asserted | ✅ (docs/RELEASE-PROCEDURES.md) | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -95,7 +96,7 @@ No new framework install is needed.
 - [x] Feedback latency < 60s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** approved 2026-10-14 (validate-phase audit: 17/17 rows green, 0 gaps)
+**Approval:** approved 2026-10-16 (validate-phase re-audit after gap closure 05-08: 18/18 rows green, 0 gaps)
 
 ## Validation Audit 2026-10-14
 
