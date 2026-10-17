@@ -886,7 +886,7 @@ func TestReleaseWorkflowFileMatchesPattern(t *testing.T) {
 	})
 
 	t.Run("reject_renamed_workflow", func(t *testing.T) {
-		san := "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-please.yml@refs/tags/v1.2.3"
+		san := "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-tag.yml@refs/tags/v1.2.3"
 		if re.MatchString(san) {
 			t.Fatalf("releaseWorkflowRefPattern must reject a different workflow filename in the same repo at a tag ref, matched: %q", san)
 		}

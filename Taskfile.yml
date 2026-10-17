@@ -10,6 +10,7 @@ vars:
   GO_TOOL_LINT: GOWORK=off go tool -modfile=go.tool-lint.mod
   GO_TOOL_PROTO: GOWORK=off go tool -modfile=go.tool-proto.mod
   GO_TOOL_GOLANGCI: GOWORK=off go tool -modfile=go.tool-golangci.mod
+  GO_TOOL_CHANGIE: GOWORK=off go tool -modfile=go.tool-changie.mod
 
   # BLD-03 (02-06): the source-tree and output-tree hashing pipeline shared
   # VERBATIM by web:build (which WRITES web/build/.build-manifest) and
@@ -533,6 +534,535 @@ tasks:
         fi
 
         echo "docs:cli:drift: docs/CLI-REFERENCE.md byte-identical to a fresh regeneration (temporary file only — source tree untouched)"
+
+  changie:
+    desc: >-
+      CHG-01's recorded install path (D-05): the single, identical command
+      body a contributor and CI both run to invoke the pinned changie
+      v1.26.0 from the isolated go.tool-changie.mod (see that file's own
+      header for the isolation rationale and measured module counts).
+      Everything after `--` passes straight through to changie. Examples:
+      `task changie -- latest` and
+      `task changie -- new -k Fixes -b "<sentence>" -m PR=<n>`.
+    silent: true
+    cmds:
+      - "{{.GO_TOOL_CHANGIE}} changie {{.CLI_ARGS}}"
+
+  check:changie:
+    desc: >-
+      CHG-03/CHG-04's live-tool guard (D-07), shaped like docs:cli:drift:
+      builds changie from the pinned go.tool-changie.mod, copies
+      .changie.yaml and the seeded baseline (.changes/header.tpl.md,
+      .changes/v*.md, .changes/unreleased/.gitkeep — never the repo's
+      real fragments) into a mktemp scratch directory, and runs fourteen
+      numbered checks there, so the source tree is never mutated. A
+      before/after checksum snapshot of .changie.yaml, .changes/ and
+      CHANGELOG.md asserts this. Reports the seeded version-file count
+      (floor 14) before comparing anything. Every refusal is asserted on
+      changie's own stderr text plus a non-zero exit, never a bare exit
+      code, and an executed-leg counter must reach 14 (rule 84d1gfpywd). A
+      one-byte or whitespace-only difference between changie merge
+      --dry-run and CHANGELOG.md IS drift. Leg 5 proves a fragment without
+      PR is accepted (D-13), and leg 12 proves it renders without a link.
+      Leg 13 drives the real task changie -- path (the configured
+      workflow.changie_command) with a body carrying command
+      substitution, backticks and a semicolon, and proves that the body
+      arrives byte-literal and that nothing executes (02-REVIEW CR-01).
+      Leg 14 runs the real changie batch auto then changie merge in the
+      scratch copy and holds four sub-checks, each reported on its own line
+      before the leg fails: the new version file ends in a blank line, no
+      `## [` heading is glued mid-line in the merged CHANGELOG.md, kinds
+      render in .changie.yaml order, and the merged CHANGELOG.md is the
+      header, one blank line, the new file and the old history byte for
+      byte (D-13, Phase 5 05-01).
+      Wired into ci.yml's test job immediately after docs:cli:drift (D-08).
+    silent: true
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — check:changie builds changie from go.tool-changie.mod (D-07)."
+      - sh: command -v cmp
+        msg: "cmp not found — check:changie byte-compares changie merge --dry-run against CHANGELOG.md."
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+        work="${scratch}/work"
+
+        before=$(find .changie.yaml .changes CHANGELOG.md -type f -exec cksum {} + | LC_ALL=C sort)
+
+        nseeds=$(find .changes -maxdepth 1 -type f -name 'v*.md' | wc -l | tr -d ' ')
+        echo "check:changie: found ${nseeds} seeded version files under .changes/ (floor 14)"
+        if [ "${nseeds}" -lt 14 ]; then
+          echo "::error::check:changie: found only ${nseeds} seeded version files under .changes/ (floor 14) — a broken enumeration must fail loud, never read as a clean pass"
+          exit 1
+        fi
+
+        GOWORK=off go build -modfile=go.tool-changie.mod -o "${scratch}/changie" github.com/miniscruff/changie
+
+        mkdir -p "${work}/.changes/unreleased"
+        cp .changie.yaml "${work}/.changie.yaml"
+        cp .changes/header.tpl.md "${work}/.changes/header.tpl.md"
+        cp .changes/v*.md "${work}/.changes/"
+        cp .changes/unreleased/.gitkeep "${work}/.changes/unreleased/.gitkeep"
+
+        passed=0
+
+        fragment_count() {
+          find "${work}/.changes/unreleased" -type f -name '*.yaml' | wc -l | tr -d ' '
+        }
+
+        # Leg 1/14: latest
+        expected=$(grep -m1 -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | sed -E 's/^## \[v?([0-9]+\.[0-9]+\.[0-9]+)\].*/v\1/')
+        if [ -z "${expected}" ]; then
+          echo "::error::check:changie: [1/14] changie latest — CHANGELOG.md has no '## [x.y.z]' heading to derive the expected value from"
+          exit 1
+        fi
+        set +e
+        actual=$(cd "${work}" && CI=true "${scratch}/changie" latest 2>"${scratch}/leg1.err")
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [1/14] changie latest — exited ${status}: $(cat "${scratch}/leg1.err")"
+          exit 1
+        fi
+        if [ "${actual}" != "${expected}" ]; then
+          echo "::error::check:changie: [1/14] changie latest = ${actual}, want ${expected} (newest CHANGELOG.md heading)"
+          exit 1
+        fi
+        lowest=$(printf '%s\n' v0.14.0 "${actual}" | sort -V | head -n1)
+        if [ "${lowest}" != "v0.14.0" ]; then
+          echo "::error::check:changie: [1/14] changie latest = ${actual} fell below the v0.14.0 baseline"
+          exit 1
+        fi
+        echo "check:changie: [1/14] changie latest = ${actual} (newest CHANGELOG.md heading ${expected}; baseline v0.14.0) — ok"
+        passed=$((passed + 1))
+
+        # Leg 2/14: next auto, empty
+        count=$(fragment_count)
+        echo "check:changie: [2/14] scratch unreleased/ holds ${count} fragments before next auto"
+        if [ "${count}" -ne 0 ]; then
+          echo "::error::check:changie: [2/14] scratch unreleased/ holds ${count} fragments, want 0 before the empty-next-auto leg"
+          exit 1
+        fi
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" next auto 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -eq 0 ]; then
+          echo "::error::check:changie: [2/14] changie next auto exited 0 against an empty unreleased/ (expected a refusal): ${out}"
+          exit 1
+        fi
+        if ! printf '%s' "${out}" | grep -qF "no unreleased changes found for automatic bumping"; then
+          echo "::error::check:changie: [2/14] changie next auto (empty) — stderr does not contain the expected refusal text: ${out}"
+          exit 1
+        fi
+        echo "check:changie: [2/14] changie next auto (empty unreleased/) refused: no unreleased changes found for automatic bumping — ok"
+        passed=$((passed + 1))
+
+        # Leg 3/14: merge --dry-run
+        set +e
+        (cd "${work}" && CI=true "${scratch}/changie" merge --dry-run) >"${scratch}/merged.md" 2>"${scratch}/leg3.err"
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [3/14] changie merge --dry-run exited ${status}: $(cat "${scratch}/leg3.err")"
+          exit 1
+        fi
+        if ! cmp -s CHANGELOG.md "${scratch}/merged.md"; then
+          echo "::error::check:changie: [3/14] changie merge --dry-run does not reproduce CHANGELOG.md byte-for-byte"
+          diff -u CHANGELOG.md "${scratch}/merged.md" | head -40 || true
+          exit 1
+        fi
+        if [ -f "${work}/CHANGELOG.md" ]; then
+          echo "::error::check:changie: [3/14] changie merge --dry-run wrote ${work}/CHANGELOG.md — dry-run must write nothing"
+          exit 1
+        fi
+        echo "check:changie: [3/14] changie merge --dry-run byte-identical to CHANGELOG.md (dry run wrote nothing) — ok"
+        passed=$((passed + 1))
+
+        # Leg 4/14: new, valid
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie probe fragment" -m PR=1 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [4/14] changie new (valid) exited ${status}: ${out}"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 1 ]; then
+          echo "::error::check:changie: [4/14] fragment count = ${count} after a valid new, want 1"
+          exit 1
+        fi
+        frag=$(find "${work}/.changes/unreleased" -type f -name '*.yaml')
+        if ! grep -qF "kind: Fixes" "${frag}" || ! grep -qF "body: check:changie probe fragment" "${frag}"; then
+          echo "::error::check:changie: [4/14] written fragment ${frag} missing expected kind/body lines"
+          cat "${frag}"
+          exit 1
+        fi
+        echo "check:changie: [4/14] changie new -k Fixes writes exactly one fragment with kind/body set — ok"
+        passed=$((passed + 1))
+
+        # Leg 5/14: no PR is accepted (D-13: PR field is optional)
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie probe without PR" 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [5/14] changie new with no -m PR= exited ${status} (expected acceptance, D-13): ${out}"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [5/14] fragment count = ${count} after the no-PR new, want 2"
+          exit 1
+        fi
+        frag5=$(grep -lF "check:changie probe without PR" "${work}/.changes/unreleased/"*.yaml || true)
+        nfrag5=$(printf '%s\n' "${frag5}" | sed '/^$/d' | wc -l | tr -d ' ')
+        if [ "${nfrag5}" -ne 1 ]; then
+          echo "::error::check:changie: [5/14] expected exactly one fragment matching the no-PR probe body, found ${nfrag5}: ${frag5}"
+          exit 1
+        fi
+        if ! grep -qF "kind: Fixes" "${frag5}"; then
+          echo "::error::check:changie: [5/14] no-PR fragment ${frag5} missing 'kind: Fixes'"
+          exit 1
+        fi
+        if grep -q "PR:" "${frag5}"; then
+          echo "::error::check:changie: [5/14] no-PR fragment ${frag5} unexpectedly contains a PR: line"
+          exit 1
+        fi
+        if grep -qF "custom:" "${frag5}"; then
+          echo "::error::check:changie: [5/14] no-PR fragment ${frag5} unexpectedly contains a custom: block"
+          exit 1
+        fi
+        echo "check:changie: [5/14] changie new with no PR accepted: fragment written without a PR field — ok"
+        passed=$((passed + 1))
+
+        # Leg 6/14: undeclared kind
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Undeclared -b "check:changie probe undeclared kind" -m PR=1 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -eq 0 ]; then
+          echo "::error::check:changie: [6/14] changie new -k Undeclared exited 0 (expected a refusal): ${out}"
+          exit 1
+        fi
+        if ! printf '%s' "${out}" | grep -qF "invalid kind: Undeclared"; then
+          echo "::error::check:changie: [6/14] undeclared-kind refusal — stderr does not contain the expected text: ${out}"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [6/14] fragment count = ${count} after the undeclared-kind refusal, want 2"
+          exit 1
+        fi
+        echo "check:changie: [6/14] changie new -k Undeclared refused: invalid kind: Undeclared — ok"
+        passed=$((passed + 1))
+
+        # Leg 7/14: PR below minInt
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie probe PR below minimum" -m PR=0 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -eq 0 ]; then
+          echo "::error::check:changie: [7/14] changie new -m PR=0 exited 0 (expected a refusal): ${out}"
+          exit 1
+        fi
+        if ! printf '%s' "${out}" | grep -qF "input below minimum: 0 < 1"; then
+          echo "::error::check:changie: [7/14] PR-below-minimum refusal — stderr does not contain the expected text: ${out}"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [7/14] fragment count = ${count} after the PR-below-minimum refusal, want 2"
+          exit 1
+        fi
+        echo "check:changie: [7/14] changie new -m PR=0 refused: input below minimum: 0 < 1 — ok"
+        passed=$((passed + 1))
+
+        # Leg 8/14: non-integer PR
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie probe non-integer PR" -m PR=abc 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -eq 0 ]; then
+          echo "::error::check:changie: [8/14] changie new -m PR=abc exited 0 (expected a refusal): ${out}"
+          exit 1
+        fi
+        if ! printf '%s' "${out}" | grep -qF "invalid number"; then
+          echo "::error::check:changie: [8/14] non-integer-PR refusal — stderr does not contain the expected text: ${out}"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 2 ]; then
+          echo "::error::check:changie: [8/14] fragment count = ${count} after the non-integer-PR refusal, want 2"
+          exit 1
+        fi
+        echo "check:changie: [8/14] changie new -m PR=abc refused: invalid number — ok"
+        passed=$((passed + 1))
+
+        # Leg 9/14: collision
+        set +e
+        out1=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie collision probe one" -m PR=2 2>&1)
+        status1=$?
+        out2=$(cd "${work}" && CI=true "${scratch}/changie" new -k Fixes -b "check:changie collision probe two" -m PR=3 2>&1)
+        status2=$?
+        set -e
+        if [ "${status1}" -ne 0 ] || [ "${status2}" -ne 0 ]; then
+          echo "::error::check:changie: [9/14] collision leg — one of the two back-to-back new calls failed (status1=${status1} status2=${status2}): ${out1} / ${out2}"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 4 ]; then
+          echo "::error::check:changie: [9/14] fragment count = ${count} after two back-to-back new calls, want 4 (collision — sub-second fragmentFileFormat not honored)"
+          exit 1
+        fi
+        echo "check:changie: [9/14] two back-to-back new -k Fixes calls raised the fragment count to 4 (sub-second fragmentFileFormat holds) — ok"
+        passed=$((passed + 1))
+
+        # Leg 10/14: patch successor (only Fixes fragments present)
+        set +e
+        next=$(cd "${work}" && CI=true "${scratch}/changie" next auto 2>"${scratch}/leg10.err")
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [10/14] changie next auto exited ${status}: $(cat "${scratch}/leg10.err")"
+          exit 1
+        fi
+        major=$(printf '%s' "${actual#v}" | cut -d. -f1)
+        minor=$(printf '%s' "${actual#v}" | cut -d. -f2)
+        patch=$(printf '%s' "${actual#v}" | cut -d. -f3)
+        want="v${major}.${minor}.$((patch + 1))"
+        if [ "${next}" != "${want}" ]; then
+          echo "::error::check:changie: [10/14] changie next auto = ${next}, want the patch successor ${want} (only Fixes fragments present)"
+          exit 1
+        fi
+        echo "check:changie: [10/14] with only Fixes fragments present, next auto = ${next} (patch successor of ${actual}) — ok"
+        passed=$((passed + 1))
+
+        # Leg 11/14: minor successor once a Breaking fragment is added
+        set +e
+        out=$(cd "${work}" && CI=true "${scratch}/changie" new -k Breaking -b "check:changie breaking probe" -m PR=4 2>&1)
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [11/14] changie new -k Breaking exited ${status}: ${out}"
+          exit 1
+        fi
+        set +e
+        next=$(cd "${work}" && CI=true "${scratch}/changie" next auto 2>"${scratch}/leg11.err")
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [11/14] changie next auto (with Breaking fragment) exited ${status}: $(cat "${scratch}/leg11.err")"
+          exit 1
+        fi
+        want="v${major}.$((minor + 1)).0"
+        if [ "${next}" != "${want}" ]; then
+          echo "::error::check:changie: [11/14] changie next auto = ${next}, want the minor successor ${want} (a Breaking fragment must not derive a major bump pre-1.0)"
+          exit 1
+        fi
+        echo "check:changie: [11/14] a Breaking fragment derives the minor successor ${next} (pre-1.0: Breaking -> minor) — ok"
+        passed=$((passed + 1))
+
+        # Leg 12/14: batch auto --dry-run renders the no-PR and PR fragments (CHG-04, D-13)
+        set +e
+        (cd "${work}" && CI=true "${scratch}/changie" batch auto --dry-run) >"${scratch}/batch12.out" 2>"${scratch}/leg12.err"
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [12/14] changie batch auto --dry-run exited ${status}: $(cat "${scratch}/leg12.err")"
+          exit 1
+        fi
+        if ! grep -qxF -- "- check:changie probe without PR" "${scratch}/batch12.out"; then
+          echo "::error::check:changie: [12/14] batch auto --dry-run missing the exact no-PR line"
+          cat "${scratch}/batch12.out"
+          exit 1
+        fi
+        if ! grep -qxF -- "- check:changie probe fragment ([#1](https://github.com/seanb4t/codegraph-go/pull/1))" "${scratch}/batch12.out"; then
+          echo "::error::check:changie: [12/14] batch auto --dry-run missing the exact PR-linked line"
+          cat "${scratch}/batch12.out"
+          exit 1
+        fi
+        nseeds_after=$(find "${work}/.changes" -maxdepth 1 -type f -name 'v*.md' | wc -l | tr -d ' ')
+        if [ "${nseeds_after}" -ne "${nseeds}" ]; then
+          echo "::error::check:changie: [12/14] .changes/v*.md count changed from ${nseeds} to ${nseeds_after} — dry run must write nothing"
+          exit 1
+        fi
+        count=$(fragment_count)
+        if [ "${count}" -ne 5 ]; then
+          echo "::error::check:changie: [12/14] fragment count = ${count} after the dry-run render, want 5 (dry run must write nothing)"
+          exit 1
+        fi
+        echo "check:changie: [12/14] changie batch auto --dry-run renders the no-PR fragment without a link and a PR fragment with its link (dry run wrote nothing) — ok"
+        passed=$((passed + 1))
+
+        # Leg 13/14: the real task changie -- path passes a hostile body byte-literal (02-REVIEW CR-01)
+        marker="${scratch}/leg13.marker"
+        payload='check:changie injection probe $(touch '"${marker}"') `touch '"${marker}"'` ; touch '"${marker}"';'
+        set +e
+        (cd "${work}" && CI=true "{{.TASK_EXE}}" --taskfile "{{.ROOT_TASKFILE}}" changie -- new --dry-run -k Fixes -b "${payload}" -m PR=1) >"${scratch}/leg13.out" 2>"${scratch}/leg13.err"
+        status=$?
+        set -e
+        if [ -e "${marker}" ]; then
+          echo "::error::check:changie: [13/14] task changie -- re-shelled the fragment body: the injected command created ${marker}"
+          exit 1
+        fi
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [13/14] task changie -- new --dry-run exited ${status}: $(cat "${scratch}/leg13.err")"
+          exit 1
+        fi
+        if ! grep -qxF -- "body: ${payload}" "${scratch}/leg13.out"; then
+          echo "::error::check:changie: [13/14] task changie -- new --dry-run did not print the body byte-literal"
+          cat "${scratch}/leg13.out"
+          exit 1
+        fi
+        echo "check:changie: [13/14] task changie -- passed a body carrying command substitution, backticks and ; byte-literal, and nothing executed — ok"
+        passed=$((passed + 1))
+
+        # Leg 14/14: batch auto then merge renders a well-formed version file and CHANGELOG.md (D-13, Phase 5 05-01)
+        set +e
+        (cd "${work}" && CI=true "${scratch}/changie" batch auto) >"${scratch}/leg14.batch.out" 2>"${scratch}/leg14.batch.err"
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [14/14] changie batch auto exited ${status}: $(cat "${scratch}/leg14.batch.err")"
+          exit 1
+        fi
+        set +e
+        (cd "${work}" && CI=true "${scratch}/changie" merge) >"${scratch}/leg14.merge.out" 2>"${scratch}/leg14.merge.err"
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::check:changie: [14/14] changie merge exited ${status}: $(cat "${scratch}/leg14.merge.err")"
+          exit 1
+        fi
+        set +e
+        new=$(cd "${work}" && CI=true "${scratch}/changie" latest 2>"${scratch}/leg14.latest.err")
+        status=$?
+        set -e
+        if [ "${status}" -ne 0 ] || [ ! -f "${work}/.changes/${new}.md" ]; then
+          echo "::error::check:changie: [14/14] changie latest after batch and merge = '${new}' (exit ${status}), and ${work}/.changes/${new}.md does not exist: $(cat "${scratch}/leg14.latest.err")"
+          exit 1
+        fi
+        leg14_failed=0
+        # (i) the new version file ends in a blank line
+        if [ "$(tail -c 2 "${work}/.changes/${new}.md" | od -An -tx1 | tr -d ' \n')" != "0a0a" ]; then
+          echo "::error::check:changie: [14/14] (i) .changes/${new}.md does not end in two newlines (a blank line), so the next merged heading would be glued onto its last bullet"
+          leg14_failed=1
+        fi
+        # (ii) no `## [` heading sits anywhere but at the start of a line
+        glued=$(grep -n -F '## [' "${work}/CHANGELOG.md" | grep -v -E '^[0-9]+:## \[' || true)
+        if [ -n "${glued}" ]; then
+          echo "::error::check:changie: [14/14] (ii) CHANGELOG.md holds a '## [' heading that is not at the start of its line: ${glued}"
+          leg14_failed=1
+        fi
+        # (iii) kinds render in .changie.yaml order (Breaking before Fixes)
+        breaking_line=$(grep -n -x -F '### Breaking' "${work}/.changes/${new}.md" | head -n1 | cut -d: -f1)
+        fixes_line=$(grep -n -x -F '### Fixes' "${work}/.changes/${new}.md" | head -n1 | cut -d: -f1)
+        if [ -z "${breaking_line}" ] || [ -z "${fixes_line}" ] || [ "${breaking_line}" -ge "${fixes_line}" ]; then
+          echo "::error::check:changie: [14/14] (iii) .changes/${new}.md does not render '### Breaking' (line '${breaking_line}') before '### Fixes' (line '${fixes_line}')"
+          leg14_failed=1
+        fi
+        # (iv) merged CHANGELOG.md = header, one newline, the new file, then the old history from its third line on
+        {
+          cat .changes/header.tpl.md
+          printf '\n'
+          cat "${work}/.changes/${new}.md"
+          tail -n +3 CHANGELOG.md
+        } >"${scratch}/leg14.expected"
+        if ! cmp -s "${work}/CHANGELOG.md" "${scratch}/leg14.expected"; then
+          echo "::error::check:changie: [14/14] (iv) merged CHANGELOG.md is not header + blank line + .changes/${new}.md + the old history byte for byte"
+          diff -u "${scratch}/leg14.expected" "${work}/CHANGELOG.md" | head -40 || true
+          leg14_failed=1
+        fi
+        if [ "${leg14_failed}" -ne 0 ]; then
+          exit 1
+        fi
+        echo "check:changie: [14/14] changie batch auto then merge renders ${new} with a trailing blank line, every heading at line start, kinds in .changie.yaml order, and history byte-identical — ok"
+        passed=$((passed + 1))
+
+        after=$(find .changie.yaml .changes CHANGELOG.md -type f -exec cksum {} + | LC_ALL=C sort)
+        if [ "${before}" != "${after}" ]; then
+          echo "::error::check:changie: the source tree changed during the run (.changie.yaml, .changes/ or CHANGELOG.md)"
+          exit 1
+        fi
+
+        if [ "${passed}" -ne 14 ]; then
+          echo "::error::check:changie: only ${passed} of 14 checks executed"
+          exit 1
+        fi
+
+        echo "check:changie: 14 of 14 checks passed against a scratch copy (source tree byte-unchanged)"
+
+  release:batch:
+    desc: >-
+      REL-10's release-PR job body (D-02). Batches .changes/unreleased into
+      one version file, merges it into CHANGELOG.md, and writes the derived
+      version to GITHUB_OUTPUT as `version`. With no *.yaml fragment it
+      prints a notice and exits 0, because changie batch auto exits 1 on an
+      empty set (CHG-03, C1). It fails when the rendered notes carry a
+      GitHub skip-ci phrase, because the release PR's body becomes the
+      squash commit message on main (repository setting
+      squash_merge_commit_message PR_BODY) and would suppress
+      release-tag.yml (C2). CI-only by intent: run it in a disposable
+      worktree, never in a checkout you want to keep, because it rewrites
+      CHANGELOG.md and deletes the fragments.
+    silent: true
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — release:batch runs the pinned changie from go.tool-changie.mod (D-02)."
+    cmds:
+      - |
+        set -euo pipefail
+        count=$(find .changes/unreleased -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d ' ')
+        if [ "${count}" -eq 0 ]; then
+          echo "release:batch: no unreleased fragments under .changes/unreleased/ — nothing to release"
+          exit 0
+        fi
+        {{.GO_TOOL_CHANGIE}} changie batch auto
+        {{.GO_TOOL_CHANGIE}} changie merge
+        version=$({{.GO_TOOL_CHANGIE}} changie latest)
+        if grep -qiE '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]' ".changes/${version}.md"; then
+          echo "::error::release:batch: .changes/${version}.md contains a GitHub skip-ci phrase; the release PR body becomes the squash commit message on main and would suppress release-tag.yml"
+          exit 1
+        fi
+        echo "release:batch: rendered ${version} from ${count} fragment(s)"
+        if [ -n "${GITHUB_OUTPUT:-}" ]; then
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+        fi
+
+  release:tag:
+    desc: >-
+      REL-11's tag-job body (D-06). Tags HEAD with `changie latest` and pushes
+      only that ref. A tag already on origin is success, not failure (C3), so
+      the milestone merge and any re-run are no-ops. The push credential is
+      whatever the checkout persisted; in release-tag.yml that is the GitHub
+      App token, because a tag pushed with the default token never starts
+      release.yml. Runs only under GitHub Actions (C8, D-06R: no human
+      git tag). This target holds the repository's only tag-creating command
+      (GRD-16).
+    silent: true
+    preconditions:
+      - sh: '[ "${GITHUB_ACTIONS:-}" = "true" ]'
+        msg: "release:tag pushes a tag to origin and runs only in release-tag.yml (D-06R: no human git tag). Rehearse it against a scratch clone whose origin is a scratch bare repository, with GITHUB_ACTIONS=true set for that one command."
+      - sh: command -v git
+        msg: "git not found — release:tag tags and pushes with git."
+    cmds:
+      - |
+        set -euo pipefail
+        tag=$({{.GO_TOOL_CHANGIE}} changie latest)
+        rc=0
+        git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null || rc=$?
+        case "${rc}" in
+          0) echo "release:tag: ${tag} already exists on origin — nothing to do"; exit 0 ;;
+          2) ;;
+          *) echo "::error::release:tag: git ls-remote exited ${rc}; refusing to guess whether ${tag} exists on origin"; exit 1 ;;
+        esac
+        git tag "${tag}"
+        git push origin "refs/tags/${tag}"
+        echo "release:tag: pushed ${tag} at $(git rev-parse HEAD)"
 
   web:deps:
     desc: >-
@@ -1517,15 +2047,25 @@ tasks:
   vuln:
     desc: >-
       ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —
-      see 04-01-SUMMARY.md): govulncheck -mode=binary over the eight tool
+      see 04-01-SUMMARY.md): govulncheck -mode=binary over the nine tool
       binaries built from go.tool.mod (task, goreleaser, govulncheck),
       go.tool-lint.mod (actionlint), go.tool-proto.mod (buf,
       protoc-gen-go, protoc-gen-connect-go — closed into scope alongside
       the golangci-lint addition below, 03-10-PLAN.md Task 1: it was a
       pre-existing gap of the identical shape, absent from this scan since
-      01-01-PLAN.md) and go.tool-golangci.mod (golangci-lint,
-      03-10-PLAN.md Task 1) — the 571 measured third-party modules
-      (deduplicated union across all four modfiles) that execute as
+      01-01-PLAN.md), go.tool-golangci.mod (golangci-lint,
+      03-10-PLAN.md Task 1) and go.tool-changie.mod (changie, v0.15.0
+      Phase 1, 01-02-PLAN.md) — 1257 measured third-party modules
+      (deduplicated union of each module's Path across the first four
+      modfiles, re-measured live at 01-02-PLAN.md Task 2 via `go list -m`
+      over each modfile), growing to 1261 with go.tool-changie.mod's graph
+      unioned in (+4 net-new, matching that modfile's own co-location
+      measurement). Neither the bare-path nor the path@version form
+      reproduces the previously-recorded count of 571 from an earlier
+      phase — that reflects dependency-graph growth since that
+      measurement (more tool modfiles, newer transitive deps), not a
+      methodology error; the number here is what was actually measured,
+      not carried forward unverified — modules that execute as
       credentialed CI tooling (repository write access and secrets) and
       were previously scanned by nothing (D-05: this target used to run
       `govulncheck ./...` over the main module only, a no-op duplicate of
@@ -1540,7 +2080,7 @@ tasks:
       every goreleaser binary regardless of config, and the upstream
       package is unmaintained, Fixed in: N/A). Shipped blocking, this gate
       would have been permanently red from its first run on real in-scope
-      tooling — worse than the no-op it replaces. All eight binaries stay
+      tooling — worse than the no-op it replaces. All nine binaries stay
       in scope (no allowlist, no exclusion): the point is detection, not
       build-failure, so a NEW finding in any binary is exactly as visible
       as this known one. -mode=binary is also symbol-level, NOT
@@ -1565,7 +2105,7 @@ tasks:
         scratch=$(mktemp -d)
         trap 'rm -rf "${scratch}"' EXIT
 
-        echo "==> Building tool binaries (GOWORK=off; go.tool.mod x3, go.tool-lint.mod x1, go.tool-proto.mod x3, go.tool-golangci.mod x1)"
+        echo "==> Building tool binaries (GOWORK=off; go.tool.mod x3, go.tool-lint.mod x1, go.tool-proto.mod x3, go.tool-golangci.mod x1, go.tool-changie.mod x1)"
         GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/task" github.com/go-task/task/v3/cmd/task
         GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/goreleaser" github.com/goreleaser/goreleaser/v2
         GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/govulncheck" golang.org/x/vuln/cmd/govulncheck
@@ -1574,13 +2114,14 @@ tasks:
         GOWORK=off go build -modfile=go.tool-proto.mod -o "${scratch}/buf" github.com/bufbuild/buf/cmd/buf
         GOWORK=off go build -modfile=go.tool-proto.mod -o "${scratch}/protoc-gen-go" google.golang.org/protobuf/cmd/protoc-gen-go
         GOWORK=off go build -modfile=go.tool-proto.mod -o "${scratch}/protoc-gen-connect-go" connectrpc.com/connect/cmd/protoc-gen-connect-go
+        GOWORK=off go build -modfile=go.tool-changie.mod -o "${scratch}/changie" github.com/miniscruff/changie
 
         # ADVISORY (D-04 superseded): every outcome below is REPORTED, never
         # fails this task. See this target's desc: for why — goreleaser's
         # binary carries a real, permanently-unfixed, symbol-reachable
         # vulnerability (GO-2026-5932) that would otherwise make a blocking
         # gate permanently red.
-        for name in task goreleaser govulncheck actionlint golangci-lint buf protoc-gen-go protoc-gen-connect-go; do
+        for name in task goreleaser govulncheck actionlint golangci-lint buf protoc-gen-go protoc-gen-connect-go changie; do
           set +e
           out=$({{.GO_TOOL}} govulncheck -mode=binary "${scratch}/${name}" 2>&1)
           status=$?
@@ -1853,13 +2394,14 @@ tasks:
 
   check:fragment-policy:
     desc: >-
-      GATE-04's offline guard (D-01, D-10). It runs
+      GATE-04's and GRD-15's offline guard (D-01, D-10). It runs
       scripts/test_fragment_policy.py's stdlib unittest suite over literal
-      inputs, never gh, git or a pull request. It passes only when unittest's
-      executed count equals the number of `def test_` methods defined in the
-      file, the defined count is at least 36, and the result line is exactly
-      OK, so a skipped or undiscovered test cannot pass (rule 84d1gfpywd). It
-      is wired into ci.yml's test job.
+      inputs, never gh, git or a pull request. GRD-15's hygiene allowlist and
+      exemption-marker tests live in the same file. It passes only when
+      unittest's executed count equals the number of `def test_` methods
+      defined in the file, the defined count is at least 46, and the result
+      line is exactly OK, so a skipped or undiscovered test cannot pass (rule
+      84d1gfpywd). It is wired into ci.yml's test job.
     silent: true
     preconditions:
       - sh: command -v python3
@@ -1867,7 +2409,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        floor=36
+        floor=46
         defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' scripts/test_fragment_policy.py || true; } | wc -l | tr -d ' ')
         if [ "${defined}" -lt "${floor}" ]; then
           echo "::error::check:fragment-policy: found only ${defined} test methods (floor ${floor}) — a gutted suite must fail loud"
@@ -2070,12 +2612,18 @@ tasks:
       `build --single-target` darwin invocation; this target is the first
       thing in this repo to exercise `goreleaser release` itself, the
       single-runner shape the migrated release.yml (plan 01-03) will use.
-      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      Runs the release composition in changie's documented pre-tag form,
+      with GORELEASER_CURRENT_TAG taken from `changie latest` and
+      --skip=publish,sign,validate: a PR or dispatch HEAD carries no tag and
       GoReleaser hard-fails ("git tag ... was not made against commit ...")
-      without one — the resolved version string is the only thing --snapshot
-      changes, not the property this target verifies. Uses
-      --skip=publish,sign so nothing is published to GitHub and no signing
-      key/OIDC token is needed locally.
+      without one, and GORELEASER_CURRENT_TAG stands in for it. It does not
+      use --snapshot, because --snapshot skips GoReleaser's changelog pipe and
+      would ignore --release-notes (REL-13, Pitfall 2). It passes
+      `--release-notes .changes/${TAG}.md`, prints a RELEASE-NOTES-EVIDENCE
+      line naming that file, its size and its sha256, and refuses an absent or
+      empty notes file. --skip=publish,sign means nothing is published to
+      GitHub and no signing key/OIDC token is needed locally; --skip=validate
+      lets the run proceed on a HEAD that is not the tagged commit.
 
       RELEASE CLASS, notarize reachable (plan 02-02's goreleaser-caller
       enumeration): `--skip=sign` skips the release-scoped `signs:` pipe
@@ -2135,8 +2683,24 @@ tasks:
         # entry's own goos:/goarch: list, not from the environment. A
         # leftover GOOS/GOARCH would be at best a no-op and at worst mask a
         # misconfiguration (RESEARCH.md Pattern 5 / Pitfall 2).
-        echo "==> goreleaser release --snapshot --skip=publish,sign --clean"
-        "${GORELEASER_BIN}" release --snapshot --skip=publish,sign --clean
+
+        # The notes file for the version the release would carry. An absent
+        # or empty file stops the run here, because GoReleaser alone only
+        # warns on an empty one (C6, Pitfall 2). The evidence line records
+        # which file was passed, nothing more (D-14).
+        TAG="$({{.GO_TOOL_CHANGIE}} changie latest)"
+        NOTES=".changes/${TAG}.md"
+        if [ ! -s "${NOTES}" ]; then
+          echo "::error::release:dry-run: ${NOTES} is missing or empty — GoReleaser would publish a release with an empty body (REL-13, C6)"
+          exit 1
+        fi
+        echo "RELEASE-NOTES-EVIDENCE tag=${TAG} file=${NOTES} bytes=$(wc -c < "${NOTES}" | tr -d ' ') sha256=$(shasum -a 256 "${NOTES}" | cut -d' ' -f1)"
+
+        # Not --snapshot: it skips the changelog pipe and would ignore
+        # --release-notes (Pitfall 2). GORELEASER_CURRENT_TAG stands in for
+        # the tag a pre-tag HEAD does not carry.
+        echo "==> goreleaser release --skip=publish,sign,validate --clean --release-notes ${NOTES} (GORELEASER_CURRENT_TAG=${TAG})"
+        GORELEASER_CURRENT_TAG="${TAG}" "${GORELEASER_BIN}" release --skip=publish,sign,validate --clean --release-notes "${NOTES}"
 
         # Assert via dist/artifacts.json (GoReleaser's own documented stable
         # lookup, same as check:darwin-release-build) that exactly four
@@ -2214,6 +2778,10 @@ tasks:
       variables (MACOS_SIGN_P12 and siblings, .goreleaser.yaml) and is
       stopped on this canary by `enabled:` evaluating false, not by any
       `--skip` flag.
+
+      The release this rehearses is cut by merging the release PR that
+      release-pr.yml opens; release-tag.yml then pushes the tag that starts
+      release.yml, whose step runs release:goreleaser (DOCS-14).
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
@@ -2385,6 +2953,11 @@ tasks:
       Meant to run in CI on a tag push, NOT casually from a laptop. For the
       local, non-publishing equivalent, use `task release:dry-run`.
 
+      The release notes are `.changes/${TAG}.md`, passed with
+      --release-notes (REL-12, changie's documented GoReleaser integration).
+      A tag with no such file fails here, including a hand-pushed rc tag
+      (D-06R).
+
       RELEASE CLASS, BOTH reachable (plan 02-02's goreleaser-caller
       enumeration): this is the one target where `notarize:` and the
       release-scoped `signs:` (cosign) pipe are BOTH live and BOTH expected
@@ -2495,7 +3068,19 @@ tasks:
         # entry's own goos:/goarch: list, not from the environment. A
         # carried-over GOOS/GOARCH would be at best a no-op and at worst
         # mask a misconfiguration.
-        "${GORELEASER_BIN}" release --clean
+        #
+        # The Release body is the changie version file for the tag being
+        # released (REL-12, D-08), handed to GoReleaser with --release-notes.
+        # GoReleaser only warns on an empty notes file, so an absent or empty
+        # one stops here instead (C6): a Release published with an empty
+        # body cannot be repaired by re-cutting the tag (Phase 1 D-12).
+        TAG="$(git describe --exact-match --tags HEAD)"
+        NOTES=".changes/${TAG}.md"
+        if [ ! -s "${NOTES}" ]; then
+          echo "::error::release:goreleaser: ${NOTES} is missing or empty — GoReleaser would publish a release with an empty body (REL-12, C6)"
+          exit 1
+        fi
+        "${GORELEASER_BIN}" release --clean --release-notes "${NOTES}"
 
         # Emit the checksums-file hash as a $GITHUB_OUTPUT `hashes` value
         # when running under GitHub Actions (GITHUB_OUTPUT is only set
@@ -2508,7 +3093,6 @@ tasks:
         # release.yml step, so the release job's Release step keeps
         # exactly one run: body (T-01-14).
         if [ -n "${GITHUB_OUTPUT:-}" ]; then
-          TAG="$(git describe --exact-match --tags HEAD)"
           CHECKSUMS_FILE="dist/codegraph_${TAG}_checksums.txt"
           if [ ! -f "${CHECKSUMS_FILE}" ]; then
             echo "::error::${CHECKSUMS_FILE} not found — expected GoReleaser's checksum: pipe to have produced it"
@@ -4845,9 +5429,10 @@ tasks:
 
   check:cross:
     desc: >-
-      4-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
-      gate release-please.yml's pretag-gate job runs before a tag can be
-      created. Run this locally before pushing to main to catch a
+      4-target go list -mod=readonly sanity sweep (D-15) — the same sweep the
+      pretag-gate jobs in release-pr.yml and release-tag.yml run before a
+      release PR is opened or a tag is pushed (D-07). Run this locally before
+      pushing to main to catch a
       platform-specific go.sum/build-constraint failure your own GOOS/GOARCH
       can't see (the exact failure class that reached the v0.1 rc.1 release
       candidate). The pair list is machine-held set-equal to

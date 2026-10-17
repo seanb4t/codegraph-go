@@ -401,13 +401,14 @@ release:
   # case: `auto` marks a release as a prerelease when the tag contains a
   # prerelease identifier, the same rule expressed declaratively.
   prerelease: auto
-  # No name_template/header/footer/draft/disable key: release-please
-  # creates the tag AND the GitHub Release object with its own generated
-  # body BEFORE release.yml ever fires (release-please.yml:57-92), so
-  # GoReleaser's job is only to add assets to an ALREADY-EXISTING
-  # Release. Regenerating the body would move release authorship away
-  # from the tool D-06R reserves it to. Held by
-  # TestReleaseBlockDoesNotRewriteReleaseBody.
+  # No name_template/header/footer/draft/disable key: the changie chain
+  # pushes the tag first (release-tag.yml); GoReleaser then creates the
+  # GitHub Release, with .changes/${TAG}.md passed as its release notes
+  # through --release-notes (Taskfile.yml release:goreleaser). A header or
+  # footer key would add text to those notes, a name_template key would
+  # rename the Release, and a draft or disable key would leave it
+  # unpublished. Held by TestReleaseBlockDoesNotRewriteReleaseBody;
+  # changelog.disable is held absent by TestGoreleaserChangelogNotDisabled.
 
 # homebrew_casks: (BREW-01/03/04, D-14/D-15/D-16/D-05) publishes
 # Casks/codegraph.rb to the seanb4t/homebrew-tap repository (D-14,

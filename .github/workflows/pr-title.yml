@@ -1,21 +1,18 @@
 # PR-title Conventional-Commits gate (D-08, REL-02).
 #
-# Deliberately a separate workflow from ci.yml, not a job inside it — see
-# .planning/phases/09-release-please-and-goreleaser/09-03-PLAN.md's
-# <recorded_divergence> block for the full rationale. In short: under this
-# repo's squash-merge model, the PR TITLE is the commit message
-# release-please parses to derive the version bump and CHANGELOG.md entry.
-# ci.yml's shared `pull_request:` trigger uses GitHub's default event types,
-# which exclude `edited` — a contributor who fixes only a bad title would
-# get no re-run there, leaving the gate stale exactly when it matters
-# (RESEARCH Pitfall 1). Widening ci.yml's trigger to include `edited` would
-# re-run its heavy test / govulncheck / reproducibility / perf-regression
-# jobs on every title OR description edit. This file's own narrow trigger
-# includes `edited` without that cost.
+# Hygiene only. This check keeps squash-merge commit subjects readable and
+# Conventional-Commits-shaped. It carries no versioning weight: changie
+# derives the version and the changelog from the .changes/unreleased/
+# fragments (release-pr.yml), never from the PR title.
 #
-# A non-conformant PR title silently degrades or omits release-please's
-# changelog entry for the merged commit — this gate is the input-quality
-# guarantee release-please's entire output depends on.
+# Deliberately a separate workflow from ci.yml, not a job inside it. ci.yml's
+# shared `pull_request:` trigger uses GitHub's default event types, which
+# exclude `edited` -- a contributor who fixes only a bad title would get no
+# re-run there, leaving the gate stale exactly when it matters (RESEARCH
+# Pitfall 1). Widening ci.yml's trigger to include `edited` would re-run its
+# heavy test / govulncheck / reproducibility / perf-regression jobs on every
+# title OR description edit. This file's own narrow trigger includes `edited`
+# without that cost.
 #
 # Security: the PR title is fully attacker-controlled text from any fork PR
 # author. It reaches the shell ONLY through the TITLE env var below, never

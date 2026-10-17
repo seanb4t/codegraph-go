@@ -200,6 +200,15 @@ jobs:
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
+      # CHG-03/CHG-04, v0.15.0 Phase 1: proves the pinned changie
+      # (go.tool-changie.mod) answers the v0.14.0 baseline version,
+      # reproduces CHANGELOG.md from .changes/ byte for byte, writes a
+      # fragment non-interactively with CI=true, and refuses a malformed
+      # one (missing PR, undeclared kind) on changie's own stderr text —
+      # all inside a scratch copy that never mutates the tree.
+      - name: Changie baseline and fragment guard (CHG-03/CHG-04)
+        run: task check:changie
+
       # GRD-11: check:gonum's SBOM half shells out to `syft` exactly as
       # .goreleaser.yaml's sboms: block does; GitHub-hosted runners do not
       # ship it. Same pin already trusted by release.yml and
@@ -538,10 +547,10 @@ jobs:
           CI: "1"
         run: task test:tmux
 
-  # actionlint: this phase's guarantees now live in FOUR workflow files
-  # (ci.yml, release.yml, release-please.yml, pr-title.yml) — a static
-  # schema/expression-type/injection checker over all of them is mandatory,
-  # not optional, given this repo's own documented "guard present but never
+  # actionlint: the release chain's guarantees live in workflow files
+  # (ci.yml, release.yml, release-pr.yml, release-tag.yml and pr-title.yml
+  # among them) — a static schema/expression-type/injection checker over all
+  # of them is mandatory, not optional, given this repo's own documented "guard present but never
   # fires" failure mode (Phase-8 CR-01/WR-02). actionlint catches schema
   # errors, untyped expressions, and injection-shaped run: blocks before
   # merge. Built from go.tool-lint.mod at a pinned version via the shared

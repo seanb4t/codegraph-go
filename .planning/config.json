@@ -50,7 +50,9 @@
     "ui_review": false,
     "use_worktrees": false,
     "_auto_chain_active": false,
-    "plan_review_convergence": true
+    "plan_review_convergence": true,
+    "changie_fragments": true,
+    "changie_command": "task changie --"
   },
   "ship": {
     "pr_body_sections": []

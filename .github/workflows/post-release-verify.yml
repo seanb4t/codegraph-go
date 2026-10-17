@@ -17,19 +17,22 @@
 #
 # TRIGGER — `workflow_run`, NOT `release: [published]`. This is the single
 # most consequential decision in this file (cross-AI review, cycle 1, HIGH,
-# raised independently by two reviewers). `.github/workflows/
-# release-please.yml`'s `release-please` job (release-please.yml:57-92)
-# creates the git tag AND the GitHub Release object TOGETHER, via
-# `googleapis/release-please-action`. GitHub emits `release: published` at
-# RELEASE-CREATION time — before any asset exists. `.github/workflows/
-# release.yml`'s tag-push trigger (release.yml:47-50) only fires afterwards,
-# and its `goreleaser release` invocation uploads assets minutes later. A
-# `release: [published]` verifier would therefore start against an EMPTY
-# asset list, hard-fail on every single release, and never automatically
-# retry (GoReleaser updating an already-published Release does not
-# guarantee a second `published` event). That would have shipped a
+# raised independently by two reviewers). Under the changie chain (v0.15.0
+# Phase 5), `.github/workflows/release-tag.yml` pushes the tag and
+# GoReleaser, inside `.github/workflows/release.yml`, creates the GitHub
+# Release itself. Before Phase 5 the previous release automation created the
+# tag AND the GitHub Release object TOGETHER at tag time. GitHub emits
+# `release: published` at RELEASE-CREATION time — before any asset exists.
+# Under the previous automation `release.yml`'s tag-push trigger only fired
+# afterwards, and its `goreleaser release` invocation uploaded assets
+# minutes later. A `release: [published]` verifier would therefore start
+# against an EMPTY asset list, hard-fail on every single release, and never
+# automatically retry (GoReleaser updating an already-published Release does
+# not guarantee a second `published` event). That would have shipped a
 # permanently-red gate whose first failure arrived AFTER the phase's
-# irreversible publish. Do not "simplify" this trigger back to
+# irreversible publish. `workflow_run` on release.yml's completion remains
+# the one event that fires after every asset of the run exists, whichever
+# tool creates the Release object. Do not "simplify" this trigger back to
 # `release: [published]` — read the paragraph above first.
 #
 # Two triggers:

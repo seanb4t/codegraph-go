@@ -69,20 +69,25 @@ const (
 
 // forbiddenToolPackages are the build-tool import paths that must live
 // ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod /
-// go.tool-proto.mod / go.tool-golangci.mod), never as a tool directive or
-// a require line in the root go.mod (D-03). google.golang.org/protobuf and
-// connectrpc.com/connect are deliberately NOT here even though
-// go.tool-proto.mod also pins their cmd/ tool binaries: both are
-// legitimate RUNTIME dependencies of the main module (the generated
-// .pb.go/.connect.go files import them), so root go.mod requiring them is
-// correct, not a D-03 violation — only the buf CLI itself is pure build
-// tooling with no runtime import anywhere in this module.
+// go.tool-proto.mod / go.tool-golangci.mod / go.tool-changie.mod), never
+// as a tool directive or a require line in the root go.mod (D-03).
+// google.golang.org/protobuf and connectrpc.com/connect are deliberately
+// NOT here even though go.tool-proto.mod also pins their cmd/ tool
+// binaries: both are legitimate RUNTIME dependencies of the main module
+// (the generated .pb.go/.connect.go files import them), so root go.mod
+// requiring them is correct, not a D-03 violation — only the buf CLI
+// itself is pure build tooling with no runtime import anywhere in this
+// module.
 var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
 	"github.com/golangci/golangci-lint",
 	"github.com/bufbuild/buf",
+	// github.com/miniscruff/changie — 01-01-PLAN.md, D-04: changie has no
+	// runtime import anywhere in this module; changieModfilePath (declared
+	// in changie_shape_test.go) is the fifth isolated tool modfile.
+	"github.com/miniscruff/changie",
 }
 
 // forbiddenTaskfileGateKeys are the two go-task fields that silently SKIP
@@ -141,11 +146,14 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "transcript-freeze"},
 	{Workflow: "ci.yml", JobID: "tool-vuln"},
 	{Workflow: "ci.yml", JobID: "tmux-e2e"},
-	{Workflow: "release-please.yml", JobID: "pretag-gate"},
 	{Workflow: "corpora.yml", JobID: "corpora"},
 	{Workflow: "corpora.yml", JobID: "golden"},
 	{Workflow: "components-drift.yml", JobID: "components-drift"},
 	{Workflow: "fragment-required.yml", JobID: "fragment-required"},
+	{Workflow: "release-pr.yml", JobID: "pretag-gate"},
+	{Workflow: "release-pr.yml", JobID: "release-pr"},
+	{Workflow: "release-tag.yml", JobID: "pretag-gate"},
+	{Workflow: "release-tag.yml", JobID: "tag"},
 }
 
 // runBodyException is one literal, reasoned carve-out from the
@@ -859,7 +867,12 @@ func TestGateStancesStated(t *testing.T) {
 // below, closes both the golangci-lint gap this plan adds AND the
 // pre-existing proto gap in the same change, rather than recording the
 // latter as accepted debt.
-var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath}
+// changieModfilePath (the fifth isolated tool modfile) is appended here
+// too — 01-01-PLAN.md, D-04 — but its path constant is declared in
+// changie_shape_test.go, not in this file's own const block, so that the
+// RED commit for that plan's guards compiles before go.tool-changie.mod
+// exists on disk.
+var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath, changieModfilePath}
 
 func TestToolModfilesRemainIsolated(t *testing.T) {
 	infos := make([]os.FileInfo, len(isolatedModfilePaths))
@@ -1428,11 +1441,6 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 		JobID:    "govulncheck",
 		Reason:   "runs via `uses: golang/govulncheck-action`, an action with no run: body at all",
 	},
-	{
-		Workflow: "release-please.yml",
-		JobID:    "release-please",
-		Reason:   "every step is `uses:` (create-github-app-token, release-please-action) — no run: body at all",
-	},
 }
 
 // inScopeWorkflowFiles is the SAME set of workflow files inScopeJobs
@@ -1449,7 +1457,7 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 // shape criterion 2 already fixed one level down (job population). Every
 // file on disk must now appear in EXACTLY ONE of inScopeWorkflowFiles or
 // workflowFileExceptions, or that test fails, naming it.
-var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml", "components-drift.yml", "fragment-required.yml"}
+var inScopeWorkflowFiles = []string{"ci.yml", "corpora.yml", "components-drift.yml", "fragment-required.yml", "release-pr.yml", "release-tag.yml"}
 
 // workflowFileException names one workflow file, by its filename under
 // workflowsDir, that is deliberately OUT of inScopeWorkflowFiles's
@@ -1646,7 +1654,7 @@ func validateUsesOnlyJobExceptions(excs []usesOnlyJobException) error {
 // (TestWorkflowRunBodiesInvokeTask's `len(inScopeJobs) == 0` check) —
 // nothing asserted that every job actually declared in
 // inScopeWorkflowFiles appears in it. A new CI job added to ci.yml,
-// release-please.yml, or corpora.yml without a matching inScopeJobs entry
+// release-pr.yml, release-tag.yml, or corpora.yml without a matching inScopeJobs entry
 // was bound by nothing and the suite stayed green — the memory-v4zqxrz6b3
 // shape: a hand-enumerated population narrows silently because a new
 // subject passes by being absent.
@@ -2407,7 +2415,7 @@ var cosignIdentitySANCorpus = []struct {
 	},
 	{
 		name:   "different workflow filename, same repo, tag ref",
-		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-please.yml@refs/tags/v1.2.3",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-tag.yml@refs/tags/v1.2.3",
 		accept: false,
 	},
 	{
@@ -2548,6 +2556,17 @@ func TestCosignIdentityPolicyBoundaryParityWithCompiledPattern(t *testing.T) {
 	// string comparison would fail on a legitimate difference and would
 	// still miss a semantic drift written in the same spelling.
 	compiled := regexp.MustCompile(releaseWorkflowRefPattern)
+
+	// Each corpus row's own accept verdict must hold against the compiled
+	// pattern. Without this the field was only counted (check 5) and never
+	// read against the pattern, so a row meant to be a negative fixture could
+	// be swapped for the real release.yml SAN and the suite stayed green.
+	for _, c := range cosignIdentitySANCorpus {
+		if got := compiled.MatchString(c.san); got != c.accept {
+			t.Errorf("corpus row %q: releaseWorkflowRefPattern match = %v, but the row says accept = %v (SAN %q)", c.name, got, c.accept, c.san)
+		}
+	}
+
 	for _, lit := range all {
 		litRe, err := regexp.Compile(lit.Value)
 		if err != nil {

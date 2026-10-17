@@ -1,0 +1,90 @@
+# release-tag: pushes tag vX.Y.Z when a release pull request merges (REL-11).
+#
+# The trigger is changie's documented release trigger (D-06): a push to main
+# that changes CHANGELOG.md. Only `changie merge` in a release PR changes that
+# file, so only a release-PR merge fires this workflow. The tag is
+# `changie latest`, pushed by `task release:tag`. A tag that already exists on
+# origin is skipped with success, so the milestone merge (which also changes
+# CHANGELOG.md and brings the already-tagged seed files) and any re-run are
+# no-ops.
+#
+# The GitHub App token is load-bearing: a tag pushed with the default
+# workflow token never starts release.yml. The checkout below persists the
+# App token, and `git push` in release:tag uses it. persist-credentials stays
+# at its default for exactly that reason.
+#
+# D-07: pretag-gate runs first, so no tag is cut from a main that fails
+# cross-platform module resolution.
+#
+# GRD-16: the release:tag target this job runs is the repository's only
+# tag-creating command; TestTagCreationHasSingleAppTokenSite holds that.
+#
+# The display name above must never be `release`: post-release-verify.yml
+# keys on workflow_run of the workflow named "release", and cosign's identity
+# pins release.yml.
+
+name: release-tag
+
+on:
+  push:
+    branches: [main]
+    paths: [CHANGELOG.md]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  # D-07: never open a release PR, and never cut a tag, from a main that
+  # fails cross-platform module resolution. Moved verbatim from the former
+  # release workflow; this is the exact check that would have caught the
+  # v0.1 rc.1 linux-only go.sum failure.
+  pretag-gate:
+    name: pre-tag 4-target go list sanity sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run check:cross sweep
+        run: task check:cross
+
+  tag:
+    name: tag
+    needs: pretag-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # The credential `git push` uses in release:tag.
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Tag the release
+        run: task release:tag
