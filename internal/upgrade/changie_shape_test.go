@@ -4,13 +4,6 @@
 // D-13 (05-01, maintainer decision of 2026-10-14) amends Phase 1 D-02's
 // newlines lock: the newlines mapping now holds four keys, not one, so a
 // freshly batched version file ends in a blank line (RESEARCH Pitfall 1).
-// These guards land RED first per rule x1cjy9vyhq: committed before
-// .changie.yaml/.changes/
-// exist, so the resulting failure is a real assertion failure, not a
-// build error. Never gate on `gsd-tools check tdd-red-evidence` — it
-// parses TAP only and always reports INVALID_RED for `go test`; the RED
-// evidence is this commit's position on main..HEAD plus the pasted
-// `--- FAIL` transcript in the plan's SUMMARY.
 package upgrade
 
 import (

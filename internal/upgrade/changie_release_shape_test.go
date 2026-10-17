@@ -1,12 +1,6 @@
 // changie_release_shape_test.go binds the changie release chain's CI wiring:
 // .github/workflows/release-pr.yml (REL-10, D-01 to D-04, D-07) and the
-// Taskfile.yml `release:batch` target it runs. The guards land RED first per
-// rule x1cjy9vyhq: committed before release-pr.yml and release:batch exist, so
-// the failure is a real assertion or read failure, not a build error. Never
-// gate on `gsd-tools check tdd-red-evidence` — it parses TAP only and always
-// reports INVALID_RED for `go test`; the RED evidence is the test(05-01)
-// commit that precedes the ci(05-01) commit plus the pasted `--- FAIL`
-// transcript in the plan's SUMMARY and 05-MUTATION-LOG.md.
+// Taskfile.yml `release:batch` target it runs.
 //
 // These tests read this repository's YAML, Taskfile bodies and config only.
 // They never exercise how changie, peter-evans/create-pull-request or GitHub

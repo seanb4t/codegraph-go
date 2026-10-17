@@ -12,11 +12,7 @@ import (
 // verbs, `query` and `unlock`, with cobra's own unknown-command error and
 // exits 1. Neither name may have any afterlife: no alias, no SuggestFor
 // entry, no hidden command and no hint text naming a replacement may revive
-// either one (D-01). This is the RED-first test for the removal (rule
-// x1cjy9vyhq): it is committed while the stubs still exist and must fail on
-// the stderr assertion against their still-registered rename text, then
-// pass once the stubs, their registration and their allowlist entries are
-// gone.
+// either one (D-01).
 //
 // Rule 84d1gfpywd — a guard must carry a positive assertion that it did its
 // work — is enforced two ways: len(cases) is checked against the exact
