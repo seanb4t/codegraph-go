@@ -70,18 +70,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Does every changed path fall in a housekeeping area? GSD planning
-          # artifacts live in .planning/ and have no GitHub issue by design, so
-          # without this the gate fires on roughly half this repo's PRs — and a
-          # gate that fires on routine work teaches people to bypass it
-          # reflexively, which is what the exemption marker exists to prevent.
+          # Does every changed path fall in a housekeeping area? An OpenSpec
+          # proposal (openspec/) refers to its issue without closing it, and the
+          # archived GSD planning record (.planning/) has no issue at all, so
+          # without this the gate fires on routine spec PRs — and a gate that
+          # fires on routine work teaches people to bypass it reflexively,
+          # which is what the exemption marker exists to prevent.
           all_exempt=true
           any_file=false
           while IFS= read -r f; do
             [ -n "$f" ] || continue
             any_file=true
             case "$f" in
-              .planning/*|docs/*|.github/*) ;;
+              .planning/*|openspec/*|docs/*|.github/*) ;;
               .changes/*) ;;
               go.mod|go.sum|.gitignore|README.md|CONTRIBUTING.md|CODE_OF_CONDUCT.md|SECURITY.md|NOTICE|LICENSE|CHANGELOG.md) ;;
               # Keep in sync with scripts/pr_template_policy.py's EXEMPT_PREFIXES
@@ -113,7 +114,7 @@ jobs:
 
       - name: Note the path-based exemption
         if: steps.check.outputs.path_exempt == 'true'
-        run: echo "::notice::All changed paths are housekeeping (.planning/, .changes/, docs/, .github/, or a root manifest) — issue link not required."
+        run: echo "::notice::All changed paths are housekeeping (openspec/, .planning/, .changes/, docs/, .github/, or a root manifest) — issue link not required."
 
       - name: Comment and fail if no issue link
         if: steps.check.outputs.found == 'false'

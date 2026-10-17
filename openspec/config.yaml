@@ -1,0 +1,33 @@
+schema: spec-driven
+
+context: |
+  codegraph-go is a pre-indexed code knowledge graph for coding agents: one Go binary
+  with a CLI, an MCP server (stdio), a local graph UI, and auto-sync.
+
+  Constraints an agent cannot infer from the code:
+  - One static binary per platform. CGo is allowed only for the tree-sitter parser
+    (see PARSER-DECISION.md). No bundled runtime, ever.
+  - Dependencies stay minimal and audited. Releases are signed, attested, reproducible
+    and ship SBOMs; changes that touch the release pipeline must keep all four.
+  - Platforms: macOS and Linux. Windows only through WSL2; native Windows was dropped.
+  - Storage and process design must leave room for team-scale use (central server,
+    CI-built indexes, concurrent access) without a rewrite.
+  - CLI output shapes and MCP tool results are a compatibility surface that agents
+    consume. Changing one is a behavior change, even when it looks like a fix.
+  - Behavior is defined by this repo's specs and frozen goldens. Compatibility with the
+    TypeScript CodeGraph this project began as a port of is no longer a constraint.
+  - MIT licensed. Upstream attribution lives only in NOTICE; LICENSE stays verbatim.
+  - Tests cover only code this repo owns. Never test third-party behavior (git, GitHub,
+    changie, GoReleaser, cobra, ...).
+  - Out of scope: hosted platform features, cloud-API embeddings.
+
+rules:
+  proposal:
+    - "The line after the title is `Issue: #<n>`, naming the GitHub issue this change resolves. Open the issue first if there is none."
+    - State what is out of scope.
+  specs:
+    - Name capabilities for durable behavior (`mcp-server`, `graph-queries`), not for the work.
+    - In a baseline spec, put the origin requirement ID from the old planning record in the requirement title, e.g. `(SYNC-02)`, so ID references in code comments still resolve.
+  tasks:
+    - "When the change touches `cmd/**` or `internal/**` with a user-visible effect, the last task adds a changelog fragment: `task changie -- new -k <Breaking|Features|Fixes|Performance|Dependencies> -b \"<one sentence>\"`. Otherwise the last task records the `<!-- changelog-exempt: <reason> -->` marker for the PR body."
+    - Each task that changes behavior names the test that covers it.

@@ -1,8 +1,15 @@
 # Paths Octopus skips for review and indexing. Syntax: .gitignore.
 # Octopus reads this file from the PR base commit.
 
-# GSD planning artifacts
+# GSD planning artifacts (archived; removed by #122)
 .planning/
+
+# Archived OpenSpec changes, and the files `openspec update` generates.
+# openspec/specs/ and active changes stay reviewable.
+openspec/changes/archive/
+.claude/commands/opsx/
+.claude/skills/openspec-*/
+.agents/skills/openspec-*/
 
 # Built SvelteKit bundle, embedded by web/embed.go. The source is web/src/.
 web/build/
