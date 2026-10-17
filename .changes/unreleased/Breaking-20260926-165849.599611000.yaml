@@ -1,5 +1,0 @@
-kind: Breaking
-body: Removed the hidden `query` and `unlock` commands, so running either now fails as an unknown command; run `search --full <term>` or `daemon unlock [path]` instead.
-time: 2026-09-26T16:58:49.599611-04:00
-custom:
-    PR: "88"
