@@ -5,6 +5,10 @@ planted: 2026-09-25
 planted_during: between milestones (post v0.14.0) / gsd-explore changie
 trigger_when: after codegraph-go's first changie-cut release verifies end to end (App-authored tag, release.yml fired, body == .changes/vX.md, post-release-verify green)
 scope: cross-repo (router-hosts, engram, fovea, fzymgc-house-skills)
+audit_acknowledged:
+  milestone: v0.15.0
+  at: 2026-10-17
+  status: dormant
 ---
 
 # SEED-005: changie release management as the template for the other repos

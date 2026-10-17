@@ -7,6 +7,9 @@ files:
   - .github/workflows/require-issue-link.yml
   - scripts/pr_template_policy.py
   - scripts/fragment_policy.py
+audit_acknowledged:
+  milestone: v0.15.0
+  at: 2026-10-17
 ---
 
 ## Problem

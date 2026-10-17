@@ -2,38 +2,36 @@
 gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
-current_phase: 06
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 06 complete — all phases complete
-last_updated: "2026-10-17T18:19:12.270Z"
+last_updated: "2026-10-17T18:41:04.429Z"
 last_activity: 2026-10-17
-last_activity_desc: Phase 06 complete
-state_head: 974ea8db7b8fff5c9f666dfad5228fa6ba7631fa
+last_activity_desc: Milestone v0.15.0 completed and archived
+state_head: 7ef47bd95143ac21195a311ab52da0472fbda01d
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 24
   completed_plans: 24
   percent: 100
+current_phase: 06
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-17 after Phase 6)
+See: .planning/PROJECT.md (updated 2026-10-17 after v0.15.0 milestone)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Milestone v0.15.0 complete (v0.15.0 released) — final audit and milestone close
+**Current focus:** Planning the next milestone. v0.15.0 is shipped, audited (`tech_debt`, 0 blockers) and archived
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-17 — Phase 06 complete
-
-Progress: [██████████] 100%
+Phase: Milestone v0.15.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-17 — Milestone v0.15.0 completed and archived
 
 ## Performance Metrics
 
@@ -587,6 +585,21 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 
 Items acknowledged and deferred at milestone close, most recent first.
 
+Acknowledged at the **v0.15.0 close (2026-10-17)**: 8 newly acknowledged and 5 carried forward from prior closes. All 8 went through the `audit-open acknowledge` writer with 0 failures.
+
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| todos | 2026-09-25-reply-on-gh-85-with-reshaped-contract.md | (presence-only) | 2026-10-17 | v0.15.0 |
+| todos | 2026-09-26-pin-the-go-toolchain-so-go-1-27-can-build-codegraph-go.md | (presence-only) | 2026-10-17 | v0.15.0 |
+| todos | 2026-10-17-close-a-stale-changie-release-pr-in-the-zero-fragment-path-w.md | (presence-only) | 2026-10-17 | v0.15.0 |
+| todos | 2026-10-17-fix-the-release-runbook-framing-tap-remedy-and-trigger-claim.md | (presence-only) | 2026-10-17 | v0.15.0 |
+| todos | 2026-10-17-harden-the-release-tag-job-credential-in-05.md | (presence-only) | 2026-10-17 | v0.15.0 |
+| todos | 2026-10-17-paginate-and-fail-closed-in-the-issue-link-and-template-hygi.md | (presence-only) | 2026-10-17 | v0.15.0 |
+| seeds | SEED-004 | dormant | 2026-10-17 | v0.15.0 |
+| seeds | SEED-005 | dormant | 2026-10-17 | v0.15.0 |
+
+**Verification override at the same close:** Phases 1–4 of v0.15.0 read `verification.status: stale`, because later phases edited files in their `covered_files`. Each report still records `status: passed`, and the audit found no gap. The maintainer chose to proceed without re-verification (`override_closeout`). The four 2026-10-17 todos are the review-fix clusters that Phase 6's short path deferred. SEED-005's trigger fired with this release, but it stays dormant until a milestone ports the chain to the other repos (PORT-01).
+
 Deferred at **v0.12.0 scoping (2026-08-22)** — recorded so the decisions stay visible:
 
 | Category | Item | Status |
@@ -682,7 +695,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-10-17T18:21:54.000Z
-Stopped at: Phase 06 complete — v0.15.0 released; milestone ready for the final audit (D-05) and close
+Stopped at: Milestone v0.15.0 audited (tech_debt, 0 blockers) and archived; follow-up PR not yet opened
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — PR #88 squash-merged to `main` (`ab49d80e`); `gsd/v0.15.0-milestone` is dead. Phase 6 and the milestone close live on the follow-up branch `gsd/v0.15.0-changie-release-management` (cut from `origin/main`, no upstream on purpose), which ships as ONE planning-only PR (D-04) that must add no fragment (D-06).
@@ -694,4 +707,6 @@ Stopped at: Phase 06 complete — v0.15.0 released; milestone ready for the fina
 
 ## Operator Next Steps
 
-- v0.15.0 is released and Phase 6 is verified. Next: `/gsd-audit-milestone` (the final pass, D-05), then `/gsd-complete-milestone v0.15.0`, then open the one planning-only follow-up PR from `gsd/v0.15.0-changie-release-management` (D-04). Separately: fix the `TestUpgradeCommand_NoArgsDefaultsToLatest` HOME leak and repair this machine's `~/.claude.json` codegraph MCP entry (see Blockers/Concerns)
+- Open the one planning-only follow-up PR from `gsd/v0.15.0-changie-release-management` (D-04). It carries Phase 6, the audit and this close, and it must add no fragment (D-06).
+- Fix the `TestUpgradeCommand_NoArgsDefaultsToLatest` HOME leak, and repair this machine's `~/.claude.json` codegraph MCP entry with `codegraph install --target claude --location global` (see Blockers/Concerns).
+- Start the next milestone with /gsd-new-milestone

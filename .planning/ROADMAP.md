@@ -2,7 +2,7 @@
 
 ## Overview
 
-CodeGraph Go is a Go implementation of a pre-indexed code knowledge graph for coding agents. Nine milestones have shipped: **v0.1** (2026-07-14) landed the core capabilities — indexing, query, MCP server, sync — from a signed/attested/SBOM'd release. **v1.0** (2026-08-03) closed the behavioral and surface gaps, adding a human-facing Charm TUI behind a build-enforced rendering seam that keeps the agent/MCP path free of ANSI, plus fully automated signed releases via release-please + GoReleaser. **v0.3.0** (2026-08-06) brought the stdio MCP server current with spec revision `2026-07-28` on `modelcontextprotocol/go-sdk@v1.7.0`, proven by a wire-level oracle that never imports the SDK it tests. **v0.5.0** (2026-08-11) made the binary installable by convention on macOS — Gatekeeper-accepted on both darwin arches and `brew install`-able from a tap we control. **v0.10.0** (2026-08-13) made agents actually *use* the tools: the server documents itself over MCP Resources, a decision-procedure-first SKILL.md teaches which question goes to which tool, and a SessionStart nudge makes availability visible at the moment it matters. **v0.11.0** (2026-08-16) retired the comparison framing without retiring capability, re-basing the golden suite onto measurement-selected corpora and retiring Compatibility as a constraint. **v0.15.0 (Changie Release Management) is in progress (scoped 2026-09-25):** it replaces release-please with changie so the changelog is authored input — one fragment per user-visible change, written at phase close — and the version is derived from it, proven by cutting a real release through the new chain.
+CodeGraph Go is a Go implementation of a pre-indexed code knowledge graph for coding agents. Ten milestones have shipped: **v0.1** (2026-07-14) landed the core capabilities — indexing, query, MCP server, sync — from a signed/attested/SBOM'd release. **v1.0** (2026-08-03) closed the behavioral and surface gaps, adding a human-facing Charm TUI behind a build-enforced rendering seam that keeps the agent/MCP path free of ANSI, plus fully automated signed releases via release-please + GoReleaser. **v0.3.0** (2026-08-06) brought the stdio MCP server current with spec revision `2026-07-28` on `modelcontextprotocol/go-sdk@v1.7.0`, proven by a wire-level oracle that never imports the SDK it tests. **v0.5.0** (2026-08-11) made the binary installable by convention on macOS — Gatekeeper-accepted on both darwin arches and `brew install`-able from a tap we control. **v0.10.0** (2026-08-13) made agents actually *use* the tools: the server documents itself over MCP Resources, a decision-procedure-first SKILL.md teaches which question goes to which tool, and a SessionStart nudge makes availability visible at the moment it matters. **v0.11.0** (2026-08-16) retired the comparison framing without retiring capability, re-basing the golden suite onto measurement-selected corpora and retiring Compatibility as a constraint. No milestone is in progress; the next one is scoped with `/gsd-new-milestone`.
 
 **v0.12.0 (Local Graph UI) shipped 2026-09-07.** Every consumer of the graph until now was a program — a CLI invocation or an agent over MCP. This milestone gave the graph a human face: `codegraph ui` serves a local, read-only web UI from the binary itself, so a developer can browse, visualize, query and health-check a `.codegraph/` index without going through an agent. It is deliberately a **third consumer** of `internal/query.Engine`, never a second implementation — the cross-phase integration check found no duplicated traversal logic in `internal/uiserver`, with every handler routing through one `withEngine` seam. The wire is ConnectRPC over Protobuf (maintainer directive), the app is a `pnpm`-built Svelte SPA committed and `go:embed`'d so the signed release path stays pure Go, and the whole surface binds loopback with exact-match Origin/Host validation because loopback binding alone has already been walked through by a documented CVE class. 51/51 requirements, 6/6 phases verified *and* validated, six per-phase SECURITY.md files all at `threats_open: 0`.
 
@@ -10,7 +10,9 @@ CodeGraph Go is a Go implementation of a pre-indexed code knowledge graph for co
 
 **v0.14.0 (Polish & Agent Reach) shipped 2026-09-20.** Three milestones of feature work had left a ledger of small, known, individually-cheap defects that were expensive together. This milestone burned them down and, on the same pass, gave the CLI a colour-and-structure glow-up on a folded verb surface and took agent reach from Claude-Code-shaped to harness-shaped: one capability table drives install/uninstall for all 8 targets, the skill package and instructions block go wherever each harness reads them, an opt-in PreToolUse nudge serves Claude Code and Codex from one core, and Codex reached parity at both scopes — each mechanism live-verified against codex-cli 0.155.0 before any code changed. Two data-loss-class bugs surfaced and were fixed on the way: the Codex TOML splice and a terminal escape injection through install notes.
 
-**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line reached `v0.2.0` at v1.0's close and has since advanced through `v0.3.0`, `v0.4.0`, `v0.5.0` … `v0.9.0`, plus `v0.10.0` and `v0.11.0`, each computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestone labels track the release line but carry **no git tag**: release-please remains the sole tag authority, pinned by `TestGsdTagCreationIsDisabled`. A hand-created `v*` tag would additionally match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline. The milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
+**v0.15.0 (Changie Release Management) shipped 2026-10-17.** release-please is replaced by changie, so the changelog is authored input and the version is derived from it. Each user-visible change gets a fragment, written at phase close by a private gsd capability (`seanb4t/gsd-capability-changie`, dispatched at `verify:post`) or by hand. A required `fragment-required` check stops a PR that changes shipped code without a fragment or a reasoned exemption. A push to `main` with fragments opens one App-authored release PR, and its merge makes the GitHub App push the tag into the unchanged, byte-locked `release.yml`. The chain was proven by its own first release: App-opened PR #101, an App-pushed tag, a Release body content-equal to `.changes/v0.15.0.md`, a green `post-release-verify`, and a verified upgrade from v0.14.0 on darwin/arm64 and linux/amd64. The `query`/`unlock` rename stubs were removed as the milestone's `Breaking` change. 29/29 requirements, 6/6 phases verified, audit `tech_debt` with 0 blockers. Promoted and delivered backlog **999.5**.
+
+**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line reached `v0.2.0` at v1.0's close and has since advanced through `v0.3.0`, `v0.4.0`, `v0.5.0` … `v0.9.0`, and `v0.10.0` … `v0.14.1`, each computed by release-please from Conventional Commits, and then to `v0.15.0`, the first version changie derived from fragments. There is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestone labels track the release line but carry **no git tag** of their own. Since v0.15.0, `release-tag.yml` (GitHub App token, after a release-PR merge) is the sole tag authority, pinned by `TestGsdTagCreationIsDisabled` and `TestTagCreationHasSingleAppTokenSite`. A hand-created `v*` tag would additionally match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline. The milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
 
 ## Milestones
 
@@ -23,7 +25,7 @@ CodeGraph Go is a Go implementation of a pre-indexed code knowledge graph for co
 - ✅ **v0.12.0 — Local Graph UI** — Phases 1–6 (shipped 2026-09-07) — `codegraph ui` serves a read-only, loopback-bound, ConnectRPC-backed Svelte SPA embedded in the binary: browse and inspect symbols with verbatim source and blast radius, a deep-linkable navigation model, an interactive query workbench, a visual index-health verdict, a file/package graph view, and live push from the watcher over a server-streaming rpc on the same schema and client as every other call. Consumed SEED-001; folded in the CR-01 `pendingWriter` fix
 - ✅ **v0.13.0 — Guard Hardening & UI Follow-through** — Phases 7–12 (shipped 2026-09-13) — every known guard that cannot fire closed with a recorded RED demonstration (21 mutation families across six phases); a tmux real-PTY harness gating CI on an exact executed count; v0.12.0's four UI follow-ons (breadcrumb + editor handoff, coverage denominator, community clustering) on the unchanged 16-rpc read-only wire; `docs/CLI-REFERENCE.md` generated from the live Cobra tree under a drift gate plus an allowlist guard for hidden flags; brew-trust wording narrowed. Verified closeout after re-verifying all six phases at HEAD. Archived to `milestones/v0.13.0-*`
 - ✅ **v0.14.0 — Polish & Agent Reach** — Phases 1–7 (shipped 2026-09-20) — every known defect, vacuous guard, flake and doc drift burned down; the verb surface folded and every human-output verb styled through `present`; the skill, capability model and an opt-in PreToolUse nudge delivered across all 8 harnesses with a published drift-tested table; Codex brought to parity at both scopes, live-verified before any `codex.go` change
-- 🚧 **v0.15.0 — Changie Release Management** — Phases 1–6 (in progress) — release-please replaced by changie: `.changie.yaml` with a `v0.14.0` baseline that rewrites no history; a private phase-close capability writing one fragment per user-visible change at `verify:post`; a required fragment gate; a release-PR workflow that tags through the GitHub App into the unchanged `release.yml`; the `query`/`unlock` stubs removed as the milestone's `Breaking` fragment; and a real release cut through the chain. Promotes backlog 999.5 as VERB-09; SEED-005's trigger. Phase numbering restarts at 1 (`--reset-phase-numbers`)
+- ✅ **v0.15.0 — Changie Release Management** — Phases 1–6 (shipped 2026-10-17) — release-please replaced by changie: `.changie.yaml` with a `v0.14.0` baseline that rewrote no history; a private phase-close capability writing one fragment per user-visible change at `verify:post`; a required fragment gate; a release-PR workflow that tags through the GitHub App into the unchanged `release.yml`; the `query`/`unlock` stubs removed as the milestone's `Breaking` fragment; and v0.15.0 cut through the chain. Promoted backlog 999.5 as VERB-09; fired SEED-005's trigger. Archived to `milestones/v0.15.0-*`
 - 📋 **Later** — unscoped. Still parked: GRF-07 (opt-in whole-symbol graph — on the v0.12.0 Phase 5 evidence that a 3,233-node file view never converged; revisit only with a measured budget), Team Scale (central server, CI-distributed indexes), SEED-003 (markdown in the index), DIST-06 (stapled offline-safe container), BREW-07 (homebrew-core), MRTR-01 (elicitation), GH #23 (gsd-pi install target), GH #9 (open-gsd workflow chore), the v0.14.0 v2 deferrals (NUDGE-07…10 nudge hooks for Cursor, Kiro, Gemini CLI, opencode and Antigravity — deferred by maintainer decision 2026-09-14; AGENT-12 Hermes — no public documentation found, nothing claimed until verified by non-web means), BRW-14 (nested scope-stack breadcrumb), annotations (embeddings/export). VOCAB-01 was *declined* at v0.11.0, not deferred
 
 ## Phases
@@ -128,237 +130,29 @@ Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · 
 
 </details>
 
-### 🚧 v0.15.0 — Changie Release Management (In Progress)
+<details>
+<summary>✅ v0.15.0 Changie Release Management (Phases 1–6) — SHIPPED 2026-10-17</summary>
 
-**Milestone Goal:** Replace release-please with changie so the changelog is authored input — one fragment per user-visible change, written at phase close — and the version is derived from it, then prove the chain by cutting a real v0.15.0 release through it.
+- [x] Phase 1: Changie Baseline (2/2 plans) — CHG-01…04 — completed 2026-09-25
+- [x] Phase 2: Phase-Close Fragment Capability (6/6 plans; 02-06 amended CHG-01/CHG-04 to an optional `PR` field) — CAP-01…04 — completed 2026-09-26
+- [x] Phase 3: Rename-Stub Removal (1/1 plan) — VERB-09, CAP-05 — completed 2026-09-26
+- [x] Phase 4: Fragment-Required Gate (5/5 plans) — GATE-01…05 — completed 2026-10-13
+- [x] Phase 5: Release Chain & release-please Retirement (8/8 plans, 05-08 added as the G-05-1 gap closure) — REL-10…14, GRD-15, GRD-16, DOCS-12…14 — completed 2026-10-16
+- [x] Phase 6: First Release Through the Chain (2/2 plans) — SHIP-01…04 — completed 2026-10-17
 
-**Phase numbering restarts at 1** (`--reset-phase-numbers`). v0.14.0 ran Phases 1–7 and its phase directories are archived under `milestones/v0.14.0-phases/`; `.planning/phases/` holds only the three `999.x` backlog directories (kept, annotated, by the 2026-09-08 bookkeeping decision), so `01-*` through `06-*` collide with nothing.
+**What the milestone proved, beyond the features:** the chain's live behaviour could exist only on `main`, so the definition of done was the chain's own first release, cut with no new mechanism. The App opened PR #101, the App pushed the tag (`actor` and attempt-1 `triggering_actor` are both the App bot), the locked `release.yml` succeeded at attempt 1, the Release body is content-equal to `.changes/v0.15.0.md`, `post-release-verify` passed 7/7, and an installed v0.14.0 upgraded with verification on two platforms. The phase-close capability fired at Phase 3's real close and wrote the milestone's only `Breaking` fragment, which is what derived the minor. The close is an `override_closeout`: 8 pre-existing artefacts were acknowledged, and the reports for Phases 1–4 read `stale` but `passed` because later phases edited their covered files. Carried out: the planning-only follow-up PR, the `TestUpgradeCommand_NoArgsDefaultsToLatest` HOME leak, the `TestColorFlagInvalidValue` flake, and 30 open review findings.
 
-**Ordering is load-bearing, not stylistic:**
+Archived: [`milestones/v0.15.0-ROADMAP.md`](./milestones/v0.15.0-ROADMAP.md) · requirements: [`milestones/v0.15.0-REQUIREMENTS.md`](./milestones/v0.15.0-REQUIREMENTS.md) · audit: [`milestones/v0.15.0-MILESTONE-AUDIT.md`](./milestones/v0.15.0-MILESTONE-AUDIT.md) · phases: `milestones/v0.15.0-phases/`
 
-- **The changie baseline (Phase 1) comes first because every later phase writes fragments against it.** The kind vocabulary, the required `PR` field and the `v0.14.0` baseline are fixed before a single fragment exists, so no fragment is written against a config that later changes under it. `changie merge --dry-run` reproducing today's `CHANGELOG.md` byte-for-byte is the proof that adopting changie rewrote no history.
-- **The phase-close capability (Phase 2) lands second so that phases close after it is installed.** `CAP-05` accepts only evidence of the `verify:post` step firing at a real phase close inside this milestone; installing it late would leave nothing to observe. Phase 3's close is the first one it must fire at, and Phases 4–5 are further chances if it does not — a missed firing is re-attempted at the next close, never papered over by a hand-written fragment presented as the capability's. The capability repository `seanb4t/gsd-capability-changie` is private and separate: its commits happen outside this roadmap's commit trail, and what this repository's requirements ask for is "installed and firing".
-- **The stub removal (Phase 3) is small, early and deliberately its own phase.** It is the milestone's only `Breaking` change and therefore the change that makes `changie batch auto` derive a minor (`Breaking → minor` until 1.0). It must be closed before Phase 6 batches the release PR, or the derived version is wrong. It is also the cleanest user-visible change to be the capability's first real input.
-- **The fragment gate (Phase 4) lands before the release chain (Phase 5)** so that `CONTRIBUTING.md`'s "how to exempt" (`DOCS-12`) documents a gate that exists. The gate's policy lives in its own `scripts/fragment_policy.py`, so `GRD-15` edits `scripts/pr_template_policy.py` alone (D-10). `GATE-05` is a repository-settings action the maintainer performs after the gate reaches `main`, so the phase halts at a blocking-human checkpoint for it (the v0.14.0 `GRD-12` precedent).
-- **The replacement and the re-pointed guards land in one phase (Phase 5), and `REL-14` closes it.** Every test that pins release-please as an authority goes RED against the replacement and is re-pointed in the same phase that introduces it — never left broken across a phase boundary. The docs (`DOCS-12…14`) are in this phase too, because `REL-14`'s zero-reference census covers `CONTRIBUTING.md` and `docs/RELEASE-PROCEDURES.md`: the census cannot read zero until their references are resolved, so deleting the release-please files is the phase's last change.
-- **The first real release (Phase 6) is last and is the milestone's definition of done.** Before merge, `REL-10`/`REL-11` can be proven only by shape tests, actionlint and a dry-run; the chain's live behaviour exists only on `main`. Phase 6 therefore runs after the milestone PR merges and carries three human checkpoints: merging the release PR, verifying the App-authored tag, and running `codegraph upgrade` from v0.14.0 on two platforms.
-- **Locked contracts bind every phase.** `release.yml`'s `on: push: tags: v[0-9]*` trigger and `internal/upgrade/verify.go`'s cosign identity `release.yml@refs/tags/v[0-9]*` are byte-locked; only who pushes the tag changes. Every action is SHA-pinned with a version comment. `Taskfile.yml` is the single definition of every CI job body (`TestWorkflowRunBodiesInvokeTask`). No human `git tag`: D-06R's tag authority transfers from release-please to the changie release workflow; it is not repealed. Never `[ci skip]` in a commit message (rule `f18zrdsgx5`).
-- **A guard is not trusted until demonstrated RED** against a confirmed-applied, byte-cleanly-reverted mutation (rule `84d1gfpywd`): the `CHG-03` byte-reproduction check against a one-byte `CHANGELOG.md` edit, the fragment gate against a mutated path rule, every re-pointed release guard against the replacement, the tag-authority assertion against a planted second tag push. Each phase commits its mutation log rather than asserting it.
-- **`v0.15.0` is a prediction, not a tag.** changie derives the real version from the fragments present at batch time; no phase schedules a `git tag` step.
-
-- [x] **Phase 1: Changie Baseline** - `.changie.yaml` and a `v0.14.0` baseline that reproduce today's `CHANGELOG.md` byte-for-byte, with fragments written non-interactively and malformed ones refused (completed 2026-09-25)
-- [x] **Phase 2: Phase-Close Fragment Capability** - A private `gsd-capability-changie` feature capability writes a phase's fragments at `verify:post`, installed and configured in this repository at project scope (completed 2026-09-26)
-- [x] **Phase 3: Rename-Stub Removal** - The hidden `query`/`unlock` stubs are gone, and this phase's close is the capability's first observed firing, writing the milestone's `Breaking` fragment (completed 2026-09-26)
-- [x] **Phase 4: Fragment-Required Gate** - A pull request that changes shipped code cannot merge without a fragment or a reasoned exemption, and the check is required on `main` (completed 2026-10-13)
-- [x] **Phase 5: Release Chain & release-please Retirement** - A changie release-PR workflow tags through the GitHub App into the locked `release.yml`, every release-please guard is re-pointed, the docs describe the chain, and release-please is deleted (completed 2026-10-16)
-- [x] **Phase 6: First Release Through the Chain** - A real release is cut through the new chain end to end, and an installed v0.14.0 upgrades to it with verification (completed 2026-10-17)
-
-#### Phase 1: Changie Baseline
-
-**Goal**: The repository has a changie configuration and baseline that answers `v0.14.0` as the latest version and reproduces today's `CHANGELOG.md` exactly, so every later phase writes fragments against a fixed vocabulary and no history is rewritten.
-**Depends on**: Nothing (first phase of the milestone).
-**Requirements**: CHG-01, CHG-02, CHG-03, CHG-04
-**Success Criteria** (what must be TRUE):
-
-  1. `changie latest` answers `v0.14.0`, `changie next auto` with an empty `.changes/unreleased/` fails with the expected "nothing to release" outcome, and `changie merge --dry-run` reproduces the current `CHANGELOG.md` byte-for-byte — all three run by a committed test or Taskfile target rather than a one-off shell transcript, and the byte-reproduction check is demonstrated RED against a one-byte `CHANGELOG.md` mutation, byte-cleanly reverted (CHG-03)
-  2. `.changie.yaml` declares exactly the five kinds with their `auto` bumps (`Breaking → minor`, carrying the flip-to-major-at-1.0 note in the file), the integer `PR` field with `minInt: 1` (optional since Phase 2 D-13), and the version/kind/change formats from `notes/changie-release-management.md`; `changie` is pinned at v1.26.0 or later with one recorded install path for CI and one for contributors (CHG-01)
-  3. `.changes/header.tpl.md`, `.changes/unreleased/.gitkeep` and `.changes/v0.14.0.md` exist, and every existing `CHANGELOG.md` entry below the changie header is byte-identical to `main` — baseline only, no historical entry rewritten (CHG-02)
-  4. `CI=true changie new -k <Kind> -b "<sentence>" -m PR=<n>` writes a `.changes/unreleased/*.yaml` without prompting, while a fragment naming an undeclared kind and a `PR=0` fragment are each refused and a fragment without `PR` is accepted (Phase 2 D-13) — both directions shown, with the refusal cases confirmed to have executed rather than inferred from a green exit (CHG-04)
-
-**Notes**: `changie merge` regenerates `CHANGELOG.md` from the header plus every `.changes/v*.md` file, so byte-reproducing today's history is not automatic when only `.changes/v0.14.0.md` is seeded — how the pre-v0.14.0 entries survive a merge (where they live, and whether that stays inside "no historical rewrite") is this phase's first research question, answered by a real `changie merge --dry-run`, not by reading the docs. The uniform regeneration of historical entries from GitHub Release notes is `CHG-05`, deferred to v2. `CHANGELOG.md` is tool-owned (today by release-please, from this phase by changie); no entry is hand-edited. The two install paths are recorded where contributors and CI will find them — `CONTRIBUTING.md`'s prose rewrite belongs to `DOCS-12` in Phase 5.
-**Plans**: 2/2 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 01-01-PLAN.md — Pinned changie renders the seeded `v0.14.0` baseline byte-for-byte (tracer): D-06 shape guards RED-first, `.changie.yaml`, 14 verbatim seeds, isolated `go.tool-changie.mod`, `task changie` wrapper, CONTRIBUTING install path (CHG-01, CHG-02)
-
-**Wave 2**
-
-- [x] 01-02-PLAN.md — `check:changie` 11-leg live-tool guard wired into ci.yml after `docs:cli:drift`, changie added to `task vuln`, and the RED mutation log for the byte-reproduction, missing-PR, collision and seed-set guards (CHG-01, CHG-03, CHG-04)
-
-#### Phase 2: Phase-Close Fragment Capability
-
-**Goal**: Closing a GSD phase in this repository writes that phase's changelog fragments without a human remembering to: a private `role: "feature"` capability, `seanb4t/gsd-capability-changie`, owns a `changie-fragments` skill dispatched at `verify:post`, and codegraph-go installs it at project scope. The capability repository is separate and private — its commits happen outside this roadmap's commit trail — so what this phase delivers *here* is the capability installed, configured and documented; its first real firing is proven at Phase 3's close (`CAP-05`).
-**Depends on**: Phase 1 (the skill reads the kinds declared in `.changie.yaml` and writes through `changie new`).
-**Requirements**: CAP-01, CAP-02, CAP-03, CAP-04
-**Success Criteria** (what must be TRUE):
-
-  1. `seanb4t/gsd-capability-changie` exists as a private repository with a README, a LICENSE and a tagged release, and its `capability.json` (`role: "feature"`, an id outside the reserved `gsd-` prefix, `engines.gsd` pinned) installs cleanly on a scratch project under gsd-core 1.14.0 with `gsd_run capability install ./ --scope project` (CAP-01)
-  2. The manifest registers exactly one `verify:post` step (`ref.skill`, `onError: skip`) gated on the federated `workflow.changie_fragments` key (`boolean`, default `true`): on a scratch project the step is dispatched with the key `true` and never dispatched with it `false` — both observed (CAP-02)
-  3. Given a phase number in a scratch project, the skill writes one fragment per user-visible change from that phase's `*-SUMMARY.md` files through `CI=true changie new`, using only the host `.changie.yaml`'s declared kinds, and commits them under the phase's commit conventions; in each of the three skip cases — no `changie` on `PATH`, no `.changie.yaml`, no user-visible change — it prints a reason and returns without prompting or blocking the workflow (CAP-03)
-  4. codegraph-go has the capability installed at project scope from `https://github.com/seanb4t/gsd-capability-changie.git#<tag>`, `workflow.changie_fragments` is set in `.planning/config.json`, `.gsd/` stays gitignored, and `CONTRIBUTING.md` documents the one-time per-clone install (CAP-04)
-
-**Notes**: At phase close on the milestone branch no milestone PR number may exist yet; D-03 and D-13 resolve it: the skill uses an explicit `--pr`, else the branch's open PR, else writes the fragment without a PR number (`PR` is optional since D-13 and `minInt: 1` still refuses `PR=0`), never a placeholder number. The capability manifest is the sanctioned extension vocabulary; no gsd-core workflow file is edited (out of scope by requirement), and `.planning/config.json` is written through the tool's own config verb, never by hand. A `contribution` or `ref.command` step is out of scope — a skill step is the least-privilege sanctioned shape. The scratch-project proofs in criteria 1–3 are the capability's own tests; the in-repo proof that it fires on this repository is `CAP-05` at Phase 3's close.
-**Plans**: 6/6 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 02-01-PLAN.md — Capability repo tracer, RED first: manifest installs on a scratch project, gated `verify:post` step, fragment writer with every named skip, idempotency trailers, rollback and lock, proven by a 29-leg `test/run.sh` (CAP-01, CAP-02, CAP-03)
-
-**Wave 2**
-
-- [x] 02-02-PLAN.md — README, verbatim MIT LICENSE, a pre-publication judgment rehearsal of SKILL.md, and three RED mutation families (CAP-01, CAP-03)
-
-**Wave 3**
-
-- [x] 02-03-PLAN.md — Maintainer-approved publish: private repo, annotated tag `v0.1.0` proven from a clean clone, draft milestone PR, `/gsd-ship` hazard recorded (CAP-01, CAP-04)
-
-**Wave 4**
-
-- [x] 02-04-PLAN.md — Project-scope install from the tag, config-set, ledger ignored, live preflight; maintainer-decided Claude skill materialization (CAP-04)
-
-**Wave 5**
-
-- [x] 02-06-PLAN.md — PR field made optional (D-13): `.changie.yaml` `optional: true` with Phase 1's shape test and `check:changie` re-pointed RED-first, capability `v0.1.1` writes fragments without a PR when none is open, published and upgraded at project and global scope (CAP-03, CAP-04, CHG-01, CHG-04)
-
-**Wave 6**
-
-- [x] 02-05-PLAN.md — Real `Skill(gsd-changie-fragments)` dispatch proof, and the CONTRIBUTING D-12 subsection (CAP-03, CAP-04)
-
-#### Phase 3: Rename-Stub Removal
-
-**Goal**: The hidden `query` and `unlock` rename stubs v0.14.0 promised to remove in the following minor are gone, and this phase's close is the first observed firing of the phase-close capability in this repository — the milestone's `Breaking` fragment is the one the capability wrote.
-**Depends on**: Phase 2 (`CAP-05` needs the capability installed before this phase closes). Must be closed before Phase 6 batches the release PR, so the derived version is a minor.
-**Requirements**: VERB-09, CAP-05
-**Success Criteria** (what must be TRUE):
-
-  1. `codegraph query` and `codegraph unlock` exit non-zero as unknown commands rather than printing a rename message; `internal/cli/renamed.go` and `renamed_test.go` are deleted, `newQueryCmd()`/`newUnlockCmd()` are gone from `root.go`, and the two `cli-reference-allowlist.txt` lines are removed (VERB-09)
-  2. `task docs:cli` produces no change to `docs/CLI-REFERENCE.md`, `task docs:cli:drift` and `TestEveryRegisteredFlagIsAccountedFor` are green, and the v0.14.0 Phase 3 census instrument (`03-MUTATION-LOG.md` family (c)) re-run with its positive control first finding a planted reference reports zero `codegraph query` / `codegraph unlock` hits (VERB-09)
-  3. At this phase's close the `verify:post` step dispatches and writes the stub removal's `Breaking` fragment into `.changes/unreleased/`; that fragment's commit is on the milestone branch, and the phase's VERIFICATION or SUMMARY records the dispatch with the commit SHA — evidence, not assertion (CAP-05, VERB-09)
-  4. With that fragment present, `changie next auto` on the milestone branch answers a minor bump over `v0.14.0` (predicted `v0.15.0`), not a major (VERB-09)
-
-**Notes**: The census instrument is v0.14.0's own, reused verbatim, including its `--hidden` correction and positive control — a zero-hit result from an instrument not first shown able to find a planted hit is not evidence. If the step does not fire, `CAP-05` stays open and is re-attempted at Phase 4's close (and Phase 5's after that); VERB-09's `Breaking` fragment is still required, but a hand-written one is recorded as hand-written and does not satisfy `CAP-05`. The capability skipping at a later close that has no user-visible change (Phase 4's gate is CI-only) is a useful second observation of `CAP-03`'s skip path, not a failure.
-**Plans**: 1/1 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 03-01-PLAN.md — Tracer RED-first removal of the `query`/`unlock` stubs in one `feat(cli)!:` commit, both guards proven RED against a revived verb, and the v0.14.0 census before/after with its positive control; the `Breaking` fragment is left to the capability at the close (VERB-09, CAP-05)
-
-#### Phase 4: Fragment-Required Gate
-
-**Goal**: A pull request that changes shipped code cannot merge without a changelog fragment or an explicit, reasoned exemption: a `fragment-required` check runs on every pull request, fails closed, and is a required status check on `main`.
-**Depends on**: Phase 1 (`.changes/unreleased/` exists). Independent of Phases 2–3 in code; sequenced after them so the capability's first firing lands on a phase with a real user-visible change.
-**Requirements**: GATE-01, GATE-02, GATE-03, GATE-04, GATE-05
-**Success Criteria** (what must be TRUE):
-
-  1. A pull request whose changed files touch `cmd/**` or `internal/**` (excluding `*_test.go` and `testdata/`) and add nothing under `.changes/unreleased/` fails `fragment-required`, and the identical shape plus a fragment passes — demonstrated in both directions against real fixtures, with the output recorded and the executed-case count asserted; the path rule lives in one place shared by the workflow and its tests (GATE-01, GATE-04)
-  2. A body carrying `<!-- changelog-exempt: <reason> -->` with a non-empty reason passes, while an empty reason does not exempt — the marker grammar mirrors `pr-template-exempt` (GATE-02)
-  3. An empty changed-file list, an API error and an unreadable body each fail with a distinct message; none of them passes (GATE-03)
-  4. The gate is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation of its path rule, recorded in the phase's mutation log, and its job body is a `task` invocation so `TestWorkflowRunBodiesInvokeTask` covers it (GATE-04)
-  5. **Checkpoint (repository-settings action, maintainer):** `fragment-required` is in ruleset `protect-main`'s required status checks, with the ruleset edit's timestamp recorded, and the live ruleset is re-read read-only before and after the edit (GATE-05, amended by D-09)
-
-**Notes**: The live required-context count is re-read read-only before and after the ruleset edit rather than assumed (8 on 2026-09-26); D-08 retired `.github/required-status-checks.txt`, `TestRequiredCheckNamesPreserved` and `scripts/check-ruleset-drift.sh`, so the ruleset itself is the only record of its contexts. Timing hazard for discuss-phase: a required check whose workflow exists only on the milestone branch never reports on any other pull request to `main`, so marking it required before the workflow is on `main` blocks every other PR until the milestone merges; D-05 settles the sequence: the gate reaches `main` through one PR off `main`, and only then is the check made required. Precedents to reuse rather than reinvent: `require-issue-link.yml`'s fail-closed empty-list handling, `scripts/pr_template_policy.py`'s path-aware exemption, and FIX-10's per-run `$GITHUB_OUTPUT` delimiter for any fork-controlled file list. Planning-only pull requests touch neither `cmd/**` nor `internal/**` and pass without a marker.
-**Plans**: 5/5 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 04-01-PLAN.md — Tracer, RED first: `fragment-required` gate end to end (`scripts/fragment_policy.py` verdict + paginated gh fetch, `check:fragment-required`, `pull_request_target` workflow, shape-test registration), then TDD exemptions and fail-closed states, and the 36-case suite with an executed-count guard in ci.yml's test job (GATE-01, GATE-02, GATE-03, GATE-04)
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 04-02-PLAN.md — Retire the ruleset-drift guard and its fixture (D-08), nine RED mutation families in the mutation log, and the D-09 GATE-05 amendment (GATE-04)
-
-**Wave 3** *(blocked on Wave 2)*
-
-- [x] 04-03-PLAN.md — Cherry-pick the code-only commits onto a branch off `origin/main`, prove nine-path fidelity, and open the landing PR after a blocking-human approval (GATE-01)
-
-**Wave 4** *(blocked on Wave 3)*
-
-- [x] 04-04-PLAN.md — Maintainer merges the landing PR; `main` merged back into the milestone, no rebase (GATE-01)
-
-**Wave 5** *(blocked on Wave 4)*
-
-- [x] 04-05-PLAN.md — Live ruleset re-read, a one-context PUT body, the maintainer's `protect-main` edit, and the timestamp recorded (GATE-05)
-
-#### Phase 5: Release Chain & release-please Retirement
-
-**Goal**: release-please is replaced end to end: a changie release workflow batches fragments into a reviewable release PR and, on its merge, pushes the tag with the GitHub App token into the unchanged `release.yml`; every guard that pinned release-please now pins the changie chain; the contributor and release docs describe the new chain; and release-please's files are gone.
-**Depends on**: Phase 1 (`.changie.yaml` and the baseline) and Phase 4 (`DOCS-12` documents the gate's exemption; `GRD-15`'s `pr_template_policy.py` edit follows the gate's).
-**Requirements**: REL-10, REL-11, REL-12, REL-13, REL-14, GRD-15, GRD-16, DOCS-12, DOCS-13, DOCS-14
-**Success Criteria** (what must be TRUE):
-
-  1. A new release workflow — actionlint-clean, every action SHA-pinned with a version comment, job bodies in `Taskfile.yml` — on a push to `main` with unreleased fragments runs `pretag-gate` (`task check:cross`, moved verbatim) then `changie batch auto && changie merge` and opens or updates one `chore(main): release vX.Y.Z` PR carrying the rendered `.changes/vX.Y.Z.md` and `CHANGELOG.md`; with no unreleased fragments it does nothing; on a push to `main` that changes `CHANGELOG.md` (changie's documented release trigger, amended by D-06) it mints an App installation token from `APP_ID`/`APP_PRIVATE_KEY` and pushes tag `vX.Y.Z` with it, skipping with success when that tag already exists, never with `GITHUB_TOKEN` — each branch pinned by a shape test (REL-10, REL-11)
-  2. `release.yml` differs from `main` by one comment hunk only, with its trigger, SLSA/cosign/notarization/SBOM steps and job shape byte-identical, while `goreleaser release`, which its `task release:goreleaser` step runs, receives `--release-notes .changes/${TAG}.md` (amended by D-12: the flag lives in `Taskfile.yml`), a shape test asserting `changelog.disable: true` is absent, and `release:dry-run` passing the same `--release-notes .changes/${TAG}.md` for the tag being released, both targets refusing a missing or empty notes file, and a `task release:dry-run` run exiting 0 captured before any real tag exists (amended by Phase 5 D-14, 2026-10-14: this repository's wiring only; how GoReleaser renders the Release body is not asserted) (REL-12, REL-13)
-  3. Every test that pinned release-please as an authority went RED against the replacement and was re-pointed within this phase: `TestReleasePleaseStaysPreMajor` reads `.changie.yaml`'s `Breaking → minor`, the Taskfile job registry names the new workflow's `pretag-gate`, the forbidden-`release:`-keys rationale is restated for GoReleaser-authored bodies, and `pr_template_policy.py` swaps the release-please exemptions for the release PR's own; `TestGsdTagCreationIsDisabled` passes unchanged, and a new assertion that the App-token step is the only `git tag`/`git push --tags` in `.github/workflows/` goes RED against a planted second tag push — no guard is left red when the phase closes (GRD-15, GRD-16)
-  4. A contributor reading `CONTRIBUTING.md` §Pull requests learns to add a fragment per user-visible change, never to hand-write `.changes/v*.md`, how to exempt, and how the version is derived; `docs/RELEASE-PROCEDURES.md` describes fragment → release PR → merge → App-token tag → locked `release.yml`, places `pretag-gate` in the new workflow, and states that a release is cut by merging the release PR, with each of its 45 release-please references resolved one by one under a recorded verdict; `pr-title.yml`'s header says it is hygiene only, and `Taskfile.yml`'s `release:dry-run-signed` comment and `docs/RELEASE.md`'s pipeline paragraph name the changie workflow (DOCS-12, DOCS-13, DOCS-14)
-  5. As the phase's last change, `release-please.yml`, `release-please-config.json` and `.release-please-manifest.json` are deleted, `changie latest` is the version source of truth, and a positive-controlled census — first shown to find a planted reference — reports zero `release-please` references outside `.planning/`, `CHANGELOG.md` history and this milestone's own notes (REL-14)
-
-**Notes**: Two token hazards shape the workflow, and both are why the App token exists: a tag pushed with `GITHUB_TOKEN` never fires `release.yml`, and a pull request opened or updated with `GITHUB_TOKEN` fires no `pull_request` workflows — so the release PR's required checks would never report and it could never merge. Which token authors the release PR is a discuss-phase decision that must answer the second hazard, not only the first. The workflow must also not loop: the release PR's own merge push carries a new `.changes/vX.Y.Z.md` and an empty `.changes/unreleased/`, so the tag path fires and the batch path does not. GitHub runs the workflow file from the pushed commit, so the milestone merge commit — which deletes `release-please.yml` — runs the new workflow and not the old one; that merge is Phase 6's entry. The census scope already excludes `.planning/`, so the Overview's versioning note and STATE.md's standing decisions naming release-please are updated at milestone close, not counted here. `release-please` references in `ci.yml`, `require-issue-link.yml`, `post-release-verify.yml`, `release.yml` comments and `.goreleaser.yaml` are part of the census and each gets a verdict. Before merge, criteria 1–2 are proven by shape tests, actionlint and the dry-run; the live proof is Phase 6.
-**Plans**: 8/8 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 05-01-PLAN.md — Tracer, RED first: one fragment becomes a mergeable release PR (`.changie.yaml` newlines amendment, `release:batch`, `release-pr.yml`, check:changie leg 14, shape tests and registry), proven end to end in a disposable worktree (REL-10, GRD-15)
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 05-02-PLAN.md — App-token tag on the `CHANGELOG.md` path trigger (`release-tag.yml`, `release:tag` skip-if-exists), the GRD-16 single-tag-site scan RED against a planted second tag push, and the D-06 REL-11/SC1 amendment (REL-11, GRD-16, GRD-15)
-
-**Wave 3** *(blocked on Wave 2)*
-
-- [x] 05-03-PLAN.md — `--release-notes .changes/${TAG}.md` in `release:goreleaser`, a non-snapshot `release:dry-run` rehearsal captured before any tag, the changelog.disable guard, the GoReleaser-authored rationale, and the REL-12, REL-13 and SC2 wording amendments per D-12 and D-14 (REL-12, REL-13, GRD-15, DOCS-14)
-
-**Wave 4** *(blocked on Wave 3)*
-
-- [x] 05-04-PLAN.md — Hygiene allowlists exempt the release PR by `.changes/` path in lockstep with a parity test, and WR-01's linear exemption markers with a timing test (GRD-15)
-- [x] 05-06-PLAN.md — CONTRIBUTING fragment workflow, the RELEASE-PROCEDURES changie runbook with 45 recorded verdicts in 05-CENSUS.md, the pr-title.yml hygiene-only header and the RELEASE.md pipeline sentence (DOCS-12, DOCS-13, DOCS-14)
-
-**Wave 5** *(blocked on 05-04)*
-
-- [x] 05-05-PLAN.md — The pre-major guard RED against the replacement, then re-pointed at `.changie.yaml`'s Breaking kind; D-06R prose with TestGsdTagCreationIsDisabled's logic unchanged; SAN fixtures and comment census rewording (GRD-15, GRD-16)
-
-**Wave 6** *(blocked on Waves 4 and 5)*
-
-- [x] 05-07-PLAN.md — Last change: the three release-please files and their registry entries deleted in one commit, a positive-controlled census at zero, and the phase gate (REL-14, GRD-15)
-
-**Wave 7** *(gap closure — G-05-1, blocked on Wave 6 completion)*
-
-- [x] 05-08-PLAN.md — close G-05-1 (IN-03): `docs/RELEASE-PROCEDURES.md` sections 1, 2 and 7 drop their stale hand-pushed prerelease-tag passages, section 2 pointing to section 4's D-15 paragraph; docs-only, one commit (DOCS-13)
-
-#### Phase 6: First Release Through the Chain
-
-**Goal**: A real release ships through the new chain end to end — the workflow opens the release PR from this milestone's fragments, the maintainer merges it, the GitHub App pushes the tag, the locked `release.yml` builds, signs and attests with the changie file as the Release body, and an installed v0.14.0 upgrades to it with verification. This is the milestone's definition of done.
-**Depends on**: Phases 1–5, and the milestone PR merged to `main` (its merge push is what fires the release workflow).
-**Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04
-**Success Criteria** (what must be TRUE):
-
-  1. **Checkpoint (human):** after the milestone PR merges, the workflow opens one `chore(main): release vX.Y.Z` PR from this milestone's fragments; the maintainer reviews the rendered notes and version and merges it; `changie latest` on `main` then answers the derived version (predicted `v0.15.0`) (SHIP-01)
-  2. **Checkpoint (human):** the resulting tag is authored by the GitHub App — not by a human and not by `GITHUB_TOKEN` — `release.yml` ran on that tag push, and the GitHub Release body is content-equal to `.changes/v0.15.0.md`: identical after both sides are normalized the same way (CRLF→LF, trailing whitespace stripped on each line, leading and trailing blank lines stripped; amended by Phase 6 D-11, 2026-10-17) (SHIP-02)
-  3. **Checkpoint (human):** `post-release-verify` is green against the published assets, and `codegraph upgrade` from an installed v0.14.0 verifies the new artifact against the unchanged cosign identity on darwin/arm64 and on linux/amd64 (SHIP-03)
-  4. SEED-005 is annotated with the verified trigger (this release) so the other repositories can pick up the template, and the capability tag installed by `CAP-04` is recorded as the one this release ran with (SHIP-04)
-
-**Notes**: This phase executes after the milestone PR has merged, so its own planning artifacts cannot ride on that PR — where they land (a planning-only follow-up PR, which the fragment gate passes without a marker) and when the milestone audit and close run relative to this phase are sequencing decisions to settle at discuss time. No human `git tag`, no `[ci skip]`, no re-run of a failed step to make a check green: a defect found here is fixed forward through a `Fixes` fragment and the chain, never by hand-tagging. The version label is a prediction — criterion 2 names `v0.15.0` only because that is what the fragments are expected to derive; the file compared is whatever `.changes/vX.Y.Z.md` the release actually produced.
-**Plans**: 2/2 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 06-01-PLAN.md — Tracer from the #88 merge: follow-up branch cut from `origin/main`, the App-opened release PR and its required checks, the maintainer's one-way merge checkpoint, then the App-authored tag, the `release.yml` run and the content-equal body (D-11), all recorded in `06-EVIDENCE.md` (SHIP-01, SHIP-02)
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 06-02-PLAN.md — `post-release-verify` green, v0.14.0 upgrades on darwin/arm64 (isolated `HOME`) and linux/amd64 (Namespace devbox), SEED-005 annotated with the capability tag, and one evidence summary for the maintainer's single blocking sign-off (SHIP-03, SHIP-04)
+</details>
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine dependencies are few: every phase needs Phase 1's `.changie.yaml`; Phase 3's close needs Phase 2's capability installed (`CAP-05`); Phase 5's docs and its `pr_template_policy.py` edit follow Phase 4's gate; Phase 6 needs all five phases and the milestone PR merged to `main`. Phase 4 is otherwise independent of Phases 2–3 and could run beside them, but is kept after Phase 3 so the capability's first firing lands on a close carrying a real user-visible change. `REL-14` is Phase 5's last change because its zero-reference census cannot pass until `DOCS-12…14` are done. Phase numbering restarted at 1 by `--reset-phase-numbers`; `.planning/phases/` held only the three `999.x` backlog directories at the start. Backlog below is preserved across milestone closes; `999.5` is promoted into Phase 3.
+9 milestones shipped through v0.14.0; **v0.15.0 shipped 2026-10-17**: 6 phases (1–6), 24 plans, 29/29 requirements, all phases verified, validated and security-audited. Per-phase detail lives in the archive
+([`milestones/v0.15.0-ROADMAP.md`](./milestones/v0.15.0-ROADMAP.md)) and the audit
+([`milestones/v0.15.0-MILESTONE-AUDIT.md`](./milestones/v0.15.0-MILESTONE-AUDIT.md)).
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Changie Baseline | 2/2 | Complete    | 2026-09-25 |
-| 2. Phase-Close Fragment Capability | 6/6 | Complete    | 2026-09-26 |
-| 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
-| 4. Fragment-Required Gate | 5/5 | Complete    | 2026-10-13 |
-| 5. Release Chain & release-please Retirement | 8/8 | Complete    | 2026-10-16 |
-| 6. First Release Through the Chain | 2/2 | Complete    | 2026-10-17 |
-
-9 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0, v0.14.0). v0.15.0 scoped: 6 phases (1–6), 29 requirements, 0/6 phases complete (0%).
+No milestone is currently scoped. Start the next one with `/gsd-new-milestone`.
 
 ## Backlog
 
