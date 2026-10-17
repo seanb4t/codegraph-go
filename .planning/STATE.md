@@ -21,10 +21,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-16 after Phase 5)
+See: .planning/PROJECT.md (updated 2026-10-17 after Phase 6)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 06 — First Release Through the Chain
+**Current focus:** Milestone v0.15.0 complete (v0.15.0 released) — final audit and milestone close
 
 ## Current Position
 
@@ -559,7 +559,10 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - [Phase 6] Phase 5 now reads verification_status: stale — a GENUINE signal (like Phase 4 → Phases 1–3): Phase 6 legitimately modified files in Phase 5's covered_files (internal/agents/claude.go, capabilities.go, skillshared.go, manifest.go, types.go, shared.go, ownership/capabilities tests, internal/cli/install.go, uninstall.go, docs/CLI-REFERENCE.md). Re-verify Phases 1–5 at the milestone audit (/gsd-verify-work), together with Phase 4's missing validate-phase/secure-phase runs.
 - [Phase 7] Released codegraph binaries carry a Codex TOML data-loss bug: findTOMLTableRange ends a table only at a column-0 '[', so an indented [mcp_servers.codegraph] swallows every sibling table up to the next column-0 header. Do NOT run 'codegraph install' or 'uninstall' with --target codex or --target all on a machine whose ~/.codex/config.toml indents headers until the Phase 7 fix (07-CONTEXT D-07/D-08) ships; no patch release (maintainer decision B2, 2026-09-19)
 - [Phase 7] FIX-03 is marked complete on the model-level footprint test (07-03 Families c1/c2, RED on the pre-fix delegate, GREEN at HEAD), but its requirement text also asks for the tmux harness assertion AFTER the CODEX-02 scope flip. That run was skipped by maintainer decision 2026-09-19 (tmux retired, replaced by herdr; GH issue #75) and has NOT run in CI either (branch unpushed). The re-anchored TTY-05 assertion compiles (go vet -tags tmux) but is unexecuted post-flip; the CI tmux-e2e job on the eventual PR is the outstanding evidence
-- [Phase 2] Milestone PR #88 (gsd/v0.15.0-milestone -> main) is already open as a draft. /gsd-ship's create_pr step runs gh pr create unconditionally (no existing-PR probe, ship.md create_pr) and will fail at milestone close. Mark #88 ready with gh pr ready 88 and update its body instead of running ship's create step. The fragment-writing skill resolves its PR number from this PR.
+- ⚠️ [v0.15.0 Phase 6] `internal/cli` `TestUpgradeCommand_NoArgsDefaultsToLatest` (`upgrade_test.go:71`) leaks into the developer's REAL `HOME`. It stubs `upgradeRunFunc` to a successful swap but neither stubs `refreshInstalledSkillsFunc` nor isolates `HOME`, so every `go test ./internal/cli` runs the real `refreshInstalledSkills` with `os.Executable()` (a `go-build…/cli.test` binary) as ExecPath. That rewrites `~/.claude.json`'s codegraph MCP `command` to the soon-deleted test binary and the `~/.claude/skills/codegraph` manifest (`codegraph_version: "dev"`). Observed 2026-10-17 (it broke the codegraph MCP server at session start and was re-triggered by the Phase 6 post-merge gate). Fix: stub the refresh seam (or `t.Setenv("HOME", t.TempDir())`) in that test. Repair a hit machine with `codegraph install --target claude --location global` from the real binary.
+- ⚠️ [v0.15.0 Phase 6] `internal/cli` `TestColorFlagInvalidValue` is flaky in CI: it compares two `status` outputs byte-for-byte, and the `DB Size:` line can differ (0.02 vs 0.01 MB). Fix by masking with `plain_golden_test.go`'s existing `dbSizeRegexp`. Hit twice on 2026-10-17 (#88 and the release PR #101, each cleared by one re-run).
+- [v0.15.0 Phase 6] Upstream gsd-core gap (report, do not patch): `code-review.md`'s `resolve_depth` reads `workflow.code_review_depth_overrides` with `config-get … --default '[]'` and no `--raw`, which yields the JSON string `"[]"`, so `resolveCodeReviewDepth` fails `not_an_array` and the workflow halts on any project that leaves the key null. The Phase 6 review used the `--raw` value.
+- [v0.15.0 Phase 6] 06-REVIEW.md's 4 findings (2 warning, 2 info) on the published v0.15.0 notes are `open` in 06-REVIEW-DISPOSITION.md: a heading style unlike the earlier entries, no diff link, and a PR #88 link that does not explain the removal. They are advisory and fixable only patch-forward (a future fragment or `.changie.yaml` format change). Triage at the milestone audit.
 - gsd-core 1.14.0 installs a git capability from a depth-1 clone of the default branch (capability-source.cjs resolveGit: `git clone --depth 1` then `git checkout <ref>`), so only the tag currently at gsd-capability-changie's `main` tip installs. `#v0.1.0` stopped resolving (`git checkout "v0.1.0" failed: fatal: invalid reference`) the moment `main` moved past it to publish `v0.1.1`. Every later capability release must move `main` to its new tag before publishing, and 02-05's CONTRIBUTING.md text, CAP-04 and SHIP-04 must always name the newest tag, never an older one. This is an upstream gap in resolveGit (a shallow clone cannot see tags behind the default branch's tip); filing it against gsd-core needs the maintainer's separate authorization.
 - [Phase 4] WR-02/WR-03 (untested fail-closed and escape branches) and IN-01…06 are still open (04-REVIEW-DISPOSITION.md). WR-01 (cubic backtracking in the exemption markers, here and in scripts/pr_template_policy.py) was fixed in Phase 5 plan 05-04 together with GRD-15: both markers are linear, test_exempt_markers_are_linear_on_adversarial_bodies passes, check:fragment-policy 46/46.
 - [Phase 5] Before Phase 6's live proof, decide review WR-02 (05-REVIEW.md, aa6af711): with the prerelease tag shape gone (D-15, gap plan 05-08), every cut is a stable vX.Y.Z, so docs/RELEASE-PROCEDURES.md §9's live-proof teardown (delete release + tag, revert, re-cut) collides with §7's "never reuse a stable tag name". The verifier judged it an advisory doc follow-up, not a DOCS-13 gap.
@@ -678,11 +681,11 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-17T18:02:54.282Z
-Stopped at: Phase 06 complete — all phases complete
+Last session: 2026-10-17T18:21:54.000Z
+Stopped at: Phase 06 complete — v0.15.0 released; milestone ready for the final audit (D-05) and close
   CARRY-OVER (v0.14.0):
 
-    - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.15.0-milestone` (draft PR #88); init computes `gsd/v0.15.0-changie-release-management`, which does not exist — skip execute-phase's handle_branching and stay on the milestone branch.
+    - **`branching_strategy: milestone`** — PR #88 squash-merged to `main` (`ab49d80e`); `gsd/v0.15.0-milestone` is dead. Phase 6 and the milestone close live on the follow-up branch `gsd/v0.15.0-changie-release-management` (cut from `origin/main`, no upstream on purpose), which ships as ONE planning-only PR (D-04) that must add no fragment (D-06).
     - **Go toolchain:** ambient Homebrew `go` is 1.27.1; `go.mod` pins 1.26.9 (PR #96) and `cockroachdb/swiss` is `!go1.27` — every local `go build`/`go test` gate needs `GOTOOLCHAIN=go1.26.9` (CI is unaffected: `go-version-file: go.mod`).
     - **Web gates:** `pnpm vitest run` must assert exit 0 AND zero "unhandled errors" lines; a pass count alone is negative-only. Piped `svelte-check` is MACHINE format (uppercase ERRORS).
     - **WINDOWS.md** is tool-owned — close rows with `gsd-tools windows fixed <id>`, never by hand; the phase-1 rows (#12/#26/#28/#30/#36) were closed at 900d64cc and the verifier treats "in the ledger" as part of the phase goal.
@@ -691,4 +694,4 @@ Stopped at: Phase 06 complete — all phases complete
 
 ## Operator Next Steps
 
-- Phase 6 is planned; short path (CONTEXT D-03 as amended 2026-10-17): push the milestone branch, `gh pr ready 88`, the maintainer squash-merges #88, then /gsd-execute-phase 6 on the follow-up branch cut from origin/main
+- v0.15.0 is released and Phase 6 is verified. Next: `/gsd-audit-milestone` (the final pass, D-05), then `/gsd-complete-milestone v0.15.0`, then open the one planning-only follow-up PR from `gsd/v0.15.0-changie-release-management` (D-04). Separately: fix the `TestUpgradeCommand_NoArgsDefaultsToLatest` HOME leak and repair this machine's `~/.claude.json` codegraph MCP entry (see Blockers/Concerns)
