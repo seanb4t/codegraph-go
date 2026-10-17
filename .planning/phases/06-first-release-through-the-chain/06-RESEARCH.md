@@ -312,13 +312,16 @@ jq '.entries.changie|{version,source}' .gsd-capabilities.json
 | A3 | GoReleaser v2.17.1 puts `--release-notes` content in the Release body verbatim (no header/footer/changelog text added, since none is configured) | 3 | Body differs from the file; handled under D-09 as a defect found by the live run |
 | A4 | GoReleaser marks the new Release "latest" (its default), so unpinned `upgrade` resolves v0.15.0 | 2, 7 | `upgrade` would stay on v0.14.1; the proof fails visibly and `upgrade v0.15.0` pins it |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where to put the SEED-005 annotation.**
    - Known: no tool verb exists; SEED-005 has no `## Notes`; SEED-001..003 do (and the plant-seed template emits `## Notes`).
    - Recommendation: prose inside the existing `## When to Surface`. Adding `## Notes` is template-sanctioned but is a heading this file lacks; the maintainer decides if they prefer it.
+   - RESOLVED: one prose paragraph at the end of the existing `## When to Surface`, with no new heading and no frontmatter change (D-14, generated-files rule). 06-02 Task 2 writes it.
 2. **D-07 item 2's premise is stale** (see 5): the `#88` merge does not change `CHANGELOG.md`. The runbook wording should be conditional. The planner should tell the quick-task author, not rewrite the decision.
+   - RESOLVED: outside Phase 6 execution. The runbook wording is a pre-merge `/gsd-quick` fix under D-03 and D-07, made conditional as section 5 says. The planner does not rewrite D-07; the stale premise is surfaced to the maintainer with the plan set. 06-01 Task 1 accepts either outcome on the #88 merge commit: no `release-tag.yml` run, or one that concluded success and logged `already exists on origin`.
 3. **linux/amd64 leg:** devbox (no repair needed) vs the maintainer authorizing an OrbStack restart. Recommend devbox per D-13's own fallback.
+   - RESOLVED: devbox, D-13's own fallback, because OrbStack amd64 emulation fails with `exec format error` (section 7). No OrbStack restart is requested. 06-02 Task 1 step 4 runs the leg.
 
 ## Environment Availability
 

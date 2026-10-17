@@ -328,16 +328,21 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
   1. **Checkpoint (human):** after the milestone PR merges, the workflow opens one `chore(main): release vX.Y.Z` PR from this milestone's fragments; the maintainer reviews the rendered notes and version and merges it; `changie latest` on `main` then answers the derived version (predicted `v0.15.0`) (SHIP-01)
-  2. **Checkpoint (human):** the resulting tag is authored by the GitHub App — not by a human and not by `GITHUB_TOKEN` — `release.yml` ran on that tag push, and the GitHub Release body equals `.changes/v0.15.0.md` byte-for-byte (SHIP-02)
+  2. **Checkpoint (human):** the resulting tag is authored by the GitHub App — not by a human and not by `GITHUB_TOKEN` — `release.yml` ran on that tag push, and the GitHub Release body is content-equal to `.changes/v0.15.0.md`: identical after both sides are normalized the same way (CRLF→LF, trailing whitespace stripped on each line, leading and trailing blank lines stripped; amended by Phase 6 D-11, 2026-10-17) (SHIP-02)
   3. **Checkpoint (human):** `post-release-verify` is green against the published assets, and `codegraph upgrade` from an installed v0.14.0 verifies the new artifact against the unchanged cosign identity on darwin/arm64 and on linux/amd64 (SHIP-03)
   4. SEED-005 is annotated with the verified trigger (this release) so the other repositories can pick up the template, and the capability tag installed by `CAP-04` is recorded as the one this release ran with (SHIP-04)
 
 **Notes**: This phase executes after the milestone PR has merged, so its own planning artifacts cannot ride on that PR — where they land (a planning-only follow-up PR, which the fragment gate passes without a marker) and when the milestone audit and close run relative to this phase are sequencing decisions to settle at discuss time. No human `git tag`, no `[ci skip]`, no re-run of a failed step to make a check green: a defect found here is fixed forward through a `Fixes` fragment and the chain, never by hand-tagging. The version label is a prediction — criterion 2 names `v0.15.0` only because that is what the fragments are expected to derive; the file compared is whatever `.changes/vX.Y.Z.md` the release actually produced.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 6 to break down)
+- [ ] 06-01-PLAN.md — Tracer from the #88 merge: follow-up branch cut from `origin/main`, the App-opened release PR and its required checks, the maintainer's one-way merge checkpoint, then the App-authored tag, the `release.yml` run and the content-equal body (D-11), all recorded in `06-EVIDENCE.md` (SHIP-01, SHIP-02)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 06-02-PLAN.md — `post-release-verify` green, v0.14.0 upgrades on darwin/arm64 (isolated `HOME`) and linux/amd64 (Namespace devbox), SEED-005 annotated with the capability tag, and one evidence summary for the maintainer's single blocking sign-off (SHIP-03, SHIP-04)
 
 ## Progress
 
@@ -351,7 +356,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
 | 4. Fragment-Required Gate | 5/5 | Complete    | 2026-10-13 |
 | 5. Release Chain & release-please Retirement | 8/8 | Complete    | 2026-10-16 |
-| 6. First Release Through the Chain | 0/TBD | Not started | - |
+| 6. First Release Through the Chain | 0/2 | Not started | - |
 
 9 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0, v0.14.0). v0.15.0 scoped: 6 phases (1–6), 29 requirements, 0/6 phases complete (0%).
 
