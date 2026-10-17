@@ -128,3 +128,119 @@ $ gh run list --repo seanb4t/codegraph-go --workflow release-tag.yml --commit ab
 ```
 
 Outcome: no release-tag.yml run on M, as RESEARCH section 5 predicted (the #88 merge did not change `CHANGELOG.md`). The positive control for the empty result is the release-pr.yml run found by the same `--commit` query on M above (run 39052978056).
+
+## Release-PR merge
+
+Task 2 checkpoint reply (verbatim): `PR merged`
+
+```text
+$ gh pr view 101 --repo seanb4t/codegraph-go --json state,mergedBy,mergeCommit,mergedAt,title
+{"mergeCommit":{"oid":"0246de0e391b7de98052389800f8347fb9657d3b"},"mergedAt":"2026-10-17T17:35:19Z","mergedBy":{"id":"MDQ6VXNlcjQ2Nzg=","is_bot":false,"login":"seanb4t","name":"Sean Brandt"},"state":"MERGED","title":"chore(main): release v0.15.0"}
+```
+
+State MERGED, `mergedBy.login` `seanb4t` (the maintainer, not the executor). SHA = 0246de0e391b7de98052389800f8347fb9657d3b.
+
+## SHIP-01 changie latest on main
+
+```text
+$ GIT_TERMINAL_PROMPT=0 git fetch origin
+   ab49d80e..0246de0e  main       -> origin/main
+ * [new tag]           v0.15.0    -> v0.15.0
+
+$ git merge --no-ff -F <msg> origin/main
+Merge made by the 'ort' strategy.
+ .changes/unreleased/Breaking-20260926-165849.599611000.yaml | 5 -----
+ .changes/v0.15.0.md                                         | 6 ++++++
+ CHANGELOG.md                                                | 6 ++++++
+ 3 files changed, 12 insertions(+), 5 deletions(-)
+
+$ git log --oneline -3
+bdea3c83 chore(06-01): merge main into the follow-up branch after the release PR merged
+0246de0e (tag: v0.15.0, origin/main, origin/HEAD) chore(main): release v0.15.0 (#101)
+c4d56838 docs(06-01): record the pre-flight and the App-opened release PR (SHIP-01)
+
+$ git rev-list --parents -n 1 HEAD
+bdea3c83547f5ee69df897ae45cd9b9ea653b3b5 c4d56838718e05d047a81c51894e82f504ba504c 0246de0e391b7de98052389800f8347fb9657d3b
+
+$ git diff --quiet 0246de0e391b7de98052389800f8347fb9657d3b HEAD -- .changes CHANGELOG.md && echo DIFF_QUIET_OK
+DIFF_QUIET_OK
+
+$ task changie -- latest
+v0.15.0
+```
+
+The merge commit has two parents; the second is the fetched origin/main (0246de0e). `task changie -- latest` prints v0.15.0, equal to TAG.
+
+## SHIP-02 App-authored tag and release.yml
+
+### release-pr.yml on SHA (zero-fragment no-op)
+
+```text
+$ gh run list --repo seanb4t/codegraph-go --workflow release-pr.yml --commit 0246de0e391b7de98052389800f8347fb9657d3b --json databaseId,status,conclusion,event,url
+[{"conclusion":"success","databaseId":39054420946,"event":"push","status":"completed","url":"https://github.com/seanb4t/codegraph-go/actions/runs/39054420946"}]
+
+$ gh run view 39054420946 --repo seanb4t/codegraph-go --log | rg 'release:batch|nothing to release'
+release PR	Batch fragments into a release	2026-10-17T17:36:24.4178049Z release:batch: no unreleased fragments under .changes/unreleased/ — nothing to release
+
+$ gh pr list --repo seanb4t/codegraph-go --head changie/release --state all --json number,state
+[{"number":101,"state":"MERGED"}]
+```
+
+Run: https://github.com/seanb4t/codegraph-go/actions/runs/39054420946. Exactly one `changie/release` PR exists and it is MERGED; no second release PR opened. This is not a WR-01 observation: no `changie/release` PR was open for the close step to close.
+
+### release-tag.yml on SHA
+
+```text
+$ gh run view 39054420866 --repo seanb4t/codegraph-go --json conclusion,url,jobs --jq '{conclusion,url,jobs:[.jobs[]|{name,conclusion}]}'
+{"conclusion":"success","jobs":[{"conclusion":"success","name":"pre-tag 4-target go list sanity sweep"},{"conclusion":"success","name":"tag"}],"url":"https://github.com/seanb4t/codegraph-go/actions/runs/39054420866"}
+
+$ gh run view 39054420866 --repo seanb4t/codegraph-go --log | rg 'release:tag'
+tag	Tag the release	2026-10-17T17:36:20.3851786Z release:tag: pushed v0.15.0 at 0246de0e391b7de98052389800f8347fb9657d3b
+
+$ gh api repos/seanb4t/codegraph-go/commits/v0.15.0 --jq .sha
+0246de0e391b7de98052389800f8347fb9657d3b
+```
+
+Run: https://github.com/seanb4t/codegraph-go/actions/runs/39054420866. The tag resolves to SHA.
+
+### release.yml on the tag push
+
+```text
+$ gh run list --repo seanb4t/codegraph-go --workflow release.yml --branch v0.15.0 --event push --json databaseId,status,conclusion,attempt,url
+[{"attempt":1,"conclusion":"success","databaseId":39054491964,"status":"completed","url":"https://github.com/seanb4t/codegraph-go/actions/runs/39054491964"}]
+
+$ gh api repos/seanb4t/codegraph-go/actions/runs/39054491964 --jq '{event,head_branch,head_sha,run_attempt,actor:.actor.login,triggering_actor:.triggering_actor.login}'
+{"actor":"fzy-release-please[bot]","event":"push","head_branch":"v0.15.0","head_sha":"0246de0e391b7de98052389800f8347fb9657d3b","run_attempt":1,"triggering_actor":"fzy-release-please[bot]"}
+
+$ gh api repos/seanb4t/codegraph-go/actions/runs/39054491964/attempts/1 --jq '{run_attempt,actor:.actor.login,triggering_actor:.triggering_actor.login}'
+{"actor":"fzy-release-please[bot]","run_attempt":1,"triggering_actor":"fzy-release-please[bot]"}
+
+$ gh release view v0.15.0 --repo seanb4t/codegraph-go --json tagName,isDraft,isPrerelease,publishedAt,url,author
+{"author":{"id":"MDM6Qm90NDE4OTgyODI=","login":"github-actions[bot]"},"isDraft":false,"isPrerelease":false,"publishedAt":"2026-10-17T17:40:18Z","tagName":"v0.15.0","url":"https://github.com/seanb4t/codegraph-go/releases/tag/v0.15.0"}
+```
+
+Run: https://github.com/seanb4t/codegraph-go/actions/runs/39054491964 (event push, head_branch v0.15.0, head_sha SHA, conclusion success, one job `build, sign, SBOM, and publish release`, attempt 1). Run actor and attempt 1 `triggering_actor` are both `fzy-release-please[bot]`, so neither `seanb4t` nor `github-actions[bot]` pushed the tag. The Release is published (not draft, not prerelease) at 2026-10-17T17:40:18Z; its record author `github-actions[bot]` is the GoReleaser publish step's GITHUB_TOKEN identity, a different act from authoring the tag.
+
+D-10 re-runs: one in plan 06-01, in Task 1 (ci.yml run 39053062791, flake `TestColorFlagInvalidValue` DB Size, engram w2t54bym10; see `Required checks` above). None in Task 3: release-pr.yml 39054420946, release-tag.yml 39054420866 and release.yml 39054491964 each ran once (attempt 1) and concluded success. The ci.yml run on SHA (39054420975, attempt 1) also concluded success.
+
+## SHIP-02 Release body (D-11)
+
+```text
+$ norm() { tr -d '\r' | sed -E 's/[[:space:]]+$//' | awk '{l[NR]=$0} END{s=1; while(NR>=s&&l[s]=="")s++; e=NR; while(e>=s&&l[e]=="")e--; for(i=s;e>=i;i++)print l[i]}'; }
+$ gh api repos/seanb4t/codegraph-go/releases/tags/v0.15.0 --jq .body | norm > body.txt
+$ git show 0246de0e391b7de98052389800f8347fb9657d3b:.changes/v0.15.0.md | norm > file.txt
+$ test -s body.txt && test -s file.txt && cmp body.txt file.txt
+CONTENT-EQUAL lines=5
+```
+
+The normalized file side (identical to the normalized Release body):
+
+```text
+## [v0.15.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.15.0) — 2026-10-17
+
+### Breaking
+
+- Removed the hidden `query` and `unlock` commands, so running either now fails as an unknown command; run `search --full <term>` or `daemon unlock [path]` instead. ([#88](https://github.com/seanb4t/codegraph-go/pull/88))
+```
+
+Both sides are non-empty and `cmp`-equal under the D-11 normalization (CR removed, trailing whitespace stripped per line, leading and trailing blank lines stripped).
