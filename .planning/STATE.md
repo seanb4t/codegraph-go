@@ -6,10 +6,10 @@ current_phase: 6
 current_phase_name: First Release Through the Chain
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-10-17T16:41:35.482Z"
+last_updated: "2026-10-17T16:53:03.507Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: 61dc5e6e826de0786560b16bbddeeb69a38a3750
+state_head: b450266d49c74e8f83022ca86056aff0e0b23486
 progress:
   total_phases: 6
   completed_phases: 5
@@ -575,6 +575,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 | 261013-esj | Reconcile v0.14.1 release into the milestone: merge main and seed .changes/v0.14.1.md | 2026-10-13 | 3b21f39d | [261013-esj-reconcile-v0-14-1-release-into-the-miles](./quick/261013-esj-reconcile-v0-14-1-release-into-the-miles/) |
 | 261013-h27 | Disable setup-zig's mutable cache in the release job (use-cache: false), PR to main | 2026-10-13 | 38e4f676 | [261013-h27-disable-setup-zig-s-mutable-cache-in-the](./quick/261013-h27-disable-setup-zig-s-mutable-cache-in-the/) |
 | 261013-l08 | Merge main (PR #99 setup-zig use-cache: false) back into the milestone for REL-12 | 2026-10-13 | a3075957 | [261013-l08-merge-main-pr-99-setup-zig-use-cache-fal](./quick/261013-l08-merge-main-pr-99-setup-zig-use-cache-fal/) |
+| 9 | Phase 6 short path: amend CONTEXT D-03/D-05/D-07/D-08, drop the IN-05 pre-flight check from 06-01, defer four review-fix clusters to todos | 2026-10-17 | b450266d | — |
 
 ## Deferred Items
 
