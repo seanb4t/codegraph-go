@@ -36,8 +36,10 @@ Out of scope:
   5. The maintainer squash-merges #88.
 
   Execution then starts on a **fresh follow-up branch cut from `main`**. Executor commits never land on the squash-merged, dead milestone branch. Skip execute-phase's `handle_branching`, as the STATE carry-over already says.
+
+  **Amended 2026-10-17 (maintainer, after planning): short path.** Steps 1–3 are dropped. The pre-merge sequence is now `gh pr ready 88`, then the maintainer squash-merges. The dropped work (D-05's pre-merge pass, D-07's four fix clusters, D-08's issue) is deferred to todos.
 - **D-04:** **One planning-only follow-up PR carries everything after the merge.** That is Phase 6's SUMMARY, VERIFICATION and UAT, the final milestone audit, and the milestone close/archive. `fragment-required` passes a `.planning/`-only diff with no marker, and `release-pr.yml` no-ops because no fragments remain after the release.
-- **D-05:** **The milestone audit runs twice.** A pre-merge pass audits Phases 1–5, with Phase 6 showing as pending, so cross-phase gaps get fixed inside #88 before it starts the chain. A final pass runs after Phase 6 verifies, on the follow-up branch, covering all 29 requirements.
+- **D-05:** **The milestone audit runs twice.** A pre-merge pass audits Phases 1–5, with Phase 6 showing as pending, so cross-phase gaps get fixed inside #88 before it starts the chain. A final pass runs after Phase 6 verifies, on the follow-up branch, covering all 29 requirements. **Amended 2026-10-17 (short path):** the pre-merge pass is dropped. Only the final pass runs.
 
 ### #88 merge-readiness
 - **D-06:** **v0.15.0's notes are the one existing `Breaking` fragment** (the `query`/`unlock` removal). No fragment is added. The capability's no-user-visible-change verdicts for Phases 4 and 5 stand.
@@ -53,7 +55,9 @@ Out of scope:
   4. **IN-05:** the tag job checks out with `persist-credentials: false`, and `release:tag` gets the App token only at push time, through `env:`. This intentionally changes `validateTagJobCredential` and the `release-tag.yml` comment. Re-point them RED-first (rule `84d1gfpywd`, Go RED evidence per `x1cjy9vyhq`).
 
   Each fix is recorded as `fixed` with its commit in `05-REVIEW-DISPOSITION.md`. That includes the seven 2026-10-14 findings the ID reuse dropped (`jf9tgc0bb5`), restored through the tool's disposition step, never by hand. Findings this list does not name, including Phase 4's open ones, are whatever the pre-merge audit (D-05) makes of them.
-- **D-08:** **Open one milestone issue and put `Closes #N` in #88's body,** following the #76 precedent (`Closes #17`, `Closes #13`). Creating the issue is outward-facing, so the maintainer authorizes it at that step. #88's body becomes the squash commit message on `main` (`squash_merge_commit_message: PR_BODY`), so it must not contain `[skip ci]` (rule `f18zrdsgx5`).
+
+  **Amended 2026-10-17 (short path):** none of these are fixed before #88 merges. All four clusters are deferred to todos and land after the release through the normal chain. None of them is needed for this release: IN-05 would change the tag job right before its first live run, and WR-01's close step has no PR to close.
+- **D-08:** **Open one milestone issue and put `Closes #N` in #88's body,** following the #76 precedent (`Closes #17`, `Closes #13`). Creating the issue is outward-facing, so the maintainer authorizes it at that step. #88's body becomes the squash commit message on `main` (`squash_merge_commit_message: PR_BODY`), so it must not contain `[skip ci]` (rule `f18zrdsgx5`). **Amended 2026-10-17 (short path):** no milestone issue is opened, because `Issue link required` is not a required check. The no-`[skip ci]` constraint on #88's body still holds.
 
 ### Failure and evidence policy
 - **D-09:** **v0.15.0 is a real, stable release from the moment the tag is pushed. Recovery is patch-forward only.** Any defect ships as the next patch through a `Fixes` fragment (if shipped code changes) and the chain. Nothing is torn down, deleted or re-tagged. The runbook's §7 teardown applies to no published `vX.Y.Z`. — **Reversibility:** one-way — a pushed `vX.Y.Z` tag and its published Release are resolved as latest by every installed `codegraph upgrade` at once, and §7 forbids reusing a stable tag name.

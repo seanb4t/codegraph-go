@@ -507,9 +507,12 @@ Standing decisions that outlive every milestone:
 ### Pending Todos
 
 - [2026-08-14] [bench] tools/bench/runner pinnedAt() validates a checkout by git rev-parse HEAD alone — the HEAD-only anti… — [todo file](.planning/todos/pending/2026-08-14-bench-pinnedat-validates-a-checkout-by-git-rev-parse-head-alone.md)
-- [2026-09-25] [release] Adopt changie for changelog + version and replace release-please with a changie release-PR workflow — [todo file](.planning/todos/pending/2026-09-25-adopt-changie-replace-release-please.md)
 - [2026-09-25] [server-mode] Reply on GH #85 / #82 / #80 with the reshaped contract from the 2026-09-25 exploration so fovea's Phase 15 plan updates — [todo file](.planning/todos/pending/2026-09-25-reply-on-gh-85-with-reshaped-contract.md)
 - [2026-09-26] [build] Pin the Go toolchain so Go 1.27 can build codegraph-go — [todo file](.planning/todos/pending/2026-09-26-pin-the-go-toolchain-so-go-1-27-can-build-codegraph-go.md)
+- [2026-10-17] [release] Close a stale changie/release PR in the zero-fragment path (WR-01) — [todo file](.planning/todos/pending/2026-10-17-close-a-stale-changie-release-pr-in-the-zero-fragment-path-w.md)
+- [2026-10-17] [docs] Fix the release runbook framing, tap remedy and trigger claim (WR-02, WR-03, WR-04) — [todo file](.planning/todos/pending/2026-10-17-fix-the-release-runbook-framing-tap-remedy-and-trigger-claim.md)
+- [2026-10-17] [release] Harden the release-tag job credential (IN-05) — [todo file](.planning/todos/pending/2026-10-17-harden-the-release-tag-job-credential-in-05.md) — Needs - Check out the `tag` job with `persist-credentials: false`.
+- [2026-10-17] [ci] Paginate and fail closed in the issue-link and template hygiene checks (WR-02, WR-03) — [todo file](.planning/todos/pending/2026-10-17-paginate-and-fail-closed-in-the-issue-link-and-template-hygi.md)
 
 ### Blockers/Concerns
 
@@ -684,4 +687,4 @@ Stopped at: Phase 6 context gathered
 
 ## Operator Next Steps
 
-- Reconcile Phase 05's UAT with /gsd-verify-work 05 (G-05-1 is fixed by 05-08; the UAT file still reads diagnosed), then discuss Phase 6 with /gsd-discuss-phase 6
+- Phase 6 is planned; short path (CONTEXT D-03 as amended 2026-10-17): push the milestone branch, `gh pr ready 88`, the maintainer squash-merges #88, then /gsd-execute-phase 6 on the follow-up branch cut from origin/main
