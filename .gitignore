@@ -56,3 +56,8 @@ __pycache__/
 
 # direnv local shell config (loads .env via dotenv_if_exists)
 .envrc
+
+# Local tool state: macOS Finder metadata, archify diagrams, Boost output cache
+.DS_Store
+.archify/
+.boost/
