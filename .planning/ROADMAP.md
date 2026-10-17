@@ -333,12 +333,12 @@ Plans:
   4. SEED-005 is annotated with the verified trigger (this release) so the other repositories can pick up the template, and the capability tag installed by `CAP-04` is recorded as the one this release ran with (SHIP-04)
 
 **Notes**: This phase executes after the milestone PR has merged, so its own planning artifacts cannot ride on that PR — where they land (a planning-only follow-up PR, which the fragment gate passes without a marker) and when the milestone audit and close run relative to this phase are sequencing decisions to settle at discuss time. No human `git tag`, no `[ci skip]`, no re-run of a failed step to make a check green: a defect found here is fixed forward through a `Fixes` fragment and the chain, never by hand-tagging. The version label is a prediction — criterion 2 names `v0.15.0` only because that is what the fragments are expected to derive; the file compared is whatever `.changes/vX.Y.Z.md` the release actually produced.
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Tracer from the #88 merge: follow-up branch cut from `origin/main`, the App-opened release PR and its required checks, the maintainer's one-way merge checkpoint, then the App-authored tag, the `release.yml` run and the content-equal body (D-11), all recorded in `06-EVIDENCE.md` (SHIP-01, SHIP-02)
+- [x] 06-01-PLAN.md — Tracer from the #88 merge: follow-up branch cut from `origin/main`, the App-opened release PR and its required checks, the maintainer's one-way merge checkpoint, then the App-authored tag, the `release.yml` run and the content-equal body (D-11), all recorded in `06-EVIDENCE.md` (SHIP-01, SHIP-02)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -356,7 +356,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
 | 4. Fragment-Required Gate | 5/5 | Complete    | 2026-10-13 |
 | 5. Release Chain & release-please Retirement | 8/8 | Complete    | 2026-10-16 |
-| 6. First Release Through the Chain | 0/2 | Not started | - |
+| 6. First Release Through the Chain | 1/2 | In Progress | - |
 
 9 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0, v0.14.0). v0.15.0 scoped: 6 phases (1–6), 29 requirements, 0/6 phases complete (0%).
 

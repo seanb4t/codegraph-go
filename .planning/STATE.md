@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.15.0
 milestone_name: Changie Release Management
-current_phase: 6
+current_phase: 06
 current_phase_name: First Release Through the Chain
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-10-17T16:53:03.507Z"
-last_activity: 2026-10-16
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: b450266d49c74e8f83022ca86056aff0e0b23486
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-10-17T17:43:26.242Z"
+last_activity: 2026-10-17
+last_activity_desc: Phase 06 execution started
+state_head: 7942130975d1b35e91c13412c6de676880b15763
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 83
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-16 after Phase 5)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 6 — First Release Through the Chain
+**Current focus:** Phase 06 — First Release Through the Chain
 
 ## Current Position
 
-Phase: 6 (First Release Through the Chain) — READY TO EXECUTE
-Plan: Not started
+Phase: 06 (First Release Through the Chain) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-10-16 — Phase 05 complete, transitioned to Phase 6
+Last activity: 2026-10-17 — Phase 06 execution started
 
 Progress: [████████░░] 83%
 
@@ -208,6 +208,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P05 | 4 min | 2 tasks | 6 files |
 | Phase 05 P07 | 25 min | 2 tasks | 6 files |
 | Phase 05 P08 | 2 min | 1 tasks | 1 files |
+| Phase 06 P01 | 25 min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -503,6 +504,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: 05-07: census recorded as an instrument in 05-CENSUS.md, exclusions exactly REL-14's three clauses (.changes/unreleased/ per D-11), header.tpl.md stays in scope
 - [Phase 5]: Gap plan 05-08 (G-05-1) completed D-15 in the runbook: §2 lists only the Stable and Internal milestone marker tag shapes and points to §4's D-15 paragraph; §1's prerelease parenthetical and §7's prerelease-retag sentence are gone (5653cbf9). Verifier re-run 2026-10-16: passed 5/5.
 - [Phase 5]: Close: the changie-fragments capability skipped with no-user-visible-change (CI, release tooling, tests and contributor docs only); validate-phase 18/18 green, secure-phase 30/30 closed (threats_open 0).
+- [Phase 06]: 06-01: v0.15.0 shipped through the chain; derived version equalled the prediction, App authored the tag, Release body content-equal to .changes/v0.15.0.md
 
 ### Pending Todos
 
@@ -673,10 +675,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/06-first-release-through-the-chain/06-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-17T14:56:13.251Z
-Stopped at: Phase 6 context gathered
+Last session: 2026-10-17T17:43:26.189Z
+Stopped at: Completed 06-01-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.15.0-milestone` (draft PR #88); init computes `gsd/v0.15.0-changie-release-management`, which does not exist — skip execute-phase's handle_branching and stay on the milestone branch.

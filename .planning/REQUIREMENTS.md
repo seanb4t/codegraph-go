@@ -61,8 +61,8 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### First Release Through the Chain
 
-- [ ] **SHIP-01**: The first changie release PR is opened by the workflow from this milestone's fragments, reviewed, and merged; `changie latest` on `main` then answers `v0.15.0` (or whatever the fragments derive — the label is a prediction)
-- [ ] **SHIP-02**: The resulting tag is authored by the GitHub App, `release.yml` ran on that tag push, and the GitHub Release body is content-equal to `.changes/v0.15.0.md`: identical after both sides are normalized the same way (CRLF→LF, trailing whitespace stripped on each line, leading and trailing blank lines stripped; amended by Phase 6 D-11, 2026-10-17)
+- [x] **SHIP-01**: The first changie release PR is opened by the workflow from this milestone's fragments, reviewed, and merged; `changie latest` on `main` then answers `v0.15.0` (or whatever the fragments derive — the label is a prediction)
+- [x] **SHIP-02**: The resulting tag is authored by the GitHub App, `release.yml` ran on that tag push, and the GitHub Release body is content-equal to `.changes/v0.15.0.md`: identical after both sides are normalized the same way (CRLF→LF, trailing whitespace stripped on each line, leading and trailing blank lines stripped; amended by Phase 6 D-11, 2026-10-17)
 - [ ] **SHIP-03**: `post-release-verify` is green against the published assets, and `codegraph upgrade` from an installed v0.14.0 verifies the new artifact against the unchanged cosign identity on darwin/arm64 and linux/amd64
 - [ ] **SHIP-04**: `SEED-005` is annotated with the verified trigger (this release) so the other repos can pick up the template; the capability repo's tag used by CAP-04 is the one this release ran with
 
@@ -121,8 +121,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-13 | Phase 5 | Complete |
 | DOCS-14 | Phase 5 | Complete |
 | VERB-09 | Phase 3 | Complete |
-| SHIP-01 | Phase 6 | Pending |
-| SHIP-02 | Phase 6 | Pending |
+| SHIP-01 | Phase 6 | Complete |
+| SHIP-02 | Phase 6 | Complete |
 | SHIP-03 | Phase 6 | Pending |
 | SHIP-04 | Phase 6 | Pending |
 
