@@ -26,7 +26,7 @@ Matches the shipped script's stdout exactly (see the by-hand capture below).
 > finding was wrong, and the emphasis was misplaced: it *was* a methodology error. The
 > rehearsal's oracle — grepping the resumed session's transcript for `SessionStart` hook events —
 > cannot observe this dispatch, so it returned a false negative. Corrected below from a
-> seven-probe investigation (`.planning/debug/resolved/resume-matcher-not-firing.md`).
+> seven-probe investigation ([`.planning/debug/resolved/resume-matcher-not-firing.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/resume-matcher-not-firing.md)).
 
 The same session was ended and resumed via `claude --resume <session-id>`. Per the official
 Claude Code hooks documentation, this is the documented trigger for the SessionStart `resume`
@@ -121,7 +121,7 @@ negatives produced by the same invalid oracle — a grep of a session transcript
    fires; Claude Code suppresses the injection and the transcript record because the shipped
    script's output is byte-identical to what `startup` already injected. NUDGE-01 holds on the
    resume path. See the retraction in the resume section above and
-   `.planning/debug/resolved/resume-matcher-not-firing.md` for the probe ladder. The lasting
+   [`.planning/debug/resolved/resume-matcher-not-firing.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/resume-matcher-not-firing.md) for the probe ladder. The lasting
    correction is to the *method*, not the code: transcript grep is not a valid oracle for
    SessionStart dispatch.
 2. ~~**Skill-discovery non-listing.**~~ **RESOLVED 2026-08-13 — discovery was never broken.** This
@@ -135,7 +135,7 @@ negatives produced by the same invalid oracle — a grep of a session transcript
    project-scoped skills appended last. A grep keyed on `codegraph:` or on the description text
    cannot match a bare name, so the oracle returned a false negative. Fixed on our side by cutting
    the description to 110 characters so it competes for the leftover budget; retracted in
-   `SKILL-03-rehearsal.md`. See `.planning/debug/resolved/skill-discovery-not-listing.md`.
+   `SKILL-03-rehearsal.md`. See [`.planning/debug/resolved/skill-discovery-not-listing.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/skill-discovery-not-listing.md).
 
 **Shared lesson, now twice-earned in one rehearsal.** Both findings were transcript-grep false
 negatives: the first was blind to a *suppressed* hook dispatch, the second to a *degraded* catalog
@@ -143,5 +143,5 @@ entry. In each case the grep's silence was read as the product's silence. A tran
 runtime's own rendering, not the world — before recording an absence from one, prove the same
 search can find the thing when it is present, or use an oracle outside the transcript entirely.
 
-Both are recorded in `.planning/STATE.md`, with their resolutions rather than the original
+Both are recorded in [`.planning/STATE.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/STATE.md), with their resolutions rather than the original
 findings, so the retractions stay legible instead of being silently dropped.

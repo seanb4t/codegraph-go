@@ -28,7 +28,7 @@ produced a stable, reproducible, entirely fictitious ~10.6% "throughput
 regression" which survived three rounds of triage — twice being written off
 as runner noise — before a same-platform control across the same commit
 range measured **+0.73%**. There was never a code regression. See
-`.planning/debug/perf-gate-throughput-regress.md`.
+[`.planning/debug/resolved/perf-gate-throughput-regress.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/perf-gate-throughput-regress.md).
 
 `CheckRegression` now refuses a `GOOS`/`GOARCH` mismatch outright rather
 than producing a number that cannot mean anything:

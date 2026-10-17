@@ -13,7 +13,7 @@ Planning runs on [OpenSpec](https://github.com/Fission-AI/OpenSpec). The backlog
 - **Fixes and chores** that change no specified behavior go straight to a PR.
 - **Pull requests.** A proposal-only PR says `Refs #<n>`. The implementation PR says `Closes #<n>` and carries the code, the changelog fragment and the `openspec archive` result.
 - **Generated files.** `openspec update` owns the `/opsx:*` commands (`.claude/commands/opsx/`) and the `openspec-*` skills (`.claude/skills/`, `.agents/skills/`). Customize OpenSpec through `openspec/config.yaml`, never by editing those files.
-- **The GSD migration** is tracked in #122. `.planning/` is a read-only archive until that issue deletes it. Do not add to it.
+- **History.** The planning record from before OpenSpec is archived at the `planning-archive-v0.15.0` tag; read a file with `git show planning-archive-v0.15.0:.planning/<path>`. Requirement and decision IDs in comments (`SYNC-02`, `D-06R`) resolve there, and `docs/2026-10-17-gsd-era-decisions.md` holds the old decision log.
 
 ## Technology stack
 

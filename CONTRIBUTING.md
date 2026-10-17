@@ -242,8 +242,11 @@ template, and `Refs #<n>` is enough. The implementation PR says `Closes #<n>`
 and carries the code, the changelog fragment, and the `openspec archive` result,
 so the spec changes in the same commit as the behavior.
 
-`.planning/` holds the planning record from before the move to OpenSpec. It is
-read-only and will be removed. Do not add to it.
+The planning record from before the move to OpenSpec is archived at the
+[`planning-archive-v0.15.0`](https://github.com/seanb4t/codegraph-go/tree/planning-archive-v0.15.0/.planning)
+tag. Requirement and decision IDs in code comments, such as `SYNC-02` or
+`D-06R`, resolve there. Its decision log is also kept in
+[`docs/2026-10-17-gsd-era-decisions.md`](docs/2026-10-17-gsd-era-decisions.md).
 
 ## Code of conduct
 

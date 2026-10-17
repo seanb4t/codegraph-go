@@ -41,10 +41,11 @@ const (
 )
 
 // changieVersionFormat, changieKindFormat and changieChangeFormat are
-// copied byte for byte from .planning/notes/changie-release-management.md
-// lines 79-81 (D-10) — the locked design-note vocabulary this phase
-// copies, never redesigns. versionFormat contains an em dash: these are
-// the literal bytes, not retyped.
+// copied byte for byte from lines 79-81 of
+// planning-archive-v0.15.0:.planning/notes/changie-release-management.md,
+// the locked design-note vocabulary: copied, never redesigned.
+// versionFormat contains an em dash: these are the literal bytes, not
+// retyped.
 const changieVersionFormat = `## [{{.Version}}](https://github.com/seanb4t/codegraph-go/releases/tag/{{.Version}}) — {{.Time.Format "2006-01-02"}}`
 const changieKindFormat = `### {{.Kind}}`
 const changieChangeFormat = `- {{.Body}}{{if .Custom.PR}} ([#{{.Custom.PR}}](https://github.com/seanb4t/codegraph-go/pull/{{.Custom.PR}})){{end}}`

@@ -54,8 +54,7 @@
 //
 // Contributors and CI run the identical command body through
 // `task changie -- <args>` (CHG-01's recorded install path, D-05) — see
-// Taskfile.yml's `changie` target. See
-// .planning/phases/01-changie-baseline/01-CONTEXT.md D-04/D-05.
+// Taskfile.yml's `changie` target.
 module github.com/seanb4t/codegraph-go/tools-changie
 
 go 1.26.5

@@ -156,6 +156,6 @@ it from the SDK's own documentation.
 
 - [CITED: `modelcontextprotocol.io/specification/2026-07-28/changelog`, fetched 2026-08-04] — every "what it does" cell above
 - `github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1197-1210` [VERIFIED, module cache] — the asserted-pin section
-- `.planning/REQUIREMENTS.md` § Out of Scope — Streamable HTTP, authorization work, and Legacy-support exclusions this table agrees with
-- `.planning/phases/01-protocol-scoping-the-sdk-independent-wire-oracle/01-RESEARCH.md` § "SEP-by-SEP Applicability Table" and § "PITFALLS Pitfall 1" — the researched source of this table's content
+- [`.planning/milestones/v0.3.0-REQUIREMENTS.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/milestones/v0.3.0-REQUIREMENTS.md) § Out of Scope — Streamable HTTP, authorization work, and Legacy-support exclusions this table agrees with
+- [`.planning/milestones/v0.3.0-phases/01-protocol-scoping-the-sdk-independent-wire-oracle/01-RESEARCH.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/milestones/v0.3.0-phases/01-protocol-scoping-the-sdk-independent-wire-oracle/01-RESEARCH.md) § "SEP-by-SEP Applicability Table" and § "PITFALLS Pitfall 1" — the researched source of this table's content
 - `testdata/wireoracle/transcripts/legacy-*.golden` [VERIFIED, six frozen transcripts, measured 2026-08-05] — the source of the "Measured pre-migration behavior" table above

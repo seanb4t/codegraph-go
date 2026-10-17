@@ -1,7 +1,5 @@
 # enabled-linters: 5
-# This repository's first formatting + idiomatic-Go gate (folded into two
-# prior phases and implemented in neither — see
-# .planning/todos/completed/2026-08-10-add-golangci-lint-with-gofmt-and-idiomatic-go-linters.md).
+# This repository's formatting and idiomatic-Go gate.
 #
 # The `# enabled-linters: N` line above is machine-read by 03-10-PLAN.md
 # Task 2's <verify> block, which proves this file byte-unchanged before

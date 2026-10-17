@@ -142,9 +142,7 @@
 		// FIX-05 (plan 01-09) turned out to be a first-render-tick race in
 		// OUR OWN mount flow, not a layout-option lever at all — see the
 		// FIX-05 comment on createFileGraphRenderer's start()/runLayout()
-		// below for the actual mechanism and fix, and .planning/STATE.md's
-		// Blockers/Concerns entry for the falsified-LAYOUT_OPTIONS
-		// investigation this superseded. `nodeDimensionsIncludeLabels` is
+		// below for the actual mechanism and fix. `nodeDimensionsIncludeLabels` is
 		// kept here on its own merits — ELK should see these nodes' TRUE
 		// rendered size, not the pre-overflow style box — independent of
 		// that fix.
@@ -516,9 +514,7 @@
 			// by a synthetic first "replace") — so the very first layout
 			// is not preceded by a remove/add cycle.
 			start() {
-				// FIX-05 (plan 01-09, .planning/STATE.md's Blockers/Concerns
-				// entry has the falsified-LAYOUT_OPTIONS investigation this
-				// supersedes): the guava
+				// FIX-05: the guava
 				// android/guava-tests/.../util/concurrent <->
 				// android/guava/src/.../util/concurrent pair's edges trip
 				// cytoscape's own once-per-edge checkForInvalidEdgeWarning on

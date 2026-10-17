@@ -284,7 +284,7 @@ bearing for later phases and must survive untouched:
 
 | Release | Why it is preserved | Recorded |
 |---|---|---|
-| **`v0.5.1`** | Its darwin assets (`codegraph_v0.5.1_darwin_arm64`, `codegraph_v0.5.1_darwin_amd64`) are deliberately **un-notarized** and are Phase 2's **SIGN-03 RED baseline**. Once notarization lands they cannot be recreated — a notarized build is a different artifact. Do not delete, replace, or re-upload them. The recorded RED observation against these assets lives in [`02-EVIDENCE.md`](../.planning/phases/02-apple-signing-notarization/02-EVIDENCE.md). | 2026-08-09, plan 01-05 |
+| **`v0.5.1`** | Its darwin assets (`codegraph_v0.5.1_darwin_arm64`, `codegraph_v0.5.1_darwin_amd64`) are deliberately **un-notarized** and are Phase 2's **SIGN-03 RED baseline**. Once notarization lands they cannot be recreated — a notarized build is a different artifact. Do not delete, replace, or re-upload them. The recorded RED observation against these assets lives in [`02-EVIDENCE.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/milestones/v0.5.0-phases/02-apple-signing-notarization/02-EVIDENCE.md). | 2026-08-09, plan 01-05 |
 | **`v0.5.0`** | Tagged but published **zero assets** — its pipeline aborted on a Taskfile version assertion before `goreleaser release` ran. Kept per D-07 (patch forward, never delete or re-push) and marked **prerelease** so `/releases/latest` skips it and `codegraph upgrade` resolves past it. | 2026-08-09, plan 01-05 |
 
 `v0.5.0` is **not** the SIGN-03 baseline despite being the first v0.5.x tag:
@@ -513,7 +513,7 @@ file), the native darwin/linux two-OS matrix that keeps darwin off a zig
 cross-link, or the SLSA generic-generator handoff. The criterion's
 *intent* — idempotent artifact replacement — is satisfied instead by §4's
 `gh release upload --clobber` step. Recorded as an accepted divergence in
-`.planning/ROADMAP.md` (§ below), not dropped.
+[`.planning/ROADMAP.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/ROADMAP.md) (§ below), not dropped.
 
 **(b) D-08 lint file location.** D-08 names `ci.yml` as the destination for
 the PR-title conventional-commit lint. What shipped is a dedicated

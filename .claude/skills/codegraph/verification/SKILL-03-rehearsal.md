@@ -6,7 +6,7 @@
 
 ## Before — the 2026-08-08 misdirection incident
 
-Source: `.planning/debug/resolved/mcp-server-one-tool-only.md` (cited verbatim, not paraphrased).
+Source: [`.planning/debug/resolved/mcp-server-one-tool-only.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/mcp-server-one-tool-only.md) (cited verbatim, not paraphrased).
 
 **Symptoms** (quoted):
 
@@ -90,7 +90,7 @@ graph store?"*
 > construction. Proven not to be a property of the file: a probe skill whose description was
 > byte-identical to a working skill's rendered **bare in the same listing** where the original
 > rendered with its description. Full probe ladder in
-> `.planning/debug/resolved/skill-discovery-not-listing.md`.
+> [`.planning/debug/resolved/skill-discovery-not-listing.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/skill-discovery-not-listing.md).
 >
 > **Consequence for this rehearsal, unchanged in substance:** an entry with no description carries
 > no trigger signal, so the skill was still semantically undiscoverable to the captured session.
@@ -133,7 +133,7 @@ this specific *skill* caused it. That limitation is unchanged by the retraction;
 ## Method note (2026-08-13): the cap is not a constant, and most ways of checking it are wrong
 
 Added after a **third** false "the skill is not listed" report in this repository
-(`.planning/debug/resolved/codegraph-skill-not-listed.md`). Pinned by
+([`.planning/debug/resolved/codegraph-skill-not-listed.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/codegraph-skill-not-listed.md)). Pinned by
 `TestSkillListingEvidenceRecordsBudgetIsNotFixed` in `internal/mcp/skill_claims_drift_test.go`.
 
 **The budget varies; it is not a property of Claude Code.** It tracks the `skillListingBudgetFraction`

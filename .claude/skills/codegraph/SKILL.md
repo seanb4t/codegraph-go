@@ -29,7 +29,7 @@ A user reported: "the mcp server is only showing one tool." The session's first 
 
 The right move was a `codegraph_explore` call against the server's own source — `internal/mcp/server.go` and `internal/cli/serve.go` — which would have surfaced the allowlist-resolution path (`ResolveCompanions`, gated by `CODEGRAPH_MCP_TOOLS`) directly, instead of trusting a wire-contract string that was, at the time, itself wrong.
 
-Full root cause, timeline, and evidence: `.planning/debug/resolved/mcp-server-one-tool-only.md`. The `instructions` string has since been corrected to name all three visibility mechanisms — this example is a lesson about the failure mode, not a description of current behavior.
+Full root cause, timeline, and evidence: [`.planning/debug/resolved/mcp-server-one-tool-only.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/debug/resolved/mcp-server-one-tool-only.md). The `instructions` string has since been corrected to name all three visibility mechanisms — this example is a lesson about the failure mode, not a description of current behavior.
 
 ### Impact analysis before a refactor
 

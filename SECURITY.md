@@ -99,6 +99,21 @@ What it does **not** defend against, stated plainly:
   as of this writing (the SPA ships zero such components); it becomes live
   at the first `shadcn-svelte add`. No provenance pinning exists for this
   path yet.
+- **Bidirectional-text tricks in terminal output.** `sanitizeControl`
+  (`internal/cli/present/sanitize.go`) strips control characters from source
+  text printed to a terminal, but it lets Unicode bidi overrides and isolates
+  (U+202E, U+2066 to U+2069) through. A crafted file can therefore make a
+  printed symbol or snippet display out of order (Trojan Source). It cannot
+  inject terminal escape sequences.
+- **Codex hook trust covers the command, not the script.** Codex records trust
+  for the hook command that `codegraph install` registers, and that command
+  stays byte-stable across upgrades. If the guard script it runs changes,
+  Codex does not ask for trust again.
+- **An unfixable advisory in release tooling.** GoReleaser's binary has a
+  reachable match for GO-2026-5932 in the unmaintained
+  `golang.org/x/crypto/openpgp`, which has no fix. It is in build tooling,
+  not in the `codegraph` binary. The advisory `tool-vuln` job reports it on
+  every run.
 
 ## Scope
 

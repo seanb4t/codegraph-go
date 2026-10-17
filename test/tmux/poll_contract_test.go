@@ -25,10 +25,9 @@ const pollContractAnchor = "cgtmux-ready"
 // two-sample equality check accepts as converged even though the command
 // has not finished writing anything.
 //
-// Rather than relying on the real codegraph binary's own cold-start latency
-// (1.1-1.6s measured in-pane on this machine — see
-// .planning/debug/tty03-cold-start-poll-race.md — which reproduces the race
-// only on a cold machine, and only probabilistically), this test commands
+// Rather than relying on the real codegraph binary's own cold-start latency,
+// which reproduces the race only on a cold machine, and only
+// probabilistically, this test commands
 // the pane's own shell to delay its only output by a fixed number of poll
 // intervals. That reproduces the race on every machine, every run, so the
 // property is checked deterministically instead of probabilistically.

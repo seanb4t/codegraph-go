@@ -1,6 +1,6 @@
 # Language Capability Matrix
 
-This is the D-11 language capability matrix (`.planning/phases/05-language-coverage-resolution-breadth/05-CONTEXT.md`)
+This is the D-11 language capability matrix ([`.planning/milestones/v0.1-phases/05-language-coverage-resolution-breadth/05-CONTEXT.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/milestones/v0.1-phases/05-language-coverage-resolution-breadth/05-CONTEXT.md))
 — the human-readable half of the coverage contract. The machine-readable
 half lives in `internal/indexer/capability/matrix.go`, and
 `internal/indexer/capability/matrix_test.go` proves the two stay identical:
