@@ -1,7 +1,7 @@
 # Paths Octopus skips for review and indexing. Syntax: .gitignore.
 # Octopus reads this file from the PR base commit.
 
-# GSD planning artifacts (archived; removed by #122)
+# GSD planning artifacts
 .planning/
 
 # Archived OpenSpec changes, and the files `openspec update` generates.
