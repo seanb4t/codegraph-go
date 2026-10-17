@@ -31,13 +31,13 @@
     {
       "number": "6",
       "name": "First Release Through the Chain",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 06 of 6 · 83% · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 06 of 6 · 83% · ready to verify"
   },
-  "updated_at": "2026-10-17T17:43:25.314Z"
+  "updated_at": "2026-10-17T18:02:51.822Z"
 }

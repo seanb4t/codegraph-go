@@ -421,3 +421,11 @@ Assumption outcomes (RESEARCH Assumptions Log):
 - A4 (GoReleaser marks the new Release as latest): held. `gh api repos/seanb4t/codegraph-go/releases/latest --jq .tag_name` prints `v0.15.0`, and the unpinned `codegraph upgrade --check` offered it.
 
 Carry-forward (D-06): before the follow-up PR merges, `git diff --name-only origin/main...HEAD -- .changes/unreleased/` must still print nothing. The capability's verify:post at this phase's close must not write a fragment, or that merge would open a new release PR. Observed now: it prints nothing, and `.changes/unreleased/` holds only `.gitkeep`.
+
+## Sign-off
+
+The maintainer reviewed the `## Evidence summary` table (SC1 to SC4, all PASS) and the SEED-005 diff, as presented by the orchestrator in this session, and replied on 2026-10-17 (D-12, the blocking-human checkpoint in 06-02 Task 3):
+
+> and approved
+
+Signed off by: the maintainer (seanb4t), 2026-10-17. The reply reports no issues. The sign-off covers SC2 and SC3's human checkpoint and the evidence summary as a whole.

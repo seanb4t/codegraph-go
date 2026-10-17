@@ -4,17 +4,17 @@ milestone: v0.15.0
 milestone_name: Changie Release Management
 current_phase: 06
 current_phase_name: First Release Through the Chain
-status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-10-17T17:43:26.242Z"
+status: verifying
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-10-17T18:02:54.402Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 06 execution started
-state_head: 7942130975d1b35e91c13412c6de676880b15763
+state_head: c6667e7e14b4f8e5aa136eae0dbc29b474cb5ae6
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 24
-  completed_plans: 23
+  completed_plans: 24
   percent: 83
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-16 after Phase 5)
 
 Phase: 06 (First Release Through the Chain) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-17 — Phase 06 execution started
 
 Progress: [████████░░] 83%
@@ -209,6 +209,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P07 | 25 min | 2 tasks | 6 files |
 | Phase 05 P08 | 2 min | 1 tasks | 1 files |
 | Phase 06 P01 | 25 min | 3 tasks | 1 files |
+| Phase 06 P02 | 19 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -505,6 +506,7 @@ Standing decisions that outlive every milestone:
 - [Phase 5]: Gap plan 05-08 (G-05-1) completed D-15 in the runbook: §2 lists only the Stable and Internal milestone marker tag shapes and points to §4's D-15 paragraph; §1's prerelease parenthetical and §7's prerelease-retag sentence are gone (5653cbf9). Verifier re-run 2026-10-16: passed 5/5.
 - [Phase 5]: Close: the changie-fragments capability skipped with no-user-visible-change (CI, release tooling, tests and contributor docs only); validate-phase 18/18 green, secure-phase 30/30 closed (threats_open 0).
 - [Phase 06]: 06-01: v0.15.0 shipped through the chain; derived version equalled the prediction, App authored the tag, Release body content-equal to .changes/v0.15.0.md
+- [Phase 06]: 06-02: D-12 sign-off given by the maintainer ('and approved', 2026-10-17) and recorded verbatim in 06-EVIDENCE.md; SEED-005 annotated by filling its existing When to Surface section, no structure invented
 
 ### Pending Todos
 
@@ -677,8 +679,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-10-17T17:43:26.189Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-10-17T18:02:54.282Z
+Stopped at: Completed 06-02-PLAN.md
   CARRY-OVER (v0.14.0):
 
     - **`branching_strategy: milestone`** — this milestone lives on `gsd/v0.15.0-milestone` (draft PR #88); init computes `gsd/v0.15.0-changie-release-management`, which does not exist — skip execute-phase's handle_branching and stay on the milestone branch.
