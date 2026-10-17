@@ -4,6 +4,13 @@
 # GSD planning artifacts
 .planning/
 
+# Archived OpenSpec changes, and the files `openspec update` generates.
+# openspec/specs/ and active changes stay reviewable.
+openspec/changes/archive/
+.claude/commands/opsx/
+.claude/skills/openspec-*/
+.agents/skills/openspec-*/
+
 # Built SvelteKit bundle, embedded by web/embed.go. The source is web/src/.
 web/build/
 

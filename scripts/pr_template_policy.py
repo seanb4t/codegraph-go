@@ -35,9 +35,12 @@ TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
 # .changes/ is the changie release PR's own tree: that PR touches only .changes/**
 # and CHANGELOG.md, and its body is the rendered notes, regenerated on every run,
 # so a manual exemption marker cannot survive there (D-05, GRD-15).
+# openspec/ holds spec proposals; the code that implements one arrives in its
+# own PR, which does need a template.
 EXEMPT_PREFIXES = (
     ".github/",
     "docs/",
+    "openspec/",
     ".planning/",
     ".changes/",
 )
@@ -134,7 +137,7 @@ def main() -> int:
         return 0
 
     if is_housekeeping(changed):
-        emit("pass", "touches only CI, docs, planning, or dependency manifests")
+        emit("pass", "touches only CI, docs, specs, planning, or dependency manifests")
         return 0
 
     if not body.strip():
