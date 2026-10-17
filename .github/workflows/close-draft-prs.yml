@@ -10,9 +10,9 @@
 # Known gap, stated rather than implied: GitHub does not fire
 # pull_request_target for fork branches whose names look like a Git SHA, so a
 # contributor could evade this by naming their head branch like a commit hash.
-# Closing that needs a scheduled base-context sweep (gsd-core has one; see the
-# tracking issue). A draft PR that evades this still cannot merge — it fails
-# every other gate and the branch ruleset.
+# Closing that would need a scheduled base-context sweep, and the gap is
+# accepted: a draft PR that evades this still cannot merge — it fails every
+# other gate and the branch ruleset.
 name: Close Draft PRs
 
 on:

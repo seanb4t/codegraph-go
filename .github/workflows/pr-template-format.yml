@@ -94,7 +94,7 @@ jobs:
               `- [Enhancement](${repoUrl}/blob/main/.github/PULL_REQUEST_TEMPLATE/enhancement.md) — existing behavior, improved`,
               `- [Feature](${repoUrl}/blob/main/.github/PULL_REQUEST_TEMPLATE/feature.md) — something new`,
               '',
-              'CI/tooling, docs, planning, and dependency-manifest PRs are detected automatically and exempt. For anything else that genuinely does not fit, put a reason in the body:',
+              'CI/tooling, docs, spec, planning, and dependency-manifest PRs are detected automatically and exempt. For anything else that genuinely does not fit, put a reason in the body:',
               '',
               '```',
               '<!-- pr-template-exempt: why a typed template does not apply -->',
