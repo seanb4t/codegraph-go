@@ -8,10 +8,10 @@ triage process and the CI gates both read it literally.
 **Open an issue before opening a pull request.** Every PR must reference an
 issue it resolves.
 
-This is not bureaucracy for its own sake: behavior is pinned by the project's own
-golden-corpus suite and its planning record, and a change that looks like an
-obvious improvement can still contradict a deliberate decision recorded in
-`.planning/`. The issue is where we find that out before you've written the code.
+This is not bureaucracy for its own sake: behavior is pinned by the project's
+specs in `openspec/specs/` and its golden-corpus suite, and a change that looks
+like an obvious improvement can still contradict a deliberate decision. The
+issue is where we find that out before you've written the code.
 
 The exception is trivially mechanical fixes — a typo, a broken link, a dead
 reference. Open the PR directly and say so.
@@ -38,10 +38,15 @@ A change lands only when all of these hold:
 1. It references an approved issue. "Approved" is a label, not a vibe:
    **`approved-feature`** for features, **`approved-enhancement`** for
    enhancements. An open issue is not an approved one. Bug fixes and mechanical
-   changes do not need a label.
-2. All six required checks pass: `test`, `actionlint`,
-   `govulncheck (DIST-03, blocking)`, `perf regression gate (PERF-02, INDX-06)`,
-   `pr-title`, `reproducibility (double-build hash-diff, DIST-04)`.
+   changes do not need a label. An issue labelled **`spec-needed`** also needs
+   its OpenSpec proposal merged before the code (see
+   [Specs and change proposals](#specs-and-change-proposals)).
+2. All nine required checks pass: `test`,
+   `actionlint (workflow static analysis)`, `govulncheck (DIST-03, blocking)`,
+   `perf regression gate (PERF-02, INDX-06)`, `pr-title`,
+   `reproducibility (double-build hash-diff, DIST-04)`,
+   `goreleaser check (config validation, DIST-01)`,
+   `tmux e2e (real-pty harness, TTY-01..TTY-07)`, `fragment-required`.
 3. Review conversations are resolved.
 4. A maintainer merges it. `main` is protected; merges are **squash-only** and
    linear history is enforced.
@@ -181,7 +186,8 @@ anyway — `fix.md` in particular asks for the regression test's failing output,
 which is the only thing distinguishing a test that catches the bug from one that
 cannot fail.
 
-CI/tooling, dependency, and doc-only PRs are exempt; note
+CI/tooling, dependency, doc-only and spec-only (`openspec/`) PRs are detected
+and exempted automatically. For anything else that genuinely does not fit, note
 `<!-- pr-template-exempt: <reason> -->` in the body.
 
 ### Never do these
@@ -210,55 +216,34 @@ The suite is a mix of unit tests, golden-corpus behavioral fixtures frozen
 from codegraph-go's own output against pinned third-party corpora, and
 workflow-shape guards that parse the real `.yml` files.
 
-## What `.planning/` is
+## Specs and change proposals
 
-Roughly half the tracked files live in `.planning/`. It is the project's
-planning and decision record — phase plans, execution summaries, debug sessions,
-and the reasoning behind decisions that are otherwise invisible in the diff.
+The project specifies its behavior with [OpenSpec](https://github.com/Fission-AI/OpenSpec).
 
-It is published deliberately. If you want to know *why* something is the way it
-is, the answer is usually there, and it is usually more candid than a commit
-message. You are not expected to add to it, and PRs are not judged on it.
+- `openspec/specs/` holds one spec per capability. Specs are added as changes
+  touch each capability. A capability without a spec yet is still pinned by its
+  tests and goldens.
+- A change to specified behavior starts as an OpenSpec change in
+  `openspec/changes/<id>/`. It holds a `proposal.md`, delta specs, an optional
+  `design.md` and a `tasks.md`. The line after the title of `proposal.md` is
+  `Issue: #<n>`, the issue the change resolves.
+- Fixes and chores that change no specified behavior skip the proposal.
+- `openspec/config.yaml` holds the project context and the rules every change
+  follows.
 
-### Changelog fragments at phase close
+With an agent, use `/opsx:propose`, `/opsx:apply` and `/opsx:archive` in Claude
+Code, or the `openspec-*` skills in Codex. Without one, use the `openspec` CLI:
+`openspec new change <id>`, `openspec validate <id> --strict` and
+`openspec archive <id>`. Do not edit the generated `/opsx:*` commands or
+`openspec-*` skills; `openspec update` rewrites them.
 
-Closing a GSD phase in this repository writes that phase's changelog fragments
-automatically. A private gsd-core capability does it: its `gsd-changie-fragments`
-skill runs at verify:post. The configuration is already committed in
-`.planning/config.json` — there is nothing to set up beyond the install below.
+A proposal can land on its own. A PR that touches only `openspec/` needs no
+template, and `Refs #<n>` is enough. The implementation PR says `Closes #<n>`
+and carries the code, the changelog fragment, and the `openspec archive` result,
+so the spec changes in the same commit as the behavior.
 
-One-time setup per clone:
-
-```
-gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2 --scope project
-```
-
-One-time setup per machine, so Claude Code can dispatch the skill:
-
-```
-gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2 --scope global
-gsd-tools capability set changie --enable --runtime claude --scope global
-```
-
-Both commands are needed because gsd-core surfaces a third-party Claude Code
-skill only from the global capability root — a project-scope install alone is
-invisible to the skill materializer.
-
-The repository is **private**, so the capability is optional. Contributors
-without access write fragments by hand instead, the same way any manual
-fragment is written (see `task changie` above):
-
-```
-task changie -- new -k <Kind> -b "<sentence>" -m PR=<n>
-```
-
-Either way, the `fragment-required` pull-request check, added by Phase 4 of
-this milestone, is the backstop that a fragment exists.
-
-To re-run the skill by hand: `/gsd-changie-fragments <phase> [--pr <n>]`. An
-explicit `--pr` is used as given. Otherwise the skill uses the branch's open PR
-if there is one; when no PR is open, it writes the fragment without a PR number
-and prints a note saying so.
+`.planning/` holds the planning record from before the move to OpenSpec. It is
+read-only and will be removed. Do not add to it.
 
 ## Code of conduct
 

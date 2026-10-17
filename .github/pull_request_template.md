@@ -33,7 +33,7 @@ Link an issue, and for anything beyond a mechanical fix let it be approved first
 - **Enhancements** — the issue should carry `approved-enhancement`
 
 This is not ceremony. Behavior-affecting changes are resolved against the
-project's recorded decisions in `.planning/` — changes that look like obvious
+project's specs in `openspec/specs/` — changes that look like obvious
 improvements are sometimes deliberate calls recorded there.
 The issue is where that surfaces before you have written the code.
 
