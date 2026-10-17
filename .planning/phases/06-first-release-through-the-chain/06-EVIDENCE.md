@@ -335,3 +335,89 @@ No devbox available yet. Try running `devbox create`.
 ```
 
 `devbox list` no longer shows `p06-upgrade-amd64`.
+
+## SHIP-04 SEED-005 and capability tag
+
+Capability record, confirmed live rather than copied from RESEARCH (D-14):
+
+```text
+$ jq '.entries.changie|{version,source}' .gsd-capabilities.json
+{
+  "version": "0.1.2",
+  "source": "https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2"
+}
+$ git -C .gsd/capabilities/changie rev-parse HEAD
+2631063f05fffc7152d70a9c98eb0b7479a0029a
+$ gh api repos/seanb4t/gsd-capability-changie/commits/v0.1.2 --jq .sha
+2631063f05fffc7152d70a9c98eb0b7479a0029a
+$ rg -n -F 'gsd-capability-changie.git#' CONTRIBUTING.md
+233:gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2 --scope project
+239:gsd-tools capability install https://github.com/seanb4t/gsd-capability-changie.git#v0.1.2 --scope global
+```
+
+All three name tag `v0.1.2`, and the installed checkout commit equals the tag's commit in the capability repo. The tag is `v0.1.2`, commit `2631063f05fffc7152d70a9c98eb0b7479a0029a`.
+
+Release facts:
+
+```text
+$ gh release view v0.15.0 --repo seanb4t/codegraph-go --json url,publishedAt
+{"publishedAt":"2026-10-17T17:40:18Z","url":"https://github.com/seanb4t/codegraph-go/releases/tag/v0.15.0"}
+```
+
+Release date: 2026-10-17. Every `trigger_when` condition is recorded above before the annotation: an App-authored tag and the release.yml run (`## SHIP-02 App-authored tag and release.yml`), a content-equal body (`## SHIP-02 Release body (D-11)`), and a green post-release-verify (`## SHIP-03 post-release-verify`).
+
+SEED-005 annotation (one prose paragraph at the end of `## When to Surface`; no heading, no frontmatter key; `status: dormant` and `trigger_when` unchanged):
+
+```text
+$ git diff origin/main --numstat -- .planning/seeds/SEED-005-changie-template-for-other-repos.md
+8	0	.planning/seeds/SEED-005-changie-template-for-other-repos.md
+$ git diff origin/main -- .planning/seeds/SEED-005-changie-template-for-other-repos.md
+@@ -26,3 +26,11 @@ with small edits.
+   and `plugin.json` (use changie `replacements` — they run on `merge`); router-hosts relies on
+   `squash_merge_commit_message=PR_BODY` carrying a `gate_status:` trailer — unaffected, but
+   verify the fragment gate's exemption marker does not collide.
++
++Trigger fired 2026-10-17: codegraph-go released v0.15.0 through the changie chain
++(https://github.com/seanb4t/codegraph-go/releases/tag/v0.15.0). The GitHub App pushed the tag,
++release.yml ran on it, the Release body is content-equal to `.changes/v0.15.0.md` (Phase 6
++D-11), post-release-verify is green, and an installed v0.14.0 upgraded to it on darwin/arm64 and
++linux/amd64. The phase-close fragment question above is answered by gsd-capability-changie
++v0.1.2 (commit 2631063f05fffc7152d70a9c98eb0b7479a0029a), the capability this release ran with.
++Evidence: `.planning/phases/06-first-release-through-the-chain/06-EVIDENCE.md`.
+```
+
+Upstream gap: no gsd-tools verb writes a post-plant annotation on a seed (`list-seeds` is read-only; `plant-seed --enrich` rewrites only trigger, scope and why). The paragraph is a value inside an existing section; no structure was invented.
+
+D-06 check (this branch adds nothing under `.changes/`):
+
+```text
+$ git diff --name-only origin/main...HEAD -- .changes/
+(no output)
+$ ls -A .changes/unreleased/
+.gitkeep
+```
+
+## Evidence summary
+
+| Criterion | Requirement | Observed | Evidence section | Verdict |
+|---|---|---|---|---|
+| ROADMAP Phase 6 SC1 | SHIP-01 | The App (`app/fzy-release-please`) opened release PR #101 `chore(main): release v0.15.0` from the one `Breaking` fragment; 9 of 9 required checks passed; the maintainer squash-merged it; `task changie -- latest` prints `v0.15.0`, equal to the pre-merge `next auto` | `## Pre-flight`, `## SHIP-01 release PR`, `## Release-PR merge`, `## SHIP-01 changie latest on main` | PASS |
+| ROADMAP Phase 6 SC2 | SHIP-02 | Tag `v0.15.0` at `0246de0e391b7de98052389800f8347fb9657d3b`; release.yml run 39054491964 on the tag push has actor and attempt-1 triggering actor `fzy-release-please[bot]`; the Release body is content-equal to `.changes/v0.15.0.md` under the D-11 normalization (`CONTENT-EQUAL lines=5`) | `## SHIP-02 App-authored tag and release.yml`, `## SHIP-02 Release body (D-11)` | PASS |
+| ROADMAP Phase 6 SC3 | SHIP-03 | post-release-verify run 39054786827: `success`, 7 of 7 jobs `success`, headSha is the tag commit; GitHub latest is `v0.15.0`; `internal/upgrade/verify.go` unchanged since v0.14.0; v0.14.0 upgraded to `v0.15.0` on darwin/arm64 (isolated HOME, manifest sha256 unchanged) and on linux/amd64 (`x86_64` Namespace devbox, torn down) | `## SHIP-03 post-release-verify`, `## SHIP-03 upgrade darwin/arm64`, `## SHIP-03 upgrade linux/amd64` | PASS |
+| ROADMAP Phase 6 SC4 | SHIP-04 | SEED-005 gained one prose paragraph in `## When to Surface` (8 lines added, 0 deleted); capability `gsd-capability-changie` `v0.1.2` at commit `2631063f05fffc7152d70a9c98eb0b7479a0029a` is recorded, equal to the tag commit and to CONTRIBUTING.md | `## SHIP-04 SEED-005 and capability tag` | PASS |
+
+Discharged 05-UAT Deferred Follow-Ups (05-UAT.md is tool-owned and was not edited):
+
+- `05-UAT test 3` (the App opens the release PR and its required checks report): see `## SHIP-01 release PR`. PR #101 was opened by the App and 9 of 9 required checks report `pass`.
+- `05-UAT test 4` (the path filter fires, the App-token tag push starts release.yml, and the milestone merge is a no-op): see `## SHIP-01 release PR` (the #88 merge fired no release-tag.yml run) and `## SHIP-02 App-authored tag and release.yml` (the release squash merge fired release-tag.yml, the App pushed the tag, release.yml ran on it).
+
+D-10 re-runs: one. ci.yml run 39053062791 on the release PR (plan 06-01 Task 1), `gh run rerun --failed`, cause: the known nondeterministic `DB Size:` difference in `internal/cli` `TestColorFlagInvalidValue` (engram w2t54bym10); attempt 2 succeeded. None in plan 06-02: post-release-verify run 39054786827 was not re-run, and neither upgrade leg was repeated to reach a pass. The one failed `devbox create` (not logged in) was an auth gate, not a CI step.
+
+Assumption outcomes (RESEARCH Assumptions Log):
+
+- A1 (`APP_ID` is `fzy-release-please`): held. The release PR author is `app/fzy-release-please` and the tag-push run actor is `fzy-release-please[bot]`.
+- A2 (devbox image has curl, glibc, CA certificates, outbound HTTPS): held. `builtin:default` (Ubuntu 24.04.3 LTS) fetched the asset with no `ca-certificates` install.
+- A3 (GoReleaser puts `--release-notes` content in the Release body verbatim): held. The body is content-equal (`CONTENT-EQUAL lines=5`).
+- A4 (GoReleaser marks the new Release as latest): held. `gh api repos/seanb4t/codegraph-go/releases/latest --jq .tag_name` prints `v0.15.0`, and the unpinned `codegraph upgrade --check` offered it.
+
+Carry-forward (D-06): before the follow-up PR merges, `git diff --name-only origin/main...HEAD -- .changes/unreleased/` must still print nothing. The capability's verify:post at this phase's close must not write a fragment, or that merge would open a new release PR. Observed now: it prints nothing, and `.changes/unreleased/` holds only `.gitkeep`.

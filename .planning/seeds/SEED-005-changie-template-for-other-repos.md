@@ -26,3 +26,11 @@ with small edits.
   and `plugin.json` (use changie `replacements` — they run on `merge`); router-hosts relies on
   `squash_merge_commit_message=PR_BODY` carrying a `gate_status:` trailer — unaffected, but
   verify the fragment gate's exemption marker does not collide.
+
+Trigger fired 2026-10-17: codegraph-go released v0.15.0 through the changie chain
+(https://github.com/seanb4t/codegraph-go/releases/tag/v0.15.0). The GitHub App pushed the tag,
+release.yml ran on it, the Release body is content-equal to `.changes/v0.15.0.md` (Phase 6
+D-11), post-release-verify is green, and an installed v0.14.0 upgraded to it on darwin/arm64 and
+linux/amd64. The phase-close fragment question above is answered by gsd-capability-changie
+v0.1.2 (commit 2631063f05fffc7152d70a9c98eb0b7479a0029a), the capability this release ran with.
+Evidence: `.planning/phases/06-first-release-through-the-chain/06-EVIDENCE.md`.
