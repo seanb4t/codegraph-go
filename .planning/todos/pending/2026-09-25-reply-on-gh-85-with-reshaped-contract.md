@@ -5,6 +5,9 @@ area: server-mode
 severity: major
 files:
   - .planning/notes/gh-85-service-mode-design-map.md
+audit_acknowledged:
+  milestone: v0.15.0
+  at: 2026-10-17
 ---
 
 ## Problem

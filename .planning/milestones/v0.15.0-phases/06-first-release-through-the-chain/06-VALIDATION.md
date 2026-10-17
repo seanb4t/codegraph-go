@@ -3,9 +3,9 @@ phase: "6"
 slug: "first-release-through-the-chain"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-17"
 ---
 
@@ -40,10 +40,10 @@ created: "2026-10-17"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 06-01-01, 06-01-02 | 06-01 | 1 | SHIP-01 | T-06-03 | release PR authored by `fzy-release-please[bot]` | live observation + human checkpoint | `gh pr list --repo seanb4t/codegraph-go --head changie/release --state all --json number,title,author,state,url`; `task changie -- latest` | ✅ | ⬜ pending |
-| 06-01-03 | 06-01 | 1 | SHIP-02 | T-06-01, T-06-02, T-06-04 | tag pushed by the App (`actor` = `fzy-release-please[bot]`, attempt 1 `triggering_actor` = `fzy-release-please[bot]`); Release body content-equal to `.changes/vX.Y.Z.md` (D-11) | live observation + human checkpoint | `gh run view <release-tag-run> --log \| rg "release:tag: pushed"`; `gh api repos/seanb4t/codegraph-go/actions/runs/<release-run>` and `.../attempts/1`; `norm` + `cmp` (06-RESEARCH.md Code Examples) | ✅ | ⬜ pending |
-| 06-02-01, 06-02-03 | 06-02 | 2 | SHIP-03 | T-06-05, T-06-06, T-06-07, T-06-08, T-06-09 | new artifact verified against the unchanged cosign identity; upgrade runs with `HOME` isolated to a scratch dir | live observation + human checkpoint | `gh run view <post-release-verify-run> --json jobs`; `HOME="$SCRATCH" ./codegraph upgrade` then `--version` (darwin/arm64 local, linux/amd64 on a `devbox`) | ✅ | ⬜ pending |
-| 06-02-02 | 06-02 | 2 | SHIP-04 | — | N/A | file edit | `jq '.entries.changie\|{version,source}' .gsd-capabilities.json`; `git diff -- .planning/seeds/SEED-005-changie-template-for-other-repos.md` | ✅ | ⬜ pending |
+| 06-01-01, 06-01-02 | 06-01 | 1 | SHIP-01 | T-06-03 | release PR authored by `fzy-release-please[bot]` | live observation + human checkpoint | `gh pr list --repo seanb4t/codegraph-go --head changie/release --state all --json number,title,author,state,url`; `task changie -- latest` | ✅ | ✅ green |
+| 06-01-03 | 06-01 | 1 | SHIP-02 | T-06-01, T-06-02, T-06-04 | tag pushed by the App (`actor` = `fzy-release-please[bot]`, attempt 1 `triggering_actor` = `fzy-release-please[bot]`); Release body content-equal to `.changes/vX.Y.Z.md` (D-11) | live observation + human checkpoint | `gh run view <release-tag-run> --log \| rg "release:tag: pushed"`; `gh api repos/seanb4t/codegraph-go/actions/runs/<release-run>` and `.../attempts/1`; `norm` + `cmp` (06-RESEARCH.md Code Examples) | ✅ | ✅ green |
+| 06-02-01, 06-02-03 | 06-02 | 2 | SHIP-03 | T-06-05, T-06-06, T-06-07, T-06-08, T-06-09 | new artifact verified against the unchanged cosign identity; upgrade runs with `HOME` isolated to a scratch dir | live observation + human checkpoint | `gh run view <post-release-verify-run> --json jobs`; `HOME="$SCRATCH" ./codegraph upgrade` then `--version` (darwin/arm64 local, linux/amd64 on a `devbox`) | ✅ | ✅ green |
+| 06-02-02 | 06-02 | 2 | SHIP-04 | — | N/A | file edit | `jq '.entries.changie\|{version,source}' .gsd-capabilities.json`; `git diff -- .planning/seeds/SEED-005-changie-template-for-other-repos.md` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -66,11 +66,19 @@ Existing infrastructure covers all phase requirements.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-10-17
+
+## Validation Audit 2026-10-17
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |

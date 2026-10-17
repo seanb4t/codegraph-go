@@ -7,6 +7,9 @@ files:
   - .github/workflows/release-tag.yml
   - Taskfile.yml
   - internal/upgrade/changie_release_shape_test.go
+audit_acknowledged:
+  milestone: v0.15.0
+  at: 2026-10-17
 ---
 
 ## Problem

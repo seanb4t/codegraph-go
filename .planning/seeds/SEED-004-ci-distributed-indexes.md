@@ -5,6 +5,10 @@ planted: 2026-09-25
 planted_during: between milestones (post v0.14.0) / gsd-explore GH #85
 trigger_when: server mode ships with graph identity (repo, sha) and a per-graph Export/Import path
 scope: server-mode, ci, graphstore
+audit_acknowledged:
+  milestone: v0.15.0
+  at: 2026-10-17
+  status: dormant
 ---
 
 # SEED-004: CI-distributed indexes — CI uploads a pre-built graph keyed by (repo, sha)

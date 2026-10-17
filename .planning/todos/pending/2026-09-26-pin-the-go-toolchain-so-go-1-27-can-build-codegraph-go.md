@@ -7,6 +7,9 @@ files:
   - go.mod:3
   - Taskfile.yml:240
   - .github/workflows/ci.yml:54-56
+audit_acknowledged:
+  milestone: v0.15.0
+  at: 2026-10-17
 ---
 
 ## Problem
