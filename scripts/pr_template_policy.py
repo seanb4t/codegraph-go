@@ -41,7 +41,6 @@ EXEMPT_PREFIXES = (
     ".github/",
     "docs/",
     "openspec/",
-    ".planning/",
     ".changes/",
 )
 # Root-level machine-maintained manifests belong here by class, not by
@@ -137,7 +136,7 @@ def main() -> int:
         return 0
 
     if is_housekeeping(changed):
-        emit("pass", "touches only CI, docs, specs, planning, or dependency manifests")
+        emit("pass", "touches only CI, docs, specs, or dependency manifests")
         return 0
 
     if not body.strip():

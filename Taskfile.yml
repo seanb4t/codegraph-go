@@ -564,8 +564,7 @@ tasks:
       one-byte or whitespace-only difference between changie merge
       --dry-run and CHANGELOG.md IS drift. Leg 5 proves a fragment without
       PR is accepted (D-13), and leg 12 proves it renders without a link.
-      Leg 13 drives the real task changie -- path (the configured
-      workflow.changie_command) with a body carrying command
+      Leg 13 drives the real task changie -- path with a body carrying command
       substitution, backticks and a semicolon, and proves that the body
       arrives byte-literal and that nothing executes (02-REVIEW CR-01).
       Leg 14 runs the real changie batch auto then changie merge in the
