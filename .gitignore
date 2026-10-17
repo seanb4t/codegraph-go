@@ -26,9 +26,6 @@ coverage.html
 # Local dev binary (produced by `go build ./tools/mcpaudit/...`)
 /mcpaudit
 
-# graphify skill scratch output
-graphify-out/
-
 # Generated knowledge-graph output — keep only the human-readable report
 .planning/graphs/*
 !.planning/graphs/GRAPH_REPORT.md
@@ -41,14 +38,6 @@ testdata/golden/corpus/*/src/.codegraph/
 # Python bytecode (scripts/pr_template_policy.py)
 __pycache__/
 *.pyc
-
-# GSD run-scoped dispatch-isolation sentinel (ephemeral session state)
-.gsd/
-
-# gsd-core capability install ledger (project scope) — lands at the project
-# root beside .gsd/, not inside it (capability-ledger.cjs joins it to the
-# project root directly), so the .gsd/ line above does not cover it.
-.gsd-capabilities.json
 
 # Local secret-reference file consumed via `op run --env-file=.env`.
 # Holds 1Password `op://` references, never literal secrets — still never committed.

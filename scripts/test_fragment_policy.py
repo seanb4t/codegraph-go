@@ -106,7 +106,7 @@ class EvaluateTests(unittest.TestCase):
         files = [
             _change(path)
             for path in (
-                ".planning/x.md",
+                "openspec/specs/x/spec.md",
                 "docs/a.md",
                 "scripts/fragment_policy.py",
                 ".github/workflows/ci.yml",
@@ -519,7 +519,7 @@ class HygieneAllowlistTests(unittest.TestCase):
     def test_exempt_sets_are_the_documented_sets(self):
         self.assertEqual(
             set(pr_template_policy.EXEMPT_PREFIXES),
-            {".github/", "docs/", "openspec/", ".planning/", ".changes/"},
+            {".github/", "docs/", "openspec/", ".changes/"},
         )
         self.assertEqual(
             pr_template_policy.EXEMPT_EXACT,

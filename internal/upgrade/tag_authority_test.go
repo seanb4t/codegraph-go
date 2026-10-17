@@ -1,7 +1,6 @@
 package upgrade
 
 import (
-	"encoding/json"
 	"os"
 	"testing"
 
@@ -11,66 +10,11 @@ import (
 // D-06R: the changie release workflow's App-token step (release-tag.yml job
 // `tag`, which runs `task release:tag`) is the SOLE tag authority for this
 // repository. GRD-16's TestTagCreationHasSingleAppTokenSite
-// (changie_release_shape_test.go) holds that structurally; the two tests
-// below pin the two config keys the decision depends on.
-// Both were prose-only until now — recorded in PROJECT.md, ROADMAP.md, and
-// STATE.md, and enforced by nothing. This file is the machine half, in the
-// same idiom as TestGoreleaserPinParity and
-// TestCheckCrossMatchesGoreleaserTargets: a documented invariant that only
-// a human remembers is one refactor away from being silently untrue.
-
-const gsdConfigPath = "../../.planning/config.json"
-
-// TestGsdTagCreationIsDisabled pins `git.create_tag: false` in GSD's project
-// config.
-//
-// Why a test and not a comment: GSD's own default for this key is TRUE, and
-// its gate is FAIL-OPEN. The resolver is
-//
-//	readConfigJsonValue(cwd, ["git", "create_tag"]) !== false
-//
-// (gsd-core/bin/lib/init.cjs), whose own comment reads "missing
-// `git.create_tag` key means 'create the tag'". So a dropped key, a null, a
-// `gsd config` regeneration, or the STRING "false" all silently re-enable
-// milestone tagging — none of which look like a change to tagging policy in
-// review.
-//
-// The blast radius is not cosmetic. A `v*` tag matches release.yml's
-// `push: tags: "v[0-9]*"` trigger, so an accidental milestone tag fires the
-// full release pipeline — building, signing, SBOM'ing and publishing a
-// release no release PR ever cut. ROADMAP.md and PROJECT.md both
-// state this consequence explicitly; this test is what makes them binding.
-//
-// The type assertion is load-bearing: `"create_tag": "false"` is a non-empty
-// string, which is `!== false`, which means GSD tags. A bool check alone
-// would pass a value that disables nothing.
-func TestGsdTagCreationIsDisabled(t *testing.T) {
-	raw, err := os.ReadFile(gsdConfigPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", gsdConfigPath, err)
-	}
-
-	var cfg struct {
-		Git map[string]any `json:"git"`
-	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		t.Fatalf("parse %s: %v", gsdConfigPath, err)
-	}
-
-	val, present := cfg.Git["create_tag"]
-	if !present {
-		t.Fatalf("%s: git.create_tag is absent. GSD's gate is fail-open — a missing key means CREATE THE TAG (init.cjs: `readConfigJsonValue(...) !== false`), and a milestone tag matching release.yml's `v[0-9]*` trigger fires the release pipeline for a release no release PR cut (D-06R). Set \"create_tag\": false explicitly.", gsdConfigPath)
-	}
-
-	asBool, isBool := val.(bool)
-	if !isBool {
-		t.Fatalf("%s: git.create_tag is %T (%v), want a JSON boolean. GSD compares with `!== false`, so any non-boolean — including the string \"false\" — leaves tagging ENABLED while looking disabled.", gsdConfigPath, val, val)
-	}
-
-	if asBool {
-		t.Fatalf("%s: git.create_tag is true, but the changie release workflow's App-token step is the sole tag authority (D-06R). GSD must not create milestone tags: a `v*` tag fires release.yml's `push: tags: \"v[0-9]*\"` trigger and publishes a release nobody cut. If this is a deliberate policy reversal, change D-06R in PROJECT.md first, then this test.", gsdConfigPath)
-	}
-}
+// (changie_release_shape_test.go) holds that structurally; the test below
+// pins the config key the version arithmetic depends on, in the same idiom as
+// TestGoreleaserPinParity and TestCheckCrossMatchesGoreleaserTargets: a
+// documented invariant that only a human remembers is one refactor away from
+// being silently untrue.
 
 // TestChangieBreakingBumpsMinorPreOne pins `auto: minor` on .changie.yaml's
 // Breaking kind.
