@@ -244,3 +244,94 @@ The normalized file side (identical to the normalized Release body):
 ```
 
 Both sides are non-empty and `cmp`-equal under the D-11 normalization (CR removed, trailing whitespace stripped per line, leading and trailing blank lines stripped).
+
+## SHIP-03 post-release-verify
+
+```text
+$ task changie -- latest
+v0.15.0
+$ gh api repos/seanb4t/codegraph-go/commits/v0.15.0 --jq .sha
+0246de0e391b7de98052389800f8347fb9657d3b
+$ gh api repos/seanb4t/codegraph-go/releases/latest --jq .tag_name
+v0.15.0
+$ git diff --stat v0.14.0 0246de0e391b7de98052389800f8347fb9657d3b -- internal/upgrade/verify.go
+(no output: the cosign identity file is unchanged between v0.14.0 and the tag commit)
+
+$ gh run list --repo seanb4t/codegraph-go --workflow post-release-verify.yml --event workflow_run --limit 20 --json databaseId,status,conclusion,headSha,createdAt
+(the only entry whose headSha is 0246de0e391b7de98052389800f8347fb9657d3b)
+{"conclusion":"success","createdAt":"2026-10-17T17:40:27Z","databaseId":39054786827,"headSha":"0246de0e391b7de98052389800f8347fb9657d3b","status":"completed"}
+
+$ gh run view 39054786827 --repo seanb4t/codegraph-go --json conclusion,url,jobs --jq '.conclusion, .url, (.jobs[]|"\(.name) => \(.conclusion)")'
+success
+https://github.com/seanb4t/codegraph-go/actions/runs/39054786827
+resolve and validate the tag under verification => success
+Gatekeeper verdict (darwin/arm64) => success
+Gatekeeper verdict (darwin/amd64) => success
+self-upgrade proof (darwin/arm64) => success
+self-upgrade proof (linux/amd64) => success
+verify supply-chain claims against the published release => success
+notarized suite proof (darwin/arm64) => success
+```
+
+Run: https://github.com/seanb4t/codegraph-go/actions/runs/39054786827, conclusion `success`, 7 jobs, all `success`, selected by `headSha` equal to the tag commit. GitHub's latest release is `v0.15.0`, equal to TAG (A4 holds). `internal/upgrade/verify.go` is byte-identical between v0.14.0 and the tag commit, so the cosign identity is unchanged.
+
+## SHIP-03 upgrade darwin/arm64
+
+The published v0.14.0 raw asset, run with `HOME` set to an empty scratch dir that is also the cwd. The scratch dir is under `/private/tmp/claude-501/` and was removed afterwards. The Homebrew `codegraph` was not run.
+
+```text
+$ shasum -a 256 "$HOME/.claude/skills/codegraph/.codegraph-manifest.json"   # before, real HOME
+eb80e383fa7a01ac4292ce0e2a740093a2a69a52d4fe971ba36fd021bbcd7b45  /Users/sean/.claude/skills/codegraph/.codegraph-manifest.json
+$ W=$(mktemp -d)  # empty scratch dir, also HOME and cwd
+W=/private/tmp/claude-501/p06/w.cADiEu
+$ gh release download v0.14.0 -p codegraph_v0.14.0_darwin_arm64 --dir $W
+$ HOME=$W ./codegraph --version
+codegraph version v0.14.0 (commit 80377d2805415988cc3bc07e111132f8dad697e5, built 2026-09-20T13:06:18Z)
+$ HOME=$W ./codegraph upgrade --check
+codegraph v0.15.0 is available (current: v0.14.0)
+$ HOME=$W ./codegraph upgrade
+upgraded to v0.15.0
+$ HOME=$W ./codegraph --version
+codegraph version v0.15.0 (commit 0246de0e391b7de98052389800f8347fb9657d3b, built 2026-10-17T17:35:19Z)
+$ shasum -a 256 "$HOME/.claude/skills/codegraph/.codegraph-manifest.json"   # after, real HOME
+eb80e383fa7a01ac4292ce0e2a740093a2a69a52d4fe971ba36fd021bbcd7b45  /Users/sean/.claude/skills/codegraph/.codegraph-manifest.json
+$ rm -rf $W
+```
+
+The manifest sha256 is the same before and after. No output line named a path under the real `~/.claude`. The upgraded binary reports the tag and the tag commit.
+
+## SHIP-03 upgrade linux/amd64
+
+Run on an ephemeral Namespace devbox (D-13 fallback; OrbStack amd64 emulation fails with `exec format error`, RESEARCH section 7).
+
+Devbox creation, exact flags (checked against `devbox create --help` and the devboxes skill):
+
+```text
+$ devbox create --ephemeral --platform linux/amd64 --no_checkout --name p06-upgrade-amd64 --purpose 'v0.14.0 upgrade proof (Phase 6 SHIP-03)' --image builtin:default --size s
+```
+
+- Image `builtin:default` (Ubuntu 24.04.3 LTS, glibc), size `s` (4 vCPU / 8 GB). No `--setup_github`, so no GitHub credential reached the devbox (T-06-09).
+- The first `devbox create` attempt failed with `Not logged in to Namespace` (auth gate). `devbox auth check-login` printed nothing and exited 0 in that state, so it is not a reliable login test. `devbox login` then completed the browser flow and reported `You are now logged into workspace "Personal"`; the create was repeated and succeeded. `devbox create` also wrote a `p06-upgrade-amd64.devbox.namespace` entry into `~/.ssh/config`; `rg p06-upgrade ~/.ssh/config` finds nothing after teardown.
+- `ca-certificates` install: not needed. curl fetched the asset over HTTPS on the stock image (A2 holds).
+
+```text
+$ devbox exec p06-upgrade-amd64 -- sh -c 'set -e; cat /etc/os-release | head -2; S=$(mktemp -d); cd "$S"; export HOME="$S"; uname -m; curl -fsSLo codegraph https://github.com/seanb4t/codegraph-go/releases/download/v0.14.0/codegraph_v0.14.0_linux_amd64; chmod +x codegraph; ./codegraph --version; ./codegraph upgrade --check; ./codegraph upgrade; ./codegraph --version'
+PRETTY_NAME="Ubuntu 24.04.3 LTS"
+NAME="Ubuntu"
+x86_64
+codegraph version v0.14.0 (commit 80377d2805415988cc3bc07e111132f8dad697e5, built 2026-09-20T13:06:18Z)
+codegraph v0.15.0 is available (current: v0.14.0)
+upgraded to v0.15.0
+codegraph version v0.15.0 (commit 0246de0e391b7de98052389800f8347fb9657d3b, built 2026-10-17T17:35:19Z)
+```
+
+Teardown:
+
+```text
+$ devbox expire p06-upgrade-amd64 --force
+done.
+$ devbox list
+No devbox available yet. Try running `devbox create`.
+```
+
+`devbox list` no longer shows `p06-upgrade-amd64`.
