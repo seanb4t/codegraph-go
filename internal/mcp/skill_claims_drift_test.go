@@ -81,9 +81,8 @@ const skillDescriptionMaxChars = 1024
 // project-scoped .claude/skills/ entries are appended after every personal and
 // plugin skill, so on an operator installation carrying many skills the
 // codegraph entry is exactly the kind that loses its description. That is not
-// hypothetical — see .planning/debug/resolved/skill-discovery-not-listing.md,
-// where it happened on a 238-skill installation and was misread as the skill
-// not being discovered at all.
+// hypothetical: it happened on a 238-skill installation and was misread as the
+// skill not being discovered at all.
 //
 // 120 is the tightest bound the measurements support. On a saturated 238-skill
 // installation, probe skills sharing the leftover budget were admitted at 65
@@ -325,7 +324,7 @@ func TestSkillDescriptionSurvivesSkillListingCap(t *testing.T) {
 		t.Fatalf("%s frontmatter description is empty — an empty description trivially satisfies a maximum-length bound while reproducing the exact defect this test exists to prevent (a catalog entry with no trigger signal)", skillPath)
 	}
 	if len(description) > skillDescriptionListingMaxChars {
-		t.Errorf("%s frontmatter description is %d characters, over the %d-character skill-listing budget; Claude Code degrades entries past its catalog cap (skillListingBudgetFraction x the model's context window) to bare names with no description, and a project-scoped skill is appended last so it is degraded first (see .planning/debug/resolved/skill-discovery-not-listing.md)", skillPath, len(description), skillDescriptionListingMaxChars)
+		t.Errorf("%s frontmatter description is %d characters, over the %d-character skill-listing budget; Claude Code degrades entries past its catalog cap (skillListingBudgetFraction x the model's context window) to bare names with no description, and a project-scoped skill is appended last so it is degraded first", skillPath, len(description), skillDescriptionListingMaxChars)
 	}
 }
 

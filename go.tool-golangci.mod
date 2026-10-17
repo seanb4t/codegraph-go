@@ -34,8 +34,7 @@
 // workspace mode is incompatible with -modfile.
 //
 // Neither Dependabot nor Renovate manages this file (both gomod managers
-// target go.mod only) — version bumps here are manual. See
-// .planning/phases/03-browse-inspect-navigation/03-10-PLAN.md Task 1.
+// target go.mod only) — version bumps here are manual.
 module github.com/seanb4t/codegraph-go/tools-golangci
 
 go 1.26.5

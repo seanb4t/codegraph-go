@@ -1,6 +1,3 @@
-.planning/research/.cache/
-.planning/milestone.lock
-
 # Go build/test artifacts
 /dist/
 *.test
@@ -25,10 +22,6 @@ coverage.html
 
 # Local dev binary (produced by `go build ./tools/mcpaudit/...`)
 /mcpaudit
-
-# Generated knowledge-graph output — keep only the human-readable report
-.planning/graphs/*
-!.planning/graphs/GRAPH_REPORT.md
 
 # Local TS/Go index data for the synthetic-parity golden fixture corpus
 # (rebuilt by testdata/golden/capture.sh; never committed — same "local to

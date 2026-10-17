@@ -1,7 +1,7 @@
 # Agent Capabilities
 
 This is the AGENT-14 per-harness capability table
-([`07-CONTEXT.md`](https://github.com/seanb4t/codegraph-go/blob/d384473ea2d19b4b21b4aa4a2d2e1d12b054977e/.planning/milestones/v0.14.0-phases/07-codex-parity/07-CONTEXT.md) D-27/D-28) — the human-readable half of
+([`07-CONTEXT.md`](https://github.com/seanb4t/codegraph-go/blob/planning-archive-v0.15.0/.planning/milestones/v0.14.0-phases/07-codex-parity/07-CONTEXT.md) D-27/D-28) — the human-readable half of
 what each of the 8 roster agents receives at each scope: its MCP config file, instructions
 file, skill package, and lifecycle-hook mechanism. The machine-readable half is the
 `Capabilities()` literal inside each target's own file in `internal/agents/*.go`, and
@@ -25,6 +25,8 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
   `verified <date> (<evidence file>)` when a recorded live session proved the row;
   `[ASSUMED] (<source>, fetched <date>)` when no live session ran and
   the row rests on the vendor's own published documentation; `n/a` for an unsupported scope.
+  The evidence files cited below are in the
+  [planning archive](https://github.com/seanb4t/codegraph-go/tree/planning-archive-v0.15.0/.planning).
 
 ## Capability Table
 

@@ -35,9 +35,7 @@
 // workspace mode is incompatible with -modfile.
 //
 // Neither Dependabot nor Renovate manages this file (both gomod managers
-// target go.mod only) — version bumps here are manual. See
-// .planning/phases/01-engine-seam-wire-protocol-secure-transport/01-CONTEXT.md
-// and 01-01-PLAN.md Task 2's MVS-measurement instructions.
+// target go.mod only) — version bumps here are manual.
 module github.com/seanb4t/codegraph-go/tools-proto
 
 go 1.26.5

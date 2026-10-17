@@ -23,8 +23,8 @@ const codexTOMLTable = "mcp_servers.codegraph"
 // HooksNone this plan — 07-07 adds codex-json.
 //
 // Verified live 2026-09-19 against codex-cli 0.155.0
-// (.planning/phases/07-codex-parity/07-LIVE-SESSIONS.md, CODEX-01): a
-// trusted project's .codex/config.toml loads (both scopes), an untrusted
+// (planning-archive-v0.15.0:.planning/milestones/v0.14.0-phases/07-codex-parity/07-LIVE-SESSIONS.md):
+// a trusted project's .codex/config.toml loads (both scopes), an untrusted
 // project's does not, project .agents/skills and AGENTS.md are read
 // regardless of trust, and the real HOME's own files are never touched by
 // this scratch verification.

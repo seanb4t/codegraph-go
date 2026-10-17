@@ -1,8 +1,7 @@
 # Tag-triggered release workflow (DIST-01, DIST-02, DIST-03).
 #
 # LOCKED CONTRACT — do not change without reading internal/upgrade/verify.go
-# (releaseWorkflowRefPattern) and .planning/phases/08-release-hardening-benchmarks/08-RESEARCH.md
-# Finding 1/2 first:
+# (releaseWorkflowRefPattern) first:
 #
 #   - This file MUST be named release.yml (or release.yaml) and live at
 #     .github/workflows/, and MUST trigger ONLY on tag pushes matching
