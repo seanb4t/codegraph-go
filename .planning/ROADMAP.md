@@ -151,7 +151,7 @@ Archived: [`milestones/v0.14.0-ROADMAP.md`](./milestones/v0.14.0-ROADMAP.md) · 
 - [x] **Phase 3: Rename-Stub Removal** - The hidden `query`/`unlock` stubs are gone, and this phase's close is the capability's first observed firing, writing the milestone's `Breaking` fragment (completed 2026-09-26)
 - [x] **Phase 4: Fragment-Required Gate** - A pull request that changes shipped code cannot merge without a fragment or a reasoned exemption, and the check is required on `main` (completed 2026-10-13)
 - [x] **Phase 5: Release Chain & release-please Retirement** - A changie release-PR workflow tags through the GitHub App into the locked `release.yml`, every release-please guard is re-pointed, the docs describe the chain, and release-please is deleted (completed 2026-10-16)
-- [ ] **Phase 6: First Release Through the Chain** - A real release is cut through the new chain end to end, and an installed v0.14.0 upgrades to it with verification
+- [x] **Phase 6: First Release Through the Chain** - A real release is cut through the new chain end to end, and an installed v0.14.0 upgrades to it with verification (completed 2026-10-17)
 
 #### Phase 1: Changie Baseline
 
@@ -333,7 +333,7 @@ Plans:
   4. SEED-005 is annotated with the verified trigger (this release) so the other repositories can pick up the template, and the capability tag installed by `CAP-04` is recorded as the one this release ran with (SHIP-04)
 
 **Notes**: This phase executes after the milestone PR has merged, so its own planning artifacts cannot ride on that PR — where they land (a planning-only follow-up PR, which the fragment gate passes without a marker) and when the milestone audit and close run relative to this phase are sequencing decisions to settle at discuss time. No human `git tag`, no `[ci skip]`, no re-run of a failed step to make a check green: a defect found here is fixed forward through a `Fixes` fragment and the chain, never by hand-tagging. The version label is a prediction — criterion 2 names `v0.15.0` only because that is what the fragments are expected to derive; the file compared is whatever `.changes/vX.Y.Z.md` the release actually produced.
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -356,7 +356,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The genuine de
 | 3. Rename-Stub Removal | 1/1 | Complete    | 2026-09-26 |
 | 4. Fragment-Required Gate | 5/5 | Complete    | 2026-10-13 |
 | 5. Release Chain & release-please Retirement | 8/8 | Complete    | 2026-10-16 |
-| 6. First Release Through the Chain | 2/2 | In Progress | - |
+| 6. First Release Through the Chain | 2/2 | Complete    | 2026-10-17 |
 
 9 milestones shipped (v0.1, v1.0, v0.3.0, v0.5.0, v0.10.0, v0.11.0, v0.12.0, v0.13.0, v0.14.0). v0.15.0 scoped: 6 phases (1–6), 29 requirements, 0/6 phases complete (0%).
 
