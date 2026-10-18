@@ -16,10 +16,21 @@ func fakeHome(t *testing.T) string {
 	t.Helper()
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
+	for key, value := range homeEnv(home) {
+		t.Setenv(key, value)
+	}
 	return home
+}
+
+// homeEnv returns every home-derived env var this package's targets
+// consult, pointed under home. fakeHome and TestMain both set exactly
+// this set; a new agent target that reads another variable adds it here.
+func homeEnv(home string) map[string]string {
+	return map[string]string{
+		"HOME":            home,
+		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"HERMES_HOME":     filepath.Join(home, ".hermes"),
+	}
 }
 
 // readFile reads path and fails the test on error, for terse test-body

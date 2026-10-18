@@ -69,6 +69,8 @@ func TestUpgradeCommand_PropagatesError(t *testing.T) {
 // upgrade` (no positional version, no --check) still delegates correctly
 // with an empty pinned Version (upgrade.Run treats empty as "latest").
 func TestUpgradeCommand_NoArgsDefaultsToLatest(t *testing.T) {
+	fakeHome(t)
+
 	var gotOpts upgrade.Options
 
 	orig := upgradeRunFunc
@@ -77,6 +79,12 @@ func TestUpgradeCommand_NoArgsDefaultsToLatest(t *testing.T) {
 		return nil
 	}
 	t.Cleanup(func() { upgradeRunFunc = orig })
+
+	origRefresh := refreshInstalledSkillsFunc
+	refreshInstalledSkillsFunc = func(execPath string, out io.Writer) error {
+		return nil
+	}
+	t.Cleanup(func() { refreshInstalledSkillsFunc = origRefresh })
 
 	if _, _, err := execCmd("upgrade"); err != nil {
 		t.Fatalf("upgrade: %v", err)
