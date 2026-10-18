@@ -27,7 +27,7 @@ Run Go with `GOTOOLCHAIN=go1.26.9`, the version `go.mod` names. Never run a repr
 - [x] 5.1 Rerun the command from 1.1. Verify that its output matches the 1.1 file exactly, so no `git` helper started to skip under the fake home.
 - [x] 5.2 Save `jq .mcpServers.codegraph ~/.claude.json`, run `go test ./internal/cli ./internal/agents -count=1`, and read the entry again. Verify both reads match. This step only reads the real home.
 - [x] 5.3 Run `GOTOOLCHAIN=go1.26.9 task test` and `GOTOOLCHAIN=go1.26.9 task lint`. Verify both pass.
-- [ ] 5.4 The change is test-only, so no changelog fragment. Put `<!-- changelog-exempt: test-only change, no user-visible effect -->` in the PR body and verify that the `fragment-required` check passes.
+- [x] 5.4 The change is test-only, so no changelog fragment. Put `<!-- changelog-exempt: test-only change, no user-visible effect -->` in the PR body and verify that the `fragment-required` check passes.
 
 ## Workflow follow-up
 
