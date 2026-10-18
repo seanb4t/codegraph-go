@@ -237,6 +237,12 @@ Code, or the `openspec-*` skills in Codex. Without one, use the `openspec` CLI:
 `openspec archive <id>`. Do not edit the generated `/opsx:*` commands or
 `openspec-*` skills; `openspec update` rewrites them.
 
+A pre-commit hook runs `openspec validate --all --strict` when a commit stages a
+file under `openspec/`. CI does not run this check. The hook is optional. To
+install it with [mise](https://mise.jdx.dev), run `mise trust`, `mise install`
+and `hk install --mise`. mise installs the `hk` and `openspec` versions that
+`mise.toml` pins. `HK=0 git commit` skips the hook for one commit.
+
 A proposal can land on its own. A PR that touches only `openspec/` needs no
 template, and `Refs #<n>` is enough. The implementation PR says `Closes #<n>`
 and carries the code, the changelog fragment, and the `openspec archive` result,
