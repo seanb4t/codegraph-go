@@ -16,8 +16,7 @@
 #
 # 1. An un-indexed repo exits here, before any process starts or stdin is
 #    read. A linked worktree root (its .git is a file) goes on to the
-#    binary, which checks whether the worktree's main checkout is indexed
-#    (#139).
+#    binary, which checks whether the worktree's main checkout is indexed.
 # 2. The codegraph binary path is rendered in at install time as the
 #    absolute path of the binary that ran `codegraph install` (D-19): the
 #    command registered in hooks.json never carries the binary path, only

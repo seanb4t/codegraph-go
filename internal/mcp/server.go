@@ -666,7 +666,7 @@ func unregisterTools(s *mcp.Server) {
 // anything to compare. Because repoPath is always startPath itself or an
 // ANCESTOR of it (it is query.ResolveIndex(startPath)'s ConfineRoot: the
 // index root, or a linked worktree's own root when the index is borrowed
-// from its main worktree, #139), confining the default startPath to
+// from its main worktree), confining the default startPath to
 // repoPath always succeeds structurally — only an explicit,
 // client-supplied "path" redirecting
 // elsewhere can ever be rejected.

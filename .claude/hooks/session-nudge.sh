@@ -10,7 +10,7 @@
 # index, and never parses its own stdin. It checks the project directory
 # for .codegraph/. Only when that is missing and the project directory is
 # a linked worktree root (its .git is a file) does it run one git command,
-# to find the main checkout and check for .codegraph/ there (#139).
+# to find the main checkout and check for .codegraph/ there.
 project_dir=${CLAUDE_PROJECT_DIR:-.}
 
 nudge() {

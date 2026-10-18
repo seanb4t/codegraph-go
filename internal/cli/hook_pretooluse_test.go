@@ -371,7 +371,7 @@ func TestHookPreToolUse_UnindexedProjectDirIsSilent(t *testing.T) {
 	}
 }
 
-// TestHookPreToolUse_LinkedWorktreeProjectDir (#139): a linked worktree
+// TestHookPreToolUse_LinkedWorktreeProjectDir: a linked worktree
 // root whose main checkout is indexed counts as indexed for both
 // harnesses; one whose main checkout is not stays silent.
 func TestHookPreToolUse_LinkedWorktreeProjectDir(t *testing.T) {

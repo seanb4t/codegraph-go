@@ -151,6 +151,25 @@ func TestResolveIndexWorktreeFallback(t *testing.T) {
 		runGitW(t, parent, "submodule", "add", child, "sub")
 		wantNotInitialized(t, filepath.Join(parent, "sub"))
 	})
+
+	t.Run("a .git file the repository does not record", func(t *testing.T) {
+		main, wt := siblingWorktree(t)
+		markIndexed(t, main)
+		wantResolution(t, wt, Resolution{IndexRoot: realpathT(t, main), ConfineRoot: wt})
+
+		wantNotInitialized(t, plantedGitFile(t, filepath.Join(main, ".git")))
+	})
+}
+
+// plantedGitFile creates a directory outside any repository whose .git file
+// names gitdir, the way a hand-written or downloaded .git file would.
+func plantedGitFile(t *testing.T, gitdir string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o644); err != nil {
+		t.Fatalf("write planted .git: %v", err)
+	}
+	return dir
 }
 
 // TestResolveIndexRunsGitOnlyInLinkedWorktree puts a git stub first on
@@ -218,6 +237,7 @@ func TestProjectIndexed(t *testing.T) {
 		{"a worktree of an unindexed main", unindexedWt, false},
 		{"an unindexed repository", plain, false},
 		{"a subdirectory of an indexed repository", mkdirAll(t, filepath.Join(parent, "pkg")), false},
+		{"a .git file naming an indexed repository's git dir", plantedGitFile(t, filepath.Join(indexedMain, ".git")), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

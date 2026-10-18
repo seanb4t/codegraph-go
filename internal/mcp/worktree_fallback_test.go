@@ -7,7 +7,7 @@ import (
 )
 
 // mcpSiblingWorktreeFixture builds an indexed main checkout and a linked
-// worktree in a different temp directory, outside it (#139). Returns both
+// worktree in a different temp directory, outside it. Returns both
 // absolute paths.
 func mcpSiblingWorktreeFixture(t *testing.T) (worktree, mainRoot string) {
 	t.Helper()

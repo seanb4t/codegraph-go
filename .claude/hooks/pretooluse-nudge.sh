@@ -8,7 +8,7 @@
 # 1. An un-indexed repo exits here, before any process starts or stdin is
 #    read (D-04, the same check as session-nudge.sh). A linked worktree
 #    root (its .git is a file) goes on to the binary, which checks whether
-#    the worktree's main checkout is indexed (#139).
+#    the worktree's main checkout is indexed.
 # 2. The codegraph binary path is rendered in at install time as the
 #    absolute path of the binary that ran `codegraph install` (D-01b). Only
 #    this unrendered repository copy falls back to the codegraph on PATH;

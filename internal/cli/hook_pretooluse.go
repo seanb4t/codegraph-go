@@ -192,7 +192,7 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 		return
 	}
 	// The shell guard also passes a linked worktree root (.git is a file),
-	// so the index check that decides is this one (#139).
+	// so the index check that decides is this one.
 	if !query.ProjectIndexed(claudeProjectDir(getenv)) {
 		return
 	}

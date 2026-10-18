@@ -116,6 +116,20 @@ When the upward walk finds no index and the nearest `.git` entry at or above the
 - **WHEN** the start directory is in a submodule, and no directory at or above the submodule holds `.codegraph/`
 - **THEN** the command reports that no index is initialized
 
+### Requirement: Only a worktree the repository records borrows its index
+
+The linked-worktree fallback SHALL apply only when the repository records the worktree both ways: the worktree's git directory is in the repository's `worktrees` directory, and that git directory names the worktree's `.git` file back. A `.git` file without that record SHALL NOT make another directory's index the index root.
+
+#### Scenario: A .git file naming another repository's git directory
+
+- **WHEN** the start directory holds a hand-written `.git` file that names `<main>/.git`, `<main>` holds `.codegraph/`, and no directory at or above the start directory holds `.codegraph/`
+- **THEN** the command reports that no index is initialized
+
+#### Scenario: A .git file naming another worktree's git directory
+
+- **WHEN** the start directory holds a hand-written `.git` file that names the git directory of a different linked worktree of `<main>`, and `<main>` holds `.codegraph/`
+- **THEN** the command reports that no index is initialized
+
 ### Requirement: Index-writing commands never use the worktree fallback
 
 `codegraph init`, `codegraph index`, `codegraph sync`, `codegraph uninit` and `codegraph daemon` SHALL act on their target directory only. They SHALL NOT use the worktree fallback, and SHALL NOT read or write the main worktree's index because of it.

@@ -41,10 +41,10 @@ func TestServeKeepsStartPathDistinctFromConfinementRoot(t *testing.T) {
 	}
 }
 
-// TestServeServerPathsSiblingWorktree pins #139: a linked worktree outside
-// the main checkout syncs and watches the main checkout's index, while its
-// confinement root is the worktree itself, so the default path (a
-// subdirectory of it) stays inside.
+// TestServeServerPathsSiblingWorktree pins the sibling case: a linked
+// worktree outside the main checkout syncs and watches the main checkout's
+// index, while its confinement root is the worktree itself, so the default
+// path (a subdirectory of it) stays inside.
 func TestServeServerPathsSiblingWorktree(t *testing.T) {
 	wt, main := siblingWorktreeFixture(t)
 	realMain, err := filepath.EvalSymlinks(main)

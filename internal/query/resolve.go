@@ -58,13 +58,15 @@ func ResolveCodegraphDir(start string) (string, error) {
 // nothing is skipped.
 //
 // When the walk finds nothing, a linked worktree falls back to its main
-// worktree's index (#139): a worktree outside the main checkout never
+// worktree's index: a worktree outside the main checkout never
 // passes through it on the way up. The walk notes the nearest .git entry,
 // and only when that entry is a file (a linked worktree or a submodule)
 // is git asked for the main worktree, so an ordinary repository without an
-// index never starts a git process. Any git failure, a bare repository,
-// or a main worktree that is the home directory or holds no .codegraph
-// returns ErrNotInitialized.
+// index never starts a git process. The repository must record the
+// worktree both ways (gitmeta.LinkedWorktreeMain), so a hand-written .git
+// file cannot point the fallback at an unrelated repository's index. Any
+// git failure, an unrecorded or bare worktree, or a main worktree that is
+// the home directory or holds no .codegraph returns ErrNotInitialized.
 func ResolveIndex(start string) (Resolution, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
@@ -115,12 +117,13 @@ func ProjectIndexed(dir string) bool {
 	return mainWorktreeIndex(dir, homeDir()) != ""
 }
 
-// mainWorktreeIndex returns the main worktree of the repository worktree
-// belongs to when it holds a .codegraph directory and is not the home
-// directory, and "" otherwise. MainWorktree resolves symlinks, so the home
-// directory is compared both as given and resolved.
+// mainWorktreeIndex returns the main worktree of the repository that
+// worktree is a recorded linked worktree of, when it holds a .codegraph
+// directory and is not the home directory, and "" otherwise.
+// LinkedWorktreeMain resolves symlinks, so the home directory is compared
+// both as given and resolved.
 func mainWorktreeIndex(worktree, home string) string {
-	main := gitmeta.MainWorktree(context.Background(), worktree)
+	main := gitmeta.LinkedWorktreeMain(context.Background(), worktree)
 	if main == "" || !isDir(filepath.Join(main, codegraphDirName)) {
 		return ""
 	}

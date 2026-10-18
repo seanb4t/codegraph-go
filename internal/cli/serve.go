@@ -37,7 +37,7 @@ const codegraphMCPToolsEnv = "CODEGRAPH_MCP_TOOLS"
 // sync and the watcher work on. confineRoot is BuildServer's repoPath, the
 // tree a tool call's "path" must stay inside (CR-02). Both are the found
 // directory when the upward walk finds the index; when a linked worktree
-// borrows its main worktree's index (#139), indexRoot is the main worktree
+// borrows its main worktree's index, indexRoot is the main worktree
 // and confineRoot is the linked worktree's own root, which still contains
 // start. With no index, both are start itself and hasIndex is false
 // (MCP-03).

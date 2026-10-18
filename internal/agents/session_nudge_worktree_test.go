@@ -38,7 +38,7 @@ func gitRepoA(t *testing.T, dir string) string {
 	return dir
 }
 
-// TestSessionNudgeLinkedWorktree (#139): in a linked worktree root the
+// TestSessionNudgeLinkedWorktree: in a linked worktree root the
 // nudge fires when the main checkout is indexed, and stays silent
 // otherwise. A git stub first on PATH counts git runs: one in a linked
 // worktree (the positive control), none in an ordinary repository.

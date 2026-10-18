@@ -13,6 +13,7 @@ package gitmeta
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -83,36 +84,81 @@ func CommonDir(ctx context.Context, dir string) string {
 	return realpath(resolved)
 }
 
-// MainWorktree returns the absolute, symlink-resolved root of the main
-// worktree of the repository dir belongs to, or "" when dir isn't in a
-// repository, the repository is bare (it has no main worktree), or git is
-// unavailable or slow. `git worktree list --porcelain` lists the main
-// worktree first from every worktree of a repository, so a linked worktree
-// anywhere on disk finds it, and a main checkout made with
-// --separate-git-dir (whose common dir is not <main>/.git) is still right.
+// LinkedWorktreeMain returns the absolute, symlink-resolved root of the
+// main worktree of the repository that root is a linked worktree of, or ""
+// when root is not the root of a linked worktree that repository records,
+// the repository is bare (it has no main worktree), or git is unavailable
+// or slow.
 //
-// An answer from a git run that exited 0, including "bare", is remembered
-// for the life of the process, keyed by filepath.Clean(dir): the MCP server
-// resolves its index on every request, and one git spawn costs tens of
-// milliseconds. A failure is not remembered, so the next call tries again.
-func MainWorktree(ctx context.Context, dir string) string {
-	key := filepath.Clean(dir)
+// The link must hold both ways, as `git worktree add` records it: root's
+// git directory is <common dir>/worktrees/<name>, and that directory's
+// gitdir file names root/.git. A .git file on its own proves nothing: one
+// line pointing at another repository's git directory would otherwise
+// borrow that repository's index for an unrelated tree. A main checkout, a
+// submodule and a --separate-git-dir checkout fail the first test.
+//
+// `git worktree list --porcelain` then names the main worktree: its first
+// record, from any worktree of the repository, which stays right for a
+// main checkout whose common dir is not <main>/.git.
+//
+// An answer from git runs that exited 0, including "" for an unrecorded or
+// bare worktree, is remembered for the life of the process, keyed by
+// filepath.Clean(root): the MCP server resolves its index on every
+// request, and one git spawn costs tens of milliseconds. A failure is not
+// remembered, so the next call tries again.
+func LinkedWorktreeMain(ctx context.Context, root string) string {
+	key := filepath.Clean(root)
 	if main, ok := mainWorktrees.get(key); ok {
 		return main
 	}
-	main, ok := mainWorktree(ctx, dir)
+	main, ok := linkedWorktreeMain(ctx, root)
 	if ok {
 		mainWorktrees.put(key, main)
 	}
 	return main
 }
 
-// mainWorktree runs the uncached lookup. ok reports whether git ran and
-// exited 0, which is what makes the answer safe to cache.
-func mainWorktree(ctx context.Context, dir string) (main string, ok bool) {
+// linkedWorktreeMain runs the uncached lookup. ok reports whether every git
+// run exited 0, which is what makes the answer safe to cache.
+func linkedWorktreeMain(ctx context.Context, root string) (main string, ok bool) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--absolute-git-dir", "--git-common-dir")
+	cmd.Dir = root
+	cmd.Stdin = nil
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	dirs := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(dirs) != 2 {
+		return "", false
+	}
+	gitDir := realpath(dirs[0])
+	common := dirs[1]
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(root, common)
+	}
+	if filepath.Dir(gitDir) != realpath(filepath.Join(common, "worktrees")) {
+		return "", true
+	}
+	back, err := os.ReadFile(filepath.Join(gitDir, "gitdir"))
+	if err != nil {
+		return "", true
+	}
+	link := strings.TrimSpace(string(back))
+	if !filepath.IsAbs(link) {
+		link = filepath.Join(gitDir, link)
+	}
+	if realpath(link) != realpath(filepath.Join(root, ".git")) {
+		return "", true
+	}
+	return mainWorktree(ctx, root)
+}
+
+// mainWorktree reads the first record of `git worktree list --porcelain`.
+func mainWorktree(ctx context.Context, dir string) (main string, ok bool) {
 	cmd := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
 	cmd.Dir = dir
 	cmd.Stdin = nil
@@ -141,7 +187,7 @@ func realpathOrEmpty(p string) string {
 	return realpath(p)
 }
 
-// mainWorktrees is MainWorktree's process-lifetime cache, bounded like
+// mainWorktrees is LinkedWorktreeMain's process-lifetime cache, bounded like
 // CachingDetector's (maxCacheEntries, WR-02): a client-supplied MCP "path"
 // can mint new keys, so a full cache is dropped and refilled.
 var mainWorktrees = &mainWorktreeCache{entries: make(map[string]string)}

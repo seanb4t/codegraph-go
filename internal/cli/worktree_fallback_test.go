@@ -12,7 +12,7 @@ import (
 
 // siblingWorktreeFixture builds an indexed main checkout and a linked
 // worktree in a different temp directory, so the upward walk from the
-// worktree never passes through the main checkout (#139).
+// worktree never passes through the main checkout.
 func siblingWorktreeFixture(t *testing.T) (worktree, mainRoot string) {
 	t.Helper()
 
