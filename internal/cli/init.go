@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -95,13 +96,34 @@ func newInitCmd() *cobra.Command {
 	return cmd
 }
 
+// ErrHomeDirectoryTarget is returned by targetRoot when the directory a
+// command would create, rebuild or remove an index in is the user's home
+// directory. The home directory can never be a codegraph project: the
+// query engine never resolves it as an index root (query.ResolveCodegraphDir),
+// so an index there would be unreachable, and older releases kept per-user
+// state in ~/.codegraph.
+var ErrHomeDirectoryTarget = errors.New("the home directory cannot be a codegraph project")
+
 // targetRoot resolves the repo root a command should operate on: args[0]
-// (absolute-ified) if given, else the current working directory.
+// (absolute-ified) if given, else the current working directory. It
+// refuses the user's home directory with ErrHomeDirectoryTarget. init,
+// index and uninit all go through here, so the check holds for every
+// command that creates, rebuilds or removes a .codegraph directory.
 func targetRoot(args []string) (string, error) {
+	var root string
+	var err error
 	if len(args) > 0 {
-		return filepath.Abs(args[0])
+		root, err = filepath.Abs(args[0])
+	} else {
+		root, err = os.Getwd()
 	}
-	return os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if home, homeErr := os.UserHomeDir(); homeErr == nil && filepath.Clean(root) == filepath.Clean(home) {
+		return "", fmt.Errorf("%w: %s", ErrHomeDirectoryTarget, root)
+	}
+	return root, nil
 }
 
 // writeGitignoreHint writes a .gitignore inside .codegraph/ that ignores

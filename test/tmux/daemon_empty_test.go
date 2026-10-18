@@ -42,7 +42,7 @@ func TestDaemonEmptyRegistryLeaksNoModeQueryBytes(t *testing.T) {
 	home := t.TempDir()
 	session := newSession(t)
 
-	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s %s daemon", home, home, binPath))
+	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s XDG_STATE_HOME=%s/.local/state %s daemon", home, home, home, binPath))
 	sendKey(t, session, "Enter")
 
 	capture := pollUntilStable(t, session, paneContains(t, "no running daemons"))

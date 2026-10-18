@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -162,5 +164,38 @@ func TestServeWatchStartDisabledPrintsVerbatimMessage(t *testing.T) {
 		"(or install the git sync hooks via `codegraph init`) to refresh.\n"
 	if !strings.Contains(stderr.String(), want) {
 		t.Fatalf("expected the full verbatim disabled message on stderr,\nwant substring: %q\ngot: %q", want, stderr.String())
+	}
+}
+
+// TestServeServerPathsIgnoresHomeCodegraph: a .codegraph in the home directory (older releases kept the
+// daemon registry there, and other tools may still create one) must not
+// make serveServerPaths report an index for the home directory or for an
+// unindexed repository under it. The store check at the end is the
+// acceptance criterion in words: nothing under the fake home was opened
+// or built as a project.
+func TestServeServerPathsIgnoresHomeCodegraph(t *testing.T) {
+	home := fakeHome(t)
+	if err := os.MkdirAll(filepath.Join(home, codegraphDirName, "daemons"), 0o755); err != nil {
+		t.Fatalf("mkdir fake ~/.codegraph/daemons: %v", err)
+	}
+	repo := filepath.Join(home, "x", "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+
+	for _, start := range []string{home, repo} {
+		repoPath, hasIndex, err := serveServerPaths(start)
+		if err != nil {
+			t.Fatalf("serveServerPaths(%s): unexpected error: %v", start, err)
+		}
+		if hasIndex {
+			t.Fatalf("serveServerPaths(%s) hasIndex = true, want false (~/.codegraph must not count as an index)", start)
+		}
+		if repoPath != start {
+			t.Fatalf("serveServerPaths(%s) repoPath = %q, want %q (no index found: repoPath falls back to start)", start, repoPath, start)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, codegraphDirName, storeDirName)); !os.IsNotExist(err) {
+		t.Fatalf("~/.codegraph/store exists after serveServerPaths (stat err %v); the home directory was treated as a project", err)
 	}
 }

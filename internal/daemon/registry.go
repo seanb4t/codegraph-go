@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/userdirs"
 )
 
-// Record is the JSON payload of one ~/.codegraph/daemons/<pid>.json entry
+// Record is the JSON payload of one <state dir>/daemons/<pid>.json entry
 // (D-04): the minimum a cross-project daemon picker (07-07) or `daemon stop
 // --all` (07-04) needs to identify and act on a running daemon.
 type Record struct {
@@ -19,20 +21,85 @@ type Record struct {
 	RepoRoot  string    `json:"repoRoot"`
 }
 
-// registryDir returns ~/.codegraph/daemons/, the global directory of
-// per-daemon record files (D-04 — deliberately not the per-repo
-// .codegraph/daemon.lock). It is a package-level func var (mirroring the
-// onSync*/onWatchOpen test-seam convention already used in daemon.go) so
-// registry_test.go can point it at t.TempDir() instead of the real home
-// directory.
+// registryDirName is the registry's subdirectory inside the per-user state
+// directory, and inside the legacy ~/.codegraph directory.
+const registryDirName = "daemons"
+
+// legacyStateDirName is the per-user directory older releases wrote the
+// registry under. It has the same name as the per-repository index marker,
+// which is why the registry moved out of it.
+const legacyStateDirName = ".codegraph"
+
+// registryDir returns the global directory of per-daemon record files
+// (D-04 — deliberately not the per-repo .codegraph/daemon.lock):
+// <userdirs.StateDir()>/daemons. It is a package-level func var (mirroring
+// the onSync*/onWatchOpen test-seam convention already used in daemon.go)
+// so registry_test.go can point it at t.TempDir() instead of the real
+// state directory.
 var registryDir = defaultRegistryDir
 
+// defaultRegistryDir resolves the registry directory and, on the way, moves
+// any records an older release left in ~/.codegraph/daemons into it. The
+// migration is a no-op once the new directory exists, so the steady-state
+// cost is one stat per call.
 func defaultRegistryDir() (string, error) {
+	stateDir, err := userdirs.StateDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(stateDir, registryDirName)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codegraph", "daemons"), nil
+	if err := migrateLegacyRegistry(filepath.Join(home, legacyStateDirName, registryDirName), dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// migrateLegacyRegistry moves every <pid>.json record from legacy into dir,
+// once: it does nothing when dir already exists or legacy does not. Each
+// record is read, written atomically to dir, then removed, so a state
+// directory on another filesystem works. Afterwards legacy and its parent
+// are removed with os.Remove, which fails on a non-empty directory; those
+// failures are ignored, so a parent that still holds files codegraph did
+// not write (another tool's, or an index built there by mistake) stays as it is.
+func migrateLegacyRegistry(legacy, dir string) error {
+	if _, err := os.Stat(dir); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	entries, err := os.ReadDir(legacy)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		src := filepath.Join(legacy, e.Name())
+		data, err := os.ReadFile(src)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // deregistered while we were migrating
+			}
+			return err
+		}
+		if err := fsatomic.WriteFile(filepath.Join(dir, e.Name()), string(data)); err != nil {
+			return err
+		}
+		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	_ = os.Remove(legacy)
+	_ = os.Remove(filepath.Dir(legacy))
+	return nil
 }
 
 // recordPath returns the record file path for pid within the registry dir.

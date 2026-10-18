@@ -28,16 +28,31 @@ const codegraphDirName = ".codegraph"
 // ErrNotInitialized once the filesystem root is reached without finding
 // one. start is resolved to an absolute path first via filepath.Abs (V5 —
 // no unbounded/relative path is ever stat'd against unexpected cwd state).
+//
+// The user's home directory is never an index root: a .codegraph there is
+// skipped and the walk continues to its parent. Older releases kept
+// per-user state in ~/.codegraph, and anything else may still create a
+// directory of that name, so without the skip every unindexed directory
+// under the home directory would resolve to the home directory itself.
+// The comparison is on filepath.Clean of both paths, with no
+// symlink evaluation; when the home directory cannot be determined,
+// nothing is skipped.
 func ResolveCodegraphDir(start string) (string, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
 		return "", err
 	}
+	home := ""
+	if h, homeErr := os.UserHomeDir(); homeErr == nil {
+		home = filepath.Clean(h)
+	}
 	for {
-		candidate := filepath.Join(dir, codegraphDirName)
-		info, statErr := os.Stat(candidate)
-		if statErr == nil && info.IsDir() {
-			return dir, nil
+		if dir != home {
+			candidate := filepath.Join(dir, codegraphDirName)
+			info, statErr := os.Stat(candidate)
+			if statErr == nil && info.IsDir() {
+				return dir, nil
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

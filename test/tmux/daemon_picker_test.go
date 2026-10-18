@@ -31,7 +31,7 @@ func TestDaemonPickerEntersAltScreenAndRestoresMainBuffer(t *testing.T) {
 	waitForRegistryRecord(t, home)
 
 	session := newSession(t)
-	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s %s daemon", home, home, binPath))
+	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s XDG_STATE_HOME=%s/.local/state %s daemon", home, home, home, binPath))
 	sendKey(t, session, "Enter")
 
 	capture := pollUntilStable(t, session, paneContains(t, "Running daemons"))
