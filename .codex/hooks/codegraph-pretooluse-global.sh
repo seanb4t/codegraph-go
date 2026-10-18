@@ -12,7 +12,9 @@
 # invocation path.
 #
 # 1. An un-indexed repo (relative to $PWD) exits here, before any process
-#    starts or stdin is read.
+#    starts or stdin is read. A linked worktree root (its .git is a file)
+#    goes on to the binary, which checks whether the worktree's main
+#    checkout is indexed (#139).
 # 2. The codegraph binary path is rendered in at install time as the
 #    absolute path of the binary that ran `codegraph install` (D-19): the
 #    command registered in hooks.json never carries the binary path, only
@@ -21,7 +23,7 @@
 # 4. The binary runs as a child with this script's stdin inherited,
 #    through the Codex envelope (--harness codex, D-21); this hook never
 #    blocks, denies, or reports a hook error — it exits 0 on every path.
-[ -d "${PWD:-.}/.codegraph" ] || exit 0
+[ -d "${PWD:-.}/.codegraph" ] || [ -f "${PWD:-.}/.git" ] || exit 0
 codegraph_bin='@codegraph-exec-path@'
 if [ ! -f "$codegraph_bin" ] || [ ! -x "$codegraph_bin" ]; then
   exit 0

@@ -31,11 +31,16 @@ import (
 // why "unset" and "set to empty" must answer differently here.
 const codegraphMCPToolsEnv = "CODEGRAPH_MCP_TOOLS"
 
-// serveServerPaths computes BuildServer's two DELIBERATELY DISTINCT
-// arguments (CR-01) from start, the caller's actual starting directory:
-// repoPath, the confinement root (start itself, overwritten with the
-// RESOLVED index root only when query.ResolveCodegraphDir finds one at or
-// above start), and hasIndex, whether an index was found at all (MCP-03).
+// serveServerPaths resolves the server's roots from start, the caller's
+// actual starting directory, which BuildServer receives separately as its
+// startPath (CR-01). indexRoot holds the .codegraph directory the startup
+// sync and the watcher work on. confineRoot is BuildServer's repoPath, the
+// tree a tool call's "path" must stay inside (CR-02). Both are the found
+// directory when the upward walk finds the index; when a linked worktree
+// borrows its main worktree's index (#139), indexRoot is the main worktree
+// and confineRoot is the linked worktree's own root, which still contains
+// start. With no index, both are start itself and hasIndex is false
+// (MCP-03).
 //
 // WR-01 (02-REVIEW-2.md): extracted so a test can pin THIS function's
 // actual output — the derivation newServeCmd's RunE really performs —
@@ -45,14 +50,16 @@ const codegraphMCPToolsEnv = "CODEGRAPH_MCP_TOOLS"
 // its root cause (BuildServer(hasIndex, allowlist, repoPath, repoPath))
 // and the entire suite, golden corpus included, stayed green — because
 // nothing exercised serve.go's own wiring. See serve_test.go.
-func serveServerPaths(start string) (repoPath string, hasIndex bool, err error) {
-	repoPath = start
-	if dir, dirErr := query.ResolveCodegraphDir(start); dirErr == nil {
-		return dir, true, nil
-	} else if !errors.Is(dirErr, query.ErrNotInitialized) {
-		return "", false, dirErr
+func serveServerPaths(start string) (indexRoot, confineRoot string, hasIndex bool, err error) {
+	r, resolveErr := query.ResolveIndex(start)
+	switch {
+	case resolveErr == nil:
+		return r.IndexRoot, r.ConfineRoot, true, nil
+	case errors.Is(resolveErr, query.ErrNotInitialized):
+		return start, start, false, nil
+	default:
+		return "", "", false, resolveErr
 	}
-	return repoPath, false, nil
 }
 
 // watchRetryInterval is the base cadence (before jitter) serveWatchStart's
@@ -213,7 +220,7 @@ tools appear on the next request, with no client restart.`,
 				return err
 			}
 
-			repoPath, hasIndex, err := serveServerPaths(start)
+			indexRoot, confineRoot, hasIndex, err := serveServerPaths(start)
 			if err != nil {
 				return err
 			}
@@ -227,8 +234,8 @@ tools appear on the next request, with no client restart.`,
 			// construction). MCP-03's absent-index case is unaffected:
 			// hasIndex false skips reconcile entirely.
 			if hasIndex {
-				storeDir := filepath.Join(repoPath, codegraphDirName, storeDirName)
-				if _, err := indexer.Sync(repoPath, storeDir, indexer.Options{Quiet: true}); err != nil {
+				storeDir := filepath.Join(indexRoot, codegraphDirName, storeDirName)
+				if _, err := indexer.Sync(indexRoot, storeDir, indexer.Options{Quiet: true}); err != nil {
 					// CR-01 scenario 3 (03-REVIEW.md): a lock-held failure
 					// here means another codegraph process (a sibling
 					// session's flush or reconcile) is actively syncing the
@@ -269,7 +276,7 @@ tools appear on the next request, with no client restart.`,
 				watchStderr = present.NewLineWriter(mode.Writer(cmd.ErrOrStderr()), present.NewPalette(true), present.RoleWarning)
 			}
 			cancelWatchStart, watchStartDone := serveWatchStart(
-				repoPath, hasIndex, noWatch, forceWatch,
+				indexRoot, hasIndex, noWatch, forceWatch,
 				indexer.Options{Quiet: true}, watchStderr, nil,
 			)
 			defer func() {
@@ -286,21 +293,20 @@ tools appear on the next request, with no client restart.`,
 			companions, unknown := mcp.ResolveCompanions(rawFilter, filterSet)
 			mcp.WarnToolFilterTo(cmd.ErrOrStderr(), unknown, companions)
 
-			// CR-01: repoPath (the RESOLVED index root) is the confinement
-			// root; start (the caller's actual cwd, captured above BEFORE
-			// repoPath overwrote it for storeDir/daemon.New's purposes) must
-			// ALSO survive to BuildServer as the handlers' default path — a
-			// literal recurrence of Phase-1 CR-02 otherwise, since passing
-			// repoPath for both collapses startPath == repoRoot and every
-			// worktree-mismatch check silently short-circuits to nil on
-			// every production call. See mcp.BuildServer's doc comment.
+			// CR-01: confineRoot is the confinement root; start (the
+			// caller's actual cwd) must ALSO survive to BuildServer as the
+			// handlers' default path — a literal recurrence of Phase-1
+			// CR-02 otherwise, since passing one root for both collapses
+			// startPath == repoRoot and every worktree-mismatch check
+			// silently short-circuits to nil on every production call. See
+			// mcp.BuildServer's doc comment.
 			//
 			// SDK-02: bootstraps entirely through the mcp.Server seam —
 			// this file names no MCP SDK package. cmd.ErrOrStderr() is
 			// already this file's stderr idiom (mcp.WarnToolFilterTo
 			// above uses it too); VRFY-03's always-on session line rides
 			// the same writer.
-			s := mcp.NewStdioServer(hasIndex, companions, repoPath, start, cmd.ErrOrStderr())
+			s := mcp.NewStdioServer(hasIndex, companions, confineRoot, start, cmd.ErrOrStderr())
 			return s.ServeStdio()
 		},
 	}

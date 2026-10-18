@@ -15,7 +15,9 @@
 # only POSIX parameter expansion.
 #
 # 1. An un-indexed repo exits here, before any process starts or stdin is
-#    read.
+#    read. A linked worktree root (its .git is a file) goes on to the
+#    binary, which checks whether the worktree's main checkout is indexed
+#    (#139).
 # 2. The codegraph binary path is rendered in at install time as the
 #    absolute path of the binary that ran `codegraph install` (D-19): the
 #    command registered in hooks.json never carries the binary path, only
@@ -27,7 +29,7 @@
 hooks_dir=${0%/*}
 codex_dir=${hooks_dir%/*}
 root=${codex_dir%/*}
-[ -d "$root/.codegraph" ] || exit 0
+[ -d "$root/.codegraph" ] || [ -f "$root/.git" ] || exit 0
 codegraph_bin='@codegraph-exec-path@'
 if [ ! -f "$codegraph_bin" ] || [ ! -x "$codegraph_bin" ]; then
   exit 0

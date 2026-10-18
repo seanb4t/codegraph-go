@@ -138,8 +138,8 @@ func runGitM(t *testing.T, dir string, args ...string) string {
 func deriveServeRepoPath(t *testing.T, start string) string {
 	t.Helper()
 	repoPath := start
-	if dir, err := query.ResolveCodegraphDir(start); err == nil {
-		repoPath = dir
+	if r, err := query.ResolveIndex(start); err == nil {
+		repoPath = r.ConfineRoot
 	}
 	return repoPath
 }

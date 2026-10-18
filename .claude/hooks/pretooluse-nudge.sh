@@ -6,7 +6,9 @@
 # dogfood guard.
 #
 # 1. An un-indexed repo exits here, before any process starts or stdin is
-#    read (D-04, the same check as session-nudge.sh).
+#    read (D-04, the same check as session-nudge.sh). A linked worktree
+#    root (its .git is a file) goes on to the binary, which checks whether
+#    the worktree's main checkout is indexed (#139).
 # 2. The codegraph binary path is rendered in at install time as the
 #    absolute path of the binary that ran `codegraph install` (D-01b). Only
 #    this unrendered repository copy falls back to the codegraph on PATH;
@@ -15,7 +17,8 @@
 # 4. The binary runs as a child with this script's stdin, and the script
 #    exits 0 whatever it did: this hook never blocks, denies or reports a
 #    hook error.
-[ -d "${CLAUDE_PROJECT_DIR:-.}/.codegraph" ] || exit 0
+project_dir=${CLAUDE_PROJECT_DIR:-.}
+[ -d "$project_dir/.codegraph" ] || [ -f "$project_dir/.git" ] || exit 0
 codegraph_bin='@codegraph-exec-path@'
 case $codegraph_bin in
 @*@) codegraph_bin=$(command -v codegraph 2>/dev/null) || exit 0 ;;

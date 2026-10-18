@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -80,6 +81,90 @@ func CommonDir(ctx context.Context, dir string) string {
 		resolved = filepath.Join(dir, resolved)
 	}
 	return realpath(resolved)
+}
+
+// MainWorktree returns the absolute, symlink-resolved root of the main
+// worktree of the repository dir belongs to, or "" when dir isn't in a
+// repository, the repository is bare (it has no main worktree), or git is
+// unavailable or slow. `git worktree list --porcelain` lists the main
+// worktree first from every worktree of a repository, so a linked worktree
+// anywhere on disk finds it, and a main checkout made with
+// --separate-git-dir (whose common dir is not <main>/.git) is still right.
+//
+// An answer from a git run that exited 0, including "bare", is remembered
+// for the life of the process, keyed by filepath.Clean(dir): the MCP server
+// resolves its index on every request, and one git spawn costs tens of
+// milliseconds. A failure is not remembered, so the next call tries again.
+func MainWorktree(ctx context.Context, dir string) string {
+	key := filepath.Clean(dir)
+	if main, ok := mainWorktrees.get(key); ok {
+		return main
+	}
+	main, ok := mainWorktree(ctx, dir)
+	if ok {
+		mainWorktrees.put(key, main)
+	}
+	return main
+}
+
+// mainWorktree runs the uncached lookup. ok reports whether git ran and
+// exited 0, which is what makes the answer safe to cache.
+func mainWorktree(ctx context.Context, dir string) (main string, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
+	cmd.Dir = dir
+	cmd.Stdin = nil
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	// The first record runs to the first blank line.
+	for line := range strings.SplitSeq(string(out), "\n") {
+		switch {
+		case line == "":
+			return realpathOrEmpty(main), true
+		case line == "bare":
+			return "", true
+		case main == "" && strings.HasPrefix(line, "worktree "):
+			main = strings.TrimPrefix(line, "worktree ")
+		}
+	}
+	return realpathOrEmpty(main), true
+}
+
+func realpathOrEmpty(p string) string {
+	if p == "" {
+		return ""
+	}
+	return realpath(p)
+}
+
+// mainWorktrees is MainWorktree's process-lifetime cache, bounded like
+// CachingDetector's (maxCacheEntries, WR-02): a client-supplied MCP "path"
+// can mint new keys, so a full cache is dropped and refilled.
+var mainWorktrees = &mainWorktreeCache{entries: make(map[string]string)}
+
+type mainWorktreeCache struct {
+	mu      sync.Mutex
+	entries map[string]string
+}
+
+func (c *mainWorktreeCache) get(key string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.entries[key]
+	return v, ok
+}
+
+func (c *mainWorktreeCache) put(key, main string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.entries) >= maxCacheEntries {
+		c.entries = make(map[string]string)
+	}
+	c.entries[key] = main
 }
 
 // realpath resolves p to an absolute path, then attempts to resolve

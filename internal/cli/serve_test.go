@@ -26,7 +26,7 @@ import (
 func TestServeKeepsStartPathDistinctFromConfinementRoot(t *testing.T) {
 	wt, main := statusWorktreeMismatchFixture(t)
 
-	repoPath, hasIndex, err := serveServerPaths(wt)
+	indexRoot, repoPath, hasIndex, err := serveServerPaths(wt)
 	if err != nil {
 		t.Fatalf("serveServerPaths(%s): unexpected error: %v", wt, err)
 	}
@@ -36,8 +36,35 @@ func TestServeKeepsStartPathDistinctFromConfinementRoot(t *testing.T) {
 	if repoPath == wt {
 		t.Fatal("serveServerPaths returned the START path as repoPath — CR-01 regression: repoPath must be the RESOLVED index root, distinct from the caller's start path in a worktree, or BuildServer's worktree-mismatch detection silently short-circuits to nil on every production call")
 	}
-	if repoPath != main {
-		t.Fatalf("serveServerPaths(%s) repoPath = %q, want the main checkout %q", wt, repoPath, main)
+	if repoPath != main || indexRoot != main {
+		t.Fatalf("serveServerPaths(%s) = index root %q, confinement root %q, want the main checkout %q for both", wt, indexRoot, repoPath, main)
+	}
+}
+
+// TestServeServerPathsSiblingWorktree pins #139: a linked worktree outside
+// the main checkout syncs and watches the main checkout's index, while its
+// confinement root is the worktree itself, so the default path (a
+// subdirectory of it) stays inside.
+func TestServeServerPathsSiblingWorktree(t *testing.T) {
+	wt, main := siblingWorktreeFixture(t)
+	realMain, err := filepath.EvalSymlinks(main)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", main, err)
+	}
+	start := filepath.Join(wt, "pkga")
+
+	indexRoot, confineRoot, hasIndex, err := serveServerPaths(start)
+	if err != nil {
+		t.Fatalf("serveServerPaths(%s): unexpected error: %v", start, err)
+	}
+	if !hasIndex {
+		t.Fatalf("serveServerPaths(%s) hasIndex = false, want true (the main checkout is indexed)", start)
+	}
+	if indexRoot != realMain {
+		t.Fatalf("serveServerPaths(%s) index root = %q, want the main checkout %q", start, indexRoot, realMain)
+	}
+	if confineRoot != wt {
+		t.Fatalf("serveServerPaths(%s) confinement root = %q, want the worktree %q", start, confineRoot, wt)
 	}
 }
 
@@ -48,15 +75,15 @@ func TestServeKeepsStartPathDistinctFromConfinementRoot(t *testing.T) {
 func TestServeServerPathsNoIndex(t *testing.T) {
 	dir := t.TempDir()
 
-	repoPath, hasIndex, err := serveServerPaths(dir)
+	indexRoot, repoPath, hasIndex, err := serveServerPaths(dir)
 	if err != nil {
 		t.Fatalf("serveServerPaths(%s): unexpected error: %v", dir, err)
 	}
 	if hasIndex {
 		t.Fatalf("serveServerPaths(%s) hasIndex = true, want false (no .codegraph/ present)", dir)
 	}
-	if repoPath != dir {
-		t.Fatalf("serveServerPaths(%s) repoPath = %q, want %q (no index found: repoPath falls back to start)", dir, repoPath, dir)
+	if repoPath != dir || indexRoot != dir {
+		t.Fatalf("serveServerPaths(%s) = index root %q, confinement root %q, want %q for both (no index found: both fall back to start)", dir, indexRoot, repoPath, dir)
 	}
 }
 
@@ -184,15 +211,15 @@ func TestServeServerPathsIgnoresHomeCodegraph(t *testing.T) {
 	}
 
 	for _, start := range []string{home, repo} {
-		repoPath, hasIndex, err := serveServerPaths(start)
+		indexRoot, repoPath, hasIndex, err := serveServerPaths(start)
 		if err != nil {
 			t.Fatalf("serveServerPaths(%s): unexpected error: %v", start, err)
 		}
 		if hasIndex {
 			t.Fatalf("serveServerPaths(%s) hasIndex = true, want false (~/.codegraph must not count as an index)", start)
 		}
-		if repoPath != start {
-			t.Fatalf("serveServerPaths(%s) repoPath = %q, want %q (no index found: repoPath falls back to start)", start, repoPath, start)
+		if repoPath != start || indexRoot != start {
+			t.Fatalf("serveServerPaths(%s) = index root %q, confinement root %q, want %q for both (no index found: both fall back to start)", start, indexRoot, repoPath, start)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(home, codegraphDirName, storeDirName)); !os.IsNotExist(err) {

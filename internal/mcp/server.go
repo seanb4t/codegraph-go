@@ -664,9 +664,11 @@ func unregisterTools(s *mcp.Server) {
 // value every handler falls back to when the caller omits "path" and the
 // value that must reach query.OpenAt for WorktreeMismatch to have
 // anything to compare. Because repoPath is always startPath itself or an
-// ANCESTOR of it (it is ResolveCodegraphDir(startPath)'s own return
-// value), confining the default startPath to repoPath always succeeds
-// structurally — only an explicit, client-supplied "path" redirecting
+// ANCESTOR of it (it is query.ResolveIndex(startPath)'s ConfineRoot: the
+// index root, or a linked worktree's own root when the index is borrowed
+// from its main worktree, #139), confining the default startPath to
+// repoPath always succeeds structurally — only an explicit,
+// client-supplied "path" redirecting
 // elsewhere can ever be rejected.
 //
 // opts is variadic (SDK-02/VRFY-03) specifically so every pre-existing
