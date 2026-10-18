@@ -115,6 +115,60 @@ func TestResolveCodegraphDir(t *testing.T) {
 			t.Fatalf("ResolveCodegraphDir: got err %v, want ErrNotInitialized", err)
 		}
 	})
+
+	// homeWithCodegraph returns a fake home directory, set as HOME, that
+	// holds the ~/.codegraph/daemons layout older releases wrote.
+	homeWithCodegraph := func(t *testing.T) string {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		if err := os.MkdirAll(filepath.Join(home, codegraphDirName, "daemons"), 0o755); err != nil {
+			t.Fatalf("mkdir fake ~/.codegraph/daemons: %v", err)
+		}
+		return home
+	}
+
+	t.Run("skips a .codegraph in the home directory from an unindexed repo under it", func(t *testing.T) {
+		home := homeWithCodegraph(t)
+		repo := filepath.Join(home, "x", "repo")
+		if err := os.MkdirAll(repo, 0o755); err != nil {
+			t.Fatalf("mkdir repo: %v", err)
+		}
+
+		_, err := ResolveCodegraphDir(repo)
+		if !errors.Is(err, ErrNotInitialized) {
+			t.Fatalf("ResolveCodegraphDir(%s): got err %v, want ErrNotInitialized", repo, err)
+		}
+	})
+
+	t.Run("skips a .codegraph in the home directory when started there", func(t *testing.T) {
+		home := homeWithCodegraph(t)
+
+		_, err := ResolveCodegraphDir(home)
+		if !errors.Is(err, ErrNotInitialized) {
+			t.Fatalf("ResolveCodegraphDir(%s): got err %v, want ErrNotInitialized", home, err)
+		}
+	})
+
+	t.Run("still resolves an indexed project under the home directory", func(t *testing.T) {
+		home := homeWithCodegraph(t)
+		repo := filepath.Join(home, "x", "repo")
+		pkg := filepath.Join(repo, "pkg")
+		if err := os.MkdirAll(filepath.Join(repo, codegraphDirName), 0o755); err != nil {
+			t.Fatalf("mkdir repo .codegraph: %v", err)
+		}
+		if err := os.MkdirAll(pkg, 0o755); err != nil {
+			t.Fatalf("mkdir pkg: %v", err)
+		}
+
+		got, err := ResolveCodegraphDir(pkg)
+		if err != nil {
+			t.Fatalf("ResolveCodegraphDir(%s): unexpected error: %v", pkg, err)
+		}
+		if got != repo {
+			t.Fatalf("ResolveCodegraphDir(%s): got %q, want %q", pkg, got, repo)
+		}
+	})
 }
 
 func TestOpenAt(t *testing.T) {

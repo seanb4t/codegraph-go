@@ -349,6 +349,8 @@ cancel; off a TTY, print the same list and exit 0. Use `daemon start`
 to run the shared watch/index server in the foreground,
 `daemon stop [--all]` to stop it non-interactively, and
 `daemon unlock [path]` to clear a stale lock left by a crash.
+Running daemons are recorded in $XDG_STATE_HOME/codegraph/daemons,
+by default ~/.local/state/codegraph/daemons.
 
 ```
 codegraph daemon [flags]

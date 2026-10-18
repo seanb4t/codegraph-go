@@ -29,6 +29,7 @@ func homeEnv(home string) map[string]string {
 	return map[string]string{
 		"HOME":            home,
 		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
 		"HERMES_HOME":     filepath.Join(home, ".hermes"),
 	}
 }

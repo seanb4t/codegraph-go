@@ -32,7 +32,7 @@ import (
 func seedRunningDaemon(t *testing.T, home, repo string) *exec.Cmd {
 	t.Helper()
 
-	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "XDG_STATE_HOME="+filepath.Join(home, ".local", "state"))
 
 	initCmd := exec.Command(binPath, "init", repo)
 	initCmd.Env = env
@@ -55,7 +55,9 @@ func seedRunningDaemon(t *testing.T, home, repo string) *exec.Cmd {
 }
 
 // waitForRegistryRecord polls home's daemon registry directory
-// (~/.codegraph/daemons, internal/daemon/registry.go's registryDir) on
+// (<home>/.local/state/codegraph/daemons, the XDG_STATE_HOME that
+// seedRunningDaemon and the daemon tests pass; internal/daemon/registry.go's
+// registryDir) on
 // stabilityPollInterval until at least one record file is present. This is
 // a bounded poll with a convergence condition, not a fixed pause — the same
 // discipline D-14 imposes on frame capture applies equally to process
@@ -65,7 +67,7 @@ func seedRunningDaemon(t *testing.T, home, repo string) *exec.Cmd {
 func waitForRegistryRecord(t *testing.T, home string) {
 	t.Helper()
 
-	dir := filepath.Join(home, ".codegraph", "daemons")
+	dir := filepath.Join(home, ".local", "state", "codegraph", "daemons")
 	deadline := time.Now().Add(stabilityPollDeadline)
 	for {
 		entries, err := os.ReadDir(dir)

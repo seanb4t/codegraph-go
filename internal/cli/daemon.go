@@ -57,7 +57,9 @@ func newDaemonCmd() *cobra.Command {
 			"cancel; off a TTY, print the same list and exit 0. Use `daemon start`\n" +
 			"to run the shared watch/index server in the foreground,\n" +
 			"`daemon stop [--all]` to stop it non-interactively, and\n" +
-			"`daemon unlock [path]` to clear a stale lock left by a crash.",
+			"`daemon unlock [path]` to clear a stale lock left by a crash.\n" +
+			"Running daemons are recorded in $XDG_STATE_HOME/codegraph/daemons,\n" +
+			"by default ~/.local/state/codegraph/daemons.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			start, err := resolveStartPath(path)

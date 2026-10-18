@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 )
@@ -157,5 +159,201 @@ func TestRegistryListEmptyDir(t *testing.T) {
 	got, err := List()
 	if err != nil || got != nil {
 		t.Fatalf("List on empty dir: got %v, err %v; want nil, nil", got, err)
+	}
+}
+
+// listNames returns the sorted file names directly under dir, or nil when
+// dir does not exist, so a test can assert the exact contents of both
+// sides of a migration in one comparison.
+func listNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("ReadDir %s: %v", dir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+// legacyRegistry builds <home>/.codegraph/daemons with the given record
+// file names and returns the daemons directory.
+func legacyRegistry(t *testing.T, home string, names ...string) string {
+	t.Helper()
+	legacy := filepath.Join(home, legacyStateDirName, registryDirName)
+	if err := os.MkdirAll(legacy, 0o755); err != nil {
+		t.Fatalf("mkdir legacy: %v", err)
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(legacy, n), []byte(`{"pid":1}`), 0o644); err != nil {
+			t.Fatalf("write %s: %v", n, err)
+		}
+	}
+	return legacy
+}
+
+// TestDefaultRegistryDirUsesStateDir: the registry lives under
+// userdirs.StateDir(), honoring XDG_STATE_HOME, never under ~/.codegraph.
+func TestDefaultRegistryDirUsesStateDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	t.Setenv("XDG_STATE_HOME", "")
+	if err := os.Unsetenv("XDG_STATE_HOME"); err != nil {
+		t.Fatalf("unsetenv: %v", err)
+	}
+	got, err := defaultRegistryDir()
+	if err != nil {
+		t.Fatalf("defaultRegistryDir: %v", err)
+	}
+	if want := filepath.Join(home, ".local", "state", "codegraph", "daemons"); got != want {
+		t.Fatalf("defaultRegistryDir with XDG_STATE_HOME unset: got %q, want %q", got, want)
+	}
+
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	got, err = defaultRegistryDir()
+	if err != nil {
+		t.Fatalf("defaultRegistryDir: %v", err)
+	}
+	if want := filepath.Join(state, "codegraph", "daemons"); got != want {
+		t.Fatalf("defaultRegistryDir with XDG_STATE_HOME set: got %q, want %q", got, want)
+	}
+}
+
+// TestMigrateLegacyRegistryMovesRecords: with nothing else under
+// ~/.codegraph, both records move and both old directories are gone.
+func TestMigrateLegacyRegistryMovesRecords(t *testing.T) {
+	home := t.TempDir()
+	legacy := legacyRegistry(t, home, "100.json", "200.json")
+	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
+
+	migrateLegacyRegistry(legacy, dir)
+	if got, want := listNames(t, dir), []string{"100.json", "200.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("new registry holds %v, want %v", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(home, legacyStateDirName)); !os.IsNotExist(err) {
+		t.Fatalf("~/.codegraph still exists after migration (stat err %v)", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "100.json"))
+	if err != nil || string(data) != `{"pid":1}` {
+		t.Fatalf("migrated record content = %q, err %v; want the original bytes", data, err)
+	}
+}
+
+// TestMigrateLegacyRegistryKeepsForeignFiles: a file codegraph did not write
+// keeps ~/.codegraph alive; only daemons/ is removed.
+func TestMigrateLegacyRegistryKeepsForeignFiles(t *testing.T) {
+	home := t.TempDir()
+	legacy := legacyRegistry(t, home, "100.json")
+	foreign := filepath.Join(home, legacyStateDirName, "telemetry.json")
+	if err := os.WriteFile(foreign, []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write foreign: %v", err)
+	}
+	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
+
+	migrateLegacyRegistry(legacy, dir)
+	if got, want := listNames(t, dir), []string{"100.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("new registry holds %v, want %v", got, want)
+	}
+	if got, want := listNames(t, filepath.Join(home, legacyStateDirName)), []string{"telemetry.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("~/.codegraph holds %v, want %v", got, want)
+	}
+}
+
+// TestMigrateLegacyRegistryNoopWhenNewDirExists: once the new registry
+// exists, old records are left where they are and nothing is deleted.
+func TestMigrateLegacyRegistryNoopWhenNewDirExists(t *testing.T) {
+	home := t.TempDir()
+	legacy := legacyRegistry(t, home, "100.json")
+	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir new dir: %v", err)
+	}
+
+	migrateLegacyRegistry(legacy, dir)
+	if got := listNames(t, dir); len(got) != 0 {
+		t.Fatalf("new registry holds %v, want nothing", got)
+	}
+	if got, want := listNames(t, legacy), []string{"100.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("legacy registry holds %v, want %v", got, want)
+	}
+}
+
+// TestMigrateLegacyRegistryNoopWithoutLegacy: no old registry means no
+// filesystem change at all, and no new directory either.
+func TestMigrateLegacyRegistryNoopWithoutLegacy(t *testing.T) {
+	home := t.TempDir()
+	legacy := filepath.Join(home, legacyStateDirName, registryDirName)
+	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
+
+	migrateLegacyRegistry(legacy, dir)
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("new registry dir was created by a no-op migration (stat err %v)", err)
+	}
+	if got := listNames(t, home); len(got) != 0 {
+		t.Fatalf("home holds %v after a no-op migration, want nothing", got)
+	}
+}
+
+// TestDefaultRegistryDirWhenLegacyIsAFile: a ~/.codegraph that is a regular
+// file (so the legacy registry path cannot be listed) must not disable the
+// registry. The new directory is returned, and the file is left alone.
+func TestDefaultRegistryDirWhenLegacyIsAFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	legacyParent := filepath.Join(home, legacyStateDirName)
+	if err := os.WriteFile(legacyParent, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write legacy file: %v", err)
+	}
+
+	got, err := defaultRegistryDir()
+	if err != nil {
+		t.Fatalf("defaultRegistryDir with ~/.codegraph as a file: %v", err)
+	}
+	if want := filepath.Join(state, "codegraph", "daemons"); got != want {
+		t.Fatalf("defaultRegistryDir = %q, want %q", got, want)
+	}
+	data, err := os.ReadFile(legacyParent)
+	if err != nil || string(data) != "not a directory" {
+		t.Fatalf("~/.codegraph file changed: %q, err %v", data, err)
+	}
+	if err := Register(Record{PID: os.Getpid(), StartedAt: time.Now(), RepoRoot: "/r"}); err != nil {
+		t.Fatalf("Register with the registry seam at its default: %v", err)
+	}
+	t.Cleanup(func() { _ = Deregister(os.Getpid()) })
+}
+
+// TestMigrateLegacyRegistrySkipsUnreadableRecord: one record that cannot be
+// read stays in the legacy directory, the readable one moves, and the
+// legacy directories survive because they are not empty.
+func TestMigrateLegacyRegistrySkipsUnreadableRecord(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-0 file; the unreadable case cannot be built")
+	}
+	home := t.TempDir()
+	legacy := legacyRegistry(t, home, "100.json", "200.json")
+	locked := filepath.Join(legacy, "100.json")
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o644) })
+	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
+
+	migrateLegacyRegistry(legacy, dir)
+
+	if got, want := listNames(t, dir), []string{"200.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("new registry holds %v, want %v", got, want)
+	}
+	if got, want := listNames(t, legacy), []string{"100.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("legacy registry holds %v, want %v", got, want)
 	}
 }
