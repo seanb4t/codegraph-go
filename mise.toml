@@ -1,0 +1,9 @@
+# Tools for the git hooks in hk.pkl. Install them with `mise install`, then the hooks with
+# `hk install --mise`. Version bumps are manual. After a change to this table, run
+# `mise lock --platform linux-x64,linux-arm64,macos-arm64` (hk publishes no macos-x64 build).
+[tools]
+# hk.pkl imports the hk package at the same version.
+hk = "2.5.0"
+# `openspec update` writes the /opsx:* commands and openspec-* skills for the CLI version that
+# runs it. Run it after a bump and commit what it writes.
+"npm:@fission-ai/openspec" = "1.14.2"

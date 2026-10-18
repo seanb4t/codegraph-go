@@ -1,0 +1,15 @@
+// Git hooks for this repository. The import version must equal the hk version in mise.toml.
+// Install the hooks with `hk install --mise`. `HK=0` skips them for one command.
+amends "package://github.com/jdx/hk/releases/download/v2.5.0/hk@2.5.0#/Config.pkl"
+
+steps {
+  // `openspec validate` takes change and spec names, not file paths, so the step validates all of
+  // them when any file under openspec/ is staged.
+  ["openspec"] {
+    glob = List("openspec/**")
+    check = "openspec validate --all --strict --no-interactive"
+    env {
+      ["OPENSPEC_TELEMETRY"] = "0"
+    }
+  }
+}

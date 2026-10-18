@@ -27,7 +27,7 @@ rules:
     - State what is out of scope.
   specs:
     - Name capabilities for durable behavior (`mcp-server`, `graph-queries`), not for the work.
-    - In a baseline spec, put the origin requirement ID from the planning archive (tag `planning-archive-v0.15.0`) in the requirement title, e.g. `(SYNC-02)`, so ID references in code comments still resolve.
+    - When a change first specifies existing behavior, put the origin requirement ID from the planning archive (tag `planning-archive-v0.15.0`) in the requirement title, e.g. `(SYNC-02)`, so ID references in code comments still resolve.
   tasks:
     - "When the change touches `cmd/**` or `internal/**` with a user-visible effect, the last task adds a changelog fragment: `task changie -- new -k <Breaking|Features|Fixes|Performance|Dependencies> -b \"<one sentence>\"`. Otherwise the last task records the `<!-- changelog-exempt: <reason> -->` marker for the PR body."
     - Each task that changes behavior names the test that covers it.
