@@ -234,9 +234,7 @@ func TestMigrateLegacyRegistryMovesRecords(t *testing.T) {
 	legacy := legacyRegistry(t, home, "100.json", "200.json")
 	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
 
-	if err := migrateLegacyRegistry(legacy, dir); err != nil {
-		t.Fatalf("migrateLegacyRegistry: %v", err)
-	}
+	migrateLegacyRegistry(legacy, dir)
 	if got, want := listNames(t, dir), []string{"100.json", "200.json"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("new registry holds %v, want %v", got, want)
 	}
@@ -260,9 +258,7 @@ func TestMigrateLegacyRegistryKeepsForeignFiles(t *testing.T) {
 	}
 	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
 
-	if err := migrateLegacyRegistry(legacy, dir); err != nil {
-		t.Fatalf("migrateLegacyRegistry: %v", err)
-	}
+	migrateLegacyRegistry(legacy, dir)
 	if got, want := listNames(t, dir), []string{"100.json"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("new registry holds %v, want %v", got, want)
 	}
@@ -281,9 +277,7 @@ func TestMigrateLegacyRegistryNoopWhenNewDirExists(t *testing.T) {
 		t.Fatalf("mkdir new dir: %v", err)
 	}
 
-	if err := migrateLegacyRegistry(legacy, dir); err != nil {
-		t.Fatalf("migrateLegacyRegistry: %v", err)
-	}
+	migrateLegacyRegistry(legacy, dir)
 	if got := listNames(t, dir); len(got) != 0 {
 		t.Fatalf("new registry holds %v, want nothing", got)
 	}
@@ -299,13 +293,67 @@ func TestMigrateLegacyRegistryNoopWithoutLegacy(t *testing.T) {
 	legacy := filepath.Join(home, legacyStateDirName, registryDirName)
 	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
 
-	if err := migrateLegacyRegistry(legacy, dir); err != nil {
-		t.Fatalf("migrateLegacyRegistry: %v", err)
-	}
+	migrateLegacyRegistry(legacy, dir)
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("new registry dir was created by a no-op migration (stat err %v)", err)
 	}
 	if got := listNames(t, home); len(got) != 0 {
 		t.Fatalf("home holds %v after a no-op migration, want nothing", got)
+	}
+}
+
+// TestDefaultRegistryDirWhenLegacyIsAFile: a ~/.codegraph that is a regular
+// file (so the legacy registry path cannot be listed) must not disable the
+// registry. The new directory is returned, and the file is left alone.
+func TestDefaultRegistryDirWhenLegacyIsAFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	legacyParent := filepath.Join(home, legacyStateDirName)
+	if err := os.WriteFile(legacyParent, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write legacy file: %v", err)
+	}
+
+	got, err := defaultRegistryDir()
+	if err != nil {
+		t.Fatalf("defaultRegistryDir with ~/.codegraph as a file: %v", err)
+	}
+	if want := filepath.Join(state, "codegraph", "daemons"); got != want {
+		t.Fatalf("defaultRegistryDir = %q, want %q", got, want)
+	}
+	data, err := os.ReadFile(legacyParent)
+	if err != nil || string(data) != "not a directory" {
+		t.Fatalf("~/.codegraph file changed: %q, err %v", data, err)
+	}
+	if err := Register(Record{PID: os.Getpid(), StartedAt: time.Now(), RepoRoot: "/r"}); err != nil {
+		t.Fatalf("Register with the registry seam at its default: %v", err)
+	}
+	t.Cleanup(func() { _ = Deregister(os.Getpid()) })
+}
+
+// TestMigrateLegacyRegistrySkipsUnreadableRecord: one record that cannot be
+// read stays in the legacy directory, the readable one moves, and the
+// legacy directories survive because they are not empty.
+func TestMigrateLegacyRegistrySkipsUnreadableRecord(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-0 file; the unreadable case cannot be built")
+	}
+	home := t.TempDir()
+	legacy := legacyRegistry(t, home, "100.json", "200.json")
+	locked := filepath.Join(legacy, "100.json")
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o644) })
+	dir := filepath.Join(t.TempDir(), "codegraph", "daemons")
+
+	migrateLegacyRegistry(legacy, dir)
+
+	if got, want := listNames(t, dir), []string{"200.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("new registry holds %v, want %v", got, want)
+	}
+	if got, want := listNames(t, legacy), []string{"100.json"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("legacy registry holds %v, want %v", got, want)
 	}
 }

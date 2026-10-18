@@ -52,31 +52,27 @@ func defaultRegistryDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := migrateLegacyRegistry(filepath.Join(home, legacyStateDirName, registryDirName), dir); err != nil {
-		return "", err
-	}
+	migrateLegacyRegistry(filepath.Join(home, legacyStateDirName, registryDirName), dir)
 	return dir, nil
 }
 
 // migrateLegacyRegistry moves every <pid>.json record from legacy into dir,
 // once: it does nothing when dir already exists or legacy does not. Each
 // record is read, written atomically to dir, then removed, so a state
-// directory on another filesystem works. Afterwards legacy and its parent
-// are removed with os.Remove, which fails on a non-empty directory; those
-// failures are ignored, so a parent that still holds files codegraph did
-// not write (another tool's, or an index built there by mistake) stays as it is.
-func migrateLegacyRegistry(legacy, dir string) error {
+// directory on another filesystem works. The move is best-effort: a legacy
+// path that cannot be listed, or a record that cannot be read or written,
+// is left where it is and never stops the registry from working at dir.
+// Afterwards legacy and its parent are removed with os.Remove, which fails
+// on a non-empty directory; those failures are ignored too, so a parent
+// that still holds files codegraph did not write (another tool's, or an
+// index built there by mistake) stays as it is.
+func migrateLegacyRegistry(legacy, dir string) {
 	if _, err := os.Stat(dir); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
+		return
 	}
 	entries, err := os.ReadDir(legacy)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+		return
 	}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
@@ -85,21 +81,15 @@ func migrateLegacyRegistry(legacy, dir string) error {
 		src := filepath.Join(legacy, e.Name())
 		data, err := os.ReadFile(src)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue // deregistered while we were migrating
-			}
-			return err
+			continue
 		}
 		if err := fsatomic.WriteFile(filepath.Join(dir, e.Name()), string(data)); err != nil {
-			return err
+			continue
 		}
-		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
-			return err
-		}
+		_ = os.Remove(src)
 	}
 	_ = os.Remove(legacy)
 	_ = os.Remove(filepath.Dir(legacy))
-	return nil
 }
 
 // recordPath returns the record file path for pid within the registry dir.
