@@ -23,11 +23,19 @@ const pinnedPreToolUseFire = `{"hookSpecificOutput":{"hookEventName":"PreToolUse
 // isolateHookEnv clears the session id the executor itself inherits from
 // Claude Code and points TMPDIR at a fresh directory, so no test reads a
 // real session's id or (once 06-03 adds it) another run's cooldown
-// sentinel.
-func isolateHookEnv(t *testing.T) {
+// sentinel. It also points CLAUDE_PROJECT_DIR at a fresh indexed
+// directory, which it returns, so the Claude path's index check never
+// depends on the environment the tests run in.
+func isolateHookEnv(t *testing.T) string {
 	t.Helper()
 	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
 	t.Setenv("TMPDIR", t.TempDir())
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, ".codegraph"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_PROJECT_DIR", project)
+	return project
 }
 
 func TestHookPreToolUse_GrepFiresPinnedContext(t *testing.T) {
@@ -285,8 +293,13 @@ func TestHookPreToolUse_CooldownPerAgent(t *testing.T) {
 }
 
 func TestHookPreToolUse_ParallelRuns(t *testing.T) {
-	isolateHookEnv(t)
-	getenv := func(string) string { return "" }
+	project := isolateHookEnv(t)
+	getenv := func(k string) string {
+		if k == "CLAUDE_PROJECT_DIR" {
+			return project
+		}
+		return ""
+	}
 
 	const n = 16
 	outs := make([]string, n)
@@ -344,5 +357,100 @@ func TestHookPreToolUse_NoAncestorPreRun(t *testing.T) {
 	}
 	if visited < 3 {
 		t.Errorf("walked %d commands, want at least 3 (pretooluse, hook, root)", visited)
+	}
+}
+
+func TestHookPreToolUse_UnindexedProjectDirIsSilent(t *testing.T) {
+	isolateHookEnv(t)
+	t.Setenv("CLAUDE_PROJECT_DIR", t.TempDir())
+
+	stdout, _, err := execCmdWithInput(hookEvent("s-unindexed", ""), "hook", "pretooluse")
+	assertHookContract(t, stdout, err)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty (the project directory holds no index)", stdout)
+	}
+}
+
+// TestHookPreToolUse_LinkedWorktreeProjectDir: a linked worktree
+// root whose main checkout is indexed counts as indexed for both
+// harnesses; one whose main checkout is not stays silent.
+func TestHookPreToolUse_LinkedWorktreeProjectDir(t *testing.T) {
+	indexedWt := hookWorktree(t, true)
+	unindexedWt := hookWorktree(t, false)
+
+	cases := []struct {
+		name string
+		dir  string
+		want string
+	}{
+		{"indexed main checkout", indexedWt, pinnedPreToolUseFire},
+		{"unindexed main checkout", unindexedWt, ""},
+	}
+	for i, tc := range cases {
+		t.Run("claude/"+tc.name, func(t *testing.T) {
+			isolateHookEnv(t)
+			t.Setenv("CLAUDE_PROJECT_DIR", tc.dir)
+			stdout, _, err := execCmdWithInput(hookEvent("s-wt-claude-"+strconv.Itoa(i), ""), "hook", "pretooluse")
+			assertHookContract(t, stdout, err)
+			if stdout != tc.want {
+				t.Fatalf("stdout = %q, want %q", stdout, tc.want)
+			}
+		})
+		t.Run("codex/"+tc.name, func(t *testing.T) {
+			isolateHookEnv(t)
+			stdout, _, err := execCmdWithInput(codexBashEvent("s-wt-codex-"+strconv.Itoa(i), tc.dir), "hook", "pretooluse", "--harness", "codex")
+			assertHookContract(t, stdout, err)
+			if stdout != tc.want {
+				t.Fatalf("stdout = %q, want %q", stdout, tc.want)
+			}
+		})
+	}
+}
+
+// hookWorktree returns the root of a linked worktree beside a main
+// checkout, which holds .codegraph when indexed is true.
+func hookWorktree(t *testing.T, indexed bool) string {
+	t.Helper()
+	main := filepath.Join(t.TempDir(), "main")
+	if err := os.MkdirAll(main, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitC(t, main, "init")
+	if err := os.WriteFile(filepath.Join(main, "a.go"), []byte("package a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitC(t, main, "add", "-A")
+	runGitC(t, main, "commit", "-m", "init")
+	if indexed {
+		if err := os.Mkdir(filepath.Join(main, ".codegraph"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	runGitC(t, main, "worktree", "add", "-b", "wt", wt)
+	return wt
+}
+
+// TestHookPreToolUseCodex_LinkedWorktreeWithoutGitIsSilent: with no git
+// on PATH the main checkout cannot be found, so the Codex hook stays
+// silent in a linked worktree. The same worktree fires once PATH is back,
+// so the silence is the missing git, not a dead fixture.
+func TestHookPreToolUseCodex_LinkedWorktreeWithoutGitIsSilent(t *testing.T) {
+	isolateHookEnv(t)
+	wt := hookWorktree(t, true)
+	path := os.Getenv("PATH")
+
+	t.Setenv("PATH", t.TempDir())
+	stdout, _, err := execCmdWithInput(codexBashEvent("s-wt-nogit", wt), "hook", "pretooluse", "--harness", "codex")
+	assertHookContract(t, stdout, err)
+	if stdout != "" {
+		t.Fatalf("no git on PATH: stdout = %q, want empty", stdout)
+	}
+
+	t.Setenv("PATH", path)
+	stdout, _, err = execCmdWithInput(codexBashEvent("s-wt-git", wt), "hook", "pretooluse", "--harness", "codex")
+	assertHookContract(t, stdout, err)
+	if stdout != pinnedPreToolUseFire {
+		t.Fatalf("git back on PATH: stdout = %q, want the pinned fire line", stdout)
 	}
 }

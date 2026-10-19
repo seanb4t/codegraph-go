@@ -54,7 +54,7 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 // a caller-supplied "path" could otherwise redirect detection, not just
 // reads, outside the server's configured root; the DEFAULT defaultPath
 // always passes this check because repoPath is
-// ResolveCodegraphDir(defaultPath)'s own return value — defaultPath is
+// query.ResolveIndex(defaultPath)'s ConfineRoot — defaultPath is
 // always repoPath itself or a descendant of it, by construction — see
 // BuildServer's doc comment), opens a FRESH query.OpenAt snapshot for this
 // call (D-02/D-08b, RESEARCH Pitfall 2 — never a snapshot cached at server

@@ -1,0 +1,3 @@
+kind: Fixes
+body: A git worktree outside the main checkout now uses the main checkout's index, as a nested worktree already did, for the CLI, the MCP server and the UI; re-run codegraph install to get hook nudges that also fire in worktrees.
+time: 2026-10-18T19:10:31.500552-04:00

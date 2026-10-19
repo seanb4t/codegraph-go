@@ -346,7 +346,7 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 	cases := []struct {
 		name        string
 		loc         Location
-		codegraph   string // "dir", "file" or "" (absent)
+		codegraph   string // "dir", "file", "gitfile", "gitdir" or "" (absent)
 		stub        string // stub content; "" = binary missing
 		stubMode    os.FileMode
 		emptyPath   bool
@@ -380,6 +380,10 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 		{name: "global/indexed_pwd", loc: LocationGlobal, codegraph: "dir", stub: stubOK, stubMode: 0o755, wantStarted: true},
 		{name: "global/not_indexed_pwd", loc: LocationGlobal, codegraph: "", stub: stubOK, stubMode: 0o755, wantStarted: false, check: wantNoOutput},
 		{name: "global/binary_exits_nonzero", loc: LocationGlobal, codegraph: "dir", stub: stubFail, stubMode: 0o755, wantStarted: true},
+		{name: "local/linked_worktree_root", loc: LocationLocal, codegraph: "gitfile", stub: stubOK, stubMode: 0o755, wantStarted: true},
+		{name: "local/git_dir_not_indexed", loc: LocationLocal, codegraph: "gitdir", stub: stubOK, stubMode: 0o755, wantStarted: false, check: wantNoOutput},
+		{name: "global/linked_worktree_pwd", loc: LocationGlobal, codegraph: "gitfile", stub: stubOK, stubMode: 0o755, wantStarted: true},
+		{name: "global/git_dir_not_indexed_pwd", loc: LocationGlobal, codegraph: "gitdir", stub: stubOK, stubMode: 0o755, wantStarted: false, check: wantNoOutput},
 	}
 
 	// bogusCwd is a fresh, un-indexed directory, unrelated to any case's
@@ -427,8 +431,8 @@ func TestCodexPreToolUseGuard(t *testing.T) {
 			}
 		})
 	}
-	if ran != len(cases) || ran < 11 {
-		t.Fatalf("ran %d guard subtests, want 11", ran)
+	if ran != len(cases) || ran < 15 {
+		t.Fatalf("ran %d guard subtests, want 15", ran)
 	}
 }
 

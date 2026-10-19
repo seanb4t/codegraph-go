@@ -282,7 +282,9 @@ func writeRenderedGuard(t *testing.T, binPath string) string {
 }
 
 // newProject returns a fresh project dir: indexed (a .codegraph/ dir), not
-// indexed, or with .codegraph as a regular file.
+// indexed, with .codegraph as a regular file, or not indexed with a .git
+// file (a linked worktree root, "gitfile") or a .git directory (an
+// ordinary repository, "gitdir").
 func newProject(t *testing.T, codegraph string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -293,6 +295,12 @@ func newProject(t *testing.T, codegraph string) string {
 		}
 	case "file":
 		writeFile(t, filepath.Join(dir, ".codegraph"), "not a directory\n")
+	case "gitfile":
+		writeFile(t, filepath.Join(dir, ".git"), "gitdir: /nonexistent/.git/worktrees/wt\n")
+	case "gitdir":
+		if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatalf("mkdir .git: %v", err)
+		}
 	}
 	return dir
 }
@@ -309,7 +317,7 @@ func exists(path string) bool {
 func TestPreToolUseGuard(t *testing.T) {
 	cases := []struct {
 		name        string
-		codegraph   string // "dir", "file" or "" (absent)
+		codegraph   string // "dir", "file", "gitfile", "gitdir" or "" (absent)
 		stub        string // stub content; "" = binary missing
 		stubMode    os.FileMode
 		useEnv      bool
@@ -341,6 +349,8 @@ func TestPreToolUseGuard(t *testing.T) {
 		{name: "binary_crashes", codegraph: "dir", stub: stubCrash, stubMode: 0o755, useEnv: true, wantStarted: true},
 		{name: "project_dir_unset_indexed", codegraph: "dir", stub: stubOK, stubMode: 0o755, useEnv: false, wantStarted: true},
 		{name: "project_dir_unset_not_indexed", codegraph: "", stub: stubOK, stubMode: 0o755, useEnv: false, wantStarted: false, check: wantNoOutput},
+		{name: "linked_worktree_root", codegraph: "gitfile", stub: stubOK, stubMode: 0o755, useEnv: true, wantStarted: true},
+		{name: "git_dir_not_indexed", codegraph: "gitdir", stub: stubOK, stubMode: 0o755, useEnv: true, wantStarted: false, check: wantNoOutput},
 	}
 
 	ran := 0
@@ -371,8 +381,8 @@ func TestPreToolUseGuard(t *testing.T) {
 			}
 		})
 	}
-	if ran < len(cases) || ran < 9 {
-		t.Fatalf("ran %d guard subtests, want at least 9", ran)
+	if ran < len(cases) || ran < 11 {
+		t.Fatalf("ran %d guard subtests, want at least 11", ran)
 	}
 }
 

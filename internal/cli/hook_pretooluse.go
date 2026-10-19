@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/nudge"
+	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // maxHookStdinBytes caps how much of a hook event the subcommand reads; a
@@ -153,9 +154,10 @@ func newHookPreToolUseCmd() *cobra.Command {
 // runHookPreToolUse is the Claude envelope adapter around the
 // harness-neutral nudge core: it decodes the event, maps the tool onto a
 // nudge.Tool, and prints the pinned context object when the call
-// qualifies, a (session, agent) key exists, and that key is outside its
-// cooldown. It never returns an error to cobra and never writes to stderr
-// (D-01a); the session id is the env id with stdin's as the fallback and
+// qualifies, the project directory is indexed (claudeProjectDir,
+// query.ProjectIndexed), a (session, agent) key exists, and that key is
+// outside its cooldown. It never returns an error to cobra and never
+// writes to stderr (D-01a); the session id is the env id with stdin's as the fallback and
 // agent_id comes from stdin only (D-07); every failure, including any
 // sentinel error, is silent (D-08). Classification runs before any
 // sentinel I/O, so a non-qualifying call touches no file.
@@ -189,6 +191,11 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 	if !hookQualifies(tool, input) {
 		return
 	}
+	// The shell guard also passes a linked worktree root (.git is a file),
+	// so the index check that decides is this one.
+	if !query.ProjectIndexed(claudeProjectDir(getenv)) {
+		return
+	}
 
 	// D-07: the env id wins, stdin's is the fallback; never fire unkeyed.
 	session := getenv("CLAUDE_CODE_SESSION_ID")
@@ -213,11 +220,30 @@ func runHookPreToolUse(in io.Reader, out io.Writer, getenv func(string) string) 
 	_, _ = out.Write(append(line, '\n'))
 }
 
+// claudeProjectDir is the directory the Claude guard checks:
+// $CLAUDE_PROJECT_DIR, or the working directory when it is unset, as the
+// guard's ${CLAUDE_PROJECT_DIR:-.} does. A relative or undeterminable
+// directory is "" and never counts as indexed.
+func claudeProjectDir(getenv func(string) string) string {
+	dir := getenv("CLAUDE_PROJECT_DIR")
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return ""
+		}
+		dir = wd
+	}
+	if !filepath.IsAbs(dir) {
+		return ""
+	}
+	return dir
+}
+
 // runHookPreToolUseCodex is the Codex envelope adapter around the same
 // harness-neutral nudge core runHookPreToolUse uses (D-21): it decodes the
 // event, maps tool_name onto the shell rule (Codex has no Grep/Glob/Read
 // tools, so only the shell corpora ever fire), re-checks that stdin's cwd
-// is absolute and holds a .codegraph directory (D-22 — the Go core
+// is absolute and indexed per query.ProjectIndexed (D-22 — the Go core
 // re-checks this independently of the guard's own check, since the guard
 // alone is not a security boundary this adapter can rely on), keys the
 // cooldown on stdin's session_id plus agent_id (main when absent, per
@@ -250,7 +276,7 @@ func runHookPreToolUseCodex(in io.Reader, out io.Writer) {
 	if event.Cwd == "" || !filepath.IsAbs(event.Cwd) {
 		return
 	}
-	if info, statErr := os.Stat(filepath.Join(event.Cwd, ".codegraph")); statErr != nil || !info.IsDir() {
+	if !query.ProjectIndexed(event.Cwd) {
 		return
 	}
 

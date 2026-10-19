@@ -2,7 +2,9 @@
 
 A tool registers only when a `.codegraph/` index resolves for the server's
 working directory. An unindexed repository advertises zero tools, while
-`initialize` still succeeds. The remedy is to run `codegraph init`.
+`initialize` still succeeds. The remedy is to run `codegraph init`. In a
+linked git worktree with no index of its own, the main checkout's index
+resolves.
 
 ## Live re-check
 
