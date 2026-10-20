@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// homeEnv returns every environment variable through which this package
+// reaches the per-user home, for a fake home root: HOME for
+// os.UserHomeDir, and the two userdirs roots. TestMain (main_test.go) sets
+// each one for the whole package run.
+func homeEnv(home string) map[string]string {
+	return map[string]string{
+		"HOME":            home,
+		"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
+		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+	}
+}
+
 // withRegistryDir points the registryDir seam at a fresh t.TempDir() for the
 // duration of the test, mirroring the onSync*/onWatchOpen test-seam
 // convention (daemon_test.go) — restores the previous value in Cleanup so

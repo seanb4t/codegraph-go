@@ -10,17 +10,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/watch"
-	"go.uber.org/goleak"
 )
-
-// TestMain gates the whole internal/daemon test package on goleak: after
-// every test in this package has run, VerifyTestMain asserts zero
-// goroutines remain that were not present at process start (SYNC-06).
-// internal/daemon had no existing TestMain (daemon_test.go/lock_test.go
-// define none), so this is the package's first.
-func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
-}
 
 // soakIterations is a modest edit->sync cycle count that exercises the
 // daemon's full watch->debounce->sync lifecycle repeatedly while keeping the
