@@ -100,8 +100,8 @@ func resolveTestBinPath(raw string) (path string, useEnv bool, err error) {
 // this package runs — this harness's entire value proposition is testing
 // the REAL production binary (D-18/D-19), so a build failure is a hard
 // stop. When set and valid, it runs every test against that externally
-// supplied binary instead — no temp dir is created, no build runs, and
-// nothing this harness did not create is cleaned up. When set and
+// supplied binary instead — no build directory is created, no build runs,
+// and nothing this harness did not create is cleaned up. When set and
 // invalid, TestMain aborts before creating a temp dir, before building,
 // and before running a single test: it prints a message naming the
 // environment variable and the offending path to stderr and exits
@@ -119,28 +119,91 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "integration: TestMain:", err)
 		os.Exit(1)
 	}
+
+	var buildDir string
 	if useEnv {
 		binPath = resolved
-		os.Exit(m.Run())
+	} else {
+		buildDir, err = os.MkdirTemp("", "codegraph-integration-*")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "integration: TestMain: MkdirTemp: %v\n", err)
+			os.Exit(1)
+		}
+		binPath = filepath.Join(buildDir, "codegraph")
+		buildCmd := exec.Command("go", "build", "-o", binPath, "github.com/seanb4t/codegraph-go/cmd/codegraph")
+		if out, err := buildCmd.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "integration: TestMain: go build github.com/seanb4t/codegraph-go/cmd/codegraph failed: %v\n%s\n", err, out)
+			_ = os.RemoveAll(buildDir)
+			os.Exit(1)
+		}
 	}
 
-	tmpDir, err := os.MkdirTemp("", "codegraph-integration-*")
+	// The throwaway home comes AFTER the build, so `go build` still sees
+	// the real GOCACHE and GOMODCACHE, whose defaults live under HOME.
+	// From here on every spawned codegraph (and git) inherits a fake home:
+	// `serve --mcp` with the watcher on registers its daemon under the fake
+	// XDG_STATE_HOME, and `install` writes agent configs under the fake
+	// XDG_CONFIG_HOME, never under the developer's real ones. Both branches
+	// above pass through this step, so a CI job that supplies a prebuilt
+	// binary is isolated too. The run stops before any test if
+	// os.UserHomeDir() does not resolve to the fake home.
+	home, err := os.MkdirTemp("", "codegraph-integration-home-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "integration: TestMain: MkdirTemp: %v\n", err)
+		cleanupBuildDir(buildDir)
 		os.Exit(1)
 	}
-
-	binPath = filepath.Join(tmpDir, "codegraph")
-	buildCmd := exec.Command("go", "build", "-o", binPath, "github.com/seanb4t/codegraph-go/cmd/codegraph")
-	if out, err := buildCmd.CombinedOutput(); err != nil {
-		fmt.Fprintf(os.Stderr, "integration: TestMain: go build github.com/seanb4t/codegraph-go/cmd/codegraph failed: %v\n%s\n", err, out)
-		_ = os.RemoveAll(tmpDir)
+	if err := isolateHome(home); err != nil {
+		fmt.Fprintf(os.Stderr, "integration: TestMain: %v\n", err)
+		_ = os.RemoveAll(home)
+		cleanupBuildDir(buildDir)
 		os.Exit(1)
 	}
 
 	code := m.Run()
-	_ = os.RemoveAll(tmpDir)
+	_ = os.RemoveAll(home)
+	cleanupBuildDir(buildDir)
 	os.Exit(code)
+}
+
+// cleanupBuildDir removes the directory TestMain built the binary into;
+// it is a no-op on the testBinEnvVar branch, where there is none.
+func cleanupBuildDir(dir string) {
+	if dir != "" {
+		_ = os.RemoveAll(dir)
+	}
+}
+
+// homeEnv returns every environment variable through which the spawned
+// binary reaches the per-user home, for a fake home root: HOME for
+// os.UserHomeDir, the two userdirs roots, and HERMES_HOME for the Hermes
+// install target. It is the same list internal/cli's fakeHome sets, plus
+// XDG_STATE_HOME for the daemon registry.
+func homeEnv(home string) map[string]string {
+	return map[string]string{
+		"HOME":            home,
+		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
+		"HERMES_HOME":     filepath.Join(home, ".hermes"),
+	}
+}
+
+// isolateHome sets every homeEnv variable under home and confirms that
+// os.UserHomeDir() now resolves there.
+func isolateHome(home string) error {
+	for key, value := range homeEnv(home) {
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("set %s: %w", key, err)
+		}
+	}
+	got, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("os.UserHomeDir: %w", err)
+	}
+	if got != home {
+		return fmt.Errorf("os.UserHomeDir() = %q, want the fake home %q", got, home)
+	}
+	return nil
 }
 
 // runGitI mirrors internal/cli/notice_test.go's runGitC (itself the third
