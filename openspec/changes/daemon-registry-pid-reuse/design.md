@@ -37,9 +37,9 @@ In `TestStartTimesCorroborate` and `TestIsStaleStillDetectsPIDReuse`, every case
 
 Alternative: keep the symmetric rule and accept a one-release window in which a new binary can clear a live old daemon's lock on macOS. Rejected: the failure is silent and corrupts the thing the lock protects.
 
-### D3. Prune malformed files by name, decode and pid
+### D3. Prune malformed files by name, decode and pid, never under a live pid
 
-`List` parses each `*.json` name as an integer pid before reading it. A name that does not parse, a body that does not decode, or a `pid` field that differs from the name is removed with the same best-effort `os.Remove` the stale path uses, and the file is skipped. Non-`.json` entries are skipped without removal, so a stray file someone drops in the directory is not destroyed. Records are written atomically through `fsatomic`, so a half-written record never carries the final name and this rule cannot race a concurrent `Register`.
+`List` parses each `*.json` name as an integer pid before reading it. A name that does not parse is removed at once with the same best-effort `os.Remove` the stale path uses: `Register` only ever writes `<pid>.json`, so no writer can be racing for that name. A body that does not decode, or a `pid` field that differs from the name, is removed only when no process holds the pid in the name; while that pid is alive the file is skipped, not listed, and reconsidered on the next listing. That keeps `List` from deleting a record that a daemon with that pid wrote between the read and the remove, an interleaving atomic writes do not prevent (`fsatomic` makes a record all-or-nothing; it does not make read, validate and remove one step). The window that remains, a dead pid recycled between the liveness check and the remove, is the one the stale path has today and is not widened. Non-`.json` entries are skipped without removal, so a stray file someone drops in the directory is not destroyed.
 
 ### D4. No new seam, and no aging wait
 
@@ -50,6 +50,7 @@ Alternative: keep the symmetric rule and accept a one-release window in which a 
 - [`SysctlKinfoProc` reports a start time for a zombie] → `isProcessLive` runs first; a zombie that still answers `Signal(0)` is listed today too and dies with its parent's `wait`. No change in exposure.
 - [The OS-derived start time differs between write and check] → Both sides come from the same OS source for the same pid, so for the writer process the delta is zero; the slack absorbs second-level rounding, as on Linux today.
 - [A registry file someone named `12345.json` by hand with a live pid] → Listed as today, and it also has to carry a corroborating start time. Not a new exposure.
+- [A malformed file sits under a pid that stays alive for days] → It is never listed and costs one decode per listing; it goes when the pid does.
 
 ## Migration Plan
 

@@ -9,8 +9,8 @@
 
 ## 2. Advisory vuln job
 
-- [ ] 2.1 Rework the `vuln` target in `Taskfile.yml` so each binary is built inside the report loop under `set +e`, a failed build prints `::warning::<name>: BUILD ERROR` plus the build output and continues, the scan runs only for built binaries, and the task ends with a `vuln: built N/9, scanned N, build errors N, detected N, scan errors N` summary, exit 0 when `scanned` equals `built` and exit 1 otherwise. Verify by running `GOMODCACHE=$(mktemp -d) GOPROXY=off task vuln` and confirming nine BUILD ERROR lines, the exact line `vuln: built 0/9, scanned 0, build errors 9, detected 0, scan errors 0` and exit status 0; then run plain `task vuln` and confirm the line starts `vuln: built 9/9, scanned 9, build errors 0` and the exit status is 0.
-- [ ] 2.2 Update the target's `desc:` and the `ci.yml` step name and comment so they say a build failure is reported, never fatal; verify `task vuln:selftest` still exits 0.
+- [ ] 2.1 Add `scripts/vuln_report.py` in the shape of `fragment_policy.py`: the nine-tool roster (name, modfile, package), a `Runner` seam, `classify(build_rc, scan_rc) -> Outcome` (`BUILD ERROR`, `CLEAN`, `DETECTED` on exit 3, `SCAN ERROR` otherwise), the `::warning::` lines with command output, the `vuln: built N/9, scanned N, build errors N, detected N, scan errors N` summary, exit 0 whatever the scans found and exit 1 when `built + build errors` is not 9 or `scanned` is not `built`. Verify with `scripts/test_vuln_report.py` feeding canned `Runner` results: all clean; one build failure followed by a successful scan of the next tool; a scan exit 3 reported as `DETECTED`; a scan exit 2 reported as `SCAN ERROR`; every roster entry attempted in order; the exact summary line and exit status for each case.
+- [ ] 2.2 Make the `vuln` target in `Taskfile.yml` run `python3 scripts/vuln_report.py` with the scanner command (`{{.GO_TOOL}} govulncheck -mode=binary`) as an argument, cut its `desc:` to what the target does and where the roster lives, and update the `ci.yml` step name and comment so they say a build failure is reported, never fatal. Verify by running `GOMODCACHE=$(mktemp -d) GOPROXY=off task vuln` and confirming nine BUILD ERROR lines, the exact line `vuln: built 0/9, scanned 0, build errors 9, detected 0, scan errors 0` and exit status 0; then plain `task vuln` with a line starting `vuln: built 9/9, scanned 9, build errors 0` and exit status 0; then `task vuln:selftest` still exits 0.
 
 ## 3. Perf gate message and record
 
@@ -19,4 +19,4 @@
 
 ## 4. Changelog
 
-- [ ] 4.1 No changelog fragment: no file under `cmd/` or `internal/` changes. Put `<!-- changelog-exempt: CI configuration, Taskfile and bench runner only -->` in the PR body and verify the `fragment-required` check passes.
+- [ ] 4.1 No changelog fragment: no file under `cmd/` or `internal/` changes. Put `<!-- changelog-exempt: CI configuration, scripts, Taskfile and bench runner only -->` in the PR body and verify the `fragment-required` check passes.

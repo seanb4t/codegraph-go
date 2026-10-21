@@ -60,7 +60,7 @@ codegraph SHALL read a live process's start time from the operating system on Li
 
 ### Requirement: Malformed registry files are removed
 
-A file in the registry directory with the `.json` suffix whose name is not `<pid>.json`, whose content does not decode as a record, or whose `pid` field differs from its name SHALL be removed on a listing and SHALL NOT be listed. Files without the `.json` suffix SHALL be left untouched.
+A file in the registry directory with the `.json` suffix whose name is not `<pid>.json` SHALL be removed on a listing. A `<pid>.json` whose content does not decode as a record, or whose `pid` field differs from its name, SHALL NOT be listed; it SHALL be removed on a listing when no process holds that pid and left in place while one does. Files without the `.json` suffix SHALL be left untouched.
 
 #### Scenario: A file named by something other than a pid
 
@@ -69,13 +69,18 @@ A file in the registry directory with the `.json` suffix whose name is not `<pid
 
 #### Scenario: A record that does not decode
 
-- **WHEN** the registry holds `4242.json` whose content is not a record
+- **WHEN** the registry holds `4242.json` whose content is not a record, and no process holds pid 4242
 - **THEN** a listing removes it and does not list it
 
 #### Scenario: A record whose pid does not match its name
 
-- **WHEN** the registry holds `4242.json` whose `pid` field is 5151
+- **WHEN** the registry holds `4242.json` whose `pid` field is 5151, and no process holds pid 4242
 - **THEN** a listing removes it and does not list it
+
+#### Scenario: A malformed record under a live pid
+
+- **WHEN** the registry holds `<pid>.json` whose content is not a record, and a process holds that pid
+- **THEN** a listing does not list it and leaves the file in place
 
 #### Scenario: A foreign file
 

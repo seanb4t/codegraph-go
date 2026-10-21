@@ -13,7 +13,7 @@
 
 ## 3. Registry pruning
 
-- [ ] 3.1 In `List`, parse each `*.json` name as a pid, remove files whose name does not parse, whose body does not decode, or whose `pid` differs from the name, and skip non-`.json` entries untouched. Verify with new cases in `registry_test.go`: `TestRegistryListRemovesNonPidName` (`d28d43d85835d89e.json`), `TestRegistryListRemovesUndecodableRecord`, `TestRegistryListRemovesPidMismatch`, `TestRegistryListLeavesForeignFile` (`notes.txt` survives).
+- [ ] 3.1 In `List`, parse each `*.json` name as a pid; remove files whose name does not parse; for files whose body does not decode or whose `pid` differs from the name, remove them only when `isProcessLive` is false for the name's pid and otherwise skip them unlisted; skip non-`.json` entries untouched. Verify with new cases in `registry_test.go`: `TestRegistryListRemovesNonPidName` (`d28d43d85835d89e.json`), `TestRegistryListRemovesUndecodableRecord` and `TestRegistryListRemovesPidMismatch` (both named for a pid no process holds), `TestRegistryListKeepsMalformedUnderLivePid` (the test's own pid with a garbage body: not listed, file still present), `TestRegistryListLeavesForeignFile` (`notes.txt` survives).
 - [ ] 3.2 Extend `TestRegistryListPrunesStale` with a record for the test's own pid whose `StartedAt` is an hour before the actual start, and assert it is removed on macOS and Linux (skip only where `processStartTime` is unavailable).
 - [ ] 3.3 Run `task test` and then `task lint` sequentially (the daemon suite is timing-sensitive under concurrent load) and verify both pass.
 

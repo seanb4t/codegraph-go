@@ -8,7 +8,7 @@ What codegraph records for a coding agent when `codegraph install` or the refres
 
 ### Requirement: Only a durable binary path is recorded (D-04)
 
-An install or refresh SHALL record the absolute path of the binary it runs from in every agent configuration and guard it writes. It SHALL refuse a path that cannot outlive the process: a base name ending in `.test`, or any path element that is `go-build` followed by one or more digits (a Go work directory). A refusal SHALL write nothing for that agent and SHALL name the path.
+An install or refresh SHALL record the absolute path of the binary it runs from in every agent configuration and guard it writes. It SHALL refuse an ephemeral path: a base name ending in `.test`, a path element that is `go-build` plus digits (a Go work directory), or a path element of 64 hex digits plus `-d` (a Go build-cache executable directory). A refusal SHALL write nothing for that agent and SHALL name the path.
 
 #### Scenario: A real binary
 
@@ -23,6 +23,11 @@ An install or refresh SHALL record the absolute path of the binary it runs from 
 #### Scenario: A `go run` binary
 
 - **WHEN** `codegraph install` runs from `<tmp>/go-build123/exe/codegraph`
+- **THEN** it exits non-zero with one error that names the path, and no agent configuration changes
+
+#### Scenario: A cached `go run` binary
+
+- **WHEN** `codegraph install` runs from `<cache>/69/<64 hex digits>-d/codegraph`
 - **THEN** it exits non-zero with one error that names the path, and no agent configuration changes
 
 #### Scenario: The refresh after an upgrade
