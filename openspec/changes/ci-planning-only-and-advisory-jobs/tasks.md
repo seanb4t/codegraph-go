@@ -21,4 +21,4 @@
 
 ## 4. Changelog
 
-- [ ] 4.1 No changelog fragment: no file under `cmd/` or `internal/` changes. Put `<!-- changelog-exempt: CI configuration, scripts, Taskfile and bench runner only -->` in the PR body and verify the `fragment-required` check passes.
+- [x] 4.1 No changelog fragment: no file under `cmd/` or `internal/` changes. Put `<!-- changelog-exempt: CI configuration, scripts, Taskfile and bench runner only -->` in the PR body and verify the `fragment-required` check passes.
