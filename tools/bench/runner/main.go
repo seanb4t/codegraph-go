@@ -626,12 +626,24 @@ func runRegression(cfg config) error {
 
 	if err := bench.CheckRegression(baseline, current, cfg.ceilingBytes); err != nil {
 		printMetrics(os.Stderr, current)
-		return fmt.Errorf("regression gate failed: %w", err)
+		return regressionFailure(err)
 	}
 
 	fmt.Fprintln(os.Stdout, "regression gate passed")
 	printMetrics(os.Stdout, current)
 	return nil
+}
+
+// regressionFailure wraps the gate's own message with the rerun-first hint
+// the reader needs before investigating; the bench: message stays intact
+// and reachable through errors.Is.
+func regressionFailure(err error) error {
+	return fmt.Errorf(
+		"regression gate failed: %w; rerun the job once before treating this as a regression: "+
+			"a no-op change has tripped this gate on a dispatch-to-dispatch spread larger than "+
+			"the whole budget (#147, see tools/bench/BASELINE.md), and a real regression reproduces",
+		err,
+	)
 }
 
 // measureRegressionTrial runs ONE independent measurement session and

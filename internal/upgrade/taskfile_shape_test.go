@@ -138,6 +138,7 @@ type inScopeJob struct {
 // — it runs via `uses: golang/govulncheck-action`, an action with no run:
 // body at all, so it has nothing for this guard to check.
 var inScopeJobs = []inScopeJob{
+	{Workflow: "ci.yml", JobID: "changes"},
 	{Workflow: "ci.yml", JobID: "test"},
 	{Workflow: "ci.yml", JobID: "actionlint"},
 	{Workflow: "ci.yml", JobID: "goreleaser-check"},
@@ -171,11 +172,15 @@ type runBodyException struct {
 }
 
 // runBodyExceptions is the literal, exhaustive exception list for the
-// in-scope jobs above. One entry, in ci.yml:
+// in-scope jobs above. Two entries, both in ci.yml:
 //   - "Compute determinism inputs" (job reproducibility) writes to the CI
 //     step-output file ($GITHUB_OUTPUT) via `id: repro`; it has no meaning
 //     outside a runner and produces no artifact a contributor would ever
 //     invoke directly.
+//   - "Classify the change" (job changes) writes planning_only to
+//     $GITHUB_OUTPUT from the event's pull request number or push SHAs;
+//     the same shape, and its unit suite runs through
+//     `task check:ci-scripts` instead.
 //
 // A second entry ("Install mingw-w64", job test) retired with native
 // Windows support (quick task 260807-gho) — the apt step it excepted no
@@ -188,6 +193,12 @@ var runBodyExceptions = []runBodyException{
 		Job:      "reproducibility",
 		Step:     "Compute determinism inputs",
 		Reason:   "writes to the CI step-output file ($GITHUB_OUTPUT) via id: repro; has no meaning outside a runner",
+	},
+	{
+		Workflow: "ci.yml",
+		Job:      "changes",
+		Step:     "Classify the change",
+		Reason:   "writes planning_only to $GITHUB_OUTPUT from the event's PR number or push SHAs; has no meaning outside a runner",
 	},
 }
 

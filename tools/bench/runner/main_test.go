@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,28 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/bench"
 )
+
+// TestRegressionFailureSaysRerunFirst pins the shape of the gate's failure:
+// the original bench: message survives, errors.Is still reaches the cause,
+// and the rerun-first sentence with its issue reference is present.
+func TestRegressionFailureSaysRerunFirst(t *testing.T) {
+	cause := errors.New("bench: throughput regressed 10.2% (budget: 10.0%): baseline=17090.88 files/s current=15348.16 files/s")
+	err := regressionFailure(cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("regressionFailure lost the cause: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"regression gate failed: " + cause.Error(),
+		"rerun the job once before treating this as a regression",
+		"#147",
+		"a real regression reproduces",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q lacks %q", msg, want)
+		}
+	}
+}
 
 // --- medianFloat64 / medianInt64 (WR-03, Phase 8 re-review) ---
 //

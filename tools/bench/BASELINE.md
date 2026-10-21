@@ -292,6 +292,19 @@ job measure (phase structure, corpus regeneration, binary build). If a
 future change depends on this number, establish which it is first rather
 than inheriting the assumption — treating the two jobs as comparable is
 itself an unverified premise.
+
+**GH #147 (2026-10-20): a 10.2% across-dispatch delta on a test-only
+change.** Run 39501339136 reported `throughput regressed 10.2%` on a pull
+request that changed only test files, and the rerun of the same job
+passed. That is one across-dispatch observation larger than the whole 10%
+budget, against the 4.66% spread recorded above. The numbers do not
+conflict: 0.35% is within-dispatch session agreement, 4.66% came from four
+session medians across two dispatches, and #147 is a fifth dispatch and
+the widest spread seen so far. Two consequences: the runner's failure
+message now says to rerun the job once before investigating, because a
+real regression reproduces and this one did not; and characterizing the
+across-dispatch spread (a multi-dispatch study on `bench.yml`, as GH #20
+did) is still open before any retuning of the budget or the trial count.
 The `-scratch-fs`/`ScratchFS`/`resolveScratchDirForClass` machinery all
 stays — first-class capabilities, not reverted, because they are what
 made every control and comparison in this investigation cheap to run,
