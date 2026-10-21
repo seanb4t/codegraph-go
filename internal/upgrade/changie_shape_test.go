@@ -605,11 +605,16 @@ func TestChangieCheckWiredIntoCI(t *testing.T) {
 
 // --- TestChangieBinaryInToolVulnScan (CHG-01) -------------------------------
 
-// changieVulnForLoopRe matches the vuln target's for-loop name list line
-// naming changie as a whole word — the shape TestChangieBinaryInToolVulnScan
-// requires so a future edit that drops changie from the loop, or renames it
-// to something ambiguous, fails loudly here.
-var changieVulnForLoopRe = regexp.MustCompile(`(?m)^\s*for name in .*\bchangie\b.*; do$`)
+// vulnReportPath is the script that holds the tool-vuln roster: the vuln
+// task only invokes it, so the roster is where changie's membership lives.
+const vulnReportPath = "../../scripts/vuln_report.py"
+
+// changieVulnRosterRe matches the roster entry that builds changie from its
+// pinned modfile — one whole line, so an edit that drops changie, moves it
+// to another modfile or renames it to something ambiguous fails loudly here.
+var changieVulnRosterRe = regexp.MustCompile(
+	`(?m)^\s*Tool\("changie", "go\.tool-changie\.mod", "` + regexp.QuoteMeta(changieToolPackage) + `"\),$`,
+)
 
 func TestChangieBinaryInToolVulnScan(t *testing.T) {
 	data, err := os.ReadFile(taskfilePath)
@@ -621,15 +626,15 @@ func TestChangieBinaryInToolVulnScan(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s: no top-level %q task", taskfilePath, "vuln")
 	}
+	if !strings.Contains(block, "scripts/vuln_report.py") {
+		t.Fatalf("vuln task block does not invoke scripts/vuln_report.py, so the roster it scans is not the one this test reads:\n%s", block)
+	}
 
-	const wantModfileToken = "-modfile=go.tool-changie.mod"
-	if !strings.Contains(block, wantModfileToken) {
-		t.Fatalf("vuln task block does not contain %q — changie is not built from the pinned modfile", wantModfileToken)
+	script, err := os.ReadFile(vulnReportPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", vulnReportPath, err)
 	}
-	if !strings.Contains(block, changieToolPackage) {
-		t.Fatalf("vuln task block does not contain %q — changie's package is not built for the scan", changieToolPackage)
-	}
-	if !changieVulnForLoopRe.MatchString(block) {
-		t.Fatalf("vuln task block has no 'for name in ...changie...; do' loop line naming changie as a whole word:\n%s", block)
+	if !changieVulnRosterRe.MatchString(string(script)) {
+		t.Fatalf("%s has no roster line building changie from go.tool-changie.mod (%s) — changie is not scanned from its pinned modfile", vulnReportPath, changieToolPackage)
 	}
 }
