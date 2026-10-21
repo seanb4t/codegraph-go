@@ -33,7 +33,7 @@ None. This change touches CI configuration, a developer tool's message and a Tas
 ## Impact
 
 - `.github/workflows/ci.yml`: one new job, `needs:` and `if:` on six jobs. Job names do not change, so the `protect-main` ruleset is untouched.
-- `scripts/planning_only.py` and its unit test, in the shape of `scripts/fragment_policy.py`.
+- `scripts/planning_only.py` and `scripts/vuln_report.py` with their unit tests, in the shape of `scripts/fragment_policy.py`; a `check:ci-scripts` task runs both suites from the `actionlint` job, which the classifier never gates.
 - `tools/bench/runner/main.go`: the regression failure message. `tools/bench/BASELINE.md`: one paragraph.
 - `Taskfile.yml`: the `vuln` target calls the script. `scripts/vuln_report.py` and its unit test hold the loop.
 - No changelog fragment. `tools/`, `scripts/` and `Taskfile.yml` are not shipped code under `scripts/fragment_policy.py`, and the PR body carries `<!-- changelog-exempt: CI configuration, scripts, Taskfile and bench runner only -->`.

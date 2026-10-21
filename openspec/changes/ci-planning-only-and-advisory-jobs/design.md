@@ -47,10 +47,15 @@ Alternative: keep the loop in bash and inject a fake scanner through a Taskfile 
 
 The runner wraps the gate's error in `tools/bench/runner/main.go` with one sentence: a no-op change has tripped this gate once on a dispatch-to-dispatch spread larger than the whole budget (#147); rerun the job once before treating the result as a regression, because a real regression reproduces. `internal/bench.CheckRegression` keeps its exact message, so nothing under `internal/` changes and no changelog question arises.
 
+### D5. The script suites run from a job the classifier cannot skip
+
+A new `check:ci-scripts` task runs `scripts/test_planning_only.py` and `scripts/test_vuln_report.py` in the shape of `check:fragment-policy`: stdlib `unittest` over literal inputs, passing only when the executed count equals the number of `def test_` methods in each file, that count meets a floor, and the result line is `OK`, so an undiscovered or skipped test cannot pass. It is a step in the `actionlint` job, which keeps no `needs: [changes]`, so a change to the classifier can never skip its own tests. `check:fragment-policy` stays where it is in the `test` job.
+
 ## Risks / Trade-offs
 
 - [The classifier misreads a code change as planning-only] → The rule is a prefix test on every path, with no globs and no exclusions, and the unit test covers mixed lists, an empty list and paths that merely contain `openspec`. A wrong `true` would need the API to return a wrong file list: a short PR listing fails the count check, and a rename counts both of its paths.
 - [Every run waits for the classifier before the heavy jobs start] → One small `ubuntu-latest` job with one API call, well under a minute, against eight minutes saved on planning-only runs.
 - [A required job that is always skipped would satisfy the ruleset forever] → Only a planning-only change skips, and the condition reads the classifier's explicit `true`. A code change that reaches `main` still runs everything.
 - [The vuln summary line hides a regression in the loop itself] → `test_vuln_report.py` fails when the loop misclassifies an exit code or skips a tool, the script exits 1 when the attempted or scanned counts fall short of the roster, and `vuln:selftest` is unchanged and still fails the job when the real scanner stops detecting.
+- [A planning-only misclassification hides the classifier's own test failure] → The suites run from `actionlint`, which every run executes.
 - [A reader ignores the rerun hint and investigates anyway] → The hint names the issue and the measured spread so the decision is informed, and `BASELINE.md` carries the data.
