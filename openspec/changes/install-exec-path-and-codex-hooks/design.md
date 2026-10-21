@@ -11,18 +11,18 @@ Codex loads hooks from `~/.codex/hooks.json` and `<repo>/.codex/hooks.json` (Cod
 **Goals:**
 - No caller can record an ephemeral path by accident, whichever CLI path reaches `Install`.
 - One clear message from `codegraph install`, not nine.
-- The Codex hook comments and the spec state what Codex actually does, with a recorded observation behind them.
+- The Codex hook comments and the spec state what Codex's source does, with the source named.
 - Nobody reads `.codex/hooks/hooks.json` as a live hook again.
 
 **Non-Goals:**
 - Validating that `ExecPath` exists or is executable. A durable path that is later removed is D-08's silent-exit case, unchanged.
-- Rendering git's path into the Codex guard unless the live check demands it.
+- Rendering git's path into the Codex guard. The local hook command is itself `"$(git rev-parse --show-toplevel)/..."`, so git has to be on the hook's `PATH` before any guard runs.
 
 ## Decisions
 
 ### D1. The check is a method on `InstallOptions`, called by every target and once by the CLI
 
-`func (o InstallOptions) Validate() error` in `internal/agents/types.go` returns a descriptive error when `ephemeralExecPath(o.ExecPath)` is true and `o.AllowEphemeralExecPath` is false. `ephemeralExecPath` is a pure function over the cleaned path: the base name has the suffix `.test`, or any path element has the prefix `go-build`. Each of the nine `Install` methods begins with the same guard: validate, and on error return a `WriteResult` whose `Errors` holds it, so the CLI's existing CR-01 rule (any error is surfaced and the exit is non-zero) applies. `newInstallCmd` calls `Validate` once right after `os.Executable()` and returns the error directly, so the user sees one line and no target runs. `refreshInstalledSkills` keeps its code path: its per-target error already prints a warning and the "run `codegraph install`" pointer.
+`func (o InstallOptions) Validate() error` in `internal/agents/types.go` returns a descriptive error when `ephemeralExecPath(o.ExecPath)` is true and `o.AllowEphemeralExecPath` is false. `ephemeralExecPath` is a pure function over the cleaned path: the base name has the suffix `.test`, or any path element is `go-build` followed by one or more digits, the name Go gives its work directory (`go-build2384710239`); `go-builder` or the `go-build` cache directory do not match. Each of the nine `Install` methods begins with the same guard: validate, and on error return a `WriteResult` whose `Errors` holds it, so the CLI's existing CR-01 rule (any error is surfaced and the exit is non-zero) applies. `newInstallCmd` calls `Validate` once right after `os.Executable()` and returns the error directly, so the user sees one line and no target runs. `refreshInstalledSkills` keeps its code path: its per-target error already prints a warning and the "run `codegraph install`" pointer.
 
 Alternative: validate only in the CLI. Leaves `refreshInstalledSkills` and any future caller able to bypass it, which is the gap the issue names. Rejected.
 
@@ -30,25 +30,21 @@ Alternative: validate only inside the targets. Correct but prints the refusal on
 
 ### D2. The override is an environment variable mapped to an option field
 
-`CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1` sets `InstallOptions.AllowEphemeralExecPath` in `newInstallCmd` and in `newUpgradeCmd` before the refresh. The agents layer never reads the environment itself, so `Install` stays a function of its options and the `internal/agents` tests set the field directly. The `internal/cli` helper that fakes the home (`fakeHome`) sets the variable with `t.Setenv`, because every command-level install test runs from a test binary; one new test leaves it unset and asserts the refusal.
+`CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1` sets `InstallOptions.AllowEphemeralExecPath` in `newInstallCmd` and in `newUpgradeCmd` before the refresh. The agents layer never reads the environment itself, so `Install` stays a function of its options and the `internal/agents` tests set the field directly. `internal/cli`'s `TestMain` sets the variable beside the home backstop, because every command-level install test runs from a test binary and some (`TestInstall_NotesAreControlCharacterSanitized`, `TestInstall_PlainBranchPathsAreControlCharacterSanitized`) set their own home without `fakeHome`; one new test clears it with `t.Setenv` and asserts the refusal.
 
 Alternative: an `--allow-ephemeral-binary` flag. Does not reach the upgrade refresh and is harder to apply across a test package. Rejected.
 
-### D3. The live Codex check comes first and decides one task
+### D3. The PATH claim is corrected from Codex's source, not probed
 
-Task 1.1 runs Codex 0.163.0 with `CODEX_HOME` pointing at a scratch directory holding a `hooks.json` whose PreToolUse command writes `env` to a file, trusts the hook through `/hooks`, runs one shell tool call and records the resulting `PATH` under "Observation" below and in the memory store. The source reading above predicts an inherited `PATH`. On that result the change rewrites the D-22 comments (the guards still avoid PATH-dependent commands, now as a robustness choice rather than a necessity) and the spec delta applies as written. If `PATH` is empty, task 1.4 applies instead: `install` renders git's absolute path (`exec.LookPath("git")` at install time) into a `CODEGRAPH_GIT` environment variable the guard exports before running the binary, `gitmeta` honors `CODEGRAPH_GIT` ahead of its `LookPath` seam, and the delta still holds because the Codex hook then finds git without a `PATH`.
+The D-22 comments are rewritten to the source reading: Codex's hook runner (`codex-rs`, `build_command`, read 2026-10-20) clears the child environment and replays the session snapshot with `PATH` kept, and Codex's own hook documentation registers a project hook as `"$(git rev-parse --show-toplevel)/..."`, which cannot run at all without git on the hook's `PATH`. The guards keep avoiding `command -v`, `dirname` and `basename`, now as a robustness choice rather than a necessity, and the rewritten comment names the source. No live probe of Codex: a check whose subject is how Codex behaves is what the repository's third-party rule excludes, and if the reading were wrong the local hook command would fail loudly as a per-call failed hook run in Codex rather than silently. No `CODEGRAPH_GIT` fallback: it could not help the local form, whose command needs git before any guard runs.
 
 ### D4. A `description` on the fragment, no rename
 
 Codex documents `description` as optional top-level metadata that does not change which hooks run, and `codexPreToolUseBlocks` reads only `hooks`, so the field is inert on both sides. The text says: this is codegraph's embedded Codex PreToolUse fragment; `codegraph install -t codex --pretool-nudge` rewrites its command into `<repo>/.codex/hooks.json` or `~/.codex/hooks.json` next to a rendered `codegraph-pretooluse.sh`; Codex does not read hooks from `.codex/hooks/`. Renaming the embed source would churn `codexassets.go`, the tests and the planning record for no behavior.
 
-### Observation
-
-Filled in by task 1.1: Codex version, date, the hook's `PATH` value (or "empty"), and whether a hook whose command does not exist produced a per-call error.
-
 ## Risks / Trade-offs
 
 - [A developer runs `go run ./cmd/codegraph install` and is refused] → The message names the path and the override variable, and the fix is `task build` then running `install` from the built binary.
 - [The nine guards drift] → `TestEveryTargetRefusesEphemeralExecPath` iterates the registry and asserts each `Install` returns the error and writes nothing, so a target that drops its guard fails the suite.
-- [The live check cannot be run (no Codex auth on the machine)] → Record that in the observation and keep the comments on the source reading, naming the Codex commit read. The spec delta does not depend on the answer.
+- [The source reading is wrong and Codex strips `PATH`] → The local hook command fails on every tool call with a visible failed-hook error, the fix is a one-line comment revert plus the old PATH condition in the spec, and the nudge is advisory in the meantime.
 - [Changing the embedded templates marks every installed Codex guard as updated on the next install] → Expected and harmless; the guard's behavior is identical.

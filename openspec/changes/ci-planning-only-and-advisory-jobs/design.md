@@ -27,7 +27,7 @@ The repository's CI scripts (`scripts/fragment_policy.py`, `scripts/pr_template_
 
 ### D1. A first-party classifier script, not a path-filter action
 
-`scripts/planning_only.py` lists the changed files and prints `planning_only=true` only when the list is non-empty and every path is under `openspec/`. For a pull request it pages through `pulls/{n}/files`, the same listing `fragment_policy.py` uses, so the verdict covers the whole PR rather than the last push. For a push it reads `compare/{before}...{after}`; a listing that reaches the API's 300-file cap is treated as undecided. Any API error, an all-zero `before` (new branch or force push), an empty list or an undecided listing prints `planning_only=false` with the reason on stderr. The script logs the file count and the verdict so the job log shows it did its work.
+`scripts/planning_only.py` lists the changed files and prints `planning_only=true` only when the list is non-empty and every path is under `openspec/`. For a pull request it calls `fragment_policy.fetch_changed_files`, which pages through `pulls/{n}/files` and reports an error when the fetched count differs from the PR's `changed_files`, so the verdict covers the whole PR rather than the last push and a truncated listing is undecided. Every `FileChange` contributes its path and, for a rename, its previous path, so a file moved out of `internal/` into `openspec/` is a code change. For a push it reads `compare/{before}...{after}` and takes `filename` and `previous_filename` from each entry; a listing that reaches the API's 300-file cap is treated as undecided. Any API error, an all-zero `before` (new branch or force push), an empty list or an undecided listing prints `planning_only=false` with the reason on stderr. The script logs the file count and the verdict so the job log shows it did its work.
 
 Alternative: `dorny/paths-filter`. It would add a pinned third-party action and a second Renovate surface for a 40-line rule the repository already knows how to write and unit-test. Rejected.
 
@@ -39,7 +39,7 @@ The six heavy jobs get `needs: [changes]` and `if: ${{ !cancelled() && needs.cha
 
 ### D3. The vuln target builds inside the loop
 
-Each binary is built right before its scan with `set +e` around the build, the way the scan already is. A failed build prints `::warning::<name>: BUILD ERROR` with the `go build` output and moves on. The task ends with `vuln: built N/9, scanned N, build errors N, detected N, scan errors N` and exits 0. The `ci.yml` step name and the target's `desc:` say that a build failure is a reported outcome too.
+Each binary is built right before its scan with `set +e` around the build, the way the scan already is. A failed build prints `::warning::<name>: BUILD ERROR` with the `go build` output and moves on. The task ends with `vuln: built N/9, scanned N, build errors N, detected N, scan errors N` and exits 0 whatever the scans found. It exits 1 when `scanned` differs from `built`: a built binary the loop never scanned is a defect in the loop, not a vulnerability finding, and the advisory stance does not cover it. That assertion is what keeps a rewritten loop from silently building without scanning; `vuln:selftest` keeps proving that a scan can detect. The `ci.yml` step name and the target's `desc:` say that a build failure is a reported outcome too.
 
 ### D4. The rerun hint lives in the runner, not `internal/bench`
 
@@ -47,8 +47,8 @@ The runner wraps the gate's error in `tools/bench/runner/main.go` with one sente
 
 ## Risks / Trade-offs
 
-- [The classifier misreads a code change as planning-only] → The rule is a prefix test on every path, with no globs and no exclusions, and the unit test covers mixed lists, an empty list and paths that merely contain `openspec`. A wrong `true` would need the API to return a wrong file list.
+- [The classifier misreads a code change as planning-only] → The rule is a prefix test on every path, with no globs and no exclusions, and the unit test covers mixed lists, an empty list and paths that merely contain `openspec`. A wrong `true` would need the API to return a wrong file list: a short PR listing fails the count check, and a rename counts both of its paths.
 - [Every run waits for the classifier before the heavy jobs start] → One small `ubuntu-latest` job with one API call, well under a minute, against eight minutes saved on planning-only runs.
 - [A required job that is always skipped would satisfy the ruleset forever] → Only a planning-only change skips, and the condition reads the classifier's explicit `true`. A code change that reaches `main` still runs everything.
-- [The vuln summary line hides a regression in the loop itself] → `vuln:selftest` is unchanged and still fails the job when detection stops firing.
+- [The vuln summary line hides a regression in the loop itself] → The `scanned == built` assertion fails the job when the loop stops scanning, and `vuln:selftest` is unchanged and still fails the job when detection stops firing.
 - [A reader ignores the rerun hint and investigates anyway] → The hint names the issue and the measured spread so the decision is informed, and `BASELINE.md` carries the data.

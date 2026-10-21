@@ -33,5 +33,5 @@ None.
 ## Impact
 
 - `internal/daemon`: a new `procstart_darwin.go` using `golang.org/x/sys/unix.SysctlKinfoProc` (the module is already an indirect dependency and becomes direct), `procstart_other.go` narrowed to `!linux && !darwin`, `startTimesCorroborate` in `lock.go` and `List` in `registry.go`.
-- Tests: the corroboration cases in `lock_test.go`, `TestRegistryListPrunesStale` and new malformed-file cases in `registry_test.go`. `requireAgedProcess` stops skipping on macOS, so the lock-lifetime tests run there too.
+- Tests: the corroboration cases in `lock_test.go`, `TestRegistryListPrunesStale` and new malformed-file cases in `registry_test.go`. `requireAgedProcess` and its wall-clock wait are removed; the lock-lifetime tests assert the written start time equals the OS-reported one and run on macOS too.
 - Changelog fragment, kind Fixes.
