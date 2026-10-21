@@ -1,0 +1,24 @@
+# Tasks
+
+## 1. Planning-only classifier
+
+- [ ] 1.1 Add `scripts/planning_only.py` with a pure `classify(files: Sequence[FileChange]) -> bool` that tests every path and previous path, and a `main()` that lists PR files through `fragment_policy.fetch_changed_files` (paginated, count-checked) or push files through `compare/{before}...{after}` with `filename` and `previous_filename`, prints `planning_only=<true|false>` to `$GITHUB_OUTPUT`, logs the file count and verdict, and prints `false` with a stderr reason on any API error, a count mismatch, an all-zero `before`, an empty list or a compare listing at the 300-file cap. Verify with `scripts/test_planning_only.py`, feeding canned `Runner` responses as `test_fragment_policy.py` does, covering an all-`openspec/` list, a mixed list, an empty list, a path that only contains the word `openspec`, a rename from `internal/` into `openspec/` (false), a PR listing shorter than `changed_files` (false), and each other fail-open path.
+- [ ] 1.2 Add the `changes` job to `.github/workflows/ci.yml` running the script with `GITHUB_REPOSITORY`, `GITHUB_EVENT_NAME`, `PR_NUMBER`, `BEFORE_SHA`, `AFTER_SHA` and `GH_TOKEN` passed through `env:`; verify `task lint` (actionlint) passes and `scripts/check-workflow-output-delimiter.sh` still passes.
+- [ ] 1.3 Add `needs: [changes]` and `if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}` to `test`, `govulncheck`, `tool-vuln`, `reproducibility`, `perf-regression` and `tmux-e2e`, leaving every job name unchanged; verify with `rg -n '^    name:' .github/workflows/ci.yml` before and after that the name list is identical.
+- [ ] 1.4 Verify on this PR that `changes` prints `planning_only=false` with the file count and that all six heavy jobs ran (the PR changes `ci.yml`, so it can never be planning-only). Then, on the first planning-only pull request after this change merges, confirm `changes` prints `planning_only=true`, the six heavy jobs show as skipped and every required check is green; record both run links in #135.
+
+- [ ] 1.5 Add `check:ci-scripts` to `Taskfile.yml` in the shape of `check:fragment-policy` (executed count equals the `def test_` count per file, a floor per file, result line `OK`) over `scripts/test_planning_only.py` and `scripts/test_vuln_report.py`, and add it as a step in the `actionlint` job of `ci.yml`, which has no `needs: [changes]`. Verify `task check:ci-scripts` prints both executed counts and passes, and `task lint` (actionlint) still passes.
+
+## 2. Advisory vuln job
+
+- [ ] 2.1 Add `scripts/vuln_report.py` in the shape of `fragment_policy.py`: the nine-tool roster (name, modfile, package), a `Runner` seam, `classify(build_rc, scan_rc) -> Outcome` (`BUILD ERROR`, `CLEAN`, `DETECTED` on exit 3, `SCAN ERROR` otherwise), the `::warning::` lines with command output, the `vuln: built N/9, scanned N, build errors N, detected N, scan errors N` summary, exit 0 whatever the scans found and exit 1 when `built + build errors` is not 9 or `scanned` is not `built`. Verify with `scripts/test_vuln_report.py` feeding canned `Runner` results: all clean; one build failure followed by a successful scan of the next tool; a scan exit 3 reported as `DETECTED`; a scan exit 2 reported as `SCAN ERROR`; every roster entry attempted in order; the exact summary line and exit status for each case.
+- [ ] 2.2 Make the `vuln` target in `Taskfile.yml` run `python3 scripts/vuln_report.py` with the scanner command (`{{.GO_TOOL}} govulncheck -mode=binary`) as an argument, cut its `desc:` to what the target does and where the roster lives, and update the `ci.yml` step name and comment so they say a build failure is reported, never fatal. Verify by running `GOMODCACHE=$(mktemp -d) GOPROXY=off task vuln` and confirming nine BUILD ERROR lines, the exact line `vuln: built 0/9, scanned 0, build errors 9, detected 0, scan errors 0` and exit status 0; then plain `task vuln` with a line starting `vuln: built 9/9, scanned 9, build errors 0` and exit status 0; then `task vuln:selftest` still exits 0.
+
+## 3. Perf gate message and record
+
+- [ ] 3.1 Extend the regression failure in `tools/bench/runner/main.go` with the rerun sentence from design D4; verify with a new `TestRegressionFailureSaysRerunFirst` in `tools/bench/runner/main_test.go` that the wrapped error carries the sentence and the original `bench:` message.
+- [ ] 3.2 Add the #147 observation (run 39501339136, 10.2% on a test-only change, green on rerun) to `tools/bench/BASELINE.md` beside the #20 figures, stating that #20 measured within-dispatch spread and #147 between dispatches; verify `task lint` passes.
+
+## 4. Changelog
+
+- [ ] 4.1 No changelog fragment: no file under `cmd/` or `internal/` changes. Put `<!-- changelog-exempt: CI configuration, scripts, Taskfile and bench runner only -->` in the PR body and verify the `fragment-required` check passes.
