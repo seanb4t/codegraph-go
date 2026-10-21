@@ -22,7 +22,7 @@ import (
 
 // updatePlainGoldens is the ONLY sanctioned way to (re)write a golden file
 // under testdata/plain/ — a golden is never hand-edited (D-16, CLI-05).
-// Usage: GOTOOLCHAIN=go1.26.9 go test ./internal/cli/ -run 'TestPlainGolden$' -update-plain-goldens -count=1
+// Usage: GOTOOLCHAIN=go1.26.10 go test ./internal/cli/ -run 'TestPlainGolden$' -update-plain-goldens -count=1
 var updatePlainGoldens = flag.Bool("update-plain-goldens", false, "rewrite internal/cli/testdata/plain/*.golden from the current plain output")
 
 // plainRun is what one plainCase resolves to at run time: the args/env to
