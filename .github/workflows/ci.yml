@@ -22,7 +22,12 @@
 #     peak-RSS tolerance bands; query latency and cold start are measured
 #     and reported, not yet gated) and INDX-06 (absolute peak-RSS ceiling)
 #     — entirely offline against the deterministic synthetic corpus (D-04:
-#     this gate MUST NOT clone a remote repo).
+#     this gate MUST NOT clone a remote repo).#   - changes: a first job that classifies the push or pull request as
+#     planning-only (every changed file under openspec/, #135). The six
+#     heavy jobs above depend on it and skip through a job-level `if`
+#     when it says so; a skipped job still reports its required check as
+#     Success, which a workflow-level paths filter would not. The
+#     classifier fails open: an empty or false verdict runs everything.
 #
 # Security note: every third-party Action below is pinned to a full commit
 # SHA (resolved at execution time via `gh api`, matching release.yml's own
@@ -43,9 +48,37 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: changes (planning-only classifier)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      planning_only: ${{ steps.classify.outputs.planning_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # scripts/planning_only.py prints planning_only=true only when every
+      # changed path (and every rename's previous path) is under openspec/.
+      # Untrusted values reach it through env:, never through the run: text.
+      - name: Classify the change
+        id: classify
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/planning_only.py
+
   test:
     name: test
     runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -288,6 +321,8 @@ jobs:
   govulncheck:
     name: govulncheck (DIST-03, blocking)
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -346,6 +381,8 @@ jobs:
   tool-vuln:
     name: tool-vuln (VULN-01/02/03, advisory)
     runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -364,7 +401,10 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
-      - name: Tool-modfile vulnerability scan (advisory — reports, never fails the build)
+      # Every per-binary outcome is reported, including a failed build
+      # (BUILD ERROR); the step fails only when the report loop itself
+      # skipped a tool (scripts/vuln_report.py).
+      - name: Tool-modfile vulnerability scan (advisory — build and scan outcomes are reported, never fail the build)
         run: task vuln
 
       - name: Non-vacuity proof the advisory scan can still detect (VULN-02, may fail this job on a detection regression)
@@ -373,6 +413,8 @@ jobs:
   reproducibility:
     name: reproducibility (double-build hash-diff, DIST-04)
     runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -432,6 +474,8 @@ jobs:
   perf-regression:
     name: perf regression gate (PERF-02, INDX-06)
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
     # CODEGRAPH_BENCH_RUNNER labels THIS job's own measurement so
     # internal/bench.CheckRegression's runner check (Phase 10, plan 10-06)
     # has something to compare against the committed baseline's "runner":
@@ -514,9 +558,15 @@ jobs:
   #     a failure soft or make a step conditional — a job that can silently
   #     skip its own count assertion is the failure shape this phase exists
   #     to close.
+  #     The only condition on this job is the planning-only skip shared
+  #     with every heavy job (the `changes` classifier, #135): the job
+  #     either runs whole, with its count assertion, or is skipped as a
+  #     unit before any step starts.
   tmux-e2e:
     name: tmux e2e (real-pty harness, TTY-01..TTY-07)
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -581,6 +631,11 @@ jobs:
 
       - name: Run actionlint
         run: task lint:actions
+
+      # The classifier's own tests run here, in a job the classifier never
+      # gates, so a change to scripts/planning_only.py cannot skip them.
+      - name: CI script unit suites (planning-only classifier, vuln report)
+        run: task check:ci-scripts
 
   transcript-freeze:
     name: transcript-freeze
