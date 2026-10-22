@@ -32,7 +32,7 @@ Planning runs on [OpenSpec](https://github.com/Fission-AI/OpenSpec). The backlog
 ## Working here
 
 - `task test` runs the suite, `task lint` the linters. `task --list` shows the rest.
-- **Changelog fragments.** A PR that changes `cmd/**` or `internal/**` with a user-visible effect adds `task changie -- new -k <Kind> -b "<one sentence>"` (kinds: Breaking, Features, Fixes, Performance, Dependencies). Otherwise the PR body carries `<!-- changelog-exempt: <reason> -->`. The required `fragment-required` check enforces this.
+- **Changelog fragments.** A PR that changes `cmd/**` or `internal/**` with a user-visible effect adds `task changie -- new --interactive=false -k <Kind> -b "<one sentence>"` (kinds: Breaking, Features, Fixes, Performance, Dependencies). Otherwise the PR body carries `<!-- changelog-exempt: <reason> -->`. The required `fragment-required` check enforces this. Keep `--interactive=false`: without it changie prompts for the optional PR field, and an agent with no TTY hangs.
 - **Embedded sources.** `.claude/hooks/{hooks.json,session-nudge.sh,pretooluse-nudge.sh}`, `.claude/skills/codegraph/SKILL.md` and `.codex/hooks/*` are `//go:embed` sources that ship in the binary. Edit them as product code.
 - **Required checks are pinned by job name** in the `protect-main` ruleset. Renaming a CI job blocks every PR until the ruleset changes too.
 - **Tests cover only code this repo owns.** Never test third-party behavior (git, GitHub, changie, GoReleaser, cobra and so on).
