@@ -10,9 +10,13 @@
 # Codex has no CLAUDE_PROJECT_DIR-equivalent env var, so this guard derives
 # its own repo root from its own invocation path ($0) with three successive
 # "%/*" parameter-expansion strips: script -> hooks dir -> .codex -> repo
-# root (D-22). Codex invokes hooks with an EMPTY PATH, so no PATH-dependent
-# command (dirname, basename, command -v) is used anywhere in this file —
-# only POSIX parameter expansion.
+# root (D-22). The hook inherits the Codex session's PATH: Codex's hook
+# runner (codex-rs, build_command) clears the child environment and
+# replays the session snapshot with PATH kept, and the registered command
+# itself runs `git rev-parse`. Even so, no PATH-dependent command
+# (dirname, basename, command -v) is used anywhere in this file — only
+# POSIX parameter expansion — so the guard does not depend on what that
+# PATH holds.
 #
 # 1. An un-indexed repo exits here, before any process starts or stdin is
 #    read. A linked worktree root (its .git is a file) goes on to the

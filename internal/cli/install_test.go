@@ -215,6 +215,42 @@ func TestInstall_ExecPathAppearsInWrittenConfig(t *testing.T) {
 	}
 }
 
+// TestInstall_RefusesEphemeralExecPath: without the override, install run
+// from this package's .test binary fails with one error line naming the
+// binary, before any target runs. The same install with the override
+// writes .claude.json, so its absence here is the refusal.
+func TestInstall_RefusesEphemeralExecPath(t *testing.T) {
+	home := fakeHome(t)
+	t.Setenv(agents.AllowEphemeralExecPathEnv, "")
+	execPath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable(): %v", err)
+	}
+
+	stdout, _, err := execCmd("install", "--target", "claude", "--location", "global")
+	if err == nil {
+		t.Fatalf("install from %s succeeded, want a refusal; stdout:\n%s", execPath, stdout)
+	}
+	if msg := err.Error(); strings.Contains(msg, "\n") || !strings.Contains(msg, execPath) {
+		t.Fatalf("install error = %q, want one line naming %s", msg, execPath)
+	}
+	if stdout != "" {
+		t.Fatalf("a refused install printed per-agent output:\n%s", stdout)
+	}
+	claudeJSON := filepath.Join(home, ".claude.json")
+	if _, statErr := os.Lstat(claudeJSON); !os.IsNotExist(statErr) {
+		t.Fatalf("a refused install wrote %s (Lstat err %v)", claudeJSON, statErr)
+	}
+
+	t.Setenv(agents.AllowEphemeralExecPathEnv, "1")
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("install with the override: %v", err)
+	}
+	if _, statErr := os.Lstat(claudeJSON); statErr != nil {
+		t.Fatalf("install with the override did not write %s: %v", claudeJSON, statErr)
+	}
+}
+
 // TestInstall_Idempotent_RerunReportsUnchanged asserts re-running install
 // twice reports only "unchanged" the second time — a byte-level no-op
 // (D-07).

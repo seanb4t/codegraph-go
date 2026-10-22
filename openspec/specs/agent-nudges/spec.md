@@ -17,12 +17,11 @@ A nudge hook SHALL fire only when its project directory is indexed: `$CLAUDE_PRO
 #### Scenario: A linked worktree of an indexed main checkout
 
 - **WHEN** the project directory is the root of a linked worktree with no `.codegraph/`, and its main worktree holds `.codegraph/`
-- **THEN** the SessionStart nudge prints its line, and a matching PreToolUse call gets the nudge from the Claude Code hook
-- **AND** the Codex hook gives the nudge when git is on its `PATH`
+- **THEN** the SessionStart nudge prints its line, and a matching PreToolUse call gets the nudge from the Claude Code hook and from the Codex hook
 
 #### Scenario: A Codex hook with no git on its PATH
 
-- **WHEN** the Codex hook runs in the root of a linked worktree with no `.codegraph/`, and no git is on its `PATH`
+- **WHEN** the Codex hook runs in the root of a linked worktree with no `.codegraph/`, and the session `PATH` it inherits holds no git
 - **THEN** it prints nothing and exits 0
 
 #### Scenario: A linked worktree of an unindexed main checkout

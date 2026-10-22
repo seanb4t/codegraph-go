@@ -9,7 +9,10 @@
 # Unlike the local guard, a global hook's cwd is simply the session's own
 # working directory (D-22) — there is no repo-relative path to derive, so
 # this guard checks $PWD directly rather than walking up from its own
-# invocation path.
+# invocation path. The hook inherits the Codex session's PATH (codex-rs,
+# build_command, replays the session snapshot with PATH kept), but this
+# guard uses no PATH-dependent command, so it does not depend on what that
+# PATH holds.
 #
 # 1. An un-indexed repo (relative to $PWD) exits here, before any process
 #    starts or stdin is read. A linked worktree root (its .git is a file)

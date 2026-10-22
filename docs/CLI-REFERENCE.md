@@ -710,6 +710,13 @@ remembered until --pretool-nudge=false or uninstall. Codex skips a
 new or changed hook until it is trusted in /hooks. Idempotent —
 re-running install is a no-op when nothing changed.
 
+Install records the absolute path of the binary that runs it. It
+refuses a binary that Go deletes later (a test binary, or one built
+by go run), exits non-zero and writes nothing. Build codegraph and
+run install from the built binary, or set
+CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 to record that path anyway.
+The refresh after codegraph upgrade follows the same rule.
+
 ```
 codegraph install [flags]
 ```

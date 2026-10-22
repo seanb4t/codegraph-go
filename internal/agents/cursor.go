@@ -95,6 +95,10 @@ func (t cursorTarget) Detect(loc Location) DetectionResult {
 
 func (t cursorTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 
 	if legacy, err := cursorLegacyRulesPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor legacy rules path: %w", err))

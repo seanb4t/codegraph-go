@@ -107,6 +107,13 @@ codegraph install       # register with detected agents
 codegraph serve --mcp   # or run it directly
 ```
 
+`codegraph install` writes the absolute path of the binary that runs it into
+each agent's configuration. It refuses a binary that Go deletes later: a test
+binary, or one that `go run` built. Build codegraph and run `install` from the
+built binary. To record such a path anyway, set
+`CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1`. The refresh after `codegraph upgrade`
+follows the same rule.
+
 Eight tools are exposed: `codegraph_explore`, `codegraph_node`,
 `codegraph_search`, `codegraph_callers`, `codegraph_callees`, `codegraph_impact`,
 `codegraph_files`, `codegraph_status`.

@@ -38,6 +38,13 @@ func parseLocationFlag(raw string) (agents.Location, error) {
 	}
 }
 
+// allowEphemeralExecPath reports whether agents.AllowEphemeralExecPathEnv
+// is "1", the override that lets install and the upgrade refresh record a
+// Go test or go run binary.
+func allowEphemeralExecPath() bool {
+	return os.Getenv(agents.AllowEphemeralExecPathEnv) == "1"
+}
+
 // newInstallCmd builds `codegraph install` (AGNT-01, D-02): resolves
 // --target/--location, resolves the running binary's absolute path once
 // via os.Executable() (D-04 — the MCP config written points at THIS
@@ -72,7 +79,13 @@ func newInstallCmd() *cobra.Command {
 			"repository; it never blocks a tool call, and the choice is\n" +
 			"remembered until --pretool-nudge=false or uninstall. Codex skips a\n" +
 			"new or changed hook until it is trusted in /hooks. Idempotent —\n" +
-			"re-running install is a no-op when nothing changed.",
+			"re-running install is a no-op when nothing changed.\n\n" +
+			"Install records the absolute path of the binary that runs it. It\n" +
+			"refuses a binary that Go deletes later (a test binary, or one built\n" +
+			"by go run), exits non-zero and writes nothing. Build codegraph and\n" +
+			"run install from the built binary, or set\n" +
+			"CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 to record that path anyway.\n" +
+			"The refresh after codegraph upgrade follows the same rule.",
 		Example: "  codegraph install\n" +
 			"  codegraph install --target all --location global\n" +
 			"  codegraph install --target claude,cursor\n" +
@@ -107,6 +120,12 @@ func newInstallCmd() *cobra.Command {
 			execPath, err := os.Executable()
 			if err != nil {
 				return fmt.Errorf("codegraph install: resolve running binary path: %w", err)
+			}
+			// Validated before the picker or any target runs, so a refused
+			// path prints one line instead of one per agent.
+			opts := agents.InstallOptions{AutoAllow: autoAllow, ExecPath: execPath, AllowEphemeralExecPath: allowEphemeralExecPath()}
+			if err := opts.Validate(); err != nil {
+				return errors.New("codegraph install: " + sanitizePathForDisplay(err.Error()))
 			}
 
 			var targets []agents.AgentTarget
@@ -154,7 +173,7 @@ func newInstallCmd() *cobra.Command {
 					fmt.Fprintln(cmd.ErrOrStderr(), "note: --pretool-nudge only configures Claude Code and Codex CLI, neither of which is among the selected agents; nothing was changed for them")
 				}
 			}
-			opts := agents.InstallOptions{AutoAllow: autoAllow, ExecPath: execPath, PreToolNudge: nudge}
+			opts.PreToolNudge = nudge
 			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Install(loc, opts)
 			}, installStatus)

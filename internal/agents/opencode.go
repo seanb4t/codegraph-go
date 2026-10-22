@@ -296,6 +296,10 @@ func (t opencodeTarget) Detect(loc Location) DetectionResult {
 
 func (t opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 
 	if configPath, err := opencodeConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode config path: %w", err))

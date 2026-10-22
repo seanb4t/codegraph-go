@@ -116,6 +116,10 @@ func (t geminiTarget) Detect(loc Location) DetectionResult {
 
 func (t geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 
 	if configPath, err := geminiConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))

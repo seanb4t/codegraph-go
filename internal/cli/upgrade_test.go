@@ -260,6 +260,38 @@ func TestRefreshInstalledSkills_OnlyPreviouslyConfiguredLocations(t *testing.T) 
 	})
 }
 
+// TestRefreshInstalledSkills_RefusesEphemeralExecPath: given a Go build
+// path and no override, the refresh rewrites nothing at a configured Claude
+// location and returns an error naming the path. With the override the
+// same refresh records the path, so the unchanged tree is the refusal.
+func TestRefreshInstalledSkills_RefusesEphemeralExecPath(t *testing.T) {
+	home := fakeHome(t)
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude: %v", err)
+	}
+	ephemeral := "/tmp/go-build1/b001/exe/codegraph"
+	before := treeSnapshot(t, home)
+
+	t.Setenv(agents.AllowEphemeralExecPathEnv, "")
+	err := refreshInstalledSkills(ephemeral, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), ephemeral) {
+		t.Fatalf("refreshInstalledSkills error = %v, want one naming %s", err, ephemeral)
+	}
+	if !equalSnapshots(before, treeSnapshot(t, home)) {
+		t.Fatal("a refused refresh changed files under the home")
+	}
+
+	t.Setenv(agents.AllowEphemeralExecPathEnv, "1")
+	if err := refreshInstalledSkills(ephemeral, io.Discard); err != nil {
+		t.Fatalf("refreshInstalledSkills with the override: %v", err)
+	}
+	mcpServers, _ := readJSONMap(t, filepath.Join(home, ".claude.json"))["mcpServers"].(map[string]any)
+	entry, _ := mcpServers["codegraph"].(map[string]any)
+	if entry["command"] != ephemeral {
+		t.Fatalf("override set: codegraph.command = %v, want %s", entry["command"], ephemeral)
+	}
+}
+
 // TestUpgradeCommand_RefreshFailureIsWarningNotError asserts D-07: when the
 // swap succeeds but the refresh seam fails, upgrade still returns nil (the
 // swap genuinely worked) and prints a warning naming `codegraph install` as
