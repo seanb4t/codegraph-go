@@ -312,6 +312,34 @@ func TestRegistryListLeavesForeignFile(t *testing.T) {
 	assertPresent(t, filepath.Join(dir, "notes.txt"), true)
 }
 
+// TestRegistryListLeavesDirectories: a directory named like a record is
+// neither listed nor removed by a listing that lists the live record beside
+// it, whether or not its name is a pid.
+func TestRegistryListLeavesDirectories(t *testing.T) {
+	dir := withRegistryDir(t)
+	dirs := []string{"not-a-pid.json", fmt.Sprintf("%d.json", deadPID(t))}
+	for _, name := range dirs {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+	}
+	live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/live/repo"}
+	if err := Register(live); err != nil {
+		t.Fatalf("Register live: %v", err)
+	}
+
+	got, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0] != live {
+		t.Fatalf("List: got %+v, want exactly the live record %+v", got, live)
+	}
+	for _, name := range dirs {
+		assertPresent(t, filepath.Join(dir, name), true)
+	}
+}
+
 // TestRegistryListMissingDir is the DMON-04 empty edge: a registry dir that
 // has never been created is not an error — List returns (nil, nil).
 func TestRegistryListMissingDir(t *testing.T) {
