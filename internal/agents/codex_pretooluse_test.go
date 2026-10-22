@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -61,6 +62,56 @@ func TestCodexHooksFragmentShape(t *testing.T) {
 	}
 	if handler["timeout"] != float64(5) {
 		t.Errorf("handler timeout = %#v, want 5", handler["timeout"])
+	}
+}
+
+// TestCodexFragmentDescriptionIsNotWritten: the embedded fragment carries
+// a top-level description, and a local and a global install write a
+// hooks.json that holds only codegraph's one PreToolUse group, without it.
+func TestCodexFragmentDescriptionIsNotWritten(t *testing.T) {
+	data, err := claudeassets.CodexHooksFragment()
+	if err != nil {
+		t.Fatalf("CodexHooksFragment: %v", err)
+	}
+	var fragment map[string]any
+	if err := json.Unmarshal(data, &fragment); err != nil {
+		t.Fatalf("decode fragment: %v", err)
+	}
+	if d, _ := fragment["description"].(string); d == "" {
+		t.Fatalf("embedded fragment has no top-level description:\n%s", data)
+	}
+
+	for _, loc := range []Location{LocationLocal, LocationGlobal} {
+		t.Run(string(loc), func(t *testing.T) {
+			fakeHome(t)
+			t.Chdir(t.TempDir())
+
+			res := codexTarget{}.Install(loc, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			if len(res.Errors) != 0 {
+				t.Fatalf("Install errors: %v", res.Errors)
+			}
+			hooksPath, err := codexHooksJSONPath(loc)
+			if err != nil {
+				t.Fatalf("codexHooksJSONPath(%s): %v", loc, err)
+			}
+			ownCommand, err := codexPreToolHookCommand(loc)
+			if err != nil {
+				t.Fatalf("codexPreToolHookCommand(%s): %v", loc, err)
+			}
+
+			got := readJSONHooksFile(t, hooksPath)
+			if _, ok := got["description"]; ok {
+				t.Fatalf("installed %s carries the fragment's description:\n%s", hooksPath, readFile(t, hooksPath))
+			}
+			want := map[string]any{"hooks": map[string]any{"PreToolUse": []any{
+				map[string]any{"matcher": "^Bash$", "hooks": []any{
+					map[string]any{"type": "command", "command": ownCommand, "timeout": float64(5)},
+				}},
+			}}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("installed %s = %#v, want %#v", hooksPath, got, want)
+			}
+		})
 	}
 }
 

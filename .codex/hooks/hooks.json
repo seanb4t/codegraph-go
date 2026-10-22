@@ -1,4 +1,5 @@
 {
+  "description": "codegraph's embedded Codex PreToolUse fragment. `codegraph install -t codex --pretool-nudge` rewrites its command into <repo>/.codex/hooks.json or ~/.codex/hooks.json, next to a rendered codegraph-pretooluse.sh. Codex does not read hooks from .codex/hooks/.",
   "hooks": {
     "PreToolUse": [
       {

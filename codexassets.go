@@ -1,6 +1,8 @@
 // Package claudeassets (this file): Codex CLI's own embedded assets
-// (Phase 7, CODEX-05) — the hand-authored .codex/hooks/ package this
-// repository dogfoods and every install target's copy is rendered from.
+// (Phase 7, CODEX-05) — the hand-authored .codex/hooks/ templates every
+// install target's copy is rendered from. Codex reads hooks only from
+// <repo>/.codex/hooks.json and ~/.codex/hooks.json, so nothing under
+// .codex/hooks/ is a live hook for this repository.
 // This mirrors claudeassets.go's Claude Code assets file above; see that
 // file's doc comment for why this MUST live at the repository root, not
 // under internal/ — the same golang/go#46056 sibling-of-root embed rule

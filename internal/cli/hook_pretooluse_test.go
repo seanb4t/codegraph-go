@@ -431,6 +431,20 @@ func hookWorktree(t *testing.T, indexed bool) string {
 	return wt
 }
 
+// TestHookPreToolUseCodex_LinkedWorktreeFires: with git on the PATH the
+// hook inherits from the Codex session, the Codex hook finds the indexed
+// main checkout of a linked worktree and gives the nudge.
+func TestHookPreToolUseCodex_LinkedWorktreeFires(t *testing.T) {
+	isolateHookEnv(t)
+	wt := hookWorktree(t, true)
+
+	stdout, _, err := execCmdWithInput(codexBashEvent("s-wt-fires", wt), "hook", "pretooluse", "--harness", "codex")
+	assertHookContract(t, stdout, err)
+	if stdout != pinnedPreToolUseFire {
+		t.Fatalf("stdout = %q, want the pinned fire line", stdout)
+	}
+}
+
 // TestHookPreToolUseCodex_LinkedWorktreeWithoutGitIsSilent: with no git
 // on PATH the main checkout cannot be found, so the Codex hook stays
 // silent in a linked worktree. The same worktree fires once PATH is back,
