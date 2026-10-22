@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -89,8 +91,8 @@ func captureStopSignal(t *testing.T) *[]int {
 
 // TestStopAll is the plan's primary acceptance gate for Task 2: StopAll
 // signals only a live, corroborated record — a stale one is never passed
-// to stopSignal (the daemon-stop safety invariant, T-07-04-01) — targets
-// are de-duplicated by pid, and an empty registry is a clean no-op.
+// to stopSignal (the daemon-stop safety invariant, T-07-04-01) — and an
+// empty registry is a clean no-op.
 func TestStopAll(t *testing.T) {
 	t.Run("signals only the live record, skips the stale one", func(t *testing.T) {
 		dir := withRegistryDir(t)
@@ -120,6 +122,34 @@ func TestStopAll(t *testing.T) {
 		}
 	})
 
+	t.Run("never signals a pid outside the range of a process id", func(t *testing.T) {
+		dir := withRegistryDir(t)
+		called := captureStopSignal(t)
+
+		live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/live/repo"}
+		if err := Register(live); err != nil {
+			t.Fatalf("Register live: %v", err)
+		}
+		for _, pid := range []int{4294967295, 4294967296, -syscall.Getpgrp()} {
+			data, err := json.Marshal(Record{PID: pid, StartedAt: time.Now().UTC(), RepoRoot: "/out/of/range"})
+			if err != nil {
+				t.Fatalf("marshal record: %v", err)
+			}
+			writeRawRecord(t, dir, fmt.Sprintf("%d.json", pid), data)
+		}
+
+		got, err := StopAll()
+		if err != nil {
+			t.Fatalf("StopAll: %v", err)
+		}
+		if len(got) != 1 || got[0] != live {
+			t.Fatalf("StopAll: got %+v, want exactly the live record %+v", got, live)
+		}
+		if len(*called) != 1 || (*called)[0] != live.PID {
+			t.Fatalf("StopAll: stopSignal calls = %v, want exactly [%d]", *called, live.PID)
+		}
+	})
+
 	t.Run("empty registry is a clean no-op", func(t *testing.T) {
 		withRegistryDir(t)
 		captureStopSignal(t)
@@ -130,7 +160,9 @@ func TestStopAll(t *testing.T) {
 		}
 	})
 
-	t.Run("de-duplicates targets by pid", func(t *testing.T) {
+	// A second file carrying the same pid cannot be named <pid>.json, so List
+	// never lists it and StopAll targets the pid once.
+	t.Run("signals a pid once when a second file names it", func(t *testing.T) {
 		dir := withRegistryDir(t)
 		called := captureStopSignal(t)
 
@@ -139,19 +171,20 @@ func TestStopAll(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal live record: %v", err)
 		}
-		writeRawRecord(t, dir, "dup-a.json", data)
+		writeRawRecord(t, dir, fmt.Sprintf("%d.json", live.PID), data)
 		writeRawRecord(t, dir, "dup-b.json", data)
 
 		got, err := StopAll()
 		if err != nil {
 			t.Fatalf("StopAll: %v", err)
 		}
-		if len(got) != 1 {
-			t.Fatalf("StopAll: got %d records, want exactly 1 (de-duplicated by pid): %+v", len(got), got)
+		if len(got) != 1 || got[0] != live {
+			t.Fatalf("StopAll: got %+v, want exactly the live record %+v", got, live)
 		}
 		if len(*called) != 1 {
-			t.Fatalf("StopAll: stopSignal called %d times, want exactly 1 (de-duplicated by pid): %v", len(*called), *called)
+			t.Fatalf("StopAll: stopSignal called %d times, want exactly 1: %v", len(*called), *called)
 		}
+		assertPresent(t, filepath.Join(dir, "dup-b.json"), false)
 	})
 }
 

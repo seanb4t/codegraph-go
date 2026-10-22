@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -30,14 +31,11 @@ const lockFileName = "daemon.lock"
 var ErrLockLive = errors.New("daemon: lock is held by a live process")
 
 // lockInfo is the lockfile's JSON payload: pid + start timestamp
-// (RESEARCH Pattern 6). StartedAt corroborates pid liveness to reduce the
-// residual PID-reuse false-negative risk in containers (T-04-07-02, A3,
-// WR-02): isStale cross-checks a live pid's OS-reported actual start time
-// (processStartTime — /proc/<pid>/stat on Linux; unavailable elsewhere)
-// against StartedAt, so a pid recycled by an unrelated process after the
-// original daemon crashed is caught even though Signal(0) alone reports it
-// as live. Falls back to liveness-only wherever the OS corroboration data
-// isn't available.
+// (RESEARCH Pattern 6). isStale corroborates a live pid against StartedAt
+// (T-04-07-02, WR-02), so a pid the OS recycled for an unrelated process
+// after the original daemon died is caught where the OS reports start times
+// (see isStale), even though Signal(0) reports it live. StartedAt is what
+// selfStartedAt returns.
 type lockInfo struct {
 	PID       int       `json:"pid"`
 	StartedAt time.Time `json:"startedAt"`
@@ -65,25 +63,17 @@ func readLock(codegraphDir string) (info lockInfo, ok bool, err error) {
 	return info, true, nil
 }
 
-// isStale reports whether info's owning process is dead — or, when OS
-// corroboration data is available, whether a live pid appears to have been
-// reused by an unrelated process since the lockfile was written (WR-02).
-// isProcessLive alone cannot distinguish "the original daemon is still
-// running" from "the original daemon crashed and its pid was recycled by
-// the OS for a different process" — both look identical to Signal(0). On
-// platforms where processStartTime can read the OS's own record of when
-// pid actually started (Linux today, via /proc), a mismatch against the
-// StartedAt this daemon itself recorded at acquire time is a strong
-// PID-reuse signal and is treated as stale despite passing the liveness
-// check. Corroboration is skipped (never a false-positive-stale) whenever
-// the data is unavailable — a different platform, missing /proc access, or
-// any parse failure — falling back to the liveness-only check documented
-// on lockInfo.
+// isStale reports whether info's owning process is dead, or is alive but
+// started more than procStartTimeSlack after info.StartedAt, which isStale
+// treats as the OS having recycled the pid (WR-02); Signal(0) alone cannot
+// tell those apart. Where processStartTime cannot read the start time (a
+// platform other than Linux and macOS, or any read failure), liveness alone
+// decides: "can't corroborate" is never itself a staleness signal.
 func isStale(info lockInfo) bool {
 	if !isProcessLive(info.PID) {
 		return true
 	}
-	if actualStart, ok := processStartTime(info.PID); ok {
+	if actualStart, ok := startTimeOf(info.PID); ok {
 		if !startTimesCorroborate(info.StartedAt, actualStart) {
 			return true
 		}
@@ -91,67 +81,53 @@ func isStale(info lockInfo) bool {
 	return false
 }
 
-// procStartTimeSlack is the tolerance for comparing info.StartedAt against
-// the OS's derived process-start wall-clock time (itself computed from a
-// boot-relative tick count plus a whole-second boot time) — generous enough
-// to absorb second-level rounding and scheduling jitter between the two
-// clock sources without masking a genuine PID-reuse.
-//
-// Both sides of that comparison derive from processStartTime for the same pid
-// (selfStartedAt at write time, isStale at read time), so for a record still
-// owned by the process that wrote it the delta is zero and the truncation
-// inside that derivation cancels out. The slack's real job is the PID-reuse
-// case, where the recorded value is the ORIGINAL process's start time and the
-// actual is the RECYCLED process's — separated by however long it took the
-// original to die and the OS to come back around to that pid, far larger than
-// this window.
+// startTimeOf is processStartTime indirected behind a package-level func var,
+// the same test-seam convention as stopSignal, so tests can make start times
+// unavailable on a platform that reports them.
+var startTimeOf = processStartTime
+
+// procStartTimeSlack is how much later than the recorded StartedAt a live
+// process may have started and still corroborate the record. It absorbs the
+// whole-second rounding of Linux start times. A pid recycled within this
+// slack of the original record's StartedAt is not detected.
 const procStartTimeSlack = 5 * time.Second
 
-// startTimesCorroborate reports whether recorded and actual plausibly refer
-// to the same process instance, within procStartTimeSlack.
+// startTimesCorroborate reports whether a process that started at actual can
+// own a record stamped recorded: it started no more than procStartTimeSlack
+// after recorded. A recorded time later than actual MUST corroborate, by any
+// amount, or a live daemon whose lock carries a wall-clock stamp loses it to
+// a second writer (INDX-05).
 func startTimesCorroborate(recorded, actual time.Time) bool {
-	delta := recorded.Sub(actual)
-	if delta < 0 {
-		delta = -delta
-	}
-	return delta <= procStartTimeSlack
+	return actual.Sub(recorded) <= procStartTimeSlack
 }
 
-// selfStartedAt returns the StartedAt this process must record in any
-// lockfile or registry record naming its own pid: its actual start time as
-// the OS reports it, which is exactly the value isStale later corroborates
-// that record against.
-//
-// time.Now() is NOT interchangeable here, and using it was a real defect.
-// startTimesCorroborate compares the recorded value against the OS's record
-// of when the pid actually started, so time.Now() encodes "when we got around
-// to taking the lock" rather than "when this process began". Those diverge by
-// the whole daemon startup path — flag parsing, config load, indexer warm-up —
-// and once the gap exceeds procStartTimeSlack the process's own lock or record
-// fails its own staleness check the instant it is written: the next acquirer
-// reads it, correctly concludes "stale", removes it, and takes the lock while
-// the first holder is still writing, defeating the single-writer invariant
-// (INDX-05 / T-04-07-01). Registry records fail the same way through List()'s
-// self-heal pruning, so `daemon stop` reports nothing to stop while a daemon
-// is still running.
-//
-// Falls back to time.Now().UTC() wherever the OS data is unavailable (every
-// non-Linux target today — procstart_other.go). That is exactly the previous
-// behaviour and is harmless there, because isStale skips corroboration on that
-// same condition and never reaches the comparison.
+// selfStartedAt returns the StartedAt this process records in any lockfile or
+// registry record naming its own pid: its start time as the OS reports it, the
+// same value isStale later reads for that pid. Where the OS reports no start
+// time it returns time.Now().UTC(), which is later than the start and so
+// corroborates.
 func selfStartedAt() time.Time {
-	if actual, ok := processStartTime(os.Getpid()); ok {
+	if actual, ok := startTimeOf(os.Getpid()); ok {
 		return actual
 	}
 	return time.Now().UTC()
 }
 
+// validPID reports whether pid is in the range of a process id. kill(2) takes
+// a 32-bit pid_t and truncates a wider value, so 4294967295 would signal every
+// process the user owns (pid -1) and 4294967296 the caller's process group
+// (pid 0).
+func validPID(pid int) bool {
+	return pid > 0 && pid <= math.MaxInt32
+}
+
 // isProcessLive checks pid liveness via os.FindProcess + Signal(0)
-// (RESEARCH Pattern 6, POSIX). Isolated in its own function — v1 targets
-// POSIX only; a future Windows build-tag variant (an OpenProcess-based
-// check) replaces just this function, not the surrounding acquire/Unlock
-// logic (RESEARCH Environment Availability).
+// (RESEARCH Pattern 6, POSIX). A pid validPID rejects is never live and is
+// never signaled.
 func isProcessLive(pid int) bool {
+	if !validPID(pid) {
+		return false
+	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		// No such process — definitely stale (RESEARCH Pattern 6).

@@ -11,6 +11,7 @@ Issue: #146
 - Process start times are read on macOS as well as Linux, so a live pid is corroborated against the record's `startedAt` on both platforms, for the registry and for the `.codegraph/daemon.lock` lockfile alike. Records and locks written by this binary on macOS stamp the OS start time, as they already do on Linux.
 - The corroboration rule becomes one-sided: a record is stale when the live process started later than the recorded time plus the slack. A recorded time that is later than the process start is kept. A recycled pid always starts after the original's record was written, so nothing real is lost, and the records and locks that v0.15.0 wrote on macOS with the wall clock at register time stay valid, so a new binary never clears a live older daemon's lock.
 - Listing the registry removes a `.json` file whose name is not `<pid>.json`, and a `<pid>.json` whose content does not decode or whose `pid` field differs from its name once no process holds that pid; while the pid is alive the file is skipped, not listed, so a listing can never delete a record a daemon is writing under its own pid. Files without the `.json` suffix are left alone.
+- A pid outside the range of a process id (1 through 2147483647) is never treated as alive or signaled, for the registry and the lockfile alike. `kill(2)` would otherwise truncate it, so a record named `4294967295.json` would reach every process the user owns.
 - `codegraph daemon` and `codegraph daemon stop` then see only daemons that are actually running. Their output shapes do not change.
 
 ## Capabilities
@@ -33,5 +34,5 @@ None.
 ## Impact
 
 - `internal/daemon`: a new `procstart_darwin.go` using `golang.org/x/sys/unix.SysctlKinfoProc` (the module is already an indirect dependency and becomes direct), `procstart_other.go` narrowed to `!linux && !darwin`, `startTimesCorroborate` in `lock.go` and `List` in `registry.go`.
-- Tests: the corroboration cases in `lock_test.go`, `TestRegistryListPrunesStale` and new malformed-file cases in `registry_test.go`. `requireAgedProcess` and its wall-clock wait are removed; the lock-lifetime tests assert the written start time equals the OS-reported one and run on macOS too.
+- Tests: the corroboration cases in `lock_test.go`, `TestRegistryListPrunesStale` and new malformed-file cases in `registry_test.go`. `requireAgedProcess` and its wall-clock wait are removed; the lock-lifetime tests assert the written start time equals the OS-reported one and run on macOS too. `TestProcessStartTime` checks the start-time reader on Linux and macOS.
 - Changelog fragment, kind Fixes.

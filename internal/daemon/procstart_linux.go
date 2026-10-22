@@ -24,9 +24,8 @@ const procStatClockTicks = 100
 // field 22) plus /proc/stat's btime line (system boot time, seconds since
 // the Unix epoch) — the standard Linux corroboration source for WR-02's
 // PID-reuse mitigation. ok is false if any read/parse step fails (missing
-// /proc, permission denied, unexpected format): the caller (isStale) falls
-// back to liveness-only staleness in that case, never treating "can't
-// corroborate" as itself a staleness signal.
+// /proc, permission denied, unexpected format); isStale then decides on
+// liveness alone.
 func processStartTime(pid int) (time.Time, bool) {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {

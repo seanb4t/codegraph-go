@@ -112,9 +112,10 @@ func TestNewPopulatesOpts(t *testing.T) {
 }
 
 // waitForRegistryRecord polls List() until a record for pid with the given
-// repoRoot appears, or the deadline elapses (D-06 — Register happens right
-// after acquire, so this mirrors waitForLock's polling shape).
-func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) {
+// repoRoot appears and returns it, or fails the test once the deadline
+// elapses (D-06 — Register happens right after acquire, so this mirrors
+// waitForLock's polling shape).
+func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) Record {
 	t.Helper()
 	deadline := time.Now().Add(testBudget(5 * time.Second))
 	for time.Now().Before(deadline) {
@@ -124,12 +125,13 @@ func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) {
 		}
 		for _, r := range recs {
 			if r.PID == pid && r.RepoRoot == repoRoot {
-				return
+				return r
 			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for a registry record with pid=%d repoRoot=%s", pid, repoRoot)
+	return Record{}
 }
 
 // assertNoRegistryRecord fails the test if List() still reports a record for
@@ -180,24 +182,12 @@ func TestRunRegistersRecordAfterAcquire(t *testing.T) {
 	}
 }
 
-// TestRunRegistersRecordThatSurvivesPruningOnAgedProcess is the deterministic
-// counterpart of the D-06 gate above, covering Run()'s Register() call the way
-// the lockfile guard in lock_test.go covers acquire()'s.
-//
-// Run stamps the registry record it writes for itself, and List() re-derives
-// staleness on every read to self-heal records left by crashed daemons.
-// Stamping time.Now() rather than this process's actual start time makes the
-// record fail that check the moment the daemon is older than
-// procStartTimeSlack, so a LIVE daemon's own record is pruned out from under
-// it — `codegraph daemon stop` then reports nothing to stop while the daemon
-// keeps running and keeps holding the writer.
-//
-// TestRunRegistersRecordAfterAcquire exercises the same path but only catches
-// this once the test binary happens to be old enough, which is what let the
-// defect reach CI as an intermittent failure. Forcing the aged condition makes
-// it fail every time instead of some of the time.
-func TestRunRegistersRecordThatSurvivesPruningOnAgedProcess(t *testing.T) {
-	requireAgedProcess(t)
+// TestRunRegistersRecordThatSurvivesPruning covers Run()'s Register() call the
+// way TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck covers acquire()'s:
+// the record Run writes for itself carries the OS-reported start time exactly
+// and survives List()'s self-heal, which re-derives staleness on every read.
+func TestRunRegistersRecordThatSurvivesPruning(t *testing.T) {
+	actualStart := requireProcessStartTime(t)
 
 	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
 	withRegistryDir(t)
@@ -215,7 +205,10 @@ func TestRunRegistersRecordThatSurvivesPruningOnAgedProcess(t *testing.T) {
 	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
-	waitForRegistryRecord(t, os.Getpid(), root)
+	rec := waitForRegistryRecord(t, os.Getpid(), root)
+	if !rec.StartedAt.Equal(actualStart) {
+		t.Fatalf("Run registered StartedAt=%v, want the OS-reported start %v exactly", rec.StartedAt, actualStart)
+	}
 
 	cancel()
 	select {
