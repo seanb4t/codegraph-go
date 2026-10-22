@@ -183,6 +183,10 @@ func (t codexTarget) Detect(loc Location) DetectionResult {
 // short-circuits a later one.
 func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 	caps := t.Capabilities()
 
 	if configPath, err := caps.MCPConfig(loc); err != nil {

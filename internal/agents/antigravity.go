@@ -174,6 +174,10 @@ func (t antigravityTarget) Detect(loc Location) DetectionResult {
 
 func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 	if loc != LocationGlobal {
 		return result
 	}

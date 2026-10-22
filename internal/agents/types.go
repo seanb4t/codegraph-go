@@ -11,6 +11,12 @@
 // the graph.
 package agents
 
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+)
+
 // Location is the install/uninstall scope: a per-user (global) config or a
 // per-project (local) config. Not every agent supports both — Codex,
 // Antigravity, and Hermes are global-only (D-03, D-05).
@@ -129,6 +135,46 @@ type InstallOptions struct {
 	// manifest step could not run (a foreign/unmanifested skill directory,
 	// D-14); PreToolNudgeOff removes them and drops the record (D-10).
 	PreToolNudge PreToolNudgeMode
+	// AllowEphemeralExecPath, when true, lets Validate accept an ExecPath
+	// that ephemeralExecPath reports as a Go test or go run binary. The CLI
+	// sets it from AllowEphemeralExecPathEnv; this package never reads the
+	// environment.
+	AllowEphemeralExecPath bool
+}
+
+// AllowEphemeralExecPathEnv names the environment variable that, set to
+// "1", makes the CLI set InstallOptions.AllowEphemeralExecPath.
+const AllowEphemeralExecPathEnv = "CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH"
+
+// Validate returns an error naming ExecPath when it is ephemeral and
+// AllowEphemeralExecPath is false. Every target's Install calls it first
+// and writes nothing when it fails.
+func (o InstallOptions) Validate() error {
+	if o.AllowEphemeralExecPath || !ephemeralExecPath(o.ExecPath) {
+		return nil
+	}
+	return fmt.Errorf("refusing to record %s as the codegraph command: it is a Go test or go run binary that Go deletes; build codegraph and run install from the built binary, or set %s=1 to record it anyway", o.ExecPath, AllowEphemeralExecPathEnv)
+}
+
+// ephemeralExecPath reports whether path is a binary Go removes on its
+// own: a base name ending in .test (a test binary), a path element that is
+// go-build plus digits (a Go work directory), or a path element of 64
+// lowercase hex digits plus -d (the build-cache directory of a binary go
+// run cached). It only inspects the path's shape.
+func ephemeralExecPath(path string) bool {
+	clean := filepath.Clean(path)
+	if strings.HasSuffix(filepath.Base(clean), ".test") {
+		return true
+	}
+	for elem := range strings.SplitSeq(clean, string(filepath.Separator)) {
+		if digits, ok := strings.CutPrefix(elem, "go-build"); ok && digits != "" && strings.Trim(digits, "0123456789") == "" {
+			return true
+		}
+		if hash, ok := strings.CutSuffix(elem, "-d"); ok && len(hash) == 64 && strings.Trim(hash, "0123456789abcdef") == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // PreToolNudgeMode is InstallOptions.PreToolNudge's tri-state: an install

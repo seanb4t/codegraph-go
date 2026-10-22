@@ -441,6 +441,10 @@ func (t claudeTarget) Detect(loc Location) DetectionResult {
 
 func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 
 	// D-10: whether the opt-in is already recorded is read before any
 	// write, so this call's own manifest update cannot decide what Keep

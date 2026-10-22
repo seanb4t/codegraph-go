@@ -90,9 +90,10 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
 		}
 		for _, t := range targets {
 			result := t.Install(loc, agents.InstallOptions{
-				ExecPath:     execPath,
-				AutoAllow:    false,
-				PreToolNudge: agents.PreToolNudgeKeep,
+				ExecPath:               execPath,
+				AutoAllow:              false,
+				PreToolNudge:           agents.PreToolNudgeKeep,
+				AllowEphemeralExecPath: allowEphemeralExecPath(),
 			})
 			// T-04-24: paths and notes are filesystem-derived, so they are
 			// sanitized here exactly as printAgentResults does.

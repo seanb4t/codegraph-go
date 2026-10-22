@@ -358,6 +358,10 @@ func (t hermesTarget) Detect(loc Location) DetectionResult {
 
 func (hermesTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 	if loc != LocationGlobal {
 		return result
 	}

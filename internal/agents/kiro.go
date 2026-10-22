@@ -115,6 +115,10 @@ func (t kiroTarget) Detect(loc Location) DetectionResult {
 
 func (t kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
+	if err := opts.Validate(); err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
 
 	if legacy, err := kiroLegacySteeringPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro legacy steering path: %w", err))
