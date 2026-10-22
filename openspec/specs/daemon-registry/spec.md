@@ -1,19 +1,23 @@
-# Spec Delta
+# daemon-registry Specification
 
 ## Purpose
-
 Which records in the per-user daemon registry count as running daemons, how a live pid is checked against its record, and what happens to records that are stale or malformed.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: A record is live only when its process is alive (D-05)
 
-Listing the registry SHALL check every record's pid. A record whose process is not alive SHALL be removed from the registry on that same call and SHALL NOT be listed. A listing SHALL return only live records.
+Listing the registry SHALL check every record's pid. A record whose process is not alive SHALL be removed from the registry on that same call and SHALL NOT be listed. A listing SHALL return only live records. A pid outside 1 through 2147483647 SHALL NOT be treated as alive and SHALL NOT be signaled.
 
 #### Scenario: The process is gone
 
 - **WHEN** a record names a pid that no process holds
 - **THEN** the record file is removed and `codegraph daemon` does not list it
+
+#### Scenario: A pid outside the range of a process id
+
+- **WHEN** the registry holds `4294967295.json` whose `pid` field is 4294967295
+- **THEN** a listing removes it, does not list it, and `codegraph daemon stop --all` sends it no signal
 
 #### Scenario: The process is alive and corroborated
 

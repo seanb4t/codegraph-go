@@ -116,8 +116,9 @@ func writeRawRecord(t *testing.T, dir, name string, data []byte) {
 
 // TestRegistryListPrunesStale is the plan's primary acceptance gate for
 // Task 2 (D-05): List() self-heals by pruning a dead-pid record from disk
-// and excluding it from the result, keeps a live-pid record, and skips a
-// malformed record without erroring.
+// and excluding it from the result, keeps a live-pid record, and removes a
+// *.json file whose name is not a pid without erroring. A record whose pid is
+// alive but was recycled since the record was written is pruned the same way.
 func TestRegistryListPrunesStale(t *testing.T) {
 	dir := withRegistryDir(t)
 
@@ -147,6 +148,168 @@ func TestRegistryListPrunesStale(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, deadName)); !os.IsNotExist(err) {
 		t.Fatalf("expected stale record file removed by List, stat err=%v", err)
 	}
+	assertPresent(t, filepath.Join(dir, "not-a-pid.json"), false)
+
+	t.Run("live pid recycled since the record was written", func(t *testing.T) {
+		actual := requireProcessStartTime(t)
+		dir := withRegistryDir(t)
+		self := os.Getpid()
+		name := fmt.Sprintf("%d.json", self)
+		data, err := json.Marshal(Record{PID: self, StartedAt: actual.Add(-time.Hour), RepoRoot: "/recycled/repo"})
+		if err != nil {
+			t.Fatalf("marshal recycled record: %v", err)
+		}
+		writeRawRecord(t, dir, name, data)
+
+		assertListsNothing(t)
+		assertPresent(t, filepath.Join(dir, name), false)
+	})
+}
+
+// assertListsNothing fails the test unless List returns no records and no
+// error.
+func assertListsNothing(t *testing.T) {
+	t.Helper()
+	got, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("List: got %+v, want no records", got)
+	}
+}
+
+// assertPresent fails the test unless path exists when want is true, or is
+// absent when want is false.
+func assertPresent(t *testing.T, path string, want bool) {
+	t.Helper()
+	_, err := os.Stat(path)
+	switch {
+	case want && err != nil:
+		t.Fatalf("%s: want it left in place, stat err=%v", filepath.Base(path), err)
+	case !want && !os.IsNotExist(err):
+		t.Fatalf("%s: want it removed, stat err=%v", filepath.Base(path), err)
+	}
+}
+
+// TestRegistryListRemovesNonPidName: a *.json file whose name is not the
+// canonical <pid>.json of a process id is removed and never listed, even when
+// its body is a record for a live process.
+func TestRegistryListRemovesNonPidName(t *testing.T) {
+	self := os.Getpid()
+	body, err := json.Marshal(Record{PID: self, StartedAt: startedAtFor(self), RepoRoot: "/live/repo"})
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	for _, name := range []string{"d28d43d85835d89e.json", "0.json", "-1.json", "0" + fmt.Sprint(self) + ".json"} {
+		t.Run(name, func(t *testing.T) {
+			dir := withRegistryDir(t)
+			writeRawRecord(t, dir, name, body)
+
+			assertListsNothing(t)
+			assertPresent(t, filepath.Join(dir, name), false)
+		})
+	}
+}
+
+// TestRegistryListRemovesUndecodableRecord: a <pid>.json that is not a
+// record is removed once no process holds the pid.
+func TestRegistryListRemovesUndecodableRecord(t *testing.T) {
+	dir := withRegistryDir(t)
+	name := fmt.Sprintf("%d.json", deadPID(t))
+	writeRawRecord(t, dir, name, []byte("not valid json"))
+
+	assertListsNothing(t)
+	assertPresent(t, filepath.Join(dir, name), false)
+}
+
+// TestRegistryListRemovesPidMismatch: a <pid>.json whose pid field names
+// another process is removed once no process holds the pid in its name, even
+// though the pid in its body is live and corroborated.
+func TestRegistryListRemovesPidMismatch(t *testing.T) {
+	dir := withRegistryDir(t)
+	self := os.Getpid()
+	body, err := json.Marshal(Record{PID: self, StartedAt: startedAtFor(self), RepoRoot: "/live/repo"})
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	name := fmt.Sprintf("%d.json", deadPID(t))
+	writeRawRecord(t, dir, name, body)
+
+	assertListsNothing(t)
+	assertPresent(t, filepath.Join(dir, name), false)
+}
+
+// TestRegistryListRemovesOutOfRangePid: a record for a pid outside the range
+// of a process id is removed and never listed, so it can never become a
+// signal target.
+func TestRegistryListRemovesOutOfRangePid(t *testing.T) {
+	for _, pid := range []int{4294967295, 4294967296} {
+		t.Run(fmt.Sprint(pid), func(t *testing.T) {
+			dir := withRegistryDir(t)
+			name := fmt.Sprintf("%d.json", pid)
+			body, err := json.Marshal(Record{PID: pid, StartedAt: time.Now().UTC(), RepoRoot: "/out/of/range"})
+			if err != nil {
+				t.Fatalf("marshal record: %v", err)
+			}
+			writeRawRecord(t, dir, name, body)
+
+			assertListsNothing(t)
+			assertPresent(t, filepath.Join(dir, name), false)
+		})
+	}
+}
+
+// TestRegistryListKeepsMalformedUnderLivePid: a <pid>.json whose pid is alive
+// but whose body does not decode, or names another pid, is not listed and
+// stays on disk for a later listing, while the same listing removes a
+// dead-pid record beside it.
+func TestRegistryListKeepsMalformedUnderLivePid(t *testing.T) {
+	dead := deadPID(t)
+	mismatch, err := json.Marshal(Record{PID: dead, StartedAt: time.Now().UTC(), RepoRoot: "/dead/repo"})
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	deadName := fmt.Sprintf("%d.json", dead)
+	for _, tc := range []struct {
+		name string
+		body []byte
+	}{
+		{"undecodable body", []byte("not valid json")},
+		{"body names another pid", mismatch},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := withRegistryDir(t)
+			name := fmt.Sprintf("%d.json", os.Getpid())
+			writeRawRecord(t, dir, name, tc.body)
+			writeRawRecord(t, dir, deadName, mismatch)
+
+			assertListsNothing(t)
+			assertPresent(t, filepath.Join(dir, name), true)
+			assertPresent(t, filepath.Join(dir, deadName), false)
+		})
+	}
+}
+
+// TestRegistryListLeavesForeignFile: a file without the .json suffix is
+// neither listed nor removed by a listing that lists the live record beside
+// it.
+func TestRegistryListLeavesForeignFile(t *testing.T) {
+	dir := withRegistryDir(t)
+	writeRawRecord(t, dir, "notes.txt", []byte("not a record"))
+	live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/live/repo"}
+	if err := Register(live); err != nil {
+		t.Fatalf("Register live: %v", err)
+	}
+
+	got, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0] != live {
+		t.Fatalf("List: got %+v, want exactly the live record %+v", got, live)
+	}
+	assertPresent(t, filepath.Join(dir, "notes.txt"), true)
 }
 
 // TestRegistryListMissingDir is the DMON-04 empty edge: a registry dir that

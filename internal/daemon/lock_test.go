@@ -3,34 +3,20 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
 
-// startedAtFor returns the StartedAt a lockInfo/Record naming pid must carry
-// to be a physically POSSIBLE fixture — pid's actual start time as the OS
-// reports it, which is exactly what isStale's WR-02 corroboration compares
-// against (startTimesCorroborate, within procStartTimeSlack).
-//
-// Fixtures must NOT use time.Now() for a pid that is already running, above
-// all not for os.Getpid(). Doing so describes a process that started just now
-// under a pid that demonstrably started earlier — the precise signature of the
-// PID reuse isStale exists to catch. It is harmless while the gap is small,
-// so it passes on any platform without OS corroboration (procstart_other.go
-// makes the branch unreachable off Linux) and on a young test binary; on Linux
-// it silently turns every such fixture stale once the binary has been alive
-// past the slack, which is what made TestStopAll/TestStopMatching/TestIsStale
-// and friends fail on CI only, and only sometimes. /proc's start time is
-// derived from a whole-second btime plus an integer tick division, so it reads
-// up to ~2s earlier than reality and the effective window is ~3s of process
-// lifetime, not the nominal 5s.
-//
-// A dead pid has no /proc entry, so this falls back to time.Now() there — the
-// value is irrelevant in that case because isStale's liveness check rejects
-// the record before corroboration is ever consulted.
+// startedAtFor returns the StartedAt a lockInfo/Record fixture naming pid
+// carries: pid's start time as processStartTime reports it, the value the
+// pid's own writer stamps (selfStartedAt). For a dead pid, or where
+// processStartTime is unavailable, it falls back to time.Now(); isStale then
+// decides on liveness alone and never compares the value.
 func startedAtFor(pid int) time.Time {
 	if actual, ok := processStartTime(pid); ok {
 		return actual
@@ -43,7 +29,13 @@ func startedAtFor(pid int) time.Time {
 // daemon process running.
 func writeLock(t *testing.T, dir string, pid int) {
 	t.Helper()
-	data, err := json.Marshal(lockInfo{PID: pid, StartedAt: startedAtFor(pid)})
+	writeLockInfo(t, dir, lockInfo{PID: pid, StartedAt: startedAtFor(pid)})
+}
+
+// writeLockInfo writes info as the lockfile at dir, bypassing acquire.
+func writeLockInfo(t *testing.T, dir string, info lockInfo) {
+	t.Helper()
+	data, err := json.Marshal(info)
 	if err != nil {
 		t.Fatalf("marshal lockInfo: %v", err)
 	}
@@ -170,6 +162,39 @@ func TestIsStale(t *testing.T) {
 	}
 }
 
+// TestIsProcessLive: this process is live; a dead pid and every value outside
+// the range of a process id are not, including this process's negated process
+// group id, which kill(2) would accept.
+func TestIsProcessLive(t *testing.T) {
+	if !isProcessLive(os.Getpid()) {
+		t.Fatalf("isProcessLive(own pid %d) = false, want true", os.Getpid())
+	}
+	for _, pid := range []int{deadPID(t), 0, -1, -syscall.Getpgrp(), math.MaxInt32 + 1, 4294967295, 4294967296} {
+		if isProcessLive(pid) {
+			t.Errorf("isProcessLive(%d) = true, want false", pid)
+		}
+	}
+}
+
+// TestIsStaleWithoutStartTimes: where start times are unavailable, a live pid
+// is not stale whatever its StartedAt says, and a dead pid still is.
+func TestIsStaleWithoutStartTimes(t *testing.T) {
+	prev := startTimeOf
+	startTimeOf = func(int) (time.Time, bool) { return time.Time{}, false }
+	t.Cleanup(func() { startTimeOf = prev })
+
+	now := time.Now().UTC()
+	for _, skew := range []time.Duration{-time.Hour, 0, time.Hour} {
+		if isStale(lockInfo{PID: os.Getpid(), StartedAt: now.Add(skew)}) {
+			t.Errorf("isStale(live pid, StartedAt=now%+v) = true without start times, want false", skew)
+		}
+	}
+	dead := deadPID(t)
+	if !isStale(lockInfo{PID: dead, StartedAt: now}) {
+		t.Fatalf("isStale(dead pid %d) = false without start times, want true", dead)
+	}
+}
+
 // TestAcquireConcurrentRaceOnlyOneWinner is the CR-02 regression: many
 // goroutines racing acquire() against the SAME (initially absent)
 // lockfile path must see exactly one success — the exclusive-create fix
@@ -222,60 +247,34 @@ func TestAcquireConcurrentRaceOnlyOneWinner(t *testing.T) {
 	}
 }
 
-// requireAgedProcess blocks until this test binary is demonstrably OLDER than
-// procStartTimeSlack as measured against the very clock isStale corroborates
-// against (processStartTime), and returns that OS-reported start time. It
-// skips on any platform where that corroboration data is unavailable (every
-// non-Linux target — procstart_other.go), because isStale degrades to
-// liveness-only there and the condition under test cannot arise.
-//
-// This exists so the aged-process regression below fails DETERMINISTICALLY
-// rather than depending on how long the preceding tests happened to take on a
-// given runner — the exact non-determinism that let this bug reach CI as an
-// intermittent "sometimes 9 tests fail, sometimes 2" flake.
-func requireAgedProcess(t *testing.T) time.Time {
+// requireProcessStartTime returns this test binary's start time as
+// processStartTime reports it, the value isStale corroborates a record for
+// os.Getpid() against. It skips where processStartTime reports no start time,
+// because isStale is liveness-only there; TestProcessStartTime fails on Linux
+// and macOS when that happens.
+func requireProcessStartTime(t *testing.T) time.Time {
 	t.Helper()
 	actual, ok := processStartTime(os.Getpid())
 	if !ok {
 		t.Skip("processStartTime unavailable on this platform — isStale is liveness-only, the corroboration branch is unreachable")
 	}
-	const margin = time.Second
-	deadline := time.Now().Add(testBudget(procStartTimeSlack + 2*margin))
-	for time.Since(actual) <= procStartTimeSlack+margin {
-		if time.Now().After(deadline) {
-			t.Fatalf("requireAgedProcess: binary never reached age %v (start=%v)", procStartTimeSlack+margin, actual)
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
 	return actual
 }
 
-// TestSelfRecordSurvivesStalenessOnAgedProcess is the regression guard for the
-// Linux-only daemon flake: a lockfile/registry record naming THIS process must
-// never be classified stale, no matter how long this process has been running.
-//
-// isStale corroborates a live pid's recorded StartedAt against the OS-reported
-// actual process start time (/proc/<pid>/stat) within procStartTimeSlack. A
-// fixture that pairs os.Getpid() with time.Now() therefore describes a
-// physically impossible process — one that started just now under a pid that
-// demonstrably started earlier — and is correctly rejected as a PID-reuse
-// forgery once the gap exceeds the slack. Because /proc's start time is
-// derived from a whole-second btime plus an integer tick division, it reads up
-// to ~2s EARLIER than reality, so the effective window is ~3s of process
-// lifetime, not the nominal 5s.
-func TestSelfRecordSurvivesStalenessOnAgedProcess(t *testing.T) {
-	actual := requireAgedProcess(t)
+// TestSelfRecordSurvivesStaleness: a lockfile or registry record naming this
+// process and stamped by selfStartedAt carries the OS-reported start time
+// exactly and is never classified stale.
+func TestSelfRecordSurvivesStaleness(t *testing.T) {
+	actual := requireProcessStartTime(t)
 
 	self := os.Getpid()
-	if isStale(lockInfo{PID: self, StartedAt: startedAtFor(self)}) {
-		t.Fatalf("isStale reported this live process stale after %v of uptime (OS-reported start %v): a self-referencing fixture must derive StartedAt via startedAtFor, not time.Now()", time.Since(actual).Round(time.Millisecond), actual)
+	if stamped := selfStartedAt(); isStale(lockInfo{PID: self, StartedAt: stamped}) {
+		t.Fatalf("isStale reported this live process stale: recorded StartedAt=%v, OS-reported start %v", stamped, actual)
 	}
 
-	// The same fixture routed through the two engines that consume it — the
-	// registry self-heal (List) and the stop path (stopTargets) — since those
-	// are where the flake actually surfaced, not in isStale directly.
+	// The same stamp routed through the registry self-heal in List.
 	withRegistryDir(t)
-	rec := Record{PID: self, StartedAt: startedAtFor(self), RepoRoot: "/live/repo"}
+	rec := Record{PID: self, StartedAt: selfStartedAt(), RepoRoot: "/live/repo"}
 	if err := Register(rec); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -284,18 +283,20 @@ func TestSelfRecordSurvivesStalenessOnAgedProcess(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 	if len(live) != 1 || live[0] != rec {
-		t.Fatalf("List pruned this live process's own record after %v of uptime: got %+v, want exactly %+v", time.Since(actual).Round(time.Millisecond), live, rec)
+		t.Fatalf("List pruned this live process's own record: got %+v, want exactly %+v", live, rec)
+	}
+	if !live[0].StartedAt.Equal(actual) {
+		t.Fatalf("listed record StartedAt=%v, want the OS-reported start %v exactly", live[0].StartedAt, actual)
 	}
 }
 
-// TestIsStaleStillDetectsPIDReuseOnAgedProcess is the security counterpart of
-// the regression above: whatever the fixtures do, isStale must STILL treat a
-// live pid whose recorded StartedAt is far from the OS-reported start time as
-// stale. This is WR-02 / T-04-07-01's PID-reuse mitigation, and it must pass
-// both before and after the fixture fix — proof the fix narrows the fixtures,
-// not the check.
-func TestIsStaleStillDetectsPIDReuseOnAgedProcess(t *testing.T) {
-	actual := requireAgedProcess(t)
+// TestIsStaleStillDetectsPIDReuse is the security counterpart of
+// TestSelfRecordSurvivesStaleness: isStale treats a live pid whose
+// OS-reported start is more than procStartTimeSlack after the recorded
+// StartedAt as a recycled pid (WR-02 / T-04-07-01), and keeps a record
+// stamped later than the start.
+func TestIsStaleStillDetectsPIDReuse(t *testing.T) {
+	actual := requireProcessStartTime(t)
 
 	for _, tc := range []struct {
 		name  string
@@ -303,10 +304,12 @@ func TestIsStaleStillDetectsPIDReuseOnAgedProcess(t *testing.T) {
 		stale bool
 	}{
 		{"recorded an hour before actual start (pid recycled)", -time.Hour, true},
-		{"recorded an hour after actual start", time.Hour, true},
-		{"recorded just outside the slack window", procStartTimeSlack + time.Second, true},
-		{"recorded exactly at the slack boundary", procStartTimeSlack, false},
+		{"recorded just beyond the slack before actual start", -(procStartTimeSlack + time.Second), true},
+		{"recorded exactly the slack before actual start", -procStartTimeSlack, false},
 		{"recorded exactly at the OS-reported start", 0, false},
+		{"recorded exactly the slack after actual start", procStartTimeSlack, false},
+		{"recorded just beyond the slack after actual start", procStartTimeSlack + time.Second, false},
+		{"recorded an hour after actual start (wall-clock stamp)", time.Hour, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := isStale(lockInfo{PID: os.Getpid(), StartedAt: actual.Add(tc.skew)})
@@ -317,25 +320,11 @@ func TestIsStaleStillDetectsPIDReuseOnAgedProcess(t *testing.T) {
 	}
 }
 
-// TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck guards the product
-// half of the same defect the fixture guard above covers: acquire() must
-// record the start time of the process it names, not the wall-clock instant
-// at which it happened to run.
-//
-// isStale corroborates a live pid's recorded StartedAt against the OS-reported
-// actual process start time. Stamping time.Now() for os.Getpid() therefore
-// writes a lockfile that is already stale the moment it lands, for any process
-// that calls acquire more than procStartTimeSlack after its own start — which
-// is every real daemon, since acquire happens after flag parsing, config load,
-// and an indexer warm-up. The lock then fails to exclude anyone: the next
-// acquirer reads it, correctly concludes "stale", removes it, and takes the
-// lock while the first holder is still writing. That defeats the single-writer
-// invariant (INDX-05 / T-04-07-01) the lockfile exists to enforce.
-//
-// The second acquire() below is the assertion that matters — a self-stale lock
-// is not merely cosmetic bookkeeping, it is a lock that does not lock.
+// TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck: acquire() stamps the
+// lock with the process's OS-reported start time exactly, the lock is not
+// stale, and it keeps a second acquire() out (INDX-05 / T-04-07-01).
 func TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck(t *testing.T) {
-	requireAgedProcess(t)
+	actualStart := requireProcessStartTime(t)
 
 	dir := t.TempDir()
 	if err := acquire(dir); err != nil {
@@ -349,10 +338,11 @@ func TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck(t *testing.T) {
 	if !ok {
 		t.Fatal("readLock: acquire left no lockfile")
 	}
+	if !info.StartedAt.Equal(actualStart) {
+		t.Fatalf("acquire stamped StartedAt=%v, want the OS-reported start %v exactly", info.StartedAt, actualStart)
+	}
 	if isStale(info) {
-		actual, _ := processStartTime(info.PID)
-		t.Fatalf("acquire wrote a lock that is already stale the instant it was written: recorded StartedAt=%v, OS-reported start of pid %d=%v, delta %v exceeds procStartTimeSlack %v — acquire must record the process's actual start time, not time.Now()",
-			info.StartedAt, info.PID, actual, info.StartedAt.Sub(actual).Round(time.Millisecond), procStartTimeSlack)
+		t.Fatalf("acquire wrote a lock that is already stale: recorded StartedAt=%v, OS-reported start of pid %d=%v", info.StartedAt, info.PID, actualStart)
 	}
 
 	if err := acquire(dir); !errors.Is(err, ErrLockLive) {
@@ -360,9 +350,97 @@ func TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck(t *testing.T) {
 	}
 }
 
-// TestStartTimesCorroborate proves the WR-02 slack-window comparison: times
-// within procStartTimeSlack of each other (in either direction) corroborate,
-// times further apart do not.
+// TestAcquireKeepsLockWithWallClockStartedAt: a lock naming a live pid whose
+// StartedAt is later than the process's OS-reported start, as a wall-clock
+// stamp is, belongs to a running daemon. acquire refuses it and leaves the
+// file exactly as it was.
+func TestAcquireKeepsLockWithWallClockStartedAt(t *testing.T) {
+	actual := requireProcessStartTime(t)
+
+	dir := t.TempDir()
+	stamped := actual.Add(time.Hour)
+	writeLockInfo(t, dir, lockInfo{PID: os.Getpid(), StartedAt: stamped})
+
+	if err := acquire(dir); !errors.Is(err, ErrLockLive) {
+		t.Fatalf("acquire over a live lock stamped %v after the process start = %v, want ErrLockLive", time.Hour, err)
+	}
+	info, ok, err := readLock(dir)
+	if err != nil || !ok {
+		t.Fatalf("readLock after refused acquire: ok=%v err=%v, want the original lockfile", ok, err)
+	}
+	if info.PID != os.Getpid() || !info.StartedAt.Equal(stamped) {
+		t.Fatalf("lockfile after refused acquire = %+v, want pid %d StartedAt %v unchanged", info, os.Getpid(), stamped)
+	}
+}
+
+// TestAcquireWithoutStartTimeKeepsItsLock: a lock acquire writes while this
+// process's start time cannot be read still corroborates once it can, so the
+// lock is not stale and a second acquire is refused.
+func TestAcquireWithoutStartTimeKeepsItsLock(t *testing.T) {
+	requireProcessStartTime(t)
+	dir := t.TempDir()
+
+	prev := startTimeOf
+	t.Cleanup(func() { startTimeOf = prev })
+	startTimeOf = func(int) (time.Time, bool) { return time.Time{}, false }
+	err := acquire(dir)
+	startTimeOf = prev
+	if err != nil {
+		t.Fatalf("acquire without a start time: %v", err)
+	}
+
+	info, ok, err := readLock(dir)
+	if err != nil || !ok {
+		t.Fatalf("readLock after acquire: ok=%v err=%v, want a lockfile", ok, err)
+	}
+	if isStale(info) {
+		t.Fatalf("lock stamped StartedAt=%v without a start time reads stale once start times are available", info.StartedAt)
+	}
+	if err := acquire(dir); !errors.Is(err, ErrLockLive) {
+		t.Fatalf("second acquire = %v, want ErrLockLive", err)
+	}
+}
+
+// TestRecycledPidLockIsCleared: a lock naming a live pid whose OS-reported
+// start is an hour after its StartedAt belongs to a recycled pid. acquire
+// replaces it with a lock stamped with this process's start, and Unlock
+// removes it.
+func TestRecycledPidLockIsCleared(t *testing.T) {
+	actual := requireProcessStartTime(t)
+	recycled := lockInfo{PID: os.Getpid(), StartedAt: actual.Add(-time.Hour)}
+
+	t.Run("acquire replaces it", func(t *testing.T) {
+		dir := t.TempDir()
+		writeLockInfo(t, dir, recycled)
+
+		if err := acquire(dir); err != nil {
+			t.Fatalf("acquire over a recycled-pid lock: %v, want nil", err)
+		}
+		info, ok, err := readLock(dir)
+		if err != nil || !ok {
+			t.Fatalf("readLock after acquire: ok=%v err=%v, want a lockfile", ok, err)
+		}
+		if !info.StartedAt.Equal(actual) {
+			t.Fatalf("acquire stamped StartedAt=%v, want the OS-reported start %v", info.StartedAt, actual)
+		}
+	})
+
+	t.Run("Unlock removes it", func(t *testing.T) {
+		dir := t.TempDir()
+		writeLockInfo(t, dir, recycled)
+
+		if _, err := Unlock(dir); err != nil {
+			t.Fatalf("Unlock of a recycled-pid lock: %v, want nil", err)
+		}
+		if _, ok, err := readLock(dir); err != nil || ok {
+			t.Fatalf("readLock after Unlock: ok=%v err=%v, want no lockfile", ok, err)
+		}
+	})
+}
+
+// TestStartTimesCorroborate proves the WR-02 one-sided comparison: a recorded
+// time up to procStartTimeSlack before actual, or any amount after it,
+// corroborates; a recorded time further before actual does not.
 func TestStartTimesCorroborate(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -374,7 +452,9 @@ func TestStartTimesCorroborate(t *testing.T) {
 		{"identical", base, base, true},
 		{"recorded slightly after actual, within slack", base.Add(2 * time.Second), base, true},
 		{"recorded slightly before actual, within slack", base.Add(-2 * time.Second), base, true},
-		{"recorded well after actual, beyond slack", base.Add(time.Hour), base, false},
+		{"recorded well after actual (wall-clock stamp)", base.Add(time.Hour), base, true},
+		{"recorded 5s before actual, at the slack", base.Add(-5 * time.Second), base, true},
+		{"recorded 6s before actual, beyond slack", base.Add(-6 * time.Second), base, false},
 		{"recorded well before actual, beyond slack (PID reuse)", base.Add(-time.Hour), base, false},
 	}
 	for _, tc := range cases {
