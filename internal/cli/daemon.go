@@ -273,7 +273,7 @@ var daemonStopAll = daemon.StopAll
 // signaling (isStale defense-in-depth) — this command only decides WHICH
 // targets, never how they're validated. An empty/no-match result is a
 // clean "no running daemon(s)" notice, exit 0 — not an error; an aggregated
-// per-target stop error IS surfaced as a non-zero exit.
+// per-target stop error IS surfaced as a non-zero exit, with no notice.
 func newDaemonStopCmd() *cobra.Command {
 	var path string
 	var all bool
@@ -294,7 +294,7 @@ func newDaemonStopCmd() *cobra.Command {
 			if all {
 				stopped, skipped, err := daemonStopAll()
 				printStoppedDaemons(mode, out, stopped)
-				if len(stopped) == 0 {
+				if len(stopped) == 0 && err == nil {
 					if mode.Styled {
 						_ = present.Line(mode.Writer(out), present.NewPalette(mode.Dark), present.RoleValue, "no running daemons")
 					} else {
@@ -316,7 +316,7 @@ func newDaemonStopCmd() *cobra.Command {
 
 			stopped, skipped, err := daemonStopMatching(repoRoot)
 			printStoppedDaemons(mode, out, stopped)
-			if len(stopped) == 0 {
+			if len(stopped) == 0 && err == nil {
 				if mode.Styled {
 					pal := present.NewPalette(mode.Dark)
 					_, _ = io.WriteString(mode.Writer(out), pal.Value.Render("no running daemon for")+" "+pal.Path.Render(sanitizePathForDisplay(repoRoot))+"\n")

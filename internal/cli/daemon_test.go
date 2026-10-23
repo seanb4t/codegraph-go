@@ -370,8 +370,9 @@ func TestDaemonStopCmd_Matching_WarnsAboutSkippedRecords(t *testing.T) {
 }
 
 // TestDaemonStopCmd_Matching_ErrorStillWarns: when `daemon stop` without
-// --all fails, it still names the skipped registry files on stderr, and the
-// error still reaches the exit status.
+// --all fails, it still names the skipped registry files on stderr, the
+// error still reaches the exit status, and stdout carries no "no running
+// daemon for" notice.
 func TestDaemonStopCmd_Matching_ErrorStillWarns(t *testing.T) {
 	fakeHome(t)
 	wantErr := errors.New("boom")
@@ -379,12 +380,15 @@ func TestDaemonStopCmd_Matching_ErrorStillWarns(t *testing.T) {
 		return nil, []string{skippedA}, wantErr
 	}, nil)
 
-	_, errOut, err := execCmd("daemon", "stop")
+	out, errOut, err := execCmd("daemon", "stop")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("daemon stop: err = %v, want %v", err, wantErr)
 	}
 	if want := skippedWarning(skippedA); errOut != want {
 		t.Fatalf("stderr = %q, want %q", errOut, want)
+	}
+	if out != "" {
+		t.Fatalf("stdout = %q, want none", out)
 	}
 }
 
@@ -470,7 +474,8 @@ func TestDaemonStopCmd_All_DispatchesToStopAll(t *testing.T) {
 
 // TestDaemonStopCmd_AggregatedError_ExitsNonZero asserts a genuine stop
 // error (e.g. errors.Join from 07-04's stopTargets) is surfaced as a
-// non-zero exit, never swallowed like the clean no-op/no-match cases.
+// non-zero exit, never swallowed like the clean no-op/no-match cases, and
+// that stdout then carries no "no running daemons" notice.
 func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 	fakeHome(t)
 	wantErr := errors.New("boom")
@@ -478,12 +483,15 @@ func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 		return nil, []string{skippedA}, wantErr
 	})
 
-	_, errOut, err := execCmd("daemon", "stop", "--all")
+	out, errOut, err := execCmd("daemon", "stop", "--all")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("daemon stop --all: err = %v, want %v", err, wantErr)
 	}
 	if want := skippedWarning(skippedA); errOut != want {
 		t.Fatalf("stderr = %q, want the skipped-file warning even on failure: %q", errOut, want)
+	}
+	if out != "" {
+		t.Fatalf("stdout = %q, want none", out)
 	}
 }
 

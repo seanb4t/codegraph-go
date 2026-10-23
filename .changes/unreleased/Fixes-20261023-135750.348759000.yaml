@@ -1,0 +1,3 @@
+kind: Fixes
+body: '`codegraph daemon stop` and the `codegraph daemon` picker no longer print "no running daemons" or "nothing stopped" when the registry listing or every stop failed; the error alone is reported.'
+time: 2026-10-23T13:57:50.348759-04:00
