@@ -8,7 +8,7 @@
 - Every `ReadFile` error is treated as "the file vanished".
 - A malformed `<pid>.json` under a live pid is skipped, and nothing reports it.
 
-`StopAll` and `StopMatching` in `stop.go` start from `List`, so `daemon stop` inherits all three paths. The only callers of `List`, `StopAll` and `StopMatching` are in `internal/cli/daemon.go` and `internal/cli/tui/daemonpicker.go`. Each caller reaches the functions through a package-level func var, so tests can replace them.
+`StopAll` and `StopMatching` in `stop.go` start from `List`, so `daemon stop` inherits all three paths. Outside `internal/daemon`, the only callers of `List`, `StopAll` and `StopMatching` are in `internal/cli/daemon.go` and `internal/cli/tui/daemonpicker.go`. Each of those reaches the functions through a package-level func var, so tests can replace them. Inside the package, `stopTargets` calls `List`, and the package's tests call all three.
 
 `isStale` in `lock.go` decides on liveness alone when `startTimeOf` returns `ok=false`. It does not check liveness again after the failed read. On macOS, `processStartTime` maps every `unix.SysctlKinfoProc` error to `ok=false`. `SysctlKinfoProc` returns `EIO` when the kernel returns a short buffer, and the kernel does that for a pid no process holds. Every other error comes from `sysctl(3)` itself, for example a denied read under a sandbox.
 
@@ -54,6 +54,8 @@ Alternatives considered:
 warning: skipped 1 daemon registry file that names a running process but is not a valid record: /home/u/.local/state/codegraph/daemons/4242.json
 ```
 
+Each path goes through `sanitizePathForDisplay` first, as every path `daemon.go` already prints does.
+
 - Bare `codegraph daemon` prints the warning after the plain list, or after the picker returns. A line written before the picker starts could be overwritten by the inline renderer or hidden by the alternate screen.
 - `daemon stop` prints the warning after its `stopped pid …` or `no running daemon…` lines.
 - The picker's stop action runs a second listing through `StopAll` or `StopMatching`. The picker can stay open for minutes, so that listing can skip a file the first one did not. `RunDaemonPicker` therefore returns the stop action's skipped paths: its signature becomes `([]string, error)`, and `dispatchDaemonAction` returns them as well. The bare command joins them with its own listing's paths. It keeps the first listing's order, adds each new path once, and prints one line.
@@ -69,7 +71,7 @@ A small helper in `internal/daemon` keeps a mutex-guarded set of keys. It logs t
 
 One `codegraph daemon` run can list the registry twice: the bare listing, then the picker's stop-all. Without the set, the same failure would print twice. A long-lived caller would print it on every listing.
 
-`sync.Once` was rejected because it cannot key by path. A test helper resets the set with `t.Cleanup`, as `resetWSLCacheForTests` does in `internal/watch`.
+`sync.Once` was rejected because it cannot key by path. A test helper resets the set and restores `logf` with `t.Cleanup`, as `captureStopSignal` restores `stopSignal` in `stop_test.go`.
 
 ### D4. `isStale` checks liveness again after a failed start-time read
 
@@ -115,7 +117,7 @@ Removing it is safe when the pid is dead. A dead pid's record is stale whatever 
 
 ## Risks / Trade-offs
 
-- [The exported signatures of `List`, `StopAll` and `StopMatching` change] → The package is internal, its only callers are in `internal/cli` and `internal/cli/tui`, and this change updates them. CLI and MCP output is the compatibility surface. That output does not change.
+- [The exported signatures of `List`, `StopAll` and `StopMatching` change] → The package is internal. Its only callers outside the package are in `internal/cli` and `internal/cli/tui`. This change updates them, together with `stopTargets` and the package's own tests. CLI and MCP output is the compatibility surface. That output does not change.
 - [Stderr gains a line that a script does not expect] → The line appears only when a skipped file exists, which is already an abnormal state. Stdout and the exit status do not change.
 - [A malformed file under a recycled pid keeps the warning on every run until that process exits] → D3 of the #146 change does not allow removal while the pid is alive. The warning names the file so the user can remove it.
 - [Dedup per process hides a repeat of the same failure in a long-lived process] → No long-lived process lists the registry today, and the first failure is always logged.

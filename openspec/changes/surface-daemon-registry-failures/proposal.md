@@ -6,6 +6,8 @@ Issue: #155
 
 Some daemon registry failures leave no trace. A listing ignores some entries, and some removals fail with no message. `codegraph daemon stop --all` can report success while a daemon gets no signal. The suite review of the #146 change found these paths. They follow design decision D3 of that change, so they are gaps, not regressions.
 
+Issue #155 describes the exit race only on the macOS start-time path. The liveness re-check goes in `isStale`. Every platform and the lockfile use that function, so the re-check covers Linux and the lockfile too.
+
 ## What Changes
 
 - A listing treats only "file does not exist" from reading a `<pid>.json` as a race with a concurrent removal. Any other read error is treated like a record that does not decode: the file is removed when no process holds its pid. Otherwise it is skipped.
@@ -22,7 +24,7 @@ None.
 
 ### Modified Capabilities
 
-- `daemon-registry`: the start-time fallback checks liveness again after a failed read. macOS logs a start-time read failure other than `EIO`. An unreadable `<pid>.json` is handled like one that does not decode. A new requirement says how a listing reports removals that fail and entries it skips.
+- `daemon-registry`: the start-time fallback checks liveness again after a failed read. macOS logs a start-time read failure other than `EIO`. An unreadable `<pid>.json` is handled like one that does not decode. Two new requirements say how a listing logs removals that fail and reports the entries it skips.
 
 ## Out of scope
 
@@ -45,6 +47,8 @@ None.
 - Tests:
   - `registry_test.go`: unreadable files, failed removals and the skipped paths.
   - `lock_test.go`: a process that exits during the start-time read.
+  - `stop_test.go`: a `TestStopAll` subtest for a skipped record.
+  - `internal/daemon/daemon_test.go`, `lock_test.go` and `stop_test.go`: existing calls move to the new `List`, `StopAll` and `StopMatching` signatures.
   - `procstart_darwin_test.go`: the logged sysctl error.
   - `internal/cli/daemon_test.go`: the stderr warning and unchanged stdout.
   - `daemonpicker_test.go`: stub signatures.

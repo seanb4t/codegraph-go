@@ -18,7 +18,7 @@
 
 ## 3. Stop
 
-- [ ] 3.1 Change `StopAll` and `StopMatching` to `([]Record, []string, error)`. `stopTargets` passes `List`'s skipped paths through. Verify with a new `TestStopAll` subtest: with only a malformed record under the test's own pid, nothing is signaled, the error is nil, and the skipped paths hold that file.
+- [ ] 3.1 Change `StopAll` and `StopMatching` to `([]Record, []string, error)`. `stopTargets` passes `List`'s skipped paths through. Update the existing `StopAll` and `StopMatching` calls in `stop_test.go`. Verify with a new `TestStopAll` subtest: with only a malformed record under the test's own pid, nothing is signaled, the error is nil, and the skipped paths hold that file.
 
 ## 4. Liveness after a failed start-time read
 
@@ -38,8 +38,8 @@
 - [ ] 6.1 Move the `daemonList`, `daemonStopAll` and `daemonStopMatching` seams in `internal/cli/daemon.go`, and the `stopMatching` and `stopAll` seams in `internal/cli/tui/daemonpicker.go`, to the new signatures. `dispatchDaemonAction` and `RunDaemonPicker` return the stop action's skipped paths, and the `runDaemonPicker` seam takes the new signature (design D2). Update the stubs in `internal/cli/daemon_test.go` and `internal/cli/tui/daemonpicker_test.go`. Verify:
   - `TestDaemonPickerModel_StopAllDispatches` and `TestDaemonPickerModel_EnterDispatchesStopOne` assert that `dispatchDaemonAction` returns the stub's skipped paths.
   - `go test ./internal/cli/...` passes.
-- [ ] 6.2 Add a helper in `internal/cli/daemon.go` that writes nothing for no skipped paths. Otherwise it writes the one `warning:` line from design D2 to `cmd.ErrOrStderr()`, with a singular and a plural form. Call it from the bare `daemon` command after the plain list or after the picker returns, joining both listings' paths without duplicates, and from both `daemon stop` branches after their own output. Verify in `internal/cli/daemon_test.go`:
-  - `TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords`: stdout equals the output without skipped files, and stderr holds one line naming both stubbed paths.
+- [ ] 6.2 Add a helper in `internal/cli/daemon.go` that writes nothing for no skipped paths. Otherwise it writes the one `warning:` line from design D2 to `cmd.ErrOrStderr()`, with a singular and a plural form, and passes each path through `sanitizePathForDisplay`. Call it from the bare `daemon` command after the plain list or after the picker returns, joining both listings' paths without duplicates, and from both `daemon stop` branches after their own output. Verify in `internal/cli/daemon_test.go`:
+  - `TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords`: stdout equals the output without skipped files, and stderr holds one line naming both stubbed paths. One stubbed path holds an escape byte, and the line holds that path without it.
   - `TestDaemonStopCmd_All_WarnsAboutSkippedRecords`: stdout is `no running daemons`, stderr holds one line, and the error is nil.
   - `TestDaemonStopCmd_Matching_WarnsAboutSkippedRecords`: `daemon stop` without `--all`. Stdout is `no running daemon for <path>`, stderr holds one line naming every stubbed path, and the error is nil.
   - `TestDaemonBareCmd_InteractiveAllowed_WarnsAfterPicker`: stdout and stderr share one buffer. The listing stub skips path A, and the picker stub returns paths A and B. One warning line follows the picker stub's output and names A and B once each.
@@ -55,6 +55,7 @@
   - Count a failed removal as a skipped path.
   - Drop the CLI warning call from each `daemon stop` branch and from the bare command.
   - Drop the picker's skipped paths from the bare command's warning.
+  - Print a skipped path without `sanitizePathForDisplay`.
 - [ ] 7.2 Run `GOTOOLCHAIN=go1.26.10 task test`, then `GOTOOLCHAIN=go1.26.10 task lint`, one after the other. Use the `go` line in `go.mod` as the toolchain. Verify both pass.
 - [ ] 7.3 Run `openspec validate surface-daemon-registry-failures --strict` and verify it passes.
 
