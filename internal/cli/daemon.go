@@ -6,7 +6,9 @@ import (
 	"io"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -71,7 +73,7 @@ func newDaemonCmd() *cobra.Command {
 				return err
 			}
 
-			records, err := daemonList()
+			records, skipped, err := daemonList()
 			if err != nil {
 				return err
 			}
@@ -84,10 +86,19 @@ func newDaemonCmd() *cobra.Command {
 			// the empty set (07-UAT test 1 / G-07-1). Fall through to the
 			// plain "no running daemons" notice instead — identical output on
 			// TTY and non-TTY for the empty case.
+			//
+			// The skipped-file warning is written after the picker exits: a
+			// line written before it starts can be overwritten by the inline
+			// renderer or hidden by the alternate screen. The picker's stop
+			// action lists the registry again, so its skipped paths join
+			// this listing's.
 			if interactiveAllowed(cmd) && len(records) > 0 {
-				return runDaemonPicker(cmd, currentRepo, records)
+				stopSkipped, err := runDaemonPicker(cmd, currentRepo, records)
+				warnSkippedRegistryFiles(cmd, unionPaths(skipped, stopSkipped))
+				return err
 			}
 			printDaemonList(cmd, currentRepo, records)
+			warnSkippedRegistryFiles(cmd, skipped)
 			return nil
 		},
 	}
@@ -140,6 +151,39 @@ func printDaemonList(cmd *cobra.Command, currentRepo string, records []daemon.Re
 	for _, r := range sorted {
 		fmt.Fprintf(out, "%d\t%s\t%s\n", r.PID, r.RepoRoot, r.StartedAt.Format(time.RFC3339))
 	}
+}
+
+// warnSkippedRegistryFiles writes one warning line to stderr naming every
+// registry file a listing skipped: a <pid>.json left in place, unlisted,
+// because a process holds its pid. It writes nothing for no paths. Stdout and
+// the exit status do not change.
+func warnSkippedRegistryFiles(cmd *cobra.Command, paths []string) {
+	if len(paths) == 0 {
+		return
+	}
+	what := "files that name a running process but are not valid records"
+	if len(paths) == 1 {
+		what = "file that names a running process but is not a valid record"
+	}
+	shown := make([]string, len(paths))
+	for i, p := range paths {
+		shown[i] = sanitizePathForDisplay(p)
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipped %d daemon registry %s: %s\n", len(paths), what, strings.Join(shown, ", "))
+}
+
+// unionPaths returns first, then each path of second that first lacks, with
+// every path once and both orders kept.
+func unionPaths(first, second []string) []string {
+	seen := make(map[string]bool, len(first)+len(second))
+	var all []string
+	for _, p := range slices.Concat(first, second) {
+		if !seen[p] {
+			seen[p] = true
+			all = append(all, p)
+		}
+	}
+	return all
 }
 
 // newDaemonStartCmd builds `daemon start` (D-01/D-02): the explicit
@@ -248,7 +292,7 @@ func newDaemonStopCmd() *cobra.Command {
 			mode := resolveColor(cmd)
 
 			if all {
-				stopped, err := daemonStopAll()
+				stopped, skipped, err := daemonStopAll()
 				printStoppedDaemons(mode, out, stopped)
 				if len(stopped) == 0 {
 					if mode.Styled {
@@ -257,6 +301,7 @@ func newDaemonStopCmd() *cobra.Command {
 						fmt.Fprintln(out, "no running daemons")
 					}
 				}
+				warnSkippedRegistryFiles(cmd, skipped)
 				return err
 			}
 
@@ -269,7 +314,7 @@ func newDaemonStopCmd() *cobra.Command {
 				return err
 			}
 
-			stopped, err := daemonStopMatching(repoRoot)
+			stopped, skipped, err := daemonStopMatching(repoRoot)
 			printStoppedDaemons(mode, out, stopped)
 			if len(stopped) == 0 {
 				if mode.Styled {
@@ -279,6 +324,7 @@ func newDaemonStopCmd() *cobra.Command {
 					fmt.Fprintf(out, "no running daemon for %s\n", repoRoot)
 				}
 			}
+			warnSkippedRegistryFiles(cmd, skipped)
 			return err
 		},
 	}

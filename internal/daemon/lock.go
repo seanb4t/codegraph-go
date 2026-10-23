@@ -68,17 +68,18 @@ func readLock(codegraphDir string) (info lockInfo, ok bool, err error) {
 // treats as the OS having recycled the pid (WR-02); Signal(0) alone cannot
 // tell those apart. Where processStartTime cannot read the start time (a
 // platform other than Linux and macOS, or any read failure), liveness alone
-// decides: "can't corroborate" is never itself a staleness signal.
+// decides: "can't corroborate" is never itself a staleness signal. Liveness
+// is checked again after the failed read, because the read also fails when
+// the process exited after the first check.
 func isStale(info lockInfo) bool {
 	if !isProcessLive(info.PID) {
 		return true
 	}
-	if actualStart, ok := startTimeOf(info.PID); ok {
-		if !startTimesCorroborate(info.StartedAt, actualStart) {
-			return true
-		}
+	actualStart, ok := startTimeOf(info.PID)
+	if !ok {
+		return !isProcessLive(info.PID)
 	}
-	return false
+	return !startTimesCorroborate(info.StartedAt, actualStart)
 }
 
 // startTimeOf is processStartTime indirected behind a package-level func var,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func aKeyMsg() tea.KeyPressMsg    { return tea.KeyPressMsg{Code: 'a', Text: "a"}
 // duration of one test, restoring the originals on cleanup — so
 // dispatchDaemonAction can be exercised without ever signaling a real
 // process.
-func withStubbedDaemonStop(t *testing.T, matching func(string) ([]daemon.Record, error), all func() ([]daemon.Record, error)) {
+func withStubbedDaemonStop(t *testing.T, matching func(string) ([]daemon.Record, []string, error), all func() ([]daemon.Record, []string, error)) {
 	t.Helper()
 	origMatching, origAll := stopMatching, stopAll
 	t.Cleanup(func() {
@@ -123,12 +124,13 @@ func TestSortRecordsCurrentFirst_SymlinkEvalErrorDegradesToRawString(t *testing.
 // seam with that record's RepoRoot — never touching stopAll.
 func TestDaemonPickerModel_EnterDispatchesStopOne(t *testing.T) {
 	var calledWith string
-	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, error) {
+	wantSkipped := []string{"/state/daemons/4242.json"}
+	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, []string, error) {
 		calledWith = repoRoot
-		return []daemon.Record{rec(repoRoot, 1)}, nil
-	}, func() ([]daemon.Record, error) {
+		return []daemon.Record{rec(repoRoot, 1)}, wantSkipped, nil
+	}, func() ([]daemon.Record, []string, error) {
 		t.Fatal("stopAll must not be called for stop-one")
-		return nil, nil
+		return nil, nil, nil
 	})
 
 	records := []daemon.Record{rec("/repo/a", 1), rec("/repo/b", 2)}
@@ -157,7 +159,7 @@ func TestDaemonPickerModel_EnterDispatchesStopOne(t *testing.T) {
 	// WR-01 (07-REVIEW.md): dispatchDaemonAction must surface the
 	// signaled records, not just the error, so RunDaemonPicker can print
 	// the same confirmation the non-interactive `daemon stop` path gives.
-	stopped, err := dispatchDaemonAction(action, target)
+	stopped, skipped, err := dispatchDaemonAction(action, target)
 	if err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
@@ -167,6 +169,9 @@ func TestDaemonPickerModel_EnterDispatchesStopOne(t *testing.T) {
 	if len(stopped) != 1 || stopped[0].RepoRoot != "/repo/a" {
 		t.Fatalf("dispatchDaemonAction stopped = %v, want [/repo/a]", stopped)
 	}
+	if !slices.Equal(skipped, wantSkipped) {
+		t.Fatalf("dispatchDaemonAction skipped = %q, want %q", skipped, wantSkipped)
+	}
 }
 
 // TestDaemonPickerModel_DownNavigatesThenEnterTargetsFocusedRow proves
@@ -174,10 +179,10 @@ func TestDaemonPickerModel_EnterDispatchesStopOne(t *testing.T) {
 // case) actually changes which record enter subsequently targets.
 func TestDaemonPickerModel_DownNavigatesThenEnterTargetsFocusedRow(t *testing.T) {
 	var calledWith string
-	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, error) {
+	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, []string, error) {
 		calledWith = repoRoot
-		return nil, nil
-	}, func() ([]daemon.Record, error) { return nil, nil })
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) { return nil, nil, nil })
 
 	records := []daemon.Record{rec("/repo/current", 1), rec("/repo/other", 2)}
 	m := newDaemonPickerModel("/repo/current", records)
@@ -201,7 +206,7 @@ func TestDaemonPickerModel_DownNavigatesThenEnterTargetsFocusedRow(t *testing.T)
 		t.Fatalf("after down+enter: action=%v target=%v, want stop-one on /repo/other", action, target)
 	}
 
-	if _, err := dispatchDaemonAction(action, target); err != nil {
+	if _, _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 	if calledWith != "/repo/other" {
@@ -214,12 +219,13 @@ func TestDaemonPickerModel_DownNavigatesThenEnterTargetsFocusedRow(t *testing.T)
 // routes it through the injected stopAll seam — never stopMatching.
 func TestDaemonPickerModel_StopAllDispatches(t *testing.T) {
 	var stopAllCalled bool
-	withStubbedDaemonStop(t, func(string) ([]daemon.Record, error) {
+	wantSkipped := []string{"/state/daemons/4242.json", "/state/daemons/4343.json"}
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
 		t.Fatal("stopMatching must not be called for stop-all")
-		return nil, nil
-	}, func() ([]daemon.Record, error) {
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
 		stopAllCalled = true
-		return nil, nil
+		return nil, wantSkipped, nil
 	})
 
 	records := []daemon.Record{rec("/repo/a", 1), rec("/repo/b", 2)}
@@ -239,11 +245,15 @@ func TestDaemonPickerModel_StopAllDispatches(t *testing.T) {
 		t.Fatalf("action = %v, want daemonActionStopAll", action)
 	}
 
-	if _, err := dispatchDaemonAction(action, target); err != nil {
+	_, skipped, err := dispatchDaemonAction(action, target)
+	if err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 	if !stopAllCalled {
 		t.Fatal("expected stopAll to be called")
+	}
+	if !slices.Equal(skipped, wantSkipped) {
+		t.Fatalf("dispatchDaemonAction skipped = %q, want %q", skipped, wantSkipped)
 	}
 }
 
@@ -251,12 +261,12 @@ func TestDaemonPickerModel_StopAllDispatches(t *testing.T) {
 // daemonActionNone — dispatchDaemonAction must be a pure no-op, never
 // calling stopMatching or stopAll.
 func TestDaemonPickerModel_CancelSignalsNothing(t *testing.T) {
-	withStubbedDaemonStop(t, func(string) ([]daemon.Record, error) {
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
 		t.Fatal("stopMatching must not be called on cancel")
-		return nil, nil
-	}, func() ([]daemon.Record, error) {
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
 		t.Fatal("stopAll must not be called on cancel")
-		return nil, nil
+		return nil, nil, nil
 	})
 
 	records := []daemon.Record{rec("/repo/a", 1)}
@@ -275,7 +285,7 @@ func TestDaemonPickerModel_CancelSignalsNothing(t *testing.T) {
 	if action != daemonActionNone {
 		t.Fatalf("action = %v, want daemonActionNone", action)
 	}
-	if _, err := dispatchDaemonAction(action, target); err != nil {
+	if _, _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 }
@@ -284,12 +294,12 @@ func TestDaemonPickerModel_CancelSignalsNothing(t *testing.T) {
 // record set's Init() resolves immediately (tea.Quit) without ever
 // signaling — the DMON-01/DMON-04 empty-registry edge.
 func TestDaemonPickerModel_EmptyRecordsQuitsWithoutDispatch(t *testing.T) {
-	withStubbedDaemonStop(t, func(string) ([]daemon.Record, error) {
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
 		t.Fatal("stopMatching must not be called for an empty registry")
-		return nil, nil
-	}, func() ([]daemon.Record, error) {
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
 		t.Fatal("stopAll must not be called for an empty registry")
-		return nil, nil
+		return nil, nil, nil
 	})
 
 	m := newDaemonPickerModel("/repo/a", nil)
@@ -306,7 +316,7 @@ func TestDaemonPickerModel_EmptyRecordsQuitsWithoutDispatch(t *testing.T) {
 	if action != daemonActionNone {
 		t.Fatalf("action = %v, want daemonActionNone", action)
 	}
-	if _, err := dispatchDaemonAction(action, target); err != nil {
+	if _, _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 }

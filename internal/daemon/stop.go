@@ -13,16 +13,18 @@ import (
 var stopSignal = sendStop
 
 // StopAll signals every live daemon in the global registry (DMON-02,
-// `daemon stop --all`). An empty registry is a clean no-op: (nil, nil), not
-// an error.
-func StopAll() ([]Record, error) {
+// `daemon stop --all`) and returns the records it signaled, plus the paths
+// List skipped. An empty registry is a clean no-op: (nil, nil, nil), not an
+// error.
+func StopAll() ([]Record, []string, error) {
 	return stopTargets(func(Record) bool { return true })
 }
 
 // StopMatching signals every live daemon in the global registry whose
 // RepoRoot resolves to the same path as repoRoot (DMON-02, `daemon stop
-// -p/--path`). No match is a clean no-op: (nil, nil), not an error.
-func StopMatching(repoRoot string) ([]Record, error) {
+// -p/--path`) and returns the records it signaled, plus the paths List
+// skipped. No match is a clean no-op: (nil, nil, nil), not an error.
+func StopMatching(repoRoot string) ([]Record, []string, error) {
 	want := resolveRepoRoot(repoRoot)
 	return stopTargets(func(rec Record) bool {
 		return resolveRepoRoot(rec.RepoRoot) == want
@@ -52,11 +54,12 @@ func resolveRepoRoot(p string) string {
 // canonical <pid>.json whose body names that same pid. Per-target sendStop
 // errors are aggregated via errors.Join rather than swallowed or
 // short-circuited on the first failure; a no-match/empty candidate set
-// returns (nil, nil), not an error.
-func stopTargets(match func(Record) bool) ([]Record, error) {
-	recs, err := List()
+// returns no records and a nil error. List's skipped paths are returned
+// unchanged, whatever match selects: a skipped file names no repo.
+func stopTargets(match func(Record) bool) ([]Record, []string, error) {
+	recs, skipped, err := List()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var signaled []Record
@@ -76,5 +79,5 @@ func stopTargets(match func(Record) bool) ([]Record, error) {
 		}
 		signaled = append(signaled, rec)
 	}
-	return signaled, errors.Join(errs...)
+	return signaled, skipped, errors.Join(errs...)
 }
