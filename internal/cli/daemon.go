@@ -154,16 +154,16 @@ func printDaemonList(cmd *cobra.Command, currentRepo string, records []daemon.Re
 }
 
 // warnSkippedRegistryFiles writes one warning line to stderr naming every
-// registry file a listing skipped: a <pid>.json left in place, unlisted,
-// because a process holds its pid. It writes nothing for no paths. Stdout and
-// the exit status do not change.
+// registry file a listing skipped: a <pid>.json that could not be read as a
+// valid record, left in place because a live process holds its pid. It
+// writes nothing for no paths and never writes to stdout.
 func warnSkippedRegistryFiles(cmd *cobra.Command, paths []string) {
 	if len(paths) == 0 {
 		return
 	}
-	what := "files that name a running process but are not valid records"
+	what := "files that name a running process but could not be read as valid records"
 	if len(paths) == 1 {
-		what = "file that names a running process but is not a valid record"
+		what = "file that names a running process but could not be read as a valid record"
 	}
 	shown := make([]string, len(paths))
 	for i, p := range paths {

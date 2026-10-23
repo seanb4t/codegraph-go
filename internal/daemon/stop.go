@@ -23,7 +23,8 @@ func StopAll() ([]Record, []string, error) {
 // StopMatching signals every live daemon in the global registry whose
 // RepoRoot resolves to the same path as repoRoot (DMON-02, `daemon stop
 // -p/--path`) and returns the records it signaled, plus the paths List
-// skipped. No match is a clean no-op: (nil, nil, nil), not an error.
+// skipped. No match is a clean no-op: no records and a nil error, with List's
+// skipped paths still returned.
 func StopMatching(repoRoot string) ([]Record, []string, error) {
 	want := resolveRepoRoot(repoRoot)
 	return stopTargets(func(rec Record) bool {
@@ -55,7 +56,8 @@ func resolveRepoRoot(p string) string {
 // errors are aggregated via errors.Join rather than swallowed or
 // short-circuited on the first failure; a no-match/empty candidate set
 // returns no records and a nil error. List's skipped paths are returned
-// unchanged, whatever match selects: a skipped file names no repo.
+// unchanged, whatever match selects: List returns no record for a skipped
+// file, so match cannot test it.
 func stopTargets(match func(Record) bool) ([]Record, []string, error) {
 	recs, skipped, err := List()
 	if err != nil {

@@ -143,14 +143,15 @@ func Deregister(pid int) error {
 // Only *.json files are considered; directories and every other name,
 // including fsatomic's in-flight temp files, are left untouched. A *.json
 // name that is not the canonical <pid>.json of an integer pid is removed. A
-// <pid>.json that cannot be read, whose body does not decode, or whose pid
-// field differs from its name, is never listed, and is removed only when
-// isProcessLive reports that pid dead, so List never removes a file a live
-// daemon may rewrite between this read and the remove. While the pid is
-// live, the file's path is returned in skipped. A file that no longer exists
-// when ReadFile runs (raced by a concurrent Deregister/prune) is passed over,
-// not fatal and not skipped. A removal that fails is logged once per path
-// (removeRegistryFile); the file is neither listed nor skipped.
+// <pid>.json that cannot be read (a dangling symlink included), whose body
+// does not decode, or whose pid field differs from its name, is never
+// listed, and is removed only when isProcessLive reports that pid dead, so
+// List never removes a file a live daemon may rewrite between this read and
+// the remove. While the pid is live, the file's path is returned in skipped.
+// An entry that is gone when ReadFile runs, removed by a concurrent
+// Deregister or listing, is passed over: not fatal and not skipped. A
+// removal that fails is logged once per path (removeRegistryFile); the file
+// is neither listed nor skipped.
 func List() (live []Record, skipped []string, err error) {
 	dir, err := registryDir()
 	if err != nil {
@@ -177,7 +178,11 @@ func List() (live []Record, skipped []string, err error) {
 		}
 		data, err := os.ReadFile(path)
 		if errors.Is(err, fs.ErrNotExist) {
-			continue // removed between ReadDir and ReadFile — another scan raced us
+			// ReadFile follows a symlink, so a dangling one reads as
+			// not-exist too; only an entry Lstat cannot find is gone.
+			if _, lerr := os.Lstat(path); errors.Is(lerr, fs.ErrNotExist) {
+				continue
+			}
 		}
 		var rec Record
 		if err == nil {
@@ -202,13 +207,15 @@ func List() (live []Record, skipped []string, err error) {
 
 // removeFile is os.Remove indirected behind a package-level func var, the
 // same test-seam convention as startTimeOf, so tests can fail a removal
-// whatever user runs them. It must stay os.Remove, which removes a symlink
-// itself and never a directory's contents: List removes unreadable entries,
-// and one may be a symlink.
+// whatever user runs them. It must stay os.Remove, which never removes a
+// directory's contents: List removes some entries without reading them, and
+// an entry may be replaced by a directory after ReadDir.
 var removeFile = os.Remove
 
 // removeRegistryFile removes the registry file at path. A failure is logged
-// once per path per process, except a file that is already gone.
+// once per path per process, except a file that is already gone. The path is
+// quoted because an entry's name can hold any byte, terminal controls
+// included.
 func removeRegistryFile(path string) {
 	err := removeFile(path)
 	if err == nil || errors.Is(err, fs.ErrNotExist) {
@@ -218,5 +225,5 @@ func removeRegistryFile(path string) {
 	if errors.As(err, &pathErr) {
 		err = pathErr.Err // the line names path already
 	}
-	logOnce(path, "daemon: removing registry file %s: %v", path, err)
+	logOnce(path, "daemon: removing registry file %q: %v", path, err)
 }

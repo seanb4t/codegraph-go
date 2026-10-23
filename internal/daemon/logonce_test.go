@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// captureLog points the logf seam at a recorder and empties logOnce's keys
-// for the duration of the test, restoring both in Cleanup. It returns the
-// lines logged so far, formatted.
+// captureLog points the logf seam at a recorder and empties logOnce's keys.
+// Cleanup restores logf and empties the keys again. It returns a pointer to
+// the formatted lines logf receives from then on.
 func captureLog(t *testing.T) *[]string {
 	t.Helper()
 	lines := new([]string)

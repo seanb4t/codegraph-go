@@ -21,7 +21,7 @@ var (
 // logOnce logs through logf the first time this process sees key, and does
 // nothing for the same key after that. A failure that repeats on every
 // registry listing, such as a file that can never be removed, is reported
-// once instead of on each retry.
+// once instead of on each listing.
 func logOnce(key, format string, args ...any) {
 	loggedMu.Lock()
 	_, seen := loggedKeys[key]

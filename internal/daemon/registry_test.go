@@ -2,12 +2,12 @@ package daemon
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"syscall"
 	"testing"
@@ -183,16 +183,17 @@ func assertListsNothing(t *testing.T, wantSkipped ...string) {
 	if len(got) != 0 {
 		t.Fatalf("List: got %+v, want no records", got)
 	}
-	if len(skipped) != len(wantSkipped) || (len(wantSkipped) > 0 && !reflect.DeepEqual(skipped, wantSkipped)) {
+	if !slices.Equal(skipped, wantSkipped) {
 		t.Fatalf("List skipped %q, want %q", skipped, wantSkipped)
 	}
 }
 
 // assertPresent fails the test unless path exists when want is true, or is
-// absent when want is false.
+// absent when want is false. A symlink counts as present whether or not its
+// target exists.
 func assertPresent(t *testing.T, path string, want bool) {
 	t.Helper()
-	_, err := os.Stat(path)
+	_, err := os.Lstat(path)
 	switch {
 	case want && err != nil:
 		t.Fatalf("%s: want it left in place, stat err=%v", filepath.Base(path), err)
@@ -300,18 +301,31 @@ func TestRegistryListKeepsMalformedUnderLivePid(t *testing.T) {
 	}
 }
 
-// unreadableRecord makes name under dir a symlink to a fresh directory, so
-// reading it fails with an error other than not-exist (EISDIR) for any user,
-// root included. It returns the link's path and the target directory.
-func unreadableRecord(t *testing.T, dir, name string) (link, target string) {
+// unreadableKinds are the two entries unreadableRecord builds. Neither needs a
+// permission change, so each fails to read for any user, root included.
+var unreadableKinds = []struct {
+	name     string
+	dangling bool
+}{
+	{"symlink to a directory", false}, // ReadFile fails with EISDIR
+	{"dangling symlink", true},        // ReadFile fails with not-exist, though the entry exists
+}
+
+// unreadableRecord makes name under dir a symlink that exists but cannot be
+// read: to a fresh directory, or, when dangling, to a path that does not
+// exist. It returns the link's path and its target.
+func unreadableRecord(t *testing.T, dir, name string, dangling bool) (link, target string) {
 	t.Helper()
 	target = t.TempDir()
+	if dangling {
+		target = filepath.Join(target, "missing")
+	}
 	link = filepath.Join(dir, name)
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatalf("symlink %s: %v", name, err)
 	}
-	if _, err := os.ReadFile(link); err == nil || errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("ReadFile(%s) err = %v, want a read error other than not-exist", name, err)
+	if _, err := os.ReadFile(link); err == nil {
+		t.Fatalf("ReadFile(%s) succeeded, want a read error", name)
 	}
 	return link, target
 }
@@ -320,23 +334,33 @@ func unreadableRecord(t *testing.T, dir, name string) (link, target string) {
 // is removed once no process holds the pid, like one that does not decode.
 // Removing a symlink removes the link, not its target.
 func TestRegistryListRemovesUnreadableRecord(t *testing.T) {
-	dir := withRegistryDir(t)
-	link, target := unreadableRecord(t, dir, fmt.Sprintf("%d.json", deadPID(t)))
+	for _, kind := range unreadableKinds {
+		t.Run(kind.name, func(t *testing.T) {
+			dir := withRegistryDir(t)
+			link, target := unreadableRecord(t, dir, fmt.Sprintf("%d.json", deadPID(t)), kind.dangling)
 
-	assertListsNothing(t)
-	assertPresent(t, link, false)
-	assertPresent(t, target, true)
+			assertListsNothing(t)
+			assertPresent(t, link, false)
+			if !kind.dangling {
+				assertPresent(t, target, true)
+			}
+		})
+	}
 }
 
 // TestRegistryListKeepsUnreadableUnderLivePid: a <pid>.json that cannot be
 // read while a process holds the pid is not listed, stays on disk, and is
 // returned as skipped.
 func TestRegistryListKeepsUnreadableUnderLivePid(t *testing.T) {
-	dir := withRegistryDir(t)
-	link, _ := unreadableRecord(t, dir, fmt.Sprintf("%d.json", os.Getpid()))
+	for _, kind := range unreadableKinds {
+		t.Run(kind.name, func(t *testing.T) {
+			dir := withRegistryDir(t)
+			link, _ := unreadableRecord(t, dir, fmt.Sprintf("%d.json", os.Getpid()), kind.dangling)
 
-	assertListsNothing(t, link)
-	assertPresent(t, link, true)
+			assertListsNothing(t, link)
+			assertPresent(t, link, true)
+		})
+	}
 }
 
 // withRemoveFile points the removeFile seam at remove for the duration of the
@@ -353,9 +377,11 @@ func withRemoveFile(t *testing.T, remove func(string) error) *int {
 	return calls
 }
 
-// TestRegistryListLogsFailedRemovalOnce: a stale record whose removal fails is
-// neither listed nor skipped, and one process logs the failure once however
-// often it lists. A removal that fails because the file is gone logs nothing.
+// TestRegistryListLogsFailedRemovalOnce: at each place List removes a file (a
+// stale record, a malformed record under a dead pid, a name that is not a
+// pid), a failed removal leaves the file neither listed nor skipped, and one
+// process logs it once however often it lists. A removal that fails because
+// the file is gone logs nothing.
 func TestRegistryListLogsFailedRemovalOnce(t *testing.T) {
 	staleRecord := func(t *testing.T, dir string) string {
 		t.Helper()
@@ -368,27 +394,44 @@ func TestRegistryListLogsFailedRemovalOnce(t *testing.T) {
 		writeRawRecord(t, dir, name, data)
 		return filepath.Join(dir, name)
 	}
+	seeds := []struct {
+		name string
+		seed func(t *testing.T, dir string) string
+	}{
+		{"stale record", staleRecord},
+		{"malformed record under a dead pid", func(t *testing.T, dir string) string {
+			name := fmt.Sprintf("%d.json", deadPID(t))
+			writeRawRecord(t, dir, name, []byte("not valid json"))
+			return filepath.Join(dir, name)
+		}},
+		{"name that is not a pid", func(t *testing.T, dir string) string {
+			writeRawRecord(t, dir, "not-a-pid.json", []byte("not valid json"))
+			return filepath.Join(dir, "not-a-pid.json")
+		}},
+	}
 
-	t.Run("permission denied is logged once", func(t *testing.T) {
-		dir := withRegistryDir(t)
-		lines := captureLog(t)
-		calls := withRemoveFile(t, func(path string) error {
-			return &fs.PathError{Op: "remove", Path: path, Err: syscall.EACCES}
+	for _, s := range seeds {
+		t.Run("permission denied is logged once: "+s.name, func(t *testing.T) {
+			dir := withRegistryDir(t)
+			lines := captureLog(t)
+			calls := withRemoveFile(t, func(path string) error {
+				return &fs.PathError{Op: "remove", Path: path, Err: syscall.EACCES}
+			})
+			path := s.seed(t, dir)
+
+			assertListsNothing(t)
+			assertListsNothing(t)
+
+			if *calls != 2 {
+				t.Fatalf("removeFile ran %d times, want once per listing (2)", *calls)
+			}
+			assertPresent(t, path, true)
+			want := []string{fmt.Sprintf("daemon: removing registry file %q: %v", path, syscall.EACCES)}
+			if !reflect.DeepEqual(*lines, want) {
+				t.Fatalf("logged %q, want %q", *lines, want)
+			}
 		})
-		path := staleRecord(t, dir)
-
-		assertListsNothing(t)
-		assertListsNothing(t)
-
-		if *calls != 2 {
-			t.Fatalf("removeFile ran %d times, want once per listing (2)", *calls)
-		}
-		assertPresent(t, path, true)
-		want := []string{fmt.Sprintf("daemon: removing registry file %s: %v", path, syscall.EACCES)}
-		if !reflect.DeepEqual(*lines, want) {
-			t.Fatalf("logged %q, want %q", *lines, want)
-		}
-	})
+	}
 
 	t.Run("a file already gone is not logged", func(t *testing.T) {
 		dir := withRegistryDir(t)

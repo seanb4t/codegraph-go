@@ -134,6 +134,17 @@ const (
 	skippedEsc = "/state/codegraph/daemons/4\x1b2.json"
 )
 
+// skippedWarning is the stderr line the daemon commands write for the given
+// skipped paths, as displayed.
+func skippedWarning(paths ...string) string {
+	if len(paths) == 1 {
+		return "warning: skipped 1 daemon registry file that names a running process but could not be read as a valid record: " +
+			paths[0] + "\n"
+	}
+	return fmt.Sprintf("warning: skipped %d daemon registry files that name a running process but could not be read as valid records: %s\n",
+		len(paths), strings.Join(paths, ", "))
+}
+
 // TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords: off a terminal, skipped
 // registry files leave stdout exactly as it is without them, and stderr holds
 // one warning line naming each one, with control bytes removed.
@@ -155,39 +166,50 @@ func TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords(t *testing.T) {
 	if out != wantOut {
 		t.Fatalf("stdout = %q, want it unchanged by skipped files: %q", out, wantOut)
 	}
-	want := "warning: skipped 2 daemon registry files that name a running process but are not valid records: " +
-		skippedA + ", /state/codegraph/daemons/42.json\n"
-	if errOut != want {
+	if want := skippedWarning(skippedA, "/state/codegraph/daemons/42.json"); errOut != want {
 		t.Fatalf("stderr = %q, want %q", errOut, want)
 	}
 }
 
 // TestDaemonBareCmd_InteractiveAllowed_WarnsAfterPicker: on a terminal, the
 // warning follows everything the picker wrote, and names each path either
-// listing skipped once: the bare listing's, then the stop action's.
+// listing skipped once: the bare listing's, then the stop action's. It is
+// written when the picker was cancelled and when the stop action failed too.
 func TestDaemonBareCmd_InteractiveAllowed_WarnsAfterPicker(t *testing.T) {
-	fakeHome(t)
-	withStubbedDaemonList(t, []daemon.Record{{PID: 333, StartedAt: time.Now().UTC(), RepoRoot: "/repo"}}, skippedA)
-	withStubbedDaemonPicker(t, func(cmd *cobra.Command, _ string, _ []daemon.Record) ([]string, error) {
-		fmt.Fprintln(cmd.OutOrStdout(), "picker output")
-		return []string{skippedA, skippedB}, nil
-	})
+	boom := errors.New("boom")
+	for _, tc := range []struct {
+		name        string
+		stopSkipped []string
+		stopErr     error
+		want        []string
+	}{
+		{"the stop action skips another file", []string{skippedB}, nil, []string{skippedA, skippedB}},
+		{"the stop action skips the same file", []string{skippedA, skippedB}, nil, []string{skippedA, skippedB}},
+		{"the picker is cancelled", nil, nil, []string{skippedA}},
+		{"the stop action fails", []string{skippedB}, boom, []string{skippedA, skippedB}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+			withStubbedDaemonList(t, []daemon.Record{{PID: 333, StartedAt: time.Now().UTC(), RepoRoot: "/repo"}}, skippedA)
+			withStubbedDaemonPicker(t, func(cmd *cobra.Command, _ string, _ []daemon.Record) ([]string, error) {
+				fmt.Fprintln(cmd.OutOrStdout(), "picker output")
+				return tc.stopSkipped, tc.stopErr
+			})
 
-	root := newRootCmd()
-	var buf bytes.Buffer
-	root.SetOut(&buf)
-	root.SetErr(&buf)
-	root.SetIn(strings.NewReader(""))
-	root.SetArgs([]string{"daemon"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("daemon: %v", err)
-	}
+			root := newRootCmd()
+			var buf bytes.Buffer
+			root.SetOut(&buf)
+			root.SetErr(&buf)
+			root.SetIn(strings.NewReader(""))
+			root.SetArgs([]string{"daemon"})
+			if err := root.Execute(); !errors.Is(err, tc.stopErr) {
+				t.Fatalf("daemon: err = %v, want %v", err, tc.stopErr)
+			}
 
-	want := "picker output\n" +
-		"warning: skipped 2 daemon registry files that name a running process but are not valid records: " +
-		skippedA + ", " + skippedB + "\n"
-	if got := buf.String(); got != want {
-		t.Fatalf("output = %q, want %q", got, want)
+			if want := "picker output\n" + skippedWarning(tc.want...); buf.String() != want {
+				t.Fatalf("output = %q, want %q", buf.String(), want)
+			}
+		})
 	}
 }
 
@@ -317,8 +339,7 @@ func TestDaemonStopCmd_All_WarnsAboutSkippedRecords(t *testing.T) {
 	if out != "no running daemons\n" {
 		t.Fatalf("stdout = %q, want %q", out, "no running daemons\n")
 	}
-	want := "warning: skipped 1 daemon registry file that names a running process but is not a valid record: " + skippedA + "\n"
-	if errOut != want {
+	if want := skippedWarning(skippedA); errOut != want {
 		t.Fatalf("stderr = %q, want %q", errOut, want)
 	}
 }
@@ -343,9 +364,26 @@ func TestDaemonStopCmd_Matching_WarnsAboutSkippedRecords(t *testing.T) {
 	if want := "no running daemon for " + cwd + "\n"; out != want {
 		t.Fatalf("stdout = %q, want %q", out, want)
 	}
-	want := "warning: skipped 2 daemon registry files that name a running process but are not valid records: " +
-		skippedA + ", " + skippedB + "\n"
-	if errOut != want {
+	if want := skippedWarning(skippedA, skippedB); errOut != want {
+		t.Fatalf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// TestDaemonStopCmd_Matching_ErrorStillWarns: when `daemon stop` without
+// --all fails, it still names the skipped registry files on stderr, and the
+// error still reaches the exit status.
+func TestDaemonStopCmd_Matching_ErrorStillWarns(t *testing.T) {
+	fakeHome(t)
+	wantErr := errors.New("boom")
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
+		return nil, []string{skippedA}, wantErr
+	}, nil)
+
+	_, errOut, err := execCmd("daemon", "stop")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("daemon stop: err = %v, want %v", err, wantErr)
+	}
+	if want := skippedWarning(skippedA); errOut != want {
 		t.Fatalf("stderr = %q, want %q", errOut, want)
 	}
 }
@@ -437,11 +475,15 @@ func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 	fakeHome(t)
 	wantErr := errors.New("boom")
 	withStubbedDaemonStop(t, nil, func() ([]daemon.Record, []string, error) {
-		return nil, nil, wantErr
+		return nil, []string{skippedA}, wantErr
 	})
 
-	if _, _, err := execCmd("daemon", "stop", "--all"); err == nil {
-		t.Fatal("expected daemon stop --all to return a non-nil error when daemonStopAll errors")
+	_, errOut, err := execCmd("daemon", "stop", "--all")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("daemon stop --all: err = %v, want %v", err, wantErr)
+	}
+	if want := skippedWarning(skippedA); errOut != want {
+		t.Fatalf("stderr = %q, want the skipped-file warning even on failure: %q", errOut, want)
 	}
 }
 

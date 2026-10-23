@@ -264,8 +264,7 @@ func (m daemonPickerModel) resolvedAction() (daemonAction, daemon.Record) {
 // right dispatch without ever constructing a real tea.Program. The
 // []daemon.Record return (WR-01, 07-REVIEW.md) lets RunDaemonPicker report
 // the same per-record confirmation the non-interactive `daemon stop` path
-// already gives via printStoppedDaemons — previously this discarded the
-// return, leaving a successful stop-one/stop-all silent.
+// gives via printStoppedDaemons.
 func dispatchDaemonAction(action daemonAction, target daemon.Record) ([]daemon.Record, []string, error) {
 	switch action {
 	case daemonActionStopOne:
@@ -283,11 +282,10 @@ func dispatchDaemonAction(action daemonAction, target daemon.Record) ([]daemon.R
 // per record, a "nothing stopped" notice when the action attempted a stop
 // but nothing matched) — duplicated here rather than imported from
 // internal/cli to avoid an internal/cli/tui -> internal/cli import cycle
-// (internal/cli already imports internal/cli/tui). Never called for
-// daemonActionNone (cancel/quit/empty-registry): those already print
-// nothing, by design, and dispatchDaemonAction returns (nil, nil) for them
-// which would otherwise read as an indistinguishable "attempted, matched
-// nothing" case.
+// (internal/cli already imports internal/cli/tui). For daemonActionNone
+// (cancel/quit/empty-registry) it prints nothing: dispatchDaemonAction
+// returns no records for those actions, which would otherwise read as an
+// indistinguishable "attempted, matched nothing" case.
 func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.Record) {
 	if action == daemonActionNone {
 		return
@@ -334,12 +332,20 @@ func RunDaemonPicker(cmd *cobra.Command, currentRepo string, records []daemon.Re
 	if err != nil {
 		return nil, err
 	}
+	return finishDaemonPicker(cmd.OutOrStdout(), final)
+}
+
+// finishDaemonPicker dispatches the action a finished picker resolved to,
+// prints what was stopped to w, and returns the registry paths the stop
+// action's listing skipped. RunDaemonPicker calls it with the Program's final
+// Model, and tests call it with a Model directly.
+func finishDaemonPicker(w io.Writer, final tea.Model) ([]string, error) {
 	fm, ok := final.(daemonPickerModel)
 	if !ok {
 		return nil, fmt.Errorf("tui: RunDaemonPicker: unexpected final model type %T", final)
 	}
 	action, target := fm.resolvedAction()
 	stopped, skipped, err := dispatchDaemonAction(action, target)
-	printDaemonPickerResult(cmd.OutOrStdout(), action, stopped)
+	printDaemonPickerResult(w, action, stopped)
 	return skipped, err
 }

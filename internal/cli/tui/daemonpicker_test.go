@@ -257,6 +257,35 @@ func TestDaemonPickerModel_StopAllDispatches(t *testing.T) {
 	}
 }
 
+// TestFinishDaemonPicker_StopAllReturnsSkippedPaths: a picker that finished
+// on stop-all dispatches through stopAll, prints what it stopped, and returns
+// the registry paths the stop's listing skipped, which RunDaemonPicker hands
+// to the bare `daemon` command.
+func TestFinishDaemonPicker_StopAllReturnsSkippedPaths(t *testing.T) {
+	wantSkipped := []string{"/state/daemons/4242.json"}
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
+		t.Fatal("stopMatching must not be called for stop-all")
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
+		return []daemon.Record{rec("/repo/a", 7)}, wantSkipped, nil
+	})
+
+	m := newDaemonPickerModel("/repo/a", []daemon.Record{rec("/repo/a", 7)})
+	final, _ := m.Update(aKeyMsg())
+
+	var out bytes.Buffer
+	skipped, err := finishDaemonPicker(&out, final)
+	if err != nil {
+		t.Fatalf("finishDaemonPicker: %v", err)
+	}
+	if !slices.Equal(skipped, wantSkipped) {
+		t.Fatalf("finishDaemonPicker skipped = %q, want %q", skipped, wantSkipped)
+	}
+	if want := "stopped pid 7 (/repo/a)\n"; out.String() != want {
+		t.Fatalf("output = %q, want %q", out.String(), want)
+	}
+}
+
 // TestDaemonPickerModel_CancelSignalsNothing asserts q/esc/ctrl+c resolve
 // daemonActionNone — dispatchDaemonAction must be a pure no-op, never
 // calling stopMatching or stopAll.
