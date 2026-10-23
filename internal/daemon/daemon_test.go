@@ -119,7 +119,7 @@ func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) Record {
 	t.Helper()
 	deadline := time.Now().Add(testBudget(5 * time.Second))
 	for time.Now().Before(deadline) {
-		recs, err := List()
+		recs, _, err := List()
 		if err != nil {
 			t.Fatalf("List: %v", err)
 		}
@@ -138,7 +138,7 @@ func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) Record {
 // pid — the D-06 deregister-on-shutdown assertion.
 func assertNoRegistryRecord(t *testing.T, pid int) {
 	t.Helper()
-	recs, err := List()
+	recs, _, err := List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestRunPolicyDisabledRegistersNothing(t *testing.T) {
 		t.Fatalf("Run = %v, want errors.Is(..., watch.ErrWatchDisabled)", runErr)
 	}
 
-	recs, err := List()
+	recs, _, err := List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

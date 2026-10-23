@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,7 @@ import (
 // tui.RunDaemonPicker without ever constructing a real tea.Program. Both
 // seams are restored on cleanup. Mirrors install_test.go's
 // withStubbedPicker.
-func withStubbedDaemonPicker(t *testing.T, picker func(*cobra.Command, string, []daemon.Record) error) {
+func withStubbedDaemonPicker(t *testing.T, picker func(*cobra.Command, string, []daemon.Record) ([]string, error)) {
 	t.Helper()
 	origAllowed, origPicker := interactiveAllowed, runDaemonPicker
 	t.Cleanup(func() {
@@ -34,21 +35,22 @@ func withStubbedDaemonPicker(t *testing.T, picker func(*cobra.Command, string, [
 }
 
 // withStubbedDaemonList forces the daemonList package-level seam to return
-// a fixed record set for the duration of one test — bypassing daemon.List's
-// own self-heal (which would otherwise prune any seeded record whose pid
-// isn't a genuinely live OS process in this test binary).
-func withStubbedDaemonList(t *testing.T, records []daemon.Record) {
+// a fixed record set, and the given skipped paths, for the duration of one
+// test — bypassing daemon.List's own self-heal (which would otherwise prune
+// any seeded record whose pid isn't a genuinely live OS process in this test
+// binary).
+func withStubbedDaemonList(t *testing.T, records []daemon.Record, skipped ...string) {
 	t.Helper()
 	orig := daemonList
 	t.Cleanup(func() { daemonList = orig })
-	daemonList = func() ([]daemon.Record, error) { return records, nil }
+	daemonList = func() ([]daemon.Record, []string, error) { return records, skipped, nil }
 }
 
 // withStubbedDaemonStop forces the daemonStopMatching/daemonStopAll
 // package-level seams for the duration of one test, so `daemon stop`
 // dispatch assertions never deliver a real OS signal. nil leaves the
 // corresponding seam at its real (daemon.StopMatching/StopAll) value.
-func withStubbedDaemonStop(t *testing.T, matching func(string) ([]daemon.Record, error), all func() ([]daemon.Record, error)) {
+func withStubbedDaemonStop(t *testing.T, matching func(string) ([]daemon.Record, []string, error), all func() ([]daemon.Record, []string, error)) {
 	t.Helper()
 	origMatching, origAll := daemonStopMatching, daemonStopAll
 	t.Cleanup(func() {
@@ -105,12 +107,109 @@ func TestDaemonStartCmdPolicyDisabledExitsCleanly(t *testing.T) {
 func TestDaemonBareCmd_NonTTY_EmptyRegistry_PrintsNoRunningDaemons(t *testing.T) {
 	fakeHome(t)
 
-	out, _, err := execCmd("daemon")
+	out, errOut, err := execCmd("daemon")
 	if err != nil {
 		t.Fatalf("daemon: %v", err)
 	}
 	if !strings.Contains(out, "no running daemons") {
 		t.Fatalf("expected 'no running daemons', got:\n%s", out)
+	}
+	assertNoStderr(t, errOut)
+}
+
+// assertNoStderr fails the test unless stderr is empty, as it is when a
+// listing skipped no registry file.
+func assertNoStderr(t *testing.T, stderr string) {
+	t.Helper()
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty: no registry file was skipped", stderr)
+	}
+}
+
+// Skipped registry paths the stubbed listings return. skippedEsc holds an
+// escape byte, which the warning line must not carry.
+const (
+	skippedA   = "/state/codegraph/daemons/41.json"
+	skippedB   = "/state/codegraph/daemons/43.json"
+	skippedEsc = "/state/codegraph/daemons/4\x1b2.json"
+)
+
+// skippedWarning is the stderr line the daemon commands write for the given
+// skipped paths, as displayed.
+func skippedWarning(paths ...string) string {
+	if len(paths) == 1 {
+		return "warning: skipped 1 daemon registry file that names a running process but could not be read as a valid record: " +
+			paths[0] + "\n"
+	}
+	return fmt.Sprintf("warning: skipped %d daemon registry files that name a running process but could not be read as valid records: %s\n",
+		len(paths), strings.Join(paths, ", "))
+}
+
+// TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords: off a terminal, skipped
+// registry files leave stdout exactly as it is without them, and stderr holds
+// one warning line naming each one, with control bytes removed.
+func TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords(t *testing.T) {
+	fakeHome(t)
+	records := []daemon.Record{{PID: 111, StartedAt: time.Now().UTC(), RepoRoot: "/other/repo"}}
+
+	withStubbedDaemonList(t, records)
+	wantOut, _, err := execCmd("daemon")
+	if err != nil {
+		t.Fatalf("daemon without skipped files: %v", err)
+	}
+
+	withStubbedDaemonList(t, records, skippedA, skippedEsc)
+	out, errOut, err := execCmd("daemon")
+	if err != nil {
+		t.Fatalf("daemon: %v", err)
+	}
+	if out != wantOut {
+		t.Fatalf("stdout = %q, want it unchanged by skipped files: %q", out, wantOut)
+	}
+	if want := skippedWarning(skippedA, "/state/codegraph/daemons/42.json"); errOut != want {
+		t.Fatalf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// TestDaemonBareCmd_InteractiveAllowed_WarnsAfterPicker: on a terminal, the
+// warning follows everything the picker wrote, and names each path either
+// listing skipped once: the bare listing's, then the stop action's. It is
+// written when the picker was cancelled and when the stop action failed too.
+func TestDaemonBareCmd_InteractiveAllowed_WarnsAfterPicker(t *testing.T) {
+	boom := errors.New("boom")
+	for _, tc := range []struct {
+		name        string
+		stopSkipped []string
+		stopErr     error
+		want        []string
+	}{
+		{"the stop action skips another file", []string{skippedB}, nil, []string{skippedA, skippedB}},
+		{"the stop action skips the same file", []string{skippedA, skippedB}, nil, []string{skippedA, skippedB}},
+		{"the picker is cancelled", nil, nil, []string{skippedA}},
+		{"the stop action fails", []string{skippedB}, boom, []string{skippedA, skippedB}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+			withStubbedDaemonList(t, []daemon.Record{{PID: 333, StartedAt: time.Now().UTC(), RepoRoot: "/repo"}}, skippedA)
+			withStubbedDaemonPicker(t, func(cmd *cobra.Command, _ string, _ []daemon.Record) ([]string, error) {
+				fmt.Fprintln(cmd.OutOrStdout(), "picker output")
+				return tc.stopSkipped, tc.stopErr
+			})
+
+			root := newRootCmd()
+			var buf bytes.Buffer
+			root.SetOut(&buf)
+			root.SetErr(&buf)
+			root.SetIn(strings.NewReader(""))
+			root.SetArgs([]string{"daemon"})
+			if err := root.Execute(); !errors.Is(err, tc.stopErr) {
+				t.Fatalf("daemon: err = %v, want %v", err, tc.stopErr)
+			}
+
+			if want := "picker output\n" + skippedWarning(tc.want...); buf.String() != want {
+				t.Fatalf("output = %q, want %q", buf.String(), want)
+			}
+		})
 	}
 }
 
@@ -128,10 +227,11 @@ func TestDaemonBareCmd_NonTTY_PrintsSeededRecordsCurrentRepoFirst(t *testing.T) 
 	current := daemon.Record{PID: 222, StartedAt: time.Now().UTC(), RepoRoot: cwd}
 	withStubbedDaemonList(t, []daemon.Record{other, current})
 
-	out, _, err := execCmd("daemon")
+	out, errOut, err := execCmd("daemon")
 	if err != nil {
 		t.Fatalf("daemon: %v", err)
 	}
+	assertNoStderr(t, errOut)
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("expected a header line + 2 records, got %d lines:\n%s", len(lines), out)
@@ -161,15 +261,17 @@ func TestDaemonBareCmd_InteractiveAllowed_CallsRunDaemonPicker(t *testing.T) {
 
 	var gotRepo string
 	var gotRecords []daemon.Record
-	withStubbedDaemonPicker(t, func(cmd *cobra.Command, currentRepo string, records []daemon.Record) error {
+	withStubbedDaemonPicker(t, func(cmd *cobra.Command, currentRepo string, records []daemon.Record) ([]string, error) {
 		gotRepo = currentRepo
 		gotRecords = records
-		return nil
+		return nil, nil
 	})
 
-	if _, _, err := execCmd("daemon"); err != nil {
+	_, errOut, err := execCmd("daemon")
+	if err != nil {
 		t.Fatalf("daemon: %v", err)
 	}
+	assertNoStderr(t, errOut)
 	if gotRepo != cwd {
 		t.Fatalf("runDaemonPicker currentRepo = %q, want %q", gotRepo, cwd)
 	}
@@ -189,18 +291,19 @@ func TestDaemonBareCmd_InteractiveAllowed_CallsRunDaemonPicker(t *testing.T) {
 func TestDaemonBareCmd_InteractiveAllowed_EmptyRegistry_NoPicker(t *testing.T) {
 	fakeHome(t)
 	withStubbedDaemonList(t, nil)
-	withStubbedDaemonPicker(t, func(*cobra.Command, string, []daemon.Record) error {
+	withStubbedDaemonPicker(t, func(*cobra.Command, string, []daemon.Record) ([]string, error) {
 		t.Fatal("runDaemonPicker must NOT be called for an empty registry — nothing to pick; opening a Program leaks terminal capability-probe responses on a TTY (G-07-1)")
-		return nil
+		return nil, nil
 	})
 
-	out, _, err := execCmd("daemon")
+	out, errOut, err := execCmd("daemon")
 	if err != nil {
 		t.Fatalf("daemon: %v", err)
 	}
 	if !strings.Contains(out, "no running daemons") {
 		t.Fatalf("expected 'no running daemons', got:\n%s", out)
 	}
+	assertNoStderr(t, errOut)
 }
 
 // TestDaemonStopCmd_All_EmptyRegistry_CleanNoOp pins DMON-02's empty edge:
@@ -210,12 +313,78 @@ func TestDaemonBareCmd_InteractiveAllowed_EmptyRegistry_NoPicker(t *testing.T) {
 func TestDaemonStopCmd_All_EmptyRegistry_CleanNoOp(t *testing.T) {
 	fakeHome(t)
 
-	out, _, err := execCmd("daemon", "stop", "--all")
+	out, errOut, err := execCmd("daemon", "stop", "--all")
 	if err != nil {
 		t.Fatalf("daemon stop --all: %v", err)
 	}
 	if !strings.Contains(out, "no running daemons") {
 		t.Fatalf("expected 'no running daemons', got:\n%s", out)
+	}
+	assertNoStderr(t, errOut)
+}
+
+// TestDaemonStopCmd_All_WarnsAboutSkippedRecords: `daemon stop --all` names
+// a skipped registry file in one stderr line, and its stdout and exit status
+// stay those of a registry without the file.
+func TestDaemonStopCmd_All_WarnsAboutSkippedRecords(t *testing.T) {
+	fakeHome(t)
+	withStubbedDaemonStop(t, nil, func() ([]daemon.Record, []string, error) {
+		return nil, []string{skippedA}, nil
+	})
+
+	out, errOut, err := execCmd("daemon", "stop", "--all")
+	if err != nil {
+		t.Fatalf("daemon stop --all: %v", err)
+	}
+	if out != "no running daemons\n" {
+		t.Fatalf("stdout = %q, want %q", out, "no running daemons\n")
+	}
+	if want := skippedWarning(skippedA); errOut != want {
+		t.Fatalf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// TestDaemonStopCmd_Matching_WarnsAboutSkippedRecords: `daemon stop` without
+// --all names every skipped registry file in one stderr line, and its stdout
+// and exit status stay those of a registry without the files.
+func TestDaemonStopCmd_Matching_WarnsAboutSkippedRecords(t *testing.T) {
+	fakeHome(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
+		return nil, []string{skippedA, skippedB}, nil
+	}, nil)
+
+	out, errOut, err := execCmd("daemon", "stop")
+	if err != nil {
+		t.Fatalf("daemon stop: %v", err)
+	}
+	if want := "no running daemon for " + cwd + "\n"; out != want {
+		t.Fatalf("stdout = %q, want %q", out, want)
+	}
+	if want := skippedWarning(skippedA, skippedB); errOut != want {
+		t.Fatalf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// TestDaemonStopCmd_Matching_ErrorStillWarns: when `daemon stop` without
+// --all fails, it still names the skipped registry files on stderr, and the
+// error still reaches the exit status.
+func TestDaemonStopCmd_Matching_ErrorStillWarns(t *testing.T) {
+	fakeHome(t)
+	wantErr := errors.New("boom")
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
+		return nil, []string{skippedA}, wantErr
+	}, nil)
+
+	_, errOut, err := execCmd("daemon", "stop")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("daemon stop: err = %v, want %v", err, wantErr)
+	}
+	if want := skippedWarning(skippedA); errOut != want {
+		t.Fatalf("stderr = %q, want %q", errOut, want)
 	}
 }
 
@@ -229,13 +398,14 @@ func TestDaemonStopCmd_NoMatch_Notice(t *testing.T) {
 		t.Fatalf("Getwd: %v", err)
 	}
 
-	out, _, err := execCmd("daemon", "stop")
+	out, errOut, err := execCmd("daemon", "stop")
 	if err != nil {
 		t.Fatalf("daemon stop: %v", err)
 	}
 	if !strings.Contains(out, "no running daemon for "+cwd) {
 		t.Fatalf("expected a no-match notice for %s, got:\n%s", cwd, out)
 	}
+	assertNoStderr(t, errOut)
 }
 
 // TestDaemonStopCmd_DispatchesToStopMatching asserts `daemon stop` (no
@@ -250,15 +420,15 @@ func TestDaemonStopCmd_DispatchesToStopMatching(t *testing.T) {
 	}
 
 	var gotRepo string
-	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, error) {
+	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, []string, error) {
 		gotRepo = repoRoot
-		return []daemon.Record{{PID: 42, RepoRoot: repoRoot}}, nil
-	}, func() ([]daemon.Record, error) {
+		return []daemon.Record{{PID: 42, RepoRoot: repoRoot}}, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
 		t.Fatal("daemonStopAll must not be called without --all")
-		return nil, nil
+		return nil, nil, nil
 	})
 
-	out, _, err := execCmd("daemon", "stop")
+	out, errOut, err := execCmd("daemon", "stop")
 	if err != nil {
 		t.Fatalf("daemon stop: %v", err)
 	}
@@ -268,6 +438,7 @@ func TestDaemonStopCmd_DispatchesToStopMatching(t *testing.T) {
 	if !strings.Contains(out, "stopped pid 42") {
 		t.Fatalf("expected a stopped-pid line, got:\n%s", out)
 	}
+	assertNoStderr(t, errOut)
 }
 
 // TestDaemonStopCmd_All_DispatchesToStopAll asserts `daemon stop --all`
@@ -276,21 +447,22 @@ func TestDaemonStopCmd_All_DispatchesToStopAll(t *testing.T) {
 	fakeHome(t)
 
 	var called bool
-	withStubbedDaemonStop(t, func(string) ([]daemon.Record, error) {
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
 		t.Fatal("daemonStopMatching must not be called with --all")
-		return nil, nil
-	}, func() ([]daemon.Record, error) {
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
 		called = true
-		return []daemon.Record{{PID: 7, RepoRoot: "/repo"}}, nil
+		return []daemon.Record{{PID: 7, RepoRoot: "/repo"}}, nil, nil
 	})
 
-	out, _, err := execCmd("daemon", "stop", "--all")
+	out, errOut, err := execCmd("daemon", "stop", "--all")
 	if err != nil {
 		t.Fatalf("daemon stop --all: %v", err)
 	}
 	if !called {
 		t.Fatal("expected daemonStopAll to be called")
 	}
+	assertNoStderr(t, errOut)
 	if !strings.Contains(out, "stopped pid 7") {
 		t.Fatalf("expected a stopped-pid line, got:\n%s", out)
 	}
@@ -302,12 +474,16 @@ func TestDaemonStopCmd_All_DispatchesToStopAll(t *testing.T) {
 func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 	fakeHome(t)
 	wantErr := errors.New("boom")
-	withStubbedDaemonStop(t, nil, func() ([]daemon.Record, error) {
-		return nil, wantErr
+	withStubbedDaemonStop(t, nil, func() ([]daemon.Record, []string, error) {
+		return nil, []string{skippedA}, wantErr
 	})
 
-	if _, _, err := execCmd("daemon", "stop", "--all"); err == nil {
-		t.Fatal("expected daemon stop --all to return a non-nil error when daemonStopAll errors")
+	_, errOut, err := execCmd("daemon", "stop", "--all")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("daemon stop --all: err = %v, want %v", err, wantErr)
+	}
+	if want := skippedWarning(skippedA); errOut != want {
+		t.Fatalf("stderr = %q, want the skipped-file warning even on failure: %q", errOut, want)
 	}
 }
 
@@ -319,12 +495,12 @@ func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 func TestDaemonStopCmd_AllAndPath_MutuallyExclusive(t *testing.T) {
 	fakeHome(t)
 
-	withStubbedDaemonStop(t, func(string) ([]daemon.Record, error) {
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
 		t.Fatal("daemonStopMatching must not be called when --all/--path conflict")
-		return nil, nil
-	}, func() ([]daemon.Record, error) {
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
 		t.Fatal("daemonStopAll must not be called when --all/--path conflict")
-		return nil, nil
+		return nil, nil, nil
 	})
 
 	if _, _, err := execCmd("daemon", "stop", "--all", "--path", "/repo"); err == nil {

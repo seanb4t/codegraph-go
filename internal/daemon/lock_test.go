@@ -3,9 +3,11 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"testing"
@@ -195,6 +197,45 @@ func TestIsStaleWithoutStartTimes(t *testing.T) {
 	}
 }
 
+// TestRegistryListRemovesRecordWhoseProcessExitsDuringStartTimeRead: a record
+// whose process is live at the liveness check and exits before its start time
+// is read is stale, so List removes it and does not list it. The startTimeOf
+// stub ends the process itself, so the race happens on every run, and it
+// counts its calls: one call proves the first liveness check saw the process
+// live.
+func TestRegistryListRemovesRecordWhoseProcessExitsDuringStartTimeRead(t *testing.T) {
+	dir := withRegistryDir(t)
+	cmd := liveProcess(t)
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	pid := cmd.Process.Pid
+	name := fmt.Sprintf("%d.json", pid)
+	data, err := json.Marshal(Record{PID: pid, StartedAt: time.Now().UTC(), RepoRoot: "/exiting/repo"})
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	writeRawRecord(t, dir, name, data)
+
+	calls := 0
+	prev := startTimeOf
+	startTimeOf = func(int) (time.Time, bool) {
+		calls++
+		// Wait reaps the child: Signal(0) reports an unreaped zombie live.
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return time.Time{}, false
+	}
+	t.Cleanup(func() { startTimeOf = prev })
+
+	assertListsNothing(t)
+	assertPresent(t, filepath.Join(dir, name), false)
+	if calls != 1 {
+		t.Fatalf("startTimeOf ran %d times, want 1: the process must be live at the first liveness check", calls)
+	}
+}
+
 // TestAcquireConcurrentRaceOnlyOneWinner is the CR-02 regression: many
 // goroutines racing acquire() against the SAME (initially absent)
 // lockfile path must see exactly one success — the exclusive-create fix
@@ -278,7 +319,7 @@ func TestSelfRecordSurvivesStaleness(t *testing.T) {
 	if err := Register(rec); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	live, err := List()
+	live, _, err := List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

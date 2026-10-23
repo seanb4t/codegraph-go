@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -136,29 +138,32 @@ func Deregister(pid int) error {
 // from disk and excluded, mirroring acquire()'s existing
 // detect-and-clear-on-every-independent-call discipline (Phase 4 D-16),
 // generalized from one lockfile to many. An absent or empty registry dir is
-// not an error — it returns (nil, nil).
+// not an error — it returns (nil, nil, nil).
 //
 // Only *.json files are considered; directories and every other name,
 // including fsatomic's in-flight temp files, are left untouched. A *.json
 // name that is not the canonical <pid>.json of an integer pid is removed. A
-// <pid>.json whose body does not decode, or whose pid field differs from its
-// name, is never listed, and is removed only when isProcessLive reports that
-// pid dead, so List never removes a file a live daemon may rewrite between
-// this read and the remove. A file that vanishes between ReadDir and ReadFile
-// (raced by a concurrent Deregister/prune) is skipped, not fatal.
-func List() ([]Record, error) {
+// <pid>.json that cannot be read (a dangling symlink included), whose body
+// does not decode, or whose pid field differs from its name, is never
+// listed, and is removed only when isProcessLive reports that pid dead, so
+// List never removes a file a live daemon may rewrite between this read and
+// the remove. While the pid is live, the file's path is returned in skipped.
+// An entry that is gone when ReadFile runs, removed by a concurrent
+// Deregister or listing, is passed over: not fatal and not skipped. A
+// removal that fails is logged once per path (removeRegistryFile); the file
+// is neither listed nor skipped.
+func List() (live []Record, skipped []string, err error) {
 	dir, err := registryDir()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	var live []Record
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".json") {
@@ -168,25 +173,57 @@ func List() ([]Record, error) {
 		base := strings.TrimSuffix(name, ".json")
 		pid, err := strconv.Atoi(base)
 		if err != nil || strconv.Itoa(pid) != base {
-			_ = os.Remove(path)
+			removeRegistryFile(path)
 			continue
 		}
 		data, err := os.ReadFile(path)
-		if err != nil {
-			continue // vanished between ReadDir and ReadFile — another scan raced us
+		if errors.Is(err, fs.ErrNotExist) {
+			// ReadFile follows a symlink, so a dangling one reads as
+			// not-exist too; only an entry Lstat cannot find is gone.
+			if _, lerr := os.Lstat(path); errors.Is(lerr, fs.ErrNotExist) {
+				continue
+			}
 		}
 		var rec Record
-		if err := json.Unmarshal(data, &rec); err != nil || rec.PID != pid {
-			if !isProcessLive(pid) {
-				_ = os.Remove(path)
+		if err == nil {
+			err = json.Unmarshal(data, &rec)
+		}
+		if err != nil || rec.PID != pid {
+			if isProcessLive(pid) {
+				skipped = append(skipped, path)
+			} else {
+				removeRegistryFile(path)
 			}
 			continue
 		}
 		if isStale(lockInfo{PID: rec.PID, StartedAt: rec.StartedAt}) {
-			_ = os.Remove(path) // self-heal; best-effort
+			removeRegistryFile(path) // self-heal
 			continue
 		}
 		live = append(live, rec)
 	}
-	return live, nil
+	return live, skipped, nil
+}
+
+// removeFile is os.Remove indirected behind a package-level func var, the
+// same test-seam convention as startTimeOf, so tests can fail a removal
+// whatever user runs them. It must stay os.Remove, which never removes a
+// directory's contents: List removes some entries without reading them, and
+// an entry may be replaced by a directory after ReadDir.
+var removeFile = os.Remove
+
+// removeRegistryFile removes the registry file at path. A failure is logged
+// once per path per process, except a file that is already gone. The path is
+// quoted because an entry's name can hold any byte, terminal controls
+// included.
+func removeRegistryFile(path string) {
+	err := removeFile(path)
+	if err == nil || errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		err = pathErr.Err // the line names path already
+	}
+	logOnce(path, "daemon: removing registry file %q: %v", path, err)
 }

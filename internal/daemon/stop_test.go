@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"testing"
 	"time"
@@ -110,7 +111,7 @@ func TestStopAll(t *testing.T) {
 		}
 		writeRawRecord(t, dir, fmt.Sprintf("%d.json", stale.PID), staleData)
 
-		got, err := StopAll()
+		got, _, err := StopAll()
 		if err != nil {
 			t.Fatalf("StopAll: %v", err)
 		}
@@ -138,7 +139,7 @@ func TestStopAll(t *testing.T) {
 			writeRawRecord(t, dir, fmt.Sprintf("%d.json", pid), data)
 		}
 
-		got, err := StopAll()
+		got, _, err := StopAll()
 		if err != nil {
 			t.Fatalf("StopAll: %v", err)
 		}
@@ -154,7 +155,7 @@ func TestStopAll(t *testing.T) {
 		withRegistryDir(t)
 		captureStopSignal(t)
 
-		got, err := StopAll()
+		got, _, err := StopAll()
 		if err != nil || got != nil {
 			t.Fatalf("StopAll on empty registry: got %v, err %v; want nil, nil", got, err)
 		}
@@ -177,7 +178,7 @@ func TestStopAll(t *testing.T) {
 		writeRawRecord(t, dir, fmt.Sprintf("%d.json", live.PID), data)
 		writeRawRecord(t, dir, dup, data)
 
-		got, err := StopAll()
+		got, _, err := StopAll()
 		if err != nil {
 			t.Fatalf("StopAll: %v", err)
 		}
@@ -188,6 +189,24 @@ func TestStopAll(t *testing.T) {
 			t.Fatalf("StopAll: stopSignal called %d times, want exactly 1: %v", len(*called), *called)
 		}
 		assertPresent(t, filepath.Join(dir, dup), false)
+	})
+
+	t.Run("returns a malformed record under a live pid as skipped", func(t *testing.T) {
+		dir := withRegistryDir(t)
+		called := captureStopSignal(t)
+		name := fmt.Sprintf("%d.json", os.Getpid())
+		writeRawRecord(t, dir, name, []byte("not valid json"))
+
+		got, skipped, err := StopAll()
+		if err != nil || got != nil {
+			t.Fatalf("StopAll: got %v, err %v; want nil, nil", got, err)
+		}
+		if len(*called) != 0 {
+			t.Fatalf("StopAll: stopSignal calls = %v, want none", *called)
+		}
+		if want := []string{filepath.Join(dir, name)}; !reflect.DeepEqual(skipped, want) {
+			t.Fatalf("StopAll skipped %q, want %q", skipped, want)
+		}
 	})
 }
 
@@ -209,7 +228,7 @@ func TestStopMatching(t *testing.T) {
 			t.Fatalf("Register other: %v", err)
 		}
 
-		got, err := StopMatching("/repo/a")
+		got, _, err := StopMatching("/repo/a")
 		if err != nil {
 			t.Fatalf("StopMatching: %v", err)
 		}
@@ -230,7 +249,7 @@ func TestStopMatching(t *testing.T) {
 			t.Fatalf("Register: %v", err)
 		}
 
-		got, err := StopMatching("/repo/does-not-match")
+		got, _, err := StopMatching("/repo/does-not-match")
 		if err != nil || got != nil {
 			t.Fatalf("StopMatching with no match: got %v, err %v; want nil, nil", got, err)
 		}
