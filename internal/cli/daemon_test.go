@@ -371,8 +371,7 @@ func TestDaemonStopCmd_Matching_WarnsAboutSkippedRecords(t *testing.T) {
 
 // TestDaemonStopCmd_Matching_ErrorStillWarns: when `daemon stop` without
 // --all fails, it still names the skipped registry files on stderr, the
-// error still reaches the exit status, and stdout carries no "no running
-// daemon for" notice.
+// error still reaches the exit status, and stdout stays empty.
 func TestDaemonStopCmd_Matching_ErrorStillWarns(t *testing.T) {
 	fakeHome(t)
 	wantErr := errors.New("boom")
@@ -439,8 +438,8 @@ func TestDaemonStopCmd_DispatchesToStopMatching(t *testing.T) {
 	if gotRepo != cwd {
 		t.Fatalf("daemonStopMatching called with %q, want %q", gotRepo, cwd)
 	}
-	if !strings.Contains(out, "stopped pid 42") {
-		t.Fatalf("expected a stopped-pid line, got:\n%s", out)
+	if want := "stopped pid 42 (" + cwd + ")\n"; out != want {
+		t.Fatalf("stdout = %q, want %q", out, want)
 	}
 	assertNoStderr(t, errOut)
 }
@@ -467,15 +466,15 @@ func TestDaemonStopCmd_All_DispatchesToStopAll(t *testing.T) {
 		t.Fatal("expected daemonStopAll to be called")
 	}
 	assertNoStderr(t, errOut)
-	if !strings.Contains(out, "stopped pid 7") {
-		t.Fatalf("expected a stopped-pid line, got:\n%s", out)
+	if want := "stopped pid 7 (/repo)\n"; out != want {
+		t.Fatalf("stdout = %q, want %q", out, want)
 	}
 }
 
 // TestDaemonStopCmd_AggregatedError_ExitsNonZero asserts a genuine stop
 // error (e.g. errors.Join from 07-04's stopTargets) is surfaced as a
 // non-zero exit, never swallowed like the clean no-op/no-match cases, and
-// that stdout then carries no "no running daemons" notice.
+// that stdout then stays empty.
 func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 	fakeHome(t)
 	wantErr := errors.New("boom")
@@ -492,6 +491,50 @@ func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 	}
 	if out != "" {
 		t.Fatalf("stdout = %q, want none", out)
+	}
+}
+
+// TestDaemonStopCmd_PartialFailureNamesStopped: when `daemon stop` signals
+// some daemons and then fails, stdout still names each daemon it stopped,
+// with no notice, and the error still reaches the exit status.
+func TestDaemonStopCmd_PartialFailureNamesStopped(t *testing.T) {
+	wantErr := errors.New("boom")
+	partial := []daemon.Record{{PID: 7, RepoRoot: "/repo"}}
+	tests := []struct {
+		name     string
+		args     []string
+		matching func(string) ([]daemon.Record, []string, error)
+		all      func() ([]daemon.Record, []string, error)
+	}{
+		{
+			name: "stop --all",
+			args: []string{"daemon", "stop", "--all"},
+			all: func() ([]daemon.Record, []string, error) {
+				return partial, nil, wantErr
+			},
+		},
+		{
+			name: "stop for the current repo",
+			args: []string{"daemon", "stop"},
+			matching: func(string) ([]daemon.Record, []string, error) {
+				return partial, nil, wantErr
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+			withStubbedDaemonStop(t, tc.matching, tc.all)
+
+			out, _, err := execCmd(tc.args...)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("%v: err = %v, want %v", tc.args, err, wantErr)
+			}
+			if want := "stopped pid 7 (/repo)\n"; out != want {
+				t.Fatalf("stdout = %q, want %q", out, want)
+			}
+		})
 	}
 }
 

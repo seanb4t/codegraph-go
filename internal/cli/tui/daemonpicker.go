@@ -286,7 +286,7 @@ func dispatchDaemonAction(action daemonAction, target daemon.Record) ([]daemon.R
 // (cancel/quit/empty-registry) it prints nothing: dispatchDaemonAction
 // returns no records for those actions, which would otherwise read as an
 // indistinguishable "attempted, matched nothing" case. When err is non-nil
-// and nothing was stopped it prints nothing; the caller reports err.
+// and nothing was stopped it prints nothing, so the caller must return err.
 func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.Record, err error) {
 	if action == daemonActionNone {
 		return

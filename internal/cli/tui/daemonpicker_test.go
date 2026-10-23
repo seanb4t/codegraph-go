@@ -288,8 +288,7 @@ func TestFinishDaemonPicker_StopAllReturnsSkippedPaths(t *testing.T) {
 }
 
 // TestFinishDaemonPicker_FailedStopAllPrintsNoNotice: a picker whose stop-all
-// failed before stopping anything returns the error and prints no "nothing
-// stopped" notice.
+// failed before stopping anything returns the error and prints nothing.
 func TestFinishDaemonPicker_FailedStopAllPrintsNoNotice(t *testing.T) {
 	wantErr := errors.New("boom")
 	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
@@ -379,9 +378,9 @@ func TestDaemonPickerModel_EmptyRecordsQuitsWithoutDispatch(t *testing.T) {
 // TestPrintDaemonPickerResult asserts WR-01's (07-REVIEW.md) confirmation
 // output: a "stopped pid %d (%s)" line per signaled record for stop-one/
 // stop-all, a "nothing stopped" notice when the action attempted a stop but
-// nothing matched, no notice when the stop failed, and complete silence for
-// daemonActionNone (cancel/quit/empty-registry already print nothing, by
-// design).
+// nothing matched, nothing at all when a stop-one or stop-all failed before
+// stopping anything, and complete silence for daemonActionNone (cancel/quit/
+// empty-registry already print nothing, by design).
 func TestPrintDaemonPickerResult(t *testing.T) {
 	boom := errors.New("boom")
 	tests := []struct {
@@ -408,6 +407,13 @@ func TestPrintDaemonPickerResult(t *testing.T) {
 			action:  daemonActionStopOne,
 			stopped: nil,
 			want:    "nothing stopped\n",
+		},
+		{
+			name:    "stop-one that failed prints no notice",
+			action:  daemonActionStopOne,
+			stopped: nil,
+			err:     boom,
+			want:    "",
 		},
 		{
 			name:    "stop-all that failed prints no notice",

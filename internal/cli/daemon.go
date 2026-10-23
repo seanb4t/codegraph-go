@@ -272,8 +272,9 @@ var daemonStopAll = daemon.StopAll
 // StopAll, 07-04) re-corroborate every target's liveness immediately before
 // signaling (isStale defense-in-depth) — this command only decides WHICH
 // targets, never how they're validated. An empty/no-match result is a
-// clean "no running daemon(s)" notice, exit 0 — not an error; an aggregated
-// per-target stop error IS surfaced as a non-zero exit, with no notice.
+// clean "no running daemon(s)" notice, exit 0 — not an error; a registry
+// listing error or an aggregated per-target stop error IS surfaced as a
+// non-zero exit, with no notice.
 func newDaemonStopCmd() *cobra.Command {
 	var path string
 	var all bool
