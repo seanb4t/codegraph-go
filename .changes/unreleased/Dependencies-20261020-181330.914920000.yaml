@@ -1,3 +1,0 @@
-kind: Dependencies
-body: Bump the web UI's vite to 8.3.4, clearing three launch-editor advisories (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm) against 8.2.2.
-time: 2026-10-20T18:13:30.91492-04:00
