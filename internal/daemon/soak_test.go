@@ -151,6 +151,16 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	var deferredBCount int32
 	onDeferredB := func() { atomic.AddInt32(&deferredBCount, 1) }
 
+	// watchOpenB receives once session B's watcher has registered every
+	// directory. B reaches watch.Open only after it holds the lock.
+	watchOpenB := make(chan struct{}, 1)
+	dB.onWatchOpen = func(*watch.Watcher) {
+		select {
+		case watchOpenB <- struct{}{}:
+		default:
+		}
+	}
+
 	ctxA, cancelA := context.WithCancel(context.Background())
 	ctxB, cancelB := context.WithCancel(context.Background())
 
@@ -214,12 +224,15 @@ func TestConvergenceTwoSessions(t *testing.T) {
 		t.Fatal("session A did not shut down")
 	}
 
-	// Wait for B to have actually re-acquired the lock (and therefore
-	// opened its own watcher) before writing — otherwise the file create
-	// could land before B's fsnotify watch is registered and never be
-	// observed at all, a race distinct from the convergence property this
-	// test is proving.
-	waitForLock(t, codegraphDir)
+	// Wait for B's watcher, not only B's lock, before writing: Run opens
+	// the watcher after it acquires the lock, and a file created between
+	// the two is never observed — a race distinct from the convergence
+	// property this test is proving.
+	select {
+	case <-watchOpenB:
+	case <-time.After(testBudget(5 * time.Second)):
+		t.Fatal("session B did not open its watcher after session A exited")
+	}
 
 	writeFixtureFile(t, root, "convB.go", "package main\n\nfunc convB() {}\n")
 	select {

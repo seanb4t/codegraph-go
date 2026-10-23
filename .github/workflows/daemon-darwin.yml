@@ -1,0 +1,43 @@
+# macOS leg for internal/daemon: runs `task test:daemon` on a macOS host, where
+# the darwin-only files (procstart_darwin.go and its test) build and run. ci.yml's
+# `test` job runs the same task on Linux only.
+#
+# Not a required check. The paths filter skips the whole workflow on a pull
+# request that touches none of the paths below; a required check skipped that
+# way would stay Pending, so keep this workflow out of the protect-main ruleset.
+# go.mod and go.sum are listed because golang.org/x/sys supplies the darwin
+# sysctl reader.
+
+name: daemon darwin
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "internal/daemon/**"
+      - ".github/workflows/daemon-darwin.yml"
+      - "go.mod"
+      - "go.sum"
+
+permissions:
+  contents: read
+
+jobs:
+  daemon-darwin:
+    name: daemon tests (macOS)
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Test internal/daemon (isolated, -count=1)
+        run: task test:daemon
