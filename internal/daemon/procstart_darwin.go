@@ -8,6 +8,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// kinfoProc is unix.SysctlKinfoProc indirected behind a package-level func
+// var, the same test-seam convention as startTimeOf, so tests can supply a
+// kinfo_proc the kernel would not return for a live test process.
+var kinfoProc = unix.SysctlKinfoProc
+
 // processStartTime returns pid's start time as a wall-clock time.Time, read
 // from the kernel's process table through sysctl kern.proc.pid (the
 // P_starttime field of the pid's kinfo_proc) without CGo. ok is false when
@@ -15,7 +20,7 @@ import (
 // holds, or when the start time is zero; isStale then decides on liveness
 // alone.
 func processStartTime(pid int) (time.Time, bool) {
-	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	kp, err := kinfoProc("kern.proc.pid", pid)
 	if err != nil {
 		return time.Time{}, false
 	}

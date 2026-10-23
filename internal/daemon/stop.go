@@ -47,10 +47,12 @@ func resolveRepoRoot(p string) string {
 // record found stale in this very narrow window between List()'s scan and
 // this point is skipped, never signaled — the daemon-stop safety invariant
 // (T-07-04-01) that a forged/stale/reused-pid record can never cause an
-// unrelated process to be SIGTERM'd. Targets are de-duplicated by pid.
-// Per-target sendStop errors are aggregated via errors.Join rather than
-// swallowed or short-circuited on the first failure; a no-match/empty
-// candidate set returns (nil, nil), not an error.
+// unrelated process to be SIGTERM'd. Each pid is signaled at most once
+// because List returns at most one record per pid: it lists only the
+// canonical <pid>.json whose body names that same pid. Per-target sendStop
+// errors are aggregated via errors.Join rather than swallowed or
+// short-circuited on the first failure; a no-match/empty candidate set
+// returns (nil, nil), not an error.
 func stopTargets(match func(Record) bool) ([]Record, error) {
 	recs, err := List()
 	if err != nil {
@@ -58,13 +60,11 @@ func stopTargets(match func(Record) bool) ([]Record, error) {
 	}
 
 	var signaled []Record
-	seen := make(map[int]bool)
 	var errs []error
 	for _, rec := range recs {
-		if !match(rec) || seen[rec.PID] {
+		if !match(rec) {
 			continue
 		}
-		seen[rec.PID] = true
 
 		if isStale(lockInfo{PID: rec.PID, StartedAt: rec.StartedAt}) {
 			continue

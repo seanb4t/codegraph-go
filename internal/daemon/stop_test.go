@@ -160,9 +160,11 @@ func TestStopAll(t *testing.T) {
 		}
 	})
 
-	// A second file carrying the same pid cannot be named <pid>.json, so List
-	// never lists it and StopAll targets the pid once.
-	t.Run("signals a pid once when a second file names it", func(t *testing.T) {
+	// A second file carrying the same pid cannot be named <pid>.json. The
+	// zero-padded name parses to the same pid, so it is the one shape that
+	// would reach stopTargets twice if List listed it; stopTargets keeps no
+	// de-dup of its own.
+	t.Run("signals a pid once because List lists only its <pid>.json", func(t *testing.T) {
 		dir := withRegistryDir(t)
 		called := captureStopSignal(t)
 
@@ -171,8 +173,9 @@ func TestStopAll(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal live record: %v", err)
 		}
+		dup := fmt.Sprintf("0%d.json", live.PID)
 		writeRawRecord(t, dir, fmt.Sprintf("%d.json", live.PID), data)
-		writeRawRecord(t, dir, "dup-b.json", data)
+		writeRawRecord(t, dir, dup, data)
 
 		got, err := StopAll()
 		if err != nil {
@@ -184,7 +187,7 @@ func TestStopAll(t *testing.T) {
 		if len(*called) != 1 {
 			t.Fatalf("StopAll: stopSignal called %d times, want exactly 1: %v", len(*called), *called)
 		}
-		assertPresent(t, filepath.Join(dir, "dup-b.json"), false)
+		assertPresent(t, filepath.Join(dir, dup), false)
 	})
 }
 
