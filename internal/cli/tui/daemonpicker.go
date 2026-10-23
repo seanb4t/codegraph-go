@@ -285,12 +285,16 @@ func dispatchDaemonAction(action daemonAction, target daemon.Record) ([]daemon.R
 // (internal/cli already imports internal/cli/tui). For daemonActionNone
 // (cancel/quit/empty-registry) it prints nothing: dispatchDaemonAction
 // returns no records for those actions, which would otherwise read as an
-// indistinguishable "attempted, matched nothing" case.
-func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.Record) {
+// indistinguishable "attempted, matched nothing" case. When err is non-nil
+// and nothing was stopped it prints nothing, so the caller must return err.
+func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.Record, err error) {
 	if action == daemonActionNone {
 		return
 	}
 	if len(stopped) == 0 {
+		if err != nil {
+			return
+		}
 		fmt.Fprintln(w, "nothing stopped")
 		return
 	}
@@ -346,6 +350,6 @@ func finishDaemonPicker(w io.Writer, final tea.Model) ([]string, error) {
 	}
 	action, target := fm.resolvedAction()
 	stopped, skipped, err := dispatchDaemonAction(action, target)
-	printDaemonPickerResult(w, action, stopped)
+	printDaemonPickerResult(w, action, stopped, err)
 	return skipped, err
 }

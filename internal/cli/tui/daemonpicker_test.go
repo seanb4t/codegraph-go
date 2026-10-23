@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -286,6 +287,30 @@ func TestFinishDaemonPicker_StopAllReturnsSkippedPaths(t *testing.T) {
 	}
 }
 
+// TestFinishDaemonPicker_FailedStopAllPrintsNoNotice: a picker whose stop-all
+// failed before stopping anything returns the error and prints nothing.
+func TestFinishDaemonPicker_FailedStopAllPrintsNoNotice(t *testing.T) {
+	wantErr := errors.New("boom")
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
+		t.Fatal("stopMatching must not be called for stop-all")
+		return nil, nil, nil
+	}, func() ([]daemon.Record, []string, error) {
+		return nil, nil, wantErr
+	})
+
+	m := newDaemonPickerModel("/repo/a", []daemon.Record{rec("/repo/a", 7)})
+	final, _ := m.Update(aKeyMsg())
+
+	var out bytes.Buffer
+	_, err := finishDaemonPicker(&out, final)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("finishDaemonPicker: err = %v, want %v", err, wantErr)
+	}
+	if out.String() != "" {
+		t.Fatalf("output = %q, want none", out.String())
+	}
+}
+
 // TestDaemonPickerModel_CancelSignalsNothing asserts q/esc/ctrl+c resolve
 // daemonActionNone — dispatchDaemonAction must be a pure no-op, never
 // calling stopMatching or stopAll.
@@ -353,13 +378,16 @@ func TestDaemonPickerModel_EmptyRecordsQuitsWithoutDispatch(t *testing.T) {
 // TestPrintDaemonPickerResult asserts WR-01's (07-REVIEW.md) confirmation
 // output: a "stopped pid %d (%s)" line per signaled record for stop-one/
 // stop-all, a "nothing stopped" notice when the action attempted a stop but
-// nothing matched, and complete silence for daemonActionNone (cancel/quit/
+// nothing matched, nothing at all when a stop-one or stop-all failed before
+// stopping anything, and complete silence for daemonActionNone (cancel/quit/
 // empty-registry already print nothing, by design).
 func TestPrintDaemonPickerResult(t *testing.T) {
+	boom := errors.New("boom")
 	tests := []struct {
 		name    string
 		action  daemonAction
 		stopped []daemon.Record
+		err     error
 		want    string
 	}{
 		{
@@ -381,6 +409,27 @@ func TestPrintDaemonPickerResult(t *testing.T) {
 			want:    "nothing stopped\n",
 		},
 		{
+			name:    "stop-one that failed prints no notice",
+			action:  daemonActionStopOne,
+			stopped: nil,
+			err:     boom,
+			want:    "",
+		},
+		{
+			name:    "stop-all that failed prints no notice",
+			action:  daemonActionStopAll,
+			stopped: nil,
+			err:     boom,
+			want:    "",
+		},
+		{
+			name:    "stop-all that failed part-way names what it stopped",
+			action:  daemonActionStopAll,
+			stopped: []daemon.Record{rec("/repo/a", 1)},
+			err:     boom,
+			want:    "stopped pid 1 (/repo/a)\n",
+		},
+		{
 			name:    "cancel prints nothing",
 			action:  daemonActionNone,
 			stopped: nil,
@@ -391,7 +440,7 @@ func TestPrintDaemonPickerResult(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			printDaemonPickerResult(&buf, tc.action, tc.stopped)
+			printDaemonPickerResult(&buf, tc.action, tc.stopped, tc.err)
 			if got := buf.String(); got != tc.want {
 				t.Fatalf("printDaemonPickerResult() = %q, want %q", got, tc.want)
 			}
