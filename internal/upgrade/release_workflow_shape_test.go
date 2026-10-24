@@ -1611,13 +1611,12 @@ var releaseJobForbiddenTools = []string{"node", "pnpm"}
 // (goreleaser-invoking, id-token: write) job's setup-tools step to `cache:
 // "false"` and an explicit tools list with no JS toolchain. A restored tool
 // cache is mutable state any branch can populate inside the OIDC signing
-// boundary (S2; T-01-29); installing every mise tool would put node, pnpm
-// and npm on the release path.
+// boundary; installing every mise tool would put node, pnpm and npm on the
+// release path.
 //
 // The signing job is found through its goreleaser invocation, not a
 // hardcoded key, and the step through parseReleaseJobSetupToolsSteps, which
-// errors on zero matches (positive floor, repo rule 84d1gfpywd). This
-// asserts only the inputs our workflow declares (rule eyva2svrcz).
+// errors on zero matches. This asserts only the inputs our workflow declares.
 func TestReleaseJobSetupToolsIsMinimalAndUncached(t *testing.T) {
 	src, err := os.ReadFile(releaseWorkflowPath)
 	if err != nil {
