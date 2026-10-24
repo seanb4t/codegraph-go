@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """Decide whether a pull request that changes shipped code adds a changelog fragment.
 
 Shipped code is cmd/** or internal/**, excluding *_test.go files and anything under
@@ -23,7 +27,7 @@ Divergence from pr_template_policy.py: the exit status IS the verdict (0 pass, 1
 because no later step reads an output and no comment is posted. The check log is the
 only guidance a contributor gets.
 
-The rule lives here and nowhere else; scripts/test_fragment_policy.py imports it.
+The rule lives here and nowhere else; tests/test_fragment_policy.py imports it.
 """
 
 from __future__ import annotations

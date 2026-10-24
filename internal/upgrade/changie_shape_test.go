@@ -1,5 +1,5 @@
 // changie_shape_test.go binds .changie.yaml, the .changes/ baseline seed
-// layout, and the isolated go.tool-changie.mod pin to CHG-01/CHG-02's
+// layout, and the mise.toml changie pin to CHG-01/CHG-02's
 // locked vocabulary (01-01-PLAN.md, D-06, D-10, D-11, D-13). Phase 5's
 // D-13 (05-01, maintainer decision of 2026-10-14) amends Phase 1 D-02's
 // newlines lock: the newlines mapping now holds four keys, not one, so a
@@ -26,7 +26,6 @@ const (
 	changieConfigPath      = "../../.changie.yaml"
 	changieChangesDir      = "../../.changes"
 	changieChangelogPath   = "../../CHANGELOG.md"
-	changieModfilePath     = "../../go.tool-changie.mod"
 	changieToolPackage     = "github.com/miniscruff/changie"
 	changieMinVersion      = "v1.26.0"
 	changieBaselineVersion = "v0.14.0"
@@ -394,47 +393,26 @@ func TestChangieVersionSeedsMatchChangelog(t *testing.T) {
 	}
 }
 
-// --- TestChangieToolPinnedInIsolatedModfile (CHG-01, D-04) ------------------
+// --- TestChangieToolPinnedInMise (CHG-01) ------------------------------------
 
-func TestChangieToolPinnedInIsolatedModfile(t *testing.T) {
-	data, err := os.ReadFile(changieModfilePath)
+func TestChangieToolPinnedInMise(t *testing.T) {
+	data, err := os.ReadFile(miseTomlPath)
 	if err != nil {
-		t.Fatalf("read %s: %v", changieModfilePath, err)
+		t.Fatalf("read %s: %v", miseTomlPath, err)
 	}
-	src := string(data)
-
-	pkgs, err := parseGoModToolPackages(src)
+	version, err := parseMiseToolVersion(string(data), "changie")
 	if err != nil {
-		t.Fatalf("parseGoModToolPackages(%s): %v", changieModfilePath, err)
+		t.Fatalf("%s: %v", miseTomlPath, err)
 	}
-	if len(pkgs) != 1 || pkgs[0] != changieToolPackage {
-		t.Fatalf("%s: tool packages = %v, want exactly [%s]", changieModfilePath, pkgs, changieToolPackage)
+	v := "v" + strings.TrimPrefix(version, "v")
+	if !semver.IsValid(v) {
+		t.Fatalf("%s: changie version %q is not valid semver", miseTomlPath, version)
 	}
-
-	version, err := parseGoModRequireVersion(src, changieToolPackage)
-	if err != nil {
-		t.Fatalf("parseGoModRequireVersion(%s, %s): %v", changieModfilePath, changieToolPackage, err)
-	}
-	if !semver.IsValid(version) {
-		t.Fatalf("%s: required %s version %q is not valid semver", changieModfilePath, changieToolPackage, version)
-	}
-	if semver.Compare(version, changieMinVersion) < 0 {
-		t.Fatalf("%s: required %s version %q is older than the pinned floor %q", changieModfilePath, changieToolPackage, version, changieMinVersion)
-	}
-
-	if !slices.Contains(isolatedModfilePaths, changieModfilePath) {
-		t.Fatalf("isolatedModfilePaths %v does not contain %s (D-04)", isolatedModfilePaths, changieModfilePath)
+	if semver.Compare(v, changieMinVersion) < 0 {
+		t.Fatalf("%s: changie version %q is older than the pinned floor %q", miseTomlPath, version, changieMinVersion)
 	}
 	if !slices.Contains(forbiddenToolPackages, changieToolPackage) {
-		t.Fatalf("forbiddenToolPackages %v does not contain %s (D-04)", forbiddenToolPackages, changieToolPackage)
-	}
-
-	header := mustToolModfileHeaderComment(t, src)
-	lowerHeader := strings.ToLower(header)
-	for _, want := range []string{"isolat", "gowork=off", "task changie"} {
-		if !strings.Contains(lowerHeader, want) {
-			t.Fatalf("%s: header comment does not mention %q, got: %q", changieModfilePath, want, header)
-		}
+		t.Fatalf("forbiddenToolPackages %v does not contain %s (D-03)", forbiddenToolPackages, changieToolPackage)
 	}
 }
 
@@ -447,11 +425,6 @@ func TestChangieWrapperTaskRecordsInstallPath(t *testing.T) {
 	}
 	src := string(data)
 
-	const wantVarLine = "  GO_TOOL_CHANGIE: GOWORK=off go tool -modfile=go.tool-changie.mod"
-	if !strings.Contains(src, wantVarLine) {
-		t.Fatalf("%s: does not contain the exact line %q", taskfilePath, wantVarLine)
-	}
-
 	blocks := mustParseTaskBlocks(t, src)
 	block, ok := blocks["changie"]
 	if !ok {
@@ -462,15 +435,15 @@ func TestChangieWrapperTaskRecordsInstallPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTaskDescription(changie): %v", err)
 	}
-	if !strings.Contains(desc, "go.tool-changie.mod") {
-		t.Fatalf("changie task desc %q does not mention go.tool-changie.mod (D-05)", desc)
+	if !strings.Contains(desc, "mise.toml") {
+		t.Fatalf("changie task desc %q does not mention mise.toml (D-05)", desc)
 	}
 
 	if !blockDeclaresKey(block, "silent") {
 		t.Fatalf("changie task block does not declare silent: — stdout must carry only changie's own output:\n%s", block)
 	}
 
-	const wantCmd = "{{.GO_TOOL_CHANGIE}} changie {{.CLI_ARGS}}"
+	const wantCmd = `"changie {{.CLI_ARGS}}"`
 	if !strings.Contains(block, wantCmd) {
 		t.Fatalf("changie task block does not contain the exact cmds entry %q, got:\n%s", wantCmd, block)
 	}
@@ -541,7 +514,7 @@ func TestChangieShapeParsersFailLoudly(t *testing.T) {
 // TestChangieCheckWiredIntoCI asserts ci.yml's test job runs `task
 // check:changie` immediately after `task docs:cli:drift` (D-08), and that
 // Taskfile.yml's check:changie block declares actionable preconditions and
-// builds from the pinned go.tool-changie.mod (D-07).
+// runs the changie mise.toml pins (D-07).
 func TestChangieCheckWiredIntoCI(t *testing.T) {
 	ciData, err := os.ReadFile(ciWorkflowPath)
 	if err != nil {
@@ -597,9 +570,9 @@ func TestChangieCheckWiredIntoCI(t *testing.T) {
 	if len(msgs) == 0 {
 		t.Fatalf("check:changie task block declares preconditions: but no non-empty msg: values")
 	}
-	const wantModfileToken = "-modfile=go.tool-changie.mod"
-	if !strings.Contains(block, wantModfileToken) {
-		t.Fatalf("check:changie task block does not contain %q (D-07: must build from the pinned modfile)", wantModfileToken)
+	const wantChangieToken = "changie_bin=$(command -v changie)"
+	if !strings.Contains(block, wantChangieToken) {
+		t.Fatalf("check:changie task block does not contain %q (D-07: must run the changie mise.toml pins)", wantChangieToken)
 	}
 }
 
@@ -609,12 +582,9 @@ func TestChangieCheckWiredIntoCI(t *testing.T) {
 // task only invokes it, so the roster is where changie's membership lives.
 const vulnReportPath = "../../scripts/vuln_report.py"
 
-// changieVulnRosterRe matches the roster entry that builds changie from its
-// pinned modfile — one whole line, so an edit that drops changie, moves it
-// to another modfile or renames it to something ambiguous fails loudly here.
-var changieVulnRosterRe = regexp.MustCompile(
-	`(?m)^\s*Tool\("changie", "go\.tool-changie\.mod", "` + regexp.QuoteMeta(changieToolPackage) + `"\),$`,
-)
+// changieVulnRosterRe matches the roster entry that scans changie — one whole
+// line, so an edit that drops changie or renames it fails loudly here.
+var changieVulnRosterRe = regexp.MustCompile(`(?m)^\s*Tool\("changie"\),$`)
 
 func TestChangieBinaryInToolVulnScan(t *testing.T) {
 	data, err := os.ReadFile(taskfilePath)
@@ -635,6 +605,6 @@ func TestChangieBinaryInToolVulnScan(t *testing.T) {
 		t.Fatalf("read %s: %v", vulnReportPath, err)
 	}
 	if !changieVulnRosterRe.MatchString(string(script)) {
-		t.Fatalf("%s has no roster line building changie from go.tool-changie.mod (%s) — changie is not scanned from its pinned modfile", vulnReportPath, changieToolPackage)
+		t.Fatalf("%s has no roster line for changie — the mise-installed changie is not scanned", vulnReportPath)
 	}
 }

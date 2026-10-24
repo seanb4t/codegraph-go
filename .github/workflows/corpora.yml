@@ -94,6 +94,8 @@ on:
       - "corpus/**"
       - "go.mod"
       - "go.sum"
+      - "mise.toml"
+      - "mise.lock"
       - "Taskfile.yml"
       - ".github/workflows/corpora.yml"
   push:
@@ -117,6 +119,8 @@ on:
       - "corpus/**"
       - "go.mod"
       - "go.sum"
+      - "mise.toml"
+      - "mise.lock"
       - "Taskfile.yml"
       - ".github/workflows/corpora.yml"
 
@@ -158,11 +162,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache corpora volume
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
@@ -182,9 +183,6 @@ jobs:
       # fail-on-cache-miss is intentionally NOT set — its default of false
       # is exactly what FIXT-02 criterion 5 requires: a miss must fall
       # through to the unconditional fetch below, never cause a skipped job.
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Fetch corpora at pinned SHAs
         # UNCONDITIONAL — deliberately NOT gated on steps.cache-corpora.hit.
@@ -230,11 +228,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache corpora volume
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
@@ -244,9 +239,6 @@ jobs:
           # at the job-level value. fail-on-cache-miss is intentionally NOT
           # set — a miss falls through to the unconditional fetch below.
           path: ${{ env.CODEGRAPH_CORPUS_DIR }}
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Fetch corpora at pinned SHAs
         # UNCONDITIONAL (FIXT-03) — deliberately NOT gated on

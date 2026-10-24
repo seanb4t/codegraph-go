@@ -57,6 +57,11 @@ jobs:
             echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+        with:
+          tools: uv
+
       - name: Evaluate template policy
         id: policy
         env:
@@ -64,7 +69,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           CHANGED_FILES: ${{ steps.changed_files.outputs.files }}
-        run: python3 scripts/pr_template_policy.py
+        run: uv run scripts/pr_template_policy.py
 
       - name: Comment on a malformed PR
         if: steps.policy.outputs.action == 'warn' || steps.policy.outputs.action == 'close'

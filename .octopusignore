@@ -15,9 +15,6 @@ web/build/
 *.connect.go
 web/src/lib/gen/
 
-# Checksums of the isolated tool modfiles (the built-in list matches only go.sum)
-go.tool*.sum
-
 # Lockfiles that `mise lock` writes
 mise.lock
 .mise/locks/

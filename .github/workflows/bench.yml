@@ -104,11 +104,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: false
+          tools: go
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
@@ -181,11 +180,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: true
+          tools: go
+          go-cache: "true"
 
       - name: Record candidate baseline on this runner
         # -rebless is the ONLY writer of baseline.json by design (D-05) and
@@ -316,14 +315,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
+          tools: go task
+          go-cache: "true"
 
       - name: Run CPU/memory/storage topology diagnostic
         # task diag:cpu is the single definition (D-01/D-02) — this step
@@ -361,19 +357,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: false
+          tools: go task
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Run CPU/memory/storage topology diagnostic
         run: |
@@ -420,11 +412,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: true
+          tools: go
+          go-cache: "true"
 
       - name: Re-measure at -trials 7 against a throwaway baseline path
         env:
@@ -460,11 +452,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: false
+          tools: go
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
@@ -523,11 +514,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: true
+          tools: go
+          go-cache: "true"
 
       - name: Re-measure at -trials 7 with disk-backed scratch, against a throwaway baseline path
         # -scratch-fs disk pins the pre-tmpfs configuration explicitly

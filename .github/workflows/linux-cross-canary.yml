@@ -80,6 +80,9 @@ on:
       - "Taskfile.yml"
       - "go.mod"
       - "go.sum"
+      - "mise.toml"
+      - "mise.lock"
+      - ".github/actions/setup-tools/**"
 
 permissions:
   contents: read
@@ -100,38 +103,8 @@ jobs:
           # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      # No nscloud-cache-action here, unlike release.yml's build job: a
-      # canary should have the smallest possible failure surface.
-
-      - name: Install zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: "0.15.1" # V1 — see the FAIL-bar variation list above
-
-      # syft and cosign are NOT speculative and must not be trimmed as "the
-      # canary doesn't sign". `release:dry-run` skips publish/sign but NOT
-      # the sboms: pipe — the moment plan 01-02 activates .goreleaser.yaml's
-      # sboms: block, this canary (which re-fires on every .goreleaser.yaml
-      # change, including 01-02's own) shells out to syft. Without the
-      # installer the canary would go red at the SBOM pipe BEFORE reaching
-      # the exec jobs below, blinding this phase's own blocking REL-05 gate
-      # at exactly the moment it matters (review HIGH-4). cosign is
-      # installed for the same forward reason and is consumed by plan
-      # 01-06's sign-enabled leg.
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       # Kept as separate steps (not folded into one shell block) so a red
       # run says WHICH layer broke — "goreleaser release itself failed" and
@@ -170,20 +143,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Download linux/amd64 binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: codegraph-linux-amd64
           path: dist/export
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Index this repository and assert a non-zero graph
         env:
@@ -201,20 +168,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Download linux/arm64 binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: codegraph-linux-arm64
           path: dist/export
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Index this repository and assert a non-zero graph
         env:
@@ -246,25 +207,8 @@ jobs:
           # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Install zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: "0.15.1" # V1 — see the FAIL-bar variation list above
-
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: "Rehearse binary_signs:/sboms: against a throwaway local key"
         env:

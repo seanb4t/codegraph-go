@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """Decide whether a push or pull request changes only planning files.
 
 A change is planning-only when its file list is non-empty and every changed path,
@@ -27,7 +31,7 @@ through pulls/{n}/files and fails when the fetched count differs from the pull
 request's changed_files. A push's files come from compare/{before}...{after},
 which lists at most 300 files, so a listing that reaches that cap is undecided.
 
-The rule lives here and nowhere else; scripts/test_planning_only.py imports it.
+The rule lives here and nowhere else; tests/test_planning_only.py imports it.
 """
 
 from __future__ import annotations

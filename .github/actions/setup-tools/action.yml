@@ -1,0 +1,70 @@
+# Installs the tools mise.toml pins, verified against mise.lock, and puts
+# their real bin directories on PATH. Shims stay off PATH: a shim resolves its
+# version from the working directory, and several Taskfile targets run tools
+# from scratch directories outside the repository.
+name: Set up tools
+description: Install the tools pinned in mise.toml and add them to PATH.
+inputs:
+  tools:
+    description: >-
+      Space-separated mise tool names to install, each also the name of the
+      command it provides. Empty installs every tool in mise.toml.
+    default: ""
+  cache:
+    description: >-
+      "false" keeps mise's tool cache out of the job. The release job sets it:
+      no mutable cache inside the OIDC signing boundary.
+    default: "true"
+  go-cache:
+    description: >-
+      "true" caches the Go module and build caches with actions/cache. Use it
+      on GitHub-hosted runners; Namespace jobs cache Go with
+      namespacelabs/nscloud-cache-action instead.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install mise and the pinned tools
+      uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      with:
+        version: 2026.10.18
+        install_args: ${{ inputs.tools }}
+        cache: ${{ inputs.cache }}
+        add_shims_to_path: false
+
+    - name: Locate the Go caches
+      id: go-cache-paths
+      if: inputs.go-cache == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo "gomodcache=$(go env GOMODCACHE)"
+          echo "gocache=$(go env GOCACHE)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go modules and builds
+      if: inputs.go-cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.go-cache-paths.outputs.gomodcache }}
+          ${{ steps.go-cache-paths.outputs.gocache }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.sum') }}
+        restore-keys: go-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Verify the tools are on PATH
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.tools }}
+      run: |
+        set -euo pipefail
+        if [ -z "${TOOLS}" ]; then
+          go version
+          task --version
+          [ "$(go env GOTOOLCHAIN)" = "local" ] || { echo "::error::GOTOOLCHAIN is $(go env GOTOOLCHAIN), want local (mise.toml [env])"; exit 1; }
+        else
+          for tool in ${TOOLS}; do
+            command -v "${tool}" || { echo "::error::${tool} is not on PATH after mise install"; exit 1; }
+          done
+        fi

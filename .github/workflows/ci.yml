@@ -60,6 +60,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+        with:
+          tools: uv
+
       # scripts/planning_only.py prints planning_only=true only when every
       # changed path (and every rename's previous path) is under openspec/.
       # Untrusted values reach it through env:, never through the run: text.
@@ -72,7 +77,7 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.event.after }}
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/planning_only.py
+        run: uv run scripts/planning_only.py
 
   test:
     name: test
@@ -83,19 +88,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Build
         run: task build
@@ -149,23 +148,8 @@ jobs:
       - name: Corpus coverage claim (committed record)
         run: task corpora:verify
 
-      # BLD-01/D-16: Corepack resolves the pnpm version pinned by
-      # web/package.json's packageManager field — the single source of
-      # truth D-16 chose over a second pnpm/action-setup pin. Node 24 is
-      # pinned deliberately, not 'latest' or a floating major: Corepack is
-      # NOT distributed with Node.js 25+ (RESEARCH.md Pitfall 4), so a
-      # newer pin would silently remove the mechanism D-16 depends on. No
-      # cache: input on this step — 02-04's TestJSInstallPathHasNoMutableCache
-      # fails this build if one appears, because a stale node_modules cache
-      # producing a tree that differs from web/pnpm-lock.yaml is exactly
-      # the divergence a committed web/build/ cannot tolerate.
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-
-      # BLD-01/D-13/D-16: frozen-lockfile install at the Corepack-resolved
-      # pnpm version. task web:deps also asserts web/pnpm-lock.yaml was not
+      # BLD-01/D-13: frozen-lockfile install with the pnpm mise.toml pins.
+      # task web:deps also asserts web/pnpm-lock.yaml was not
       # rewritten by the install, failing loudly rather than drifting
       # silently between a developer's machine and this runner.
       - name: Install JS deps (frozen lockfile, BLD-01)
@@ -234,20 +218,13 @@ jobs:
         run: task docs:cli:drift
 
       # CHG-03/CHG-04, v0.15.0 Phase 1: proves the pinned changie
-      # (go.tool-changie.mod) answers the v0.14.0 baseline version,
+      # (mise.toml) answers the v0.14.0 baseline version,
       # reproduces CHANGELOG.md from .changes/ byte for byte, writes a
       # fragment non-interactively with CI=true, and refuses a malformed
       # one (missing PR, undeclared kind) on changie's own stderr text —
       # all inside a scratch copy that never mutates the tree.
       - name: Changie baseline and fragment guard (CHG-03/CHG-04)
         run: task check:changie
-
-      # GRD-11: check:gonum's SBOM half shells out to `syft` exactly as
-      # .goreleaser.yaml's sboms: block does; GitHub-hosted runners do not
-      # ship it. Same pin already trusted by release.yml and
-      # linux-cross-canary.yml — reused rather than re-derived.
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
       # GRD-11/GRF-10: this target's three positive-controlled halves
       # (govulncheck source mode over the main module, syft SBOM by
@@ -331,29 +308,16 @@ jobs:
       # (RESEARCH anti-pattern). This project's SBOM generation lives in
       # release.yml's `assemble` job (per-binary SBOM at release time),
       # entirely separate from this call-graph-aware vulnerability gate.
-      - name: Run govulncheck
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          # go-version-input MUST be explicitly empty. The action's own
-          # action.yml defaults it to 'stable' and passes it to setup-go as
-          # `go-version:` unconditionally, alongside our `go-version-file:`.
-          # setup-go resolves `go-version` FIRST and emits only a warning —
-          # "Both go-version and go-version-file inputs are specified, only
-          # go-version will be used" — so `go-version-file: go.mod` below is
-          # structurally dead unless this is blank. Observed, not theorised:
-          # run 34232338047 scanned under go1.27.1 while go.mod pinned 1.26.6,
-          # and failed loading packages on cockroachdb/swiss's go1.27
-          # incompatibility (undefined: hashFn / fastrand64) — a BLOCKING
-          # security gate that had silently stopped scanning the toolchain it
-          # claims to. Blank here, not a literal version, so go.mod stays the
-          # single definition of the pin.
-          go-version-input: ""
-          go-version-file: go.mod
-          repo-checkout: false
+          go-cache: "true"
 
-  # tool-vuln (VULN-01/02/03): govulncheck -mode=binary over the four tool
-  # binaries built from go.tool.mod/go.tool-lint.mod — the 357 measured
-  # third-party modules that execute as credentialed CI tooling (repository
+      - name: Run govulncheck
+        run: task vuln:source
+
+  # tool-vuln (VULN-01/02/03): govulncheck -mode=binary over the Go tool
+  # binaries mise.toml pins — the third-party modules that execute as credentialed CI tooling (repository
   # write access and secrets) and were previously scanned by nothing
   # (Taskfile.yml's `vuln` target used to be a no-op duplicate of the
   # govulncheck job above, D-05). This job deliberately does NOT replace the
@@ -387,19 +351,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       # Every per-binary outcome is reported, including a failed build
       # (BUILD ERROR); the step fails only when the report loop itself
@@ -421,24 +379,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
-
-      - name: Install zig (linux/arm64 cross-target leg only)
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: "0.15.1"
 
       - name: Compute determinism inputs
         id: repro
@@ -490,14 +437,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
+          go-cache: "true"
 
       - name: Perf-regression gate (offline synthetic 120k-file corpus)
         # tools/bench/runner -mode regression builds+runs gencorpus's
@@ -571,14 +514,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
+          go-cache: "true"
 
       - name: Install tmux
         run: task test:tmux:install
@@ -603,11 +542,7 @@ jobs:
   # of them is mandatory, not optional, given this repo's own documented "guard present but never
   # fires" failure mode (Phase-8 CR-01/WR-02). actionlint catches schema
   # errors, untyped expressions, and injection-shaped run: blocks before
-  # merge. Built from go.tool-lint.mod at a pinned version via the shared
-  # install-task/Taskfile bootstrap (Phase 10, D-03/D-04) rather than a
-  # fourth-party Action or a bare `go install @pin` — see go.tool-lint.mod's
-  # own header for why actionlint is isolated from go.tool.mod's task/
-  # goreleaser tool directives.
+  # merge. actionlint is pinned in mise.toml.
   actionlint:
     name: actionlint (workflow static analysis)
     runs-on: namespace-profile-linux-amd64-2x4
@@ -615,19 +550,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Run actionlint
         run: task lint:actions
@@ -650,19 +579,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       # Base ref reaches the shell only through this step-level env: entry,
       # never interpolated into the run: body — matching this workflow's
@@ -679,19 +602,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Cache Go modules and build
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
 
       - name: Run goreleaser check
         run: task check:goreleaser
