@@ -63,7 +63,7 @@ func TestReleaseChainGoToolChangieRe(t *testing.T) {
 		"        version=$(changie latest)":                                 false,
 		"        go tool changie latest":                                    true,
 		"        go run github.com/miniscruff/changie latest":               true,
-		"        go install github.com/miniscruff/changie@v1.26.0":          true,
+		"        go install github.com/miniscruff/changie@latest":           true,
 		"        GOWORK=off go build -modfile=x.mod -o bin/changie changie": true,
 	}
 	for line, want := range cases {

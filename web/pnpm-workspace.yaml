@@ -41,7 +41,7 @@ overrides:
 # Advisories accepted because this SPA build cannot reach them: +layout.ts
 # sets ssr = false and prerender = false, and the UI has no form actions,
 # no use:enhance, no setHeaders and no server files. Both are fixed only in
-# @sveltejs/kit 3; drop them with the kit 3 migration (#184).
+# @sveltejs/kit 3; drop them when the UI moves to kit 3.
 audit:
   ignore:
     # @sveltejs/kit <3: URL redirection through an enhanced form submission.
