@@ -1995,6 +1995,18 @@ tasks:
     cmds:
       - uv run scripts/vuln_report.py -- govulncheck -mode=binary
 
+  mutation-check:
+    desc: >-
+      Proves that Go tests catch the bugs they target: runs each mutant in the
+      JSON file passed after `--` against the tests it names, through `go test
+      -overlay`, so the working tree never changes. Fails unless every mutant
+      is CAUGHT. See .claude/skills/mutation-check/SKILL.md for the file format.
+    preconditions:
+      - sh: command -v uv && command -v go
+        msg: "uv or go not on PATH — run `mise install`."
+    cmds:
+      - uv run scripts/mutation_check.py {{.CLI_ARGS}}
+
   vuln:source:
     desc: >-
       BLOCKING (DIST-03): govulncheck in source mode over the main module,
@@ -2301,8 +2313,9 @@ tasks:
   check:ci-scripts:
     desc: >-
       Offline guard for ci.yml's planning-only classifier and the advisory
-      vuln report loop: runs tests/test_planning_only.py and
-      tests/test_vuln_report.py (stdlib unittest over literal inputs,
+      vuln report loop and the mutation check: runs tests/test_planning_only.py,
+      tests/test_vuln_report.py and tests/test_mutation_check.py (stdlib
+      unittest over literal inputs,
       never gh, mise, go or a workflow). Each file passes only when unittest's
       executed count equals its number of `def test_` methods, that count
       meets the file's floor, and the result line is exactly OK (rule
@@ -2316,7 +2329,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        for spec in test_planning_only.py:28 test_vuln_report.py:18; do
+        for spec in test_planning_only.py:28 test_vuln_report.py:18 test_mutation_check.py:13; do
           file="${spec%%:*}"
           floor="${spec##*:}"
           defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' "tests/${file}" || true; } | wc -l | tr -d ' ')
