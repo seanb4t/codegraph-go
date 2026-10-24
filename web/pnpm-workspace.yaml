@@ -37,3 +37,14 @@ allowBuilds: {}
 # cookie@0.7.0.
 overrides:
   cookie@<0.7.0: ^0.7.2
+
+# Advisories accepted because this SPA build cannot reach them: +layout.ts
+# sets ssr = false and prerender = false, and the UI has no form actions,
+# no use:enhance, no setHeaders and no server files. Both are fixed only in
+# @sveltejs/kit 3; drop them with the kit 3 migration (#184).
+audit:
+  ignore:
+    # @sveltejs/kit <3: URL redirection through an enhanced form submission.
+    - GHSA-pfhg-q3qv-9q6r
+    # @sveltejs/kit <3: XSS through a cache-control header on a prerendered page.
+    - GHSA-27mw-82g8-phjj
