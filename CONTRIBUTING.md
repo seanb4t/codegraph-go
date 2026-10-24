@@ -70,8 +70,8 @@ itself, `task`, Node, pnpm, uv, the linters and the release tools. Host tools
 such as git, gh and jq are not. Install [mise](https://mise.jdx.dev), then
 run `mise trust` and `mise install` in the repository. Run tasks from a shell
 with `mise activate`, or as `mise exec -- task <target>`: a task refuses to
-run when go, pnpm, buf, goreleaser, changie or golangci-lint on PATH is not
-the pinned install. CI installs the same versions through
+run when a version-sensitive tool on PATH is not the pinned install
+(`MISE_TOOLS_ON_PATH` in `Taskfile.yml` lists them). CI installs the same versions through
 `.github/actions/setup-tools`. The Python scripts run on the version in
 `.python-version`.
 

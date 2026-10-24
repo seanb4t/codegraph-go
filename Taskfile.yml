@@ -16,7 +16,7 @@ vars:
   MISE_TOOLS_ON_PATH:
     sh: |
       command -v mise >/dev/null || { echo "mise is not on PATH: install mise, then run mise install" >&2; exit 1; }
-      for tool in go pnpm buf goreleaser changie golangci-lint; do
+      for tool in go pnpm buf goreleaser changie golangci-lint govulncheck protoc-gen-go protoc-gen-connect-go; do
         want=$(mise which "$tool" 2>/dev/null) || continue
         have=$(command -v "$tool" || true)
         [ "$have" = "$want" ] || { echo "$tool on PATH is ${have:-missing}, not the mise.toml pin $want: run tasks with mise activate, or as mise exec -- task <target>" >&2; exit 1; }
