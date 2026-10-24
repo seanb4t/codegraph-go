@@ -1,7 +1,7 @@
 # Adapted from open-gsd/gsd-core (.github/workflows/pr-template-format.yml).
 # Their policy lives in scripts/pr-template-policy.cjs; ours is
-# scripts/pr_template_policy.py — this repo carries no Node toolchain, and a
-# .cjs file would have been migration debt from the day it landed.
+# scripts/pr_template_policy.py, because this repository's policy scripts are
+# Python run through uv.
 #
 # pull_request_target for the fork-token reason documented in
 # close-draft-prs.yml. The checkout below is of the BASE branch (no ref:), so
@@ -57,6 +57,13 @@ jobs:
             echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 
+      # No cache is read or written under pull_request_target.
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+        with:
+          tools: uv
+          cache: "false"
+
       - name: Evaluate template policy
         id: policy
         env:
@@ -64,7 +71,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           CHANGED_FILES: ${{ steps.changed_files.outputs.files }}
-        run: python3 scripts/pr_template_policy.py
+        run: uv run scripts/pr_template_policy.py
 
       - name: Comment on a malformed PR
         if: steps.policy.outputs.action == 'warn' || steps.policy.outputs.action == 'close'

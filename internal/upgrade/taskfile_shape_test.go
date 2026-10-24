@@ -21,28 +21,10 @@ import (
 // directory this guard scans for job `name:` fields.
 const workflowsDir = "../../.github/workflows"
 
-// rootGoModPath and the two tool-modfile paths this guard reads off disk to
-// prove D-03's isolation held: the root module must declare no tool
-// directive and require none of the three build-tool packages, and both
-// tool modfiles must exist as distinct files with a non-empty rationale
-// header.
+// rootGoModPath is the main module's go.mod: it must declare no tool
+// directive and require none of forbiddenToolPackages.
 const (
-	rootGoModPath   = "../../go.mod"
-	toolModfilePath = "../../go.tool.mod"
-	lintModfilePath = "../../go.tool-lint.mod"
-	// golangciModfilePath is the fourth isolated tool modfile
-	// (03-10-PLAN.md Task 1), registered with TestToolModfilesRemainIsolated
-	// below so a new modfile absent from that guard's iterated set is not
-	// silently inspected by nothing (the same shape TestWorkflowRunBodiesInvokeTask
-	// guards for CI jobs — see inScopeJobs).
-	golangciModfilePath = "../../go.tool-golangci.mod"
-	// protoModfilePath was a PRE-EXISTING gap of the identical shape —
-	// absent from this guard's iterated set since 01-01-PLAN.md — closed
-	// alongside golangciModfilePath's registration rather than left as a
-	// second recorded-but-unfixed instance of the same defect (03-10-PLAN.md
-	// Task 1; see 03-10-SUMMARY.md for why this went beyond the plan's own
-	// stated scope).
-	protoModfilePath = "../../go.tool-proto.mod"
+	rootGoModPath    = "../../go.mod"
 	taskfilePath     = "../../Taskfile.yml"
 	goreleaserPath   = "../../.goreleaser.yaml"
 	checkCrossTaskID = "check:cross"
@@ -67,26 +49,19 @@ const (
 	releasePathRepoRoot = "../.."
 )
 
-// forbiddenToolPackages are the build-tool import paths that must live
-// ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod /
-// go.tool-proto.mod / go.tool-golangci.mod / go.tool-changie.mod), never
-// as a tool directive or a require line in the root go.mod (D-03).
-// google.golang.org/protobuf and connectrpc.com/connect are deliberately
-// NOT here even though go.tool-proto.mod also pins their cmd/ tool
+// forbiddenToolPackages are the build-tool import paths that mise.toml pins
+// and that must never appear as a tool directive or a require line in the
+// root go.mod (D-03). google.golang.org/protobuf and connectrpc.com/connect
+// are deliberately NOT here even though mise.toml also pins their cmd/ tool
 // binaries: both are legitimate RUNTIME dependencies of the main module
 // (the generated .pb.go/.connect.go files import them), so root go.mod
-// requiring them is correct, not a D-03 violation — only the buf CLI
-// itself is pure build tooling with no runtime import anywhere in this
-// module.
+// requiring them is correct, not a D-03 violation.
 var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
 	"github.com/golangci/golangci-lint",
 	"github.com/bufbuild/buf",
-	// github.com/miniscruff/changie — 01-01-PLAN.md, D-04: changie has no
-	// runtime import anywhere in this module; changieModfilePath (declared
-	// in changie_shape_test.go) is the fifth isolated tool modfile.
 	"github.com/miniscruff/changie",
 }
 
@@ -134,9 +109,7 @@ type inScopeJob struct {
 // jobs' inline `go run ./tools/bench/runner` invocations, commented in-file
 // above the rebless job; release.yml's native build matrix, D-08).
 // Including either file here would fail this test for reasons the project
-// already decided, not for a real regression. govulncheck is also excluded
-// — it runs via `uses: golang/govulncheck-action`, an action with no run:
-// body at all, so it has nothing for this guard to check.
+// already decided, not for a real regression.
 var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "changes"},
 	{Workflow: "ci.yml", JobID: "test"},
@@ -146,6 +119,7 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "perf-regression"},
 	{Workflow: "ci.yml", JobID: "transcript-freeze"},
 	{Workflow: "ci.yml", JobID: "tool-vuln"},
+	{Workflow: "ci.yml", JobID: "govulncheck"},
 	{Workflow: "ci.yml", JobID: "tmux-e2e"},
 	{Workflow: "corpora.yml", JobID: "corpora"},
 	{Workflow: "corpora.yml", JobID: "golden"},
@@ -310,97 +284,36 @@ func parseGoModRequireVersion(src, pkg string) (string, error) {
 	return "", fmt.Errorf("parseGoModRequireVersion: no require line found for package %q", pkg)
 }
 
-// parseWorkflowEnvValue returns the value of key from a workflow YAML
-// source's WORKFLOW-LEVEL `env:` block only — a job-level or step-level
-// `env:` entry with the same key (both indented deeper than column 0) must
-// not satisfy it, since the pin this guards (MAINT-03) is a workflow-level
-// value. Surrounding quotes are stripped. Returns a non-nil error naming
-// key whenever the workflow declares no top-level env: block at all, the
-// block exists but does not declare key, or declares key with an empty
-// value — never a usable zero value on any of those misses (the CR-01
-// defect class every parser in this file guards against).
-func parseWorkflowEnvValue(src, key string) (string, error) {
-	envBlockRe := regexp.MustCompile(`^env:\s*$`)
-	keyRe := regexp.MustCompile(`^  (\S+):\s*(.*)$`)
+// miseTomlPath is the file that pins every build, test and release tool.
+const miseTomlPath = "../../mise.toml"
 
-	inBlock := false
+// miseToolLineRe matches one `name = "version"` entry, with the name quoted
+// or bare.
+var miseToolLineRe = regexp.MustCompile(`^"?([^"=\s]+)"?\s*=\s*"([^"]+)"`)
+
+// parseMiseToolVersion returns the version mise.toml's [tools] table pins
+// for tool. It returns a non-nil error when the source has no [tools] table
+// or the table does not pin tool.
+func parseMiseToolVersion(src, tool string) (string, error) {
+	inTools, sawTools := false, false
 	for _, line := range strings.Split(src, "\n") {
-		if envBlockRe.MatchString(line) {
-			inBlock = true
-			continue
-		}
-		if !inBlock {
-			continue
-		}
-		// A non-blank line at column 0 (no leading whitespace) ends the
-		// workflow-level env: block — e.g. the following `jobs:` key.
-		if line != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
-			break
-		}
-		if m := keyRe.FindStringSubmatch(line); m != nil && m[1] == key {
-			v := strings.TrimSpace(m[2])
-			v = strings.Trim(v, `"'`)
-			if v == "" {
-				return "", fmt.Errorf("parseWorkflowEnvValue: workflow-level env: key %q found but its value is empty", key)
-			}
-			return v, nil
-		}
-	}
-	if !inBlock {
-		return "", fmt.Errorf("parseWorkflowEnvValue: no workflow-level env: block found")
-	}
-	return "", fmt.Errorf("parseWorkflowEnvValue: workflow-level env: block found but no key %q present", key)
-}
-
-func mustWorkflowEnvValue(t *testing.T, src, key string) string {
-	t.Helper()
-	v, err := parseWorkflowEnvValue(src, key)
-	if err != nil {
-		t.Fatalf("mustWorkflowEnvValue: %v", err)
-	}
-	return v
-}
-
-// parseToolModfileHeaderComment returns the leading `//`-comment block that
-// precedes a tool modfile's `module` directive line, with the `// ` prefix
-// stripped from each line and joined by spaces. Returns a non-nil error if
-// the source has no leading comment block, or the module line appears with
-// no comment above it at all.
-func parseToolModfileHeaderComment(src string) (string, error) {
-	lines := strings.Split(src, "\n")
-	moduleRe := regexp.MustCompile(`^module\s+\S+`)
-
-	var commentLines []string
-	for _, line := range lines {
-		if moduleRe.MatchString(line) {
-			break
-		}
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+		if strings.HasPrefix(trimmed, "[") {
+			inTools = trimmed == "[tools]"
+			sawTools = sawTools || inTools
 			continue
 		}
-		if !strings.HasPrefix(trimmed, "//") {
-			// Non-comment, non-blank line before module: — treat as no
-			// header (a stray line, not a documented rationale).
+		if !inTools {
 			continue
 		}
-		commentLines = append(commentLines, strings.TrimSpace(strings.TrimPrefix(trimmed, "//")))
+		if m := miseToolLineRe.FindStringSubmatch(trimmed); m != nil && m[1] == tool {
+			return m[2], nil
+		}
 	}
-
-	joined := strings.TrimSpace(strings.Join(commentLines, " "))
-	if joined == "" {
-		return "", fmt.Errorf("parseToolModfileHeaderComment: no leading comment block found before the module directive")
+	if !sawTools {
+		return "", fmt.Errorf("parseMiseToolVersion: no [tools] table found")
 	}
-	return joined, nil
-}
-
-func mustToolModfileHeaderComment(t *testing.T, src string) string {
-	t.Helper()
-	v, err := parseToolModfileHeaderComment(src)
-	if err != nil {
-		t.Fatalf("mustToolModfileHeaderComment: %v", err)
-	}
-	return v
+	return "", fmt.Errorf("parseMiseToolVersion: [tools] does not pin %q", tool)
 }
 
 // taskNameLineRe matches a top-level task-name key line under the
@@ -744,46 +657,14 @@ func parseGateStanceWord(text string) (string, error) {
 
 // --- tests -------------------------------------------------------------
 
-// TestGoreleaserPinParity is the MAINT-03 pin-parity guard: go.tool.mod's
-// goreleaser require line and release.yml's workflow-level
-// GORELEASER_VERSION must name the same version. Two independent pin sites
-// drifted apart silently for five weeks before this test existed (19 days
-// between ee258d9, which set release.yml's v2.17.0, and 82ffd60, which
-// created go.tool.mod already carrying v2.17.1) — this test fails the
-// build on any future divergence, naming both sites and both versions so
-// the offending pair is immediately actionable.
-func TestGoreleaserPinParity(t *testing.T) {
-	toolModData, err := os.ReadFile(toolModfilePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", toolModfilePath, err)
-	}
-	toolVersion, err := parseGoModRequireVersion(string(toolModData), "github.com/goreleaser/goreleaser")
-	if err != nil {
-		t.Fatalf("%s: %v", toolModfilePath, err)
-	}
-
-	releaseData, err := os.ReadFile(releaseWorkflowPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
-	}
-	releaseVersion := mustWorkflowEnvValue(t, string(releaseData), "GORELEASER_VERSION")
-
-	toolNorm := strings.TrimPrefix(toolVersion, "v")
-	releaseNorm := strings.TrimPrefix(releaseVersion, "v")
-
-	if toolNorm != releaseNorm {
-		t.Fatalf("GoReleaser pin mismatch (MAINT-03): %s requires goreleaser@%s but %s sets GORELEASER_VERSION=%s — the two pin sites must name the same version", toolModfilePath, toolVersion, releaseWorkflowPath, releaseVersion)
-	}
-}
-
 // TestGateStancesStated is the VULN-03 stance guard.
 //
 // NOTE (D-04 superseded 2026-08-06 at 04-01's Task 1 checkpoint — see
 // 04-CONTEXT.md and 04-01-SUMMARY.md): this test was originally designed
 // to assert a DELIBERATE blocking-versus-advisory divergence between the
-// tool-modfile scan (Taskfile.yml's `vuln` task / ci.yml's `tool-vuln`
+// tool-binary scan (Taskfile.yml's `vuln` task / ci.yml's `tool-vuln`
 // job) and the D-03 transcript-freeze guard (Phase 3's sibling
-// advisory-stance pattern). Implementing the tool-modfile scan surfaced a
+// advisory-stance pattern). Implementing the tool-binary scan surfaced a
 // real, permanently-unfixed, symbol-reachable vulnerability in
 // goreleaser's own binary (GO-2026-5932) that would have made a blocking
 // gate permanently red from its first CI run, so the maintainer demoted it
@@ -862,121 +743,28 @@ func TestGateStancesStated(t *testing.T) {
 	}
 }
 
-// TestToolModfilesRemainIsolated is the D-03 isolation guard: go.tool.mod
-// and go.tool-lint.mod must exist as two distinct files, the root go.mod
-// must declare no tool directive and require none of the three build-tool
-// packages, and each tool modfile's header comment must be non-empty and
-// state the isolation rationale — without that header the two files read
-// as an accident and someone merges them.
-// isolatedModfilePaths is every tool modfile TestToolModfilesRemainIsolated
-// holds to the isolation property (D-03). 03-10-PLAN.md's own review
-// (constraint: "hardcoded iteration set") flagged that this guard
-// previously iterated a two-element slice hardcoded in-line — a new
-// modfile absent from it was inspected by NOTHING and the test stayed
-// green, which is why go.tool-proto.mod (present on disk since
-// 01-01-PLAN.md) was never actually checked. Declaring the set here, as a
-// named slice checked against disk by TestToolModfilesPopulationMatchesDisk
-// below, closes both the golangci-lint gap this plan adds AND the
-// pre-existing proto gap in the same change, rather than recording the
-// latter as accepted debt.
-// changieModfilePath (the fifth isolated tool modfile) is appended here
-// too — 01-01-PLAN.md, D-04 — but its path constant is declared in
-// changie_shape_test.go, not in this file's own const block, so that the
-// RED commit for that plan's guards compiles before go.tool-changie.mod
-// exists on disk.
-var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath, changieModfilePath}
-
-func TestToolModfilesRemainIsolated(t *testing.T) {
-	infos := make([]os.FileInfo, len(isolatedModfilePaths))
-	for i, path := range isolatedModfilePaths {
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat %s: %v", path, err)
-		}
-		infos[i] = info
-	}
-	for i := range infos {
-		for j := i + 1; j < len(infos); j++ {
-			if os.SameFile(infos[i], infos[j]) {
-				t.Fatalf("%s and %s resolve to the same file — they must be distinct modfiles (D-03)", isolatedModfilePaths[i], isolatedModfilePaths[j])
-			}
-		}
-	}
-
+// TestRootGoModHasNoBuildTools is the D-03 isolation guard: build tools are
+// pinned in mise.toml, so the root go.mod must declare no tool directive and
+// require none of forbiddenToolPackages.
+func TestRootGoModHasNoBuildTools(t *testing.T) {
 	rootData, err := os.ReadFile(rootGoModPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", rootGoModPath, err)
 	}
 	rootSrc := string(rootData)
+	if !regexp.MustCompile(`(?m)^require \($`).MatchString(rootSrc) {
+		t.Fatalf("%s has no require block — the guard below would check nothing", rootGoModPath)
+	}
 
 	if pkgs, toolErr := parseGoModToolPackages(rootSrc); toolErr == nil {
-		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in the isolated tool modfiles (D-03)", pkgs)
+		t.Fatalf("root go.mod declares a tool directive %v — build tools are pinned in mise.toml (D-03)", pkgs)
 	}
-
 	for _, pkg := range forbiddenToolPackages {
 		if version, reqErr := parseGoModRequireVersion(rootSrc, pkg); reqErr == nil {
-			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in the isolated tool modfiles (D-03)", pkg, version)
+			t.Fatalf("root go.mod requires %s@%s directly — build tools are pinned in mise.toml (D-03)", pkg, version)
 		}
 	}
-
-	for _, path := range isolatedModfilePaths {
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			t.Fatalf("read %s: %v", path, readErr)
-		}
-		comment := mustToolModfileHeaderComment(t, string(data))
-		if !strings.Contains(strings.ToLower(comment), "isolat") {
-			t.Fatalf("%s: header comment does not mention isolation rationale, got: %q", path, comment)
-		}
-	}
-}
-
-// TestToolModfilesPopulationMatchesDisk is the positive-count guard
-// 03-10-PLAN.md's review demanded: TestToolModfilesRemainIsolated's own
-// exit status cannot report its own blindness to a modfile absent from
-// isolatedModfilePaths (a new go.tool-*.mod that's simply never added to
-// that slice is inspected by nothing, and the isolation test still
-// passes). This test instead globs the actual population on disk and
-// asserts the count matches exactly, so a future go.tool-*.mod landing
-// without a matching isolatedModfilePaths entry fails LOUDLY here rather
-// than silently falling behind — the same population-vs-assertion gap
-// this plan closed for go.tool-proto.mod, guarded from recurring.
-//
-// IN-03: a bare count comparison is genuinely set-complete only IN
-// CONJUNCTION with TestToolModfilesRemainIsolated, which os.Stats every
-// registered path (slice ⊆ disk) and pairwise-SameFiles them (the slice
-// has no duplicates) — equal cardinality plus containment plus
-// distinctness does imply equality, but that dependency was implicit:
-// `go test -run '^TestToolModfilesPopulationMatchesDisk$'` in isolation
-// was a bare count, not a self-contained set-equality assertion (verified:
-// swapping one real path in isolatedModfilePaths for a same-cardinality
-// but WRONG bogus path left the old count-only check green). Sorting both
-// sides and comparing with slices.Equal makes this test self-contained.
-func TestToolModfilesPopulationMatchesDisk(t *testing.T) {
-	matches, err := filepath.Glob(filepath.Join(filepath.Dir(rootGoModPath), "go.tool*.mod"))
-	if err != nil {
-		t.Fatalf("glob go.tool*.mod: %v", err)
-	}
-	sort.Strings(matches)
-	want := append([]string(nil), isolatedModfilePaths...)
-	sort.Strings(want)
-	if !slices.Equal(matches, want) {
-		t.Fatalf("go.tool*.mod files on disk %v do not match isolatedModfilePaths %v — a new tool modfile was added without registering it here, or a registered one no longer exists on disk", matches, want)
-	}
-}
-
-// TestToolModfilesRemainIsolated_AbsentModfileIsError is the edge case: a
-// modfile that does not exist on disk at all must produce a non-nil error
-// naming the missing path, never a skipped assertion.
-func TestToolModfilesRemainIsolated_AbsentModfileIsError(t *testing.T) {
-	missingPath := filepath.Join(t.TempDir(), "go.tool-does-not-exist.mod")
-	_, err := os.ReadFile(missingPath)
-	if err == nil {
-		t.Fatalf("os.ReadFile(%s): expected a non-nil error for an absent modfile, got nil", missingPath)
-	}
-	if !strings.Contains(err.Error(), missingPath) {
-		t.Fatalf("os.ReadFile(%s) error does not name the missing path: %v", missingPath, err)
-	}
+	t.Logf("%s: no tool directive; none of %d build-tool packages required", rootGoModPath, len(forbiddenToolPackages))
 }
 
 // TestTaskfileShapeHelpersFailLoudly is the T-09-01-07-style repudiation
@@ -1010,16 +798,16 @@ func TestTaskfileShapeHelpersFailLoudly(t *testing.T) {
 			},
 		},
 		{
-			name: "parseToolModfileHeaderComment: empty input",
+			name: "parseMiseToolVersion: empty input",
 			fn: func() error {
-				_, err := parseToolModfileHeaderComment("")
+				_, err := parseMiseToolVersion("", "changie")
 				return err
 			},
 		},
 		{
-			name: "parseWorkflowEnvValue: empty input",
+			name: "parseMiseToolVersion: tool pinned outside [tools]",
 			fn: func() error {
-				_, err := parseWorkflowEnvValue("", "GORELEASER_VERSION")
+				_, err := parseMiseToolVersion("[env]\nchangie = \"1.0.0\"\n[tools]\ngo = \"1.26.10\"\n", "changie")
 				return err
 			},
 		},
@@ -1038,17 +826,6 @@ func TestTaskfileShapeHelpersFailLoudly(t *testing.T) {
 				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
 			}
 		})
-	}
-}
-
-// TestParseWorkflowEnvValue_NoWorkflowLevelEnvBlockIsError is the edge case
-// named by this task's own <behavior>: a workflow source that declares
-// jobs: but no workflow-level env: block at all must produce a non-nil
-// error, never an empty string that would compare equal to nothing.
-func TestParseWorkflowEnvValue_NoWorkflowLevelEnvBlockIsError(t *testing.T) {
-	src := "name: x\non:\n  push:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - name: s\n        run: task build\n"
-	if _, err := parseWorkflowEnvValue(src, "GORELEASER_VERSION"); err == nil {
-		t.Fatalf("parseWorkflowEnvValue(%q, %q): expected a non-nil error for a workflow with jobs but no workflow-level env: block, got nil", src, "GORELEASER_VERSION")
 	}
 }
 
@@ -1274,13 +1051,15 @@ func TestCheckCrossParsersFailLoudly(t *testing.T) {
 
 // --- TestWorkflowRunBodiesInvokeTask: workflow step decoding -----------
 
-// workflowRunStep is the subset of a GitHub Actions workflow step this
-// guard needs: its display name and its run: body (empty for a `uses:`
-// step, which this guard does not constrain — D-01 only binds run: bodies).
+// workflowRunStep is the subset of a GitHub Actions workflow step these
+// guards need: its display name, its run: body (empty for a `uses:` step —
+// D-01 only binds run: bodies), and its uses: and with: values, which the
+// setup-tools guards read.
 type workflowRunStep struct {
-	Name string `yaml:"name"`
-	Run  string `yaml:"run"`
-	Uses string `yaml:"uses"`
+	Name string         `yaml:"name"`
+	Run  string         `yaml:"run"`
+	Uses string         `yaml:"uses"`
+	With map[string]any `yaml:"with"`
 }
 
 type workflowJobYAML struct {
@@ -1447,13 +1226,7 @@ type usesOnlyJobException struct {
 	Reason   string
 }
 
-var usesOnlyJobExceptions = []usesOnlyJobException{
-	{
-		Workflow: "ci.yml",
-		JobID:    "govulncheck",
-		Reason:   "runs via `uses: golang/govulncheck-action`, an action with no run: body at all",
-	},
-}
+var usesOnlyJobExceptions = []usesOnlyJobException{}
 
 // inScopeWorkflowFiles is the SAME set of workflow files inScopeJobs
 // already covers — bench.yml and release.yml carry their own documented
@@ -1558,8 +1331,8 @@ func validateWorkflowFileExceptions(excs []workflowFileException) error {
 }
 
 // TestWorkflowFilePopulationMatchesDisk is WR-03's disk-binding fix for
-// inScopeWorkflowFiles, mirroring TestToolModfilesPopulationMatchesDisk
-// and TestInScopeJobsPopulationMatchesDisk's own pattern one level up:
+// inScopeWorkflowFiles, mirroring TestInScopeJobsPopulationMatchesDisk's
+// own pattern one level up:
 // every *.yml file actually present under workflowsDir must appear in
 // EXACTLY ONE of inScopeWorkflowFiles or workflowFileExceptions. Before
 // this fix, a new workflow file added anywhere under .github/workflows/
@@ -1658,10 +1431,8 @@ func validateUsesOnlyJobExceptions(excs []usesOnlyJobException) error {
 	return nil
 }
 
-// TestInScopeJobsPopulationMatchesDisk is IN-05's disk-binding fix,
-// mirroring TestToolModfilesPopulationMatchesDisk's own pattern (that
-// test's own doc comment is this one's precedent, named directly in
-// 03-REVIEW.md's IN-05 finding). Before this fix, inScopeJobs was a
+// TestInScopeJobsPopulationMatchesDisk is IN-05's disk-binding fix. Before
+// this fix, inScopeJobs was a
 // hand-enumerated fixture with only a non-empty guard
 // (TestWorkflowRunBodiesInvokeTask's `len(inScopeJobs) == 0` check) —
 // nothing asserted that every job actually declared in
@@ -2620,7 +2391,7 @@ func TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError(t *testing.T) {
 	}
 }
 
-// --- quick 260811-s5o: cosign-installer coverage guard ---------------------
+// --- quick 260811-s5o: cosign installation coverage guard -------------------
 //
 // Release v0.9.0, post-release-verify.yml run 31549287269: the self-upgrade
 // job invoked `task verify:self-upgrade`, which declares a `command -v
@@ -2630,10 +2401,10 @@ func TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError(t *testing.T) {
 // precondition was correct; the installer was missing. This guard derives,
 // at runtime, every Taskfile target with a `command -v cosign` precondition
 // and every job in post-release-verify.yml, then asserts each job that
-// invokes such a target installs cosign via sigstore/cosign-installer
-// exactly once, pinned to one uniform SHA+version comment across the whole
-// file — so the next Taskfile target that grows a cosign precondition
-// cannot silently ship the same defect.
+// invokes such a target installs cosign exactly once, through one
+// setup-tools step whose tools list names cosign, or which installs every
+// tool while mise.toml pins cosign — so the next Taskfile target that grows a
+// cosign precondition cannot silently ship the same defect.
 
 // parseCosignRequiringTaskTargets decodes Taskfile source src with the real
 // YAML decoder (reusing gatekeeperTaskfileRoot) and returns the set of task
@@ -2708,16 +2479,31 @@ func taskTargetsInRunBody(body string) []string {
 	return targets
 }
 
-// cosignInstallerPinRe matches a sigstore/cosign-installer `uses:` line
-// pinned to a 40-hex commit SHA with a trailing `# vX.Y.Z` version comment,
-// checked against RAW source rather than the YAML-decoded step (the YAML
-// decoder strips the trailing comment, so pin-shape must be read from raw
-// text — exactly as this package already does for
-// actions/attest-build-provenance in release_workflow_shape_test.go). The
-// (?m) flag is required for `$` to match end-of-LINE rather than only
-// end-of-text, since this regex is matched with FindAllStringSubmatch
-// against a multi-line file with more than one occurrence.
-var cosignInstallerPinRe = regexp.MustCompile(`(?m)uses:\s*(sigstore/cosign-installer@[0-9a-f]{40})\s+#\s*(v\d+\.\d+\.\d+)\s*$`)
+// setupToolsList reads a setup-tools step's tools input. An absent, null or
+// blank value means every tool in mise.toml (all = true), as the action does.
+func setupToolsList(with map[string]any) (tools []string, all bool) {
+	v, ok := with["tools"]
+	if !ok || v == nil {
+		return nil, true
+	}
+	tools = strings.Fields(fmt.Sprint(v))
+	return tools, len(tools) == 0
+}
+
+// setupToolsInstalls reports whether step is a setup-tools step that installs
+// tool: its tools list names tool, or it installs every tool and mise.toml
+// pins tool.
+func setupToolsInstalls(step workflowRunStep, tool, miseToml string) bool {
+	if step.Uses != setupToolsAction {
+		return false
+	}
+	tools, all := setupToolsList(step.With)
+	if all {
+		_, err := parseMiseToolVersion(miseToml, tool)
+		return err == nil
+	}
+	return slices.Contains(tools, tool)
+}
 
 // TestCosignRequiringJobsInstallCosign is quick 260811-s5o's guard: it is
 // the test that would have caught release v0.9.0 run 31549287269's
@@ -2726,8 +2512,8 @@ var cosignInstallerPinRe = regexp.MustCompile(`(?m)uses:\s*(sigstore/cosign-inst
 // hardcoded job or target list — every Taskfile target with a
 // `command -v cosign` precondition and every job in
 // post-release-verify.yml, then asserts an EXACT installer-step count of 1
-// for every job that invokes a cosign-requiring target, plus pin uniformity
-// across the whole file. A "no job is missing an installer" style
+// for every job that invokes a cosign-requiring target. A "no job is
+// missing an installer" style
 // negative-only assertion would pass vacuously the moment its anchor
 // stopped matching (repo rule 84d1gfpywd) — this guard never states the
 // property that way.
@@ -2739,6 +2525,10 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 	cosignTargets, err := parseCosignRequiringTaskTargets(string(taskfileData))
 	if err != nil {
 		t.Fatalf("parseCosignRequiringTaskTargets: %v", err)
+	}
+	miseData, err := os.ReadFile(miseTomlPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", miseTomlPath, err)
 	}
 
 	workflowData, err := os.ReadFile(postReleaseWorkflowPath)
@@ -2757,7 +2547,6 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 	}
 	sort.Strings(jobIDs)
 
-	totalInstallerSteps := 0
 	cosignRequiringJobCount := 0
 	for _, jobID := range jobIDs {
 		steps := jobs[jobID]
@@ -2773,11 +2562,10 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 
 		installerCount := 0
 		for _, step := range steps {
-			if strings.HasPrefix(step.Uses, "sigstore/cosign-installer@") {
+			if setupToolsInstalls(step, "cosign", string(miseData)) {
 				installerCount++
 			}
 		}
-		totalInstallerSteps += installerCount
 
 		if len(requiringTargets) == 0 {
 			continue
@@ -2793,7 +2581,7 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 		t.Logf("job %q invokes cosign-requiring target(s) %v, installer step count=%d", jobID, requiredList, installerCount)
 
 		if installerCount != 1 {
-			t.Errorf("job %q invokes cosign-requiring target(s) %v but declares %d sigstore/cosign-installer step(s) (want exactly 1) — a job whose run: body invokes a task target with a 'command -v cosign' precondition must install cosign exactly once", jobID, requiredList, installerCount)
+			t.Errorf("job %q invokes cosign-requiring target(s) %v but declares %d setup-tools step(s) that install cosign (want exactly 1) — a job whose run: body invokes a task target with a 'command -v cosign' precondition must install cosign exactly once", jobID, requiredList, installerCount)
 		}
 	}
 
@@ -2801,23 +2589,6 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 		t.Fatalf("derived cosign-requiring job set is empty — a broken run-body parse must go red, never pass silently")
 	}
 
-	pinMatches := cosignInstallerPinRe.FindAllStringSubmatch(workflowSrc, -1)
-	if len(pinMatches) != totalInstallerSteps {
-		t.Errorf("%s: found %d sigstore/cosign-installer pin(s) matching the SHA+version-comment shape via raw-source regex, but %d installer step(s) via YAML decode — an unpinned, branch-pinned, or comment-less installer step decodes as a step but matches no pin line", postReleaseWorkflowPath, len(pinMatches), totalInstallerSteps)
-	}
-
-	shas := make(map[string]bool)
-	versions := make(map[string]bool)
-	for _, m := range pinMatches {
-		shas[m[1]] = true
-		versions[m[2]] = true
-	}
-	if len(shas) != 1 {
-		t.Errorf("%s: found %d distinct sigstore/cosign-installer SHA pin(s), want exactly 1: %v", postReleaseWorkflowPath, len(shas), shas)
-	}
-	if len(versions) != 1 {
-		t.Errorf("%s: found %d distinct sigstore/cosign-installer version comment(s), want exactly 1: %v", postReleaseWorkflowPath, len(versions), versions)
-	}
 }
 
 // TestCosignInstallerGuardParsersFailLoudly is the non-vacuity companion to
@@ -2950,7 +2721,7 @@ type releasePathScanUnit struct {
 // resolved — the positive assertion repo rule 84d1gfpywd requires. A
 // resolver that silently resolves zero local actions or zero Taskfile
 // targets must not read as "the closure is small and clean": release.yml
-// demonstrably `uses: ./.github/actions/install-task` and runs `task
+// demonstrably `uses: ./.github/actions/setup-tools` and runs `task
 // release:goreleaser` / `task release:record-final-hashes` today
 // (T-02-04-01), so a zero count means the resolver is broken, not that the
 // closure is empty.
@@ -3391,7 +3162,7 @@ func releasePathUnitNames(units []releasePathScanUnit) []string {
 // TestReleasePathClosureIsTransitive is the review-HIGH closure-derivation
 // guard: resolving the closure from the two roots must name, BY NAME, the
 // three execution edges release.yml demonstrably contains today —
-// `.github/actions/install-task/action.yml`, `release:goreleaser`, and
+// `.github/actions/setup-tools/action.yml`, `release:goreleaser`, and
 // `release:record-final-hashes` — and the resolved-local-action and
 // resolved-Taskfile-target counts must each clear a floor derived from
 // what release.yml actually contains, not a guess. A closure whose
@@ -3407,7 +3178,7 @@ func TestReleasePathClosureIsTransitive(t *testing.T) {
 		t.Fatalf("resolveReleasePathClosure: stats.Roots = %d, want exactly 2 (%v)", stats.Roots, releasePathScanRoots)
 	}
 	if stats.ResolvedLocalActions < 1 {
-		t.Fatalf("resolveReleasePathClosure: stats.ResolvedLocalActions = %d, want >= 1 — %s demonstrably `uses: ./.github/actions/install-task` today; zero means the resolver broke, not that the closure is small", stats.ResolvedLocalActions, releasePathWorkflowPath)
+		t.Fatalf("resolveReleasePathClosure: stats.ResolvedLocalActions = %d, want >= 1 — %s demonstrably `uses: ./.github/actions/setup-tools` today; zero means the resolver broke, not that the closure is small", stats.ResolvedLocalActions, releasePathWorkflowPath)
 	}
 	if stats.ResolvedTaskTargets < 2 {
 		t.Fatalf("resolveReleasePathClosure: stats.ResolvedTaskTargets = %d, want >= 2 — %s demonstrably runs `task release:goreleaser` and `task release:record-final-hashes` today", stats.ResolvedTaskTargets, releasePathWorkflowPath)
@@ -3417,10 +3188,10 @@ func TestReleasePathClosureIsTransitive(t *testing.T) {
 	wantGoreleaserTarget := fmt.Sprintf("%s task %q", taskfilePath, "release:goreleaser")
 	wantRecordHashesTarget := fmt.Sprintf("%s task %q", taskfilePath, "release:record-final-hashes")
 
-	var haveInstallTask, haveGoreleaserTarget, haveRecordHashesTarget bool
+	var haveSetupTools, haveGoreleaserTarget, haveRecordHashesTarget bool
 	for _, n := range names {
-		if strings.HasSuffix(n, "/.github/actions/install-task/action.yml") {
-			haveInstallTask = true
+		if strings.HasSuffix(n, "/.github/actions/setup-tools/action.yml") {
+			haveSetupTools = true
 		}
 		if n == wantGoreleaserTarget {
 			haveGoreleaserTarget = true
@@ -3429,8 +3200,8 @@ func TestReleasePathClosureIsTransitive(t *testing.T) {
 			haveRecordHashesTarget = true
 		}
 	}
-	if !haveInstallTask {
-		t.Errorf("resolveReleasePathClosure: closure does not name .github/actions/install-task/action.yml by unit name — units: %v", names)
+	if !haveSetupTools {
+		t.Errorf("resolveReleasePathClosure: closure does not name .github/actions/setup-tools/action.yml by unit name — units: %v", names)
 	}
 	if !haveGoreleaserTarget {
 		t.Errorf("resolveReleasePathClosure: closure does not name unit %q — units: %v", wantGoreleaserTarget, names)
@@ -3723,10 +3494,8 @@ func TestReleasePathScanIgnoresNearMisses(t *testing.T) {
 var forbiddenCacheActions = []string{"actions/cache", "actions/cache/restore", "actions/cache/save"}
 
 // cacheInputKeys are the with: input keys that turn a Node setup action
-// into a cache restorer. A cache: input on actions/setup-node is a
-// FINDING regardless of its value; the identical key on actions/setup-go
-// (cache: false in ci.yml today) is a different action prefix entirely and
-// is not matched by this fixture's use in the Node-setup case.
+// into a cache restorer. A cache: input on actions/setup-node is a FINDING
+// regardless of its value.
 var cacheInputKeys = []string{"cache"}
 
 // nodeSetupActionPrefix and nscloudCacheActionPrefix are the two `uses:`
@@ -3777,6 +3546,77 @@ type cacheAwareJob struct {
 
 type cacheAwareWorkflow struct {
 	Jobs map[string]cacheAwareJob `yaml:"jobs"`
+}
+
+// setupToolsActionPath is the local composite action ci.yml's jobs call to
+// install tools; its cache steps are scanned where a job uses it.
+const setupToolsActionPath = "../../.github/actions/setup-tools/action.yml"
+
+// goCacheGate is the if: condition on setup-tools' Go cache step, and
+// goCachePathOutputs are the only paths that step may cache.
+const goCacheGate = "inputs.go-cache == 'true'"
+
+var goCachePathOutputs = []string{"${{ steps.go-cache-paths.outputs.gomodcache }}", "${{ steps.go-cache-paths.outputs.gocache }}"}
+
+type compositeCacheStep struct {
+	Name string         `yaml:"name"`
+	Uses string         `yaml:"uses"`
+	If   string         `yaml:"if"`
+	With map[string]any `yaml:"with"`
+}
+
+type compositeAction struct {
+	Runs struct {
+		Steps []compositeCacheStep `yaml:"steps"`
+	} `yaml:"runs"`
+}
+
+// scanSetupToolsCaches classifies the cache steps inside the setup-tools
+// composite action for a caller passing callerWith. jdx/mise-action's tool
+// cache holds mise.lock-pinned binaries, not JS dependencies, so it is out of
+// BLD-01's scope. A cache action step is allowed only as the go-cache-gated
+// Go module/build cache, and counts as an allowed cache when the caller turns
+// go-cache on; any other cache step is a finding.
+func scanSetupToolsCaches(actionSrc []byte, callerWith map[string]any) ([]mutableCacheFinding, int, error) {
+	var action compositeAction
+	if err := yaml.Unmarshal(actionSrc, &action); err != nil {
+		return nil, 0, fmt.Errorf("scanSetupToolsCaches: %w", err)
+	}
+	if len(action.Runs.Steps) == 0 {
+		return nil, 0, fmt.Errorf("scanSetupToolsCaches: composite action declares zero steps")
+	}
+	var findings []mutableCacheFinding
+	allowed := 0
+	for _, step := range action.Runs.Steps {
+		if !contains(forbiddenCacheActions, actionPrefix(step.Uses)) {
+			continue
+		}
+		paths := strings.Fields(fmt.Sprint(step.With["path"]))
+		goOnly := len(paths) > 0
+		for i := 0; i < len(paths); {
+			matched := false
+			for _, want := range goCachePathOutputs {
+				n := len(strings.Fields(want))
+				if i+n <= len(paths) && strings.Join(paths[i:i+n], " ") == want {
+					i += n
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				goOnly = false
+				break
+			}
+		}
+		if strings.TrimSpace(step.If) != goCacheGate || !goOnly {
+			findings = append(findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "composite-cache"})
+			continue
+		}
+		if fmt.Sprint(callerWith["go-cache"]) == "true" {
+			allowed++
+		}
+	}
+	return findings, allowed, nil
 }
 
 // hasAnyCacheInputKey reports whether with declares any key named in
@@ -3842,6 +3682,18 @@ func scanContentForMutableCache(jobID string, content []byte) (mutableCacheScanR
 			case cacheVal == "go":
 				result.AllowedCaches++
 			}
+
+		case step.Uses == setupToolsAction:
+			actionSrc, err := os.ReadFile(setupToolsActionPath)
+			if err != nil {
+				return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: read %s: %w", setupToolsActionPath, err)
+			}
+			findings, allowed, err := scanSetupToolsCaches(actionSrc, step.With)
+			if err != nil {
+				return mutableCacheScanResult{}, err
+			}
+			result.Findings = append(result.Findings, findings...)
+			result.AllowedCaches += allowed
 		}
 	}
 	return result, nil
@@ -3859,15 +3711,11 @@ func scanForMutableCache(jobID string) (mutableCacheScanResult, error) {
 }
 
 // TestJSInstallPathHasNoMutableCache is the BLD-01 structural invariant:
-// ci.yml's test job carries no mutable JS-scoped cache. The Node-setup
-// clause (actions/setup-node with a cache: input) has NOTHING to match at
-// this wave — 02-06 adds that step two waves later — and that is by
-// design: authoring the invariant BEFORE the step exists means the step
-// cannot arrive with a cache input already attached. What makes this
-// pre-arrival zero mean something is AllowedCaches > 0: ci.yml's test job
-// demonstrably contains a Go cache step (nscloud-cache-action, cache: go)
-// today, so a zero AllowedCaches count would mean this scanner never
-// reached it, and its clean verdict would mean nothing.
+// ci.yml's test job carries no mutable JS-scoped cache, either as its own
+// step or inside the setup-tools composite action, which installs node and
+// pnpm. AllowedCaches > 0 is what makes a clean verdict mean something:
+// ci.yml's test job contains a Go cache step (nscloud-cache-action, cache:
+// go), so a zero count would mean this scanner never reached it.
 func TestJSInstallPathHasNoMutableCache(t *testing.T) {
 	result, err := scanForMutableCache("test")
 	if err != nil {
@@ -3886,12 +3734,47 @@ func TestJSInstallPathHasNoMutableCache(t *testing.T) {
 
 // TestMutableCacheScanIsNonVacuous plants each of the three forbidden
 // forms in synthetic in-memory YAML, one row each, and asserts exactly one
-// finding per row. A fourth row plants the two EXISTING Go forms this
-// repository actually uses (nscloud-cache-action with cache: go,
-// actions/setup-go with cache: false) and asserts zero findings — pinning
+// finding per row. A fourth row plants the Go forms this repository uses
+// (nscloud-cache-action with cache: go, setup-tools with go-cache) and
+// asserts zero findings — pinning
 // the boundary so a future widening of the matcher breaks THIS test
 // instead of quietly failing TestJSInstallPathHasNoMutableCache against
 // the real workflow.
+// TestSetupToolsCacheScanIsNonVacuous plants cache steps in a synthetic
+// setup-tools action: the go-cache-gated Go cache is allowed (and counted
+// only when the caller turns go-cache on), while an ungated cache or one
+// whose path reaches beyond the Go caches is a finding.
+func TestSetupToolsCacheScanIsNonVacuous(t *testing.T) {
+	goStep := "    - name: go\n      if: inputs.go-cache == 'true'\n      uses: actions/cache@v6\n      with:\n        path: |\n          ${{ steps.go-cache-paths.outputs.gomodcache }}\n          ${{ steps.go-cache-paths.outputs.gocache }}\n"
+	mise := "    - name: mise\n      uses: jdx/mise-action@v5\n"
+	cases := []struct {
+		name         string
+		steps        string
+		with         map[string]any
+		wantFindings int
+		wantAllowed  int
+	}{
+		{"gated Go cache, go-cache on", mise + goStep, map[string]any{"go-cache": "true"}, 0, 1},
+		{"gated Go cache, go-cache off", mise + goStep, nil, 0, 0},
+		{"ungated cache", mise + strings.Replace(goStep, "      if: inputs.go-cache == 'true'\n", "", 1), nil, 1, 0},
+		{"cache path beyond Go", mise + strings.Replace(goStep, "${{ steps.go-cache-paths.outputs.gocache }}", "web/node_modules", 1), map[string]any{"go-cache": "true"}, 1, 0},
+	}
+	for _, c := range cases {
+		src := []byte("runs:\n  using: composite\n  steps:\n" + c.steps)
+		findings, allowed, err := scanSetupToolsCaches(src, c.with)
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if len(findings) != c.wantFindings || allowed != c.wantAllowed {
+			t.Errorf("%s: got %d finding(s) %v and %d allowed, want %d and %d", c.name, len(findings), findings, allowed, c.wantFindings, c.wantAllowed)
+		}
+	}
+	if _, _, err := scanSetupToolsCaches([]byte("runs:\n  using: composite\n"), nil); err == nil {
+		t.Errorf("scanSetupToolsCaches on an action with no steps: expected an error, got nil")
+	}
+}
+
 func TestMutableCacheScanIsNonVacuous(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -3915,7 +3798,7 @@ func TestMutableCacheScanIsNonVacuous(t *testing.T) {
 		},
 		{
 			name:         "existing Go forms stay allowed",
-			src:          "jobs:\n  test:\n    steps:\n      - name: go cache\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: go\n      - name: setup go\n        uses: actions/setup-go@v6\n        with:\n          cache: false\n",
+			src:          "jobs:\n  test:\n    steps:\n      - name: go cache\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: go\n      - name: setup tools\n        uses: ./.github/actions/setup-tools\n        with:\n          go-cache: \"true\"\n",
 			wantFindings: 0,
 		},
 	}

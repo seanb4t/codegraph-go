@@ -34,10 +34,9 @@ const benchWorkflowPath = "../../.github/workflows/bench.yml"
 // tests in this file need: its display name, its uses: action reference
 // (empty for a run: step), its run: body (empty for a uses: step), and its
 // with: parameter map. With: is map[string]any, not map[string]string,
-// because a real with: block mixes scalar types (e.g. Set up Go's
-// `cache: false` is a YAML bool sitting next to `go-version-file: go.mod`,
-// a string) — decoding straight into map[string]string would fail the
-// WHOLE document's Unmarshal on that bool, not just the one field.
+// because a with: block can mix scalar types (a YAML bool next to a
+// string) — decoding straight into map[string]string would fail the WHOLE
+// document's Unmarshal on that bool, not just the one field.
 type benchStep struct {
 	Name string         `yaml:"name"`
 	Uses string         `yaml:"uses"`
@@ -129,6 +128,10 @@ func benchActionIdentifier(uses string) (name, ref string) {
 	}
 	return uses[:idx], uses[idx+1:]
 }
+
+// setupToolsAction is the repository's local tool-bootstrap action. It is a
+// local path, so it carries no @ref.
+const setupToolsAction = "./.github/actions/setup-tools"
 
 // sha40Re matches a 40-character lowercase-hex full commit SHA — the pin
 // shape every remote uses: reference in this repo must carry.
@@ -309,21 +312,26 @@ func TestBenchPublishJobShape(t *testing.T) {
 		t.Errorf("publish job has %d actions/upload-artifact step(s), want exactly 1", uploads)
 	}
 
-	// No step uses a Node-setup action — BENCH-03 forbids installing a
-	// second runtime anywhere in this job.
+	// BENCH-03 forbids installing a second runtime anywhere in this job: no
+	// Node-setup action, and setup-tools installs exactly go.
 	for _, s := range job.Steps {
 		name, _ := benchActionIdentifier(s.Uses)
 		if strings.Contains(name, "setup-node") {
 			t.Errorf("publish job step %q uses a Node-setup action (%s) — BENCH-03 forbids installing a second runtime", s.Name, name)
 		}
+		if name == setupToolsAction {
+			if got := withString(s.With, "tools"); got != "go" {
+				t.Errorf("publish job's setup-tools step installs %q, want exactly \"go\" — BENCH-03 forbids installing a second runtime", got)
+			}
+		}
 	}
 
 	// cycle-2 LOW 1 — the action identifier list is ORDERED, not a set,
 	// and length-asserted: a set comparison would silently tolerate a
-	// duplicated checkout or setup-go step.
+	// duplicated checkout or setup-tools step.
 	wantActions := []string{
 		"actions/checkout",
-		"actions/setup-go",
+		setupToolsAction,
 		"namespacelabs/nscloud-cache-action",
 		"actions/upload-artifact",
 	}
@@ -334,7 +342,7 @@ func TestBenchPublishJobShape(t *testing.T) {
 		}
 		name, ref := benchActionIdentifier(s.Uses)
 		gotActions = append(gotActions, name)
-		if !sha40Re.MatchString(ref) {
+		if name != setupToolsAction && !sha40Re.MatchString(ref) {
 			t.Errorf("publish job step %q's uses: ref %q is not a 40-hex SHA pin", s.Name, ref)
 		}
 	}
@@ -396,7 +404,7 @@ const reblessIfFixture = "github.event_name == 'workflow_dispatch' && (inputs.jo
 // count) catches an inserted, removed, or reordered step.
 var reblessStepNamesFixture = []string{
 	"Checkout",
-	"Set up Go",
+	"Set up tools",
 	"Record candidate baseline on this runner",
 	"Publish candidate to job summary",
 	"Upload candidate baseline artifact",

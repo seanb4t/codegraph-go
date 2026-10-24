@@ -27,27 +27,9 @@
 # job that can be re-dispatched on demand is the right urgency for vendored-
 # source drift; a release blocker is not.
 #
-# THE BOOTSTRAP CHAIN IS LOAD-BEARING (cycle-2/cycle-3 review). Without
-# checkout, the repository is not on disk. Without the repository's own
-# ./.github/actions/install-task, there is no `task` binary and the run step
-# fails immediately. Without actions/setup-node pinned to Node 24, this
-# repository's pinned pnpm (resolved via Corepack, D-16) is unreachable —
-# Corepack is NOT distributed with Node.js 25+ (ci.yml:124-130 carries the
-# identical pin for the identical reason). All three are `uses:` steps
-# carrying no run body at all, so TestWorkflowRunBodiesInvokeTask's checkStepInvokesTask
-# (internal/upgrade/taskfile_shape_test.go:1399-1402) never inspects them —
-# no runBodyExceptions entry is needed or permitted for any of the three.
-# Their ORDER matters as much as their presence: checkout, then
-# install-task, then setup-node, then the run step — placing either
-# bootstrap step after the run step produces a workflow that registers
-# cleanly, passes actionlint, and fails every single scheduled run.
-#
-# The two third-party action SHAs below are the SAME pins ci.yml already
-# uses for actions/checkout and actions/setup-node — a second SHA for the
-# same action version would itself be a form of drift.
-#
-# Security note: both third-party Actions are pinned to a full commit SHA,
-# matching every other workflow in this repository.
+# Step order is load-bearing: checkout, then setup-tools (task, node and
+# pnpm), then the run step. A bootstrap step placed after the run step still
+# registers and passes actionlint, then fails every scheduled run.
 
 name: components-drift
 
@@ -70,19 +52,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Install Task
-        uses: ./.github/actions/install-task
-
-      # BLD-01/D-16: Corepack resolves the pnpm version pinned by
-      # web/package.json's packageManager field. Node 24 is pinned
-      # deliberately, matching ci.yml:131-134 for the identical reason:
-      # Corepack is NOT distributed with Node.js 25+, and this target
-      # shells out to `pnpm install` and `pnpm dlx shadcn-svelte@1.5.1`
-      # inside a scratch tree.
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
       - name: Vendored component drift (T-04-27)
         run: task web:components:drift

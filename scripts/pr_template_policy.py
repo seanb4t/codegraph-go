@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """Decide whether a pull request body follows one of the typed PR templates.
 
 Adapted from open-gsd/gsd-core's scripts/pr-template-policy.cjs, rewritten in
@@ -52,13 +56,9 @@ EXEMPT_PREFIXES = (
 EXEMPT_EXACT = {
     "go.mod",
     "go.sum",
-    # Isolated tool modfiles (Phase 10 / DEV-01). Recorded as a known
-    # follow-up in issue #18: a PR touching only these is the same class of
-    # housekeeping change as one touching go.mod.
-    "go.tool.mod",
-    "go.tool.sum",
-    "go.tool-lint.mod",
-    "go.tool-lint.sum",
+    # mise.lock only: a re-lock is housekeeping, but mise.toml pins the release
+    # toolchain and stays under the gates.
+    "mise.lock",
     ".gitignore",
     "README.md",
     "CONTRIBUTING.md",

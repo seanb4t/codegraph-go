@@ -12,7 +12,7 @@ import (
 // repository. GRD-16's TestTagCreationHasSingleAppTokenSite
 // (changie_release_shape_test.go) holds that structurally; the test below
 // pins the config key the version arithmetic depends on, in the same idiom as
-// TestGoreleaserPinParity and TestCheckCrossMatchesGoreleaserTargets: a
+// TestCheckCrossMatchesGoreleaserTargets: a
 // documented invariant that only a human remembers is one refactor away from
 // being silently untrue.
 
