@@ -1,10 +1,27 @@
 # Single local-build/CI-invocation definition site (D-01, D-02). CI workflow
 # `run:` steps call `task <target>` — they no longer own command bodies
-# themselves. Every tool this Taskfile shells out to is pinned in mise.toml
-# and must be on PATH (`mise install`; CI runs .github/actions/setup-tools).
+# themselves. The build, lint, codegen and release tools these targets run are
+# pinned in mise.toml and must be on PATH: run tasks with `mise activate`, or as
+# `mise exec -- task <target>`; CI runs .github/actions/setup-tools. Host tools
+# (git, gh, jq, rsync, tmux) are not pinned.
 version: "3"
 
+env:
+  GOTOOLCHAIN: local
+
 vars:
+  # Refuses every task when a version-sensitive tool on PATH is not the
+  # mise.toml pin. A tool mise has not installed (a CI job's tools subset)
+  # is skipped. Task evaluates this var for every target, referenced or not.
+  MISE_TOOLS_ON_PATH:
+    sh: |
+      command -v mise >/dev/null || { echo "mise is not on PATH: install mise, then run mise install" >&2; exit 1; }
+      for tool in go pnpm buf goreleaser changie golangci-lint; do
+        want=$(mise which "$tool" 2>/dev/null) || continue
+        have=$(command -v "$tool" || true)
+        [ "$have" = "$want" ] || { echo "$tool on PATH is ${have:-missing}, not the mise.toml pin $want: run tasks with mise activate, or as mise exec -- task <target>" >&2; exit 1; }
+      done
+
   # BLD-03 (02-06): the source-tree and output-tree hashing pipeline shared
   # VERBATIM by web:build (which WRITES web/build/.build-manifest) and
   # web:drift (which only RECOMPUTES the same two digests and COMPARES them
@@ -459,7 +476,7 @@ tasks:
       DOCS-05/D-01-D-03: regenerates docs/CLI-REFERENCE.md IN PLACE from the
       live codegraph Cobra tree via tools/clidoc — the only sanctioned way
       to change this file (a hand edit is exactly what docs:cli:drift
-      exists to catch). Go is the mise.toml toolchain.
+      exists to catch).
     cmds:
       - |
         set -euo pipefail
@@ -1979,28 +1996,30 @@ tasks:
     desc: >-
       ADVISORY (VULN-01/VULN-03): finds the mise-installed Go tool binaries
       that scripts/vuln_report.py's roster names and scans each one with
-      govulncheck -mode=binary. Every outcome is reported, never fatal: NOT
-      FOUND, CLEAN, DETECTED (exit 3, a symbol-matched vulnerability) or
-      SCAN ERROR. A finding does not fail this task because goreleaser's binary
+      govulncheck -mode=binary. Every scan outcome is reported, never fatal:
+      CLEAN, DETECTED (exit 3, a symbol-matched vulnerability) or SCAN ERROR.
+      A roster tool mise cannot find (NOT FOUND) fails the task, because
+      mise.toml pins every one of them. A finding does not fail this task because goreleaser's binary
       carries a permanently unfixed, symbol-reachable match for
       GO-2026-5932 (openpgp, reached through its ko pipe), so a blocking
-      gate would be red forever. The task fails only when the script's own
-      loop skipped a tool or left a found binary unscanned. -mode=binary is
+      gate would be red forever. Otherwise the task fails only when the
+      script's own loop skipped a tool or left a found binary unscanned. -mode=binary is
       symbol-level, not call-graph-aware, so it is weaker than ci.yml's
       blocking source-mode govulncheck job, which it does not replace. See
       vuln:selftest for the proof that detection still fires.
     preconditions:
-      - sh: command -v uv && command -v govulncheck
-        msg: "uv or govulncheck not on PATH — run `mise install`. vuln runs scripts/vuln_report.py."
+      - sh: command -v mise && command -v uv && command -v govulncheck
+        msg: "mise, uv or govulncheck not on PATH — install mise, then run `mise install`. vuln runs scripts/vuln_report.py."
     cmds:
       - uv run scripts/vuln_report.py -- govulncheck -mode=binary
 
   mutation-check:
     desc: >-
-      Proves that Go tests catch the bugs they target: runs each mutant in the
-      JSON file passed after `--` against the tests it names, through `go test
-      -overlay`, so the working tree never changes. Fails unless every mutant
-      is CAUGHT. See .claude/skills/mutation-check/SKILL.md for the file format.
+      Proves that Go tests catch the bugs they target: runs the named tests on
+      the unmutated tree first, then each mutant in the JSON file passed after
+      `--`, through `go test -overlay`, so the working tree never changes.
+      Fails unless every mutant is CAUGHT or CRASHED. See
+      .claude/skills/mutation-check/SKILL.md for the file format.
     preconditions:
       - sh: command -v uv && command -v go
         msg: "uv or go not on PATH — run `mise install`."
@@ -2292,7 +2311,7 @@ tasks:
         fi
 
         status=0
-        out=$(PYTHONPATH=scripts uv run --no-project --python '>=3.12' python -B -m unittest discover -s tests -p 'test_fragment_policy.py' -v 2>&1) || status=$?
+        out=$(PYTHONPATH=scripts uv run --no-project python -B -m unittest discover -s tests -p 'test_fragment_policy.py' -v 2>&1) || status=$?
         printf '%s\n' "${out}"
         if [ "${status}" -ne 0 ]; then
           echo "::error::check:fragment-policy: unittest exited ${status}"
@@ -2313,9 +2332,9 @@ tasks:
   check:ci-scripts:
     desc: >-
       Offline guard for ci.yml's planning-only classifier and the advisory
-      vuln report loop and the mutation check: runs tests/test_planning_only.py,
-      tests/test_vuln_report.py and tests/test_mutation_check.py (stdlib
-      unittest over literal inputs,
+      vuln report loop, plus the mutation-check script: runs
+      tests/test_planning_only.py, tests/test_vuln_report.py and
+      tests/test_mutation_check.py (stdlib unittest over literal inputs,
       never gh, mise, go or a workflow). Each file passes only when unittest's
       executed count equals its number of `def test_` methods, that count
       meets the file's floor, and the result line is exactly OK (rule
@@ -2329,7 +2348,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        for spec in test_planning_only.py:28 test_vuln_report.py:18 test_mutation_check.py:13; do
+        for spec in test_planning_only.py:28 test_vuln_report.py:20 test_mutation_check.py:18; do
           file="${spec%%:*}"
           floor="${spec##*:}"
           defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' "tests/${file}" || true; } | wc -l | tr -d ' ')
@@ -2339,7 +2358,7 @@ tasks:
           fi
 
           status=0
-          out=$(PYTHONPATH=scripts uv run --no-project --python '>=3.12' python -B -m unittest discover -s tests -p "${file}" -v 2>&1) || status=$?
+          out=$(PYTHONPATH=scripts uv run --no-project python -B -m unittest discover -s tests -p "${file}" -v 2>&1) || status=$?
           printf '%s\n' "${out}"
           if [ "${status}" -ne 0 ]; then
             echo "::error::check:ci-scripts: ${file}: unittest exited ${status}"
@@ -2463,6 +2482,8 @@ tasks:
       linux-cross-canary's `cross-build` job on the same macOS profile
       (`goreleaser release` DOES accept `--skip=sign`); still true post-D-18.
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
       - sh: command -v clang
@@ -2550,6 +2571,8 @@ tasks:
       .goreleaser.yaml) evaluating false — never `--skip=sign`, which is a
       different pipe.
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
       - sh: command -v zig
@@ -2572,9 +2595,10 @@ tasks:
         # override, zig fails with "unable to open local cache directory
         # ...: AccessDenied" the first time either linux build id's zig cc
         # override actually runs. Point both the local and global cache at
-        # a scratch dir cleaned up by the same trap as GORELEASER_BIN above.
+        # a scratch dir the EXIT trap removes. GORELEASER_BIN is mise's install
+        # and must never be in that trap.
         ZIG_CACHE_ROOT="$(mktemp -d)"
-        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")" "${ZIG_CACHE_ROOT}"' EXIT
+        trap 'rm -rf "${ZIG_CACHE_ROOT}"' EXIT
         export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
         export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
 
@@ -2683,6 +2707,8 @@ tasks:
       release-pr.yml opens; release-tag.yml then pushes the tag that starts
       release.yml, whose step runs release:goreleaser (DOCS-14).
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
       - sh: command -v zig
@@ -2865,6 +2891,8 @@ tasks:
       pull_request-triggerable workflow) — not by a precondition here, since
       this target is meant to run only from that job.
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:goreleaser must run on a native darwin host — the linux legs cross-compile via zig from here (D-01/D-02) and darwin must build natively; a linux host would silently produce a cross-linked darwin binary (libresolv/DNS-resolution risk). Use `task release:dry-run` or the linux-cross-canary workflow instead."
       - sh: command -v zig
@@ -3105,6 +3133,8 @@ tasks:
       closes by asserting the committed .goreleaser.yaml is still
       byte-unchanged — no experiment here ever leaks into the working tree.
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       # --- host / tool guards, in the order a maintainer must satisfy them
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:rehearse-notarize must run on a native darwin host (D-08) — rehearsal is local-only by design, never CI. Run it on your own Mac."
@@ -3710,6 +3740,8 @@ tasks:
       release`'s sign-and-notarize step whenever its five-term `enabled:`
       credential conjunction evaluates true).
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:rehearse-cask must run on a native darwin host — brew install --cask only makes sense against a real macOS Homebrew prefix. Run it on your own Mac."
       - sh: command -v brew
@@ -5948,7 +5980,7 @@ tasks:
       exists specifically to fail loud instead.
     preconditions:
       - sh: command -v zig
-        msg: "zig not found on PATH — check:reproducibility:arm64 cross-compiles via zig cc (aarch64-linux-gnu). Install per CONTRIBUTING.md's Building section (https://ziglang.org/download/), or run `task check:reproducibility` (the blocking linux/amd64 leg) alone if you don't need the cross-target report."
+        msg: "zig not found on PATH — check:reproducibility:arm64 cross-compiles via zig cc (aarch64-linux-gnu). Run `mise install`, or run `task check:reproducibility` (the blocking linux/amd64 leg) alone if you don't need the cross-target report."
     cmds:
       - |
         set -euo pipefail

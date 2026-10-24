@@ -3,7 +3,7 @@
 # to [tools], run `mise lock --platform linux-x64,linux-arm64,macos-arm64` (hk publishes no
 # macos-x64 build) and commit mise.lock.
 [tools]
-# go.mod's `go` line is the minimum language version and must not exceed this toolchain.
+# The `go` line of go.mod and of testdata/vulnredpoc/go.mod must not exceed this toolchain.
 go = "1.26.10"
 node = "24.22.1"
 pnpm = "11.23.0"
@@ -15,6 +15,7 @@ changie = "1.26.0"
 golangci-lint = "2.13.2"
 actionlint = "1.7.12"
 buf = "1.72.0"
+# Must equal go.mod's google.golang.org/protobuf version (TestProtocGenGoMatchesProtobufRuntime).
 protoc-gen-go = "1.36.11"
 "go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "1.20.0"
 cosign = "3.1.4"

@@ -1,7 +1,8 @@
 # buf.gen.yaml drives `task proto:gen` (RPC-01, BLD-04). Both plugins are
 # referenced by bare name, resolved via PATH — mise.toml pins
-# protoc-gen-go and protoc-gen-connect-go and puts them on PATH, so this
-# file never hardcodes a machine-local binary path.
+# protoc-gen-go and protoc-gen-connect-go, and `mise install` (or CI's
+# setup-tools) puts them on PATH, so this file never hardcodes a
+# machine-local binary path.
 # paths=source_relative on both plugins lands generated files beside their
 # .proto input (internal/schema/*.pb.go next to graph.proto,
 # internal/uiproto/uiv1/*.pb.go and uiv1connect/*.connect.go next to

@@ -65,10 +65,15 @@ You need a **C toolchain** — tree-sitter is CGo. The reasoning is in
 [`PARSER-DECISION.md`](PARSER-DECISION.md), including why the pure-Go
 alternatives were rejected.
 
-Every other tool is pinned in `mise.toml`: Go itself, `task`, Node, pnpm,
-uv, the linters and the release tools. Install [mise](https://mise.jdx.dev),
-then run `mise trust` and `mise install` in the repository. CI installs the
-same versions from `mise.lock` through `.github/actions/setup-tools`.
+The build, test, lint and release tools are pinned in `mise.toml`: Go
+itself, `task`, Node, pnpm, uv, the linters and the release tools. Host tools
+such as git, gh and jq are not. Install [mise](https://mise.jdx.dev), then
+run `mise trust` and `mise install` in the repository. Run tasks from a shell
+with `mise activate`, or as `mise exec -- task <target>`: a task refuses to
+run when go, pnpm, buf, goreleaser, changie or golangci-lint on PATH is not
+the pinned install. CI installs the same versions through
+`.github/actions/setup-tools`. The Python scripts run on the version in
+`.python-version`.
 
 ```sh
 CGO_ENABLED=1 go build ./cmd/codegraph
@@ -136,7 +141,8 @@ Every command CI runs is defined exactly once, as a `task` target — see
 - Version bumps in `mise.toml` are manual: neither Dependabot nor Renovate
   is configured for this repository. After you change `mise.toml`, run
   `mise lock --platform linux-x64,linux-arm64,macos-arm64` and commit
-  `mise.lock`, which records the checksum of every download.
+  `mise.lock`. It records a checksum for every prebuilt download; the `go:`
+  tools are built from source and verified by the Go checksum database.
 
 ## Pull requests
 

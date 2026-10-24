@@ -1,6 +1,6 @@
 // Package main is VULN-02's permanent, deliberately-vulnerable proof
 // program — it exists only so `task vuln:selftest` has a real, reachable
-// vulnerability to detect, proving the tool-modfile scan (see Taskfile.yml's
+// vulnerability to detect, proving the tool-binary scan (see Taskfile.yml's
 // `vuln` target) can actually fire rather than being a documented gate that
 // never does.
 //

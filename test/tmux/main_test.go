@@ -19,8 +19,6 @@
 // TMUX_EXPECTED_TESTS, declared in the test:tmux target's own vars: block in
 // Taskfile.yml. Adding or removing a top-level Test* function in this
 // package means updating that constant in the SAME commit.
-//
-// Set CODEGRAPH_TEST_BIN to bypass the local build entirely.
 package tmux
 
 import (
