@@ -231,7 +231,7 @@ jobs:
       # name+version, cgo-closure walk) ran only locally since v0.13.0
       # Phase 11. `test` is already a required context, so this blocks
       # merges the moment it lands — no ruleset edit needed (D-04). Needs
-      # `node` (Set up Node above) and `syft` (the step above).
+      # `node` and `syft`, both from Set up tools.
       - name: Gonum dependency-shape guard (GRD-11/GRF-10)
         run: task check:gonum
 
@@ -304,21 +304,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      # Deliberately its own job/step — NEVER combined with SBOM generation
-      # (RESEARCH anti-pattern). This project's SBOM generation lives in
-      # release.yml's `assemble` job (per-binary SBOM at release time),
-      # entirely separate from this call-graph-aware vulnerability gate.
       - name: Set up tools
         uses: ./.github/actions/setup-tools
         with:
           go-cache: "true"
 
+      # Deliberately its own job/step — NEVER combined with SBOM generation
+      # (RESEARCH anti-pattern). The release SBOMs come from .goreleaser.yaml's
+      # sboms: pipe in release.yml, separate from this call-graph-aware gate.
       - name: Run govulncheck
         run: task vuln:source
 
   # tool-vuln (VULN-01/02/03): govulncheck -mode=binary over the Go tool
-  # binaries mise.toml pins — the third-party modules that execute as credentialed CI tooling (repository
-  # write access and secrets) and were previously scanned by nothing
+  # binaries mise.toml pins — the third-party modules that execute as
+  # credentialed CI tooling (repository write access and secrets) and were
+  # previously scanned by nothing
   # (Taskfile.yml's `vuln` target used to be a no-op duplicate of the
   # govulncheck job above, D-05). This job deliberately does NOT replace the
   # govulncheck job above, which keeps covering the main module in source
@@ -359,10 +359,10 @@ jobs:
         with:
           cache: go
 
-      # Every per-binary outcome is reported, including a failed build
-      # (BUILD ERROR); the step fails only when the report loop itself
-      # skipped a tool (scripts/vuln_report.py).
-      - name: Tool-modfile vulnerability scan (advisory — build and scan outcomes are reported, never fail the build)
+      # Every per-tool outcome is reported. The step fails only when the report
+      # loop itself fails: a roster tool mise cannot find (NOT FOUND), a tool it
+      # never tried, or a found binary it never scanned (scripts/vuln_report.py).
+      - name: Tool-binary vulnerability scan (advisory — scan findings are reported, never fail the build)
         run: task vuln
 
       - name: Non-vacuity proof the advisory scan can still detect (VULN-02, may fail this job on a detection regression)
@@ -489,9 +489,7 @@ jobs:
   #     test:tmux installs whatever ubuntu-latest currently ships and then
   #     fails loudly when `tmux -V` doesn't match the committed
   #     TMUX_EXPECTED_VERSION constant in Taskfile.yml — drift becomes a
-  #     visible one-line decision, not a silent behavior change (the same
-  #     govulncheck go-version-input: stable lesson this workflow already
-  #     paid for once, see the govulncheck job's own comment above).
+  #     visible one-line decision, not a silent behavior change.
   #   - What actually gates this job is the EXECUTED-COUNT EQUALITY inside
   #     `task test:tmux`, not the job's exit code in isolation: a runner
   #     without tmux, a misspelled build tag, or one silently-skipping case

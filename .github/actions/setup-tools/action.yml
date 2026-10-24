@@ -1,7 +1,8 @@
-# Installs the tools mise.toml pins, verified against mise.lock, and puts
-# their real bin directories on PATH. Shims stay off PATH: a shim resolves its
-# version from the working directory, and several Taskfile targets run tools
-# from scratch directories outside the repository.
+# Installs the tools mise.toml pins and puts their real bin directories on PATH.
+# Prebuilt downloads are verified against mise.lock checksums; `go:` tools are
+# built from source and verified by the Go checksum database. Shims stay off
+# PATH: a shim resolves its version from the working directory, and several
+# Taskfile targets run tools from scratch directories outside the repository.
 name: Set up tools
 description: Install the tools pinned in mise.toml and add them to PATH.
 inputs:
@@ -12,8 +13,8 @@ inputs:
     default: ""
   cache:
     description: >-
-      "false" keeps mise's tool cache out of the job. The release job sets it:
-      no mutable cache inside the OIDC signing boundary.
+      "false" keeps mise's tool cache out of the job. The release job and the
+      pull_request_target jobs set it.
     default: "true"
   go-cache:
     description: >-
@@ -38,9 +39,11 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        gomodcache=$(go env GOMODCACHE)
+        gocache=$(go env GOCACHE)
         {
-          echo "gomodcache=$(go env GOMODCACHE)"
-          echo "gocache=$(go env GOCACHE)"
+          echo "gomodcache=${gomodcache}"
+          echo "gocache=${gocache}"
         } >> "$GITHUB_OUTPUT"
 
     - name: Cache Go modules and builds
@@ -53,18 +56,19 @@ runs:
         key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.sum') }}
         restore-keys: go-${{ runner.os }}-${{ runner.arch }}-
 
-    - name: Verify the tools are on PATH
+    - name: Verify the tools on PATH are the mise installs
       shell: bash
       env:
         TOOLS: ${{ inputs.tools }}
       run: |
         set -euo pipefail
-        if [ -z "${TOOLS}" ]; then
-          go version
-          task --version
+        check=${TOOLS:-go task}
+        for tool in ${check}; do
+          have=$(command -v "${tool}" || true)
+          want=$(mise which "${tool}")
+          [ "${have}" = "${want}" ] || { echo "::error::${tool} on PATH is ${have:-missing}, not the mise install ${want}"; exit 1; }
+          echo "${tool}: ${have}"
+        done
+        if [ -z "${TOOLS}" ] || [[ " ${TOOLS} " == *" go "* ]]; then
           [ "$(go env GOTOOLCHAIN)" = "local" ] || { echo "::error::GOTOOLCHAIN is $(go env GOTOOLCHAIN), want local (mise.toml [env])"; exit 1; }
-        else
-          for tool in ${TOOLS}; do
-            command -v "${tool}" || { echo "::error::${tool} is not on PATH after mise install"; exit 1; }
-          done
         fi

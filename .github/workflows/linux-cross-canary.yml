@@ -17,11 +17,13 @@
 # D-04 FAIL-BAR VARIATION LIST — enumerated here, BEFORE the first dispatch,
 # so the GoReleaser Pro decision stays falsifiable. A list written after a
 # failure is rationalization, not a bound. Apply variations in order by
-# editing the zig `version:` input below and/or `.goreleaser.yaml`'s linux
-# build ids' target triples, recording which V-number produced the recorded
-# run in the plan SUMMARY:
+# editing the `zig` entry in mise.toml (then `mise lock`) and/or
+# `.goreleaser.yaml`'s linux build ids' target triples, recording which
+# V-number produced the recorded run in the plan SUMMARY. mise.toml's zig is
+# also release.yml's zig: a V4/V5 trial on a branch moves the release
+# toolchain with it.
 #
-#   V1 — zig 0.15.1 (this file's pin), target triples x86_64-linux-gnu and
+#   V1 — zig 0.15.1 (mise.toml's pin), target triples x86_64-linux-gnu and
 #        aarch64-linux-gnu, default (dynamic) CGO_LDFLAGS.
 #   V2 — zig 0.15.1, explicit glibc floor: triples x86_64-linux-gnu.2.28
 #        and aarch64-linux-gnu.2.28, default CGO_LDFLAGS.
@@ -36,8 +38,8 @@
 # Exhausting V1-V5 without BOTH linux legs indexing a real tree on real
 # Linux declares REL-05 FAIL and escalates to the costed GoReleaser Pro
 # fallback (`release --split`/`continue --merge`), with its three named
-# gate repairs entered as scope: check:goreleaser/DIST-01, TestGoreleaserPinParity,
-# and tool-vuln/VULN-01-02-03 (which would turn GO-2026-5932 from
+# gate repairs entered as scope: check:goreleaser/DIST-01, the goreleaser pin
+# in mise.toml, and tool-vuln/VULN-01-02-03 (which would turn GO-2026-5932 from
 # accepted-and-measured into unmeasurable). This canary ships wired to V1.
 #
 # Two triggers, deliberately:

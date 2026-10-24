@@ -310,13 +310,11 @@ var releaseJobIDTokenWriteRe = regexp.MustCompile(`id-token:\s*write`)
 var releaseJobAttestationsWriteRe = regexp.MustCompile(`attestations:\s*write`)
 
 // releaseJobInvokesGoreleaserRe matches either the Taskfile indirection
-// (`task release:goreleaser`) or a bare `goreleaser ` invocation, so this
-// guard does not silently pass if the Taskfile indirection is later
-// removed. Deliberately case-sensitive and whitespace-anchored so it does
-// not false-positive on prose like "Install GoReleaser" or on the
-// goreleaser-action `uses:` reference (`goreleaser/goreleaser-action`,
-// where "goreleaser" is never followed by whitespace).
-var releaseJobInvokesGoreleaserRe = regexp.MustCompile(`task release:goreleaser|\bgoreleaser\s`)
+// (`task release:goreleaser`) or a `goreleaser` command at the start of a
+// line or a run: value, so this guard does not silently pass if the
+// Taskfile indirection is later removed. It does not match the word inside
+// prose or a setup-tools `tools:` list.
+var releaseJobInvokesGoreleaserRe = regexp.MustCompile(`task release:goreleaser|^\s*(?:-\s+)?(?:run:\s*)?goreleaser\s`)
 
 // parseReleaseJobShapes walks every top-level job under release.yml's
 // `jobs:` key and returns each job's releaseJobShape, using a
@@ -1603,16 +1601,16 @@ func parseReleaseJobSetupToolsSteps(doc fullWorkflowDoc, jobID string) ([]fullWo
 	return steps, nil
 }
 
-// releaseJobForbiddenTools are mise tools the signing job must never install:
-// the JS toolchain stays off the release path.
-var releaseJobForbiddenTools = []string{"node", "pnpm"}
+// releaseJobTools is exactly the tool set the signing job installs: what
+// release:goreleaser and release:record-final-hashes run, and nothing else.
+var releaseJobTools = []string{"cosign", "go", "goreleaser", "syft", "task", "zig"}
 
 // TestReleaseJobSetupToolsIsMinimalAndUncached pins the release
 // (goreleaser-invoking, id-token: write) job's setup-tools step to `cache:
-// "false"` and an explicit tools list with no JS toolchain. A restored tool
+// "false"`, no go-cache, and exactly releaseJobTools. A restored tool or Go
 // cache is mutable state any branch can populate inside the OIDC signing
-// boundary; installing every mise tool would put node, pnpm and npm on the
-// release path.
+// boundary; a missing tool fails the release only after the tag is pushed;
+// an extra one widens the signing job.
 //
 // The signing job is found through its goreleaser invocation, not a
 // hardcoded key, and the step through parseReleaseJobSetupToolsSteps, which
@@ -1635,19 +1633,21 @@ func TestReleaseJobSetupToolsIsMinimalAndUncached(t *testing.T) {
 
 	for _, step := range steps {
 		if v := fmt.Sprint(step.With["cache"]); v != "false" {
-			t.Errorf("release.yml job %q step %q has cache = %q, want \"false\" — the signing job must not read a mutable cache (S2; T-01-29)", job.ID, step.Name, v)
+			t.Errorf("release.yml job %q step %q has cache = %q, want \"false\" — the signing job must not read a mutable cache", job.ID, step.Name, v)
 		}
-		tools := strings.Fields(fmt.Sprint(step.With["tools"]))
-		if step.With["tools"] == nil || len(tools) == 0 {
-			t.Errorf("release.yml job %q step %q declares no tools list — an empty list installs every mise tool, the JS toolchain included", job.ID, step.Name)
+		if v, ok := step.With["go-cache"]; ok && fmt.Sprint(v) != "false" {
+			t.Errorf("release.yml job %q step %q has go-cache = %q, want it absent or \"false\" — no Go cache inside the signing boundary", job.ID, step.Name, fmt.Sprint(v))
+		}
+		tools, all := setupToolsList(step.With)
+		if all {
+			t.Errorf("release.yml job %q step %q declares no tools list — that installs every mise tool, the JS toolchain included", job.ID, step.Name)
 			continue
 		}
-		for _, tool := range tools {
-			if slices.Contains(releaseJobForbiddenTools, tool) || strings.HasPrefix(tool, "npm:") {
-				t.Errorf("release.yml job %q step %q installs %q — no JS toolchain on the release path", job.ID, step.Name, tool)
-			}
+		got := slices.Sorted(slices.Values(tools))
+		if !slices.Equal(got, releaseJobTools) {
+			t.Errorf("release.yml job %q step %q installs %v, want exactly %v", job.ID, step.Name, got, releaseJobTools)
 		}
-		t.Logf("release.yml job %q step %q: cache=%v, %d tools %v", job.ID, step.Name, step.With["cache"], len(tools), tools)
+		t.Logf("release.yml job %q step %q: cache=%v, %d tools %v", job.ID, step.Name, step.With["cache"], len(tools), got)
 	}
 }
 

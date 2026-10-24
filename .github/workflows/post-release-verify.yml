@@ -39,7 +39,9 @@
 #   - workflow_run: workflows: ["release"], types: [completed] — fires once
 #     release.yml has actually finished, success or not.
 #   - workflow_dispatch, with a `tag` input — retained for re-verification
-#     of a historical tag on demand.
+#     of a historical tag on demand. The jobs that check out the tag run that
+#     tag's .github/actions/setup-tools, so a tag cut before mise.toml and
+#     setup-tools existed cannot be re-verified this way.
 #
 # THE CONCLUSION GUARD MUST BE EVENT-AWARE (cross-AI review, cycle 2,
 # MEDIUM/pi). Every job below carries an `if:` disjunct that short-circuits

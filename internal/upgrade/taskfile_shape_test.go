@@ -662,9 +662,9 @@ func parseGateStanceWord(text string) (string, error) {
 // NOTE (D-04 superseded 2026-08-06 at 04-01's Task 1 checkpoint — see
 // 04-CONTEXT.md and 04-01-SUMMARY.md): this test was originally designed
 // to assert a DELIBERATE blocking-versus-advisory divergence between the
-// tool-modfile scan (Taskfile.yml's `vuln` task / ci.yml's `tool-vuln`
+// tool-binary scan (Taskfile.yml's `vuln` task / ci.yml's `tool-vuln`
 // job) and the D-03 transcript-freeze guard (Phase 3's sibling
-// advisory-stance pattern). Implementing the tool-modfile scan surfaced a
+// advisory-stance pattern). Implementing the tool-binary scan surfaced a
 // real, permanently-unfixed, symbol-reachable vulnerability in
 // goreleaser's own binary (GO-2026-5932) that would have made a blocking
 // gate permanently red from its first CI run, so the maintainer demoted it
@@ -1051,9 +1051,10 @@ func TestCheckCrossParsersFailLoudly(t *testing.T) {
 
 // --- TestWorkflowRunBodiesInvokeTask: workflow step decoding -----------
 
-// workflowRunStep is the subset of a GitHub Actions workflow step this
-// guard needs: its display name and its run: body (empty for a `uses:`
-// step, which this guard does not constrain — D-01 only binds run: bodies).
+// workflowRunStep is the subset of a GitHub Actions workflow step these
+// guards need: its display name, its run: body (empty for a `uses:` step —
+// D-01 only binds run: bodies), and its uses: and with: values, which the
+// setup-tools guards read.
 type workflowRunStep struct {
 	Name string         `yaml:"name"`
 	Run  string         `yaml:"run"`
@@ -1330,8 +1331,8 @@ func validateWorkflowFileExceptions(excs []workflowFileException) error {
 }
 
 // TestWorkflowFilePopulationMatchesDisk is WR-03's disk-binding fix for
-// inScopeWorkflowFiles, mirroring TestToolModfilesPopulationMatchesDisk
-// and TestInScopeJobsPopulationMatchesDisk's own pattern one level up:
+// inScopeWorkflowFiles, mirroring TestInScopeJobsPopulationMatchesDisk's
+// own pattern one level up:
 // every *.yml file actually present under workflowsDir must appear in
 // EXACTLY ONE of inScopeWorkflowFiles or workflowFileExceptions. Before
 // this fix, a new workflow file added anywhere under .github/workflows/
@@ -1430,10 +1431,8 @@ func validateUsesOnlyJobExceptions(excs []usesOnlyJobException) error {
 	return nil
 }
 
-// TestInScopeJobsPopulationMatchesDisk is IN-05's disk-binding fix,
-// mirroring TestToolModfilesPopulationMatchesDisk's own pattern (that
-// test's own doc comment is this one's precedent, named directly in
-// 03-REVIEW.md's IN-05 finding). Before this fix, inScopeJobs was a
+// TestInScopeJobsPopulationMatchesDisk is IN-05's disk-binding fix. Before
+// this fix, inScopeJobs was a
 // hand-enumerated fixture with only a non-empty guard
 // (TestWorkflowRunBodiesInvokeTask's `len(inScopeJobs) == 0` check) —
 // nothing asserted that every job actually declared in
@@ -2392,7 +2391,7 @@ func TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError(t *testing.T) {
 	}
 }
 
-// --- quick 260811-s5o: cosign-installer coverage guard ---------------------
+// --- quick 260811-s5o: cosign installation coverage guard -------------------
 //
 // Release v0.9.0, post-release-verify.yml run 31549287269: the self-upgrade
 // job invoked `task verify:self-upgrade`, which declares a `command -v
@@ -2403,9 +2402,9 @@ func TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError(t *testing.T) {
 // at runtime, every Taskfile target with a `command -v cosign` precondition
 // and every job in post-release-verify.yml, then asserts each job that
 // invokes such a target installs cosign exactly once, through one
-// setup-tools step whose tools list is empty (every mise tool) or names
-// cosign — so the next Taskfile target that grows a cosign precondition
-// cannot silently ship the same defect.
+// setup-tools step whose tools list names cosign, or which installs every
+// tool while mise.toml pins cosign — so the next Taskfile target that grows a
+// cosign precondition cannot silently ship the same defect.
 
 // parseCosignRequiringTaskTargets decodes Taskfile source src with the real
 // YAML decoder (reusing gatekeeperTaskfileRoot) and returns the set of task
@@ -2480,18 +2479,30 @@ func taskTargetsInRunBody(body string) []string {
 	return targets
 }
 
+// setupToolsList reads a setup-tools step's tools input. An absent, null or
+// blank value means every tool in mise.toml (all = true), as the action does.
+func setupToolsList(with map[string]any) (tools []string, all bool) {
+	v, ok := with["tools"]
+	if !ok || v == nil {
+		return nil, true
+	}
+	tools = strings.Fields(fmt.Sprint(v))
+	return tools, len(tools) == 0
+}
+
 // setupToolsInstalls reports whether step is a setup-tools step that installs
-// tool: its tools input is empty (every mise tool) or names tool.
-func setupToolsInstalls(step workflowRunStep, tool string) bool {
+// tool: its tools list names tool, or it installs every tool and mise.toml
+// pins tool.
+func setupToolsInstalls(step workflowRunStep, tool, miseToml string) bool {
 	if step.Uses != setupToolsAction {
 		return false
 	}
-	v, ok := step.With["tools"]
-	if !ok {
-		return true
+	tools, all := setupToolsList(step.With)
+	if all {
+		_, err := parseMiseToolVersion(miseToml, tool)
+		return err == nil
 	}
-	tools := strings.Fields(fmt.Sprint(v))
-	return len(tools) == 0 || slices.Contains(tools, tool)
+	return slices.Contains(tools, tool)
 }
 
 // TestCosignRequiringJobsInstallCosign is quick 260811-s5o's guard: it is
@@ -2514,6 +2525,10 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 	cosignTargets, err := parseCosignRequiringTaskTargets(string(taskfileData))
 	if err != nil {
 		t.Fatalf("parseCosignRequiringTaskTargets: %v", err)
+	}
+	miseData, err := os.ReadFile(miseTomlPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", miseTomlPath, err)
 	}
 
 	workflowData, err := os.ReadFile(postReleaseWorkflowPath)
@@ -2547,7 +2562,7 @@ func TestCosignRequiringJobsInstallCosign(t *testing.T) {
 
 		installerCount := 0
 		for _, step := range steps {
-			if setupToolsInstalls(step, "cosign") {
+			if setupToolsInstalls(step, "cosign", string(miseData)) {
 				installerCount++
 			}
 		}
@@ -3479,10 +3494,8 @@ func TestReleasePathScanIgnoresNearMisses(t *testing.T) {
 var forbiddenCacheActions = []string{"actions/cache", "actions/cache/restore", "actions/cache/save"}
 
 // cacheInputKeys are the with: input keys that turn a Node setup action
-// into a cache restorer. A cache: input on actions/setup-node is a
-// FINDING regardless of its value; the identical key on actions/setup-go
-// (cache: false in ci.yml today) is a different action prefix entirely and
-// is not matched by this fixture's use in the Node-setup case.
+// into a cache restorer. A cache: input on actions/setup-node is a FINDING
+// regardless of its value.
 var cacheInputKeys = []string{"cache"}
 
 // nodeSetupActionPrefix and nscloudCacheActionPrefix are the two `uses:`
@@ -3533,6 +3546,77 @@ type cacheAwareJob struct {
 
 type cacheAwareWorkflow struct {
 	Jobs map[string]cacheAwareJob `yaml:"jobs"`
+}
+
+// setupToolsActionPath is the local composite action ci.yml's jobs call to
+// install tools; its cache steps are scanned where a job uses it.
+const setupToolsActionPath = "../../.github/actions/setup-tools/action.yml"
+
+// goCacheGate is the if: condition on setup-tools' Go cache step, and
+// goCachePathOutputs are the only paths that step may cache.
+const goCacheGate = "inputs.go-cache == 'true'"
+
+var goCachePathOutputs = []string{"${{ steps.go-cache-paths.outputs.gomodcache }}", "${{ steps.go-cache-paths.outputs.gocache }}"}
+
+type compositeCacheStep struct {
+	Name string         `yaml:"name"`
+	Uses string         `yaml:"uses"`
+	If   string         `yaml:"if"`
+	With map[string]any `yaml:"with"`
+}
+
+type compositeAction struct {
+	Runs struct {
+		Steps []compositeCacheStep `yaml:"steps"`
+	} `yaml:"runs"`
+}
+
+// scanSetupToolsCaches classifies the cache steps inside the setup-tools
+// composite action for a caller passing callerWith. jdx/mise-action's tool
+// cache holds mise.lock-pinned binaries, not JS dependencies, so it is out of
+// BLD-01's scope. A cache action step is allowed only as the go-cache-gated
+// Go module/build cache, and counts as an allowed cache when the caller turns
+// go-cache on; any other cache step is a finding.
+func scanSetupToolsCaches(actionSrc []byte, callerWith map[string]any) ([]mutableCacheFinding, int, error) {
+	var action compositeAction
+	if err := yaml.Unmarshal(actionSrc, &action); err != nil {
+		return nil, 0, fmt.Errorf("scanSetupToolsCaches: %w", err)
+	}
+	if len(action.Runs.Steps) == 0 {
+		return nil, 0, fmt.Errorf("scanSetupToolsCaches: composite action declares zero steps")
+	}
+	var findings []mutableCacheFinding
+	allowed := 0
+	for _, step := range action.Runs.Steps {
+		if !contains(forbiddenCacheActions, actionPrefix(step.Uses)) {
+			continue
+		}
+		paths := strings.Fields(fmt.Sprint(step.With["path"]))
+		goOnly := len(paths) > 0
+		for i := 0; i < len(paths); {
+			matched := false
+			for _, want := range goCachePathOutputs {
+				n := len(strings.Fields(want))
+				if i+n <= len(paths) && strings.Join(paths[i:i+n], " ") == want {
+					i += n
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				goOnly = false
+				break
+			}
+		}
+		if strings.TrimSpace(step.If) != goCacheGate || !goOnly {
+			findings = append(findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "composite-cache"})
+			continue
+		}
+		if fmt.Sprint(callerWith["go-cache"]) == "true" {
+			allowed++
+		}
+	}
+	return findings, allowed, nil
 }
 
 // hasAnyCacheInputKey reports whether with declares any key named in
@@ -3598,6 +3682,18 @@ func scanContentForMutableCache(jobID string, content []byte) (mutableCacheScanR
 			case cacheVal == "go":
 				result.AllowedCaches++
 			}
+
+		case step.Uses == setupToolsAction:
+			actionSrc, err := os.ReadFile(setupToolsActionPath)
+			if err != nil {
+				return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: read %s: %w", setupToolsActionPath, err)
+			}
+			findings, allowed, err := scanSetupToolsCaches(actionSrc, step.With)
+			if err != nil {
+				return mutableCacheScanResult{}, err
+			}
+			result.Findings = append(result.Findings, findings...)
+			result.AllowedCaches += allowed
 		}
 	}
 	return result, nil
@@ -3615,15 +3711,11 @@ func scanForMutableCache(jobID string) (mutableCacheScanResult, error) {
 }
 
 // TestJSInstallPathHasNoMutableCache is the BLD-01 structural invariant:
-// ci.yml's test job carries no mutable JS-scoped cache. The Node-setup
-// clause (actions/setup-node with a cache: input) has NOTHING to match at
-// this wave — 02-06 adds that step two waves later — and that is by
-// design: authoring the invariant BEFORE the step exists means the step
-// cannot arrive with a cache input already attached. What makes this
-// pre-arrival zero mean something is AllowedCaches > 0: ci.yml's test job
-// demonstrably contains a Go cache step (nscloud-cache-action, cache: go)
-// today, so a zero AllowedCaches count would mean this scanner never
-// reached it, and its clean verdict would mean nothing.
+// ci.yml's test job carries no mutable JS-scoped cache, either as its own
+// step or inside the setup-tools composite action, which installs node and
+// pnpm. AllowedCaches > 0 is what makes a clean verdict mean something:
+// ci.yml's test job contains a Go cache step (nscloud-cache-action, cache:
+// go), so a zero count would mean this scanner never reached it.
 func TestJSInstallPathHasNoMutableCache(t *testing.T) {
 	result, err := scanForMutableCache("test")
 	if err != nil {
@@ -3642,12 +3734,47 @@ func TestJSInstallPathHasNoMutableCache(t *testing.T) {
 
 // TestMutableCacheScanIsNonVacuous plants each of the three forbidden
 // forms in synthetic in-memory YAML, one row each, and asserts exactly one
-// finding per row. A fourth row plants the two EXISTING Go forms this
-// repository actually uses (nscloud-cache-action with cache: go,
-// actions/setup-go with cache: false) and asserts zero findings — pinning
+// finding per row. A fourth row plants the Go forms this repository uses
+// (nscloud-cache-action with cache: go, setup-tools with go-cache) and
+// asserts zero findings — pinning
 // the boundary so a future widening of the matcher breaks THIS test
 // instead of quietly failing TestJSInstallPathHasNoMutableCache against
 // the real workflow.
+// TestSetupToolsCacheScanIsNonVacuous plants cache steps in a synthetic
+// setup-tools action: the go-cache-gated Go cache is allowed (and counted
+// only when the caller turns go-cache on), while an ungated cache or one
+// whose path reaches beyond the Go caches is a finding.
+func TestSetupToolsCacheScanIsNonVacuous(t *testing.T) {
+	goStep := "    - name: go\n      if: inputs.go-cache == 'true'\n      uses: actions/cache@v6\n      with:\n        path: |\n          ${{ steps.go-cache-paths.outputs.gomodcache }}\n          ${{ steps.go-cache-paths.outputs.gocache }}\n"
+	mise := "    - name: mise\n      uses: jdx/mise-action@v5\n"
+	cases := []struct {
+		name         string
+		steps        string
+		with         map[string]any
+		wantFindings int
+		wantAllowed  int
+	}{
+		{"gated Go cache, go-cache on", mise + goStep, map[string]any{"go-cache": "true"}, 0, 1},
+		{"gated Go cache, go-cache off", mise + goStep, nil, 0, 0},
+		{"ungated cache", mise + strings.Replace(goStep, "      if: inputs.go-cache == 'true'\n", "", 1), nil, 1, 0},
+		{"cache path beyond Go", mise + strings.Replace(goStep, "${{ steps.go-cache-paths.outputs.gocache }}", "web/node_modules", 1), map[string]any{"go-cache": "true"}, 1, 0},
+	}
+	for _, c := range cases {
+		src := []byte("runs:\n  using: composite\n  steps:\n" + c.steps)
+		findings, allowed, err := scanSetupToolsCaches(src, c.with)
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if len(findings) != c.wantFindings || allowed != c.wantAllowed {
+			t.Errorf("%s: got %d finding(s) %v and %d allowed, want %d and %d", c.name, len(findings), findings, allowed, c.wantFindings, c.wantAllowed)
+		}
+	}
+	if _, _, err := scanSetupToolsCaches([]byte("runs:\n  using: composite\n"), nil); err == nil {
+		t.Errorf("scanSetupToolsCaches on an action with no steps: expected an error, got nil")
+	}
+}
+
 func TestMutableCacheScanIsNonVacuous(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -3671,7 +3798,7 @@ func TestMutableCacheScanIsNonVacuous(t *testing.T) {
 		},
 		{
 			name:         "existing Go forms stay allowed",
-			src:          "jobs:\n  test:\n    steps:\n      - name: go cache\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: go\n      - name: setup go\n        uses: actions/setup-go@v6\n        with:\n          cache: false\n",
+			src:          "jobs:\n  test:\n    steps:\n      - name: go cache\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: go\n      - name: setup tools\n        uses: ./.github/actions/setup-tools\n        with:\n          go-cache: \"true\"\n",
 			wantFindings: 0,
 		},
 	}

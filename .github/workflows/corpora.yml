@@ -71,7 +71,8 @@ on:
   # internal/schema/**), the query/cli/mcp surfaces (internal/query/**,
   # internal/cli/**, internal/mcp/**), the CLI entrypoint (cmd/**), the golden
   # fixtures and behavioral corpus themselves (testdata/golden/**,
-  # corpus/**), and the module definition (go.mod, go.sum). When a new golden
+  # corpus/**), the module definition (go.mod, go.sum), and the toolchain that
+  # builds them (mise.toml, mise.lock, .github/actions/setup-tools/**). When a new golden
   # input package is added, APPEND it here — a golden-only PR that the filter
   # omits silently bypasses the golden job (T-03-P1-05). Never replace a real
   # package with a plausible placeholder name.
@@ -96,6 +97,7 @@ on:
       - "go.sum"
       - "mise.toml"
       - "mise.lock"
+      - ".github/actions/setup-tools/**"
       - "Taskfile.yml"
       - ".github/workflows/corpora.yml"
   push:
@@ -121,6 +123,7 @@ on:
       - "go.sum"
       - "mise.toml"
       - "mise.lock"
+      - ".github/actions/setup-tools/**"
       - "Taskfile.yml"
       - ".github/workflows/corpora.yml"
 

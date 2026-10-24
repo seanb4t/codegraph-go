@@ -37,7 +37,7 @@ const (
 	releaseChainPinAppToken = "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0"
 	releaseChainPinCreatePR = "peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1"
 
-	releaseChainSetupTools = "./.github/actions/setup-tools"
+	releaseChainSetupTools = setupToolsAction
 )
 
 // releaseChainExpectedPins is the exact set of pinned (non-local) `uses:`
@@ -53,9 +53,25 @@ var releaseChainExpectedPins = []string{
 var releaseChainUsesLineRe = regexp.MustCompile(`^\s*(?:-\s+)?uses:\s*(.+?)\s*$`)
 
 // releaseChainGoToolChangieRe matches a changie invocation that goes through
-// the go command (`go tool`, `go run`, or a -modfile build) instead of the
-// changie mise.toml pins.
-var releaseChainGoToolChangieRe = regexp.MustCompile(`\bgo (tool|run|build)\b|-modfile`)
+// the go command (`go tool`, `go run`, `go build`, `go install`, or a
+// -modfile build) instead of the changie mise.toml pins.
+var releaseChainGoToolChangieRe = regexp.MustCompile(`\bgo (tool|run|build|install)\b|-modfile`)
+
+func TestReleaseChainGoToolChangieRe(t *testing.T) {
+	cases := map[string]bool{
+		"        changie batch auto":                                        false,
+		"        version=$(changie latest)":                                 false,
+		"        go tool changie latest":                                    true,
+		"        go run github.com/miniscruff/changie latest":               true,
+		"        go install github.com/miniscruff/changie@v1.26.0":          true,
+		"        GOWORK=off go build -modfile=x.mod -o bin/changie changie": true,
+	}
+	for line, want := range cases {
+		if got := releaseChainGoToolChangieRe.MatchString(line); got != want {
+			t.Errorf("releaseChainGoToolChangieRe.MatchString(%q) = %v, want %v", line, got, want)
+		}
+	}
+}
 
 // releaseChainPinnedUsesRe is the only accepted shape for a non-local uses
 // value: owner/repo@<40 hex>, a space, `#`, a space, vX.Y.Z.

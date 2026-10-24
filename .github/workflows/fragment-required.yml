@@ -46,8 +46,12 @@ jobs:
         # No `ref:` on purpose: this checks out the base, not the PR head.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      # No cache is read or written under pull_request_target.
       - name: Set up tools
         uses: ./.github/actions/setup-tools
+        with:
+          tools: task uv
+          cache: "false"
 
       - name: Evaluate fragment policy
         env:

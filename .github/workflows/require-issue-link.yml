@@ -86,9 +86,9 @@ jobs:
               go.mod|go.sum|.gitignore|README.md|CONTRIBUTING.md|CODE_OF_CONDUCT.md|SECURITY.md|NOTICE|LICENSE|CHANGELOG.md) ;;
               # Keep in sync with scripts/pr_template_policy.py's EXEMPT_PREFIXES
               # and EXEMPT_EXACT (asserted by
-              # test_hygiene_allowlists_mirror_require_issue_link). Tool pins;
-              # .changes/ above is the changie release PR's own tree (D-05).
-              mise.toml|mise.lock) ;;
+              # test_hygiene_allowlists_mirror_require_issue_link). mise.lock
+              # only; .changes/ above is the changie release PR's own tree (D-05).
+              mise.lock) ;;
               *) all_exempt=false; break ;;
             esac
           done <<< "$CHANGED_FILES"
