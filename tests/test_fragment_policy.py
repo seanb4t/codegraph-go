@@ -526,7 +526,6 @@ class HygieneAllowlistTests(unittest.TestCase):
             {
                 "go.mod",
                 "go.sum",
-                "mise.toml",
                 "mise.lock",
                 ".gitignore",
                 "README.md",
@@ -542,7 +541,7 @@ class HygieneAllowlistTests(unittest.TestCase):
     def test_hygiene_allowlists_mirror_require_issue_link(self):
         prefixes, exact = _workflow_allowlist()
         self.assertGreaterEqual(len(prefixes), 4, f"parsed prefixes: {sorted(prefixes)}")
-        self.assertGreaterEqual(len(exact), 12, f"parsed exact names: {sorted(exact)}")
+        self.assertGreaterEqual(len(exact), 11, f"parsed exact names: {sorted(exact)}")
         mine_prefixes = set(pr_template_policy.EXEMPT_PREFIXES)
         mine_exact = set(pr_template_policy.EXEMPT_EXACT)
         self.assertEqual(

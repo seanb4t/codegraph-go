@@ -8,7 +8,7 @@ description: Prove a new or changed Go test catches its bug, by running it again
 A test proves a fix only if it fails without the fix. Use this skill when an
 OpenSpec task says "check that each new test can fail", when a fix PR claims
 "I watched it fail before the fix", or when a review asks whether a guard can
-fire (rule `84d1gfpywd`).
+fire.
 
 ## Steps
 
@@ -31,17 +31,23 @@ fire (rule `84d1gfpywd`).
    ]
    ```
 
-   `old` must occur exactly once in `file`. `tests` names the tests that must
-   catch the mutant; the script anchors them, so no other test runs.
-3. Run `task mutation-check -- <path to the JSON file>`.
+   `old` must occur exactly once in `file`. `tests` names top-level tests
+   (no `/`) that must catch the mutant; the script anchors them, so no other
+   test runs. `new` may be empty, to delete the text.
+3. Run `task mutation-check -- <path to the JSON file>`. The script first
+   runs the named tests on the unmutated tree; each must report PASS.
 4. Read each result:
    - `CAUGHT by <tests>`: the test fails without the fix. Done.
-   - `SURVIVED`: no named test fails. Strengthen the test, or name the test
-     that should catch it.
-   - `BUILD FAIL`: the mutant does not compile, so it proves nothing. Keep
-     the code compiling, for example with `_ = x` for a variable the mutant
-     leaves unused.
-   - `BAD ANCHOR`: fix `old` so it occurs exactly once.
+   - `CRASHED`: go test failed without a failing test, for example a timeout
+     or a panic. The mutant is caught; read the output to see how.
+   - `SURVIVED`: every named test passed. Strengthen the test, or name the
+     test that should catch it.
+   - `BUILD FAIL`: the mutant does not compile or vet, so it proves nothing.
+     Keep the code compiling, for example with `_ = x` for a variable the
+     mutant leaves unused.
+   - `BAD ANCHOR`: fix `old` so it occurs exactly once, or fix `file`.
+   - `BASELINE FAIL`: a named test fails, or does not run, without any
+     mutant: a misspelled name, a skip or a build tag. Fix that first.
 5. Repeat until the last line reads `N/N caught`. Put that line and the
    mutant list in the PR body.
 

@@ -56,9 +56,8 @@ EXEMPT_PREFIXES = (
 EXEMPT_EXACT = {
     "go.mod",
     "go.sum",
-    # Tool pins: a PR touching only these is the same class of housekeeping
-    # change as one touching go.mod.
-    "mise.toml",
+    # mise.lock only: a re-lock is housekeeping, but mise.toml pins the release
+    # toolchain and stays under the gates.
     "mise.lock",
     ".gitignore",
     "README.md",

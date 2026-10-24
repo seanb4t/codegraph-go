@@ -14,12 +14,12 @@ Taskfile passes `govulncheck -mode=binary`). Each tool ends in exactly one outco
     DETECTED      the scan exited 3 (a symbol-matched vulnerability)
     SCAN ERROR    the scan exited with any other status
 
-The scan is advisory: no outcome fails the task, because goreleaser's binary
+The scan is advisory: no scan outcome fails the task, because goreleaser's binary
 carries a permanently unfixed, symbol-reachable match (GO-2026-5932) that would
 keep a blocking gate red forever. The exit status is about the loop itself. It is
-0 when every tool was attempted and every found binary was scanned, and 1
-otherwise, because a tool the loop never tried or a binary it never scanned is a
-defect in this script, not a vulnerability finding.
+0 when every roster tool was found and scanned, and 1 otherwise. mise.toml pins
+every roster tool, so NOT FOUND means a broken environment, and a run that scans
+less than the whole roster must never read as clean.
 
 `vuln:selftest` in Taskfile.yml stays the proof that the real scanner can detect;
 tests/test_vuln_report.py proves this loop reports what the scanner says.
@@ -31,6 +31,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TextIO
 
 Runner = Callable[[Sequence[str]], tuple[int, str, str]]
@@ -57,23 +58,26 @@ ROSTER: tuple[Tool, ...] = (
     Tool("syft"),
 )
 
-NOT_FOUND = "NOT FOUND"
-CLEAN = "CLEAN"
-DETECTED = "DETECTED"
-SCAN_ERROR = "SCAN ERROR"
+class Outcome(StrEnum):
+    NOT_FOUND = "NOT FOUND"
+    CLEAN = "CLEAN"
+    DETECTED = "DETECTED"
+    SCAN_ERROR = "SCAN ERROR"
+
+
 DETECTED_EXIT = 3
 
 
 @dataclass(frozen=True)
 class Result:
     tool: Tool
-    outcome: str
+    outcome: Outcome
     locate_rc: int
     scan_rc: int | None
     output: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Tally:
     roster_size: int
     found: int
@@ -94,20 +98,22 @@ class Tally:
         attempted = self.found + self.not_found
         if attempted != self.roster_size:
             return f"attempted {attempted} of {self.roster_size} tools"
+        if self.not_found:
+            return f"{self.not_found} of {self.roster_size} roster tools not found"
         if self.scanned != self.found:
             return f"scanned {self.scanned} of {self.found} found binaries"
         return None
 
 
-def classify(locate_rc: int, scan_rc: int | None) -> str:
-    """The outcome for one tool from its two exit statuses."""
-    if locate_rc != 0:
-        return NOT_FOUND
+def classify(found: bool, scan_rc: int | None) -> Outcome:
+    """The outcome for one tool from whether it was found and the scan's exit status."""
+    if not found:
+        return Outcome.NOT_FOUND
     if scan_rc == 0:
-        return CLEAN
+        return Outcome.CLEAN
     if scan_rc == DETECTED_EXIT:
-        return DETECTED
-    return SCAN_ERROR
+        return Outcome.DETECTED
+    return Outcome.SCAN_ERROR
 
 
 def locate_command(tool: Tool) -> list[str]:
@@ -121,40 +127,39 @@ def scan_command(scanner: Sequence[str], path: str) -> list[str]:
 def run_tool(tool: Tool, scanner: Sequence[str], run: Runner) -> Result:
     locate_rc, locate_out, locate_err = run(locate_command(tool))
     path = locate_out.strip()
-    if locate_rc == 0 and not path:
-        locate_rc, locate_err = 1, f"mise which {tool.name} printed no path\n"
-    if locate_rc != 0:
-        return Result(tool, NOT_FOUND, locate_rc, None, locate_out + locate_err)
+    if locate_rc != 0 or not path:
+        return Result(tool, classify(False, None), locate_rc, None, locate_out + locate_err)
     scan_rc, scan_out, scan_err = run(scan_command(scanner, path))
-    return Result(tool, classify(locate_rc, scan_rc), locate_rc, scan_rc, scan_out + scan_err)
+    return Result(tool, classify(True, scan_rc), locate_rc, scan_rc, scan_out + scan_err)
 
 
 def tally(results: Sequence[Result], roster_size: int) -> Tally:
     outcomes = [r.outcome for r in results]
-    not_found = outcomes.count(NOT_FOUND)
+    not_found = outcomes.count(Outcome.NOT_FOUND)
     found = len(outcomes) - not_found
     return Tally(
         roster_size=roster_size,
         found=found,
         scanned=sum(1 for r in results if r.scan_rc is not None),
         not_found=not_found,
-        detected=outcomes.count(DETECTED),
-        scan_errors=outcomes.count(SCAN_ERROR),
+        detected=outcomes.count(Outcome.DETECTED),
+        scan_errors=outcomes.count(Outcome.SCAN_ERROR),
     )
 
 
 def report_result(result: Result, out: TextIO) -> None:
     name = result.tool.name
-    if result.outcome == CLEAN:
+    if result.outcome == Outcome.CLEAN:
         print(
             f"    {name}: CLEAN (exit 0: no symbol-matched vulnerability, or a "
             "module-level-only match govulncheck does not consider a symbol hit)",
             file=out,
         )
         return
-    if result.outcome == NOT_FOUND:
-        detail = f"mise which exited {result.locate_rc}; nothing was scanned"
-    elif result.outcome == DETECTED:
+    if result.outcome == Outcome.NOT_FOUND:
+        located = f"mise which exited {result.locate_rc}" if result.locate_rc else "mise which printed no path"
+        detail = f"{located}; nothing was scanned"
+    elif result.outcome == Outcome.DETECTED:
         detail = (
             f"govulncheck -mode=binary exited {result.scan_rc} "
             "(symbol-matched vulnerability; advisory, does not fail the build)"
