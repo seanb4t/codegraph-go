@@ -65,7 +65,7 @@ runs:
         check=${TOOLS:-go task}
         for tool in ${check}; do
           have=$(command -v "${tool}" || true)
-          want=$(mise which "${tool}")
+          want=$(mise which "${tool}") || { echo "::error::mise has no install of ${tool}: list only tools pinned in mise.toml"; exit 1; }
           [ "${have}" = "${want}" ] || { echo "::error::${tool} on PATH is ${have:-missing}, not the mise install ${want}"; exit 1; }
           echo "${tool}: ${have}"
         done
