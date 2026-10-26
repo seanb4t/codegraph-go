@@ -1,6 +1,6 @@
 // Package main is VULN-02's permanent, deliberately-vulnerable proof
 // program — it exists only so `task vuln:selftest` has a real, reachable
-// vulnerability to detect, proving the tool-modfile scan (see Taskfile.yml's
+// vulnerability to detect, proving the tool-binary scan (see Taskfile.yml's
 // `vuln` target) can actually fire rather than being a documented gate that
 // never does.
 //
@@ -23,11 +23,8 @@
 // main module's build.
 //
 // It is never built by `go build ./...`, `go vet ./...`, or any other
-// main-module target — only by `task vuln:selftest`, which builds it
-// explicitly via `GOWORK=off go build -modfile=go.tool.mod ./testdata/vulnredpoc`
-// (the same isolated-tool-modfile mechanism Taskfile.yml's `vuln` target
-// uses to build task/goreleaser/govulncheck/actionlint), so it never adds a
-// requirement to the root go.mod either.
+// main-module target — only by `task vuln:selftest`, from its own go.mod in
+// this directory, so it never adds a requirement to the root go.mod either.
 package main
 
 import (

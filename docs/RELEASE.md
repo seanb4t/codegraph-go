@@ -385,11 +385,10 @@ Builds are made reproducible via:
 - `SOURCE_DATE_EPOCH` pinned to the release commit's own commit date (not
   build wall-clock time), used to compute the `-X ...Date=` ldflag
   deterministically
-- pinned Go and `zig` toolchain versions (`.github/workflows/release.yml`'s
-  `GORELEASER_VERSION` env, plus a pinned `zig` version via
-  `mlugg/setup-zig`) — `zig cc` is itself a deterministic C compiler
-  driver, which is a real asset here compared to a system-installed
-  clang/gcc whose exact patch version can silently drift between CI runs
+- pinned versions of Go, GoReleaser and `zig`, in `mise.toml`, with a
+  checksum for each download in `mise.lock`. `zig cc` is a deterministic C
+  compiler driver. A system clang or gcc can change its patch version
+  between CI runs without notice.
 
 **The reproducibility guarantee is scoped, not blanket, and states this
 explicitly rather than hiding cross-target drift behind one green check:**

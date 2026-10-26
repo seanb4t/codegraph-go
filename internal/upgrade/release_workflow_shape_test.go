@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -309,13 +310,11 @@ var releaseJobIDTokenWriteRe = regexp.MustCompile(`id-token:\s*write`)
 var releaseJobAttestationsWriteRe = regexp.MustCompile(`attestations:\s*write`)
 
 // releaseJobInvokesGoreleaserRe matches either the Taskfile indirection
-// (`task release:goreleaser`) or a bare `goreleaser ` invocation, so this
-// guard does not silently pass if the Taskfile indirection is later
-// removed. Deliberately case-sensitive and whitespace-anchored so it does
-// not false-positive on prose like "Install GoReleaser" or on the
-// goreleaser-action `uses:` reference (`goreleaser/goreleaser-action`,
-// where "goreleaser" is never followed by whitespace).
-var releaseJobInvokesGoreleaserRe = regexp.MustCompile(`task release:goreleaser|\bgoreleaser\s`)
+// (`task release:goreleaser`) or a `goreleaser` command at the start of a
+// line or a run: value, so this guard does not silently pass if the
+// Taskfile indirection is later removed. It does not match the word inside
+// prose or a setup-tools `tools:` list.
+var releaseJobInvokesGoreleaserRe = regexp.MustCompile(`task release:goreleaser|^\s*(?:-\s+)?(?:run:\s*)?goreleaser\s`)
 
 // parseReleaseJobShapes walks every top-level job under release.yml's
 // `jobs:` key and returns each job's releaseJobShape, using a
@@ -991,22 +990,22 @@ func TestWorkflowSourceHelpersFailLoudly(t *testing.T) {
 			},
 		},
 		{
-			name: "parseReleaseJobSetupZigSteps: job has no mlugg/setup-zig step",
+			name: "parseReleaseJobSetupToolsSteps: job has no setup-tools step",
 			fn: func() error {
 				doc := fullWorkflowDoc{Jobs: map[string]fullWorkflowJob{
 					"release": {Steps: []fullWorkflowStep{{Name: "Checkout", Uses: "actions/checkout@v6"}}},
 				}}
-				_, err := parseReleaseJobSetupZigSteps(doc, "release")
+				_, err := parseReleaseJobSetupToolsSteps(doc, "release")
 				return err
 			},
 		},
 		{
-			name: "parseReleaseJobSetupZigSteps: job is absent from the workflow",
+			name: "parseReleaseJobSetupToolsSteps: job is absent from the workflow",
 			fn: func() error {
 				doc := fullWorkflowDoc{Jobs: map[string]fullWorkflowJob{
-					"other": {Steps: []fullWorkflowStep{{Name: "Install zig", Uses: setupZigActionPrefix + "deadbeef"}}},
+					"other": {Steps: []fullWorkflowStep{{Name: "Set up tools", Uses: setupToolsAction}}},
 				}}
-				_, err := parseReleaseJobSetupZigSteps(doc, "release")
+				_, err := parseReleaseJobSetupToolsSteps(doc, "release")
 				return err
 			},
 		},
@@ -1582,46 +1581,41 @@ func TestHomebrewTapTokenScopedToReleaseJob(t *testing.T) {
 	}
 }
 
-// setupZigActionPrefix is the `uses:` prefix that identifies a mlugg/setup-zig
-// step regardless of the SHA it is pinned to.
-const setupZigActionPrefix = "mlugg/setup-zig@"
-
-// parseReleaseJobSetupZigSteps returns every mlugg/setup-zig step in job
-// jobID of doc. It returns a non-nil error — never an empty slice with a nil
-// error — when the job is absent or declares no such step (CR-01 idiom), so a
-// caller asserting a property of "the" zig step cannot pass vacuously.
-func parseReleaseJobSetupZigSteps(doc fullWorkflowDoc, jobID string) ([]fullWorkflowStep, error) {
+// parseReleaseJobSetupToolsSteps returns every setup-tools step in job jobID
+// of doc. It returns a non-nil error — never an empty slice with a nil error —
+// when the job is absent or has no setup-tools step.
+func parseReleaseJobSetupToolsSteps(doc fullWorkflowDoc, jobID string) ([]fullWorkflowStep, error) {
 	job, ok := doc.Jobs[jobID]
 	if !ok {
-		return nil, fmt.Errorf("parseReleaseJobSetupZigSteps: workflow declares no job %q", jobID)
+		return nil, fmt.Errorf("parseReleaseJobSetupToolsSteps: workflow declares no job %q", jobID)
 	}
 	var steps []fullWorkflowStep
 	for _, s := range job.Steps {
-		if strings.HasPrefix(s.Uses, setupZigActionPrefix) {
+		if s.Uses == setupToolsAction {
 			steps = append(steps, s)
 		}
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("parseReleaseJobSetupZigSteps: job %q declares no mlugg/setup-zig step (%d steps examined)", jobID, len(job.Steps))
+		return nil, fmt.Errorf("parseReleaseJobSetupToolsSteps: job %q declares no %s step (%d steps examined)", jobID, setupToolsAction, len(job.Steps))
 	}
 	return steps, nil
 }
 
-// TestReleaseJobSetupZigDisablesCache pins the release (goreleaser-invoking,
-// id-token: write) job's mlugg/setup-zig step to `use-cache: false`. The
-// action caches the zig global/local cache dirs by default; that would put a
-// mutable cache any branch can populate inside the OIDC signing boundary —
-// the same no-mutable-cache posture as setup-go's `cache: false` and the
-// nscloud-cache-action note in release.yml (S2; T-01-29). It also restored a
-// .zig-cache/ that dirtied the workspace and failed GoReleaser's git-state
-// check on a same-tag re-run (v0.14.1, run 38414831563).
+// releaseJobTools is exactly the tool set the signing job installs: what
+// release:goreleaser and release:record-final-hashes run, and nothing else.
+var releaseJobTools = []string{"cosign", "go", "goreleaser", "syft", "task", "zig"}
+
+// TestReleaseJobSetupToolsIsMinimalAndUncached pins the release
+// (goreleaser-invoking, id-token: write) job's setup-tools step to `cache:
+// "false"`, no go-cache, and exactly releaseJobTools. A restored tool or Go
+// cache is mutable state any branch can populate inside the OIDC signing
+// boundary; a missing tool fails the release only after the tag is pushed;
+// an extra one widens the signing job.
 //
 // The signing job is found through its goreleaser invocation, not a
-// hardcoded key, and the zig step through parseReleaseJobSetupZigSteps, which
-// errors on zero matches (positive floor, repo rule 84d1gfpywd). This asserts
-// ONLY the input our workflow declares, never setup-zig's own behavior (rule
-// eyva2svrcz). RED evidence is recorded in quick-261013-h27's SUMMARY.
-func TestReleaseJobSetupZigDisablesCache(t *testing.T) {
+// hardcoded key, and the step through parseReleaseJobSetupToolsSteps, which
+// errors on zero matches. This asserts only the inputs our workflow declares.
+func TestReleaseJobSetupToolsIsMinimalAndUncached(t *testing.T) {
 	src, err := os.ReadFile(releaseWorkflowPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
@@ -1632,20 +1626,28 @@ func TestReleaseJobSetupZigDisablesCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeFullWorkflowDoc(%s): %v", releaseWorkflowPath, err)
 	}
-	steps, err := parseReleaseJobSetupZigSteps(doc, job.ID)
+	steps, err := parseReleaseJobSetupToolsSteps(doc, job.ID)
 	if err != nil {
-		t.Fatalf("%v — the positive floor: zero setup-zig steps must never pass", err)
+		t.Fatalf("%v — the positive floor: zero setup-tools steps must never pass", err)
 	}
 
 	for _, step := range steps {
-		v, present := step.With["use-cache"]
-		if !present {
-			t.Errorf("release.yml job %q step %q (uses: %s) declares no use-cache: input — the signing job must not read a mutable cache (S2; T-01-29); add use-cache: false", job.ID, step.Name, step.Uses)
+		if v := fmt.Sprint(step.With["cache"]); v != "false" {
+			t.Errorf("release.yml job %q step %q has cache = %q, want \"false\" — the signing job must not read a mutable cache", job.ID, step.Name, v)
+		}
+		if v, ok := step.With["go-cache"]; ok && fmt.Sprint(v) != "false" {
+			t.Errorf("release.yml job %q step %q has go-cache = %q, want it absent or \"false\" — no Go cache inside the signing boundary", job.ID, step.Name, fmt.Sprint(v))
+		}
+		tools, all := setupToolsList(step.With)
+		if all {
+			t.Errorf("release.yml job %q step %q declares no tools list — that installs every mise tool, the JS toolchain included", job.ID, step.Name)
 			continue
 		}
-		if b, isBool := v.(bool); !isBool || b {
-			t.Errorf("release.yml job %q step %q (uses: %s) has use-cache = %#v (%T), want the YAML boolean false — write it unquoted, like setup-go's cache: false", job.ID, step.Name, step.Uses, v, v)
+		got := slices.Sorted(slices.Values(tools))
+		if !slices.Equal(got, releaseJobTools) {
+			t.Errorf("release.yml job %q step %q installs %v, want exactly %v", job.ID, step.Name, got, releaseJobTools)
 		}
+		t.Logf("release.yml job %q step %q: cache=%v, %d tools %v", job.ID, step.Name, step.With["cache"], len(tools), got)
 	}
 }
 

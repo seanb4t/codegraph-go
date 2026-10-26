@@ -34,11 +34,10 @@ const releaseChainPRWorkflowPath = "../../.github/workflows/release-pr.yml"
 
 const (
 	releaseChainPinCheckout = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3"
-	releaseChainPinSetupGo  = "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0"
 	releaseChainPinAppToken = "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0"
 	releaseChainPinCreatePR = "peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1"
 
-	releaseChainInstallTask = "./.github/actions/install-task"
+	releaseChainSetupTools = setupToolsAction
 )
 
 // releaseChainExpectedPins is the exact set of pinned (non-local) `uses:`
@@ -46,13 +45,33 @@ const (
 var releaseChainExpectedPins = []string{
 	releaseChainPinCheckout,
 	releaseChainPinAppToken,
-	releaseChainPinSetupGo,
 	releaseChainPinCreatePR,
 }
 
 // releaseChainUsesLineRe matches a `uses:` line in raw workflow source,
 // capturing the value that follows it up to end of line.
 var releaseChainUsesLineRe = regexp.MustCompile(`^\s*(?:-\s+)?uses:\s*(.+?)\s*$`)
+
+// releaseChainGoToolChangieRe matches a changie invocation that goes through
+// the go command (`go tool`, `go run`, `go build`, `go install`, or a
+// -modfile build) instead of the changie mise.toml pins.
+var releaseChainGoToolChangieRe = regexp.MustCompile(`\bgo (tool|run|build|install)\b|-modfile`)
+
+func TestReleaseChainGoToolChangieRe(t *testing.T) {
+	cases := map[string]bool{
+		"        changie batch auto":                                        false,
+		"        version=$(changie latest)":                                 false,
+		"        go tool changie latest":                                    true,
+		"        go run github.com/miniscruff/changie latest":               true,
+		"        go install github.com/miniscruff/changie@latest":           true,
+		"        GOWORK=off go build -modfile=x.mod -o bin/changie changie": true,
+	}
+	for line, want := range cases {
+		if got := releaseChainGoToolChangieRe.MatchString(line); got != want {
+			t.Errorf("releaseChainGoToolChangieRe.MatchString(%q) = %v, want %v", line, got, want)
+		}
+	}
+}
 
 // releaseChainPinnedUsesRe is the only accepted shape for a non-local uses
 // value: owner/repo@<40 hex>, a space, `#`, a space, vX.Y.Z.
@@ -290,8 +309,7 @@ func TestReleasePRWorkflowShape(t *testing.T) {
 	checked += 2
 	checked += releaseChainCheckSteps(t, "pretag-gate", gate.Steps, []releaseChainStepWanted{
 		{Name: "Checkout", Uses: strings.SplitN(releaseChainPinCheckout, " #", 2)[0]},
-		{Name: "Set up Go", Uses: strings.SplitN(releaseChainPinSetupGo, " #", 2)[0], With: map[string]string{"go-version-file": "go.mod"}},
-		{Name: "Install Task", Uses: releaseChainInstallTask},
+		{Name: "Set up tools", Uses: releaseChainSetupTools, With: map[string]string{"go-cache": "true"}},
 		{Name: "Run check:cross sweep", Run: "task check:cross"},
 	})
 
@@ -315,8 +333,7 @@ func TestReleasePRWorkflowShape(t *testing.T) {
 			With: map[string]string{"app-id": "${{ secrets.APP_ID }}", "private-key": "${{ secrets.APP_PRIVATE_KEY }}"},
 		},
 		{Name: "Checkout", Uses: strings.SplitN(releaseChainPinCheckout, " #", 2)[0]},
-		{Name: "Set up Go", Uses: strings.SplitN(releaseChainPinSetupGo, " #", 2)[0], With: map[string]string{"go-version-file": "go.mod"}},
-		{Name: "Install Task", Uses: releaseChainInstallTask},
+		{Name: "Set up tools", Uses: releaseChainSetupTools, With: map[string]string{"go-cache": "true"}},
 		{Name: "Batch fragments into a release", ID: "batch", Run: "task release:batch"},
 		{
 			Name: "Open or update the release PR",
@@ -336,8 +353,8 @@ func TestReleasePRWorkflowShape(t *testing.T) {
 	})
 
 	// The pinned uses set, read from raw source: every non-comment `uses:`
-	// line is the local install-task action or a full-SHA pin with a version
-	// comment, and the distinct pins are exactly the four expected.
+	// line is the local setup-tools action or a full-SHA pin with a version
+	// comment, and the distinct pins are exactly the expected set.
 	nonComment := releaseChainNonCommentLines(src)
 	usesLines := 0
 	pins := map[string]bool{}
@@ -348,7 +365,7 @@ func TestReleasePRWorkflowShape(t *testing.T) {
 		}
 		usesLines++
 		v := m[1]
-		if v == releaseChainInstallTask {
+		if v == releaseChainSetupTools {
 			continue
 		}
 		if !releaseChainPinnedUsesRe.MatchString(v) {
@@ -415,9 +432,9 @@ var releaseChainBatchTokens = []struct {
 }{
 	{"fragment count", `find .changes/unreleased -maxdepth 1 -type f -name '*.yaml'`},
 	{"zero-count exit 0", `exit 0`},
-	{"batch", `{{.GO_TOOL_CHANGIE}} changie batch auto`},
-	{"merge", `{{.GO_TOOL_CHANGIE}} changie merge`},
-	{"latest", `{{.GO_TOOL_CHANGIE}} changie latest`},
+	{"batch", `changie batch auto`},
+	{"merge", `changie merge`},
+	{"latest", `changie latest`},
 	{"skip-ci phrase scan", `\[(skip ci|ci skip|no ci|skip actions|actions skip)\]`},
 	{"version output", `"version=${version}" >> "${GITHUB_OUTPUT}"`},
 }
@@ -449,8 +466,8 @@ func TestReleaseBatchTargetShape(t *testing.T) {
 	msgs, err := parsePreconditionMessages(block)
 	if err != nil {
 		t.Errorf("parsePreconditionMessages(release:batch): %v", err)
-	} else if !strings.Contains(strings.Join(msgs, "\n"), "go.tool-changie.mod") {
-		t.Errorf("release:batch precondition messages %q do not name go.tool-changie.mod", msgs)
+	} else if !strings.Contains(strings.Join(msgs, "\n"), "mise install") {
+		t.Errorf("release:batch precondition messages %q do not say to run mise install", msgs)
 	}
 
 	// Scope the body to the cmds: section so the desc prose is not scanned.
@@ -480,8 +497,8 @@ func TestReleaseBatchTargetShape(t *testing.T) {
 		}
 	}
 
-	// changie is reached only through GO_TOOL_CHANGIE (CHG-01's one install
-	// path). Scoped to this block: check:changie legs call a scratch binary.
+	// changie is the mise-pinned binary on PATH, never `go tool` or `go run`
+	// (CHG-01's one install path). Scoped to this block.
 	invocations := 0
 	for _, line := range releaseChainNonCommentLines(cmds) {
 		if !releaseChainChangieVerbRe.MatchString(line) {
@@ -491,8 +508,8 @@ func TestReleaseBatchTargetShape(t *testing.T) {
 			continue
 		}
 		invocations++
-		if !strings.Contains(line, "{{.GO_TOOL_CHANGIE}} changie ") {
-			t.Errorf("release:batch invokes changie without the {{.GO_TOOL_CHANGIE}} prefix: %q", strings.TrimSpace(line))
+		if releaseChainGoToolChangieRe.MatchString(line) {
+			t.Errorf("release:batch invokes changie through the go command, not the mise-pinned changie: %q", strings.TrimSpace(line))
 		}
 	}
 
@@ -521,7 +538,7 @@ func TestReleaseBatchTargetShape(t *testing.T) {
 		t.Fatalf("%s: scanned zero workflow files — this guard would vacuously pass", workflowsDir)
 	}
 	if invocations < 3 {
-		t.Errorf("release:batch invokes changie through GO_TOOL_CHANGIE %d times, want at least 3 (batch, merge, latest)", invocations)
+		t.Errorf("release:batch invokes changie %d times, want at least 3 (batch, merge, latest)", invocations)
 	}
 	t.Logf("release:batch: %d of %d ordered tokens found; %d changie invocations; %d workflow files scanned", tokens, len(releaseChainBatchTokens), invocations, scanned)
 }
@@ -536,7 +553,6 @@ const releaseChainTagWorkflowPath = "../../.github/workflows/release-tag.yml"
 var releaseChainTagExpectedPins = []string{
 	releaseChainPinCheckout,
 	releaseChainPinAppToken,
-	releaseChainPinSetupGo,
 }
 
 // releaseChainAppTokenOutput is the only credential the tag job's checkout
@@ -572,7 +588,7 @@ func releaseChainPinnedUses(t *testing.T, nonComment []string) (int, []string) {
 		}
 		usesLines++
 		v := m[1]
-		if v == releaseChainInstallTask {
+		if v == releaseChainSetupTools {
 			continue
 		}
 		if !releaseChainPinnedUsesRe.MatchString(v) {
@@ -687,8 +703,7 @@ func TestReleaseTagWorkflowShape(t *testing.T) {
 			Uses: strings.SplitN(releaseChainPinCheckout, " #", 2)[0],
 			With: map[string]string{"token": releaseChainAppTokenOutput},
 		},
-		{Name: "Set up Go", Uses: strings.SplitN(releaseChainPinSetupGo, " #", 2)[0], With: map[string]string{"go-version-file": "go.mod"}},
-		{Name: "Install Task", Uses: releaseChainInstallTask},
+		{Name: "Set up tools", Uses: releaseChainSetupTools, With: map[string]string{"go-cache": "true"}},
 		{Name: "Tag the release", Run: "task release:tag"},
 	})
 
@@ -748,7 +763,7 @@ var releaseChainTagTokens = []struct {
 	label string
 	token string
 }{
-	{"tag from changie latest", `tag=$({{.GO_TOOL_CHANGIE}} changie latest)`},
+	{"tag from changie latest", `tag=$(changie latest)`},
 	{"origin lookup", `git ls-remote --exit-code --tags origin "refs/tags/${tag}"`},
 	{"existing-tag arm", `0) echo "release:tag: ${tag} already exists on origin`},
 	{"absent-tag arm", `2) ;;`},
@@ -862,15 +877,16 @@ func TestReleaseTagTargetShape(t *testing.T) {
 		}
 	}
 
-	// changie is reached only through GO_TOOL_CHANGIE (CHG-01's one install path).
+	// changie is the mise-pinned binary on PATH, never `go tool` or `go run`
+	// (CHG-01's one install path).
 	invocations := 0
 	for _, l := range lines {
 		if !releaseChainChangieVerbRe.MatchString(l) || strings.Contains(l, "echo ") || strings.Contains(l, "::error::") {
 			continue
 		}
 		invocations++
-		if !strings.Contains(l, "{{.GO_TOOL_CHANGIE}} changie ") {
-			t.Errorf("release:tag invokes changie without the {{.GO_TOOL_CHANGIE}} prefix: %q", strings.TrimSpace(l))
+		if releaseChainGoToolChangieRe.MatchString(l) {
+			t.Errorf("release:tag invokes changie through the go command, not the mise-pinned changie: %q", strings.TrimSpace(l))
 		}
 	}
 	if invocations != 1 {
@@ -1356,11 +1372,11 @@ jobs:
       - name: Tag the release
         run: task release:tag
 `
-	tagCreationPlantedAction = `name: Install Task
+	tagCreationPlantedAction = `name: Set up tools
 runs:
   using: composite
   steps:
-    - name: Verify Task
+    - name: Verify the tools are on PATH
       shell: bash
       run: task --version
 `
@@ -1400,7 +1416,7 @@ func TestTagCreationScanFlagsPlantedSites(t *testing.T) {
 		}
 		return m
 	}
-	actions := map[string][]byte{"install-task/action.yml": []byte(tagCreationPlantedAction)}
+	actions := map[string][]byte{"setup-tools/action.yml": []byte(tagCreationPlantedAction)}
 
 	cases := []struct {
 		name      string
@@ -1625,7 +1641,7 @@ func TestReleaseGoreleaserPassesReleaseNotes(t *testing.T) {
 // the notes path, the refusal of an absent or empty file, the evidence line,
 // then the non-snapshot invocation (REL-13, D-14, Pitfall 2).
 var releaseChainDryRunTokens = []struct{ label, token string }{
-	{"tag from changie latest", `TAG="$({{.GO_TOOL_CHANGIE}} changie latest)"`},
+	{"tag from changie latest", `TAG="$(changie latest)"`},
 	{"notes path from the tag", `NOTES=".changes/${TAG}.md"`},
 	{"empty-notes check", `[ ! -s "${NOTES}" ]`},
 	{"empty-notes error", `::error::release:dry-run: ${NOTES} is missing or empty`},
@@ -1656,15 +1672,16 @@ func TestReleaseDryRunRehearsesReleaseNotes(t *testing.T) {
 		}
 	}
 
-	// changie is reached only through GO_TOOL_CHANGIE (CHG-01's one install path).
+	// changie is the mise-pinned binary on PATH, never `go tool` or `go run`
+	// (CHG-01's one install path).
 	invocations := 0
 	for _, l := range lines {
 		if !releaseChainChangieVerbRe.MatchString(l) || strings.Contains(l, "echo ") || strings.Contains(l, "::error::") {
 			continue
 		}
 		invocations++
-		if !strings.Contains(l, "{{.GO_TOOL_CHANGIE}} changie ") {
-			t.Errorf("release:dry-run invokes changie without the {{.GO_TOOL_CHANGIE}} prefix: %q", strings.TrimSpace(l))
+		if releaseChainGoToolChangieRe.MatchString(l) {
+			t.Errorf("release:dry-run invokes changie through the go command, not the mise-pinned changie: %q", strings.TrimSpace(l))
 		}
 	}
 	if invocations != 1 {

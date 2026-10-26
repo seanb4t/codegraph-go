@@ -27,11 +27,11 @@ Planning runs on [OpenSpec](https://github.com/Fission-AI/OpenSpec). The backlog
 | File watching | `fsnotify/fsnotify` |
 | Graph UI | SvelteKit 2 and Svelte 5 in `web/` (pnpm), embedded by `web/embed.go`, talking Connect RPC (protobuf via buf) |
 | Release | GoReleaser v2, cosign keyless signing, SLSA provenance, SBOMs, Apple notarization, Homebrew tap, changie for the changelog and versions |
-| Tooling | `Taskfile.yml`; `task`, `goreleaser`, `actionlint` and `changie` build from the isolated `go.tool*.mod` files |
+| Tooling | `Taskfile.yml`; the build, lint and release tools, Go included, are pinned in `mise.toml`, with checksums for prebuilt downloads in `mise.lock`. `mise install` installs them locally; `.github/actions/setup-tools` installs them in CI |
 
 ## Working here
 
-- `task test` runs the suite, `task lint` the linters. `task --list` shows the rest.
+- Run `mise trust && mise install` once. In a shell without `mise activate`, run every target as `mise exec -- task <target>`: the Taskfile refuses to run when a pinned tool on PATH is not the mise install. `task test` runs the suite, `task lint` the linters, and `task --list` shows the rest.
 - **Changelog fragments.** A PR that changes `cmd/**` or `internal/**` with a user-visible effect adds `task changie -- new --interactive=false -k <Kind> -b "<one sentence>"` (kinds: Breaking, Features, Fixes, Performance, Dependencies). Otherwise the PR body carries `<!-- changelog-exempt: <reason> -->`. The required `fragment-required` check enforces this. Keep `--interactive=false`: without it changie prompts for the optional PR field, and an agent with no TTY hangs.
 - **Embedded sources.** `.claude/hooks/{hooks.json,session-nudge.sh,pretooluse-nudge.sh}`, `.claude/skills/codegraph/SKILL.md` and `.codex/hooks/*` are `//go:embed` sources that ship in the binary. Edit them as product code.
 - **Required checks are pinned by job name** in the `protect-main` ruleset. Renaming a CI job blocks every PR until the ruleset changes too.

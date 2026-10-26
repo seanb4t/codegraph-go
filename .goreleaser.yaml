@@ -184,8 +184,8 @@ checksum:
 
 # notarize: (SIGN-01, D-01/D-04/D-18) performs Developer ID codesigning AND
 # Apple notarization submission for the two darwin raw Mach-O binaries,
-# entirely in-process via github.com/goreleaser/quill (already an indirect
-# dependency, go.tool.mod:236) — never a codesign/xcrun notarytool
+# entirely in-process via github.com/goreleaser/quill (built into
+# GoReleaser) — never a codesign/xcrun notarytool
 # shell-out. notary.MacOS{} is registered inside GoReleaser's hardcoded
 # BuildPipeline Go slice (internal/pipeline/pipeline.go, pinned
 # goreleaser/v2@v2.17.1), which is why it runs before archives:/checksum:/

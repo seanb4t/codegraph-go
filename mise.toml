@@ -1,9 +1,33 @@
-# Tools for the git hooks in hk.pkl. Install them with `mise install`, then the hooks with
-# `hk install --mise`. Version bumps are manual. After a change to this table, run
-# `mise lock --platform linux-x64,linux-arm64,macos-arm64` (hk publishes no macos-x64 build).
+# Every tool that builds, tests, lints and releases this repository, for local use and CI.
+# Install them with `mise install`, and the git hooks with `hk install --mise`. After any change
+# to [tools], run `mise lock --platform linux-x64,linux-arm64,macos-arm64` (hk publishes no
+# macos-x64 build) and commit mise.lock.
 [tools]
+# The `go` line of go.mod and of testdata/vulnredpoc/go.mod must not exceed this toolchain.
+go = "1.26.10"
+node = "24.22.1"
+pnpm = "11.23.0"
+uv = "0.13.5"
+task = "3.52.0"
+goreleaser = "2.17.1"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
+changie = "1.26.0"
+golangci-lint = "2.13.2"
+actionlint = "1.7.12"
+buf = "1.72.0"
+# Must equal go.mod's google.golang.org/protobuf version (TestProtocGenGoMatchesProtobufRuntime).
+protoc-gen-go = "1.36.11"
+"go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "1.20.0"
+cosign = "3.1.4"
+syft = "1.55.0"
+# The linux cross-compile C toolchain (`zig cc`); linux-cross-canary.yml proves this version.
+zig = "0.15.1"
 # hk.pkl imports the hk package at the same version.
 hk = "2.5.0"
 # `openspec update` writes the /opsx:* commands and openspec-* skills for the CLI version that
 # runs it. Run it after a bump and commit what it writes.
 "npm:@fission-ai/openspec" = "1.14.2"
+
+[env]
+# A go.mod that asks for a newer Go fails the build instead of downloading another toolchain.
+GOTOOLCHAIN = "local"

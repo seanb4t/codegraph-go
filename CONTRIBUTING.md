@@ -65,14 +65,24 @@ You need a **C toolchain** — tree-sitter is CGo. The reasoning is in
 [`PARSER-DECISION.md`](PARSER-DECISION.md), including why the pure-Go
 alternatives were rejected.
 
+The build, test, lint and release tools are pinned in `mise.toml`: Go
+itself, `task`, Node, pnpm, uv, the linters and the release tools. Host tools
+such as git, gh and jq are not. Install [mise](https://mise.jdx.dev), then
+run `mise trust` and `mise install` in the repository. Run tasks from a shell
+with `mise activate`, or as `mise exec -- task <target>`: a task refuses to
+run when a version-sensitive tool on PATH is not the pinned install
+(`MISE_TOOLS_ON_PATH` in `Taskfile.yml` lists them). CI installs the same versions through
+`.github/actions/setup-tools`. The Python scripts run on the version in
+`.python-version`.
+
 ```sh
 CGO_ENABLED=1 go build ./cmd/codegraph
 CGO_ENABLED=1 go test ./...
 CGO_ENABLED=1 go vet ./...
 ```
 
-Cross-compiling to other platforms needs `zig`. If you are only changing Go
-code for your own platform, you do not need it.
+Cross-compiling to other platforms needs `zig`, which `mise install` also
+installs.
 
 codegraph targets **Linux and macOS** (amd64 and arm64). Native Windows is
 not supported — Windows contributors should work inside WSL2, where the
@@ -87,7 +97,7 @@ Every command CI runs is defined exactly once, as a `task` target — see
 - `task build`, `task test`, and `task lint` are the three you need day to
   day. `task test` covers every host-only leg — unit, golden-corpus
   behavioral, subprocess integration, isolated daemon, and race — and needs
-  nothing beyond the C toolchain above.
+  nothing beyond the C toolchain and the mise tools above.
 - The cross-toolchain checks are deliberately separate targets, not part of
   `task test`: `task check:reproducibility:arm64` needs `zig`. It fails with
   an install instruction rather than skipping, so a green run means the same
@@ -127,13 +137,12 @@ Every command CI runs is defined exactly once, as a `task` target — see
   completes, rather than run standalone locally.
 - CI calls these same fine-grained targets directly — a contributor and CI
   run identical command bodies, never a divergent local approximation.
-- `task`, `goreleaser`, `actionlint`, and `changie` build on demand from
-  `go.tool.mod`, `go.tool-lint.mod`, and `go.tool-changie.mod` — there is
-  nothing to install first, only Go and whatever toolchain the target
-  itself needs. changie runs as `task changie`, for example
-  `task changie -- latest`. Version bumps for those three files are
-  manual: neither Dependabot nor Renovate is configured for this
-  repository at all, so nothing updates them automatically.
+- changie runs as `task changie`, for example `task changie -- latest`.
+- Version bumps in `mise.toml` are manual: neither Dependabot nor Renovate
+  is configured for this repository. After you change `mise.toml`, run
+  `mise lock --platform linux-x64,linux-arm64,macos-arm64` and commit
+  `mise.lock`. It records a checksum for every prebuilt download; the `go:`
+  tools are built from source and verified by the Go checksum database.
 
 ## Pull requests
 
@@ -239,9 +248,8 @@ Code, or the `openspec-*` skills in Codex. Without one, use the `openspec` CLI:
 
 A pre-commit hook runs `openspec validate --all --strict` when a commit stages a
 file under `openspec/`. CI does not run this check. The hook is optional. To
-install it with [mise](https://mise.jdx.dev), run `mise trust`, `mise install`
-and `hk install --mise`. mise installs the `hk` and `openspec` versions that
-`mise.toml` pins. `HK=0 git commit` skips the hook for one commit.
+install it, run `hk install --mise` after `mise install`. `HK=0 git commit`
+skips the hook for one commit.
 
 A proposal can land on its own. A PR that touches only `openspec/` needs no
 template, and `Refs #<n>` is enough. The implementation PR says `Closes #<n>`

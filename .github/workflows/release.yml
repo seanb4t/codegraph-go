@@ -59,16 +59,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # Deliberately kept equal to go.tool.mod's goreleaser require line
-  # (v2.17.1) — machine-enforced by TestGoreleaserPinParity in
-  # internal/upgrade/taskfile_shape_test.go. Aligned upward to v2.17.1
-  # (was v2.17.0) because go.tool.mod's pin is the one with live, repeated
-  # PR validation (task check:goreleaser, task check:darwin-release-build);
-  # this env value's prior "validated locally in Plan 08-01" provenance
-  # predated both the Taskfile rewiring and go.tool.mod's existence.
-  GORELEASER_VERSION: "v2.17.1"
-
 jobs:
   # Collapsed single job (plan 01-03, D-01, D-11): one `goreleaser release`
   # invocation (task release:goreleaser), on one native macOS-class runner,
@@ -105,71 +95,13 @@ jobs:
           # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      # Only the tools the release needs, and no tool cache: nothing mutable
+      # inside the OIDC signing boundary, and no JS toolchain on the release path.
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
         with:
-          go-version-file: go.mod
-          cache: false
-
-      # nscloud-cache-action (present in the pre-collapse build job) is
-      # deliberately NOT carried into this job: it now also holds
-      # id-token: write, so every additional Action inside it is inside
-      # the signing boundary, and a release build should not read from a
-      # mutable cache any PR on any branch can populate (review synthesis
-      # finding S2; T-01-29).
-
-      - name: Install zig
-        # UNCONDITIONAL (D-02): both linux build ids in .goreleaser.yaml
-        # now cross via zig cc/zig c++ from this one darwin host — the
-        # per-leg `if: matrix.needs_zig` guard the old build matrix used
-        # no longer applies now that there is no matrix.
-        #
-        # use-cache is disabled for the same reason as setup-go's
-        # cache: false and the nscloud-cache-action note above (S2;
-        # T-01-29): the action's default caches the zig global/local
-        # cache dirs, which would put a mutable cache any branch can
-        # populate inside this signing job. A restored .zig-cache/ also
-        # dirtied the workspace and failed GoReleaser's git-state check
-        # on a same-tag re-run (v0.14.1, run 38414831563); ignoring
-        # .zig-cache would only hide that. Machine-checked by
-        # TestReleaseJobSetupZigDisablesCache (release_workflow_shape_test.go).
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: "0.15.1"
-          use-cache: false
-
-      - name: Install cosign
-        # Moved up from the deleted assemble job: .goreleaser.yaml's
-        # binary_signs: pipe shells out to cosign, so it must be on PATH
-        # before goreleaser runs.
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      - name: Install syft
-        # Moved up from the deleted assemble job: .goreleaser.yaml's
-        # sboms: pipe shells out to syft, so it must be on PATH before
-        # goreleaser runs.
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-
-      - name: Install GoReleaser
-        # GoReleaser install strategy, DECIDED (C6, not left to chance):
-        # install-only: true keeps GORELEASER_VERSION's meaning concrete —
-        # the version this Action installs — which is what
-        # TestGoreleaserPinParity holds equal to go.tool.mod. A
-        # Taskfile-only build would make this env var vestigial in CI and
-        # quietly hollow that test (and the tool-vuln/VULN-01-02-03 gate's
-        # view of the pinned tool version) out. It also avoids paying a
-        # from-source GoReleaser build inside this OIDC-bearing job.
-        # Taskfile.yml's release:goreleaser target prefers this installed
-        # binary and falls back to building go.tool.mod's pin only as a
-        # LOCAL convenience when no Action is available.
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          distribution: goreleaser
-          version: ${{ env.GORELEASER_VERSION }}
-          install-only: true
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
+          tools: go task goreleaser zig cosign syft
+          cache: "false"
 
       # Mints HOMEBREW_TAP_TOKEN (03-03, D-16) for the Release step below.
       # PLACEMENT VERDICT: REDACTED, measured on a real workflow run rather

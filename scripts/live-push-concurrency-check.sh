@@ -145,7 +145,7 @@ if [ -n "$BIN_OVERRIDE" ]; then
   echo "live-push-concurrency-check: using pre-built binary $BIN" >&2
 else
   echo "live-push-concurrency-check: building codegraph binary" >&2
-  GOTOOLCHAIN=go1.26.10 go build -o "$BIN" ./cmd/codegraph || fail "go build ./cmd/codegraph failed"
+  go build -o "$BIN" ./cmd/codegraph || fail "go build ./cmd/codegraph failed"
 fi
 
 echo "live-push-concurrency-check: seeding scratch repository at $SCRATCH_REPO" >&2
@@ -287,12 +287,12 @@ if [ -z "$UI_URL" ]; then
 fi
 echo "live-push-concurrency-check: ui at $UI_URL (pid $UI_PID)" >&2
 
-GOTOOLCHAIN=go1.26.10 go run "$REPO_ROOT/scripts/live-push-probe.go" mcp \
+go run "$REPO_ROOT/scripts/live-push-probe.go" mcp \
   --path "$SCRATCH_REPO" --seconds "$HOLD_SECONDS" --bin "$BIN" \
   > "$MCP_PROBE_OUT" 2>"$WORKDIR/mcp-probe.stderr" &
 MCP_PROBE_PID=$!
 
-GOTOOLCHAIN=go1.26.10 go run "$REPO_ROOT/scripts/live-push-probe.go" stream \
+go run "$REPO_ROOT/scripts/live-push-probe.go" stream \
   --url "$UI_URL" --out "$STREAM_OUT" --seconds "$HOLD_SECONDS" \
   > "$WORKDIR/stream-probe.stdout" 2>"$WORKDIR/stream-probe.stderr" &
 STREAM_PID=$!
