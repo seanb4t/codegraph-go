@@ -1,11 +1,15 @@
 package indexer
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -471,4 +475,319 @@ func TestSyncDeletedDependentNotDoubleCounted(t *testing.T) {
 		t.Error("expected pkg/b.go File record pruned after deletion")
 	}
 	assertNoOrphansOrDangling(t, r)
+}
+
+// requireSyncEqualsRun fails t unless the store at storeDir, built by
+// Sync, exports byte-identical to a fresh Run over the same tree.
+func requireSyncEqualsRun(t *testing.T, repoRoot, storeDir string) {
+	t.Helper()
+	freshDir := t.TempDir()
+	if _, err := Run(repoRoot, freshDir, Options{}); err != nil {
+		t.Fatalf("Run (fresh): %v", err)
+	}
+	synced, fresh := exportNormalized(t, storeDir), exportNormalized(t, freshDir)
+	if !bytes.Equal(synced, fresh) {
+		reportFirstDiff(t, synced, fresh)
+	}
+}
+
+// TestSyncResolvesSymbolAddedAfterCaller proves a reference to a symbol
+// that does not exist yet gets its edge when a later Sync adds the
+// symbol, although the referring file does not change again.
+func TestSyncResolvesSymbolAddedAfterCaller(t *testing.T) {
+	cases := []struct {
+		name      string
+		caller    string
+		calleeRel string
+		callee    string
+	}{
+		{
+			name:      "same package",
+			caller:    "package pkg\n\nfunc A() { B() }\n",
+			calleeRel: "pkg/b.go",
+			callee:    "package pkg\n\nfunc B() {}\n",
+		},
+		{
+			name:      "imported package",
+			caller:    "package pkg\n\nimport \"example.com/syncfixture/q\"\n\nfunc A() { q.B() }\n",
+			calleeRel: "q/b.go",
+			callee:    "package q\n\nfunc B() {}\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := writeFixture(t, map[string]string{
+				"pkg/a.go": "package pkg\n\nfunc A() {}\n",
+			})
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+
+			writeFile(t, filepath.Join(repoRoot, "pkg", "a.go"), tc.caller)
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (caller): %v", err)
+			}
+
+			calleePath := filepath.Join(repoRoot, tc.calleeRel)
+			if err := os.MkdirAll(filepath.Dir(calleePath), 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			writeFile(t, calleePath, tc.callee)
+			stats, err := Sync(repoRoot, storeDir, Options{})
+			if err != nil {
+				t.Fatalf("Sync (callee): %v", err)
+			}
+			if stats.DependentsRecomputed != 1 {
+				t.Errorf("Stats.DependentsRecomputed = %d, want 1 (pkg/a.go waits on B)", stats.DependentsRecomputed)
+			}
+
+			func() {
+				r, closeAll := openSnapshot(t, storeDir)
+				defer closeAll()
+				aID := nodeid.NodeID(goextract.KindFunction, "A", "pkg/a.go")
+				bID := nodeid.NodeID(goextract.KindFunction, "B", tc.calleeRel)
+				if !hasEdge(t, r, aID, "calls", bID) {
+					t.Fatalf("no calls edge A -> B after the Sync that added B")
+				}
+			}()
+			requireSyncEqualsRun(t, repoRoot, storeDir)
+		})
+	}
+}
+
+// TestSyncRestoresEdgesToRestoredFile proves that deleting a file and
+// putting it back, as git stash and git stash pop do, leaves the edges
+// into it that a fresh index has.
+func TestSyncRestoresEdgesToRestoredFile(t *testing.T) {
+	const ySrc = "package pkg\n\nfunc Y() int { return 1 }\n"
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/x.go": "package pkg\n\nfunc X() int { return Y() }\n",
+		"pkg/y.go": ySrc,
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	yPath := filepath.Join(repoRoot, "pkg", "y.go")
+	if err := os.Remove(yPath); err != nil {
+		t.Fatalf("os.Remove(y.go): %v", err)
+	}
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (delete): %v", err)
+	}
+	writeFile(t, yPath, ySrc)
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (restore): %v", err)
+	}
+
+	func() {
+		r, closeAll := openSnapshot(t, storeDir)
+		defer closeAll()
+		xID := nodeid.NodeID(goextract.KindFunction, "X", "pkg/x.go")
+		yID := nodeid.NodeID(goextract.KindFunction, "Y", "pkg/y.go")
+		if !hasEdge(t, r, xID, "calls", yID) {
+			t.Fatalf("no calls edge X -> Y after y.go was restored")
+		}
+	}()
+	requireSyncEqualsRun(t, repoRoot, storeDir)
+}
+
+// TestSyncWaitingFileReparsedOnce proves a file that waits on a name this
+// sync adds, and is already reparsed for another reason, is reparsed and
+// counted once: when it changed itself, and when it depends on a symbol
+// this sync removes.
+func TestSyncWaitingFileReparsedOnce(t *testing.T) {
+	cases := []struct {
+		name           string
+		edits          map[string]string
+		wantDependents int
+	}{
+		{
+			name: "changed",
+			edits: map[string]string{
+				"pkg/x.go": "package pkg\n\nfunc X() { Y(); Z() }\n\n// edited\n",
+				"pkg/z.go": "package pkg\n\nfunc Z() {}\n",
+			},
+			wantDependents: 0,
+		},
+		{
+			name: "dependent",
+			edits: map[string]string{
+				"pkg/y.go": "package pkg\n\nfunc Z() {}\n",
+			},
+			wantDependents: 1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := writeFixture(t, map[string]string{
+				"pkg/x.go": "package pkg\n\nfunc X() { Y(); Z() }\n",
+				"pkg/y.go": "package pkg\n\nfunc Y() {}\n",
+			})
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+
+			for rel, src := range tc.edits {
+				writeFile(t, filepath.Join(repoRoot, rel), src)
+			}
+			stats, err := Sync(repoRoot, storeDir, Options{})
+			if err != nil {
+				t.Fatalf("Sync (edit): %v", err)
+			}
+			if stats.FilesReparsed != 2 {
+				t.Errorf("Stats.FilesReparsed = %d, want 2", stats.FilesReparsed)
+			}
+			if stats.DependentsRecomputed != tc.wantDependents {
+				t.Errorf("Stats.DependentsRecomputed = %d, want %d", stats.DependentsRecomputed, tc.wantDependents)
+			}
+
+			func() {
+				r, closeAll := openSnapshot(t, storeDir)
+				defer closeAll()
+				xID := nodeid.NodeID(goextract.KindFunction, "X", "pkg/x.go")
+				zPath := "pkg/z.go"
+				if _, ok := tc.edits[zPath]; !ok {
+					zPath = "pkg/y.go"
+				}
+				zID := nodeid.NodeID(goextract.KindFunction, "Z", zPath)
+				if !hasEdge(t, r, xID, "calls", zID) {
+					t.Fatalf("no calls edge X -> Z after the Sync that added Z")
+				}
+			}()
+			requireSyncEqualsRun(t, repoRoot, storeDir)
+		})
+	}
+}
+
+// TestSyncSkipsWaitingFilesWhenNoSymbolIsNew proves a Sync that adds no
+// new symbol re-extracts no waiting file, even one waiting on a name the
+// changed file declares: Set{} does not resolve to a map type, so x.go
+// waits on Set, but Set is not new when y.go changes.
+func TestSyncSkipsWaitingFilesWhenNoSymbolIsNew(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/x.go": "package pkg\n\nfunc X() { _ = Set{} }\n",
+		"pkg/y.go": "package pkg\n\ntype Set map[string]bool\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	func() {
+		r, closeAll := openSnapshot(t, storeDir)
+		defer closeAll()
+		f, err := r.GetFile("pkg/x.go")
+		if err != nil {
+			t.Fatalf("GetFile(pkg/x.go): %v", err)
+		}
+		want := []string{"example.com/syncfixture/pkg Set"}
+		if got := unresolvedNameStrings(f); !slices.Equal(got, want) {
+			t.Fatalf("pkg/x.go unresolved names = %q, want %q", got, want)
+		}
+	}()
+
+	writeFile(t, filepath.Join(repoRoot, "pkg", "y.go"), "package pkg\n\ntype Set map[string]bool\n\n// edited\n")
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (edit): %v", err)
+	}
+	if stats.FilesReparsed != 1 {
+		t.Errorf("Stats.FilesReparsed = %d, want 1 (only pkg/y.go)", stats.FilesReparsed)
+	}
+	if stats.DependentsRecomputed != 0 {
+		t.Errorf("Stats.DependentsRecomputed = %d, want 0 (Set is not new)", stats.DependentsRecomputed)
+	}
+}
+
+// TestSyncBackfillsGraphWithoutUnresolvedNames proves a store whose Meta
+// lacks has_unresolved_names is rebuilt from scratch by the next Sync,
+// which records each file's unresolved names and stamps the flag, so the
+// Sync after it is incremental again.
+func TestSyncBackfillsGraphWithoutUnresolvedNames(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/a.go": "package pkg\n\nfunc A() { B() }\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	func() {
+		store, err := graphstore.Open(storeDir)
+		if err != nil {
+			t.Fatalf("graphstore.Open: %v", err)
+		}
+		defer store.Close()
+		r, err := store.Snapshot()
+		if err != nil {
+			t.Fatalf("Snapshot: %v", err)
+		}
+		meta, err := r.GetMeta()
+		r.Close()
+		if err != nil {
+			t.Fatalf("GetMeta: %v", err)
+		}
+		old := proto.Clone(meta).(*schema.Meta)
+		old.HasUnresolvedNames = false
+		w, err := store.NewWriter()
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.PutMeta(old); err != nil {
+			t.Fatalf("PutMeta: %v", err)
+		}
+		if err := w.Commit(); err != nil {
+			t.Fatalf("Commit: %v", err)
+		}
+	}()
+
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (backfill): %v", err)
+	}
+	if stats.FilesReparsed != stats.Files {
+		t.Errorf("Stats.FilesReparsed = %d, want %d (a full rebuild)", stats.FilesReparsed, stats.Files)
+	}
+
+	func() {
+		r, closeAll := openSnapshot(t, storeDir)
+		defer closeAll()
+		meta, err := r.GetMeta()
+		if err != nil {
+			t.Fatalf("GetMeta: %v", err)
+		}
+		if !meta.GetHasUnresolvedNames() {
+			t.Error("Meta.HasUnresolvedNames = false after backfill, want true")
+		}
+		f, err := r.GetFile("pkg/a.go")
+		if err != nil {
+			t.Fatalf("GetFile(pkg/a.go): %v", err)
+		}
+		want := []string{"example.com/syncfixture/pkg B"}
+		if got := unresolvedNameStrings(f); !slices.Equal(got, want) {
+			t.Errorf("pkg/a.go unresolved names = %q, want %q", got, want)
+		}
+	}()
+
+	stats2, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (after backfill): %v", err)
+	}
+	if stats2.FilesReparsed != 0 {
+		t.Errorf("Stats.FilesReparsed = %d on the Sync after the backfill, want 0", stats2.FilesReparsed)
+	}
+}
+
+// unresolvedNameStrings renders f's unresolved names as "moduleKey name"
+// strings, in stored order.
+func unresolvedNameStrings(f *schema.File) []string {
+	var out []string
+	for _, u := range f.GetUnresolvedNames() {
+		out = append(out, u.GetModuleKey()+" "+u.GetName())
+	}
+	return out
 }

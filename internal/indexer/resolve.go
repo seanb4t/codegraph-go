@@ -7,6 +7,8 @@
 package indexer
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -105,6 +107,12 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 
 		resolvedForFile := 0
 		var filePending []goextract.UnresolvedRef
+		var waiting []*schema.UnresolvedName
+		wait := func(pkgAlias, name string) {
+			if u := unresolvedName(r, pkgAlias, name); u != nil {
+				waiting = append(waiting, u)
+			}
+		}
 		for _, ref := range r.Unresolved {
 			switch ref.Kind {
 			case goextract.RefKindCalls:
@@ -127,6 +135,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
 				if !ok {
 					unresolvedCount++
+					wait(ref.PkgAlias, ref.Name)
 					continue
 				}
 				// Pattern 2 (RES-02) + D-09 split (01-RESEARCH.md §B): a
@@ -185,6 +194,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				typeID, ok := idx.resolveUnqualified(r.ImportPath, ref.Name)
 				if !ok {
 					unresolvedCount++
+					wait("", ref.Name)
 					continue
 				}
 				edges = append(edges, &schema.Edge{
@@ -224,6 +234,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
 				if !ok {
 					unresolvedCount++
+					wait(ref.PkgAlias, ref.Name)
 					continue
 				}
 				edges = append(edges, &schema.Edge{
@@ -246,6 +257,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
 				if !ok || nodeKindByID[targetID] != goextract.KindStruct {
 					unresolvedCount++
+					wait(ref.PkgAlias, ref.Name)
 					continue
 				}
 				edges = append(edges, &schema.Edge{
@@ -263,6 +275,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
 				if !ok {
 					unresolvedCount++
+					wait(ref.PkgAlias, ref.Name)
 					continue
 				}
 				edges = append(edges, &schema.Edge{
@@ -286,13 +299,14 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		}
 
 		f := &schema.File{
-			Path:        r.RelPath,
-			ContentHash: r.ContentHash,
-			Language:    r.Language,
-			NodeCount:   int64(len(r.Nodes)),
-			EdgeCount:   int64(len(r.IntraEdges) + resolvedForFile),
-			MtimeUnixNs: r.MtimeUnixNs,
-			SizeBytes:   r.SizeBytes,
+			Path:            r.RelPath,
+			ContentHash:     r.ContentHash,
+			Language:        r.Language,
+			NodeCount:       int64(len(r.Nodes)),
+			EdgeCount:       int64(len(r.IntraEdges) + resolvedForFile),
+			MtimeUnixNs:     r.MtimeUnixNs,
+			SizeBytes:       r.SizeBytes,
+			UnresolvedNames: waiting,
 		}
 		if r.Err != nil {
 			f.Errors = []string{r.Err.Error()}
@@ -300,7 +314,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		files = append(files, f)
 
 		for _, ref := range filePending {
-			pending = append(pending, pendingCall{ref: ref, file: f})
+			pending = append(pending, pendingCall{ref: ref, file: f, wait: unresolvedName(r, ref.PkgAlias, ref.Name)})
 		}
 	}
 
@@ -325,7 +339,39 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 	// requirement).
 	edges = append(edges, retryConformanceCalls(pending, edges, nodeNameByID, &unresolvedCount)...)
 
+	for _, f := range files {
+		f.UnresolvedNames = sortedUniqueNames(f.UnresolvedNames)
+	}
+
 	return nodes, packageNodes, edges, files, unresolvedCount
+}
+
+// unresolvedName returns the (module key, name) pair a reference to name
+// is looked up under, or nil when no symbol can ever resolve it by name:
+// a qualified reference whose qualifier is not one of r's imports, such
+// as a method call through a local variable.
+func unresolvedName(r goextract.FileResult, pkgAlias, name string) *schema.UnresolvedName {
+	if pkgAlias == "" {
+		return &schema.UnresolvedName{ModuleKey: r.ImportPath, Name: name}
+	}
+	moduleKey, ok := r.Imports[pkgAlias]
+	if !ok {
+		return nil
+	}
+	return &schema.UnresolvedName{ModuleKey: moduleKey, Name: name}
+}
+
+// sortedUniqueNames sorts names by (module key, name) and drops repeats,
+// so a File record's bytes do not depend on reference order.
+func sortedUniqueNames(names []*schema.UnresolvedName) []*schema.UnresolvedName {
+	if len(names) == 0 {
+		return nil
+	}
+	compare := func(a, b *schema.UnresolvedName) int {
+		return cmp.Or(cmp.Compare(a.ModuleKey, b.ModuleKey), cmp.Compare(a.Name, b.Name))
+	}
+	slices.SortFunc(names, compare)
+	return slices.CompactFunc(names, func(a, b *schema.UnresolvedName) bool { return compare(a, b) == 0 })
 }
 
 // pendingCall is a RefKindCalls ref that failed pass-1 resolution,
@@ -336,6 +382,8 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 type pendingCall struct {
 	ref  goextract.UnresolvedRef
 	file *schema.File
+	// wait is the name file waits on if the retry fails too, or nil.
+	wait *schema.UnresolvedName
 }
 
 // retryConformanceCalls implements Pitfall 3's two-pass conformance
@@ -385,6 +433,9 @@ func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeName
 		}
 		if !ok {
 			*unresolvedCount++
+			if pc.wait != nil {
+				pc.file.UnresolvedNames = append(pc.file.UnresolvedNames, pc.wait)
+			}
 			continue
 		}
 		resolved = append(resolved, &schema.Edge{
@@ -845,6 +896,8 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// Stamping the flag here mirrors HasFileIndex's own precedent: only a
 	// GENUINELY pre-Phase-10 store is ever missing it (D-06).
 	meta.HasCoverage = true
+	// resolveRefsWithIndex fills every File record's unresolved_names.
+	meta.HasUnresolvedNames = true
 	// WR-01 (iteration 2): stamp the read-modify-written generation
 	// computed above — see this function's own comment at the Snapshot
 	// read for why a from-scratch rewrite still increments monotonically

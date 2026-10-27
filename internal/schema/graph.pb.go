@@ -407,9 +407,16 @@ type File struct {
 	// size_bytes is the file's on-disk size in bytes as observed by the
 	// writer. Additive Phase-4 field (D-01a); written by both `index` and
 	// `sync` alongside mtime_unix_ns for the same stat pre-filter.
-	SizeBytes     int64 `protobuf:"varint,8,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SizeBytes int64 `protobuf:"varint,8,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// unresolved_names lists, sorted by (module_key, name) and without
+	// duplicates, the symbols this file references that did not resolve
+	// when it was last indexed. A sync that adds a symbol matching one of
+	// them re-resolves this file. A reference that no symbol can resolve
+	// by name, such as a method call through a local variable, is not
+	// listed.
+	UnresolvedNames []*UnresolvedName `protobuf:"bytes,9,rep,name=unresolved_names,json=unresolvedNames,proto3" json:"unresolved_names,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *File) Reset() {
@@ -498,6 +505,69 @@ func (x *File) GetSizeBytes() int64 {
 	return 0
 }
 
+func (x *File) GetUnresolvedNames() []*UnresolvedName {
+	if x != nil {
+		return x.UnresolvedNames
+	}
+	return nil
+}
+
+// UnresolvedName is one symbol a file references but the index does not
+// hold: module_key is the symbol index's module key the reference is
+// looked up in (the file's own for an unqualified name, the imported
+// package's for a qualified one), and name is the bare identifier.
+type UnresolvedName struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModuleKey     string                 `protobuf:"bytes,1,opt,name=module_key,json=moduleKey,proto3" json:"module_key,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnresolvedName) Reset() {
+	*x = UnresolvedName{}
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnresolvedName) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnresolvedName) ProtoMessage() {}
+
+func (x *UnresolvedName) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnresolvedName.ProtoReflect.Descriptor instead.
+func (*UnresolvedName) Descriptor() ([]byte, []int) {
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UnresolvedName) GetModuleKey() string {
+	if x != nil {
+		return x.ModuleKey
+	}
+	return ""
+}
+
+func (x *UnresolvedName) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 // ExcludedFile is a sibling record to File (never a field on it, D-05):
 // one record per path the walker visited but did not index, or one
 // record per pruned directory (D-02). path is the slash-normalized
@@ -518,7 +588,7 @@ type ExcludedFile struct {
 
 func (x *ExcludedFile) Reset() {
 	*x = ExcludedFile{}
-	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -530,7 +600,7 @@ func (x *ExcludedFile) String() string {
 func (*ExcludedFile) ProtoMessage() {}
 
 func (x *ExcludedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -543,7 +613,7 @@ func (x *ExcludedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExcludedFile.ProtoReflect.Descriptor instead.
 func (*ExcludedFile) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ExcludedFile) GetPath() string {
@@ -626,13 +696,19 @@ type Meta struct {
 	// already refuses to mint a token in that case (D-06), so an unset
 	// value here is never observed by a real page token.
 	CoverageGeneration int64 `protobuf:"varint,10,opt,name=coverage_generation,json=coverageGeneration,proto3" json:"coverage_generation,omitempty"`
+	// has_unresolved_names reports whether every File record in this graph
+	// carries unresolved_names. Absent or false means a graph written
+	// before the field existed: `sync` then rebuilds it from scratch once,
+	// since without the lists it cannot find the files a new symbol
+	// resolves.
+	HasUnresolvedNames bool `protobuf:"varint,11,opt,name=has_unresolved_names,json=hasUnresolvedNames,proto3" json:"has_unresolved_names,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
 	*x = Meta{}
-	mi := &file_internal_schema_graph_proto_msgTypes[4]
+	mi := &file_internal_schema_graph_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -644,7 +720,7 @@ func (x *Meta) String() string {
 func (*Meta) ProtoMessage() {}
 
 func (x *Meta) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[4]
+	mi := &file_internal_schema_graph_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -657,7 +733,7 @@ func (x *Meta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Meta.ProtoReflect.Descriptor instead.
 func (*Meta) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{4}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Meta) GetSchemaVersion() uint32 {
@@ -730,6 +806,13 @@ func (x *Meta) GetCoverageGeneration() int64 {
 	return 0
 }
 
+func (x *Meta) GetHasUnresolvedNames() bool {
+	if x != nil {
+		return x.HasUnresolvedNames
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -769,7 +852,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\bmetadata\x18\a \x03(\v2 .codegraph.v1.Edge.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xf2\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xbb\x02\n" +
 	"\x04File\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12!\n" +
 	"\fcontent_hash\x18\x02 \x01(\tR\vcontentHash\x12\x1a\n" +
@@ -781,13 +864,18 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06errors\x18\x06 \x03(\tR\x06errors\x12\"\n" +
 	"\rmtime_unix_ns\x18\a \x01(\x03R\vmtimeUnixNs\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\b \x01(\x03R\tsizeBytes\"\x90\x01\n" +
+	"size_bytes\x18\b \x01(\x03R\tsizeBytes\x12G\n" +
+	"\x10unresolved_names\x18\t \x03(\v2\x1c.codegraph.v1.UnresolvedNameR\x0funresolvedNames\"C\n" +
+	"\x0eUnresolvedName\x12\x1d\n" +
+	"\n" +
+	"module_key\x18\x01 \x01(\tR\tmoduleKey\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x90\x01\n" +
 	"\fExcludedFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x125\n" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xf6\x02\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xa8\x03\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -802,7 +890,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"commit_sha\x18\b \x01(\tR\tcommitSha\x12!\n" +
 	"\fhas_coverage\x18\t \x01(\bR\vhasCoverage\x12/\n" +
 	"\x13coverage_generation\x18\n" +
-	" \x01(\x03R\x12coverageGenerationJ\x04\b2\x10<*\xe5\x01\n" +
+	" \x01(\x03R\x12coverageGeneration\x120\n" +
+	"\x14has_unresolved_names\x18\v \x01(\bR\x12hasUnresolvedNamesJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +
@@ -824,24 +913,26 @@ func file_internal_schema_graph_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_schema_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_internal_schema_graph_proto_goTypes = []any{
-	(ExclusionReason)(0), // 0: codegraph.v1.ExclusionReason
-	(*Node)(nil),         // 1: codegraph.v1.Node
-	(*Edge)(nil),         // 2: codegraph.v1.Edge
-	(*File)(nil),         // 3: codegraph.v1.File
-	(*ExcludedFile)(nil), // 4: codegraph.v1.ExcludedFile
-	(*Meta)(nil),         // 5: codegraph.v1.Meta
-	nil,                  // 6: codegraph.v1.Edge.MetadataEntry
+	(ExclusionReason)(0),   // 0: codegraph.v1.ExclusionReason
+	(*Node)(nil),           // 1: codegraph.v1.Node
+	(*Edge)(nil),           // 2: codegraph.v1.Edge
+	(*File)(nil),           // 3: codegraph.v1.File
+	(*UnresolvedName)(nil), // 4: codegraph.v1.UnresolvedName
+	(*ExcludedFile)(nil),   // 5: codegraph.v1.ExcludedFile
+	(*Meta)(nil),           // 6: codegraph.v1.Meta
+	nil,                    // 7: codegraph.v1.Edge.MetadataEntry
 }
 var file_internal_schema_graph_proto_depIdxs = []int32{
-	6, // 0: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
-	0, // 1: codegraph.v1.ExcludedFile.reason:type_name -> codegraph.v1.ExclusionReason
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	7, // 0: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
+	4, // 1: codegraph.v1.File.unresolved_names:type_name -> codegraph.v1.UnresolvedName
+	0, // 2: codegraph.v1.ExcludedFile.reason:type_name -> codegraph.v1.ExclusionReason
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_internal_schema_graph_proto_init() }
@@ -855,7 +946,7 @@ func file_internal_schema_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_schema_graph_proto_rawDesc), len(file_internal_schema_graph_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

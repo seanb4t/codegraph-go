@@ -1,0 +1,3 @@
+kind: Fixes
+body: codegraph sync, the file watcher and the daemon now add the edge to a symbol that appears after the code that uses it was synced, for example a function written after the call to it; the first sync after upgrading rebuilds the index once
+time: 2026-10-26T21:09:55.388806-04:00

@@ -127,6 +127,23 @@ message File {
   // writer. Additive Phase-4 field (D-01a); written by both `index` and
   // `sync` alongside mtime_unix_ns for the same stat pre-filter.
   int64 size_bytes = 8;
+
+  // unresolved_names lists, sorted by (module_key, name) and without
+  // duplicates, the symbols this file references that did not resolve
+  // when it was last indexed. A sync that adds a symbol matching one of
+  // them re-resolves this file. A reference that no symbol can resolve
+  // by name, such as a method call through a local variable, is not
+  // listed.
+  repeated UnresolvedName unresolved_names = 9;
+}
+
+// UnresolvedName is one symbol a file references but the index does not
+// hold: module_key is the symbol index's module key the reference is
+// looked up in (the file's own for an unqualified name, the imported
+// package's for a qualified one), and name is the bare identifier.
+message UnresolvedName {
+  string module_key = 1;
+  string name = 2;
 }
 
 // ExclusionReason is the closed vocabulary of reasons a discovered path
@@ -213,6 +230,13 @@ message Meta {
   // already refuses to mint a token in that case (D-06), so an unset
   // value here is never observed by a real page token.
   int64 coverage_generation = 10;
+
+  // has_unresolved_names reports whether every File record in this graph
+  // carries unresolved_names. Absent or false means a graph written
+  // before the field existed: `sync` then rebuilds it from scratch once,
+  // since without the lists it cannot find the files a new symbol
+  // resolves.
+  bool has_unresolved_names = 11;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of
