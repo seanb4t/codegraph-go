@@ -203,6 +203,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		newMeta := schema.NewMeta()
 		newMeta.HasFileIndex = true
 		newMeta.HasUnresolvedNames = true
+		newMeta.HasDeclaredModuleKeys = true
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
@@ -388,7 +389,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		excludePaths[p] = true
 	}
 
-	idx, err := newSymbolIndexFromStore(r0, modulePath, excludePaths)
+	idx, err := newSymbolIndexFromStore(r0, discovered, excludePaths)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
@@ -486,6 +487,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	newMeta := schema.NewMeta()
 	newMeta.HasFileIndex = true
 	newMeta.HasUnresolvedNames = true
+	newMeta.HasDeclaredModuleKeys = true
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
@@ -569,8 +571,8 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 }
 
 // needsFileIndexBackfill reports whether the store at storeDir has no
-// Meta record yet, or a Meta record whose has_file_index or
-// has_unresolved_names flag is false (D-02b) — opening and closing the
+// Meta record yet, or a Meta record whose has_file_index,
+// has_unresolved_names or has_declared_module_keys flag is false (D-02b) — opening and closing the
 // store in isolation from Sync's own main open, so the two never race a
 // Pebble lock against each other.
 func needsFileIndexBackfill(storeDir string) (bool, error) {
@@ -593,7 +595,7 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		}
 		return false, err
 	}
-	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames(), nil
+	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys(), nil
 }
 
 // unresolvedKey is a (module key, name) pair as schema.UnresolvedName

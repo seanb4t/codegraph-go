@@ -96,11 +96,13 @@ func (idx *symbolIndex) addSymbol(names map[string]string, name, id string) {
 }
 
 // newSymbolIndexFromStore seeds a symbolIndex from the graph already
-// committed to r — every node's moduleKey is recomputed via
-// importPathFor(modulePath, node.FilePath) rather than read off a
-// goextract.FileResult, since the store holds no FileResult (Phase 4
-// RESEARCH Pattern 1 step 10 / Pitfall 1). Nodes belonging to a path in
-// exclude are skipped entirely — the caller (Sync) is about to supersede
+// committed to r, filing each node under the key overlay would give it;
+// the store holds no FileResult to read it from (Phase 4 RESEARCH Pattern
+// 1 step 10 / Pitfall 1). That key is the module the node's file declares
+// (File.declared_module_key) when it declares one, and otherwise the
+// file's ImportPath in discovered, which its language's
+// LanguageSpec.ModuleKey computed on this run. Nodes belonging to a path
+// in exclude are skipped entirely — the caller (Sync) is about to supersede
 // or has already removed those files' symbols and overlays fresh ones on
 // top, so any store-seeded entry for them would be stale. Collisions
 // discovered here route through the SAME addSymbol tie-break as overlay
@@ -112,8 +114,24 @@ func (idx *symbolIndex) addSymbol(names map[string]string, name, id string) {
 // target, and a package pseudo-node has no declaring source to seed a
 // (name -> id) entry from in this scan (it is re-minted, not looked up,
 // by resolveRefsWithIndex's imports-ref branch).
-func newSymbolIndexFromStore(r graphstore.Reader, modulePath string, exclude map[string]bool) (*symbolIndex, error) {
+func newSymbolIndexFromStore(r graphstore.Reader, discovered map[string]DiscoveredFile, exclude map[string]bool) (*symbolIndex, error) {
 	idx := &symbolIndex{byModuleKeyAndName: make(map[string]map[string]string)}
+
+	declared := make(map[string]string)
+	fit, err := r.IterateFiles()
+	if err != nil {
+		return nil, err
+	}
+	for fit.Next() {
+		if f := fit.File(); f.GetDeclaredModuleKey() != "" {
+			declared[f.GetPath()] = f.GetDeclaredModuleKey()
+		}
+	}
+	err = fit.Err()
+	fit.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	it, err := r.IterateNodes()
 	if err != nil {
@@ -126,7 +144,10 @@ func newSymbolIndexFromStore(r graphstore.Reader, modulePath string, exclude map
 		if n.Kind == goextract.KindFile || n.Kind == kindPackage || exclude[n.FilePath] {
 			continue
 		}
-		moduleKey := importPathFor(modulePath, n.FilePath)
+		moduleKey, ok := declared[n.FilePath]
+		if !ok {
+			moduleKey = discovered[n.FilePath].ImportPath
+		}
 		names := idx.byModuleKeyAndName[moduleKey]
 		if names == nil {
 			names = make(map[string]string)

@@ -478,8 +478,9 @@ func TestSyncDeletedDependentNotDoubleCounted(t *testing.T) {
 }
 
 // requireSyncEqualsRun fails t unless the store at storeDir, built by
-// Sync, exports byte-identical to a fresh Run over the same tree.
-func requireSyncEqualsRun(t *testing.T, repoRoot, storeDir string) {
+// Sync, exports byte-identical to a fresh Run over the same tree, and
+// returns the fresh store's directory.
+func requireSyncEqualsRun(t *testing.T, repoRoot, storeDir string) string {
 	t.Helper()
 	freshDir := t.TempDir()
 	if _, err := Run(repoRoot, freshDir, Options{}); err != nil {
@@ -488,6 +489,113 @@ func requireSyncEqualsRun(t *testing.T, repoRoot, storeDir string) {
 	synced, fresh := exportNormalized(t, storeDir), exportNormalized(t, freshDir)
 	if !bytes.Equal(synced, fresh) {
 		reportFirstDiff(t, synced, fresh)
+	}
+	return freshDir
+}
+
+// crossFileEdgeCount counts the edges in the store at storeDir whose
+// source and target symbols are declared in different files.
+func crossFileEdgeCount(t *testing.T, storeDir string) int {
+	t.Helper()
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+	it, err := r.IterateEdges("")
+	if err != nil {
+		t.Fatalf("IterateEdges: %v", err)
+	}
+	defer it.Close()
+	n := 0
+	for it.Next() {
+		e := it.Edge()
+		src, err := r.GetNode(e.Source)
+		if err != nil || src.Kind == goextract.KindFile {
+			continue
+		}
+		dst, err := r.GetNode(e.Target)
+		if err != nil || dst.Kind == kindPackage {
+			continue
+		}
+		if src.FilePath != dst.FilePath {
+			n++
+		}
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("IterateEdges: %v", err)
+	}
+	return n
+}
+
+// TestSyncKeepsCrossFileEdgesOfEditedFile proves that editing a file and
+// running Sync keeps its edges into files that did not change, in each
+// language whose fresh index resolves a reference across files. Each
+// language keys its symbols its own way, so the store-seeded index must
+// use the key of each stored symbol's file.
+func TestSyncKeepsCrossFileEdgesOfEditedFile(t *testing.T) {
+	cases := []struct {
+		lang  string
+		files map[string]string
+		edit  string
+	}{
+		{"typescript", map[string]string{
+			"web/a.ts": "export function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/b.ts"},
+		{"tsx", map[string]string{
+			"web/a.tsx": "export function helper(): number {\n  return 1;\n}\n",
+			"web/b.tsx": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/b.tsx"},
+		{"javascript", map[string]string{
+			"web/a.js": "export function helper() {\n  return 1;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/b.js"},
+		{"java", map[string]string{
+			"src/com/ex/A.java": "package com.ex;\n\npublic class A {\n    public static int helper() { return 1; }\n}\n",
+			"src/com/ex/B.java": "package com.ex;\n\npublic class B extends A {\n    A field;\n    int caller() { return helper(); }\n}\n",
+		}, "src/com/ex/B.java"},
+		{"csharp", map[string]string{
+			"Ex/A.cs": "namespace Ex {\n    public class A {\n        public static int Helper() { return 1; }\n    }\n}\n",
+			"Ex/B.cs": "namespace Ex {\n    public class B : A {\n        A field;\n        int Caller() { return Helper(); }\n    }\n}\n",
+		}, "Ex/B.cs"},
+		{"kotlin", map[string]string{
+			"src/ex/A.kt": "package ex\n\nopen class A\n\nfun helper(): Int = 1\n",
+			"src/ex/B.kt": "package ex\n\nclass B : A() {\n    fun caller(): Int = helper()\n}\n",
+		}, "src/ex/B.kt"},
+		{"php", map[string]string{
+			"src/A.php": "<?php\nnamespace Ex;\n\nclass A {\n    public function helper() { return 1; }\n}\n",
+			"src/B.php": "<?php\nnamespace Ex;\n\nclass B extends A {\n    public function caller() { return helper(); }\n}\n",
+		}, "src/B.php"},
+		{"swift", map[string]string{
+			"Sources/Ex/A.swift": "func helper() -> Int {\n    return 1\n}\n",
+			"Sources/Ex/B.swift": "func caller() -> Int {\n    return helper()\n}\n",
+		}, "Sources/Ex/B.swift"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.lang, func(t *testing.T) {
+			repoRoot := writeFixture(t, tc.files)
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+
+			path := filepath.Join(repoRoot, tc.edit)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tc.edit, err)
+			}
+			writeFile(t, path, string(data)+"\n")
+			stats, err := Sync(repoRoot, storeDir, Options{})
+			if err != nil {
+				t.Fatalf("Sync (edit): %v", err)
+			}
+			if stats.FilesReparsed != 1 {
+				t.Errorf("Stats.FilesReparsed = %d, want 1 (only %s changed)", stats.FilesReparsed, tc.edit)
+			}
+
+			freshDir := requireSyncEqualsRun(t, repoRoot, storeDir)
+			if n := crossFileEdgeCount(t, freshDir); n == 0 {
+				t.Fatalf("a fresh index of the %s fixture has no cross-file edge, so this case proves nothing", tc.lang)
+			}
+		})
 	}
 }
 
@@ -715,35 +823,7 @@ func TestSyncBackfillsGraphWithoutUnresolvedNames(t *testing.T) {
 	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-
-	func() {
-		store, err := graphstore.Open(storeDir)
-		if err != nil {
-			t.Fatalf("graphstore.Open: %v", err)
-		}
-		defer store.Close()
-		r, err := store.Snapshot()
-		if err != nil {
-			t.Fatalf("Snapshot: %v", err)
-		}
-		meta, err := r.GetMeta()
-		r.Close()
-		if err != nil {
-			t.Fatalf("GetMeta: %v", err)
-		}
-		old := proto.Clone(meta).(*schema.Meta)
-		old.HasUnresolvedNames = false
-		w, err := store.NewWriter()
-		if err != nil {
-			t.Fatalf("NewWriter: %v", err)
-		}
-		if err := w.PutMeta(old); err != nil {
-			t.Fatalf("PutMeta: %v", err)
-		}
-		if err := w.Commit(); err != nil {
-			t.Fatalf("Commit: %v", err)
-		}
-	}()
+	clearMetaFlag(t, storeDir, func(m *schema.Meta) { m.HasUnresolvedNames = false })
 
 	stats, err := Sync(repoRoot, storeDir, Options{})
 	if err != nil {
@@ -779,6 +859,110 @@ func TestSyncBackfillsGraphWithoutUnresolvedNames(t *testing.T) {
 	}
 	if stats2.FilesReparsed != 0 {
 		t.Errorf("Stats.FilesReparsed = %d on the Sync after the backfill, want 0", stats2.FilesReparsed)
+	}
+}
+
+// clearMetaFlag rewrites the Meta record of the store at storeDir with
+// clear applied, as a store written by an older build has it.
+func clearMetaFlag(t *testing.T, storeDir string, clear func(*schema.Meta)) {
+	t.Helper()
+	store, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("graphstore.Open: %v", err)
+	}
+	defer store.Close()
+	r, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	meta, err := r.GetMeta()
+	r.Close()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	old := proto.Clone(meta).(*schema.Meta)
+	clear(old)
+	w, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	if err := w.PutMeta(old); err != nil {
+		t.Fatalf("PutMeta: %v", err)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+}
+
+// TestSyncBackfillsGraphWithoutDeclaredModuleKeys proves a store whose
+// Meta lacks has_declared_module_keys is rebuilt from scratch by the next
+// Sync, which records the module a Java file declares, none for a Go
+// file, and stamps the flag.
+func TestSyncBackfillsGraphWithoutDeclaredModuleKeys(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/a.go":          "package pkg\n\nfunc A() {}\n",
+		"src/com/ex/A.java": "package com.ex;\n\npublic class A {}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	clearMetaFlag(t, storeDir, func(m *schema.Meta) { m.HasDeclaredModuleKeys = false })
+
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (backfill): %v", err)
+	}
+	if stats.FilesReparsed != stats.Files {
+		t.Errorf("Stats.FilesReparsed = %d, want %d (a full rebuild)", stats.FilesReparsed, stats.Files)
+	}
+
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+	meta, err := r.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if !meta.GetHasDeclaredModuleKeys() {
+		t.Error("Meta.HasDeclaredModuleKeys = false after backfill, want true")
+	}
+	for path, want := range map[string]string{"src/com/ex/A.java": "com.ex", "pkg/a.go": ""} {
+		f, err := r.GetFile(path)
+		if err != nil {
+			t.Fatalf("GetFile(%s): %v", path, err)
+		}
+		if got := f.GetDeclaredModuleKey(); got != want {
+			t.Errorf("%s declared module key = %q, want %q", path, got, want)
+		}
+	}
+}
+
+// TestSyncFollowsModulePathRename proves Sync files an unchanged file's
+// symbols under the module key discovery computes on this run, not one
+// stored earlier: after go.mod renames the module and the caller's
+// import follows, its call into the unchanged package still resolves.
+func TestSyncFollowsModulePathRename(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/a.go": "package pkg\n\nfunc A() {}\n",
+		"cmd/b.go": "package cmd\n\nimport \"example.com/syncfixture/pkg\"\n\nfunc B() { pkg.A() }\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	writeFile(t, filepath.Join(repoRoot, "go.mod"), "module example.com/renamed\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(repoRoot, "cmd", "b.go"), "package cmd\n\nimport \"example.com/renamed/pkg\"\n\nfunc B() { pkg.A() }\n")
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (rename): %v", err)
+	}
+
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+	aID := nodeid.NodeID(goextract.KindFunction, "A", "pkg/a.go")
+	bID := nodeid.NodeID(goextract.KindFunction, "B", "cmd/b.go")
+	if !hasEdge(t, r, bID, "calls", aID) {
+		t.Fatalf("no calls edge B -> A after the module rename")
 	}
 }
 

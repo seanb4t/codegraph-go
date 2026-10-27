@@ -415,8 +415,14 @@ type File struct {
 	// by name, such as a method call through a local variable, is not
 	// listed.
 	UnresolvedNames []*UnresolvedName `protobuf:"bytes,9,rep,name=unresolved_names,json=unresolvedNames,proto3" json:"unresolved_names,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// declared_module_key is the module this file's source declares (a
+	// Java or Kotlin package, a C# or PHP namespace), which the symbol
+	// index files its symbols under. It is empty when the key comes from
+	// the file's path or the project descriptor, which `sync` recomputes
+	// on every run.
+	DeclaredModuleKey string `protobuf:"bytes,10,opt,name=declared_module_key,json=declaredModuleKey,proto3" json:"declared_module_key,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *File) Reset() {
@@ -510,6 +516,13 @@ func (x *File) GetUnresolvedNames() []*UnresolvedName {
 		return x.UnresolvedNames
 	}
 	return nil
+}
+
+func (x *File) GetDeclaredModuleKey() string {
+	if x != nil {
+		return x.DeclaredModuleKey
+	}
+	return ""
 }
 
 // UnresolvedName is one symbol a file references but the index does not
@@ -702,8 +715,14 @@ type Meta struct {
 	// since without the lists it cannot find the files a new symbol
 	// resolves.
 	HasUnresolvedNames bool `protobuf:"varint,11,opt,name=has_unresolved_names,json=hasUnresolvedNames,proto3" json:"has_unresolved_names,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// has_declared_module_keys reports whether every File record in this
+	// graph carries declared_module_key where its source declares one.
+	// Absent or false means a graph written before the field existed:
+	// `sync` then rebuilds it from scratch once, since without the keys it
+	// files an unchanged file's symbols under the wrong module.
+	HasDeclaredModuleKeys bool `protobuf:"varint,12,opt,name=has_declared_module_keys,json=hasDeclaredModuleKeys,proto3" json:"has_declared_module_keys,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
@@ -813,6 +832,13 @@ func (x *Meta) GetHasUnresolvedNames() bool {
 	return false
 }
 
+func (x *Meta) GetHasDeclaredModuleKeys() bool {
+	if x != nil {
+		return x.HasDeclaredModuleKeys
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -852,7 +878,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\bmetadata\x18\a \x03(\v2 .codegraph.v1.Edge.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xbb\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xeb\x02\n" +
 	"\x04File\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12!\n" +
 	"\fcontent_hash\x18\x02 \x01(\tR\vcontentHash\x12\x1a\n" +
@@ -865,7 +891,9 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\rmtime_unix_ns\x18\a \x01(\x03R\vmtimeUnixNs\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\b \x01(\x03R\tsizeBytes\x12G\n" +
-	"\x10unresolved_names\x18\t \x03(\v2\x1c.codegraph.v1.UnresolvedNameR\x0funresolvedNames\"C\n" +
+	"\x10unresolved_names\x18\t \x03(\v2\x1c.codegraph.v1.UnresolvedNameR\x0funresolvedNames\x12.\n" +
+	"\x13declared_module_key\x18\n" +
+	" \x01(\tR\x11declaredModuleKey\"C\n" +
 	"\x0eUnresolvedName\x12\x1d\n" +
 	"\n" +
 	"module_key\x18\x01 \x01(\tR\tmoduleKey\x12\x12\n" +
@@ -875,7 +903,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xa8\x03\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xe1\x03\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -891,7 +919,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\fhas_coverage\x18\t \x01(\bR\vhasCoverage\x12/\n" +
 	"\x13coverage_generation\x18\n" +
 	" \x01(\x03R\x12coverageGeneration\x120\n" +
-	"\x14has_unresolved_names\x18\v \x01(\bR\x12hasUnresolvedNamesJ\x04\b2\x10<*\xe5\x01\n" +
+	"\x14has_unresolved_names\x18\v \x01(\bR\x12hasUnresolvedNames\x127\n" +
+	"\x18has_declared_module_keys\x18\f \x01(\bR\x15hasDeclaredModuleKeysJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +

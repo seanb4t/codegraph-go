@@ -152,6 +152,11 @@ type FileResult struct {
 	RelPath    string
 	Language   string
 
+	// ModuleKeyDeclared reports that ImportPath is the module the file's
+	// source declares (a Java or Kotlin package, a C# or PHP namespace),
+	// not the key discovery computed from its path.
+	ModuleKeyDeclared bool
+
 	Nodes      []ExtractedNode
 	IntraEdges []IntraEdge
 	Unresolved []UnresolvedRef

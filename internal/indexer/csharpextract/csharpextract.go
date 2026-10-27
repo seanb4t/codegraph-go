@@ -71,6 +71,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 
 	if ns := findNamespace(root, src); ns != "" {
 		result.ImportPath = ns
+		result.ModuleKeyDeclared = true
 	}
 
 	ex := &extractor{
