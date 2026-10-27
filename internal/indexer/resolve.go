@@ -308,6 +308,9 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 			SizeBytes:       r.SizeBytes,
 			UnresolvedNames: waiting,
 		}
+		if r.ModuleKeyDeclared {
+			f.DeclaredModuleKey = r.ImportPath
+		}
 		if r.Err != nil {
 			f.Errors = []string{r.Err.Error()}
 		}
@@ -898,6 +901,9 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	meta.HasCoverage = true
 	// resolveRefsWithIndex fills every File record's unresolved_names.
 	meta.HasUnresolvedNames = true
+	// resolveRefsWithIndex fills declared_module_key wherever a file
+	// declares its module.
+	meta.HasDeclaredModuleKeys = true
 	// WR-01 (iteration 2): stamp the read-modify-written generation
 	// computed above — see this function's own comment at the Snapshot
 	// read for why a from-scratch rewrite still increments monotonically

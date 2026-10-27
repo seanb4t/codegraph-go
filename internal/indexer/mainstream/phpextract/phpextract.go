@@ -70,6 +70,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 
 	if ns, ok := namespaceOverride(root, src); ok && ns != "" {
 		result.ImportPath = ns
+		result.ModuleKeyDeclared = true
 	}
 
 	decls := topLevelDecls(root)

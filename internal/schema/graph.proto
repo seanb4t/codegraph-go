@@ -135,6 +135,13 @@ message File {
   // by name, such as a method call through a local variable, is not
   // listed.
   repeated UnresolvedName unresolved_names = 9;
+
+  // declared_module_key is the module this file's source declares (a
+  // Java or Kotlin package, a C# or PHP namespace), which the symbol
+  // index files its symbols under. It is empty when the key comes from
+  // the file's path or the project descriptor, which `sync` recomputes
+  // on every run.
+  string declared_module_key = 10;
 }
 
 // UnresolvedName is one symbol a file references but the index does not
@@ -237,6 +244,13 @@ message Meta {
   // since without the lists it cannot find the files a new symbol
   // resolves.
   bool has_unresolved_names = 11;
+
+  // has_declared_module_keys reports whether every File record in this
+  // graph carries declared_module_key where its source declares one.
+  // Absent or false means a graph written before the field existed:
+  // `sync` then rebuilds it from scratch once, since without the keys it
+  // files an unchanged file's symbols under the wrong module.
+  bool has_declared_module_keys = 12;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of

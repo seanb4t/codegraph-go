@@ -70,6 +70,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 
 	if pkg := findPackageDeclaration(root, src); pkg != "" {
 		result.ImportPath = pkg
+		result.ModuleKeyDeclared = true
 	}
 
 	ex := &extractor{
