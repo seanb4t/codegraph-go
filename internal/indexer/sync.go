@@ -204,6 +204,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		newMeta.HasFileIndex = true
 		newMeta.HasUnresolvedNames = true
 		newMeta.HasDeclaredModuleKeys = true
+		newMeta.HasMethodSpecs = true
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
@@ -314,6 +315,23 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 
+	// A method's file owns its contains edge from a type declared in
+	// another file, since resolving the method's file makes it. When this
+	// sync removes the type's node, those files are dependents, so their
+	// edges follow the type: remade if it still exists, dropped if not.
+	for _, id := range sortedKeys(goneIDs) {
+		methodFiles, err := containedMethodFiles(r0, id)
+		if err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+		for _, mf := range methodFiles {
+			if _, already := changedSet[mf]; !already {
+				dependentPaths[mf] = struct{}{}
+			}
+		}
+	}
+
 	// Narrow-prune dependents: only their owned OUTGOING edges — their
 	// own nodes/File record stay (content unchanged, RESEARCH Pattern 1
 	// step 8).
@@ -396,7 +414,13 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	idx.overlay(results)
 
-	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, idx)
+	view, err := loadStoreView(r0, excludePaths)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+
+	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, idx, view)
 
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
@@ -404,18 +428,39 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	collapsedEdges := collapseEdges(edges, nodeFilePath)
 
-	// CR-03: collapseEdges' own representative-selection above only needs
-	// nodeFilePath for edges whose Source is in THIS cycle's reparse batch
-	// (true for calls/embeds/imports, whose Source is always ref.FromID —
-	// the file currently being parsed). A `contains` edge's Source is the
-	// receiver TYPE's node id, which idx.resolveUnqualified can resolve
-	// into a completely unchanged, non-reparsed file (the "type in one
-	// file, methods in another" Go idiom) — nodeFilePath alone would miss
-	// it, silently writing the edge with ownerPath="" and permanently
-	// escaping the x/ index (never enumerable by a later prune of that
-	// type's file). ownerPathFor below falls back to r0 — the pre-Sync
-	// snapshot, unaffected by this cycle's staged-but-uncommitted writes —
-	// for exactly that case.
+	// The resolve above synthesized implements and overrides over the
+	// whole graph. A synthesized edge an unchanged file already stores is
+	// skipped, and a stored one the synthesis did not produce is deleted,
+	// so Meta.EdgeCount counts each change once.
+	kept := make(map[edgeTriple]bool)
+	writes := make([]*schema.Edge, 0, len(collapsedEdges))
+	for _, e := range collapsedEdges {
+		k := edgeTriple{e.Source, e.Kind, e.Target}
+		if _, stored := view.synthesized[k]; stored && isSynthesizedEdge(e) {
+			kept[k] = true
+			continue
+		}
+		writes = append(writes, e)
+	}
+	collapsedEdges = writes
+	for _, k := range sortedTriples(view.synthesized) {
+		if kept[k] {
+			continue
+		}
+		if err := deleteOwnedEdge(w, view.synthesized[k], k); err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+		edgesRemoved++
+	}
+
+	// CR-03: an edge's owner (edgeOwnerID) is not always in THIS cycle's
+	// reparse batch: a synthesized implements or override edge can start
+	// at a node in an unchanged file. nodeFilePath alone would miss it,
+	// silently writing the edge with ownerPath="" and permanently escaping
+	// the x/ index (never enumerable by a later prune). ownerPathFor below
+	// falls back to r0 — the pre-Sync snapshot, unaffected by this cycle's
+	// staged-but-uncommitted writes — for exactly that case.
 
 	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
 	allNodes = append(allNodes, nodes...)
@@ -473,7 +518,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, ownerPathFor(e.Source, nodeFilePath, r0)); err != nil {
+		if err := w.PutEdge(e, ownerPathFor(edgeOwnerID(e), nodeFilePath, r0)); err != nil {
 			w.Close()
 			return Stats{}, err
 		}
@@ -488,6 +533,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	newMeta.HasFileIndex = true
 	newMeta.HasUnresolvedNames = true
 	newMeta.HasDeclaredModuleKeys = true
+	newMeta.HasMethodSpecs = true
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
@@ -572,7 +618,8 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
-// has_unresolved_names or has_declared_module_keys flag is false (D-02b) — opening and closing the
+// has_unresolved_names, has_declared_module_keys or has_method_specs flag
+// is false (D-02b) — opening and closing the
 // store in isolation from Sync's own main open, so the two never race a
 // Pebble lock against each other.
 func needsFileIndexBackfill(storeDir string) (bool, error) {
@@ -595,7 +642,75 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		}
 		return false, err
 	}
-	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys(), nil
+	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() || !meta.GetHasMethodSpecs(), nil
+}
+
+// containedMethodFiles returns, sorted, the files of the methods that
+// typeID's contains edges in r0 point to.
+func containedMethodFiles(r0 graphstore.Reader, typeID string) ([]string, error) {
+	it, err := r0.IterateEdges(typeID)
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	seen := make(map[string]struct{})
+	for it.Next() {
+		e := it.Edge()
+		if e.Kind != "contains" {
+			continue
+		}
+		n, err := r0.GetNode(e.Target)
+		if err != nil {
+			if err == graphstore.ErrNotFound {
+				continue
+			}
+			return nil, err
+		}
+		seen[n.GetFilePath()] = struct{}{}
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	return sortedKeys(seen), nil
+}
+
+// sortedKeys returns m's keys in order.
+func sortedKeys(m map[string]struct{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// deleteOwnedEdge stages the delete of edge k and of owner's file-index
+// entry for it.
+func deleteOwnedEdge(w graphstore.Writer, owner string, k edgeTriple) error {
+	if err := w.DeleteEdge(k.source, k.kind, k.target); err != nil {
+		return err
+	}
+	return w.DeleteFileIndexEdge(owner, k.source, k.kind, k.target)
+}
+
+// sortedTriples returns m's keys sorted by (source, kind, target).
+func sortedTriples(m map[edgeTriple]string) []edgeTriple {
+	keys := make([]edgeTriple, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		if a.source != b.source {
+			return a.source < b.source
+		}
+		if a.kind != b.kind {
+			return a.kind < b.kind
+		}
+		return a.target < b.target
+	})
+	return keys
 }
 
 // unresolvedKey is a (module key, name) pair as schema.UnresolvedName
@@ -736,12 +851,12 @@ func pruneOwnedEdgesOnly(r0 graphstore.Reader, w graphstore.Writer, path string,
 	return it.Err()
 }
 
-// ownerPathFor resolves e's ownerPath for CR-03: batch first (this cycle's
-// freshly reparsed nodes — always sufficient for calls/embeds/imports,
-// whose Source is always in-batch), falling back to a lookup against r0 —
-// the pre-Sync snapshot — when id belongs to a node that was NOT reparsed
-// this cycle, which is exactly the cross-file `contains` case (the
-// receiver type's node lives in an unchanged sibling file). r0 is a
+// ownerPathFor resolves the file of id, an edge's owner (edgeOwnerID), for
+// CR-03: batch first (this cycle's freshly reparsed nodes — always
+// sufficient for an edge resolved from a reference, whose owner is in the
+// file being resolved), falling back to a lookup against r0 — the
+// pre-Sync snapshot — when id belongs to a node that was NOT reparsed
+// this cycle, which is the synthesized implements and override case. r0 is a
 // point-in-time snapshot unaffected by this Sync's own staged-but-
 // uncommitted writes, so this lookup cannot observe a partial commit; it
 // also cannot resolve to a node id that is itself being pruned/superseded
