@@ -28,7 +28,7 @@ None.
 
 ### Modified Capabilities
 
-- `mcp-server`: a new requirement, "A linked worktree gets an index of its own". "Finding the index" and "Worktree notice on a borrowed index" now describe borrowing as what happens when the worktree index is turned off or not yet ready. "Watcher limits within a session" gains an exception: a worktree index that the server itself builds in the background gets the watcher when it is ready.
+- `mcp-server`: five new requirements: "A linked worktree gets an index of its own", "A worktree index with few changes is ready before the first request", "A worktree index with many changes is built in the background", "Turning the worktree index off" and "Worktree index failures". "Finding the index" and "Worktree notice on a borrowed index" now describe borrowing as what happens when the worktree index is turned off or not yet ready. "Watcher limits within a session" gains an exception: a worktree index that the server itself builds in the background gets the watcher when it is ready.
 
 `index-resolution` does not change. Its scenario "A worktree with its own index" already makes a worktree's own `.codegraph/` win over the fallback.
 
