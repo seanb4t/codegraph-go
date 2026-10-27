@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -1403,5 +1404,58 @@ func TestResolve_EndToEnd(t *testing.T) {
 	}
 	if meta.EdgeCount == 0 {
 		t.Error("Meta.EdgeCount = 0, want > 0")
+	}
+}
+
+// TestResolve_RecordsUnresolvedNames proves a File record lists the names
+// its references could not resolve, for every reference kind that
+// resolves by name: an unqualified name under the file's own module key,
+// an import-qualified name under the imported path, sorted and listed
+// once. A call through a local variable is not listed, since no symbol
+// can resolve it by name.
+func TestResolve_RecordsUnresolvedNames(t *testing.T) {
+	src := `package p
+
+import "example.com/m/q"
+
+type S struct {
+	Base
+}
+
+func (r Recv) M() {}
+
+func G() q.Thing {
+	q.Absent()
+	Missing()
+	Missing()
+	_ = Gone
+	_ = Lit{}
+	var w q.Widget
+	w.Describe()
+	return q.Thing{}
+}
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/m/p", "p/p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, _, files, _ := resolveRefs([]goextract.FileResult{result}, "example.com/m")
+	if len(files) != 1 {
+		t.Fatalf("got %d File records, want 1", len(files))
+	}
+	got := unresolvedNameStrings(files[0])
+	want := []string{
+		"example.com/m/p Base",
+		"example.com/m/p Gone",
+		"example.com/m/p Lit",
+		"example.com/m/p Missing",
+		"example.com/m/p Recv",
+		"example.com/m/q Absent",
+		"example.com/m/q Thing",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("unresolved names = %q, want %q", got, want)
 	}
 }

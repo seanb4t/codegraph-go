@@ -18,7 +18,8 @@ import (
 
 // Sync performs an incremental update of the graph at storeDir against the
 // current on-disk state of repoRoot (INDX-03): only content-hash-changed
-// files, plus their direct call-graph dependents, are reparsed;
+// files, plus their direct call-graph dependents and the files waiting on
+// a symbol this sync adds, are reparsed;
 // changed/deleted files' subgraphs are pruned via the x/ file-owned
 // secondary index (D-02); and the whole prune+write lands in exactly ONE
 // atomic Writer commit (D-01b — never per-symbol). One routine, three
@@ -201,6 +202,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 		newMeta := schema.NewMeta()
 		newMeta.HasFileIndex = true
+		newMeta.HasUnresolvedNames = true
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
@@ -338,6 +340,41 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		return Stats{}, err
 	}
 
+	// A file whose reference did not resolve when it was last indexed is
+	// re-extracted when this sync adds a symbol it names, so the
+	// reference resolves now. Its owned edges are pruned like a
+	// dependent's, before any edge below is staged.
+	addedNames, err := newNames(r0, results)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting, err := filesWaitingOn(r0, addedNames, changedSet, dependentPaths)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	if len(waiting) > 0 {
+		waitingFiles := make([]DiscoveredFile, 0, len(waiting))
+		for _, path := range waiting {
+			if err := pruneOwnedEdgesOnly(r0, w, path, &edgesRemoved); err != nil {
+				w.Close()
+				return Stats{}, err
+			}
+			dependentPaths[path] = struct{}{}
+			if f, ok := discovered[path]; ok {
+				waitingFiles = append(waitingFiles, f)
+			}
+		}
+		more, err := Extract(waitingFiles, workers)
+		if err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+		batchFiles = append(batchFiles, waitingFiles...)
+		results = append(results, more...)
+	}
+
 	// The store-seeded index must exclude every path whose symbol
 	// identity is being superseded or removed: the reparse batch (about
 	// to be overlaid fresh) AND deleted files (never re-extracted, so a
@@ -448,6 +485,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 
 	newMeta := schema.NewMeta()
 	newMeta.HasFileIndex = true
+	newMeta.HasUnresolvedNames = true
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
@@ -531,9 +569,10 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 }
 
 // needsFileIndexBackfill reports whether the store at storeDir has no
-// Meta record yet, or a Meta record whose has_file_index flag is false
-// (D-02b) — opening and closing the store in isolation from Sync's own
-// main open, so the two never race a Pebble lock against each other.
+// Meta record yet, or a Meta record whose has_file_index or
+// has_unresolved_names flag is false (D-02b) — opening and closing the
+// store in isolation from Sync's own main open, so the two never race a
+// Pebble lock against each other.
 func needsFileIndexBackfill(storeDir string) (bool, error) {
 	store, err := graphstore.Open(storeDir)
 	if err != nil {
@@ -554,7 +593,75 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		}
 		return false, err
 	}
-	return !meta.GetHasFileIndex(), nil
+	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames(), nil
+}
+
+// unresolvedKey is a (module key, name) pair as schema.UnresolvedName
+// holds it, usable as a map key.
+type unresolvedKey struct {
+	moduleKey, name string
+}
+
+// newNames returns the (module key, name) pairs results declare under a
+// node id r0 does not hold: the symbols this sync adds.
+func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresolvedKey]struct{}, error) {
+	names := make(map[unresolvedKey]struct{})
+	for _, r := range results {
+		if r.Err != nil {
+			continue
+		}
+		for _, en := range r.Nodes {
+			if en.Node.Kind == goextract.KindFile {
+				continue
+			}
+			_, err := r0.GetNode(en.Node.Id)
+			if err == nil {
+				continue
+			}
+			if err != graphstore.ErrNotFound {
+				return nil, err
+			}
+			names[unresolvedKey{moduleKey: r.ImportPath, name: en.Node.Name}] = struct{}{}
+		}
+	}
+	return names, nil
+}
+
+// filesWaitingOn returns, sorted, the paths of r0's files that are in
+// neither changed nor dependents and whose unresolved names include one
+// of names.
+func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, changed, dependents map[string]struct{}) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	it, err := r0.IterateFiles()
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	var paths []string
+	for it.Next() {
+		f := it.File()
+		path := f.GetPath()
+		if _, ok := changed[path]; ok {
+			continue
+		}
+		if _, ok := dependents[path]; ok {
+			continue
+		}
+		for _, u := range f.GetUnresolvedNames() {
+			if _, ok := names[unresolvedKey{moduleKey: u.GetModuleKey(), name: u.GetName()}]; ok {
+				paths = append(paths, path)
+				break
+			}
+		}
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	sort.Strings(paths)
+	return paths, nil
 }
 
 // pruneFileSubgraph enumerates path's owned x/ entries in r0 and stages a
