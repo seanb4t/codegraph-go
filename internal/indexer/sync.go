@@ -30,7 +30,7 @@ import (
 // Sync mirrors Run's open-once/Close-on-every-path lifecycle (D-04), but
 // performs a store-seeded incremental resolve instead of a from-scratch
 // one: the global symbol index is seeded from the store's own committed
-// nodes (newSymbolIndexFromStore), not just the reparse batch, so a
+// nodes (loadStoreView's symbols), not just the reparse batch, so a
 // reference into an unchanged file still resolves (RESEARCH Pitfall 1).
 func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	start := time.Now()
@@ -407,20 +407,14 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		excludePaths[p] = true
 	}
 
-	idx, err := newSymbolIndexFromStore(r0, discovered, excludePaths)
+	view, err := loadStoreView(r0, discovered, excludePaths)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
 	}
-	idx.overlay(results)
+	view.symbols.overlay(results)
 
-	view, err := loadStoreView(r0, excludePaths)
-	if err != nil {
-		w.Close()
-		return Stats{}, err
-	}
-
-	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, idx, view)
+	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, view.symbols, view)
 
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
@@ -860,7 +854,7 @@ func pruneOwnedEdgesOnly(r0 graphstore.Reader, w graphstore.Writer, path string,
 // point-in-time snapshot unaffected by this Sync's own staged-but-
 // uncommitted writes, so this lookup cannot observe a partial commit; it
 // also cannot resolve to a node id that is itself being pruned/superseded
-// this cycle, since newSymbolIndexFromStore's excludePaths already keeps
+// this cycle, since loadStoreView's excludePaths already keeps
 // idx from ever resolving a reference into the batch's own files or a
 // deleted file in the first place (RESEARCH Pitfall 1's exclusion set).
 func ownerPathFor(id string, batch map[string]string, r0 graphstore.Reader) string {

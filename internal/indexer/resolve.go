@@ -49,7 +49,7 @@ func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, pack
 // the symbol index (Phase 4 D-01/RESEARCH Pattern 1 step 11): resolveRefs
 // keeps building its own from-scratch newSymbolIndex(results) unconditio-
 // nally; Sync() instead injects a store-seeded index overlaid with the
-// reparse batch (newSymbolIndexFromStore + symbolIndex.overlay), so an
+// reparse batch (loadStoreView's symbols + symbolIndex.overlay), so an
 // unqualified/qualified reference into an UNCHANGED file still resolves
 // (RESEARCH Pitfall 1). Sync also passes view, what the files it does not
 // reparse declare, so the kind lookups and the implements, override and

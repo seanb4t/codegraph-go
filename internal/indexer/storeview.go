@@ -11,6 +11,17 @@ import (
 // reparse, so that kind checks and implements, override and
 // conformance-retry matching see the whole graph as a fresh index does.
 type storeView struct {
+	// symbols is the store-seeded symbol index (Phase 4 RESEARCH Pattern 1
+	// step 10 / Pitfall 1): Sync overlays the batch on it, so a reference
+	// into an unchanged file still resolves. A stored symbol sits under
+	// the key overlay would give it: the module its file declares
+	// (File.declared_module_key) when it declares one, and otherwise the
+	// file's ImportPath in discovered, which its language's
+	// LanguageSpec.ModuleKey computed on this run. File and package nodes
+	// are left out, as newSymbolIndex leaves them out, and collisions
+	// route through the same addSymbol tie-break (WR-01).
+	symbols *symbolIndex
+
 	kinds, names     map[string]string
 	startLines       map[string]int32
 	arity            map[string]int32
@@ -26,16 +37,34 @@ type storeView struct {
 	synthesized map[edgeTriple]string
 }
 
-// loadStoreView reads r's nodes and edges, skipping what files in exclude
-// own: the files the sync reparses or deleted.
-func loadStoreView(r graphstore.Reader, exclude map[string]bool) (*storeView, error) {
+// loadStoreView reads r's files, nodes and edges once each, skipping what
+// files in exclude own: the files the sync reparses or deleted, whose
+// symbols the batch supersedes or removes.
+func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, exclude map[string]bool) (*storeView, error) {
 	v := &storeView{
+		symbols:          &symbolIndex{byModuleKeyAndName: make(map[string]map[string]string)},
 		kinds:            make(map[string]string),
 		names:            make(map[string]string),
 		startLines:       make(map[string]int32),
 		arity:            make(map[string]int32),
 		interfaceMethods: make(dispatch.InterfaceSpecs),
 		synthesized:      make(map[edgeTriple]string),
+	}
+
+	declared := make(map[string]string)
+	fit, err := r.IterateFiles()
+	if err != nil {
+		return nil, err
+	}
+	for fit.Next() {
+		if f := fit.File(); f.GetDeclaredModuleKey() != "" {
+			declared[f.GetPath()] = f.GetDeclaredModuleKey()
+		}
+	}
+	err = fit.Err()
+	fit.Close()
+	if err != nil {
+		return nil, err
 	}
 
 	fileOf := make(map[string]string)
@@ -57,6 +86,13 @@ func loadStoreView(r graphstore.Reader, exclude map[string]bool) (*storeView, er
 		}
 		for _, m := range n.InterfaceMethods {
 			v.interfaceMethods[n.Id] = append(v.interfaceMethods[n.Id], goextract.MethodSpec{Name: m.Name, Arity: m.Arity})
+		}
+		if n.Kind != goextract.KindFile {
+			moduleKey, ok := declared[n.FilePath]
+			if !ok {
+				moduleKey = discovered[n.FilePath].ImportPath
+			}
+			v.symbols.add(moduleKey, n.Name, n.Id)
 		}
 	}
 	err = nit.Err()
