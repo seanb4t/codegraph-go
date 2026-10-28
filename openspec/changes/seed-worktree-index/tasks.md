@@ -4,12 +4,12 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 1. Prerequisite and baseline
 
-- [ ] 1.1 Confirm #187 is closed by a merged PR and its regression test is on main (`gh issue view 187 --json state,closedByPullRequestsReferences`). Do not start group 4 before this. Verify the output names a merged PR.
-- [ ] 1.2 Reproduce the borrow in a scratch directory with the current binary: a repository `main` with one Go file, `codegraph init`, a sibling worktree `wt` on a branch that adds `func OnlyHere() {}`. Verify `codegraph explore OnlyHere --path wt` prints the worktree notice and does not find `OnlyHere`. Keep the scratch directory for 8.2.
+- [x] 1.1 Confirm #187 is closed by a merged PR and its regression test is on main (`gh issue view 187 --json state,closedByPullRequestsReferences`). Do not start group 4 before this. Verify the output names a merged PR.
+- [x] 1.2 Reproduce the borrow in a scratch directory with the current binary: a repository `main` with one Go file, `codegraph init`, a sibling worktree `wt` on a branch that adds `func OnlyHere() {}`. Verify `codegraph explore OnlyHere --path wt` prints the worktree notice and does not find `OnlyHere`. Keep the scratch directory for 8.2.
 
 ## 2. Store checkpoint in `internal/graphstore`
 
-- [ ] 2.1 Add `Checkpoint(srcDir, destDir string) error` to `internal/graphstore/pebble_store.go`. It opens the source with `Open` (so with its lock retries and `ErrStoreLocked`), calls pebble's `DB.Checkpoint(destDir)`, and closes the source. `destDir` must not exist. Add `TestCheckpointCopiesGraph` (a store with nodes and edges; the checkpoint opens with `Open` and holds the same node ids and edges) and `TestCheckpointLockedSource` (the source held open by the test; `errors.Is(err, ErrStoreLocked)`, with `openLockRetrySleep` stubbed so the test does not wait). Verify `go test ./internal/graphstore -run Checkpoint -count=1` passes.
+- [x] 2.1 Add `Checkpoint(srcDir, destDir string) error` to `internal/graphstore/pebble_store.go`. It opens the source with `Open` (so with its lock retries and `ErrStoreLocked`), calls pebble's `DB.Checkpoint(destDir)`, and closes the source. `destDir` must not exist. Add `TestCheckpointCopiesGraph` (a store with nodes and edges; the checkpoint opens with `Open` and holds the same node ids and edges) and `TestCheckpointLockedSource` (the source held open by the test; `errors.Is(err, ErrStoreLocked)`, with `openLockRetrySleep` stubbed so the test does not wait). Verify `go test ./internal/graphstore -run Checkpoint -count=1` passes.
 
 ## 3. Early stop in `indexer.Sync`
 

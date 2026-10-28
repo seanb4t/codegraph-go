@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -139,6 +140,14 @@ func classifyOpenError(err error) error {
 // the final attempt surfaces wrapped in ErrStoreLocked (errors.Is-able) —
 // classification happens here, at the pebble.Open seam, and nowhere else.
 func Open(dir string) (GraphStore, error) {
+	s, err := open(dir)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func open(dir string) (*pebbleStore, error) {
 	var lastErr error
 	for attempt := 0; attempt < openLockRetryAttempts; attempt++ {
 		if attempt > 0 {
@@ -154,6 +163,23 @@ func Open(dir string) (GraphStore, error) {
 		}
 	}
 	return nil, lastErr
+}
+
+// Checkpoint copies the store at srcDir into destDir, using hard links
+// where the filesystem allows. destDir must not exist. The source is opened
+// with Open, so a source that another process holds fails with
+// ErrStoreLocked after Open's retries. A missing srcDir is an error, not a
+// new empty store.
+func Checkpoint(srcDir, destDir string) (err error) {
+	if _, err := os.Stat(srcDir); err != nil {
+		return err
+	}
+	src, err := open(srcDir)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, src.Close()) }()
+	return src.db.Checkpoint(destDir)
 }
 
 // Snapshot returns a consistent, point-in-time Reader (INDX-05): Pebble
