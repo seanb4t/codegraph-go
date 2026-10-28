@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1152,4 +1153,75 @@ func unresolvedNameStrings(f *schema.File) []string {
 		out = append(out, u.GetModuleKey()+" "+u.GetName())
 	}
 	return out
+}
+
+// TestSyncMaxChanged proves Sync stops before it writes anything when more
+// files changed than Options.MaxChanged allows, and syncs as usual at the
+// limit.
+func TestSyncMaxChanged(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/a.go": "package pkg\n\nfunc Old() {}\n",
+		"pkg/b.go": "package pkg\n\nfunc Gone() {}\n",
+		"pkg/c.go": "package pkg\n\nfunc Kept() {}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+	seededMeta := func() *schema.Meta {
+		r, closeAll := openSnapshot(t, storeDir)
+		defer closeAll()
+		m, err := r.GetMeta()
+		if err != nil {
+			t.Fatalf("GetMeta: %v", err)
+		}
+		return m
+	}()
+
+	writeFile(t, filepath.Join(repoRoot, "pkg", "a.go"), "package pkg\n\nfunc New() {}\n")
+	if err := os.Remove(filepath.Join(repoRoot, "pkg", "b.go")); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	writeFile(t, filepath.Join(repoRoot, "pkg", "d.go"), "package pkg\n\nfunc Added() {}\n")
+
+	oldID := nodeid.NodeID(goextract.KindFunction, "Old", "pkg/a.go")
+	newID := nodeid.NodeID(goextract.KindFunction, "New", "pkg/a.go")
+	hasNode := func(id string) bool {
+		t.Helper()
+		r, closeAll := openSnapshot(t, storeDir)
+		defer closeAll()
+		_, err := r.GetNode(id)
+		if err != nil && err != graphstore.ErrNotFound {
+			t.Fatalf("GetNode: %v", err)
+		}
+		return err == nil
+	}
+
+	_, err := Sync(repoRoot, storeDir, Options{MaxChanged: 2})
+	var tooMany *ErrTooManyChanges
+	if !errors.As(err, &tooMany) {
+		t.Fatalf("Sync (MaxChanged 2) error = %v; want *ErrTooManyChanges", err)
+	}
+	if tooMany.Changed != 3 || tooMany.Total != 3 {
+		t.Errorf("ErrTooManyChanges = %+v; want Changed 3, Total 3", tooMany)
+	}
+	r, closeAll := openSnapshot(t, storeDir)
+	m, err := r.GetMeta()
+	closeAll()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if !proto.Equal(m, seededMeta) {
+		t.Errorf("meta after the stopped sync = %v; want it unchanged, %v", m, seededMeta)
+	}
+	if !hasNode(oldID) || hasNode(newID) {
+		t.Errorf("after the stopped sync: Old present = %v, New present = %v; want true, false", hasNode(oldID), hasNode(newID))
+	}
+
+	if _, err := Sync(repoRoot, storeDir, Options{MaxChanged: 3}); err != nil {
+		t.Fatalf("Sync (MaxChanged 3): %v", err)
+	}
+	if hasNode(oldID) || !hasNode(newID) {
+		t.Errorf("after the sync at the limit: Old present = %v, New present = %v; want false, true", hasNode(oldID), hasNode(newID))
+	}
 }

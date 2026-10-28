@@ -153,6 +153,10 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	fit.Close()
 
+	if changed := len(added) + len(modified) + len(deleted); opts.MaxChanged > 0 && changed > opts.MaxChanged {
+		return Stats{}, &ErrTooManyChanges{Changed: changed, Total: len(files)}
+	}
+
 	// Phase 10 D-07: diff the c/ namespace exactly like the `deleted`
 	// diff above compares stored File records against the freshly
 	// discovered file set — upsert what is absent/changed, prune what is
