@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/wtindex"
 )
 
 // TestServeKeepsStartPathDistinctFromConfinementRoot is WR-01's required
@@ -114,9 +115,23 @@ func TestServeServerPathsNoIndex(t *testing.T) {
 //     before the return): serveWatchStart deadlocks inside the hook waiting
 //     for a close that only happens after it returns — the bounded select on
 //     retCh below trips and fails the test. Still mutation-proof.
+//
+// The "pending worktree build" case does the same with a build that
+// serveWatchStart must finish inside the goroutine: the worktree index must
+// not exist when serveWatchStart returns.
 func TestServeWatchStartDeferred(t *testing.T) {
-	_, main := statusWorktreeMismatchFixture(t)
+	t.Run("watcher", func(t *testing.T) {
+		_, main := statusWorktreeMismatchFixture(t)
+		testServeWatchStartDeferred(t, main, nil, "")
+	})
+	t.Run("pending worktree build", func(t *testing.T) {
+		t.Setenv("CODEGRAPH_NO_WATCH", "")
+		wt, indexRoot, pending := pendingWorktreeBuild(t)
+		testServeWatchStartDeferred(t, indexRoot, pending, wt)
+	})
+}
 
+func testServeWatchStartDeferred(t *testing.T, main string, pending *wtindex.Build, wt string) {
 	released := make(chan struct{})
 	workStarted := make(chan struct{}, 1)
 	onWatchWorkStart := func() {
@@ -134,7 +149,7 @@ func TestServeWatchStartDeferred(t *testing.T) {
 	var stderr bytes.Buffer
 	retCh := make(chan startResult, 1)
 	go func() {
-		cancel, done := serveWatchStart(main, true, false, false, indexer.Options{Quiet: true}, &stderr, onWatchWorkStart)
+		cancel, done := serveWatchStart(main, true, pending, false, pending != nil, indexer.Options{Quiet: true}, &stderr, onWatchWorkStart)
 		retCh <- startResult{cancel: cancel, done: done}
 	}()
 
@@ -143,6 +158,9 @@ func TestServeWatchStartDeferred(t *testing.T) {
 	case res = <-retCh:
 	case <-time.After(5 * time.Second):
 		t.Fatal("serveWatchStart did not return within 5s — it is blocked inside onWatchWorkStart, meaning the goroutine's real work (daemon.New/policy-check/acquire/watch.Open) ran synchronously BEFORE the return: the exact WATCH-02 regression this test exists to catch")
+	}
+	if pending != nil && pathExists(t, filepath.Join(wt, codegraphDirName)) {
+		t.Fatal("the worktree index exists when serveWatchStart returns: the build ran above the goroutine, on the handshake path")
 	}
 
 	// serveWatchStart has returned; only now is the hook released to do the
@@ -153,6 +171,9 @@ func TestServeWatchStartDeferred(t *testing.T) {
 	case <-workStarted:
 	case <-time.After(5 * time.Second):
 		t.Fatal("onWatchWorkStart never fired within 5s of release — serveWatchStart's goroutine did not start real work")
+	}
+	if pending != nil {
+		awaitDaemonLock(t, wt)
 	}
 
 	res.cancel()
@@ -173,7 +194,7 @@ func TestServeWatchStartDisabledPrintsVerbatimMessage(t *testing.T) {
 	_, main := statusWorktreeMismatchFixture(t)
 
 	var stderr bytes.Buffer
-	cancel, done := serveWatchStart(main, true, true, false, indexer.Options{Quiet: true}, &stderr, nil)
+	cancel, done := serveWatchStart(main, true, nil, true, false, indexer.Options{Quiet: true}, &stderr, nil)
 	cancel()
 	select {
 	case <-done:

@@ -833,6 +833,14 @@ starts and completes the MCP handshake, so agents fall back to their built-ins
 instead of the connection being refused. Run codegraph init to fix that — the
 tools appear on the next request, with no client restart.
 
+In a linked git worktree with no index of its own, whose main checkout has
+one, the server makes the worktree an index from the main checkout's index.
+When few files differ, the index is ready before the first request. When many
+differ, the server builds it in the background: until it is ready, tool calls
+use the main checkout's index and say so in a notice. --no-worktree-index or
+CODEGRAPH_NO_WORKTREE_INDEX=1 turns this off, and the server then uses the
+main checkout's index.
+
 ```
 codegraph serve [flags]
 ```
@@ -853,11 +861,12 @@ codegraph serve [flags]
 ### Options
 
 ```
-  -h, --help          help for serve
-      --mcp           run the stdio MCP server
-      --no-watch      Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)
-  -p, --path string   repo path (default: cwd)
-      --watch         Force the file watcher on, overriding the WSL2/slow-filesystem auto-off (the CLI twin of CODEGRAPH_FORCE_WATCH=1)
+  -h, --help                help for serve
+      --mcp                 run the stdio MCP server
+      --no-watch            Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)
+      --no-worktree-index   In a linked git worktree with no index, use the main checkout's index instead of making one (the CLI twin of CODEGRAPH_NO_WORKTREE_INDEX=1)
+  -p, --path string         repo path (default: cwd)
+      --watch               Force the file watcher on, overriding the WSL2/slow-filesystem auto-off (the CLI twin of CODEGRAPH_FORCE_WATCH=1)
 ```
 
 ### Options inherited from parent commands

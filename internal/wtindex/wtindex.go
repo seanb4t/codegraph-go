@@ -74,7 +74,7 @@ type Build struct {
 // temporary directory is gone.
 func Prepare(ctx context.Context, worktreeRoot, mainRoot string, lim Limits) (*Build, error) {
 	if _, err := os.Lstat(filepath.Join(worktreeRoot, indexDirName)); err == nil {
-		return &Build{Ready: true}, nil
+		return &Build{Ready: true, worktreeRoot: worktreeRoot}, nil
 	}
 	sweep(worktreeRoot)
 	dir, err := newSeedDir(worktreeRoot)
@@ -108,6 +108,11 @@ func Prepare(ctx context.Context, worktreeRoot, mainRoot string, lim Limits) (*B
 		return nil, err
 	}
 	return b, nil
+}
+
+// WorktreeRoot is the root of the worktree the index is for.
+func (b *Build) WorktreeRoot() string {
+	return b.worktreeRoot
 }
 
 // seed checkpoints mainStore into the build's directory. It returns the
