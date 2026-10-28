@@ -1,7 +1,6 @@
 package indexer
 
 import (
-	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 )
 
@@ -95,70 +94,15 @@ func (idx *symbolIndex) addSymbol(names map[string]string, name, id string) {
 	}
 }
 
-// newSymbolIndexFromStore seeds a symbolIndex from the graph already
-// committed to r, filing each node under the key overlay would give it;
-// the store holds no FileResult to read it from (Phase 4 RESEARCH Pattern
-// 1 step 10 / Pitfall 1). That key is the module the node's file declares
-// (File.declared_module_key) when it declares one, and otherwise the
-// file's ImportPath in discovered, which its language's
-// LanguageSpec.ModuleKey computed on this run. Nodes belonging to a path
-// in exclude are skipped entirely — the caller (Sync) is about to supersede
-// or has already removed those files' symbols and overlays fresh ones on
-// top, so any store-seeded entry for them would be stale. Collisions
-// discovered here route through the SAME addSymbol tie-break as overlay
-// (WR-01), so Sync's store-seeded index and a from-scratch newSymbolIndex
-// never disagree on which node id wins a same-(moduleKey, name) collision.
-//
-// goextract.KindFile and kindPackage nodes are skipped, mirroring
-// newSymbolIndex's own exclusions: a file node is never a callable
-// target, and a package pseudo-node has no declaring source to seed a
-// (name -> id) entry from in this scan (it is re-minted, not looked up,
-// by resolveRefsWithIndex's imports-ref branch).
-func newSymbolIndexFromStore(r graphstore.Reader, discovered map[string]DiscoveredFile, exclude map[string]bool) (*symbolIndex, error) {
-	idx := &symbolIndex{byModuleKeyAndName: make(map[string]map[string]string)}
-
-	declared := make(map[string]string)
-	fit, err := r.IterateFiles()
-	if err != nil {
-		return nil, err
+// add files (name -> id) under moduleKey through addSymbol, creating the
+// moduleKey bucket on first use.
+func (idx *symbolIndex) add(moduleKey, name, id string) {
+	names := idx.byModuleKeyAndName[moduleKey]
+	if names == nil {
+		names = make(map[string]string)
+		idx.byModuleKeyAndName[moduleKey] = names
 	}
-	for fit.Next() {
-		if f := fit.File(); f.GetDeclaredModuleKey() != "" {
-			declared[f.GetPath()] = f.GetDeclaredModuleKey()
-		}
-	}
-	err = fit.Err()
-	fit.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	it, err := r.IterateNodes()
-	if err != nil {
-		return nil, err
-	}
-	defer it.Close()
-
-	for it.Next() {
-		n := it.Node()
-		if n.Kind == goextract.KindFile || n.Kind == kindPackage || exclude[n.FilePath] {
-			continue
-		}
-		moduleKey, ok := declared[n.FilePath]
-		if !ok {
-			moduleKey = discovered[n.FilePath].ImportPath
-		}
-		names := idx.byModuleKeyAndName[moduleKey]
-		if names == nil {
-			names = make(map[string]string)
-			idx.byModuleKeyAndName[moduleKey] = names
-		}
-		idx.addSymbol(names, n.Name, n.Id)
-	}
-	if err := it.Err(); err != nil {
-		return nil, err
-	}
-	return idx, nil
+	idx.addSymbol(names, name, id)
 }
 
 // resolveSelector resolves a package-qualified reference (pkg.Name) using

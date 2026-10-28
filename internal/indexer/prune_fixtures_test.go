@@ -401,14 +401,13 @@ func assertFileIndexHasEdge(t *testing.T, storeDir, path, src, kind, dst string)
 }
 
 // TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile is the CR-03
-// regression: a `contains` edge whose Source (the receiver type) lives in
-// an unchanged, non-reparsed file must still be recorded under that file's
-// x/ index after an INCREMENTAL sync — not silently dropped with
-// ownerPath="" — so a later prune of the type's file can find and remove
-// it. The bug does not manifest on the seed (from-scratch) sync, since
-// writeGraph's nodeFilePath there is built from every node in the repo;
-// it only shows up once a later incremental Sync reparses only
-// pkg/methods.go and leaves pkg/types.go (where Widget lives) untouched.
+// regression: a `contains` edge from a receiver type in one file to a
+// method in another must be recorded under its owner's x/ index — the
+// method's file, whose resolution makes the edge — after the seed sync
+// and after an INCREMENTAL sync that reparses only pkg/methods.go and
+// leaves pkg/types.go (where Widget lives) untouched, never dropped with
+// ownerPath="", so a later prune of the method's file can find and
+// remove it.
 func TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile(t *testing.T) {
 	repoRoot := copyFixture(t, prunefixtureRoot)
 	storeDir := t.TempDir()
@@ -422,7 +421,7 @@ func TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile(t *testing.T) {
 	// The seed (from-scratch) sync already indexes the edge correctly —
 	// confirms the fixture and ids are set up as expected before the
 	// incremental case under test.
-	assertFileIndexHasEdge(t, storeDir, "pkg/types.go", widgetID, "contains", describeID)
+	assertFileIndexHasEdge(t, storeDir, "pkg/methods.go", widgetID, "contains", describeID)
 
 	// Edit ONLY pkg/methods.go: nodeid.NodeID hashes (kind, qualifiedName,
 	// filePath) — not source content — so this comment-only edit changes
@@ -445,16 +444,14 @@ func TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile(t *testing.T) {
 	}
 
 	// The CR-03 assertion: the edge must be indexed under its OWNER file
-	// (pkg/types.go, where Widget lives), even though pkg/types.go itself
-	// was never reparsed this cycle — proving ownerPathFor's r0 fallback
-	// resolved it instead of silently writing ownerPath="". Reuses the
-	// snapshot already open above (graphstore/Pebble allows only one open
+	// (pkg/methods.go, where Describe lives), never under ownerPath="".
+	// Reuses the snapshot already open above (graphstore/Pebble allows only one open
 	// handle per store directory at a time — assertFileIndexHasEdge's own
 	// graphstore.Open would otherwise contend with it).
 	found := false
-	xit, err := r.IterateFileIndex("pkg/types.go")
+	xit, err := r.IterateFileIndex("pkg/methods.go")
 	if err != nil {
-		t.Fatalf("IterateFileIndex(pkg/types.go): %v", err)
+		t.Fatalf("IterateFileIndex(pkg/methods.go): %v", err)
 	}
 	for xit.Next() {
 		e := xit.Entry()
@@ -464,11 +461,11 @@ func TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile(t *testing.T) {
 		}
 	}
 	if err := xit.Err(); err != nil {
-		t.Fatalf("IterateFileIndex(pkg/types.go) error: %v", err)
+		t.Fatalf("IterateFileIndex(pkg/methods.go) error: %v", err)
 	}
 	xit.Close()
 	if !found {
-		t.Fatalf("expected x/pkg/types.go index to contain edge (%s -contains-> %s) after the incremental sync, not found — CR-03 regression", widgetID, describeID)
+		t.Fatalf("expected x/pkg/methods.go index to contain edge (%s -contains-> %s) after the incremental sync, not found — CR-03 regression", widgetID, describeID)
 	}
 
 	assertNoOrphansOrDangling(t, r)

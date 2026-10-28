@@ -57,6 +57,15 @@ message Node {
   // (D-03); written by the Phase 2 goextract symbol pass.
   string return_type = 15;
 
+  // arity is a method's declared parameter count, which override and
+  // structural implements matching compare. It is 0 for every other kind.
+  int32 arity = 16;
+
+  // interface_methods lists the methods an interface declares itself, in
+  // source order, without those of interfaces it embeds. It is empty for
+  // every other kind.
+  repeated MethodSpec interface_methods = 17;
+
   // Reserved now, before any consumer exists, so a future embedding-vector
   // or community/cluster-assignment field lands at a pre-agreed number
   // instead of colliding with whatever the next organic field would be.
@@ -142,6 +151,13 @@ message File {
   // the file's path or the project descriptor, which `sync` recomputes
   // on every run.
   string declared_module_key = 10;
+}
+
+// MethodSpec is one method an interface declares: its name and declared
+// parameter count.
+message MethodSpec {
+  string name = 1;
+  int32 arity = 2;
 }
 
 // UnresolvedName is one symbol a file references but the index does not
@@ -251,6 +267,15 @@ message Meta {
   // `sync` then rebuilds it from scratch once, since without the keys it
   // files an unchanged file's symbols under the wrong module.
   bool has_declared_module_keys = 12;
+
+  // has_method_specs reports whether this graph's method and interface
+  // nodes carry arity and interface_methods, and whether a contains edge
+  // from a type to a method in another file is indexed under the
+  // method's file. Absent or false means a graph written before either:
+  // `sync` then rebuilds it from scratch once, since without them it
+  // cannot match implements and overrides across files it does not
+  // reparse, nor prune a contains edge with the file that makes it.
+  bool has_method_specs = 13;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of

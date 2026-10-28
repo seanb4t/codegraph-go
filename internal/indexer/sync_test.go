@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -862,6 +863,132 @@ func TestSyncBackfillsGraphWithoutUnresolvedNames(t *testing.T) {
 	}
 }
 
+// TestSyncKeepsEdgesThatDependOnUnchangedFiles proves Sync resolves a
+// reparsed file against what unchanged files declare, as a fresh Run
+// does: a struct's kind for an instantiation, an interface's kind for an
+// embedding, a method declared beside its type, a structural implements
+// in either direction and when it stops holding, a method override, and
+// a call that resolves through a supertype.
+func TestSyncKeepsEdgesThatDependOnUnchangedFiles(t *testing.T) {
+	const (
+		reader     = "package pkg\n\ntype Reader interface {\n\tRead(p []byte) int\n}\n"
+		readCloser = "package pkg\n\ntype Reader interface {\n\tRead(p []byte) int\n\tClose()\n}\n"
+		impl       = "package pkg\n\ntype S struct{}\n\nfunc (S) Read(p []byte) int { return 0 }\n"
+		embedder   = "package pkg\n\ntype S struct {\n\tReader\n}\n"
+		base       = "package pkg\n\ntype Base struct{}\n\nfunc (Base) Name(n int) string { return \"base\" }\n\nfunc (Base) Greet() string { return \"hi\" }\n"
+		baseNoName = "package pkg\n\ntype Base struct{}\n\nfunc (Base) Greet() string { return \"hi\" }\n"
+		overrider  = "package pkg\n\ntype Derived struct {\n\tBase\n}\n\nfunc (Derived) Name(n int) string { return \"derived\" }\n"
+		derived    = "package pkg\n\ntype Derived struct {\n\tBase\n}\n\nfunc (Derived) Name(n int) string { return \"derived\" }\n\nfunc (d Derived) Hello() string { return d.Greet() }\n"
+		typeT      = "package pkg\n\ntype T struct{}\n"
+		methodM    = "package pkg\n\nfunc (T) M() {}\n"
+	)
+	cases := []struct {
+		name  string
+		files map[string]string
+		steps []map[string]string
+	}{
+		{
+			name: "instantiates a struct in an unchanged file",
+			files: map[string]string{
+				"pkg/types.go": "package pkg\n\ntype Probe struct{}\n",
+				"pkg/use.go":   "package pkg\n\nfunc F() { _ = Probe{} }\n",
+			},
+			steps: []map[string]string{{"pkg/use.go": "package pkg\n\nfunc F() { _ = Probe{} }\n\n// edited\n"}},
+		},
+		{
+			name:  "embeds an interface in an unchanged file",
+			files: map[string]string{"pkg/reader.go": reader, "pkg/s.go": embedder},
+			steps: []map[string]string{{"pkg/s.go": embedder + "\n// edited\n"}},
+		},
+		{
+			name:  "embedded interface's file changes",
+			files: map[string]string{"pkg/reader.go": reader, "pkg/s.go": embedder},
+			steps: []map[string]string{{"pkg/reader.go": reader + "\n// edited\n"}},
+		},
+		{
+			name:  "method beside its type when the type's file changes",
+			files: map[string]string{"pkg/t.go": typeT, "pkg/m.go": methodM},
+			steps: []map[string]string{{"pkg/t.go": typeT + "\n// edited\n"}},
+		},
+		{
+			name: "method beside its type when the type's file is a dependent",
+			files: map[string]string{
+				"pkg/t.go": "package pkg\n\ntype T struct{}\n\nfunc UseHelper() { Helper() }\n",
+				"pkg/h.go": "package pkg\n\nfunc Helper() {}\n",
+				"pkg/m.go": methodM,
+			},
+			steps: []map[string]string{{"pkg/h.go": "package pkg\n\nfunc Helper() {}\n\n// edited\n"}},
+		},
+		{
+			name:  "method beside its type when the method's file changes",
+			files: map[string]string{"pkg/t.go": typeT, "pkg/m.go": methodM},
+			steps: []map[string]string{{"pkg/m.go": methodM + "\n// edited\n"}},
+		},
+		{
+			name:  "type removed while its method's file stays",
+			files: map[string]string{"pkg/t.go": typeT, "pkg/m.go": methodM},
+			steps: []map[string]string{{"pkg/t.go": "package pkg\n"}},
+		},
+		{
+			name:  "method removed from beside its type",
+			files: map[string]string{"pkg/t.go": typeT, "pkg/m.go": methodM},
+			steps: []map[string]string{{"pkg/m.go": "package pkg\n"}},
+		},
+		{
+			name:  "implements when the struct's file changes",
+			files: map[string]string{"pkg/reader.go": reader, "pkg/s.go": impl},
+			steps: []map[string]string{{"pkg/s.go": impl + "\n// edited\n"}},
+		},
+		{
+			name:  "implements persists when the interface's file changes",
+			files: map[string]string{"pkg/reader.go": reader, "pkg/s.go": impl},
+			steps: []map[string]string{{"pkg/reader.go": reader + "\n// edited\n"}},
+		},
+		{
+			name:  "implements starts holding when the interface's file changes",
+			files: map[string]string{"pkg/reader.go": readCloser, "pkg/s.go": impl},
+			steps: []map[string]string{{"pkg/reader.go": reader}},
+		},
+		{
+			name:  "implements stops holding",
+			files: map[string]string{"pkg/reader.go": reader, "pkg/s.go": impl},
+			steps: []map[string]string{{"pkg/reader.go": readCloser}},
+		},
+		{
+			name:  "override and supertype call when the derived file changes",
+			files: map[string]string{"pkg/base.go": base, "pkg/derived.go": derived},
+			steps: []map[string]string{{"pkg/derived.go": derived + "\n// edited\n"}},
+		},
+		{
+			name:  "override starts when the base file changes",
+			files: map[string]string{"pkg/base.go": baseNoName, "pkg/derived.go": overrider},
+			steps: []map[string]string{{"pkg/base.go": base}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := writeFixture(t, tc.files)
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+			seeded := crossFileEdgeCount(t, storeDir)
+			for i, step := range tc.steps {
+				for rel, src := range step {
+					writeFile(t, filepath.Join(repoRoot, rel), src)
+				}
+				if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+					t.Fatalf("Sync (step %d): %v", i+1, err)
+				}
+			}
+			freshDir := requireSyncEqualsRun(t, repoRoot, storeDir)
+			if seeded == 0 && crossFileEdgeCount(t, freshDir) == 0 {
+				t.Fatalf("neither the seeded nor the final index of this fixture has a cross-file edge, so this case proves nothing")
+			}
+		})
+	}
+}
+
 // clearMetaFlag rewrites the Meta record of the store at storeDir with
 // clear applied, as a store written by an older build has it.
 func clearMetaFlag(t *testing.T, storeDir string, clear func(*schema.Meta)) {
@@ -934,6 +1061,57 @@ func TestSyncBackfillsGraphWithoutDeclaredModuleKeys(t *testing.T) {
 		if got := f.GetDeclaredModuleKey(); got != want {
 			t.Errorf("%s declared module key = %q, want %q", path, got, want)
 		}
+	}
+}
+
+// TestSyncBackfillsGraphWithoutMethodSpecs proves a store whose Meta
+// lacks has_method_specs is rebuilt from scratch by the next Sync, which
+// records a method's arity and an interface's own methods and stamps the
+// flag.
+func TestSyncBackfillsGraphWithoutMethodSpecs(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/r.go": "package pkg\n\ntype Reader interface {\n\tRead(p []byte) int\n}\n\ntype S struct{}\n\nfunc (S) Read(p []byte) int { return 0 }\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	clearMetaFlag(t, storeDir, func(m *schema.Meta) { m.HasMethodSpecs = false })
+
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (backfill): %v", err)
+	}
+	if stats.FilesReparsed != stats.Files {
+		t.Errorf("Stats.FilesReparsed = %d, want %d (a full rebuild)", stats.FilesReparsed, stats.Files)
+	}
+
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+	meta, err := r.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if !meta.GetHasMethodSpecs() {
+		t.Error("Meta.HasMethodSpecs = false after backfill, want true")
+	}
+	method, err := r.GetNode(nodeid.NodeID(goextract.KindMethod, "S.Read", "pkg/r.go"))
+	if err != nil {
+		t.Fatalf("GetNode(S.Read): %v", err)
+	}
+	if method.GetArity() != 1 {
+		t.Errorf("S.Read arity = %d, want 1", method.GetArity())
+	}
+	iface, err := r.GetNode(nodeid.NodeID(goextract.KindInterface, "Reader", "pkg/r.go"))
+	if err != nil {
+		t.Fatalf("GetNode(Reader): %v", err)
+	}
+	var specs []string
+	for _, m := range iface.GetInterfaceMethods() {
+		specs = append(specs, fmt.Sprintf("%s/%d", m.GetName(), m.GetArity()))
+	}
+	if want := []string{"Read/1"}; !slices.Equal(specs, want) {
+		t.Errorf("Reader interface methods = %q, want %q", specs, want)
 	}
 }
 
