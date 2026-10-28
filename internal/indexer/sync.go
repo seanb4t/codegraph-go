@@ -643,6 +643,13 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() || !meta.GetHasMethodSpecs(), nil
 }
 
+// NeedsFullIndex reports whether Sync on the store at storeDir would build
+// the graph from scratch, because the store lacks a record or flag that an
+// incremental sync needs. Options.MaxChanged does not limit that build.
+func NeedsFullIndex(storeDir string) (bool, error) {
+	return needsFileIndexBackfill(storeDir)
+}
+
 // containedMethodFiles returns, sorted, the files of the methods that
 // typeID's contains edges in r0 point to.
 func containedMethodFiles(r0 graphstore.Reader, typeID string) ([]string, error) {
