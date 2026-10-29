@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -506,13 +508,28 @@ func TestResourceCountClaimsMatchSourceSets(t *testing.T) {
 // literal prefix.
 var envVarTokenRe = regexp.MustCompile(`CODEGRAPH_[A-Z0-9_]+`)
 
+// worktreeIndexEnvName turns the worktree index off in codegraph serve. It
+// is re-typed here, not imported from internal/cli, for the same reason as
+// allowlistEnvName. TestResourceEnvVarNamesAreReal checks that
+// internal/cli/serve.go defines it.
+const worktreeIndexEnvName = "CODEGRAPH_NO_WORKTREE_INDEX"
+
 // TestResourceEnvVarNamesAreReal is GUARD-01's env-var half: the only
-// environment variable resource content is permitted to name is
+// environment variables resource content is permitted to name are
 // allowlistEnvName (instructions_contract_test.go's own literal, reused
-// here rather than re-typed). The rule is deliberately absolute — a doc
-// that starts describing some other variable fails until someone decides
-// that variable is real.
+// here rather than re-typed) and worktreeIndexEnvName. The rule is
+// deliberately absolute — a doc that starts describing some other variable
+// fails until someone decides that variable is real.
 func TestResourceEnvVarNamesAreReal(t *testing.T) {
+	serveSrc, err := os.ReadFile(filepath.Join("..", "cli", "serve.go"))
+	if err != nil {
+		t.Fatalf("read internal/cli/serve.go: %v", err)
+	}
+	if !strings.Contains(string(serveSrc), `"`+worktreeIndexEnvName+`"`) {
+		t.Fatalf("internal/cli/serve.go does not define %s", worktreeIndexEnvName)
+	}
+	allowed := map[string]bool{allowlistEnvName: true, worktreeIndexEnvName: true}
+
 	entries, err := fs.ReadDir(resourcesFS, "resources")
 	if err != nil {
 		t.Fatalf("read embedded resources dir: %v", err)
@@ -526,8 +543,8 @@ func TestResourceEnvVarNamesAreReal(t *testing.T) {
 		}
 		for _, tok := range envVarTokenRe.FindAllString(string(data), -1) {
 			found++
-			if tok != allowlistEnvName {
-				t.Errorf("resources/%s names environment variable %q, which is not %s — resource content may only name the narrowing filter", entry.Name(), tok, allowlistEnvName)
+			if !allowed[tok] {
+				t.Errorf("resources/%s names environment variable %q, which is not %s or %s — resource content may only name those", entry.Name(), tok, allowlistEnvName, worktreeIndexEnvName)
 			}
 		}
 	}

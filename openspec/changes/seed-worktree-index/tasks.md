@@ -30,8 +30,8 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 6. Tool calls across the switch
 
-- [ ] 6.1 Add `TestWorktreeIndexAppearsMidSession` to `internal/mcp`: build the server on borrowed sibling-worktree roots. A `codegraph_explore` call begins with the worktree notice and does not find `OnlyHere`. Place a worktree index with `wtindex`, then the next call finds `OnlyHere`, has no notice, and `tools/list` is unchanged. No `internal/mcp` code change is expected. If one is needed, stop and update the design. Verify `go test ./internal/mcp -run TestWorktreeIndexAppearsMidSession -count=1` passes.
-- [ ] 6.2 In `internal/mcp/resources/index-state.md`, replace the worktree sentence: in a linked git worktree with no index of its own, the server makes one from the main checkout's index, and `CODEGRAPH_NO_WORKTREE_INDEX=1` makes it use the main checkout's index instead. Verify `go test ./internal/mcp -run Resource -count=1` passes, including the resource drift tests.
+- [x] 6.1 Add `TestWorktreeIndexAppearsMidSession` to `internal/mcp`: build the server on borrowed sibling-worktree roots. A `codegraph_explore` call begins with the worktree notice and does not find `OnlyHere`. Place a worktree index with `wtindex`, then the next call finds `OnlyHere`, has no notice, and `tools/list` is unchanged. No `internal/mcp` code change is expected. If one is needed, stop and update the design. Verify `go test ./internal/mcp -run TestWorktreeIndexAppearsMidSession -count=1` passes.
+- [x] 6.2 In `internal/mcp/resources/index-state.md`, replace the worktree sentence: in a linked git worktree with no index of its own, the server makes one from the main checkout's index, and `CODEGRAPH_NO_WORKTREE_INDEX=1` makes it use the main checkout's index instead. Verify `go test ./internal/mcp -run Resource -count=1` passes, including the resource drift tests.
 
 ## 7. Limits
 
