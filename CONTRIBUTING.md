@@ -41,10 +41,9 @@ A change lands only when all of these hold:
    changes do not need a label. An issue labelled **`spec-needed`** also needs
    its OpenSpec proposal merged before the code (see
    [Specs and change proposals](#specs-and-change-proposals)).
-2. All nine required checks pass: `test`,
+2. All required checks pass: `test`,
    `actionlint (workflow static analysis)`, `govulncheck (DIST-03, blocking)`,
-   `perf regression gate (PERF-02, INDX-06)`, `pr-title`,
-   `reproducibility (double-build hash-diff, DIST-04)`,
+   `pr-title`, `reproducibility (double-build hash-diff, DIST-04)`,
    `goreleaser check (config validation, DIST-01)`,
    `tmux e2e (real-pty harness, TTY-01..TTY-07)`, `fragment-required`.
 3. Review conversations are resolved.

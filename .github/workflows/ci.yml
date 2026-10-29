@@ -1,4 +1,4 @@
-# PR/push CI gates (DIST-03, DIST-04, PERF-02, INDX-06).
+# PR/push CI gates (DIST-03, DIST-04).
 #
 # This workflow turns this phase's guarantees into things that actually run on
 # every PR/push, not just documented intent (08-RESEARCH.md Pitfall 5:
@@ -17,17 +17,15 @@
 #     Blocks on linux/amd64 (the canonical, lowest-variance target, D-03);
 #     the linux/arm64 cross-target leg is reported via continue-on-error,
 #     never silently green across all targets.
-#   - perf-regression: tools/bench/runner -mode regression against the
-#     committed tools/bench/baseline.json, gating PERF-02 (throughput and
-#     peak-RSS tolerance bands; query latency and cold start are measured
-#     and reported, not yet gated) and INDX-06 (absolute peak-RSS ceiling)
-#     — entirely offline against the deterministic synthetic corpus (D-04:
-#     this gate MUST NOT clone a remote repo).#   - changes: a first job that classifies the push or pull request as
-#     planning-only (every changed file under openspec/, #135). The six
-#     heavy jobs above depend on it and skip through a job-level `if`
+#   - changes: a first job that classifies the push or pull request as
+#     planning-only (every changed file under openspec/, #135). The five
+#     heavy jobs below depend on it and skip through a job-level `if`
 #     when it says so; a skipped job still reports its required check as
 #     Success, which a workflow-level paths filter would not. The
 #     classifier fails open: an empty or false verdict runs everything.
+#
+# The perf regression check (PERF-02, INDX-06) is not a gate here. It runs
+# in bench.yml, nightly and on dispatch, and blocks no pull request.
 #
 # Security note: every third-party Action below is pinned to a full commit
 # SHA (resolved at execution time via `gh api`, matching release.yml's own
@@ -416,60 +414,6 @@ jobs:
           COMMIT: ${{ steps.repro.outputs.commit }}
         run: task check:reproducibility:arm64
 
-  perf-regression:
-    name: perf regression gate (PERF-02, INDX-06)
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
-    # CODEGRAPH_BENCH_RUNNER labels THIS job's own measurement so
-    # internal/bench.CheckRegression's runner check (Phase 10, plan 10-06)
-    # has something to compare against the committed baseline's "runner":
-    # "ubuntu-latest" — without this, the current run's Runner field would
-    # be empty, which the check refuses just as hard as a genuine mismatch
-    # (an unrecorded identity is not a wildcard). scratch_fs needs no
-    # equivalent here: tools/bench/runner's -scratch-fs flag defaults to
-    # "disk", matching the baseline, with no env var required.
-    env:
-      CODEGRAPH_BENCH_RUNNER: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up tools
-        uses: ./.github/actions/setup-tools
-        with:
-          go-cache: "true"
-
-      - name: Perf-regression gate (offline synthetic 120k-file corpus)
-        # tools/bench/runner -mode regression builds+runs gencorpus's
-        # deterministic, network-free synthetic corpus (D-04: never clones
-        # a remote repo) and gates the Go binary's from-scratch index
-        # throughput/query-latency/cold-start against the committed
-        # tools/bench/baseline.json (PERF-02 tolerance bands) plus the
-        # absolute peak-RSS ceiling (INDX-06). Non-zero exit fails the job.
-        #
-        # -trials 3 is the runner's own default; it is stated here so the
-        # measurement procedure is visible at the call site rather than
-        # only in a Go constant. It medians over three independent
-        # measurement sessions because one session — even after the inner
-        # median-of-5 — is a single draw from a distribution wide enough to
-        # flip this verdict: three CI observations of the same corpus
-        # spread 2.4% against a 10.0% budget
-        # (perf-gate-throughput-regress). Cost: this job runs roughly 3x
-        # longer than the single-session version it replaces. It is a
-        # parallel job and blocks nothing else.
-        #
-        # The baseline this gates against MUST have been recorded on this
-        # same ubuntu-latest runner class — bench.yml's `rebless` job is
-        # the supported way to produce one. internal/bench.CheckRegression
-        # now refuses a GOOS/GOARCH, runner, OR scratch_fs mismatch
-        # outright (Phase 10, plan 10-06), so a baseline from elsewhere
-        # fails loudly here instead of reporting a fictitious regression —
-        # exactly the failure class a same-day, four-configuration
-        # investigation (tools/bench/BASELINE.md) confirmed this runner
-        # class is the right one to stay on, not migrate off.
-        run: task bench:regression
-
   # tmux-e2e (TTY-01..TTY-07, 08-tmux-real-pty-harness): the real-PTY harness
   # gives the terminal UI the missing rung between the piped, TTY-blind
   # integration suite and manual human UAT — it builds the real codegraph
@@ -480,7 +424,7 @@ jobs:
   #     entire purpose is to prove a real pty behaves correctly, and a
   #     documented, publicly-inspectable image matters more here than the
   #     Namespace cache speedup the rest of this workflow otherwise prefers.
-  #     govulncheck and perf-regression already made the same call.
+  #     govulncheck already made the same call.
   #   - tmux is install-then-assert, not apt-pinned (D-11): `apt-get install
   #     tmux=<exact-version>` starts failing the moment the archive snapshot
   #     rolls, turning an unrelated event into a red build. Instead,

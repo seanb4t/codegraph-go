@@ -132,7 +132,8 @@ against from day one.
 
 ## 3. Regression gate (PERF-02, INDX-06)
 
-`.github/workflows/ci.yml`'s `perf-regression` job runs on every PR/push:
+`.github/workflows/bench.yml`'s `regression` job runs every night and on
+manual dispatch. It runs `task bench:regression`, which calls the runner:
 
 ```sh
 go run ./tools/bench/runner -mode regression \
@@ -183,7 +184,7 @@ so a reviewer can evaluate the performance delta on its own terms.
 
 **Known caveat:** the committed baseline was captured on darwin/arm64 (a
 local development machine), not on GitHub Actions' `ubuntu-latest` runner
-hardware that `ci.yml` actually gates against. `CheckRegression`'s
+hardware that the regression job runs on. `CheckRegression`'s
 tolerance bands assume a reasonably consistent measurement host between
 baseline capture and gate run; re-blessing once real CI runner hardware
 numbers are available (rather than continuing to gate CI runs against a

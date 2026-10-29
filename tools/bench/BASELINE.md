@@ -8,7 +8,7 @@ against (via `internal/bench.CheckRegression`).
 
 The committed baseline was recorded on `ubuntu-latest` (`linux/amd64`,
 `scratch_fs: disk`) by `bench.yml`'s `rebless` job (run 30758999046,
-`trials: 7`) — the same runner class the blocking gate spends it on, and
+`trials: 7`) — the same runner class the regression check spends it on, and
 the same scratch-filesystem class the gate itself uses. Both frame
 descriptors (`runner`, `scratch_fs`) are populated for the first time in
 this baseline.
