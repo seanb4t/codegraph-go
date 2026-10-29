@@ -146,10 +146,10 @@ func testServeWatchStartDeferred(t *testing.T, main string, pending *wtindex.Bui
 		cancel func()
 		done   <-chan struct{}
 	}
-	var stderr bytes.Buffer
+	stderr := newSyncWriter()
 	retCh := make(chan startResult, 1)
 	go func() {
-		cancel, done := serveWatchStart(main, true, pending, false, pending != nil, indexer.Options{Quiet: true}, &stderr, onWatchWorkStart)
+		cancel, done := serveWatchStart(main, true, pending, false, pending != nil, indexer.Options{Quiet: true}, stderr, onWatchWorkStart)
 		retCh <- startResult{cancel: cancel, done: done}
 	}()
 
@@ -173,7 +173,7 @@ func testServeWatchStartDeferred(t *testing.T, main string, pending *wtindex.Bui
 		t.Fatal("onWatchWorkStart never fired within 5s of release — serveWatchStart's goroutine did not start real work")
 	}
 	if pending != nil {
-		awaitDaemonLock(t, wt)
+		awaitDaemonLock(t, wt, stderr)
 	}
 
 	res.cancel()

@@ -272,9 +272,40 @@ func pendingWorktreeBuild(t *testing.T) (wt, indexRoot string, pending *wtindex.
 	return wt, indexRoot, pending
 }
 
+// syncWriter is an io.Writer a test can read while another goroutine
+// writes to it. Each write also signals on wrote.
+type syncWriter struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	wrote chan struct{}
+}
+
+func newSyncWriter() *syncWriter {
+	return &syncWriter{wrote: make(chan struct{}, 1)}
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	select {
+	case w.wrote <- struct{}{}:
+	default:
+	}
+	return n, err
+}
+
+func (w *syncWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
 // awaitDaemonLock waits until <root>/.codegraph/daemon.lock names this
-// process, watching the filesystem rather than polling.
-func awaitDaemonLock(t *testing.T, root string) {
+// process, watching the filesystem rather than polling. It fails at once
+// when stderr reports that the build or the watcher failed, and shows
+// stderr on every failure.
+func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 	t.Helper()
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -302,12 +333,16 @@ func awaitDaemonLock(t *testing.T, root string) {
 				return
 			}
 		}
+		if out := stderr.String(); strings.Contains(out, "could not make an index") || strings.Contains(out, "watcher:") {
+			t.Fatalf("the build or the watcher failed; stderr:\n%s", out)
+		}
 		select {
 		case <-w.Events:
+		case <-stderr.wrote:
 		case err := <-w.Errors:
-			t.Fatalf("fsnotify: %v", err)
+			t.Fatalf("fsnotify: %v; stderr:\n%s", err, stderr.String())
 		case <-timeout:
-			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s", indexDir)
+			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s", indexDir, stderr.String())
 		}
 	}
 }
@@ -318,8 +353,8 @@ func TestServeWatchStartBuildsThenWatches(t *testing.T) {
 
 	released := make(chan struct{})
 	release := sync.OnceFunc(func() { close(released) })
-	var stderr bytes.Buffer
-	cancel, done := serveWatchStart(indexRoot, true, pending, false, true, indexer.Options{Quiet: true}, &stderr, func() { <-released })
+	stderr := newSyncWriter()
+	cancel, done := serveWatchStart(indexRoot, true, pending, false, true, indexer.Options{Quiet: true}, stderr, func() { <-released })
 	defer func() {
 		release()
 		cancel()
@@ -330,7 +365,7 @@ func TestServeWatchStartBuildsThenWatches(t *testing.T) {
 	}
 	release()
 
-	awaitDaemonLock(t, wt)
+	awaitDaemonLock(t, wt, stderr)
 	if !pathExists(t, filepath.Join(wt, codegraphDirName, storeDirName)) {
 		t.Errorf("the watcher runs on the worktree, but the worktree index has no store")
 	}
