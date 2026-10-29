@@ -40,11 +40,16 @@ overrides:
 
 # Advisories accepted because this SPA build cannot reach them: +layout.ts
 # sets ssr = false and prerender = false, and the UI has no form actions,
-# no use:enhance, no setHeaders and no server files. Both are fixed only in
-# @sveltejs/kit 3; drop them when the UI moves to kit 3.
+# no use:enhance, no setHeaders and no server files. The two @sveltejs/kit
+# ones are fixed only in kit 3; drop them when the UI moves to kit 3.
 audit:
   ignore:
     # @sveltejs/kit <3: URL redirection through an enhanced form submission.
     - GHSA-pfhg-q3qv-9q6r
     # @sveltejs/kit <3: XSS through a cache-control header on a prerendered page.
     - GHSA-27mw-82g8-phjj
+    # deepmerge <=4.3.1: prototype poisoning through mergeObject(). Only
+    # @sveltejs/vite-plugin-svelte uses it, to merge this repository's own
+    # Svelte and Vite config at build time; it is not in the built UI. No
+    # deepmerge release fixes it yet; drop it when one does.
+    - GHSA-gcqx-w48m-w2h4
