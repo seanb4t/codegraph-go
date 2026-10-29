@@ -34,7 +34,7 @@ type Limits struct {
 }
 
 // DefaultLimits are the limits codegraph serve uses.
-var DefaultLimits = Limits{Foreground: 50, SeededFraction: 0.10}
+var DefaultLimits = Limits{Foreground: 50, SeededFraction: 0.15}
 
 // The reasons a Build is pending.
 const (
