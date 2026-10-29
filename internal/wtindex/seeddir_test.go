@@ -44,7 +44,11 @@ func TestSeedDirGitignoreFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newSeedDir: %v", err)
 	}
-	defer d.remove()
+	defer func() {
+		if err := d.remove(); err != nil {
+			t.Errorf("remove the seed directory: %v", err)
+		}
+	}()
 	if err := os.WriteFile(filepath.Join(d.path, "probe"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}

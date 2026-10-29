@@ -230,7 +230,11 @@ func TestServePrepareIndexReadOnlyWorktree(t *testing.T) {
 	if err := os.Chmod(wt, 0o555); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(wt, 0o755) })
+	t.Cleanup(func() {
+		if err := os.Chmod(wt, 0o755); err != nil {
+			t.Errorf("restore the worktree's mode: %v", err)
+		}
+	})
 
 	var stderr bytes.Buffer
 	indexRoot, confineRoot, hasIndex, pending, err := servePrepareIndex(context.Background(), wt, false, wtindex.DefaultLimits, &stderr)

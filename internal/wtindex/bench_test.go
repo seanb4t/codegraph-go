@@ -18,15 +18,15 @@ const (
 	benchFuncsPerFile    = 20
 )
 
-// benchChangedFiles are the changed-file counts the benchmarks measure:
-// 1%, 5%, 10% and 25% of the module's files.
+// benchChangedFiles are the numbers of changed files in the worktrees that
+// BenchmarkSeededSync and BenchmarkFullIndex index.
 var benchChangedFiles = []int{10, 50, 100, 250}
 
-// benchFile returns the source of file f in package p: about 280 lines,
-// the size of an average Go file in this repository. Each function calls a
-// function in the next file of its package and one in the next package. A
-// changed file renames its first function and calls one more function, so
-// the files that call the old name become dependents of the change.
+// benchFile returns the source of file f in package p, about 280 lines
+// long. Each function calls a function in the next file of its package and
+// one in the next package. A changed file renames its first function and
+// calls one more function, so the files that call the old name become
+// dependents of the change.
 func benchFile(p, f int, changed bool) string {
 	next := (p + 1) % benchPackages
 	var b strings.Builder

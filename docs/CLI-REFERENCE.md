@@ -833,13 +833,13 @@ starts and completes the MCP handshake, so agents fall back to their built-ins
 instead of the connection being refused. Run codegraph init to fix that — the
 tools appear on the next request, with no client restart.
 
-In a linked git worktree with no index of its own, whose main checkout has
-one, the server makes the worktree an index from the main checkout's index.
-When few files differ, the index is ready before the first request. When many
-differ, the server builds it in the background: until it is ready, tool calls
-use the main checkout's index and say so in a notice. --no-worktree-index or
-CODEGRAPH_NO_WORKTREE_INDEX=1 turns this off, and the server then uses the
-main checkout's index.
+In a linked git worktree with no index of its own, the server makes one from
+the main checkout's index. When few files differ, the index is ready before
+the first request. When many files differ, the server builds the index in the
+background. Until it is ready, tool calls use the main checkout's index, and
+each result says so in a notice. --no-worktree-index or
+CODEGRAPH_NO_WORKTREE_INDEX=1 turns this off. The server then uses the main
+checkout's index.
 
 ```
 codegraph serve [flags]

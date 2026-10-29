@@ -78,7 +78,7 @@ func sweep(root string) {
 		if err != nil {
 			continue
 		}
-		(&seedDir{path: path, lock: lock}).remove()
+		_ = (&seedDir{path: path, lock: lock}).remove()
 	}
 }
 
@@ -89,7 +89,7 @@ func sweep(root string) {
 func place(d *seedDir, root string) error {
 	target := filepath.Join(root, indexDirName)
 	if err := os.Rename(d.path, target); err != nil {
-		d.remove()
+		_ = d.remove()
 		if _, statErr := os.Lstat(target); statErr == nil {
 			return ErrIndexExists
 		}

@@ -85,7 +85,7 @@ func Prepare(ctx context.Context, worktreeRoot, mainRoot string, lim Limits) (*B
 
 	reason, err := b.seed(filepath.Join(mainRoot, indexDirName, storeDirName))
 	if err != nil {
-		dir.remove()
+		_ = dir.remove()
 		return nil, err
 	}
 	if reason != "" {
@@ -101,7 +101,7 @@ func Prepare(ctx context.Context, worktreeRoot, mainRoot string, lim Limits) (*B
 		b.Changed, b.Total = tooMany.Changed, tooMany.Total
 		return b, nil
 	case err != nil:
-		dir.remove()
+		_ = dir.remove()
 		return nil, err
 	}
 	if err := b.place(ctx); err != nil {
@@ -184,7 +184,7 @@ func (b *Build) Finish(ctx context.Context) error {
 	case err := <-done:
 		defer close(b.stopped)
 		if err != nil {
-			b.dir.remove()
+			_ = b.dir.remove()
 			return err
 		}
 		return b.place(ctx)
@@ -192,7 +192,7 @@ func (b *Build) Finish(ctx context.Context) error {
 		go func() {
 			defer close(b.stopped)
 			<-done
-			b.dir.remove()
+			_ = b.dir.remove()
 		}()
 		return ctx.Err()
 	}
@@ -216,7 +216,7 @@ func (b *Build) build() error {
 // index already at the worktree root counts as placed.
 func (b *Build) place(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		b.dir.remove()
+		_ = b.dir.remove()
 		return err
 	}
 	if err := place(b.dir, b.worktreeRoot); err != nil && !errors.Is(err, ErrIndexExists) {
