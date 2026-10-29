@@ -14,11 +14,13 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/daemon"
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
+	"github.com/seanb4t/codegraph-go/internal/wtindex"
 )
 
 // codegraphMCPToolsEnv is the operator NARROWING filter (D-08a, MCP-02): a
@@ -62,6 +64,44 @@ func serveServerPaths(start string) (indexRoot, confineRoot string, hasIndex boo
 	}
 }
 
+// codegraphNoWorktreeIndexEnv turns the worktree index off when it is set
+// to exactly "1", like the --no-worktree-index flag.
+const codegraphNoWorktreeIndexEnv = "CODEGRAPH_NO_WORKTREE_INDEX"
+
+// worktreeIndexOff reports whether the flag or the environment turns the
+// worktree index off.
+func worktreeIndexOff(flag bool) bool {
+	return flag || os.Getenv(codegraphNoWorktreeIndexEnv) == "1"
+}
+
+// servePrepareIndex resolves the server's roots as serveServerPaths does.
+// When start is in a git worktree that borrows another working tree's
+// index, and optOut is false, it first gives the worktree an index of its
+// own with wtindex.Prepare and resolves the roots again. A build that
+// Prepare leaves pending is returned for serveWatchStart to finish, and
+// the roots stay borrowed meanwhile. When Prepare fails, one stderr line
+// says why and the roots stay borrowed.
+func servePrepareIndex(ctx context.Context, start string, optOut bool, lim wtindex.Limits, stderr io.Writer) (indexRoot, confineRoot string, hasIndex bool, pending *wtindex.Build, err error) {
+	indexRoot, confineRoot, hasIndex, err = serveServerPaths(start)
+	if err != nil || !hasIndex || optOut {
+		return indexRoot, confineRoot, hasIndex, nil, err
+	}
+	m := gitmeta.DetectIndexMismatch(ctx, start, indexRoot)
+	if m == nil {
+		return indexRoot, confineRoot, hasIndex, nil, nil
+	}
+	b, prepErr := wtindex.Prepare(ctx, m.WorktreeRoot, indexRoot, lim)
+	if prepErr != nil {
+		fmt.Fprintf(stderr, "codegraph serve: could not make an index for the worktree %s, using the index in %s: %v\n", m.WorktreeRoot, indexRoot, prepErr)
+		return indexRoot, confineRoot, hasIndex, nil, nil
+	}
+	if !b.Ready {
+		return indexRoot, confineRoot, hasIndex, b, nil
+	}
+	indexRoot, confineRoot, hasIndex, err = serveServerPaths(start)
+	return indexRoot, confineRoot, hasIndex, nil, err
+}
+
 // watchRetryInterval is the base cadence (before jitter) serveWatchStart's
 // background goroutine waits between daemon.RunWithRetry's ErrLockLive
 // retries (D-14/WATCH-04) — a slow-enough cadence to avoid needlessly
@@ -90,6 +130,12 @@ const watchRetryInterval = 30 * time.Second
 // auto-sync begins on the next serve --mcp session, and the D-04a
 // stale/mtime fallback keeps staleness observable meanwhile.
 //
+// pending, when non-nil, is a worktree index that servePrepareIndex left
+// to build in the background. The goroutine finishes it before daemon.New,
+// with a stderr line when the build starts and one when the index is
+// ready, and then watches the worktree instead of repoPath. When the build
+// fails, the goroutine says why on stderr and starts no watcher.
+//
 // onWatchWorkStart, when non-nil, is invoked at the very start of the
 // goroutine's real work, before daemon.New runs — a test-only control seam
 // mirroring daemon.Daemon's onSyncStart convention (internal/daemon/daemon.go
@@ -99,6 +145,7 @@ const watchRetryInterval = 30 * time.Second
 func serveWatchStart(
 	repoPath string,
 	hasIndex bool,
+	pending *wtindex.Build,
 	noWatch bool,
 	forceWatch bool,
 	opts indexer.Options,
@@ -119,6 +166,22 @@ func serveWatchStart(
 
 		if onWatchWorkStart != nil {
 			onWatchWorkStart()
+		}
+
+		if pending != nil {
+			why := pending.Reason
+			if pending.Total > 0 {
+				why = fmt.Sprintf("%s: %d of %d files", why, pending.Changed, pending.Total)
+			}
+			fmt.Fprintf(stderr, "codegraph serve: building an index for the worktree %s in the background (%s)\n", pending.WorktreeRoot(), why)
+			if err := pending.Finish(watchCtx); err != nil {
+				if !errors.Is(err, context.Canceled) {
+					fmt.Fprintf(stderr, "codegraph serve: could not make an index for the worktree %s, using the index in %s: %v\n", pending.WorktreeRoot(), repoPath, err)
+				}
+				return
+			}
+			fmt.Fprintf(stderr, "codegraph serve: the index for the worktree %s is ready\n", pending.WorktreeRoot())
+			repoPath = pending.WorktreeRoot()
 		}
 
 		probe := watch.Probe{NoWatch: noWatch, ForceWatch: forceWatch}
@@ -182,6 +245,7 @@ func newServeCmd() *cobra.Command {
 	var mcpMode bool
 	var forceWatch bool
 	var noWatch bool
+	var noWorktreeIndex bool
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -200,7 +264,15 @@ stderr. codegraph_explore is always present and cannot be filtered out.
 A repository with no .codegraph/ index exposes zero tools; the server still
 starts and completes the MCP handshake, so agents fall back to their built-ins
 instead of the connection being refused. Run codegraph init to fix that — the
-tools appear on the next request, with no client restart.`,
+tools appear on the next request, with no client restart.
+
+In a linked git worktree with no index of its own, the server makes one from
+the main checkout's index. When few files differ, the index is ready before
+the first request. When many files differ, the server builds the index in the
+background. Until it is ready, tool calls use the main checkout's index, and
+each result says so in a notice. --no-worktree-index or
+CODEGRAPH_NO_WORKTREE_INDEX=1 turns this off. The server then uses the main
+checkout's index.`,
 		Example: `  # all eight tools (the default)
   codegraph serve --mcp
 
@@ -220,7 +292,9 @@ tools appear on the next request, with no client restart.`,
 				return err
 			}
 
-			indexRoot, confineRoot, hasIndex, err := serveServerPaths(start)
+			indexRoot, confineRoot, hasIndex, pending, err := servePrepareIndex(
+				cmd.Context(), start, worktreeIndexOff(noWorktreeIndex), wtindex.DefaultLimits, cmd.ErrOrStderr(),
+			)
 			if err != nil {
 				return err
 			}
@@ -276,7 +350,7 @@ tools appear on the next request, with no client restart.`,
 				watchStderr = present.NewLineWriter(mode.Writer(cmd.ErrOrStderr()), present.NewPalette(true), present.RoleWarning)
 			}
 			cancelWatchStart, watchStartDone := serveWatchStart(
-				indexRoot, hasIndex, noWatch, forceWatch,
+				indexRoot, hasIndex, pending, noWatch, forceWatch,
 				indexer.Options{Quiet: true}, watchStderr, nil,
 			)
 			defer func() {
@@ -316,6 +390,7 @@ tools appear on the next request, with no client restart.`,
 	cmd.Flags().BoolVar(&forceWatch, "watch", false, "Force the file watcher on, overriding the WSL2/slow-filesystem auto-off (the CLI twin of CODEGRAPH_FORCE_WATCH=1)")
 	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)")
 	cmd.MarkFlagsMutuallyExclusive("no-watch", "watch")
+	cmd.Flags().BoolVar(&noWorktreeIndex, "no-worktree-index", false, "In a linked git worktree with no index, use the main checkout's index instead of making one (the CLI twin of CODEGRAPH_NO_WORKTREE_INDEX=1)")
 
 	return cmd
 }

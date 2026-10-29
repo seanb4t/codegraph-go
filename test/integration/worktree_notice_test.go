@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -82,9 +83,11 @@ func exploreAlpha(t *testing.T, ctx context.Context, session *mcp.ClientSession)
 // TestWorktreeNoticeReachesServeMCPExplore is TEST-04's mandatory D-20
 // anchor: a real `codegraph serve --mcp` subprocess, spawned with its
 // process cwd inside a real git worktree linked at
-// .claude/worktrees/probe, must return a codegraph_explore payload
-// carrying the bare U+26A0 worktree notice — while the SAME binary, spawned
-// with cwd in the main checkout, must not. This is the exact
+// .claude/worktrees/probe with the worktree index turned off, must return a
+// codegraph_explore payload carrying the bare U+26A0 worktree notice —
+// while the SAME binary, spawned with cwd in the main checkout, must not.
+// With the worktree index on, the same worktree gets its own .codegraph/
+// and the notice goes away. This is the exact
 // cwd/argv->resolveStartPath->serveServerPaths->mcp.BuildServer wiring
 // in-process BuildServer->CallTool tests (internal/mcp/markdown_test.go)
 // structurally bypass: those tests construct a *mcp.Server directly and
@@ -111,12 +114,26 @@ func TestWorktreeNoticeReachesServeMCPExplore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	// Anchor: cwd inside the borrowed worktree — the explore payload must
-	// carry the bare notice.
-	wtClient := newServeClient(t, ctx, wt)
+	// Anchor: cwd inside the borrowed worktree, with the worktree index
+	// turned off — the explore payload must carry the bare notice.
+	wtClient := newServeClientWithEnv(t, ctx, wt, []string{"CODEGRAPH_NO_WORKTREE_INDEX=1"})
 	wtText := exploreAlpha(t, ctx, wtClient)
 	if !containsBareNoticeGlyph(wtText, glyph) {
 		t.Fatalf("worktree-cwd codegraph_explore: expected the bare worktree notice glyph %q, got: %q", glyph, wtText)
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".codegraph")); !os.IsNotExist(err) {
+		t.Fatalf("worktree index turned off, but %s/.codegraph exists (stat error %v)", wt, err)
+	}
+
+	// The worktree index on: the server gives the worktree its own index
+	// before the first request, and the notice goes away.
+	ownClient := newServeClient(t, ctx, wt)
+	ownText := exploreAlpha(t, ctx, ownClient)
+	if containsBareNoticeGlyph(ownText, glyph) {
+		t.Fatalf("worktree-cwd codegraph_explore with the worktree index on: expected NO worktree notice, got: %q", ownText)
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".codegraph", "store")); err != nil {
+		t.Fatalf("worktree index on, but %s/.codegraph/store is missing: %v", wt, err)
 	}
 
 	// Control: cwd in the main checkout (not borrowed) — no notice.

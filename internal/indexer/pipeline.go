@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"fmt"
 	"runtime"
 	"time"
 
@@ -40,6 +41,26 @@ type Options struct {
 	// which is exactly right for a genuinely fresh store (`codegraph
 	// init`, no prior store to alias against).
 	CoverageGenerationFloor int64
+
+	// MaxChanged makes Sync return *ErrTooManyChanges, before it writes
+	// anything, when more files were added, modified or deleted than it
+	// allows. Zero means no limit. Run ignores it, and so does a Sync that
+	// rebuilds a store without the file index.
+	MaxChanged int
+}
+
+// ErrTooManyChanges is the error Sync returns when more files changed than
+// Options.MaxChanged allows. The store is unchanged. Match it with
+// errors.As.
+type ErrTooManyChanges struct {
+	// Changed counts the added, modified and deleted files.
+	Changed int
+	// Total counts the files discovered in the repository.
+	Total int
+}
+
+func (e *ErrTooManyChanges) Error() string {
+	return fmt.Sprintf("indexer: %d of %d files changed, more than the sync limit allows", e.Changed, e.Total)
 }
 
 // Stats summarizes one Run invocation: how many files were discovered, how

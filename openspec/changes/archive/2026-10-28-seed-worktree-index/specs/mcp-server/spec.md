@@ -119,7 +119,7 @@ If the worktree index cannot be made, the server SHALL say why on stderr and SHA
 
 ### Requirement: Finding the index (MCP-03, AGNT-03)
 
-The server SHALL take its start directory from `--path` (`-p`) or the current directory, and SHALL resolve the index root from it as index resolution defines, after it makes a worktree index where "A linked worktree gets an index of its own" requires one. When the index is at or above the start directory, the index root SHALL also be the confinement root. When it comes from the linked-worktree fallback, the confinement root SHALL be the linked worktree's root. If no index resolves, it SHALL run with no index.
+The server SHALL take its start directory from `--path` (`-p`) or the current directory, and SHALL resolve the index root from it as index resolution defines, after it makes any worktree index. When the index is at or above the start directory, the index root SHALL also be the confinement root. When it comes from the linked-worktree fallback, the confinement root SHALL be the linked worktree's root. If no index resolves, it SHALL run with no index.
 
 #### Scenario: A subdirectory of an indexed repository
 

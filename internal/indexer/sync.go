@@ -153,6 +153,10 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	fit.Close()
 
+	if changed := len(added) + len(modified) + len(deleted); opts.MaxChanged > 0 && changed > opts.MaxChanged {
+		return Stats{}, &ErrTooManyChanges{Changed: changed, Total: len(files)}
+	}
+
 	// Phase 10 D-07: diff the c/ namespace exactly like the `deleted`
 	// diff above compares stored File records against the freshly
 	// discovered file set — upsert what is absent/changed, prune what is
@@ -637,6 +641,13 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		return false, err
 	}
 	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() || !meta.GetHasMethodSpecs(), nil
+}
+
+// NeedsFullIndex reports whether Sync on the store at storeDir would build
+// the graph from scratch, because the store lacks a record or flag that an
+// incremental sync needs. Options.MaxChanged does not limit that build.
+func NeedsFullIndex(storeDir string) (bool, error) {
+	return needsFileIndexBackfill(storeDir)
 }
 
 // containedMethodFiles returns, sorted, the files of the methods that
