@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -342,9 +344,33 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 		case err := <-w.Errors:
 			t.Fatalf("fsnotify: %v; stderr:\n%s", err, stderr.String())
 		case <-timeout:
-			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s", indexDir, stderr.String())
+			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s\n%s", indexDir, stderr.String(), daemonWaitState(indexDir))
 		}
 	}
+}
+
+// daemonWaitState describes what a failed awaitDaemonLock found: the
+// entries of indexDir, its daemon.lock if any, and the stacks of the
+// goroutines in serve, daemon, wtindex and watch.
+func daemonWaitState(indexDir string) string {
+	var b strings.Builder
+	entries, err := os.ReadDir(indexDir)
+	fmt.Fprintf(&b, "entries of %s (error %v):", indexDir, err)
+	for _, e := range entries {
+		fmt.Fprintf(&b, " %s", e.Name())
+	}
+	data, err := os.ReadFile(filepath.Join(indexDir, "daemon.lock"))
+	fmt.Fprintf(&b, "\ndaemon.lock: %q (error %v); this process: %d\n", data, err, os.Getpid())
+	buf := make([]byte, 1<<22)
+	buf = buf[:runtime.Stack(buf, true)]
+	for _, g := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(g, "internal/daemon.") || strings.Contains(g, "internal/cli.serveWatchStart") ||
+			strings.Contains(g, "internal/wtindex.") || strings.Contains(g, "internal/watch.") {
+			b.WriteString(g)
+			b.WriteString("\n\n")
+		}
+	}
+	return b.String()
 }
 
 func TestServeWatchStartBuildsThenWatches(t *testing.T) {
