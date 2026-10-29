@@ -39,10 +39,10 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 8. Integration
 
-- [ ] 8.1 Run `mise exec -- task test`, then `mise exec -- task lint`. Verify both pass, and report any failure that exists on main separately.
-- [ ] 8.2 With a binary built from the branch, in the scratch directory from 1.2: start `codegraph serve --mcp` in `wt` with an `initialize` request on stdin. Verify `wt/.codegraph/` exists before the response arrives, and `codegraph explore OnlyHere --path wt` then finds it with no notice. Then make a second worktree 30 commits back in this repository and repeat. Verify the response arrives before stderr's ready line, and the index appears after it. Remove both worktrees with `git worktree remove`.
-- [ ] 8.3 Run `openspec validate seed-worktree-index --strict`. Verify it reports the change valid.
-- [ ] 8.4 Add the changelog fragment: `mise exec -- task changie -- new --interactive=false -k Features -b "codegraph serve now gives a linked git worktree an index of its own, built from the main checkout's index, so answers match the worktree's files; set CODEGRAPH_NO_WORKTREE_INDEX=1 to keep using the main checkout's index"`. Verify `.changes/unreleased/` holds the new file.
+- [x] 8.1 Run `mise exec -- task test`, then `mise exec -- task lint`. Verify both pass, and report any failure that exists on main separately.
+- [x] 8.2 With a binary built from the branch, in the scratch directory from 1.2: start `codegraph serve --mcp` in `wt` with an `initialize` request on stdin. Verify `wt/.codegraph/` exists before the response arrives, and `codegraph explore OnlyHere --path wt` then finds it with no notice. Then make a second worktree 30 commits back in this repository and repeat. Verify the response arrives before stderr's ready line, and the index appears after it. Remove both worktrees with `git worktree remove`.
+- [x] 8.3 Run `openspec validate seed-worktree-index --strict`. Verify it reports the change valid.
+- [x] 8.4 Add the changelog fragment: `mise exec -- task changie -- new --interactive=false -k Features -b "codegraph serve now gives a linked git worktree an index of its own, built from the main checkout's index, so answers match the worktree's files; set CODEGRAPH_NO_WORKTREE_INDEX=1 to keep using the main checkout's index"`. Verify `.changes/unreleased/` holds the new file.
 
 ## Workflow follow-up
 
