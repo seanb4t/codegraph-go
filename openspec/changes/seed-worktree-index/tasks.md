@@ -35,7 +35,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 7. Limits
 
-- [ ] 7.1 Add `BenchmarkSeededSync` and `BenchmarkFullIndex` to `internal/wtindex`. They use a generated Go module of 1,000 files, with 1%, 5%, 10% and 25% of the files changed. Run them with `go test ./internal/wtindex -run '^$' -bench . -count=5`. Set `Limits.Foreground` to the largest changed-file count whose seeded sync stays under 2.5 s (the handshake budget in design.md), and `Limits.SeededFraction` to the share where a seeded sync and a full index cost the same. Put the benchmark output in the PR body. Verify the constants in `internal/wtindex` match the numbers in the PR body.
+- [x] 7.1 Add `BenchmarkSeededSync` and `BenchmarkFullIndex` to `internal/wtindex`. They use a generated Go module of 1,000 files, with 1%, 5%, 10% and 25% of the files changed. Run them with `go test ./internal/wtindex -run '^$' -bench . -count=5`. The generated files cost less to index than real ones, so the generated module never reaches the point where a seeded sync and a full index cost the same. Calibrate on this repository instead: checkpoint a fresh index of `HEAD` and sync it to worktrees at `HEAD`, `HEAD~5`, `HEAD~15` and `HEAD~30`, against a full index of each. Set `Limits.Foreground` well below the changed-file count whose seeded sync nears 2.5 s (the handshake budget in design.md), so slower machines stay inside it, and `Limits.SeededFraction` at or below the share where the two cost the same. Put both outputs in the PR body. Verify the constants in `internal/wtindex` match the numbers in the PR body.
 
 ## 8. Integration
 
