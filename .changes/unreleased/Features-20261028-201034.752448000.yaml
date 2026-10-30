@@ -1,3 +1,0 @@
-kind: Features
-body: codegraph serve now gives a linked git worktree an index of its own, built from the main checkout's index, so answers match the worktree's files; set CODEGRAPH_NO_WORKTREE_INDEX=1 to keep using the main checkout's index
-time: 2026-10-28T20:10:34.752448-04:00

@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph install and the upgrade refresh refuse to record a Go test or go run binary as the agent's command; CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 overrides
-time: 2026-10-22T17:52:20.115303-04:00

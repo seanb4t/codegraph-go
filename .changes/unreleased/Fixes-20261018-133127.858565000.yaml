@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph no longer treats the home directory as a project when ~/.codegraph exists, and the daemon registry moves from ~/.codegraph/daemons to $XDG_STATE_HOME/codegraph/daemons (default ~/.local/state/codegraph/daemons) with a one-time migration; delete a leftover ~/.codegraph/store by hand.
-time: 2026-10-18T13:31:27.858565-04:00

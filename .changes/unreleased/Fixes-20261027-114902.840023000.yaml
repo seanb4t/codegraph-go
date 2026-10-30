@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph sync, the file watcher and the daemon no longer drop the edges from an edited TypeScript, JavaScript, Java, C#, Kotlin, PHP or Swift file into files that did not change; the first sync after upgrading rebuilds the index once
-time: 2026-10-27T11:49:02.840023-04:00
