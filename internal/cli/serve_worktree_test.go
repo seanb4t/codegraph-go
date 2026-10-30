@@ -318,7 +318,6 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 		t.Fatalf("watch %s: %v", root, err)
 	}
 	indexDir := filepath.Join(root, codegraphDirName)
-	watchingIndex := false
 	start := time.Now()
 	var wakes []string
 	note := func(format string, a ...any) {
@@ -326,11 +325,13 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 	}
 	timeout := time.After(30 * time.Second)
 	for {
-		if !watchingIndex && pathExists(t, indexDir) {
+		// .codegraph appears by a rename. A watch added on that rename's
+		// first event can still receive its IN_MOVE_SELF, and fsnotify
+		// then drops the watch, so add it again whenever it is missing.
+		if pathExists(t, indexDir) && !slices.Contains(w.WatchList(), indexDir) {
 			if err := w.Add(indexDir); err != nil {
 				t.Fatalf("watch %s: %v", indexDir, err)
 			}
-			watchingIndex = true
 			note("watching %s", indexDir)
 		}
 		data, err := os.ReadFile(filepath.Join(indexDir, "daemon.lock"))
