@@ -318,16 +318,25 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 		t.Fatalf("watch %s: %v", root, err)
 	}
 	indexDir := filepath.Join(root, codegraphDirName)
-	watchingIndex := false
+	start := time.Now()
+	var wakes []string
+	note := func(format string, a ...any) {
+		wakes = append(wakes, time.Since(start).Round(time.Microsecond).String()+": "+fmt.Sprintf(format, a...))
+	}
 	timeout := time.After(30 * time.Second)
 	for {
-		if !watchingIndex && pathExists(t, indexDir) {
+		// .codegraph appears by a rename. A watch added on that rename's
+		// first event can still receive its IN_MOVE_SELF, and fsnotify
+		// then drops the watch, so add it again whenever it is missing.
+		if pathExists(t, indexDir) && !slices.Contains(w.WatchList(), indexDir) {
 			if err := w.Add(indexDir); err != nil {
 				t.Fatalf("watch %s: %v", indexDir, err)
 			}
-			watchingIndex = true
+			note("watching %s", indexDir)
 		}
-		if data, err := os.ReadFile(filepath.Join(indexDir, "daemon.lock")); err == nil {
+		data, err := os.ReadFile(filepath.Join(indexDir, "daemon.lock"))
+		note("read daemon.lock: %q, error %v", data, err)
+		if err == nil {
 			var lock struct {
 				PID int `json:"pid"`
 			}
@@ -339,33 +348,42 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 			t.Fatalf("the build or the watcher failed; stderr:\n%s", out)
 		}
 		select {
-		case <-w.Events:
+		case ev := <-w.Events:
+			note("event %v", ev)
 		case <-stderr.wrote:
+			note("stderr written")
 		case err := <-w.Errors:
 			t.Fatalf("fsnotify: %v; stderr:\n%s", err, stderr.String())
 		case <-timeout:
-			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s\n%s", indexDir, stderr.String(), daemonWaitState(indexDir))
+			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s\nwake-ups:\n%s\nwatching: %v\n%s",
+				indexDir, stderr.String(), strings.Join(wakes, "\n"), w.WatchList(), daemonWaitState(indexDir, start))
 		}
 	}
 }
 
 // daemonWaitState describes what a failed awaitDaemonLock found: the
-// entries of indexDir, its daemon.lock if any, and the stacks of the
-// goroutines in serve, daemon, wtindex and watch.
-func daemonWaitState(indexDir string) string {
+// entries of indexDir, its daemon.lock if any and when it was written
+// relative to start, and the stacks of the goroutines in serve, daemon,
+// wtindex, watch and fsnotify.
+func daemonWaitState(indexDir string, start time.Time) string {
 	var b strings.Builder
 	entries, err := os.ReadDir(indexDir)
 	fmt.Fprintf(&b, "entries of %s (error %v):", indexDir, err)
 	for _, e := range entries {
 		fmt.Fprintf(&b, " %s", e.Name())
 	}
-	data, err := os.ReadFile(filepath.Join(indexDir, "daemon.lock"))
+	lockPath := filepath.Join(indexDir, "daemon.lock")
+	data, err := os.ReadFile(lockPath)
 	fmt.Fprintf(&b, "\ndaemon.lock: %q (error %v); this process: %d\n", data, err, os.Getpid())
+	if fi, err := os.Stat(lockPath); err == nil {
+		fmt.Fprintf(&b, "daemon.lock written %v after the wait began\n", fi.ModTime().Sub(start))
+	}
 	buf := make([]byte, 1<<22)
 	buf = buf[:runtime.Stack(buf, true)]
 	for _, g := range strings.Split(string(buf), "\n\n") {
 		if strings.Contains(g, "internal/daemon.") || strings.Contains(g, "internal/cli.serveWatchStart") ||
-			strings.Contains(g, "internal/wtindex.") || strings.Contains(g, "internal/watch.") {
+			strings.Contains(g, "internal/wtindex.") || strings.Contains(g, "internal/watch.") ||
+			strings.Contains(g, "fsnotify.") || strings.Contains(g, "internal/cli.awaitDaemonLock") {
 			b.WriteString(g)
 			b.WriteString("\n\n")
 		}
