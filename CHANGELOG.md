@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.16.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.0) — 2026-10-30
+
+### Features
+
+- codegraph serve now gives a linked git worktree an index of its own, built from the main checkout's index, so answers match the worktree's files; set CODEGRAPH_NO_WORKTREE_INDEX=1 to keep using the main checkout's index
+
+### Fixes
+
+- codegraph no longer treats the home directory as a project when ~/.codegraph exists, and the daemon registry moves from ~/.codegraph/daemons to $XDG_STATE_HOME/codegraph/daemons (default ~/.local/state/codegraph/daemons) with a one-time migration; delete a leftover ~/.codegraph/store by hand.
+- A git worktree outside the main checkout now uses the main checkout's index, as a nested worktree already did, for the CLI, the MCP server and the UI; re-run codegraph install to get hook nudges that also fire in worktrees.
+- codegraph daemon no longer lists a stale record whose pid was reused by another process, prunes malformed registry files, and corroborates daemon start times on macOS
+- codegraph install and the upgrade refresh refuse to record a Go test or go run binary as the agent's command; CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 overrides
+- codegraph daemon and daemon stop warn on stderr about registry files they skip, log registry files they cannot remove and denied macOS start-time reads, and no longer treat a daemon that exits during the start-time read as running
+- `codegraph daemon stop` and the `codegraph daemon` picker no longer print "no running daemons", "no running daemon for <path>" or "nothing stopped" when listing the registry or every stop failed. They report the error, and any skipped registry files, on stderr.
+- codegraph sync, the file watcher and the daemon now add the edge to a symbol that appears after the code that uses it was synced, for example a function written after the call to it; the first sync after upgrading rebuilds the index once
+- codegraph sync, the file watcher and the daemon no longer drop the edges from an edited TypeScript, JavaScript, Java, C#, Kotlin, PHP or Swift file into files that did not change; the first sync after upgrading rebuilds the index once
+- codegraph sync, the file watcher and the daemon now keep instantiates, implements, overrides and method contains edges that depend on files a sync does not reparse, so a synced index matches a fresh one; the first sync after upgrading rebuilds the index once
+
+### Dependencies
+
+- Bump the web UI's vite to 8.3.4, clearing three launch-editor advisories (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm) against 8.2.2.
+- The release binary builds with Go 1.26.10, which fixes GO-2026-6809 in crypto/x509, and carries klauspost/compress 1.18.7 for GHSA-259r-337f-4rfw
+- Bump the web UI's vitest to 4.1.12, clearing two @vitest/mocker advisories (GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp) against 4.1.11.
+- Raise cockroachdb/pebble to v2.1.7, so codegraph builds from source with Go 1.27.
+
 ## [v0.15.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.15.0) — 2026-10-17
 
 ### Breaking
