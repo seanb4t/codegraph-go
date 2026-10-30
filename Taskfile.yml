@@ -2928,6 +2928,14 @@ tasks:
 
         GORELEASER_BIN="$(command -v goreleaser)"
 
+        # Keep zig's caches out of the read-only module cache, as
+        # release:dry-run explains. mlugg/setup-zig exported these until
+        # #183 moved zig to mise, and the v0.16.0 release failed without them.
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        trap 'rm -rf "${ZIG_CACHE_ROOT}"' EXIT
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
         # No GOOS/GOARCH set here: unlike `build --single-target`,
         # `goreleaser release` resolves every target from each builds:
         # entry's own goos:/goarch: list, not from the environment. A
@@ -5988,6 +5996,12 @@ tasks:
         COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
         DATE=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
         LDFLAGS="-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=ci-repro -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}"
+        # Keep zig's caches out of the read-only module cache, as
+        # release:dry-run explains.
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        trap 'rm -rf "${ZIG_CACHE_ROOT}"' EXIT
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
         build() {
           CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
             CC="zig cc -target aarch64-linux-gnu" \
