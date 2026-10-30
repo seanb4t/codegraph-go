@@ -891,9 +891,8 @@ var zigTasksKnown = []string{"release:goreleaser", "release:dry-run", "check:rep
 // TestZigTasksRedirectZigCache asserts that every task which requires zig on
 // PATH exports ZIG_LOCAL_CACHE_DIR. Without it, zig cc puts its local cache
 // next to the nearest build.zig, which for the tree-sitter grammars is inside
-// Go's read-only module cache, and the build fails with AccessDenied. The
-// v0.16.0 release failed this way after #183 removed mlugg/setup-zig, which
-// had exported the variable for every job.
+// Go's read-only module cache, and the build fails with AccessDenied. CI sets
+// no zig cache variables, so each task must set its own.
 func TestZigTasksRedirectZigCache(t *testing.T) {
 	data, err := os.ReadFile(taskfilePath)
 	if err != nil {

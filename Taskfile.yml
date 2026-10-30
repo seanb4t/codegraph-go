@@ -2929,8 +2929,7 @@ tasks:
         GORELEASER_BIN="$(command -v goreleaser)"
 
         # Keep zig's caches out of the read-only module cache, as
-        # release:dry-run explains. mlugg/setup-zig exported these until
-        # #183 moved zig to mise, and the v0.16.0 release failed without them.
+        # release:dry-run explains. Nothing else in CI sets these.
         ZIG_CACHE_ROOT="$(mktemp -d)"
         trap 'rm -rf "${ZIG_CACHE_ROOT}"' EXIT
         export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
