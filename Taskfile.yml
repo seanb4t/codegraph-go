@@ -6009,7 +6009,7 @@ tasks:
   bench:regression:
     desc: >-
       Local invocation of the PERF-02/INDX-06 regression gate (D-14) —
-      wraps ci.yml's perf-regression job's invocation verbatim. This gate
+      wraps bench.yml's nightly regression job's invocation verbatim. This gate
       is deliberately unrunnable as a REAL check on a developer machine:
       internal/bench.CheckRegression refuses any comparison whose
       GOOS/GOARCH, runner, or scratch_fs identity doesn't match the

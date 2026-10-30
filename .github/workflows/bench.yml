@@ -1,20 +1,22 @@
-# On-demand/scheduled benchmark workflow. Two dispatchable jobs, neither of
+# On-demand/scheduled benchmark workflow. Three dispatchable jobs, none of
 # which ever blocks a merge:
 #
-#   - publish:  publishes absolute Go throughput / query-latency / peak-RSS
-#               numbers, measuring only the freshly-built Go binary
-#               (BENCH-01/BENCH-03).
+#   - publish:    publishes absolute Go throughput / query-latency / peak-RSS
+#                 numbers, measuring only the freshly-built Go binary
+#                 (BENCH-01/BENCH-03).
+#   - regression: the perf regression check (PERF-02, INDX-06): `task
+#                 bench:regression` against the committed
+#                 tools/bench/baseline.json, nightly and on dispatch.
 #   - rebless:    records a CANDIDATE tools/bench/baseline.json for the
-#                 blocking perf gate, on the same runner class that gate
-#                 executes on. It never writes to the repository — it
-#                 publishes the number for a human to review and commit.
+#                 regression job, on the same runner class that job runs
+#                 on. It never writes to the repository — it publishes the
+#                 number for a human to review and commit.
 #
-# This workflow is deliberately NOT triggered on pull_request/push (see
-# ci.yml for the blocking perf-regression gate, which runs the offline
-# synthetic corpus instead). Docs/BENCHMARKS.md (Plan 08-09) is refreshed
-# from the publish job's output.
+# This workflow is deliberately NOT triggered on pull_request/push.
+# Docs/BENCHMARKS.md (Plan 08-09) is refreshed from the publish job's
+# output.
 #
-# Why the rebless job has to run on the SAME runner class as the gate
+# Why the rebless job has to run on the SAME runner class as the regression job
 # (perf-gate-throughput-regress): throughput from this harness is dominated
 # by hardware class, not just GOOS/GOARCH. Measured on one physical Apple
 # Silicon machine, synthetic corpus, identical code — darwin/arm64 native
@@ -24,7 +26,7 @@
 # reblessed on a maintainer's Linux box satisfies internal/bench's
 # GOOS/GOARCH guard and is still a meaningless yardstick for the gate.
 #
-# rebless runs on ubuntu-latest, matching ci.yml's perf-regression gate
+# rebless runs on ubuntu-latest, matching the regression job below
 # (10-04-PLAN RESOLUTION): a full same-day, same-methodology investigation
 # considered moving both rebless and the gate to a Namespace profile, and
 # found every alternative configuration measured WORSE session-to-session
@@ -70,6 +72,7 @@ on:
         default: publish
         options:
           - publish
+          - regression
           - rebless
           - both
           - cpu-diag
@@ -84,11 +87,12 @@ on:
           - "5"
           - "7"
   schedule:
-    # Weekly, Monday 06:00 UTC. Scheduled runs are advisory/publishing only
-    # — they never gate a PR or push (see ci.yml for the blocking gate), and
-    # they never run the rebless job: recording a baseline is an act of
-    # judgement, not something a cron should decide to do.
+    # Weekly, Monday 06:00 UTC: publish. Nightly, 05:00 UTC: regression.
+    # Each job names its own cron in its `if:`. Scheduled runs never gate a
+    # PR or push, and they never run the rebless job: recording a baseline
+    # is an act of judgement, not something a cron should decide to do.
     - cron: "0 6 * * 1"
+    - cron: "0 5 * * *"
 
 permissions:
   contents: read
@@ -97,7 +101,7 @@ jobs:
   publish:
     name: benchmark publish (BENCH-01/BENCH-03, non-blocking)
     runs-on: namespace-profile-linux-amd64-4x8
-    if: github.event_name == 'schedule' || inputs.job == 'publish' || inputs.job == 'both'
+    if: (github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1') || inputs.job == 'publish' || inputs.job == 'both'
     env:
       CODEGRAPH_BENCH_RUNNER: namespace-profile-linux-amd64-4x8
     steps:
@@ -121,9 +125,9 @@ jobs:
         # Measures ONLY the freshly-built Go binary over
         # tools/bench/realcorpus's pinned real-repo manifest (weft-go,
         # cockroachdb/pebble), producing absolute per-repo Metrics JSON.
-        # This step publishes and never gates: the blocking gate is
-        # ci.yml's perf-regression job running CheckRegression against the
-        # committed tools/bench/baseline.json. A slower number here must
+        # This step publishes and never gates: the regression job below
+        # runs CheckRegression against the committed
+        # tools/bench/baseline.json. A slower number here must
         # never fail this workflow — only a genuinely broken measurement
         # does. publish mode has no baseline-overwriting flag at all, so
         # the D-13/D-01 no-Taskfile-wrapping exception documented above the
@@ -151,6 +155,57 @@ jobs:
           name: publish-results
           path: publish-results.json
           if-no-files-found: error
+
+  regression:
+    name: perf regression check (PERF-02, INDX-06, nightly, non-blocking)
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'schedule' && github.event.schedule == '0 5 * * *') || inputs.job == 'regression'
+    # CODEGRAPH_BENCH_RUNNER labels THIS job's own measurement so
+    # internal/bench.CheckRegression's runner check (Phase 10, plan 10-06)
+    # has something to compare against the committed baseline's "runner":
+    # "ubuntu-latest" — without this, the current run's Runner field would
+    # be empty, which the check refuses just as hard as a genuine mismatch
+    # (an unrecorded identity is not a wildcard). scratch_fs needs no
+    # equivalent here: tools/bench/runner's -scratch-fs flag defaults to
+    # "disk", matching the baseline, with no env var required.
+    env:
+      CODEGRAPH_BENCH_RUNNER: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+        with:
+          go-cache: "true"
+
+      - name: Perf-regression gate (offline synthetic 120k-file corpus)
+        # tools/bench/runner -mode regression builds+runs gencorpus's
+        # deterministic, network-free synthetic corpus (D-04: never clones
+        # a remote repo) and gates the Go binary's from-scratch index
+        # throughput/query-latency/cold-start against the committed
+        # tools/bench/baseline.json (PERF-02 tolerance bands) plus the
+        # absolute peak-RSS ceiling (INDX-06). Non-zero exit fails the job.
+        #
+        # -trials 3 is the runner's own default; it is stated here so the
+        # measurement procedure is visible at the call site rather than
+        # only in a Go constant. It medians over three independent
+        # measurement sessions because one session — even after the inner
+        # median-of-5 — is a single draw from a distribution wide enough to
+        # flip this verdict. Runs of the same code on different
+        # ubuntu-latest machines still land further apart than the 10.0%
+        # budget, so this check runs here and gates no pull request.
+        #
+        # The baseline this gates against MUST have been recorded on this
+        # same ubuntu-latest runner class — bench.yml's `rebless` job is
+        # the supported way to produce one. internal/bench.CheckRegression
+        # now refuses a GOOS/GOARCH, runner, OR scratch_fs mismatch
+        # outright (Phase 10, plan 10-06), so a baseline from elsewhere
+        # fails loudly here instead of reporting a fictitious regression —
+        # exactly the failure class a same-day, four-configuration
+        # investigation (tools/bench/BASELINE.md) confirmed this runner
+        # class is the right one to stay on, not migrate off.
+        run: task bench:regression
 
   # D-13 / D-01 EXCEPTION, documented here on purpose: this job's three
   # `go run ./tools/bench/runner` invocations (this file only) are NOT

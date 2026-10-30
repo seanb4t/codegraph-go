@@ -521,7 +521,7 @@ the PR-title conventional-commit lint. What shipped is a dedicated
 `pull_request` trigger uses GitHub's default event types, which exclude
 `edited` — a contributor fixing only a bad title would get no re-run
 there. Widening `ci.yml`'s trigger to include `edited` would also re-run
-its heavy reproducibility and perf-regression jobs on every title or
+its heavy reproducibility job on every title or
 description edit, not just code changes. The lint's substance (a blocking
 gate, hand-written `grep -E`, title bound via `env:`) is unchanged — only
 its file location diverged.
