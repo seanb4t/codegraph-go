@@ -883,6 +883,43 @@ func TestTaskfileGatesFailLoud_EmptyFileIsError(t *testing.T) {
 	}
 }
 
+// zigTasksKnown are tasks known to run zig cc. TestZigTasksRedirectZigCache
+// must find each one by its zig precondition, so the guard cannot pass over
+// an empty set when that anchor stops matching.
+var zigTasksKnown = []string{"release:goreleaser", "release:dry-run", "check:reproducibility:arm64"}
+
+// TestZigTasksRedirectZigCache asserts that every task which requires zig on
+// PATH exports ZIG_LOCAL_CACHE_DIR. Without it, zig cc puts its local cache
+// next to the nearest build.zig, which for the tree-sitter grammars is inside
+// Go's read-only module cache, and the build fails with AccessDenied. CI sets
+// no zig cache variables, so each task must set its own.
+func TestZigTasksRedirectZigCache(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(data))
+
+	zigPreconditionRe := regexp.MustCompile(`(?m)^\s*-\s*sh:\s*command -v zig\s*$`)
+	cacheExportRe := regexp.MustCompile(`(?m)^\s*export ZIG_LOCAL_CACHE_DIR=\S`)
+
+	var found []string
+	for name, block := range blocks {
+		if !zigPreconditionRe.MatchString(block) {
+			continue
+		}
+		found = append(found, name)
+		if !cacheExportRe.MatchString(block) {
+			t.Errorf("task %q requires zig but does not export ZIG_LOCAL_CACHE_DIR; zig cc would try to write .zig-cache inside the read-only Go module cache (see release:dry-run)", name)
+		}
+	}
+	for _, want := range zigTasksKnown {
+		if !slices.Contains(found, want) {
+			t.Errorf("task %q was not found by its `command -v zig` precondition; the guard's anchor no longer matches, so it checks nothing", want)
+		}
+	}
+}
+
 // TestTaskfileWrapperIsSerial is the D-10 wrapper guard: the `test`
 // wrapper task must declare no deps: key (go-task runs deps: entries
 // concurrently, which would reintroduce exactly the cross-test contention
