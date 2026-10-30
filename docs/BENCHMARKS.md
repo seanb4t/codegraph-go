@@ -114,21 +114,24 @@ production scale (see `tools/bench/BASELINE.md` for full provenance):
 {
   "subject": "go",
   "repo": "synthetic-seed42-count120000",
-  "goos": "darwin",
-  "goarch": "arm64",
-  "files_per_sec": 12816.38,
-  "bytes_per_sec": 1941331.36,
-  "query_latency_median_ms": 137.572,
-  "peak_rss_bytes": 842350592,
-  "cold_start_ms": 11.147
+  "goos": "linux",
+  "goarch": "amd64",
+  "runner": "ubuntu-latest",
+  "scratch_fs": "disk",
+  "median_of_trials": 7,
+  "files_per_sec": 17090.87527197409,
+  "bytes_per_sec": 2588799.9585264884,
+  "query_latency_median_ms": 258.199,
+  "peak_rss_bytes": 845950976,
+  "cold_start_ms": 12.708
 }
 ```
 
 This is a from-scratch `index --force` of a deterministic, network-free,
-120,000-file synthetic corpus (captured on darwin/arm64) — ~803 MiB peak
-RSS, comfortably under the regression gate's absolute ceiling (§3 below).
-It exists purely to give the CI regression gate something real to compare
-against from day one.
+120,000-file synthetic corpus. `bench.yml`'s `rebless` job recorded it on
+`ubuntu-latest`, the runner class that the regression job also runs on.
+Its peak RSS is about 807 MiB, well under the regression check's absolute
+ceiling (§3 below).
 
 ## 3. Regression gate (PERF-02, INDX-06)
 
@@ -168,25 +171,21 @@ measured metrics, to stderr.
 
 ### Re-blessing the baseline (explicit, human-invoked only)
 
-`tools/bench/baseline.json` is **only ever** overwritten by `-rebless` —
-never as a side effect of a normal gating run:
+Only `-rebless` writes `tools/bench/baseline.json`. A normal run of the
+check never changes it. Re-bless only to accept a new normal on purpose,
+for example after a real, expected performance change to the indexer.
 
-```sh
-go run ./tools/bench/runner -mode regression \
-  -seed 42 -count 120000 -rebless -baseline tools/bench/baseline.json
-```
+Record the new baseline with `bench.yml`'s `rebless` job (Actions → bench
+→ Run workflow, `job: rebless`), not on your own machine. The job runs on
+`ubuntu-latest`, the runner class of the regression job, and uploads a
+`baseline-candidate` artifact. Commit that file as
+`tools/bench/baseline.json` in its own PR, apart from any feature or fix,
+so that a reviewer can judge the performance change alone.
+`tools/bench/BASELINE.md` gives the full procedure.
 
-Use this only to *intentionally* accept a new normal (e.g. after a real,
-expected performance change to the indexer). Review the resulting
-`baseline.json` diff in its own dedicated PR, isolated from any unrelated
-code change — never bundle a re-bless with a feature or bugfix commit,
-so a reviewer can evaluate the performance delta on its own terms.
-
-**Known caveat:** the committed baseline was captured on darwin/arm64 (a
-local development machine), not on GitHub Actions' `ubuntu-latest` runner
-hardware that the regression job runs on. `CheckRegression`'s
-tolerance bands assume a reasonably consistent measurement host between
-baseline capture and gate run; re-blessing once real CI runner hardware
-numbers are available (rather than continuing to gate CI runs against a
-different machine's baseline) is recommended before treating small
-regressions on CI as meaningful.
+The baseline and the runner must match. `CheckRegression` refuses to
+compare a run whose `GOOS`/`GOARCH` differs from the baseline's. For that
+reason, the check does not run on a macOS development machine. Throughput on
+`ubuntu-latest` also varies from one runner to the next by more than the
+10% budget. That variance is why the check runs nightly and blocks no
+pull request.
