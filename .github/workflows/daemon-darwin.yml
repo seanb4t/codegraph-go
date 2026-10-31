@@ -41,4 +41,4 @@ jobs:
         run: task test:daemon
 
       - name: Test internal/watch (FSEvents backend, -count=1)
-        run: go test ./internal/watch/ -count=1
+        run: task test:watch

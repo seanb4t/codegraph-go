@@ -287,6 +287,13 @@ tasks:
     cmds:
       - go test ./internal/daemon/ -count=1
 
+  test:watch:
+    desc: >-
+      internal/watch alone (-count=1). The daemon darwin workflow runs it on
+      macOS, where the FSEvents backend and its tests build.
+    cmds:
+      - go test ./internal/watch/ -count=1
+
   test:race:
     desc: >-
       Concurrency packages under the race detector. -p 1 preserves the same
