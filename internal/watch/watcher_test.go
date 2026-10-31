@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
 // waitFlush blocks until a flush arrives on ch or timeout elapses, failing
@@ -79,6 +81,49 @@ func TestWatcherRecursiveAdd(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// TestAddCreatedDirSkipsExcludedDirs covers the Create-event path: a
+// directory that ShouldSkipDir excludes and that appears after Open (a
+// .venv/ made by `uv sync` in a new worktree) must stay out of the watch
+// set, together with everything below it. An ordinary new directory must
+// still enter it.
+func TestAddCreatedDirSkipsExcludedDirs(t *testing.T) {
+	root := t.TempDir()
+	w, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer w.Close()
+
+	venvLib := filepath.Join(root, ".venv", "lib")
+	plainSub := filepath.Join(root, "pkg", "sub")
+	for _, d := range []string{venvLib, plainSub} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", d, err)
+		}
+	}
+
+	for _, d := range []string{filepath.Join(root, ".venv"), filepath.Join(root, "pkg")} {
+		if err := addCreatedDir(w.fsw, d, indexer.ShouldSkipDir); err != nil {
+			t.Fatalf("addCreatedDir %s: %v", d, err)
+		}
+	}
+
+	watched := make(map[string]bool)
+	for _, p := range w.fsw.WatchList() {
+		watched[p] = true
+	}
+	for _, want := range []string{filepath.Join(root, "pkg"), plainSub} {
+		if !watched[want] {
+			t.Errorf("%s not watched after addCreatedDir; watch list: %v", want, w.fsw.WatchList())
+		}
+	}
+	for _, unwanted := range []string{filepath.Join(root, ".venv"), venvLib} {
+		if watched[unwanted] {
+			t.Errorf("%s watched, but ShouldSkipDir excludes .venv", unwanted)
+		}
+	}
 }
 
 // TestWatcherErrorsDrained proves an internal fsnotify error does not

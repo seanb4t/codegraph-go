@@ -71,6 +71,23 @@ func addRecursive(w *fsnotify.Watcher, root string, skip func(name string) bool)
 	})
 }
 
+// addCreatedDir watches a directory that appeared after Open. addRecursive
+// never applies skip to its own root, so the created directory's name is
+// checked here first: without that check, a new .venv/ or node_modules/
+// sibling of a watched directory is walked in full, and kqueue holds one
+// file descriptor for every file in it. A path that is not a directory is
+// ignored.
+func addCreatedDir(w *fsnotify.Watcher, path string, skip func(name string) bool) error {
+	if skip(filepath.Base(path)) {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	return addRecursive(w, path, skip)
+}
+
 // Run consumes fsnotify events until ctx is cancelled, feeding each
 // changed path into deb so a burst coalesces into one debounced flush
 // (Pattern 3). Run returns (and stops deb's pending timer) once ctx is
@@ -97,10 +114,8 @@ func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *Debouncer) {
 				return
 			}
 			if ev.Has(fsnotify.Create) {
-				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
-					if err := addRecursive(w, ev.Name, indexer.ShouldSkipDir); err != nil {
-						log.Printf("watch: adding new directory %s: %v", ev.Name, err)
-					}
+				if err := addCreatedDir(w, ev.Name, indexer.ShouldSkipDir); err != nil {
+					log.Printf("watch: adding new directory %s: %v", ev.Name, err)
 				}
 			}
 			deb.Add(ev.Name)
