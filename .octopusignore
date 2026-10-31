@@ -18,3 +18,7 @@ web/src/lib/gen/
 # Lockfiles that `mise lock` writes
 mise.lock
 .mise/locks/
+
+# Frozen corpus goldens that `task golden:regen` writes and `task
+# test:golden` checks byte for byte. GitHub sends no patch for a large one.
+testdata/golden/corpus/
