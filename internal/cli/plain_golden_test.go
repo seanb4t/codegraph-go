@@ -60,6 +60,11 @@ var (
 	uiPortRegexp   = regexp.MustCompile(`http://127\.0\.0\.1:\d+`)
 )
 
+// maskDBSize replaces the value on the status DB Size line with <SIZE>.
+func maskDBSize(s string) string {
+	return dbSizeRegexp.ReplaceAllString(s, "DB Size:${1}<SIZE> MB")
+}
+
 // normalizeDir returns a normalizer that replaces every literal occurrence
 // of dir with placeholder — the fixture/home/project path substitution
 // every case that touches a temp directory needs.
@@ -220,7 +225,7 @@ func plainCases(_ *testing.T) []plainCase {
 				args: []string{"status", "-p", dir},
 				normalize: composeNormalize(
 					normalizeDir(dir, "<FIXTURE>"),
-					func(s string) string { return dbSizeRegexp.ReplaceAllString(s, "DB Size:${1}<SIZE> MB") },
+					maskDBSize,
 				),
 			}
 		}},
