@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.16.2](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.2) — 2026-10-31
+
+### Fixes
+
+- Index every variable that a grouped `var ( ... )` block declares in Go code. The next `codegraph sync` rebuilds an older index once to add them.
+
 ## [v0.16.1](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.1) — 2026-10-30
 
 ### Fixes
