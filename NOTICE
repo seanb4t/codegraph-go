@@ -37,8 +37,10 @@ inspect the exact dependency set compiled into a given release:
 Notable components:
 
 - **tree-sitter** and its per-language grammars (MIT) — parsing. This is the
-  project's one CGo dependency; the rationale is recorded in
+  project's main CGo dependency; the rationale is recorded in
   `PARSER-DECISION.md`.
+- **fsnotify/fsevents** (BSD-3-Clause) — the macOS file watcher, through
+  Apple's FSEvents API. It uses CGo and is linked only into macOS builds.
 - **CockroachDB Pebble** (BSD-3-Clause) — the embedded graph store.
 - **modelcontextprotocol/go-sdk** (Apache-2.0) — MCP server transport and tool registration.
 - **spf13/cobra** (Apache-2.0) — CLI framework.

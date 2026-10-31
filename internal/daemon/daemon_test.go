@@ -705,9 +705,9 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 	}
 	waitForLock(t, codegraphDir)
 
-	// Close the event stream out from under the running watch loop —
-	// fsnotify closes Events/Errors, watchLoop returns with ctx still
-	// alive: the exact abnormal teardown ErrWatcherClosed exists for.
+	// Close the event stream out from under the running watch loop — the
+	// watch loop returns with ctx still alive: the exact abnormal teardown
+	// ErrWatcherClosed exists for.
 	if err := w.Close(); err != nil {
 		t.Fatalf("closing the watcher out from under Run: %v", err)
 	}

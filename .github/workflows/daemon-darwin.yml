@@ -15,6 +15,7 @@ on:
   pull_request:
     paths:
       - "internal/daemon/**"
+      - "internal/watch/**"
       - ".github/workflows/daemon-darwin.yml"
       - "go.mod"
       - "go.sum"
@@ -38,3 +39,6 @@ jobs:
 
       - name: Test internal/daemon (isolated, -count=1)
         run: task test:daemon
+
+      - name: Test internal/watch (FSEvents backend, -count=1)
+        run: go test ./internal/watch/ -count=1

@@ -6,7 +6,8 @@ context: |
 
   Constraints an agent cannot infer from the code:
   - One static binary per platform. CGo is allowed only for the tree-sitter parser
-    (see PARSER-DECISION.md). No bundled runtime, ever.
+    (see PARSER-DECISION.md) and for macOS system frameworks (the FSEvents file
+    watcher, issue #227). No bundled runtime, ever.
   - Dependencies stay minimal and audited. Releases are signed, attested, reproducible
     and ship SBOMs; changes that touch the release pipeline must keep all four.
   - Platforms: macOS and Linux. Windows only through WSL2; native Windows was dropped.

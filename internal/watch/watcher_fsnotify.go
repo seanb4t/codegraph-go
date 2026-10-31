@@ -1,14 +1,9 @@
-// Package watch implements SYNC-01: a native, debounced filesystem watcher
-// built on github.com/fsnotify/fsnotify (D-04) — the mandated cross-platform
-// primitive; no polling default. fsnotify does not recurse on its own, so
-// Watcher walks the tree at Open time and re-adds any newly-created
-// directory on a Create event. A burst of events is coalesced by a
-// Debouncer (see debounce.go) into one flush call over the union of
-// changed paths.
-//
-// internal/watch depends only on internal/indexer's exported ShouldSkipDir
-// predicate — never on internal/graphstore or pebble directly (D-04a
-// archtest boundary; this package has no storage concerns of its own).
+//go:build !darwin
+
+// This backend uses github.com/fsnotify/fsnotify (inotify on Linux).
+// fsnotify does not recurse on its own, so Watcher walks the tree at Open
+// time and re-adds any newly-created directory on a Create event.
+
 package watch
 
 import (
