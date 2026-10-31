@@ -173,9 +173,10 @@ func TestResolveColorMatrix(t *testing.T) {
 
 // TestColorFlagInvalidValue covers D-11's usage-error contract:
 // --color=bogus and --color= (empty) are both rejected naming all three
-// accepted values, and --color=never produces byte-identical output to
-// the bare (flagless) invocation — execCmd's bytes.Buffer stdout is never
-// a TTY, so the plain path is already selected without the flag.
+// accepted values, and --color=never produces output identical to the bare
+// (flagless) invocation apart from the DB Size value — execCmd's
+// bytes.Buffer stdout is never a TTY, so the plain path is already
+// selected without the flag.
 func TestColorFlagInvalidValue(t *testing.T) {
 	dir := setupIndexedFixture(t)
 
@@ -201,8 +202,18 @@ func TestColorFlagInvalidValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execCmd(status -p %s --color=never): unexpected error: %v", dir, err)
 	}
-	if neverOut != bareOut {
-		t.Errorf("status --color=never output differs from the bare (no-flag) plain output:\n--- bare ---\n%s\n--- never ---\n%s", bareOut, neverOut)
+	// The bare output is the plain reference for the comparison below.
+	if strings.Contains(bareOut, "\x1b") {
+		t.Fatalf("bare status output is styled, want the plain reference: %q", bareOut)
+	}
+	// DB Size is pebble's on-disk size, which can change between the two runs.
+	// The count is checked on the bare output only: a never output without
+	// the line then fails the comparison below, not this check.
+	if n := len(dbSizeRegexp.FindAllStringIndex(bareOut, -1)); n != 1 {
+		t.Fatalf("bare status output has %d DB Size lines, want 1:\n%q", n, bareOut)
+	}
+	if bare, never := maskDBSize(bareOut), maskDBSize(neverOut); never != bare {
+		t.Errorf("status --color=never output differs from the bare (no-flag) plain output, DB Size masked: %s", diffLines(bare, never))
 	}
 }
 
