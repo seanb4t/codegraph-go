@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.16.3](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.3) — 2026-10-31
+
+### Fixes
+
+- The file watcher no longer watches a skipped directory, such as .venv or node_modules, that appears after the watcher starts. On macOS each watched file used one file descriptor, so a new .venv could hold tens of thousands of them.
+
 ## [v0.16.2](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.2) — 2026-10-31
 
 ### Fixes
