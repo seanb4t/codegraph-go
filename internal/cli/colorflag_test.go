@@ -202,6 +202,10 @@ func TestColorFlagInvalidValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execCmd(status -p %s --color=never): unexpected error: %v", dir, err)
 	}
+	// The bare output is the plain reference for the comparison below.
+	if strings.Contains(bareOut, "\x1b") {
+		t.Fatalf("bare status output is styled, want the plain reference: %q", bareOut)
+	}
 	// DB Size is pebble's on-disk size, which can change between the two runs.
 	// The count is checked on the bare output only: a never output without
 	// the line then fails the comparison below, not this check.
@@ -209,7 +213,7 @@ func TestColorFlagInvalidValue(t *testing.T) {
 		t.Fatalf("bare status output has %d DB Size lines, want 1:\n%q", n, bareOut)
 	}
 	if bare, never := maskDBSize(bareOut), maskDBSize(neverOut); never != bare {
-		t.Errorf("status --color=never output differs from the bare (no-flag) plain output, DB Size masked:\n--- bare ---\n%q\n--- never ---\n%q", bare, never)
+		t.Errorf("status --color=never output differs from the bare (no-flag) plain output, DB Size masked: %s", diffLines(bare, never))
 	}
 }
 
