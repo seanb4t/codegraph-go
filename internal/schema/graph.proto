@@ -277,6 +277,13 @@ message Meta {
   // reparse, nor prune a contains edge with the file that makes it.
   bool has_method_specs = 13;
 
+  // has_grouped_vars reports whether this graph holds a node for every
+  // variable that a grouped `var ( ... )` block declares in a Go file.
+  // Absent or false means a graph written before the Go extractor read
+  // those blocks: `sync` then rebuilds it from scratch once, since it
+  // does not reparse the unchanged files that lack the nodes.
+  bool has_grouped_vars = 14;
+
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of
   // colliding with whatever the next organic field would be — mirroring

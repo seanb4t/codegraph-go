@@ -167,6 +167,56 @@ func TestExtract_NodeKinds(t *testing.T) {
 	}
 }
 
+// TestExtract_GroupedConstVarBlocks proves each name a grouped var block,
+// a grouped const block or a single var declares gets exactly one node.
+func TestExtract_GroupedConstVarBlocks(t *testing.T) {
+	src := `package p
+
+var (
+	errA = 1
+	errB, errC = 2, 3
+	_ = 4
+	typed int
+)
+
+const (
+	limitA = 1
+	limitB = 2
+)
+
+var single = 5
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	want := map[string]string{
+		"errA":   KindVariable,
+		"errB":   KindVariable,
+		"errC":   KindVariable,
+		"typed":  KindVariable,
+		"single": KindVariable,
+		"limitA": KindConstant,
+		"limitB": KindConstant,
+	}
+	got := map[string]int{}
+	for _, n := range result.Nodes {
+		if n.Node.Kind == KindVariable || n.Node.Kind == KindConstant {
+			got[n.Node.Kind+" "+n.Node.Name]++
+		}
+	}
+	for name, kind := range want {
+		if c := got[kind+" "+name]; c != 1 {
+			t.Errorf("%s %s: %d nodes, want 1", kind, name, c)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("const/var nodes = %v, want exactly %v", got, want)
+	}
+}
+
 // TestExtract_MethodReceivers proves value- and pointer-receiver methods
 // both resolve to the same receiver type, get the "Recv.Method" qualified
 // name, and produce a same-file type->method contains edge (LANG-01).

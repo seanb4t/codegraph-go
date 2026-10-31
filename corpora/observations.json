@@ -63,19 +63,19 @@
       "trackedFiles": 2547,
       "status": {
         "backend": "pebble",
-        "edgeCount": 23351,
+        "edgeCount": 23842,
         "edgesByKind": {
-          "calls": 6212,
-          "contains": 10713,
+          "calls": 6217,
+          "contains": 11033,
           "embeds": 155,
           "extends": 131,
           "implements": 1018,
           "imports": 2160,
           "instantiates": 636,
           "overrides": 24,
-          "references": 1189,
+          "references": 1342,
           "returns": 1096,
-          "type_of": 17
+          "type_of": 30
         },
         "fileCount": 918,
         "filesByLanguage": {
@@ -97,7 +97,7 @@
           "go",
           "javascript"
         ],
-        "nodeCount": 11814,
+        "nodeCount": 12134,
         "nodesByKind": {
           "constant": 686,
           "file": 918,
@@ -107,7 +107,7 @@
           "package": 183,
           "struct": 974,
           "type_alias": 201,
-          "variable": 376
+          "variable": 696
         },
         "pendingChanges": {
           "added": 0,

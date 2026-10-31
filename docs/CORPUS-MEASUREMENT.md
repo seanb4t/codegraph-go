@@ -65,17 +65,17 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 2547
 - **Edges by kind:**
-  - calls: 6212
-  - contains: 10713
+  - calls: 6217
+  - contains: 11033
   - embeds: 155
   - extends: 131
   - implements: 1018
   - imports: 2160
   - instantiates: 636
   - overrides: 24
-  - references: 1189
+  - references: 1342
   - returns: 1096
-  - type_of: 17
+  - type_of: 30
 - **Files by language:**
   - c: 4
   - go: 889

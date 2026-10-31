@@ -209,6 +209,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		newMeta.HasUnresolvedNames = true
 		newMeta.HasDeclaredModuleKeys = true
 		newMeta.HasMethodSpecs = true
+		newMeta.HasGroupedVars = true
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
@@ -532,6 +533,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	newMeta.HasUnresolvedNames = true
 	newMeta.HasDeclaredModuleKeys = true
 	newMeta.HasMethodSpecs = true
+	newMeta.HasGroupedVars = true
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
@@ -616,8 +618,8 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
-// has_unresolved_names, has_declared_module_keys or has_method_specs flag
-// is false (D-02b) — opening and closing the
+// has_unresolved_names, has_declared_module_keys, has_method_specs or
+// has_grouped_vars flag is false (D-02b) — opening and closing the
 // store in isolation from Sync's own main open, so the two never race a
 // Pebble lock against each other.
 func needsFileIndexBackfill(storeDir string) (bool, error) {
@@ -640,7 +642,7 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		}
 		return false, err
 	}
-	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() || !meta.GetHasMethodSpecs(), nil
+	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() || !meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars(), nil
 }
 
 // NeedsFullIndex reports whether Sync on the store at storeDir would build

@@ -804,6 +804,12 @@ type Meta struct {
 	// cannot match implements and overrides across files it does not
 	// reparse, nor prune a contains edge with the file that makes it.
 	HasMethodSpecs bool `protobuf:"varint,13,opt,name=has_method_specs,json=hasMethodSpecs,proto3" json:"has_method_specs,omitempty"`
+	// has_grouped_vars reports whether this graph holds a node for every
+	// variable that a grouped `var ( ... )` block declares in a Go file.
+	// Absent or false means a graph written before the Go extractor read
+	// those blocks: `sync` then rebuilds it from scratch once, since it
+	// does not reparse the unchanged files that lack the nodes.
+	HasGroupedVars bool `protobuf:"varint,14,opt,name=has_grouped_vars,json=hasGroupedVars,proto3" json:"has_grouped_vars,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -929,6 +935,13 @@ func (x *Meta) GetHasMethodSpecs() bool {
 	return false
 }
 
+func (x *Meta) GetHasGroupedVars() bool {
+	if x != nil {
+		return x.HasGroupedVars
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -999,7 +1012,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\x8b\x04\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xb5\x04\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -1017,7 +1030,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	" \x01(\x03R\x12coverageGeneration\x120\n" +
 	"\x14has_unresolved_names\x18\v \x01(\bR\x12hasUnresolvedNames\x127\n" +
 	"\x18has_declared_module_keys\x18\f \x01(\bR\x15hasDeclaredModuleKeys\x12(\n" +
-	"\x10has_method_specs\x18\r \x01(\bR\x0ehasMethodSpecsJ\x04\b2\x10<*\xe5\x01\n" +
+	"\x10has_method_specs\x18\r \x01(\bR\x0ehasMethodSpecs\x12(\n" +
+	"\x10has_grouped_vars\x18\x0e \x01(\bR\x0ehasGroupedVarsJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +
