@@ -14,7 +14,9 @@ import (
 // home. The run stops before any test if os.UserHomeDir() does not
 // resolve to that directory. It also sets the ephemeral-binary override,
 // because every install this package drives runs from its .test binary;
-// a test of the refusal clears it with t.Setenv.
+// a test of the refusal clears it with t.Setenv. It unsets
+// forcedColorEnv, so the tests that expect plain output do not depend on
+// the developer's shell.
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "codegraph-cli-home-*")
 	if err != nil {
@@ -31,11 +33,22 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(home)
 		os.Exit(1)
 	}
+	for _, key := range forcedColorEnv {
+		if err := os.Unsetenv(key); err != nil {
+			fmt.Fprintf(os.Stderr, "cli: TestMain: unset %s: %v\n", key, err)
+			_ = os.RemoveAll(home)
+			os.Exit(1)
+		}
+	}
 
 	code := m.Run()
 	_ = os.RemoveAll(home)
 	os.Exit(code)
 }
+
+// forcedColorEnv lists the variables that style output on a writer that
+// is not a terminal. A test that needs one sets it with t.Setenv.
+var forcedColorEnv = []string{"CLICOLOR_FORCE", "TTY_FORCE"}
 
 // isolateHome sets every homeEnv variable under home and confirms that
 // os.UserHomeDir() now resolves there.
