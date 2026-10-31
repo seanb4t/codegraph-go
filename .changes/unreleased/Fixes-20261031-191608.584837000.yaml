@@ -1,0 +1,3 @@
+kind: Fixes
+body: The file watcher no longer watches a skipped directory, such as .venv or node_modules, that appears after the watcher starts. On macOS each watched file used one file descriptor, so a new .venv could hold tens of thousands of them.
+time: 2026-10-31T19:16:08.584837-04:00
