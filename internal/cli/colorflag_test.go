@@ -201,7 +201,14 @@ func TestColorFlagInvalidValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execCmd(status -p %s --color=never): unexpected error: %v", dir, err)
 	}
-	if neverOut != bareOut {
+	// DB Size is pebble's on-disk size, which can change between the two runs.
+	maskDBSize := func(name, out string) string {
+		if n := len(dbSizeRegexp.FindAllStringIndex(out, -1)); n != 1 {
+			t.Fatalf("%s status output has %d DB Size lines, want 1:\n%s", name, n, out)
+		}
+		return dbSizeRegexp.ReplaceAllString(out, "DB Size:${1}<SIZE> MB")
+	}
+	if maskDBSize("bare", bareOut) != maskDBSize("never", neverOut) {
 		t.Errorf("status --color=never output differs from the bare (no-flag) plain output:\n--- bare ---\n%s\n--- never ---\n%s", bareOut, neverOut)
 	}
 }
