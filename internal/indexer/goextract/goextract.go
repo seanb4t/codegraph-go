@@ -400,11 +400,21 @@ func (ex *extractor) collectConstsVars(root *tree_sitter.Node) {
 		default:
 			continue
 		}
-		for j := uint(0); j < decl.NamedChildCount(); j++ {
-			spec := decl.NamedChild(j)
-			if spec.Kind() == "const_spec" || spec.Kind() == "var_spec" {
-				ex.emitConstVarSpec(kind, spec)
-			}
+		ex.emitConstVarSpecs(kind, decl)
+	}
+}
+
+// emitConstVarSpecs emits the specs that are children of parent. A grouped
+// `var ( ... )` block holds its var_spec nodes in a var_spec_list child; a
+// grouped `const ( ... )` block holds its const_spec nodes directly.
+func (ex *extractor) emitConstVarSpecs(kind string, parent *tree_sitter.Node) {
+	for j := uint(0); j < parent.NamedChildCount(); j++ {
+		spec := parent.NamedChild(j)
+		switch spec.Kind() {
+		case "const_spec", "var_spec":
+			ex.emitConstVarSpec(kind, spec)
+		case "var_spec_list":
+			ex.emitConstVarSpecs(kind, spec)
 		}
 	}
 }

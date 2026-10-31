@@ -1,0 +1,3 @@
+kind: Fixes
+body: Index every variable that a grouped `var ( ... )` block declares in Go code. The next `codegraph sync` rebuilds an older index once to add them.
+time: 2026-10-31T14:46:40.800065-04:00

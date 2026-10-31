@@ -947,6 +947,9 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// resolveRefsWithIndex stamps arity and interface_methods on every
 	// node.
 	meta.HasMethodSpecs = true
+	// The Go extractor emits a node for every variable of a grouped var
+	// block.
+	meta.HasGroupedVars = true
 	// WR-01 (iteration 2): stamp the read-modify-written generation
 	// computed above — see this function's own comment at the Snapshot
 	// read for why a from-scratch rewrite still increments monotonically

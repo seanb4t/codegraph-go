@@ -1116,6 +1116,59 @@ func TestSyncBackfillsGraphWithoutMethodSpecs(t *testing.T) {
 	}
 }
 
+// TestSyncBackfillsGraphWithoutGroupedVars proves a store whose Meta lacks
+// has_grouped_vars is rebuilt from scratch by the next Sync, which restores
+// the node of a grouped var block's variable in a file that did not change.
+func TestSyncBackfillsGraphWithoutGroupedVars(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/v.go": "package pkg\n\nvar (\n\terrA = 1\n)\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	varID := nodeid.NodeID(goextract.KindVariable, "errA", "pkg/v.go")
+	func() {
+		store, err := graphstore.Open(storeDir)
+		if err != nil {
+			t.Fatalf("graphstore.Open: %v", err)
+		}
+		defer store.Close()
+		w, err := store.NewWriter()
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.DeleteNode(varID); err != nil {
+			t.Fatalf("DeleteNode: %v", err)
+		}
+		if err := w.Commit(); err != nil {
+			t.Fatalf("Commit: %v", err)
+		}
+	}()
+	clearMetaFlag(t, storeDir, func(m *schema.Meta) { m.HasGroupedVars = false })
+
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (backfill): %v", err)
+	}
+	if stats.FilesReparsed != stats.Files {
+		t.Errorf("Stats.FilesReparsed = %d, want %d (a full rebuild)", stats.FilesReparsed, stats.Files)
+	}
+
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+	meta, err := r.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if !meta.GetHasGroupedVars() {
+		t.Error("Meta.HasGroupedVars = false after backfill, want true")
+	}
+	if _, err := r.GetNode(varID); err != nil {
+		t.Errorf("GetNode(errA) after backfill: %v", err)
+	}
+}
+
 // TestSyncFollowsModulePathRename proves Sync files an unchanged file's
 // symbols under the module key discovery computes on this run, not one
 // stored earlier: after go.mod renames the module and the caller's
