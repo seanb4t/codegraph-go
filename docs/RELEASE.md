@@ -330,8 +330,9 @@ though each one is easy to mistake for doing so:
 
 ## 2. Dependency tree (DIST-05)
 
-**The dependency tree is minimal and audited. CGo, via tree-sitter, is the
-sole documented exception to the project's pure-Go, no-CGo default.**
+**The dependency tree is minimal and audited. CGo, via tree-sitter and the
+macOS FSEvents watcher, is the only documented exception to the project's
+pure-Go, no-CGo default.**
 
 `go.mod` lists many more indirect requirements than direct ones, and the raw
 counts on both sides move with every dependency bump — this document
@@ -355,7 +356,7 @@ Beyond the grammars, a short, deliberately chosen list of direct requires is
 the actual supply-chain surface worth auditing individually: the storage
 engine (`cockroachdb/pebble/v2`), the MCP server
 (`modelcontextprotocol/go-sdk`), the CLI framework (`spf13/cobra`), the file
-watcher (`fsnotify/fsnotify`), the release-verification client
+watchers (`fsnotify/fsnotify` on Linux, `fsnotify/fsevents` on macOS), the release-verification client
 (`sigstore/sigstore-go`), a JSONC parser for agent-config editing
 (`tailscale/hujson`), the protobuf runtime (`google.golang.org/protobuf`),
 the community-detection library (`gonum.org/v1/gonum`), the TUI stack
@@ -363,12 +364,16 @@ the community-detection library (`gonum.org/v1/gonum`), the TUI stack
 a goroutine-leak test harness (`go.uber.org/goleak`), and a handful of
 `golang.org/x/*` toolchain packages.
 
-**CGo is the sole documented exception.** `CGO_ENABLED=1` is required
+**CGo is the only documented exception.** `CGO_ENABLED=1` is required
 because `tree-sitter/go-tree-sitter` wraps the tree-sitter C runtime and
 every grammar's (mostly-generated) C parser tables — no pure-Go tree-sitter
 alternative exists today with comparable language coverage or performance
 (see `PARSER-DECISION.md` for the full benchmarked spike that made this
-call). No other component in this project introduces CGo.
+call). On macOS only, `fsnotify/fsevents` also uses CGo to call Apple's
+FSEvents API in CoreServices. The kqueue watcher it replaces held one file
+descriptor per watched file and directory (issue #227). The darwin binaries
+are built natively on macOS, where the system SDK provides CoreServices. No
+other component in this project introduces CGo.
 
 The **SBOM published with every release binary** (§1c above) is the
 authoritative, per-binary, machine-readable inventory of exactly what
