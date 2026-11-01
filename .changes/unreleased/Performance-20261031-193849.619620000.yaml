@@ -1,3 +1,0 @@
-kind: Performance
-body: On macOS the file watcher now uses FSEvents instead of kqueue. kqueue held one file descriptor for every watched file and folder, and FSEvents uses a few per repository.
-time: 2026-10-31T19:38:49.61962-04:00
