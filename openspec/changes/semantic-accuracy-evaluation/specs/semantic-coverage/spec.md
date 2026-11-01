@@ -28,8 +28,12 @@ The evaluation MUST derive expected facts from reviewed source annotations or an
 
 #### Scenario: Dynamic behavior exceeds reference evidence
 - **WHEN** an independent parser cannot determine a runtime call target
-- **THEN** the report classifies the target as unresolved or outside the reference scope
-- **AND** the report does not count that target as a correct resolved edge
+- **THEN** the report classifies any emitted target edge as unknown and outside reference scope
+- **AND** that edge enters neither accuracy denominator nor true positives
+
+#### Scenario: Reviewed source forbids an edge
+- **WHEN** CodeGraph emits a relationship that a reviewed expectation explicitly forbids
+- **THEN** the relationship counts as a false positive rather than an unknown observation
 
 ### Requirement: Comparable semantic identities
 
@@ -59,7 +63,7 @@ The report MUST show true positives, false positives, false negatives, precision
 
 #### Scenario: A file fails to parse
 - **WHEN** the reference expects declarations in that file
-- **THEN** those declarations remain in the source-coverage denominator
+- **THEN** those declarations remain in the declaration recall denominator as false negatives
 - **AND** the report distinguishes parse failure from successful extraction
 
 #### Scenario: A source sample has unlabeled facts
@@ -82,7 +86,7 @@ The evaluation MUST exercise definitions, callers, callees, impact, and explore 
 
 ### Requirement: Adversarial and held-out cases
 
-The inventory MUST include omissions, incorrect extra edges, shadowing, repeated names, malformed input, and cross-file resolution. Manifests MUST distinguish development and acceptance partitions. Routine tuning MUST exclude acceptance cases, while pull request evaluation MUST run them. Reports MUST name the partition and expectation revision. Aggregate counts MUST NOT substitute for these cases.
+The inventory MUST include omissions, extra edges, shadowing, repeated names, malformed input, and cross-file resolution. Manifests MUST distinguish development and acceptance partitions. `task eval:semantic:dev` MUST run only development cases. `task eval:semantic` and pull request CI MUST run both partitions. Reports MUST name the partition and expectation revision. Aggregate counts MUST NOT substitute for these cases.
 
 #### Scenario: Unrelated corpus edges mask missing TypeScript edges
 - **WHEN** a repository contains many Go edges and no expected TypeScript edge
@@ -110,10 +114,24 @@ Cases MUST distinguish supported, known-gap, unsupported, and unevaluated status
 - **THEN** the gate fails and names the additional omission
 
 #### Scenario: A known omission is fixed
-- **WHEN** an expected mismatch no longer occurs
+- **WHEN** every listed mismatch of a known-gap case disappears and no new mismatch occurs
 - **THEN** the gate requires removal of the stale exception
 - **AND** the corrected fact increases the measured accuracy
 - **AND** the case changes from known-gap to supported
+
+#### Scenario: Only part of a known gap is fixed
+- **WHEN** one listed mismatch disappears but others remain
+- **THEN** the gate requires removal of the repaired mismatch from the exception
+- **AND** the case remains known-gap with its remaining exact differences
+
+### Requirement: Unsupported and unevaluated accounting
+
+Unsupported constructs outside the declared product contract and unevaluated cases without independent evidence MUST remain visible as separate counts. Their facts MUST stay outside both accuracy denominators and the regression gate. Neither status can establish support. Authored manifests MUST define the evaluated scope rather than accepting every reference-tool fact as an expectation.
+
+#### Scenario: A reference emits an out-of-scope Java record component
+- **WHEN** its manifest labels that construct unsupported
+- **THEN** the report counts it separately without a gate exception or accuracy denominator contribution
+- **AND** no passing record-component support claim follows
 
 ### Requirement: Semantic lifecycle agreement
 

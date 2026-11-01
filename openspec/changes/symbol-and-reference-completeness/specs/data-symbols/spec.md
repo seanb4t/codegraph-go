@@ -54,6 +54,11 @@ CodeGraph MUST expose named Go struct fields, TypeScript and JavaScript class fi
 - **WHEN** a field name depends on runtime computation
 - **THEN** CodeGraph does not invent a named field from the expression text
 
+#### Scenario: A field and method share a name
+- **WHEN** a Java class declares field `size` and method `size()`
+- **THEN** owner-qualified data lookup resolves field reads while calls to `size()` resolve to the method
+- **AND** the field does not enter the bare-name call index in fresh or incremental indexing
+
 ### Requirement: Ownership and initialization relationships
 
 Data symbols MUST retain their declaring owner and statically resolvable initializer references. A callable value stored in a variable MUST retain a binding relationship to its target. Initialization MUST NOT create a call edge unless the initializer actually invokes a callable.
@@ -106,6 +111,16 @@ CodeGraph MUST resolve calls through a unique static callable binding within a n
 - **THEN** CodeGraph retains the known value references
 - **AND** it does not claim one definitive call target from the initializer alone
 
+#### Scenario: A mutable function-kind binding changes value
+- **WHEN** a JavaScript or TypeScript module reassigns a function-expression binding declared with `let` or `var`
+- **THEN** calls through that binding pass the same competing-write analysis regardless of its function kind
+- **AND** no direct name lookup bypasses that analysis
+
+#### Scenario: A data binding is invoked
+- **WHEN** a caller invokes a variable that uniquely binds a function
+- **THEN** its access to the variable is a read reference and its call targets the function
+- **AND** no calls edge targets the variable node
+
 #### Scenario: Direct and alias calls share endpoints
 - **WHEN** one function calls a target directly and through a supported alias
 - **THEN** one call edge retains direct evidence and the alias path with its context
@@ -148,6 +163,19 @@ Existing indexes MUST gain the new data facts after the supported rebuild path. 
 #### Scenario: A field moves to another owner
 - **WHEN** an edit removes a field from one class and adds it to another
 - **THEN** queries show the new owner and contain no references to the removed field
+
+### Requirement: Dependency-aware reference updates
+
+Synchronization MUST persist binding-write contributions and lookup dependencies, including unresolved bindings and inherited owner/name chains. Changes to write sets, owners, or shadowing declarations MUST re-resolve unchanged dependent files. Added and removed conflicts MUST update call evidence for each analysis context. The batch MUST commit dependency metadata and resulting facts together.
+
+#### Scenario: Another file adds then removes a competing write
+- **WHEN** a production file adds a competing assignment to a binding used by an unchanged caller
+- **THEN** synchronization removes the caller's unsupported derived call evidence
+- **AND** removing that assignment restores the same evidence as a fresh index
+
+#### Scenario: A subclass gains a shadowing field
+- **WHEN** a class edit adds a field that shadows its base field
+- **THEN** unchanged files that used the inherited lookup re-resolve to the subclass field
 
 ### Requirement: Explicit completeness boundary
 

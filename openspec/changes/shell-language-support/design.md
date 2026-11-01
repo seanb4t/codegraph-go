@@ -38,6 +38,8 @@ Register language IDs `shell`, `bash`, `zsh`, and `fish`. The `shell` ID means t
 
 Add bounded source classification before parser creation. Read only the shebang prefix after the existing size and file-type safeguards. Accept direct interpreter paths and supported `/usr/bin/env` forms, including literal `-S` interpreter selection. Do not expand environment variables or arbitrary command expressions.
 
+Recognize exactly the interpreter basenames `sh`, `bash`, `zsh`, and `fish`, mapped to the corresponding dialect IDs. Other explicit interpreters, including `dash`, `ash`, and `ksh`, are mismatches for shell candidates in this initial contract. This bounded list does not claim that their languages lack POSIX-compatible syntax.
+
 Apply shell classification only to shell extensions, recognized startup names, and otherwise eligible extensionless files. Registered non-shell extensions retain their existing classification regardless of shebang. Within shell candidates, use this precedence: recognized interpreter, explicit unsupported-interpreter exclusion, startup filename, then extension.
 
 `.sh` without an explicit interpreter selects `shell`. `.bash`, `.zsh`, and `.fish` select their named dialects. An unidentified extensionless file stays excluded. An explicit unsupported interpreter on a shell candidate uses the new `EXCLUSION_REASON_INTERPRETER_MISMATCH` reason, with the interpreter in diagnostic details.
@@ -48,7 +50,7 @@ Recognize `.profile` as POSIX shell. Recognize `.bashrc`, `.bash_profile`, `.bas
 
 Allow only `<repo>/.config/fish/config.fish`, `<repo>/.config/fish/functions/**/*.fish`, and `<repo>/.config/fish/conf.d/**/*.fish`. Anchor this exception at the repository root, not any nested `.config/fish` suffix. Traverse only the required ancestors. Keep other dot-prefixed directories excluded, including `home/.config/fish` and hidden parents. Do not expand this exception to the user home directory.
 
-Replace the basename-only prune decision with a shared root-relative inclusion decision where necessary. Apply it to discovery, fsnotify recursive registration, new-directory events, and the macOS FSEvents path filter in `watcher_darwin.go`. Preserve exclusion accounting when a directory has permitted descendants. Keep unrelated directory consumers, including route discovery, within their existing scope.
+Replace the basename-only prune decision with a shared root-relative inclusion decision where necessary. Apply it to discovery, fsnotify recursive registration, new-directory events, and the macOS FSEvents path filter in `watcher_darwin.go`. Apply it also to the no-daemon staleness walk in `internal/query/status.go`. Place shared path policy below indexer and query packages to avoid an import cycle. Preserve exclusion accounting and keep route discovery within its existing scope.
 
 Do not follow file or directory symlinks outside the repository. Apply the same canonical-path boundary to sourced files. Respect source-size limits before shebang reads and extraction.
 
@@ -59,8 +61,8 @@ Use these extraction boundaries:
 | Dialect | Bindings and syntax | Resolution limits |
 | --- | --- | --- |
 | POSIX shell | Named functions, global assignment words, parameter reads, literal function commands, literal dot commands | Command-scoped environment assignments do not create persistent globals. Unsupported extensions remain visible. |
-| Bash | POSIX forms plus named arrays, `local`, `declare`, and `typeset` declarations | Dynamic scope, namerefs, indirect expansion, and computed command names do not receive definitive targets. |
-| Zsh | Named functions and statically named `typeset` or assignment bindings | Autoload, runtime option changes, and expansion-dependent binding remain unresolved. Rejected grammar forms fail the whole file. |
+| Bash | POSIX forms plus literal `source`, named arrays, `local`, `declare`, and `typeset` declarations | Dynamic scope, namerefs, indirect expansion, and computed command names do not receive definitive targets. |
+| Zsh | Named functions, static `typeset` or assignment bindings, parameter reads, literal function commands, and literal `.` or `source` commands | Autoload, runtime option changes, and expansion-dependent binding remain unresolved. Rejected grammar forms fail the whole file. |
 | Fish | Functions, `set` declarations, explicit local/global scope, parameter reads, and literal `source` commands | Universal variables and environment-dependent bindings remain unresolved. Do not infer autoload from a filename alone. |
 
 Record direct calls in pipelines, subshells, and command substitutions when a target is statically established. Respect process and scope boundaries for writes. Do not turn words inside quoted strings or literal heredocs into declarations. Interpolated expansions receive only their supported syntactic references.
@@ -73,7 +75,9 @@ Resolve literal relative source paths against the importing file's directory as 
 
 Paths with expansion, command substitution, runtime search through `PATH`, or unknown roots stay unresolved. Do not execute `cd` statements to infer working directories. Literal absolute paths are eligible only when their canonical target stays within the repository.
 
-Use cycle detection for sourced-file traversal. Do not create duplicate nodes when several scripts source the same file. Editing a sourced file must invalidate dependent resolution through the existing synchronization mechanism.
+Use cycle detection for sourced-file traversal. Do not create duplicate nodes when several scripts source the same file. Persist resolved and unresolved literal source candidates as normalized repository-relative lookup paths on importing file records through the schema source and generator.
+
+Add path-based invalidation to synchronization rather than relying on symbol-name waiting lists. Adding, restoring, deleting, renaming, or changing a candidate's eligibility must re-resolve its unchanged importers and their transitive dependents. Reapply canonical-path boundaries on each resolution. Commit path dependencies and graph updates together, with cycle detection. Source edits must also invalidate imported function resolution.
 
 Use an explicit all-or-nothing shell parse policy. Any Tree-sitter error or missing node rejects extraction for that file. Keep the file record with indexing errors, but emit no declarations or relationships from it. Count it as failed, retain independently expected facts in evaluation denominators, and remove stale facts during synchronization. Other languages retain their existing behavior.
 

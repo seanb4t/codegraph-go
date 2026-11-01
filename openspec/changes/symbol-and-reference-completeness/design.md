@@ -34,6 +34,8 @@ Apply this declaration-kind mapping consistently across extraction and evaluatio
 
 Qualify fields through their declaring type. Collect repeated writes before identity finalization so a Python attribute has one logical owner/name binding. Choose its earliest qualifying declaration or assignment as its source anchor. Keep write sites as reference evidence.
 
+Keep fields out of the bare-name index used for unqualified call resolution, including store-seeded incremental indexes. Resolve field references through owner-qualified lookup. A callable field must pass binding resolution before it can produce a call to a function. A field named `size` must not displace a method named `size`.
+
 Apply discard rules per language. Go's blank identifier and destructuring holes do not declare symbols. A Python or JavaScript variable named `_` remains a valid binding.
 
 Implement this bounded declaration matrix:
@@ -61,7 +63,9 @@ Use the containing function or method as the source of executable reads and writ
 
 Retain type relationships where the existing extractor can establish them. This change does not infer arbitrary receiver types or broaden interface satisfaction rules.
 
-For callable aliases, retain a reference from the data symbol to the function value. When an actual call invokes a uniquely bound value, also emit a call edge from the caller to that function. Mark the edge with its static-binding evidence. Initialization alone never emits that call.
+For callable aliases, retain a reference from the data symbol to the function value. Represent the caller's access to the data binding as a read reference, not a calls edge. Emit a calls edge only to a uniquely established function target. Mark it with static-binding evidence. Initialization alone never emits that call.
+
+Apply the competing-write rule to mutable module bindings even when their direct function expression uses the `function` kind. Kind alone cannot authorize direct call resolution. For `let f = () => 1; f = g; f()`, preserve value references but withhold a definitive target. This preserves existing callable identities without bypassing conservative resolution.
 
 Resolve bounded alias chains with cycle detection. Require a single established target and no conflicting writes in the declared analysis context. A direct import alias can participate. Attribute lookup with an unknown receiver cannot.
 
@@ -82,6 +86,10 @@ Audit allowed kinds, result filters, graph presentation, and serialization. Chan
 Allocate a rebuild capability marker after the `index-invariants` implementation lands. Do not reserve a protobuf field number from an unmerged snapshot. An index without the marker follows the existing clean rebuild path so unchanged files gain new facts.
 
 Compare fresh indexing with edits, renames, deletion, and restoration. Include a field that moves between owners and an alias whose target changes. Identity stability applies to unchanged declarations, not removed or moved symbols.
+
+Persist each file's binding-write contributions and lookup dependencies through the existing schema source and generator. Include unresolved lookups, binding chains, analysis contexts, and every owner/name consulted by inherited-field lookup. Compare old and new contributions for each synchronization batch. Re-resolve dependent files when a write set, owner chain, or shadowing declaration changes, even when those files are unchanged.
+
+Propagate affected dependency keys until the dependent-file set stops growing, with cycle detection. Rebuild their outgoing relationships from the complete post-batch context and commit contributions and facts together. Removing a conflict must restore eligible calls, just as adding one removes them. PR #237 supplies structural invariants, not this new dependency mechanism.
 
 Land shared graph conventions first, followed by language-specific extraction changes and query acceptance. Each language must meet its exact fixture contract before its capability claim changes. Issue #238 supplies independent expectations and exposes remaining failures.
 

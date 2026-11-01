@@ -12,6 +12,7 @@ CodeGraph omits several variable and field declarations across its core language
 - Resolve calls through uniquely established callable bindings without treating initialization as a call.
 - Distinguish Go production and test binding contexts so test stubs do not hide the production path in #175.
 - Define declaration kinds and bounded inherited-field lookup consistently across the supported languages.
+- Track binding and owner dependencies so source changes update references in unchanged files.
 - Preserve current identities where possible and rebuild existing indexes when new extraction becomes available.
 - Define exact supported forms and exclusions through tests and the evaluation in #238.
 

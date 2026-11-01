@@ -20,6 +20,8 @@ Non-goals: Replace the test runner, implement production compilers, or prove arb
 
 Use a small developer entry point, `task eval:semantic`, with authored fixtures under `testdata/semantic/`. Keep reference integration under `tools/semantic-eval/`. Use native Go tests and the existing test runner. Avoid a separate test framework or generated expectation language.
 
+`task eval:semantic:dev` selects only development cases for local iteration. `task eval:semantic` runs both development and acceptance partitions and is the pull request gate. Both commands use the same product tests with an explicit manifest selection.
+
 Assert nonempty inputs, required tools, exact differences, and exception validity inside the acceptance gate. Do not add companion gate self-tests or simulated workflow failures. Exercise normalization through tests of CodeGraph extraction and public queries against independent facts.
 
 The report is the new developer-facing behavior. It has a versioned JSON format and a short text rendering. This format does not alter production CLI or MCP responses.
@@ -49,13 +51,15 @@ Normalize declarations to language, relative path, owner, role, name, and the in
 
 Define a source-reviewed span rule for each declaration construct. CodeGraph can span a complete declaration while the reference spans its identifier. Match each identifier once by owner, role, name, and its independently derived declaration envelope. Require the CodeGraph span to match that construct's span rule. Containment alone cannot establish a match.
 
-For Go multi-name specs, map each named binding to its own identifier within the shared declaration envelope. Preserve distinct occurrences for repeated same-line names. Report incorrect spans separately from missing identities. Include Unicode, nested equal names, and deliberately wrong product spans in product acceptance cases.
+For Go multi-name specs, map each named binding to its own identifier within the shared declaration envelope. Preserve distinct occurrences for repeated same-line names. Report incorrect spans separately from missing identities. Include Unicode and nested equal names in product acceptance cases without injecting faults into observed output.
 
 Normalize relationships to source declaration, kind, and target declaration. CodeGraph deduplicates repeated relationships with those endpoints. Keep call-site counts separate. Normalize callable constants consistently so existing arrow-function identities do not create false duplicates.
 
 Report precision as correct emitted facts divided by evaluated emitted facts. Report recall as correct emitted facts divided by expected facts. Show both denominators, exact differences, and unavailable categories.
 
-Retain omitted files in source coverage when expectations exist. For incompletely labeled source, report unlabeled observations as unknown. Exclude unknown facts from both precision and recall denominators and report their raw counts separately. Unknown targets cannot become true positives. Do not claim whole-repository precision from a reviewed sample.
+Expected declarations missing from a failed or omitted file remain false negatives in declaration recall. For incompletely labeled source, report unlabeled observations as unknown. Exclude unknown facts from both precision and recall denominators and report their raw counts separately. Unknown targets cannot become true positives. Do not claim whole-repository precision from a reviewed sample.
+
+When the reference cannot establish a dynamic target, classify any emitted target edge as unknown and outside reference scope. When reviewed source explicitly forbids an edge, count an emitted match as a false positive. These are separate expectation labels, not interchangeable uses of unresolved.
 
 The first inventory covers the following dimensions:
 
@@ -64,7 +68,7 @@ The first inventory covers the following dimensions:
 | Declarations | Grouped bindings, destructuring, constants, fields, methods, nested owners, repeated names, exported and private symbols |
 | Resolution | Imports, aliases, cross-file references, initializer references, receivers, shadowing, unresolved and ambiguous targets |
 | Source boundaries | Unicode, comments, literals, malformed input, excluded files, generated files, platform and build context |
-| Lifecycle | Fresh indexing, no-op synchronization, edits, renames, deletion, restored files, rebuild migration |
+| Lifecycle | Fresh indexing, no-op synchronization, edits, renames, deletion, restored files |
 | Queries | Definitions, callers, callees, impact, explore, disambiguation, required context, forbidden facts, truncation |
 
 Record decorators, Java records and enums, overloads, interface dispatch, and dynamic attributes even when the initial result is a known gap. Other registered languages remain explicitly unevaluated by this change. Add issues for gaps beyond #239 instead of expanding its scope automatically.
@@ -77,7 +81,11 @@ Declare `development` and `acceptance` partitions in authored manifests. Keep ac
 
 Review acceptance changes separately from extractor changes, with a language-contract reason and source evidence. This is a review policy, not another CI guard. The public corpus is not a secret or statistically unbiased benchmark. Never regenerate expectations from CodeGraph to make a run pass.
 
-Use distinct case statuses: `supported`, `known-gap`, `unsupported`, and `unevaluated`. Supported cases require zero missing or extra facts. Known-gap cases list exact differences, an owner, an issue, and a review date. They remain failures in accuracy totals even when temporarily permitted by the regression gate. Expired, enlarged, or stale exceptions fail the gate. A corrected case becomes supported only after its exception is removed.
+Use distinct case statuses: `supported`, `known-gap`, `unsupported`, and `unevaluated`. Supported cases require zero missing or extra facts. Known-gap cases list exact differences, an owner, an issue, and a review date. They remain failures in accuracy totals even when temporarily permitted by the regression gate. Expired, enlarged, or stale exceptions fail the gate.
+
+Remove each repaired mismatch from its exception. Keep the case known-gap while any listed mismatch remains. Change it to supported only when no differences remain and the exception is removed.
+
+Unsupported cases are inventoried constructs outside the declared product contract. Unevaluated cases lack independent evaluation. Report their case counts and any observed fact counts separately, outside both accuracy denominators and the regression gate. They never establish support. Manifest labels control this scope, not whatever facts a reference tool happens to emit.
 
 Compare fresh and incremental semantic facts and public answers under the same configuration and analysis context. Include no-op synchronization, edits, renames, deletion, and restoration. Name the evaluated fact subset and retain excluded categories in reports. Do not imply route-graph equality beyond the boundary defined by `index-invariants` in PR #237.
 

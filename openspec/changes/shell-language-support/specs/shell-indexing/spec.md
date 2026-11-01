@@ -32,6 +32,11 @@ Shell classification MUST apply only to `.sh`, `.bash`, `.zsh`, `.fish`, documen
 - **WHEN** an extensionless file has a supported Zsh shebang
 - **THEN** discovery selects Zsh without executing the interpreter
 
+#### Scenario: An interpreter is outside the recognized set
+- **WHEN** a shell candidate names an interpreter other than `sh`, `bash`, `zsh`, or `fish`, including `dash`, `ash`, or `ksh`
+- **THEN** discovery records an interpreter mismatch
+- **AND** direct paths and supported `env` forms use the same exact interpreter set
+
 #### Scenario: A registered non-shell file has a shebang
 - **WHEN** a `.py` or `.js` file contains a shell or unsupported shebang
 - **THEN** its existing Python or JavaScript extension classification remains unchanged
@@ -48,6 +53,10 @@ Discovery MUST include documented startup files. The Fish hidden-directory excep
 #### Scenario: A nested Fish directory resembles the allowed root
 - **WHEN** `home/.config/fish/config.fish` or `.hidden/.config/fish/config.fish` exists inside the repository
 - **THEN** the Fish exception does not include either path in discovery or watching
+
+#### Scenario: Fish configuration changes without a daemon
+- **WHEN** an included Fish file changes after the last synchronization and no daemon sidecar exists
+- **THEN** the status staleness walk includes that file and reports the index as stale
 
 #### Scenario: A source link escapes the repository
 - **WHEN** a shell file or sourced path points outside the repository through a symbolic link
@@ -101,6 +110,18 @@ CodeGraph MUST resolve literal `.` or `source` paths through a shell-specific re
 #### Scenario: Two files source each other
 - **WHEN** each file contains a literal source path to the other
 - **THEN** indexing terminates and retains the source relationships without duplicate declarations
+
+#### Scenario: Dialects use their supported source commands
+- **WHEN** POSIX shell uses `.`, Bash or Zsh uses `.` or `source`, or Fish uses `source` with an eligible literal path
+- **THEN** its dialect records the supported source relationship
+
+### Requirement: Source-path dependency updates
+
+CodeGraph MUST persist resolved and unresolved literal source candidates as repository-relative lookup paths. Added, restored, deleted, renamed, or newly ineligible targets MUST re-resolve unchanged importers and transitive dependents. Resolution MUST reapply repository boundaries and terminate on cycles. Synchronization MUST commit path dependencies and resulting graph facts together.
+
+#### Scenario: A missing sourced file is restored
+- **WHEN** an unchanged script has an unresolved literal source candidate and that eligible file appears at the recorded path
+- **THEN** synchronization resolves its imports and supported function references exactly as a fresh index
 
 ### Requirement: Shell parse failures reject file extraction
 

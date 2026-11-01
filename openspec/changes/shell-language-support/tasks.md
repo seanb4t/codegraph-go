@@ -9,9 +9,9 @@
 
 ## 2. Discovery and file watching
 
-- [ ] 2.1 Add bounded shell classification and `EXCLUSION_REASON_INTERPRETER_MISMATCH` to both authored protocol sources. Regenerate clients and update exclusion rendering. Cover precedence, non-shell extension compatibility, `env -S`, unknown interpreters, and extensionless files in `TestShellDiscovery`.
+- [ ] 2.1 Add bounded classification for exactly `sh`, `bash`, `zsh`, and `fish` interpreters. Add `EXCLUSION_REASON_INTERPRETER_MISMATCH` to both protocol sources and regenerate clients. Cover precedence, non-shell extensions, `env -S`, excluded interpreter names, and extensionless files in `TestShellDiscovery`.
 - [ ] 2.2 Add shared root-relative inclusion rules for repository-local Fish configuration. Cover allowed paths, excluded siblings, source limits, and symlink escapes in `TestShellDiscoveryBoundaries`.
-- [ ] 2.3 Share root-anchored inclusion across discovery, fsnotify recursive registration and directory events, and macOS FSEvents filtering. Cover new Fish directories, nested-path exclusions, and changed shebangs in `TestShellWatchDiscoveryParity` on both platforms.
+- [ ] 2.3 Share root-anchored inclusion across discovery, fsnotify registration and directory events, FSEvents filtering, and no-daemon status staleness. Cover new Fish directories, nested exclusions, changed shebangs, and stale status in `TestShellWatchDiscoveryParity` and `TestShellStatusStaleness` on both platforms.
 - [ ] 2.4 Document recognized filenames, shebang forms, precedence, and hidden-directory exceptions. Make sure that every documented form appears in `TestShellDiscovery` or `TestShellDiscoveryBoundaries`.
 
 ## 3. Dialect extraction
@@ -25,7 +25,7 @@
 ## 4. Source relationships and reference resolution
 
 - [ ] 4.1 Add a shell-specific source-path resolver to existing file nodes with imports edges and path-assumption metadata. Bypass Go module-prefix resolution. Cover relative candidates, absolute paths, escapes, expansion, and absence of synthetic packages in `TestShellSourceResolution`.
-- [ ] 4.2 Add cycle-safe source traversal and conservative imported function resolution. Cover cycles, repeated imports, ambiguous names, and dynamic commands in `TestShellReferenceResolution`.
+- [ ] 4.2 Add cycle-safe source traversal and conservative imported function resolution. Persist literal path dependencies through schema sources and generators, including unresolved candidates. Cover cycles, repeated imports, ambiguous names, and dynamic commands in `TestShellReferenceResolution`.
 - [ ] 4.3 Add read/write metadata and stable binding identities through the shared graph contract. Cover repeated assignments and owner separation in `TestShellBindingIdentity`.
 - [ ] 4.4 Document source-path assumptions and unresolved runtime behavior. Make sure that `TestShellNoExecution` indexes side-effecting source text without executing it.
 
@@ -34,7 +34,7 @@
 - [ ] 5.1 Register each qualified dialect and extend language filters. Cover distinct IDs and exact declarations in `TestShellLanguageRegistration`. Do not mark the change complete until all four dialects qualify.
 - [ ] 5.2 Add CLI and MCP definitions, callers, callees, impact, and explore acceptance. Cover expected facts, false matches, and output compatibility in `TestShellPublicQueries`.
 - [ ] 5.3 Use normal `Sync` discovery for unchanged shell files absent from older indexes. Cover the upgrade in `TestShellSyncDiscoversExistingFiles`. Document that shell registration alone needs no rebuild marker.
-- [ ] 5.4 Add semantic synchronization cases for source edits, rename, deletion, restoration, and dialect changes. Compare fresh and updated graphs in `TestShellSyncEquivalence`.
+- [ ] 5.4 Add path-based invalidation for unchanged importers and transitive dependents. Cover source edits, added or restored targets, rename, deletion, eligibility changes, and cycles in `TestShellSyncEquivalence`. Compare fresh and updated graphs after each operation.
 - [ ] 5.5 Publish per-dialect capability evidence and limitations. Trace each support claim to the dialect extraction tests and #238's independent report.
 
 ## 6. Integration acceptance
