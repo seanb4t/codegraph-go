@@ -248,3 +248,4 @@ describe('browse route: typing in search does not tear down the open node view (
 		await vi.waitFor(() => expect(screen.getByTestId('browse-source')).toBeInTheDocument(), settle);
 	});
 });
+// Path-filter probe for #221; this branch is never merged.
