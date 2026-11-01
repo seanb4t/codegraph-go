@@ -23,18 +23,18 @@ vars:
       done
 
   # run_gotestsum NAME GO-TEST-ARGS... runs go test through gotestsum. It writes
-  # .test-results/NAME.xml (JUnit) and NAME.json, then prints the 20 slowest
+  # test-results/NAME.xml (JUnit) and NAME.json, then prints the 20 slowest
   # tests. It never reruns a failed test (--rerun-fails), because a rerun hides
   # a flake. sed, not head, cuts the list, so pipefail never sees a SIGPIPE.
   GOTESTSUM_LIB: |
     run_gotestsum() {
       local name="$1"
       shift
-      mkdir -p .test-results
+      mkdir -p test-results
       local status=0
-      gotestsum --format pkgname --junitfile ".test-results/${name}.xml" --jsonfile ".test-results/${name}.json" -- "$@" || status=$?
+      gotestsum --format pkgname --junitfile "test-results/${name}.xml" --jsonfile "test-results/${name}.json" -- "$@" || status=$?
       echo "${name}: the 20 slowest tests"
-      gotestsum tool slowest --jsonfile ".test-results/${name}.json" | sed -n '1,20p'
+      gotestsum tool slowest --jsonfile "test-results/${name}.json" | sed -n '1,20p'
       return "${status}"
     }
 
