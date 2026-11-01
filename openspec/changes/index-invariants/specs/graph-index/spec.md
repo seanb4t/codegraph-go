@@ -55,7 +55,7 @@ A file can declare one name more than once with the same kind and qualified name
 
 ### Requirement: An incremental sync gives the same graph as a fresh index (INDX-03, INDX-04)
 
-A user can create, edit, rename and delete files in any sequence and run `codegraph sync` after each step. After the last sync, the store SHALL hold the same nodes and edges as `codegraph index --force` over the final tree.
+A user can create, edit, rename and delete files in any sequence and run `codegraph sync` after each step. After the last sync, the store SHALL hold the same nodes and edges as `codegraph index --force` over the final tree, except route nodes and their edges. Route detection runs only in a full index, a limitation that `docs/LANGUAGE-CAPABILITY-MATRIX.md` documents.
 
 #### Scenario: A sequence of edits
 
