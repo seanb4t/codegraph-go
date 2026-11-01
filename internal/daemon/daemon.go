@@ -126,7 +126,7 @@ type Daemon struct {
 	syncFn func(repoRoot, storeDir string, opts indexer.Options) (indexer.Stats, error)
 
 	// onWatchOpen, when non-nil, is invoked with the freshly-opened
-	// watcher right after watch.Open succeeds inside Run, before the watch
+	// watcher right after it opens inside Run, before the watch
 	// loop goroutine starts. It is a test-only control seam (unexported,
 	// no exported setter — mirrors onSyncStart) so daemon_test.go can
 	// capture the watcher handle and close its event stream out from under
@@ -134,7 +134,11 @@ type Daemon struct {
 	// that must return ErrWatcherClosed (03-REVIEW.md IN-07/WR-01) —
 	// fsnotify offers no other way to force its channels closed without
 	// the ctx being cancelled. Production callers leave it nil.
-	onWatchOpen func(*watch.Watcher)
+	onWatchOpen func(Watcher)
+
+	// openWatcher opens the watcher Run drives. Nil means watch.Open;
+	// WithWatcher sets it.
+	openWatcher func(root string) (Watcher, error)
 
 	// getppid, when non-nil, replaces os.Getppid as the watchdog's
 	// parent-pid reader. It is a test-only control seam (unexported, no
@@ -174,11 +178,36 @@ type Daemon struct {
 type Option func(*Daemon)
 
 // WithProbe overrides the Daemon's watch.Probe (see the probe field's doc
-// comment). This is the only Option this plan introduces.
+// comment).
 func WithProbe(p watch.Probe) Option {
 	return func(d *Daemon) {
 		d.probe = p
 	}
+}
+
+// Watcher is the part of *watch.Watcher that Run uses. Run returns when ctx
+// is cancelled or Close ends the event stream, and it stops deb's pending
+// timer before it returns.
+type Watcher interface {
+	Run(ctx context.Context, deb *watch.Debouncer)
+	Close() error
+}
+
+// WithWatcher makes Run open its watcher with open instead of watch.Open.
+func WithWatcher(open func(root string) (Watcher, error)) Option {
+	return func(d *Daemon) {
+		d.openWatcher = open
+	}
+}
+
+// openWatch is the default for Daemon.openWatcher. It returns a nil
+// interface on error, never a nil *watch.Watcher inside a non-nil one.
+func openWatch(root string) (Watcher, error) {
+	w, err := watch.Open(root)
+	if err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 // New resolves repoRoot's .codegraph/ layout and returns a Daemon ready to
@@ -290,7 +319,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 		stop()
 	}()
 
-	w, err := watch.Open(d.repoRoot)
+	open := d.openWatcher
+	if open == nil {
+		open = openWatch
+	}
+	w, err := open(d.repoRoot)
 	if err != nil {
 		return err
 	}

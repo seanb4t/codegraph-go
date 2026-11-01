@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -63,7 +64,35 @@ func waitForLock(t *testing.T, codegraphDir string) {
 	t.Fatalf("timed out waiting for %s to appear", lockPath(codegraphDir))
 }
 
+// watcherOpened returns a channel that receives once d's Run has opened its
+// watcher. Run takes the lock before it opens the watcher, so a file
+// written after waitForLock alone can land before the watcher exists and
+// is never observed.
+func watcherOpened(d *Daemon) <-chan struct{} {
+	ch := make(chan struct{}, 1)
+	d.onWatchOpen = func(Watcher) {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	return ch
+}
+
+// waitWatcherOpened blocks until opened, from watcherOpened, receives.
+func waitWatcherOpened(t *testing.T, opened <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-opened:
+	case <-time.After(testBudget(5 * time.Second)):
+		t.Fatal("timed out waiting for Run to open its watcher")
+	}
+}
+
 // nodeNames returns the set of node names currently in storeDir's graph.
+// Call it only after Run has returned: while Run is live, this open can
+// race a flush for the Pebble LOCK, and a pebble.Open that loses that race
+// can leak its disk-health ticker goroutine past goleak.
 func nodeNames(t *testing.T, storeDir string) map[string]bool {
 	t.Helper()
 	store, err := graphstore.Open(storeDir)
@@ -380,6 +409,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 		}
 		synced <- stats
 	}
+	opened := watcherOpened(d)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -389,6 +419,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
+	waitWatcherOpened(t, opened)
 
 	// The single-writer invariant: a second acquire attempt while the
 	// daemon holds the lock must be rejected, never silently succeed.
@@ -407,10 +438,6 @@ func TestDaemonSharedWriter(t *testing.T) {
 		t.Fatal("timed out waiting for the daemon-driven sync triggered by the file edit")
 	}
 
-	if names := nodeNames(t, storeDir); !names["extra"] {
-		t.Fatalf("committed graph after daemon-driven sync = %v, want it to contain \"extra\"", names)
-	}
-
 	cancel()
 	select {
 	case err := <-runErr:
@@ -419,6 +446,10 @@ func TestDaemonSharedWriter(t *testing.T) {
 		}
 	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after cancel")
+	}
+
+	if names := nodeNames(t, storeDir); !names["extra"] {
+		t.Fatalf("committed graph after daemon-driven sync = %v, want it to contain \"extra\"", names)
 	}
 }
 
@@ -487,75 +518,66 @@ func TestDaemonCleanShutdown(t *testing.T) {
 // otherwise), reproducing the exact untracked-goroutine window CR-01
 // describes: the debounce timer has already fired, so the deb.Stop() that
 // the watch loop calls on ctx.Done() cannot cancel it — only deb.Wait()
-// (joined from Run after wg.Wait()) can make Run wait correctly.
+// (joined from Run after wg.Wait()) can make Run wait correctly. The test
+// runs on a fakeWatcher in a synctest bubble: synctest.Wait proves Run is
+// blocked, with no wall-clock wait.
 func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
-	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "10")
-
-	root, codegraphDir, _ := initFixture(t)
-
-	d, err := New(root, indexer.Options{Quiet: true})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	flushStarted := make(chan struct{})
-	releaseFlush := make(chan struct{})
-	// sync.Once guards the close: under heavy parallel-suite load, fsnotify
-	// can deliver the write's events straddling a debounce window boundary,
-	// producing a SECOND overlapping fire whose onSyncStart would otherwise
-	// panic on a double close (observed as a load-induced flake). The
-	// second fire just parks on <-releaseFlush alongside the first; both
-	// proceed when it closes, serialized by syncMu.
-	var flushStartedOnce sync.Once
-	d.onSyncStart = func() {
-		flushStartedOnce.Do(func() { close(flushStarted) })
-		<-releaseFlush
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
-
-	waitForLock(t, codegraphDir)
-
-	writeFixtureFile(t, root, "extra.go", "package main\n\nfunc extra() {}\n")
-
-	select {
-	case <-flushStarted:
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("timed out waiting for the debounced flush to start")
-	}
-
-	// The flush's fire() goroutine is now blocked mid-flush — the exact
-	// CR-01 window. Cancel ctx: the watcher loop's deb.Stop() cannot
-	// cancel a timer that has already fired.
-	cancel()
-
-	select {
-	case err := <-runErr:
-		t.Fatalf("Run returned (err=%v) while a debounced flush was still in flight — CR-01 regression", err)
-	case <-time.After(testBudget(200 * time.Millisecond)):
-		// correct: Run must still be blocked.
-	}
-	if _, ok, lerr := readLock(codegraphDir); lerr != nil || !ok {
-		t.Fatalf("daemon lock released while a flush was still in flight (ok=%v err=%v) — CR-01 regression", ok, lerr)
-	}
-
-	close(releaseFlush) // let the flush — and its real indexer.Sync — proceed
-
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
+	root, codegraphDir := fakeFixture(t)
+	synctest.Test(t, func(t *testing.T) {
+		fw := newFakeWatcher()
+		d := newFakeDaemon(t, root, fw)
+		d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
+			return indexer.Stats{}, nil
 		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after the in-flight flush completed")
-	}
+		flushStarted := make(chan struct{})
+		releaseFlush := make(chan struct{})
+		d.onSyncStart = func() {
+			close(flushStarted)
+			<-releaseFlush
+		}
 
-	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
-		t.Fatalf("lockfile still present after flush completed and Run returned (ok=%v err=%v)", ok, lerr)
-	}
+		ctx, cancel := context.WithCancel(context.Background())
+		runErr := startFakeRun(t, ctx, cancel, d)
+
+		fw.events <- "extra.go"
+
+		select {
+		case <-flushStarted:
+		case <-time.After(time.Minute):
+			t.Fatal("timed out waiting for the debounced flush to start")
+		}
+
+		// The flush's fire() goroutine is now blocked mid-flush — the exact
+		// CR-01 window. Cancel ctx: the watcher loop's deb.Stop() cannot
+		// cancel a timer that has already fired.
+		cancel()
+		synctest.Wait()
+
+		select {
+		case err := <-runErr:
+			t.Fatalf("Run returned (err=%v) while a debounced flush was still in flight — CR-01 regression", err)
+		default:
+			// correct: Run must still be blocked.
+		}
+		if _, ok, lerr := readLock(codegraphDir); lerr != nil || !ok {
+			t.Fatalf("daemon lock released while a flush was still in flight (ok=%v err=%v) — CR-01 regression", ok, lerr)
+		}
+
+		close(releaseFlush)
+
+		select {
+		case err := <-runErr:
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+		case <-time.After(time.Minute):
+			t.Fatal("Run did not return after the in-flight flush completed")
+		}
+
+		if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
+			t.Fatalf("lockfile still present after flush completed and Run returned (ok=%v err=%v)", ok, lerr)
+		}
+	})
 }
 
 // TestDaemonFlushLockRequeueGivesUpPerEpisode pins the WR-01/IN-03
@@ -575,89 +597,84 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 // LOCK can leak its disk-health ticker goroutine, tripping this package's
 // goleak TestMain gate; real ErrStoreLocked propagation through
 // indexer.Sync is covered by the integration live-sync test. All
-// synchronization is event-driven via the onSync seam.
+// synchronization is event-driven via the onSync seam. Events come from a
+// fakeWatcher in a synctest bubble, so the quiet gaps run on fake time.
 func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
 	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "10")
 
-	root, codegraphDir, _ := initFixture(t)
+	root, _ := fakeFixture(t)
+	synctest.Test(t, func(t *testing.T) {
+		fw := newFakeWatcher()
+		d := newFakeDaemon(t, root, fw)
 
-	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	var locked atomic.Bool
-	locked.Store(true)
-	d.syncFn = func(_, _ string, _ indexer.Options) (indexer.Stats, error) {
-		if locked.Load() {
-			return indexer.Stats{}, fmt.Errorf("%w: injected contention", graphstore.ErrStoreLocked)
+		var locked atomic.Bool
+		locked.Store(true)
+		d.syncFn = func(_, _ string, _ indexer.Options) (indexer.Stats, error) {
+			if locked.Load() {
+				return indexer.Stats{}, fmt.Errorf("%w: injected contention", graphstore.ErrStoreLocked)
+			}
+			return indexer.Stats{}, nil
 		}
-		return indexer.Stats{}, nil
-	}
-	synced := make(chan error, 32)
-	d.onSync = func(_ indexer.Stats, err error) { synced <- err }
+		synced := make(chan error, 32)
+		d.onSync = func(_ indexer.Stats, err error) { synced <- err }
 
-	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+		ctx, cancel := context.WithCancel(context.Background())
+		runErr := startFakeRun(t, ctx, cancel, d)
 
-	waitForLock(t, codegraphDir)
-
-	// awaitEpisode drives one contention episode: write a fresh file (one
-	// organic event) and require exactly `want` consecutive lock-lost sync
-	// attempts, followed by a quiet gap proving the give-up branch did NOT
-	// requeue a further attempt.
-	awaitEpisode := func(rel string, want int) {
-		t.Helper()
-		writeFixtureFile(t, root, rel, "package main\n")
-		for i := 1; i <= want; i++ {
+		// awaitEpisode drives one contention episode: one organic event,
+		// then exactly `want` consecutive lock-lost sync attempts, followed
+		// by a quiet gap proving the give-up branch did NOT requeue a
+		// further attempt.
+		awaitEpisode := func(rel string, want int) {
+			t.Helper()
+			fw.events <- rel
+			for i := 1; i <= want; i++ {
+				select {
+				case err := <-synced:
+					if !errors.Is(err, graphstore.ErrStoreLocked) {
+						t.Fatalf("episode %q attempt %d: sync error = %v, want errors.Is(..., graphstore.ErrStoreLocked)", rel, i, err)
+					}
+				case <-time.After(10 * time.Second):
+					t.Fatalf("episode %q: timed out waiting for lock-lost sync attempt %d of %d — the requeue chain stopped early (counter not reset at give-up?)", rel, i, want)
+				}
+			}
+			// The give-up branch must not requeue: a further attempt would
+			// arrive one debounce window (10ms) after the give-up, well
+			// inside this 1s gap.
 			select {
 			case err := <-synced:
-				if !errors.Is(err, graphstore.ErrStoreLocked) {
-					t.Fatalf("episode %q attempt %d: sync error = %v, want errors.Is(..., graphstore.ErrStoreLocked)", rel, i, err)
-				}
-			case <-time.After(testBudget(10 * time.Second)):
-				t.Fatalf("episode %q: timed out waiting for lock-lost sync attempt %d of %d — the requeue chain stopped early (counter not reset at give-up?)", rel, i, want)
+				t.Fatalf("episode %q: a %dth sync attempt fired after exhaustion (err=%v) — the give-up branch requeued", rel, want+1, err)
+			case <-time.After(1 * time.Second):
 			}
 		}
-		// The give-up branch must not requeue: a further attempt would
-		// arrive one debounce window (~10ms) after the give-up; a 1s quiet
-		// gap is a generous margin and cannot flake in the pass direction —
-		// with no new events, nothing legitimate can fire.
+
+		// Episode 1: 1 organic + maxFlushLockRequeues requeued attempts.
+		awaitEpisode("episode1.go", maxFlushLockRequeues+1)
+		// Episode 2: the reset at give-up gives a fresh episode its own budget.
+		awaitEpisode("episode2.go", maxFlushLockRequeues+1)
+
+		// Contention lifts: the next organic event's sync must succeed.
+		locked.Store(false)
+		fw.events <- "episode3.go"
 		select {
 		case err := <-synced:
-			t.Fatalf("episode %q: a %dth sync attempt fired after exhaustion (err=%v) — the give-up branch requeued", rel, want+1, err)
-		case <-time.After(testBudget(1 * time.Second)):
+			if err != nil {
+				t.Fatalf("post-contention sync = %v, want success once the lock is free", err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for a successful sync after contention lifted")
 		}
-	}
 
-	// Episode 1: 1 organic + maxFlushLockRequeues requeued attempts.
-	awaitEpisode("episode1.go", maxFlushLockRequeues+1)
-	// Episode 2: the reset at give-up gives a fresh episode its own budget.
-	awaitEpisode("episode2.go", maxFlushLockRequeues+1)
-
-	// Contention lifts: the next organic event's sync must succeed.
-	locked.Store(false)
-	writeFixtureFile(t, root, "episode3.go", "package main\n")
-	select {
-	case err := <-synced:
-		if err != nil {
-			t.Fatalf("post-contention sync = %v, want success once the lock is free", err)
+		cancel()
+		select {
+		case err := <-runErr:
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("Run did not return after cancel")
 		}
-	case <-time.After(testBudget(10 * time.Second)):
-		t.Fatal("timed out waiting for a successful sync after contention lifted")
-	}
-
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(10 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	})
 }
 
 // TestRunReturnsErrWatcherClosedAndReleasesLock pins the IN-07 abnormal
@@ -676,8 +693,8 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	watcherCh := make(chan *watch.Watcher, 1)
-	d.onWatchOpen = func(w *watch.Watcher) { watcherCh <- w }
+	watcherCh := make(chan Watcher, 1)
+	d.onWatchOpen = func(w Watcher) { watcherCh <- w }
 
 	// A real, cancellable ctx (rather than a bare context.Background())
 	// gives joinDaemonRun's t.Cleanup an actual escape hatch: the expected
@@ -697,7 +714,7 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 	}()
 	joinDaemonRun(t, cancel, retryErr)
 
-	var w *watch.Watcher
+	var w Watcher
 	select {
 	case w = <-watcherCh:
 	case <-time.After(testBudget(5 * time.Second)):
@@ -883,9 +900,10 @@ func TestRunWithRetryReturnsImmediatelyOnGenuineError(t *testing.T) {
 // returns ctx.Err() promptly, well under the full retry interval — not by
 // waiting the interval out. Manually holding the lock (rather than running
 // a second Daemon) makes d.Run deterministically return ErrLockLive on
-// every attempt.
+// every attempt. d.Run returns before it opens a watcher, so the test runs
+// in a synctest bubble and measures the interval on fake time.
 func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
-	root, codegraphDir, _ := initFixture(t)
+	root, codegraphDir := fakeFixture(t)
 
 	if err := acquire(codegraphDir); err != nil {
 		t.Fatalf("acquire (holding the lock ourselves): %v", err)
@@ -897,52 +915,49 @@ func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	var mu sync.Mutex
-	deferredCount := 0
-	onDeferred := func() {
+		var mu sync.Mutex
+		deferredCount := 0
+		onDeferred := func() {
+			mu.Lock()
+			deferredCount++
+			mu.Unlock()
+		}
+
+		// Long enough that a prompt ctx.Err() proves the sleep — not the
+		// interval — elapsed.
+		const interval = 2 * time.Second
+		retryErr := make(chan error, 1)
+		go func() {
+			retryErr <- RunWithRetry(ctx, d, interval, onDeferred)
+			close(retryErr)
+		}()
+		joinDaemonRun(t, cancel, retryErr)
+
+		// RunWithRetry has hit ErrLockLive and waits in its retry sleep.
+		synctest.Wait()
+		start := time.Now()
+		cancel()
+
+		select {
+		case err := <-retryErr:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("RunWithRetry = %v, want context.Canceled", err)
+			}
+			if elapsed := time.Since(start); elapsed >= interval {
+				t.Fatalf("RunWithRetry took %v to return after cancel, want well under the %v interval", elapsed, interval)
+			}
+		case <-time.After(1 * time.Second):
+			t.Fatal("RunWithRetry did not return promptly after ctx cancellation during sleep")
+		}
+
 		mu.Lock()
-		deferredCount++
-		mu.Unlock()
-	}
-
-	// Long enough that a prompt ctx.Err() proves the sleep — not the
-	// interval — elapsed. interval is RunWithRetry's own retry cadence (an
-	// input to the SUT under test, not a test-side wait budget), so it is
-	// deliberately left unscaled — the property under test is "returns
-	// well under interval", which testBudget scaling interval itself would
-	// undermine.
-	const interval = 2 * time.Second
-	retryErr := make(chan error, 1)
-	go func() {
-		retryErr <- RunWithRetry(ctx, d, interval, onDeferred)
-		close(retryErr)
-	}()
-	joinDaemonRun(t, cancel, retryErr)
-
-	// Give RunWithRetry time to hit ErrLockLive at least once and enter its
-	// retry sleep before cancelling.
-	time.Sleep(50 * time.Millisecond)
-	start := time.Now()
-	cancel()
-
-	select {
-	case err := <-retryErr:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("RunWithRetry = %v, want context.Canceled", err)
+		defer mu.Unlock()
+		if deferredCount == 0 {
+			t.Fatal("onDeferred was never called — RunWithRetry should have hit ErrLockLive at least once before cancel")
 		}
-		if elapsed := time.Since(start); elapsed >= interval {
-			t.Fatalf("RunWithRetry took %v to return after cancel, want well under the %v interval", elapsed, interval)
-		}
-	case <-time.After(testBudget(1 * time.Second)):
-		t.Fatal("RunWithRetry did not return promptly after ctx cancellation during sleep")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if deferredCount == 0 {
-		t.Fatal("onDeferred was never called — RunWithRetry should have hit ErrLockLive at least once before cancel")
-	}
+	})
 }
