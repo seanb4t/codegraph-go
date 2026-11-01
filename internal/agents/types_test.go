@@ -31,6 +31,72 @@ func TestEphemeralExecPath(t *testing.T) {
 	}
 }
 
+func TestStableExecPath(t *testing.T) {
+	root := t.TempDir()
+	file := func(rel string) string {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	link := func(target, rel string) {
+		t.Helper()
+		if err := os.Symlink(target, filepath.Join(root, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	miseSame := file("mise/installs/codegraph/0.16.3/codegraph")
+	link("./0.16.3", "mise/installs/codegraph/latest")
+
+	miseOld := file("other/installs/codegraph/0.15.0/codegraph")
+	file("other/installs/codegraph/0.16.3/codegraph")
+	link("./0.16.3", "other/installs/codegraph/latest")
+
+	asdf := file("asdf/installs/codegraph/0.16.3/bin/codegraph")
+
+	broken := file("broken/installs/codegraph/0.16.3/codegraph")
+	link("./0.99.0", "broken/installs/codegraph/latest")
+
+	cask := file("brew/Caskroom/codegraph/0.16.3/codegraph")
+	if err := os.MkdirAll(filepath.Join(root, "brew/bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link("../Caskroom/codegraph/0.16.3/codegraph", "brew/bin/codegraph")
+
+	caskNoLink := file("brew2/Caskroom/codegraph/0.16.3/codegraph")
+
+	cases := []struct {
+		name          string
+		path          string
+		wantRecorded  string
+		wantVersioned bool
+	}{
+		{"mise latest names the same version", miseSame, filepath.Join(root, "mise/installs/codegraph/latest/codegraph"), false},
+		{"mise latest names another version", miseOld, miseOld, true},
+		{"asdf has no latest", asdf, asdf, true},
+		{"broken latest link", broken, broken, true},
+		{"cask with its bin link", cask, filepath.Join(root, "brew/bin/codegraph"), false},
+		{"cask without the bin link", caskNoLink, caskNoLink, true},
+		{"already latest", filepath.Join(root, "mise/installs/codegraph/latest/codegraph"), filepath.Join(root, "mise/installs/codegraph/latest/codegraph"), false},
+		{"not a package-manager path", "/usr/local/bin/codegraph", "/usr/local/bin/codegraph", false},
+		{"installs with one element after it", "/opt/installs/codegraph", "/opt/installs/codegraph", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorded, versioned := StableExecPath(tc.path)
+			if recorded != tc.wantRecorded || versioned != tc.wantVersioned {
+				t.Errorf("StableExecPath(%q) = (%q, %v), want (%q, %v)", tc.path, recorded, versioned, tc.wantRecorded, tc.wantVersioned)
+			}
+		})
+	}
+}
+
 func TestInstallOptionsValidate(t *testing.T) {
 	ephemeral := "/var/folders/xy/T/go-build1/b001/cli.test"
 

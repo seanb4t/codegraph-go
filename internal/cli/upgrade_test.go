@@ -292,6 +292,26 @@ func TestRefreshInstalledSkills_RefusesEphemeralExecPath(t *testing.T) {
 	}
 }
 
+// TestRefreshInstalledSkills_RecordsMiseLatestLink: given a mise version
+// path whose latest link names that version, the refresh rewrites the
+// Claude entry to the latest path.
+func TestRefreshInstalledSkills_RecordsMiseLatestLink(t *testing.T) {
+	home := fakeHome(t)
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude: %v", err)
+	}
+	versioned, latest := versionedInstall(t, "codegraph", true)
+
+	if err := refreshInstalledSkills(versioned, io.Discard); err != nil {
+		t.Fatalf("refreshInstalledSkills: %v", err)
+	}
+	mcpServers, _ := readJSONMap(t, filepath.Join(home, ".claude.json"))["mcpServers"].(map[string]any)
+	entry, _ := mcpServers["codegraph"].(map[string]any)
+	if entry["command"] != latest {
+		t.Fatalf("codegraph.command = %v, want %s", entry["command"], latest)
+	}
+}
+
 // TestUpgradeCommand_RefreshFailureIsWarningNotError asserts D-07: when the
 // swap succeeds but the refresh seam fails, upgrade still returns nil (the
 // swap genuinely worked) and prints a warning naming `codegraph install` as

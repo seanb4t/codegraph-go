@@ -251,6 +251,92 @@ func TestInstall_RefusesEphemeralExecPath(t *testing.T) {
 	}
 }
 
+// versionedInstall writes a stand-in binary at
+// <t.TempDir()>/installs/codegraph/0.16.3/<rel> and, if withLatest, the
+// mise link installs/codegraph/latest -> ./0.16.3. It returns the versioned
+// path and the path through latest.
+func versionedInstall(t *testing.T, rel string, withLatest bool) (versioned, latest string) {
+	t.Helper()
+	tool := filepath.Join(t.TempDir(), "installs", "codegraph")
+	versioned = filepath.Join(tool, "0.16.3", rel)
+	if err := os.MkdirAll(filepath.Dir(versioned), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(versioned, []byte("bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if withLatest {
+		if err := os.Symlink("./0.16.3", filepath.Join(tool, "latest")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return versioned, filepath.Join(tool, "latest", rel)
+}
+
+// runFromExecPath makes install see path as its running binary.
+func runFromExecPath(t *testing.T, path string) {
+	t.Helper()
+	orig := executablePath
+	executablePath = func() (string, error) { return path, nil }
+	t.Cleanup(func() { executablePath = orig })
+}
+
+func opencodeCommand(t *testing.T, home string) any {
+	t.Helper()
+	mcp, _ := readJSONMap(t, filepath.Join(home, ".config", "opencode", "opencode.jsonc"))["mcp"].(map[string]any)
+	entry, _ := mcp["codegraph"].(map[string]any)
+	command, _ := entry["command"].([]any)
+	if len(command) == 0 {
+		t.Fatalf("opencode.jsonc has no mcp.codegraph.command: %v", entry)
+	}
+	return command[0]
+}
+
+// TestInstall_RecordsMiseLatestLink: run from a mise version directory
+// whose latest link names that version, install records the latest path
+// and prints no warning.
+func TestInstall_RecordsMiseLatestLink(t *testing.T) {
+	home := fakeHome(t)
+	versioned, latest := versionedInstall(t, "codegraph", true)
+	runFromExecPath(t, versioned)
+
+	_, stderr, err := execCmd("install", "--target", "opencode", "--location", "global")
+	if err != nil {
+		t.Fatalf("install --target opencode: %v", err)
+	}
+	if got := opencodeCommand(t, home); got != latest {
+		t.Fatalf("opencode command = %v, want %s", got, latest)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+// TestInstall_WarnsOnceForVersionedPath: run from an asdf-style version
+// directory with no latest link, install records the real path for every
+// agent, prints exactly one warning naming it, and exits zero.
+func TestInstall_WarnsOnceForVersionedPath(t *testing.T) {
+	home := fakeHome(t)
+	versioned, _ := versionedInstall(t, filepath.Join("bin", "codegraph"), false)
+	runFromExecPath(t, versioned)
+
+	_, stderr, err := execCmd("install", "--target", "all", "--location", "global")
+	if err != nil {
+		t.Fatalf("install --target all: %v", err)
+	}
+	if got := opencodeCommand(t, home); got != versioned {
+		t.Fatalf("opencode command = %v, want %s", got, versioned)
+	}
+	mcpServers, _ := readJSONMap(t, filepath.Join(home, ".claude.json"))["mcpServers"].(map[string]any)
+	if entry, _ := mcpServers["codegraph"].(map[string]any); entry["command"] != versioned {
+		t.Fatalf("claude command = %v, want %s", entry["command"], versioned)
+	}
+	lines := strings.Split(strings.TrimRight(stderr, "\n"), "\n")
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "warning: ") || !strings.Contains(lines[0], versioned) {
+		t.Fatalf("stderr = %q, want one warning line naming %s", stderr, versioned)
+	}
+}
+
 // TestInstall_Idempotent_RerunReportsUnchanged asserts re-running install
 // twice reports only "unchanged" the second time — a byte-level no-op
 // (D-07).

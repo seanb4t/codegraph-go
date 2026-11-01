@@ -13,7 +13,9 @@ package agents
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -175,6 +177,62 @@ func ephemeralExecPath(path string) bool {
 		}
 	}
 	return false
+}
+
+// StableExecPath returns the path an install records for the binary at
+// path. A versioned package-manager path, <dir>/installs/<tool>/<version>/...
+// (mise, asdf) or <prefix>/Caskroom/<token>/<version>/<name> (a Homebrew
+// cask), is replaced with the link the package manager keeps across
+// upgrades: <dir>/installs/<tool>/latest/... or <prefix>/bin/<name>. The
+// link is used only when it resolves to the same file as path, so the
+// recorded command never starts a binary other than the one running.
+// Otherwise path is returned unchanged, and versioned reports whether it
+// is a versioned path that the next upgrade or prune can break.
+func StableExecPath(path string) (recorded string, versioned bool) {
+	clean := filepath.Clean(path)
+	link, ok := stableLinkFor(clean)
+	if !ok {
+		return path, false
+	}
+	if sameFile(clean, link) {
+		return link, false
+	}
+	return path, true
+}
+
+// stableLinkFor finds the last installs or Caskroom element of path that
+// has a tool or token, a version and at least one more element after it,
+// and returns the stable link for that layout. ok is false when there is
+// no such element or its version is already latest.
+func stableLinkFor(path string) (link string, ok bool) {
+	sep := string(filepath.Separator)
+	elems := strings.Split(path, sep)
+	for i := len(elems) - 4; i >= 0; i-- {
+		switch elems[i] {
+		case "installs":
+			if elems[i+2] == "latest" {
+				return "", false
+			}
+			parts := append(append(slices.Clone(elems[:i+2]), "latest"), elems[i+3:]...)
+			return strings.Join(parts, sep), true
+		case "Caskroom":
+			if elems[i+2] == "latest" {
+				return "", false
+			}
+			parts := append(slices.Clone(elems[:i]), "bin", elems[len(elems)-1])
+			return strings.Join(parts, sep), true
+		}
+	}
+	return "", false
+}
+
+func sameFile(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	return err == nil && os.SameFile(ai, bi)
 }
 
 // PreToolNudgeMode is InstallOptions.PreToolNudge's tri-state: an install
