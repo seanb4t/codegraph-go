@@ -45,6 +45,10 @@ func allowEphemeralExecPath() bool {
 	return os.Getenv(agents.AllowEphemeralExecPathEnv) == "1"
 }
 
+// executablePath is os.Executable behind a seam, so a test can run install
+// as if from a package-manager install directory.
+var executablePath = os.Executable
+
 // newInstallCmd builds `codegraph install` (AGNT-01, D-02): resolves
 // --target/--location, resolves the running binary's absolute path once
 // via os.Executable() (D-04 — the MCP config written points at THIS
@@ -85,7 +89,13 @@ func newInstallCmd() *cobra.Command {
 			"by go run), exits non-zero and writes nothing. Build codegraph and\n" +
 			"run install from the built binary, or set\n" +
 			"CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 to record that path anyway.\n" +
-			"The refresh after codegraph upgrade follows the same rule.",
+			"The refresh after codegraph upgrade follows the same rule.\n\n" +
+			"For a binary in a mise or Homebrew cask version directory, install\n" +
+			"records the link that the package manager keeps across upgrades\n" +
+			"(mise's latest, or Homebrew's bin/codegraph) when that link names\n" +
+			"the same binary. If no such link names it, for example under asdf,\n" +
+			"install records the versioned path and prints one warning to\n" +
+			"stderr. Run install again after each upgrade in that case.",
 		Example: "  codegraph install\n" +
 			"  codegraph install --target all --location global\n" +
 			"  codegraph install --target claude,cursor\n" +
@@ -117,9 +127,13 @@ func newInstallCmd() *cobra.Command {
 				return printConfigStyle(cmd, targets, loc)
 			}
 
-			execPath, err := os.Executable()
+			rawExecPath, err := executablePath()
 			if err != nil {
 				return fmt.Errorf("codegraph install: resolve running binary path: %w", err)
+			}
+			execPath, versioned := agents.StableExecPath(rawExecPath)
+			if versioned {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s is a versioned package-manager path. A package-manager upgrade or prune can break it. Run `codegraph install` again after each upgrade.\n", sanitizePathForDisplay(execPath))
 			}
 			// Validated before the picker or any target runs, so a refused
 			// path prints one line instead of one per agent.

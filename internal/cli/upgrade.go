@@ -80,6 +80,9 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
 	if len(locs) == 0 {
 		return nil
 	}
+	// Only install warns about a versioned path; the refresh output stays
+	// as it is.
+	execPath, _ = agents.StableExecPath(execPath)
 
 	var errs []error
 	for _, loc := range locs {

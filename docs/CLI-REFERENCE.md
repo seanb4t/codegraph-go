@@ -717,6 +717,13 @@ run install from the built binary, or set
 CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 to record that path anyway.
 The refresh after codegraph upgrade follows the same rule.
 
+For a binary in a mise or Homebrew cask version directory, install
+records the link that the package manager keeps across upgrades
+(mise's latest, or Homebrew's bin/codegraph) when that link names
+the same binary. If no such link names it, for example under asdf,
+install records the versioned path and prints one warning to
+stderr. Run install again after each upgrade in that case.
+
 ```
 codegraph install [flags]
 ```
