@@ -94,7 +94,7 @@ The inventory MUST include omissions, extra edges, shadowing, repeated names, ma
 
 #### Scenario: An acceptance fixture changes
 - **WHEN** an acceptance expectation requires revision
-- **THEN** a separate review records its language-contract reason and source evidence before the revised result establishes support
+- **THEN** the report names the changed expectation revision and its acceptance partition
 
 ### Requirement: Reproducible evaluation inputs
 

@@ -24,7 +24,7 @@
 
 ## 4. Reproducible execution
 
-- [ ] 4.1 Add `task eval:semantic` for both manifest partitions and `task eval:semantic:dev` for development only. Run the four language tests and `TestSemanticPublicQueries` through these selections. Run offline after dependency installation. Document failure exits and report fields. Assert required tools inside the command without wrapper self-tests.
+- [ ] 4.1 Add `task eval:semantic` for both manifest partitions and `task eval:semantic:dev` for development only. Run the four language tests, `TestSemanticLifecycle`, and `TestSemanticPublicQueries` through these selections. Run offline after dependency installation. Document failure exits and report fields. Assert required tools inside the command without wrapper self-tests.
 - [ ] 4.2 Add a small licensed TypeScript and TSX source collection through the existing corpus mechanism. Record its immutable revision and digest. Demonstrate nonempty expected TypeScript relationships through `TestSemanticTypeScriptCorpusEdges`.
 - [ ] 4.3 Add development and acceptance manifest partitions, with acceptance cases under `testdata/semantic/heldout/`. Pin Go, Python, and Java inputs. Run `TestSemanticPublicQueries` with acceptance cases. Record sample sizes and unlabeled limits. Document separate source review for acceptance revisions.
 - [ ] 4.4 Wire `task eval:semantic` into pull request CI and the source collections into scheduled or manual CI. Upload the semantic report with the existing workflow artifact step. Reuse existing actions and test reporting without induced workflow failures.

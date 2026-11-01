@@ -28,9 +28,9 @@ Apply this declaration-kind mapping consistently across extraction and evaluatio
 | --- | --- | --- |
 | Go package `var` / `const` | `variable` / `constant` | Explicitly named struct members use `field`. |
 | TypeScript, JavaScript, TSX module `var` / `let` / `const` | `variable` / `variable` / `constant` | A direct arrow or function expression uses `function`, including unexported bindings. An alias to another function retains its data kind. |
-| TypeScript, JavaScript, TSX class member | `field` | Static, readonly, private, and callable fields remain fields. Preserve modifiers as metadata. |
+| TypeScript, JavaScript, TSX class data field | `field` | Static, readonly, private, and callable fields remain fields. Methods retain their callable kind. Interface property signatures remain outside this field contract. |
 | Python module assignment or annotation | `variable` | Uppercase spelling does not establish a constant. Class and declared-receiver attributes use `field`. |
-| Java class or interface member | `field` | Static, final, and interface fields retain modifiers without changing kind. |
+| Java class or interface data field | `field` | Static, final, and interface fields retain modifiers without changing kind. Methods retain their callable kind. |
 
 Qualify fields through their declaring type. Collect repeated writes before identity finalization so a Python attribute has one logical owner/name binding. Choose its earliest qualifying declaration or assignment as its source anchor. Keep write sites as reference evidence.
 
@@ -51,7 +51,7 @@ Python class-method receiver attributes require an explicit `classmethod` form a
 
 Resolve direct identifier reads and writes in their lexical scope. Track local bindings only far enough to reject shadowed global names. Resolve member accesses through explicit receiver types or established `this`, `self`, and class owners. Reject ambiguous owners.
 
-For Java and TypeScript, follow an explicit, uniquely resolved base-class chain for accessible fields. Reference the declaring base owner unless a derived declaration shadows that name. Do not resolve inaccessible private fields or ambiguous bases. This does not add arbitrary receiver inference or Go embedded-field promotion.
+For Java, TypeScript, JavaScript, and TSX, follow an explicit, uniquely resolved base-class chain for accessible fields. Reference the declaring base owner unless a derived declaration shadows that name. Do not resolve inaccessible private fields or ambiguous bases. This does not add arbitrary receiver inference or Go embedded-field promotion.
 
 For Python, a declared instance receiver's assignment establishes a field on its lexical class, even when a base defines a same-named class attribute. Prefer that established instance field for supported reads. Otherwise, follow only a uniquely established class chain. Leave descriptors, dynamic method resolution, and ambiguous class/instance storage unresolved.
 

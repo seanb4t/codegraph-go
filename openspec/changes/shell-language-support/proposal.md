@@ -13,7 +13,8 @@ CodeGraph has no shell language registration, despite shell scripts and startup 
 - Resolve literal sourced files within the repository without executing scripts or searching the runtime environment.
 - Track source-path dependencies so added or restored scripts update unchanged importers.
 - Support root-anchored `.config/fish` discovery through shared fsnotify and macOS FSEvents inclusion rules.
-- Reject shell extraction on parse errors and discover newly supported files through normal synchronization.
+- Reject shell extraction on parse errors or recognized constructs outside the selected dialect contract.
+- Discover newly supported files through normal synchronization and preserve exclusion reasons for extensionless non-shell scripts.
 - Qualify maintained parser candidates before registration and publish dialect-specific limitations.
 
 Out of scope: arbitrary shell execution, `eval`, runtime expansion, environment-dependent command lookup, plugin autoloading, and shell embedded in YAML or Makefiles. The change does not index the user home directory as a project.

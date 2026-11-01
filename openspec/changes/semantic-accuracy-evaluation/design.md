@@ -71,7 +71,7 @@ The first inventory covers the following dimensions:
 | Lifecycle | Fresh indexing, no-op synchronization, edits, renames, deletion, restored files |
 | Queries | Definitions, callers, callees, impact, explore, disambiguation, required context, forbidden facts, truncation |
 
-Record decorators, Java records and enums, overloads, interface dispatch, and dynamic attributes even when the initial result is a known gap. Other registered languages remain explicitly unevaluated by this change. Add issues for gaps beyond #239 instead of expanding its scope automatically.
+Inventory decorators, Java record components, enum-specific declarations, general overload resolution, interface dispatch, and dynamic attributes. Label each construct unsupported while it remains outside the declared product contract. Reserve known-gap for missing facts within that contract. Other registered languages remain explicitly unevaluated. Track future scope separately instead of expanding #239 automatically.
 
 Run small reviewed fixtures on pull requests. Run pinned source collections on a schedule and on demand. Reuse `internal/corpora` and existing corpus tasks. Add genuine TypeScript and TSX input because Hugo's JavaScript files do not establish TypeScript coverage.
 

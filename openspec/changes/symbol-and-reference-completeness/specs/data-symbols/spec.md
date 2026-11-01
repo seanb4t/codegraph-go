@@ -21,7 +21,7 @@ CodeGraph MUST expose statically named package or module bindings in Go, TypeScr
 
 ### Requirement: Deterministic declaration kinds
 
-Go package `var` and `const` MUST use variable and constant kinds. JavaScript and TypeScript module `var`/`let` MUST use variable, and `const` MUST use constant. Direct module arrow/function expressions MUST use function, with one identity regardless of export. Callable aliases MUST retain their data kind. Python module assignments MUST use variable. Named type members MUST use field, including Java final fields and callable class fields.
+Go package var/const MUST use variable/constant. JavaScript/TypeScript/TSX module var/let/const MUST use variable/variable/constant, except direct arrow/function expressions MUST use function. Callable aliases MUST retain their data kind. Python module assignments MUST use variable. Go struct fields, Java/TypeScript/JavaScript/TSX class fields, Java interface fields, and Python class/receiver attributes MUST use field. Methods MUST retain their callable kind.
 
 #### Scenario: Modifiers do not invent new declaration kinds
 - **WHEN** source declares an uppercase Python assignment, a Java static final field, and a TypeScript readonly field
@@ -86,9 +86,9 @@ CodeGraph MUST link statically resolvable reads and writes to the correct data d
 
 ### Requirement: Bounded inherited field resolution
 
-Java and TypeScript field lookup MUST follow uniquely established base-class chains to accessible declaring owners, unless a derived field shadows the name. Python receiver assignments MUST belong to the lexical class. Python reads MUST prefer established instance fields, then uniquely established class chains. Ambiguous ownership, inaccessible private fields, descriptors, and dynamic method resolution MUST remain unresolved.
+Java, TypeScript, JavaScript, and TSX field lookup MUST follow uniquely established base-class chains to accessible declaring owners, unless a derived field shadows the name. Python receiver assignments MUST belong to the lexical class. Python reads MUST prefer established instance fields, then uniquely established class chains. Ambiguous ownership, inaccessible private fields, descriptors, and dynamic method resolution MUST remain unresolved.
 
-#### Scenario: An inherited Java or TypeScript field is read
+#### Scenario: An inherited Java, TypeScript, JavaScript, or TSX field is read
 - **WHEN** a derived class reads an accessible field declared only in its established base class
 - **THEN** the reference targets the base field
 - **AND** adding a same-named derived field changes that reference to the derived owner

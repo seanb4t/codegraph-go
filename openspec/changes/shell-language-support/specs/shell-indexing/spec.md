@@ -17,7 +17,7 @@ CodeGraph MUST represent POSIX shell, Bash, Zsh, and Fish as distinct languages.
 
 ### Requirement: Deterministic dialect discovery
 
-Shell classification MUST apply only to `.sh`, `.bash`, `.zsh`, `.fish`, documented startup names, and eligible extensionless files. Registered non-shell extensions MUST retain their existing classification. Within shell candidates, recognized shebangs MUST precede startup names and extensions. Explicit unsupported interpreters MUST prevent shell fallback and use `EXCLUSION_REASON_INTERPRETER_MISMATCH`. Unidentified extensionless files MUST remain unsupported.
+Discovery MUST inspect `.sh`, `.bash`, `.zsh`, `.fish`, startup names, and regular extensionless files within repository, directory, and size limits. Registered non-shell extensions MUST keep their classification. Recognized shebangs MUST take precedence. Unsupported interpreters on shell extensions or startup names MUST use `EXCLUSION_REASON_INTERPRETER_MISMATCH`. Extensionless files without a recognized interpreter MUST retain `EXCLUSION_REASON_UNSUPPORTED_EXTENSION`.
 
 #### Scenario: Bash uses the generic shell extension
 - **WHEN** `build.sh` starts with `#!/usr/bin/env bash`
@@ -33,9 +33,13 @@ Shell classification MUST apply only to `.sh`, `.bash`, `.zsh`, `.fish`, documen
 - **THEN** discovery selects Zsh without executing the interpreter
 
 #### Scenario: An interpreter is outside the recognized set
-- **WHEN** a shell candidate names an interpreter other than `sh`, `bash`, `zsh`, or `fish`, including `dash`, `ash`, or `ksh`
+- **WHEN** a shell extension or startup name specifies an interpreter other than `sh`, `bash`, `zsh`, or `fish`, including `dash`, `ash`, or `ksh`
 - **THEN** discovery records an interpreter mismatch
 - **AND** direct paths and supported `env` forms use the same exact interpreter set
+
+#### Scenario: An extensionless non-shell script remains unsupported
+- **WHEN** an eligible extensionless script names Python, Node, or another unrecognized interpreter
+- **THEN** its exclusion remains `EXCLUSION_REASON_UNSUPPORTED_EXTENSION` rather than a shell interpreter mismatch
 
 #### Scenario: A registered non-shell file has a shebang
 - **WHEN** a `.py` or `.js` file contains a shell or unsupported shebang
@@ -43,7 +47,7 @@ Shell classification MUST apply only to `.sh`, `.bash`, `.zsh`, `.fish`, documen
 
 ### Requirement: Bounded startup file discovery
 
-Discovery MUST include documented startup files. The Fish hidden-directory exception MUST include only root-anchored `.config/fish/config.fish`, `.config/fish/functions/**/*.fish`, and `.config/fish/conf.d/**/*.fish`. Nested equivalents and hidden ancestors MUST remain excluded. Discovery, fsnotify registration and directory events, and macOS FSEvents filtering MUST use equivalent rules within repository and size boundaries.
+Discovery MUST include documented startup files. Fish exceptions MUST include only root-anchored `.config/fish/config.fish`, `.config/fish/functions/**/*.fish`, and `.config/fish/conf.d/**/*.fish`. Nested equivalents and hidden ancestors MUST remain excluded. Discovery, fsnotify registration and directory events, FSEvents filtering, and the no-daemon status walk MUST use equivalent rules within repository and size boundaries.
 
 #### Scenario: A repository contains Fish configuration
 - **WHEN** `.config/fish/functions/prompt.fish` changes
@@ -125,13 +129,18 @@ CodeGraph MUST persist resolved and unresolved literal source candidates as repo
 
 ### Requirement: Shell parse failures reject file extraction
 
-A shell Tree-sitter error or missing node MUST reject all declarations and relationships from that file. The file record MUST retain indexing errors and count as failed. Synchronization MUST remove previously extracted facts for the failed file. Independent expected facts MUST remain in evaluation denominators. Other languages MUST retain their existing parse behavior.
+A shell Tree-sitter error, missing node, or recognized construct outside the selected dialect contract MUST reject extraction for that file. Its file record MUST retain a named indexing error and count as failed. Synchronization MUST remove former extracted facts. Expected facts MUST remain in evaluation denominators. A sourced file MUST retain its independently selected dialect. Other languages MUST retain their existing parse behavior.
 
 #### Scenario: Unsupported Zsh syntax appears beside a function
 - **WHEN** the selected parser cannot parse part of the file
 - **THEN** indexing reports the parse limitation
 - **AND** the file retains an error record but no extracted declarations or outgoing relationships
 - **AND** synchronization removes its former facts and invalidates dependent references
+
+#### Scenario: A POSIX-selected file contains a Bash-only construct
+- **WHEN** the shared grammar accepts a Bash array or `function` declaration in a `shell` file
+- **THEN** the POSIX adapter rejects extraction and names that construct in the file's indexing error
+- **AND** sourcing it from Bash does not change its dialect or bypass rejection
 
 ### Requirement: Public query and synchronization support
 

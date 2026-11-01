@@ -9,22 +9,22 @@
 
 ## 2. Discovery and file watching
 
-- [ ] 2.1 Add bounded classification for exactly `sh`, `bash`, `zsh`, and `fish` interpreters. Add `EXCLUSION_REASON_INTERPRETER_MISMATCH` to both protocol sources and regenerate clients. Cover precedence, non-shell extensions, `env -S`, excluded interpreter names, and extensionless files in `TestShellDiscovery`.
+- [ ] 2.1 Add classification for exactly `sh`, `bash`, `zsh`, and `fish`. Add `EXCLUSION_REASON_INTERPRETER_MISMATCH` to both protocol sources and regenerate clients. In `TestShellDiscovery`, cover precedence, `env -S`, excluded interpreters, and eligible extensionless inputs. Preserve non-shell extension classification and extensionless non-shell exclusion reasons.
 - [ ] 2.2 Add shared root-relative inclusion rules for repository-local Fish configuration. Cover allowed paths, excluded siblings, source limits, and symlink escapes in `TestShellDiscoveryBoundaries`.
 - [ ] 2.3 Share root-anchored inclusion across discovery, fsnotify registration and directory events, FSEvents filtering, and no-daemon status staleness. Cover new Fish directories, nested exclusions, changed shebangs, and stale status in `TestShellWatchDiscoveryParity` and `TestShellStatusStaleness` on both platforms.
 - [ ] 2.4 Document recognized filenames, shebang forms, precedence, and hidden-directory exceptions. Make sure that every documented form appears in `TestShellDiscovery` or `TestShellDiscoveryBoundaries`.
 
 ## 3. Dialect extraction
 
-- [ ] 3.1 Add POSIX shell function, binding, read, and direct-call extraction. Cover command-scoped assignments, pipelines, subshells, literals, and heredocs in `TestPOSIXShellExtraction`. Document the supported subset.
+- [ ] 3.1 Add POSIX shell function, binding, read, and direct-call extraction. Cover command-scoped assignments, pipelines, subshells, literals, and heredocs in `TestPOSIXShellExtraction`. Reject recognized Bash-only constructs with named errors in `TestShellParseFailures`. Document the supported subset and independent source-file dialect selection.
 - [ ] 3.2 Add Bash arrays and explicit local declarations through its dialect adapter. Cover shadowing, substitutions, indirect names, and dynamic scope in `TestBashExtraction`. Document unresolved forms.
-- [ ] 3.3 Add Zsh named functions and static bindings through its dialect adapter. Cover arrays, parameter expansion, glob syntax, and parse failures in `TestZshExtraction`. Document exact parser limits.
-- [ ] 3.4 Add Fish functions and explicit local/global `set` bindings. Cover repeated assignments, scope, substitutions, and universal-variable limits in `TestFishExtraction`. Document unresolved forms.
+- [ ] 3.3 Add Zsh named functions and static bindings through its dialect adapter. Cover direct function calls, reads, arrays, parameter expansion, glob syntax, and parse failures in `TestZshExtraction`. Document exact parser limits.
+- [ ] 3.4 Add Fish functions and explicit local/global `set` bindings. Cover direct function calls, reads, repeated assignments, scope, substitutions, and universal-variable limits in `TestFishExtraction`. Document unresolved forms.
 - [ ] 3.5 Reject shell extraction on any Tree-sitter error or missing node. Preserve file errors and remove stale facts during synchronization. Cover valid syntax beside rejected syntax, dependent references, and failed-file accounting in `TestShellParseFailures`.
 
 ## 4. Source relationships and reference resolution
 
-- [ ] 4.1 Add a shell-specific source-path resolver to existing file nodes with imports edges and path-assumption metadata. Bypass Go module-prefix resolution. Cover relative candidates, absolute paths, escapes, expansion, and absence of synthetic packages in `TestShellSourceResolution`.
+- [ ] 4.1 Add a shell-specific source-path resolver to file nodes with imports edges and path-assumption metadata. Bypass Go module-prefix resolution. In `TestShellSourceResolution`, cover POSIX `.`, Bash/Zsh `.` and `source`, and Fish `source`. Include relative candidates, absolute paths, escapes, expansion, and absence of synthetic packages.
 - [ ] 4.2 Add cycle-safe source traversal and conservative imported function resolution. Persist literal path dependencies through schema sources and generators, including unresolved candidates. Cover cycles, repeated imports, ambiguous names, and dynamic commands in `TestShellReferenceResolution`.
 - [ ] 4.3 Add read/write metadata and stable binding identities through the shared graph contract. Cover repeated assignments and owner separation in `TestShellBindingIdentity`.
 - [ ] 4.4 Document source-path assumptions and unresolved runtime behavior. Make sure that `TestShellNoExecution` indexes side-effecting source text without executing it.
