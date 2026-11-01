@@ -511,46 +511,32 @@ func TestChangieShapeParsersFailLoudly(t *testing.T) {
 
 // --- TestChangieCheckWiredIntoCI (CHG-03, D-07, D-08) -----------------------
 
-// TestChangieCheckWiredIntoCI asserts ci.yml's test job runs `task
-// check:changie` immediately after `task docs:cli:drift` (D-08), and that
-// Taskfile.yml's check:changie block declares actionable preconditions and
-// runs the changie mise.toml pins (D-07).
+// TestChangieCheckWiredIntoCI asserts ci.yml's release-checks job runs
+// `task check:changie` exactly once (D-08), and that Taskfile.yml's
+// check:changie block declares actionable preconditions and runs the
+// changie mise.toml pins (D-07).
 func TestChangieCheckWiredIntoCI(t *testing.T) {
+	const job = "release-checks"
 	ciData, err := os.ReadFile(ciWorkflowPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", ciWorkflowPath, err)
 	}
-	steps, err := parseWorkflowJobSteps(string(ciData), "test")
+	steps, err := parseWorkflowJobSteps(string(ciData), job)
 	if err != nil {
-		t.Fatalf("parseWorkflowJobSteps(%s, %q): %v", ciWorkflowPath, "test", err)
+		t.Fatalf("parseWorkflowJobSteps(%s, %q): %v", ciWorkflowPath, job, err)
 	}
 
-	docsDriftIdx, checkChangieIdx := -1, -1
 	var stripped []string
-	for i, step := range steps {
+	calls := 0
+	for _, step := range steps {
 		s := stripRunBodyNoise(step.Run)
 		stripped = append(stripped, s)
-		switch s {
-		case "task docs:cli:drift":
-			if docsDriftIdx != -1 {
-				t.Fatalf("%s job %q: more than one step's run: body strips to %q (indices %d and %d): %v", ciWorkflowPath, "test", "task docs:cli:drift", docsDriftIdx, i, stripped)
-			}
-			docsDriftIdx = i
-		case "task check:changie":
-			if checkChangieIdx != -1 {
-				t.Fatalf("%s job %q: more than one step's run: body strips to %q (indices %d and %d): %v", ciWorkflowPath, "test", "task check:changie", checkChangieIdx, i, stripped)
-			}
-			checkChangieIdx = i
+		if s == "task check:changie" {
+			calls++
 		}
 	}
-	if docsDriftIdx == -1 {
-		t.Fatalf("%s job %q: no step's run: body strips to %q — observed steps: %v", ciWorkflowPath, "test", "task docs:cli:drift", stripped)
-	}
-	if checkChangieIdx == -1 {
-		t.Fatalf("%s job %q: no step's run: body strips to %q — observed steps: %v", ciWorkflowPath, "test", "task check:changie", stripped)
-	}
-	if checkChangieIdx != docsDriftIdx+1 {
-		t.Fatalf("%s job %q: %q is at index %d, want %d (immediately after %q at index %d, D-08) — observed steps: %v", ciWorkflowPath, "test", "task check:changie", checkChangieIdx, docsDriftIdx+1, "task docs:cli:drift", docsDriftIdx, stripped)
+	if calls != 1 {
+		t.Fatalf("%s job %q: %d steps' run: bodies strip to %q, want exactly 1 — observed steps: %v", ciWorkflowPath, job, calls, "task check:changie", stripped)
 	}
 
 	taskfileData, err := os.ReadFile(taskfilePath)

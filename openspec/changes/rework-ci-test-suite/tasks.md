@@ -15,10 +15,10 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 2. CI layout (design.md D1 to D4)
 
-- [ ] 2.1 Replace the `changes` job with `dorny/paths-filter`, pinned by SHA, with the outputs of D2. If the filter step fails, set every output to `true`. Delete `scripts/planning_only.py` and `tests/test_planning_only.py`, and remove them from `check:ci-scripts`.
-- [ ] 2.2 Split the `test` job into the legs of D3. The `go` leg installs the web dependencies before `proto:drift`. The `daemon` leg runs on the `go` output. Run `internal/daemon` once, under `-race -p 1`. Run `go-race` without `-p 1`. Drop `-count=1` except on the `daemon` leg. Remove the `test:integration` and `test:wireoracle` steps and `task test:daemon`.
-- [ ] 2.3 Add the aggregate job named `test` (D1). Gate `govulncheck`, `tool-vuln` and `reproducibility` on the `release` or `ci` output.
-- [ ] 2.4 Add the `concurrency` block of D4.
+- [x] 2.1 Replace the `changes` job with `dorny/paths-filter`, pinned by SHA, with the outputs of D2. If the filter step fails, set every output to `true`. Delete `scripts/planning_only.py` and `tests/test_planning_only.py`, and remove them from `check:ci-scripts`.
+- [x] 2.2 Split the `test` job into the legs of D3. The `go` leg installs the web dependencies before `proto:drift`. The `daemon` leg runs on the `go` output. Run `internal/daemon` once, under `-race -p 1`. Run `go-race` without `-p 1`. Drop `-count=1` except on the `daemon` leg. Remove the `test:integration` and `test:wireoracle` steps and `task test:daemon`.
+- [x] 2.3 Add the aggregate job named `test` (D1). Gate `govulncheck`, `tool-vuln` and `reproducibility` on the `release` or `ci` output.
+- [x] 2.4 Add the `concurrency` block of D4.
 - [ ] 2.5 Verify on the PR with three scratch commits, then drop them. A change to only `web/src/` runs the `web` leg and skips the Go legs, and the required `test` status still reports success. A change to only `.changes/` runs `release-checks`. A change to only `docs/LANGUAGE-CAPABILITY-MATRIX.md` runs the `go` leg, and the `gotestsum` report shows that `TestMatrix_DocMirrorsDescriptor` ran. Link the three runs in the PR body. Verify `task lint:actions` passes.
 
 ## 3. Linters in place of `archtest` (design.md D6)

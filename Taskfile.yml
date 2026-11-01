@@ -144,7 +144,7 @@ tasks:
   test:unit:
     desc: >-
       go test over every package except internal/daemon (isolated separately
-      — see task test:daemon).
+      — see task test:race:daemon).
     cmds:
       - |
         set -euo pipefail
@@ -294,19 +294,6 @@ tasks:
 
         exit "${STATUS}"
 
-  test:daemon:
-    desc: >-
-      internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
-      are a documented, PRE-EXISTING flake under full-suite parallel load
-      (STATE.md, 08-CONTEXT.md "Flake note") — isolating them here is the
-      documented handling; the tests are NOT removed or skipped, just run
-      without contention from the rest of the suite.
-    cmds:
-      - |
-        set -euo pipefail
-        {{.GOTESTSUM_LIB}}
-        run_gotestsum daemon ./internal/daemon/ -count=1
-
   test:watch:
     desc: >-
       internal/watch alone (-count=1). The daemon darwin workflow runs it on
@@ -316,9 +303,9 @@ tasks:
 
   test:race:
     desc: >-
-      Concurrency packages under the race detector. -p 1 preserves the same
-      no-parallel-package-contention isolation test:daemon relies on — do not
-      run this concurrently with test:daemon (see the test wrapper's comment).
+      internal/cli, internal/mcp and internal/watch under the race detector.
+      The packages run in parallel, and the test cache skips an unchanged
+      package. internal/daemon runs alone in test:race:daemon.
     cmds:
       # internal/mcp added during phase-01 UAT (01-UAT.md test 2): the
       # session-line hook in server.go writes to a shared caller-supplied
@@ -331,7 +318,19 @@ tasks:
       - |
         set -euo pipefail
         {{.GOTESTSUM_LIB}}
-        run_gotestsum race -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/... ./internal/mcp/...
+        run_gotestsum race -race ./internal/watch/... ./internal/cli/... ./internal/mcp/...
+
+  test:race:daemon:
+    desc: >-
+      internal/daemon, once, under the race detector. -p 1 keeps other
+      packages from contending with its soak and flush-lock tests, and
+      -count=1 always runs it, because it drives a real watcher and store.
+      The race run covers a plain run, so there is no second one.
+    cmds:
+      - |
+        set -euo pipefail
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum daemon -race -count=1 -p 1 ./internal/daemon/...
 
   vet:
     desc: >-
@@ -2361,16 +2360,14 @@ tasks:
 
   check:ci-scripts:
     desc: >-
-      Offline guard for ci.yml's planning-only classifier and the advisory
-      vuln report loop, plus the mutation-check script: runs
-      tests/test_planning_only.py, tests/test_vuln_report.py and
+      Offline guard for the advisory vuln report loop and the mutation-check
+      script: runs tests/test_vuln_report.py and
       tests/test_mutation_check.py (stdlib unittest over literal inputs,
       never gh, mise, go or a workflow). Each file passes only when unittest's
       executed count equals its number of `def test_` methods, that count
       meets the file's floor, and the result line is exactly OK (rule
-      84d1gfpywd). It is wired into ci.yml's actionlint job, which the
-      classifier never gates, so a change to the classifier cannot skip
-      its own tests.
+      84d1gfpywd). It is wired into ci.yml's actionlint job, which no path
+      filter gates.
     silent: true
     preconditions:
       - sh: command -v uv
@@ -2378,7 +2375,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        for spec in test_planning_only.py:28 test_vuln_report.py:20 test_mutation_check.py:18; do
+        for spec in test_vuln_report.py:20 test_mutation_check.py:18; do
           file="${spec%%:*}"
           floor="${spec##*:}"
           defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' "tests/${file}" || true; } | wc -l | tr -d ' ')
@@ -6099,20 +6096,16 @@ tasks:
 
   test:
     desc: >-
-      Contributor wrapper: the six host-only legs (test:unit, test:golden,
-      test:integration, test:wireoracle, test:daemon, test:race), run
-      SERIALLY via a list of sub-task commands (never deps:, which go-task
-      runs concurrently). test:daemon and test:race both pass -p 1
-      specifically to avoid cross-test contention; running the two
-      concurrently with each other would reintroduce exactly the flakiness
-      those flags exist to prevent.
+      Contributor wrapper: the four host-only legs (test:unit, test:golden,
+      test:race, test:race:daemon), run SERIALLY via a list of sub-task
+      commands (never deps:, which go-task runs concurrently), because
+      test:race:daemon's -p 1 isolation means nothing beside a concurrent
+      leg. test:unit already runs test/integration and test/wireoracle.
     cmds:
       - task: test:unit
       - task: test:golden
-      - task: test:integration
-      - task: test:wireoracle
-      - task: test:daemon
       - task: test:race
+      - task: test:race:daemon
 
   lint:
     desc: "Contributor wrapper: vet, lint:actions and lint:go, run serially."
