@@ -56,7 +56,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 - [ ] 7.5 Remove the positive-control legs of `check:gonum` and `check:no-force-layout`. Each asserts that it scanned more than zero items.
 - [ ] 7.6 Delete `scripts/mutation_check.py`, `tests/test_mutation_check.py`, `task mutation-check` and `.claude/skills/mutation-check/`.
 - [ ] 7.7 #212: rewrite `check:reproducibility` and `check:reproducibility:arm64` on `goreleaser build --snapshot` (D10), and remove the "Compute determinism inputs" step. Verify `task check:reproducibility` passes on macOS and in CI.
-- [ ] 7.8 #106: list PR files with `gh api --paginate` in `require-issue-link.yml` and `pr-template-format.yml`, and escape the reason in `pr_template_policy.emit` (D11). Add `test_emit_escapes_workflow_command` and `test_truncated_file_list_is_not_exempt` to `tests/test_pr_template_policy.py`.
+- [ ] 7.8 #106: list PR files with `gh api --paginate` in `require-issue-link.yml` and `pr-template-format.yml`, and escape the reason in `pr_template_policy.emit` (D11). Add `test_emit_escapes_workflow_command` to `tests/test_pr_template_policy.py`, because the escape guards a workflow-command injection. The paginated file list needs no unit test. Verify it on the PR run.
 - [ ] 7.9 #105: add the baseline age and runner test to `bench.yml` (D12). Run it once with `gh workflow run bench.yml --ref <branch> -f job=regression`, and link the regression job's output in the PR body.
 
 ## 8. OpenSpec rules and close-out
