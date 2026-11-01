@@ -81,7 +81,7 @@ Add a test helper package, `internal/indexer/invariant`, with `Check(store) (Cou
 
 ### D8. One node per declaration, checked against tree-sitter
 
-`TestEveryDeclarationHasOneNode` parses each fixture file with tree-sitter and lists the declaration occurrences with a small table of node kinds per language. It compares occurrences, not totals, because one missing declaration and one extra node can give equal totals. Each expected occurrence (name, kind and start line) must match exactly one extracted node. Each extracted node of a listed kind must match one expected occurrence. It also asserts that no two extracted nodes share an id. The table has rows for the languages of the fixtures and of the four pinned corpora:
+`TestEveryDeclarationHasOneNode` parses each fixture file with tree-sitter and lists the declaration occurrences with a small table of node kinds per language. It compares occurrences, not totals, because one missing declaration and one extra node can give equal totals. Each expected occurrence must match exactly one extracted node. The key is the name, the kind, and the start line and start column, which every stored node has (`start_line`, `start_col`). The line alone is not enough: minified code and one-line callbacks put two same-named declarations on one line. The test takes each position from the same syntax node that the extractor uses for the node's range. A construct where the two differ gets a named normalization, as the partial type does. Each extracted node of a listed kind must match one expected occurrence. It also asserts that no two extracted nodes share an id. The table has rows for the languages of the fixtures and of the four pinned corpora:
 
 | language | declaration node kinds |
 |---|---|
