@@ -44,7 +44,7 @@ import (
 )
 
 // readerBufSize matches the wire oracle's own 10 MB stdout cap
-// (test/integration/mcp_stdout_purity_test.go), so a single unusually
+// (test/wireoracle/capture.go), so a single unusually
 // large frame does not force extra reallocation churn in the common case.
 const readerBufSize = 10 * 1024 * 1024
 

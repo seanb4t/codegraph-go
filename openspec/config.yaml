@@ -32,3 +32,5 @@ rules:
   tasks:
     - "When the change touches `cmd/**` or `internal/**` with a user-visible effect, the last task adds a changelog fragment: `task changie -- new --interactive=false -k <Breaking|Features|Fixes|Performance|Dependencies> -b \"<one sentence>\"`. Otherwise the last task records the `<!-- changelog-exempt: <reason> -->` marker for the PR body."
     - Each task that changes behavior names the test that covers it.
+    - A task that adds a test names the property, fuzz target or scenario-shaped test that covers the behavior.
+    - A task that adds a gate states the positive assertion the gate makes, so the gate fails when it inspected nothing.

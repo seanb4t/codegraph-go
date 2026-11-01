@@ -19,7 +19,7 @@ import (
 // shimBinPath is the absolute path to the real mcpaudit binary, built
 // once per `go test` run by TestMain — the CLI-level tests below drive
 // this exact binary rather than only the in-process Run function,
-// mirroring test/integration/main_test.go's TestMain pattern.
+// the pattern test/wireoracle/main_test.go's TestMain also uses.
 var shimBinPath string
 
 func TestMain(m *testing.M) {

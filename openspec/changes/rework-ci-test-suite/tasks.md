@@ -29,10 +29,10 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 4. Timing in `internal/watch` and `internal/daemon` (design.md D5)
 
-- [ ] 4.1 Move the debouncer-only tests in `internal/watch` into `synctest.Test`. Each moved test keeps its assertions.
-- [ ] 4.2 Add `WithWatcher` and the `Watcher` interface, with `Run(context.Context, *watch.Debouncer)` and `Close() error`, to `internal/daemon` (design.md D5). If the option is absent, `Run` uses `watch.Open`. Add `TestRunUsesInjectedWatcher`, which feeds one event through a fake and asserts one sync.
-- [ ] 4.3 Move `TestDaemonFlushLockRequeueGivesUpPerEpisode` and the other debounce and quiet-gap tests to the fake watcher inside `synctest.Test`. Keep the tests that prove the real watcher on real files.
-- [ ] 4.4 Verify `go test -race -count=20 ./internal/daemon ./internal/watch` passes, and record the `daemon` leg time in the PR body.
+- [x] 4.1 Move the debouncer-only tests in `internal/watch` into `synctest.Test`. Each moved test keeps its assertions.
+- [x] 4.2 Add `WithWatcher` and the `Watcher` interface, with `Run(context.Context, *watch.Debouncer)` and `Close() error`, to `internal/daemon` (design.md D5). If the option is absent, `Run` uses `watch.Open`. Add `TestRunUsesInjectedWatcher`, which feeds one event through a fake and asserts one sync.
+- [x] 4.3 Move `TestDaemonFlushLockRequeueGivesUpPerEpisode` and the other debounce and quiet-gap tests to the fake watcher inside `synctest.Test`. Keep the tests that prove the real watcher on real files.
+- [x] 4.4 Verify `go test -race -count=20 ./internal/daemon ./internal/watch` passes, and record the `daemon` leg time in the PR body.
 
 ## 5. `teatest` in place of tmux (design.md D8, #75)
 
@@ -61,8 +61,8 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 8. OpenSpec rules and close-out
 
-- [ ] 8.1 Add two `rules.tasks` entries to `openspec/config.yaml`. A task that adds a test names the property, fuzz target or scenario-shaped test that covers it. A task that adds a gate states the positive assertion the gate makes.
-- [ ] 8.2 Search for each removed task and script name with `rg`, and update each doc and comment that still names one.
-- [ ] 8.3 Verify `task test` and `task lint` pass, and put the "after" timings in the PR body.
-- [ ] 8.4 Supersede engram memory `gq9fpccbka`, which names the deleted `mutation-check` script.
+- [x] 8.1 Add two `rules.tasks` entries to `openspec/config.yaml`. A task that adds a test names the property, fuzz target or scenario-shaped test that covers it. A task that adds a gate states the positive assertion the gate makes.
+- [x] 8.2 Search for each removed task and script name with `rg`, and update each doc and comment that still names one.
+- [x] 8.3 Verify `task test` and `task lint` pass, and put the "after" timings in the PR body.
+- [x] 8.4 Supersede engram memory `gq9fpccbka`, which names the deleted `mutation-check` script.
 - [ ] 8.5 Put `<!-- changelog-exempt: CI and test tooling only, no user-visible change -->` in the PR body.
