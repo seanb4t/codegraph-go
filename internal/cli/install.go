@@ -91,11 +91,12 @@ func newInstallCmd() *cobra.Command {
 			"CODEGRAPH_ALLOW_EPHEMERAL_EXEC_PATH=1 to record that path anyway.\n" +
 			"The refresh after codegraph upgrade follows the same rule.\n\n" +
 			"For a binary in a mise or Homebrew cask version directory, install\n" +
-			"records the link that the package manager keeps across upgrades\n" +
-			"(mise's latest, or Homebrew's bin/codegraph) when that link names\n" +
-			"the same binary. If no such link names it, for example under asdf,\n" +
-			"install records the versioned path and prints one warning to\n" +
-			"stderr. Run install again after each upgrade in that case.",
+			"records the link that the package manager keeps across upgrades.\n" +
+			"That link is mise's latest or Homebrew's bin/codegraph. It uses it\n" +
+			"only if the link names the same binary. If no such link names it,\n" +
+			"for example under asdf, install records the versioned path and\n" +
+			"prints one warning to stderr. Run install again after each upgrade\n" +
+			"in that case.",
 		Example: "  codegraph install\n" +
 			"  codegraph install --target all --location global\n" +
 			"  codegraph install --target claude,cursor\n" +
