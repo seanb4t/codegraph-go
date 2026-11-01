@@ -4,14 +4,14 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 0. Baseline
 
-- [ ] 0.1 Record the `test` and `tmux-e2e` job times of the last green `ci.yml` run on `main` that changed `internal/`, with `gh run view <id> --json jobs`. Put them in the PR body as the "before" column.
+- [x] 0.1 Record the `test` and `tmux-e2e` job times of the last green `ci.yml` run on `main` that changed `internal/`, with `gh run view <id> --json jobs`. Put them in the PR body as the "before" column.
 
 ## 1. Flaky tests, comments and the test runner
 
-- [ ] 1.1 #235: in `awaitDaemonLock` (`internal/cli/serve_worktree_test.go`), treat an `os.ErrNotExist` from `w.Add` as "try again on the next pass" (design.md D13). Verify `go test ./internal/cli -run '^TestServeWatchStartBuildsThenWatches$' -count=200` passes on macOS.
-- [ ] 1.2 #185: change the CR-01 test in `web/tests/browse-page.test.ts` to wait with `vi.waitFor` (design.md D13). Verify that `pnpm exec vitest run` passes 20 times in a row.
-- [ ] 1.3 #232: in `internal/daemon/daemon_test.go:488` and `internal/watch/soak_test.go:68`, name the watch loop's behavior in place of `watchLoop`.
-- [ ] 1.4 Pin `gotestsum` in `mise.toml`, with its hash in `mise.lock`. Make `test:unit`, `test:daemon` and `test:race` run through `gotestsum --junitfile`, and print `gotestsum tool slowest` at the end. Do not use `--rerun-fails`. Verify `task test` passes locally.
+- [x] 1.1 #235: in `awaitDaemonLock` (`internal/cli/serve_worktree_test.go`), treat an `os.ErrNotExist` from `w.Add` as "try again on the next pass" (design.md D13). Verify `go test ./internal/cli -run '^TestServeWatchStartBuildsThenWatches$' -count=200` passes on macOS.
+- [x] 1.2 #185: change the CR-01 test in `web/tests/browse-page.test.ts` to wait with `vi.waitFor`, and move its route import to module scope (design.md D13). Verify that `pnpm exec vitest run` passes 20 times in a row.
+- [x] 1.3 #232: in `internal/daemon/daemon_test.go:488` and `internal/watch/soak_test.go:68`, name the watch loop's behavior in place of `watchLoop`.
+- [x] 1.4 Pin `gotestsum` in `mise.toml`, with its hash in `mise.lock`. Make `test:unit`, `test:daemon` and `test:race` run through `gotestsum --junitfile`, and print `gotestsum tool slowest` at the end. Do not use `--rerun-fails`. Verify `task test` passes locally.
 
 ## 2. CI layout (design.md D1 to D4)
 

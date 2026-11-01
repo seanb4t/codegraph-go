@@ -65,7 +65,7 @@ func TestSoak(t *testing.T) {
 
 	// Cancel and join BEFORE any goleak assertion runs (TestMain's
 	// VerifyTestMain fires after the whole package's tests complete):
-	// watchLoop's ctx.Done() branch calls deb.Stop() before returning, so
+	// the watch loop calls deb.Stop() on ctx.Done() before it returns, so
 	// wg.Wait() here guarantees no watcher goroutine and no pending debounce
 	// timer survive past this test.
 	cancel()

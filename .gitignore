@@ -43,3 +43,4 @@ __pycache__/
 .DS_Store
 .archify/
 .boost/
+/.test-results/

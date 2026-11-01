@@ -132,7 +132,7 @@ Before the comparison, `bench.yml` reads the date of the last commit that change
 ### D13. The two flaky tests
 
 - #235: in `awaitDaemonLock` (`internal/cli/serve_worktree_test.go`), an `os.ErrNotExist` from `w.Add` on the index directory goes to the next loop pass, like a missing watch does today. Any other error still fails the test.
-- #185: the CR-01 test in `web/tests/browse-page.test.ts` waits with `vi.waitFor` on the RPC count and the URL, in place of a fixed number of microtask flushes. The fix is accepted after 20 full-suite runs with no failure.
+- #185: the CR-01 test in `web/tests/browse-page.test.ts` waits with `vi.waitFor` on the RPC count and the URL. A measurement during implementation showed the main cause: the test imported the route component inside its body, and that Vite transform took about 11 s of the 15 s test timeout when the file ran alone. So the stub client, `vi.doMock` and the import move to module scope, as in the other route tests. The fix is accepted after 20 full-suite runs with no failure.
 
 ### D14. Order of the commits
 

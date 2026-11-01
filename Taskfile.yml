@@ -16,11 +16,27 @@ vars:
   MISE_TOOLS_ON_PATH:
     sh: |
       command -v mise >/dev/null || { echo "mise is not on PATH: install mise, then run mise install" >&2; exit 1; }
-      for tool in go pnpm buf goreleaser changie golangci-lint govulncheck protoc-gen-go protoc-gen-connect-go; do
+      for tool in go pnpm buf goreleaser changie golangci-lint gotestsum govulncheck protoc-gen-go protoc-gen-connect-go; do
         want=$(mise which "$tool" 2>/dev/null) || continue
         have=$(command -v "$tool" || true)
         [ "$have" = "$want" ] || { echo "$tool on PATH is ${have:-missing}, not the mise.toml pin $want: run tasks with mise activate, or as mise exec -- task <target>" >&2; exit 1; }
       done
+
+  # run_gotestsum NAME GO-TEST-ARGS... runs go test through gotestsum. It writes
+  # .test-results/NAME.xml (JUnit) and NAME.json, then prints the 20 slowest
+  # tests. It never reruns a failed test (--rerun-fails), because a rerun hides
+  # a flake. sed, not head, cuts the list, so pipefail never sees a SIGPIPE.
+  GOTESTSUM_LIB: |
+    run_gotestsum() {
+      local name="$1"
+      shift
+      mkdir -p .test-results
+      local status=0
+      gotestsum --format pkgname --junitfile ".test-results/${name}.xml" --jsonfile ".test-results/${name}.json" -- "$@" || status=$?
+      echo "${name}: the 20 slowest tests"
+      gotestsum tool slowest --jsonfile ".test-results/${name}.json" | sed -n '1,20p'
+      return "${status}"
+    }
 
   # BLD-03 (02-06): the source-tree and output-tree hashing pipeline shared
   # VERBATIM by web:build (which WRITES web/build/.build-manifest) and
@@ -140,7 +156,8 @@ tasks:
         # list's exit code is checked by set -e before anything consumes it.
         pkgs_raw=$(go list ./...)
         mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
-        go test "${pkgs[@]}"
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum unit "${pkgs[@]}"
 
   test:golden:
     desc: >-
@@ -285,7 +302,10 @@ tasks:
       documented handling; the tests are NOT removed or skipped, just run
       without contention from the rest of the suite.
     cmds:
-      - go test ./internal/daemon/ -count=1
+      - |
+        set -euo pipefail
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum daemon ./internal/daemon/ -count=1
 
   test:watch:
     desc: >-
@@ -308,7 +328,10 @@ tasks:
       # test (TestSessionLineSurvivesConcurrentAndRepeatedInitialize) fails
       # deterministically without -race; this entry is the fallback net for
       # the races it cannot model.
-      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/... ./internal/mcp/...
+      - |
+        set -euo pipefail
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum race -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/... ./internal/mcp/...
 
   vet:
     desc: >-

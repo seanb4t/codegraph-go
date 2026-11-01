@@ -485,8 +485,8 @@ func TestDaemonCleanShutdown(t *testing.T) {
 // deterministically (a real indexer.Sync against a tiny test fixture
 // completes far too fast to reliably race against ctx cancellation
 // otherwise), reproducing the exact untracked-goroutine window CR-01
-// describes: the debounce timer has already fired, so watchLoop's
-// deb.Stop() (called on ctx.Done()) cannot cancel it — only deb.Wait()
+// describes: the debounce timer has already fired, so the deb.Stop() that
+// the watch loop calls on ctx.Done() cannot cancel it — only deb.Wait()
 // (joined from Run after wg.Wait()) can make Run wait correctly.
 func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "10")
