@@ -1,12 +1,12 @@
-# enabled-linters: 5
+# enabled-linters: 7
 # This repository's formatting and idiomatic-Go gate.
 #
 # The `# enabled-linters: N` line above is machine-read by
 # internal/upgrade/golangci_shape_test.go, which fails when N differs from
 # the linters and formatters enabled below. N counts every entry across
-# BOTH linters.enable and formatters.enable below (4 + 1 = 5) — it does
-# NOT count exclusion presets or issues: knobs, which shape HOW the five
-# report, not WHICH five run. If you change the enabled set, changing N
+# BOTH linters.enable and formatters.enable below (6 + 1 = 7) — it does
+# NOT count exclusion presets, exclusion rules or issues: knobs, which shape
+# HOW the seven report, not WHICH seven run. If you change the enabled set, changing N
 # here is the visible act that says so.
 #
 # ENABLED, with reasons (todo's own four categories, verbatim):
@@ -21,6 +21,16 @@
 #                 stylecheck).
 #   unused      — "unused identifiers": the todo's own named category,
 #                 flags unused constants/variables/functions/types.
+#   depguard    — direct-import rules: D-04a (only internal/graphstore
+#                 imports Pebble) and SDK-02 (internal/cli's production
+#                 files import no MCP SDK).
+#   forbidigo   — identifier rules, resolved through type information:
+#                 HYG-02 (no os.Stdout, bare fmt.Print* or log.SetOutput in
+#                 production files of internal/ outside internal/cli) and
+#                 VRFY-02 (no protocol-version identifier of an MCP SDK, anywhere).
+#                 The transitive rules T-01-18, TUI-01 and REL-01 live in
+#                 internal/depclosure, because a linter sees one package at
+#                 a time.
 #   gofmt (formatter) — the formatting check this repository has never had
 #                 anywhere (the todo's primary complaint). Plain gofmt was
 #                 chosen over the stricter gofumpt superset: gofmt is the
@@ -57,10 +67,65 @@ version: "2"
 linters:
   default: none
   enable:
+    - depguard
     - errcheck
+    - forbidigo
     - ineffassign
     - staticcheck
     - unused
+  settings:
+    depguard:
+      rules:
+        # D-04a: Pebble is reachable only through the GraphStore interface.
+        # Test files count.
+        graphstore-owns-pebble:
+          files:
+            - $all
+            - "!**/internal/graphstore/**"
+          deny:
+            - pkg: github.com/cockroachdb/pebble
+              desc: "D-04a: only internal/graphstore (and its subpackages) may import Pebble; go through the GraphStore interface"
+        # SDK-02: internal/cli starts the stdio server through
+        # internal/mcp.NewStdioServer. It reaches the SDK only through
+        # internal/mcp. Production files of internal/cli itself only.
+        cli-names-no-mcp-sdk:
+          files:
+            - "**/internal/cli/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/modelcontextprotocol/go-sdk
+              desc: "SDK-02: internal/cli must start the MCP server through internal/mcp, never import an MCP SDK"
+            - pkg: github.com/mark3labs/mcp-go
+              desc: "SDK-02: internal/cli must start the MCP server through internal/mcp, never import an MCP SDK"
+    forbidigo:
+      # With analyze-types, a package-level identifier matches as
+      # `<package name>.<identifier>` and `pkg` matches its import path, so
+      # an import alias does not hide it. A field or method matches as
+      # `<package name>.<type>.<name>`.
+      analyze-types: true
+      forbid:
+        # HYG-02: stdout belongs to the MCP JSON-RPC transport. The scope
+        # (production files of internal/, except internal/cli) is set by
+        # the exclusion rules below, which match the "HYG-02" text.
+        - pattern: '^os\.Stdout$'
+          pkg: '^os$'
+          msg: "HYG-02: stdout is reserved for the MCP JSON-RPC transport; write diagnostics to an explicit stderr writer"
+        - pattern: '^fmt\.Print(f|ln)?$'
+          pkg: '^fmt$'
+          msg: "HYG-02: a bare fmt.Print* writes to stdout, which is reserved for the MCP JSON-RPC transport; pass an explicit writer to fmt.Fprint*"
+        - pattern: '^log\.SetOutput$'
+          pkg: '^log$'
+          msg: "HYG-02: never redirect the standard logger's default stderr output"
+        # VRFY-02: a dependency bump must never move the declared MCP
+        # protocol version, so no code references a protocol-version
+        # identifier of an MCP SDK. The name heuristic matches any
+        # identifier spelled like protocol-version. Known false positives
+        # that a reviewed change may meet: go-sdk's MetaKeyProtocolVersion
+        # (a _meta key name) and CodeUnsupportedProtocolVersion (an error
+        # code).
+        - pattern: '(?i)^\w+\.\w*protocol\w?version\w*$'
+          pkg: '^github\.com/(modelcontextprotocol/go-sdk|mark3labs/mcp-go)(/|$)'
+          msg: "VRFY-02: reference internal/mcp.ProtocolVersion, never an external protocol-version identifier"
   exclusions:
     # std-error-handling is golangci-lint's own documented, maintained
     # preset for errcheck's most common non-actionable pattern: ignoring
@@ -78,6 +143,32 @@ linters:
     # in Task 2, not suppressed.
     presets:
       - std-error-handling
+    rules:
+      # HYG-02 covers production files of internal/ only, and not
+      # internal/cli, which renders product output through
+      # cmd.OutOrStdout() and is never reachable from `serve --mcp`.
+      - linters: [forbidigo]
+        text: "HYG-02"
+        path-except: '^internal/'
+      - linters: [forbidigo]
+        text: "HYG-02"
+        path: '^internal/cli/'
+      - linters: [forbidigo]
+        text: "HYG-02"
+        path: '_test\.go$'
+      # The one legitimate stdout reference: ServeStdio hands the real
+      # stdout to go-sdk's IOTransport as the JSON-RPC writer.
+      - linters: [forbidigo]
+        text: "HYG-02: stdout"
+        path: '^internal/mcp/server\.go$'
+        source: '^\s*Writer:\s*&pendingWriter\{w: os\.Stdout, pending: &pending\},$'
+      # forbidigo also reports the last name of a selector chain such as
+      # req.Params.ProtocolVersion as a bare identifier with the field's
+      # package. A bare identifier is never a qualified constant
+      # reference, so VRFY-02 drops it. This also drops a dot-imported
+      # constant.
+      - linters: [forbidigo]
+        text: '^use of `\w+` forbidden because "VRFY-02'
 
 formatters:
   enable:

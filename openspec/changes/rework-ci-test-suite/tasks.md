@@ -23,9 +23,9 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 3. Linters in place of `archtest` (design.md D6)
 
-- [ ] 3.1 Add `depguard` rules for D-04a and SDK-02 to `.golangci.yml` (design.md D6). Add `forbidigo` rules for HYG-02 (`os.Stdout`, bare `fmt.Print*`, `log.SetOutput`, production files only) and for VRFY-02. Add the one `ServeStdio` exclusion, scoped to its file and source line. Add the second `golangci-lint run` over `./testdata/golden/...` to `lint:go`. Change `# enabled-linters: 5` to 7 and update `internal/upgrade/golangci_shape_test.go`. Verify that each rule fires: add one forbidden import or call in a scratch commit, run `task lint:go`, see it fail, then drop the scratch commit. Do this also for an `os.Stdout` elsewhere in `internal/mcp`, and for a forbidden protocol-version constant under `testdata/golden`.
-- [ ] 3.2 Add `TestDependencyClosure`, which runs `go list -deps` for production and test variants and asserts T-01-18, TUI-01 and REL-01 (design.md D6). It asserts that each closure holds more than zero packages.
-- [ ] 3.3 Delete the `archtest` packages and their `*_selftest_test.go` files. Verify `task test` and `task lint` pass.
+- [x] 3.1 Add `depguard` rules for D-04a and SDK-02 to `.golangci.yml` (design.md D6). Add `forbidigo` rules for HYG-02 (`os.Stdout`, bare `fmt.Print*`, `log.SetOutput`, production files only) and for VRFY-02. Add the one `ServeStdio` exclusion, scoped to its file and source line. Add the second `golangci-lint run` over `./testdata/golden/...` to `lint:go`. Change `# enabled-linters: 5` to 7 and update `internal/upgrade/golangci_shape_test.go`. Verify that each rule fires: add one forbidden import or call in a scratch commit, run `task lint:go`, see it fail, then drop the scratch commit. Do this also for an `os.Stdout` elsewhere in `internal/mcp`, and for a forbidden protocol-version constant under `testdata/golden`.
+- [x] 3.2 Add `TestDependencyClosure`, which runs `go list -deps` for production and test variants and asserts T-01-18, TUI-01 and REL-01 (design.md D6). It asserts that each closure holds more than zero packages.
+- [x] 3.3 Delete the `archtest` packages and their `*_selftest_test.go` files. Verify `task test` and `task lint` pass.
 
 ## 4. Timing in `internal/watch` and `internal/daemon` (design.md D5)
 

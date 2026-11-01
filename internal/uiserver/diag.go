@@ -22,9 +22,7 @@ const diagPrefix = "codegraph: uiserver: "
 //
 // os.Stderr, never os.Stdout, per the repo-wide diagnostics rule
 // (T-03-07-Leak): stdout is reserved for the MCP JSON-RPC transport.
-// uiserver is not one of internal/graphstore/archtest's six
-// serve-reachable guarded packages, but the rule is a repo-wide one and
-// is followed here for the same reason.
+// The HYG-02 forbidigo rule in .golangci.yml covers this package.
 //
 // diagWriterMu guards diagWriter itself. Unlike graphstore's, this seam
 // is written from HTTP handler goroutines, which genuinely do run

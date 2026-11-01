@@ -2,7 +2,7 @@
 // (D-01). It consumes already-computed plain data (query.StatusResult,
 // the files result struct) and emits colorized, sectioned output;
 // internal/query and internal/mcp never import charm — the boundary the
-// TUI-01 archtest (internal/cli/present/archtest) enforces at build time.
+// TUI-01 rule in internal/depclosure's TestDependencyClosure enforces.
 //
 // present must NOT read the process environment or probe terminal state
 // itself — real fd/env values are read only at the RunE call sites in

@@ -45,9 +45,9 @@ const serverDirPrefix = "internal/mcp/"
 
 // mcpSDKModulePrefixes names the MCP SDK module paths whose go.mod diff
 // line counts as "the MCP dependency changed." The second entry is
-// deliberately forward-declared for Phase 2's SDK swap, exactly as the
-// SDK-02 archtest's own list is — a guard naming only today's dependency
-// would go vacuous at the moment the swap makes it matter most.
+// deliberately forward-declared for Phase 2's SDK swap, as the SDK-02
+// depguard rule's list in .golangci.yml is — a guard naming only today's
+// dependency would go vacuous at the moment the swap makes it matter most.
 var mcpSDKModulePrefixes = []string{
 	"github.com/mark3labs/mcp-go",
 	"github.com/modelcontextprotocol/go-sdk",

@@ -8,5 +8,5 @@
 //
 // internal/watch depends only on internal/indexer's exported ShouldSkipDir
 // predicate — never on internal/graphstore or pebble directly (D-04a
-// archtest boundary; this package has no storage concerns of its own).
+// boundary; this package has no storage concerns of its own).
 package watch

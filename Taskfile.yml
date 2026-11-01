@@ -5357,6 +5357,11 @@ tasks:
       result reads as green.
     cmds:
       - "golangci-lint run ./..."
+      # ./... skips testdata/, so testdata/golden needs its own run. Only
+      # forbidigo runs there, and the HYG-02 exclusions in .golangci.yml
+      # drop every HYG-02 issue outside internal/, so VRFY-02 is the one
+      # rule that can report.
+      - "golangci-lint run --enable-only forbidigo ./testdata/golden/..."
 
   check:transcript-freeze:
     desc: >-

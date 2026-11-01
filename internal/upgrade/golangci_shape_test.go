@@ -100,7 +100,7 @@ func enabledLintersHeaderMismatch(headerCount, actual int, cfg golangciConfigYAM
 // TestGolangciEnabledLintersHeaderMatchesConfig parses BOTH the `#
 // enabled-linters: N` header comment and the real linters.enable +
 // formatters.enable lists from the same file, and asserts N equals their
-// combined length — so enabling a sixth linter without updating the
+// combined length — so enabling another linter without updating the
 // comment (or vice versa: updating the comment without actually changing
 // the enabled set) fails here rather than drifting silently forever.
 func TestGolangciEnabledLintersHeaderMatchesConfig(t *testing.T) {
