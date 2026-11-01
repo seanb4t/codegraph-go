@@ -199,3 +199,5 @@ These apply across multiple languages and are not repeated per-row above:
   not `sync.go`'s incremental `Sync` path. A repo whose routes changed
   will not have them re-detected until the next full re-index — an
   accepted, documented v1 scope boundary (05-12-SUMMARY.md).
+
+<!-- Path-filter probe for #221; this branch is never merged. -->
