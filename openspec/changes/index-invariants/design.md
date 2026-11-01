@@ -38,9 +38,9 @@ The extractors do not visit declarations in source order. For example, `tsextrac
 Add `nodeid.Allocator`, created once per extracted file, with two steps:
 
 1. `Declare(kind, qualifiedName string, startByte uint) string` returns a provisional id that is unique for each declaration occurrence. It is `NodeID(kind, qualifiedName, filePath)` plus `@` plus the start byte. The extractor uses this id for the node and for every edge that the declaration's body emits, as it does with today's id.
-2. `Finalize(result)` runs once at the end of the file. For each `(kind, qualifiedName)` pair, it sorts the occurrences by start byte. The first one gets `NodeID(kind, qualifiedName, filePath)`, which is today's id. The n-th one (n of 2 or more) gets the hash of four segments: the three of today, plus the decimal ordinal `n`. Then it rewrites each provisional id in the file's nodes and edges to its final id.
+2. `Finalize(result)` runs once at the end of the file. For each `(kind, qualifiedName)` pair, it sorts the occurrences by start byte. The first one gets `NodeID(kind, qualifiedName, filePath)`, which is today's id. The n-th one (n of 2 or more) gets the hash of four segments: the three of today, plus the decimal ordinal `n`. Then it rewrites each provisional id to its final id in every field of the file's `FileResult` that holds a node id. The fields are `Node.Id`, the `Source` and `Target` of each `IntraEdge`, `UnresolvedRef.FromID`, and the keys of `InterfaceMethods` and `MethodArity` (`goextract/types.go:118-185`). The resolver reads both maps by node id (`resolve.go:94-104`), so a stale key stops dispatch from matching the node.
 
-A provisional id never reaches the store. If a provisional id is left, `Finalize` fails the extraction. Ids that name another file's symbol, file nodes and package nodes keep calling `NodeID`.
+A provisional id never reaches the store. After the rewrite, `Finalize` scans the same fields. If a provisional id is left in any of them, it fails the extraction. Ids that name another file's symbol, file nodes and package nodes keep calling `NodeID`.
 
 Alternatives considered:
 
