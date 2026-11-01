@@ -8,7 +8,7 @@ How the index represents the source code: which nodes a declaration gets, how no
 
 ### Requirement: A node id depends only on the declaration (D-02)
 
-The indexer SHALL compute a node id from the declaration's kind, qualified name and file path, plus an ordinal for a repeated declaration. An edit elsewhere in the file, or in another file, SHALL NOT change the id. Two runs of `codegraph index` over the same tree SHALL produce the same ids.
+The indexer SHALL compute a node id from the declaration's kind, qualified name and file path, plus an ordinal for a repeated declaration. An edit SHALL NOT change the id of a declaration whose kind, qualified name, file path and ordinal stay the same. Two runs of `codegraph index` over the same tree SHALL produce the same ids.
 
 #### Scenario: An edit above a declaration
 
@@ -34,10 +34,24 @@ When a file declares two or more symbols with the same kind and qualified name, 
 - **WHEN** a file declares `function e()` once, is indexed, and a second `function e()` is then added below the first
 - **THEN** after `codegraph sync`, the first `e` keeps its node id and the second `e` has a different id
 
+#### Scenario: Two classes with one name
+
+- **WHEN** a TypeScript file declares `class Model` with method `load` in one callback, and `class Model` with method `save` in another callback
+- **THEN** the index holds two `Model` nodes, the first contains only `load`, and the second contains only `save`
+
 #### Scenario: A C# partial class
 
 - **WHEN** two files declare `partial class Order` in the same namespace
 - **THEN** the index holds one node for `Order`
+
+### Requirement: A reference to a repeated name resolves to the first copy (RES-01)
+
+A file can declare one name more than once with the same kind and qualified name. A reference that resolves to that name SHALL target the first copy in source order. This SHALL hold after `codegraph index` and after every `codegraph sync`.
+
+#### Scenario: Another file calls a repeated function
+
+- **WHEN** `a.ts` declares `function e()` three times and exports the first, and `b.ts` imports `e` and calls it
+- **THEN** `codegraph callers` on the first `e` lists the call from `b.ts`, and the other two copies have no caller from `b.ts`
 
 ### Requirement: An incremental sync gives the same graph as a fresh index (INDX-03, INDX-04)
 
@@ -80,7 +94,12 @@ A store written by a version without unique declaration ids SHALL be rebuilt fro
 - **WHEN** a store written before this change has a drifted node count, and the new version runs `codegraph sync`
 - **THEN** the sync rebuilds the whole graph, and its `nodes=` count equals the `Nodes:` count of `codegraph status`
 
-#### Scenario: The second sync after an upgrade
+#### Scenario: Records that a fresh index does not have
 
-- **WHEN** the new version runs `codegraph sync` a second time with one file changed
-- **THEN** the sync reparses only that file
+- **WHEN** a store written before this change still holds the node of a deleted file, and the new version runs `codegraph sync`
+- **THEN** the store holds the same nodes and edges as a fresh index of the tree
+
+#### Scenario: The syncs after the rebuild
+
+- **WHEN** the new version runs `codegraph sync` a second and a third time, each with one file changed
+- **THEN** each of those syncs reparses only that file

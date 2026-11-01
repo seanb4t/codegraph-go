@@ -27,7 +27,7 @@ Two flaky tests (#235, #185) fail required checks at random. Four small CI defec
   - A `paths-filter` rule on `.changes/unreleased/**` replaces `scripts/fragment_policy.py`.
   - `goreleaser build` twice, with a hash comparison, replaces the hand-copied build flags of `check:reproducibility` and its arm64 leg. That removes the GNU `date -d` call, so the check runs on macOS (#212).
 - Deletions: `scripts/mutation_check.py`, its tests, `task mutation-check` and the `mutation-check` skill go. #222 trials a tool later.
-- Gates keep their positive assertion inside the gate: Each multi-leg self-proof goes. In its place, if the gate inspected nothing, it fails.
+- Gates keep their positive assertion inside the gate: Each multi-leg self-proof goes. In its place, each gate treats zero inspected items as a failure.
 - **Folded fixes:**
   - #235: if an entry of the watched directory disappears, the test helper retries `w.Add`.
   - #185: the browse-page test waits on the condition, not on a fixed number of ticks.
