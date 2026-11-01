@@ -16,7 +16,7 @@ The required checks in `protect-main` are `test`, `actionlint (workflow static a
 
 **Goals:**
 
-- The `test` job of a Go change takes about 200 s, down from 314 s. A docs-only or web-only change skips most of it.
+- The `test` job of a Go change takes about 200 s, down from 314 s. A change only under `openspec/`, `web/src/` or `web/tests/` skips the Go legs.
 - No gate tests third-party behavior, and no gate has a second artifact that tests the gate.
 - Each gate keeps a positive assertion inside itself.
 - One implementation PR, with one commit for each step in the order below, so a reviewer can read it commit by commit.
@@ -41,10 +41,12 @@ A filter that lists the inputs of each leg misses inputs. Examples are `.changes
 
 | output | true when |
 |---|---|
-| `go` | any changed file is outside `openspec/**`, `web/src/**`, `web/tests/**`, and Markdown files other than `docs/CLI-REFERENCE.md` |
+| `go` | any changed file is outside `openspec/**`, `web/src/**` and `web/tests/**` |
 | `web` | any changed file is under `web/**`, is a `.proto` file or a `buf*.yaml` file, or is `Taskfile.yml`, `mise.toml` or `mise.lock` |
-| `release` | any changed file is outside `openspec/**`, `web/src/**`, `web/tests/**` and Markdown files |
+| `release` | any changed file is outside `openspec/**`, `web/src/**` and `web/tests/**` |
 | `ci` | any changed file is under `.github/**`, `scripts/**` or `tests/**`, or is `Taskfile.yml`, `mise.toml`, `mise.lock` or `.golangci.yml` |
+
+Markdown does not skip the Go legs, because Go tests read Markdown files. Examples are `README.md` (`internal/mcp/instructions_contract_test.go`), `docs/CLI-REFERENCE.md` (`internal/cli/cli_reference_test.go`), `docs/LANGUAGE-CAPABILITY-MATRIX.md` (`internal/indexer/capability/matrix_test.go`) and `docs/AGENT-CAPABILITIES.md` (`internal/agents/capability_doc_test.go`). Today's classifier skips only `openspec/`, so a Markdown skip removes coverage that exists now. The cost is small: Go's test cache records the files a test opened, so with the cache restored, only the tests that read the changed file run again.
 
 A change that matches `ci` runs every leg. On a push to `main`, every leg runs. If the filter step fails, the job sets every output to `true`, as `planning_only.py` did. `planning_only.py` and its tests go.
 
