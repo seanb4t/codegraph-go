@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph install now records the mise latest link or the Homebrew bin link in place of a versioned path, so agent configurations keep working after a package-manager upgrade.
-time: 2026-11-01T09:36:57.487082-05:00

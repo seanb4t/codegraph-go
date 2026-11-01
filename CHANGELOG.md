@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.16.5](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.5) — 2026-11-01
+
+### Fixes
+
+- codegraph install now records the mise latest link or the Homebrew bin link in place of a versioned path, so agent configurations keep working after a package-manager upgrade.
+
 ## [v0.16.4](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.4) — 2026-11-01
 
 ### Performance
