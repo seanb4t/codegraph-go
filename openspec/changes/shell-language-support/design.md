@@ -87,7 +87,7 @@ The POSIX adapter also rejects recognized syntax outside its declared subset, ev
 
 A sourced file keeps its independently selected dialect. A Bash importer does not promote a shebang-less `.sh` file to Bash. Such a library needs a recognized Bash shebang or `.bash` extension for Bash extraction.
 
-Add dialect-specific fixtures to #238's evaluation format. Independent hand-reviewed expectations define source facts. Include CLI and MCP query cases plus fresh-versus-incremental comparisons. Do not use an installed shell as a production oracle.
+Add dialect-specific fixtures to #238's evaluation format. Independent hand-reviewed expectations define source facts. Add `TestSemanticShell` to `task eval:semantic` and `task eval:semantic:dev` with the existing partition selection. Include CLI and MCP query cases plus fresh-versus-incremental comparisons. Do not use an installed shell as a production oracle.
 
 Land classification and shared inclusion changes first. Add dialect adapters behind registration readiness. Enable each dialect only after its contract passes. Existing `Sync` calls `DiscoverAll` and adds files absent from storage. Use that path to discover unchanged, newly supported shell files without a new rebuild marker. Test migration from an index created before shell registration.
 

@@ -26,7 +26,9 @@ Assert nonempty inputs, required tools, exact differences, and exception validit
 
 The report is the new developer-facing behavior. It has a versioned JSON format and a short text rendering. This format does not alter production CLI or MCP responses.
 
-Each case records language, construct, source digest, configuration, expected facts, evidence, and status. Authored expectations remain separate from generated observations. The report writer owns generated report structure.
+Each case records language, construct, source digest, configuration, expected facts, evidence, status, and the target specification revision. Authored expectations remain separate from generated observations. The report writer owns generated report structure.
+
+The evaluated contract is the cited target specification, including planned forms before implementation. Initially, missing #239 forms are known-gap cases linked to #239. Explicitly excluded forms are unsupported. Later language changes, including #240, extend the evaluated contract when they register independently labeled suites.
 
 Use these reference sources within their actual limits:
 
@@ -71,7 +73,7 @@ The first inventory covers the following dimensions:
 | Lifecycle | Fresh indexing, no-op synchronization, edits, renames, deletion, restored files |
 | Queries | Definitions, callers, callees, impact, explore, disambiguation, required context, forbidden facts, truncation |
 
-Inventory decorators, Java record components, enum-specific declarations, general overload resolution, interface dispatch, and dynamic attributes. Label each construct unsupported while it remains outside the declared product contract. Reserve known-gap for missing facts within that contract. Other registered languages remain explicitly unevaluated. Track future scope separately instead of expanding #239 automatically.
+Inventory decorators, Java record components, enum-specific declarations, general overload resolution, interface dispatch, and dynamic attributes. Label each construct unsupported while it remains outside the target specification. Reserve known-gap for missing facts within that contract. Other languages remain unevaluated until their separate changes register independent suites. Track future scope separately instead of expanding #239 automatically.
 
 Run small reviewed fixtures on pull requests. Run pinned source collections on a schedule and on demand. Reuse `internal/corpora` and existing corpus tasks. Add genuine TypeScript and TSX input because Hugo's JavaScript files do not establish TypeScript coverage.
 

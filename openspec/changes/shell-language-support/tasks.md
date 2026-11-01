@@ -2,7 +2,7 @@
 
 ## 1. Parser qualification
 
-- [ ] 1.1 Add independently reviewed fixtures for all four dialects under #238's evaluation format. Document required forms and expected parse limitations beside the fixtures.
+- [ ] 1.1 Add independently reviewed fixtures for all four dialects under #238's format. Add `TestSemanticShell` to both semantic tasks with the existing manifest partitions. Document required forms and expected parse limitations beside the fixtures.
 - [ ] 1.2 Pin the Bash, Zsh, and Fish parser sources and record their licenses in `NOTICE`. Preserve upstream generated files unchanged. Record the dependency review and exact revisions.
 - [ ] 1.3 Add minimal parser adapters through the existing parser seam. Cover scanner lifecycle, malformed input, source limits, and repeated extraction in `TestShellParserIntegration`.
 - [ ] 1.4 Exercise the adapters with the existing macOS and Linux build targets. Record linking results and binary-size changes. Keep any failing dialect unregistered and its tasks incomplete.
@@ -35,10 +35,10 @@
 - [ ] 5.2 Add CLI and MCP definitions, callers, callees, impact, and explore acceptance. Cover expected facts, false matches, and output compatibility in `TestShellPublicQueries`.
 - [ ] 5.3 Use normal `Sync` discovery for unchanged shell files absent from older indexes. Cover the upgrade in `TestShellSyncDiscoversExistingFiles`. Document that shell registration alone needs no rebuild marker.
 - [ ] 5.4 Add path-based invalidation for unchanged importers and transitive dependents. Cover source edits, added or restored targets, rename, deletion, eligibility changes, and cycles in `TestShellSyncEquivalence`. Compare fresh and updated graphs after each operation.
-- [ ] 5.5 Publish per-dialect capability evidence and limitations. Trace each support claim to the dialect extraction tests and #238's independent report.
+- [ ] 5.5 Publish per-dialect capability evidence and limitations. Explain POSIX `local` rejection and unresolved Fish autoload calls between discovered files. Trace support claims to dialect tests and the independent report.
 
 ## 6. Integration acceptance
 
-- [ ] 6.1 Run structural invariants, shell semantic acceptance, and affected watcher tests on macOS and Linux. Record the commands, exact parser revisions, and remaining limitations.
+- [ ] 6.1 Run `TestSemanticShell` through `task eval:semantic`, structural invariants, and affected watcher tests on macOS and Linux. Record commands, parser revisions, and remaining limitations.
 - [ ] 6.2 Run the existing release build and dependency audit targets. Make sure that released artifacts need no shell interpreter and preserve existing signing, attestation, and SBOM workflows.
 - [ ] 6.3 Add the release note with `task changie -- new --interactive=false -k Features -b "Index POSIX shell, Bash, Zsh, and Fish sources with explicit dialect and resolution limits."`. Make sure that the generated fragment matches the qualified dialects.

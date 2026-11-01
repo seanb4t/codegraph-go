@@ -21,7 +21,7 @@ CodeGraph MUST expose statically named package or module bindings in Go, TypeScr
 
 ### Requirement: Deterministic declaration kinds
 
-Go package var/const MUST use variable/constant. JavaScript/TypeScript/TSX module var/let/const MUST use variable/variable/constant, except direct arrow/function expressions MUST use function. Callable aliases MUST retain their data kind. Python module assignments MUST use variable. Go struct fields, Java/TypeScript/JavaScript/TSX class fields, Java interface fields, and Python class/receiver attributes MUST use field. Methods MUST retain their callable kind.
+Go package var/const MUST use variable/constant. JavaScript/TypeScript/TSX module var/let/const MUST use variable/variable/constant, except direct arrow/function expressions MUST use function. Callable aliases MUST retain their data kind. Python module assignments and annotations MUST use variable. Go struct fields, Java/TypeScript/JavaScript/TSX class fields, Java interface fields, and Python class/receiver attributes MUST use field. Methods MUST retain their callable kind.
 
 #### Scenario: Modifiers do not invent new declaration kinds
 - **WHEN** source declares an uppercase Python assignment, a Java static final field, and a TypeScript readonly field
@@ -32,6 +32,10 @@ Go package var/const MUST use variable/constant. JavaScript/TypeScript/TSX modul
 - **WHEN** a JavaScript module binds a direct function expression to a nonexported constant
 - **THEN** that declaration has one function identity
 - **AND** a separate alias to that function retains its variable or constant kind
+
+#### Scenario: A Python module binding has only an annotation
+- **WHEN** a module declares `x: int` without an initializer
+- **THEN** CodeGraph emits one variable declaration for `x`
 
 ### Requirement: Statically named fields
 

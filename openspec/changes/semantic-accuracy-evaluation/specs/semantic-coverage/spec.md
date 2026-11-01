@@ -8,7 +8,7 @@ Give maintainers reproducible evidence about extracted facts and useful query an
 
 ### Requirement: Explicit evaluation inventory
 
-The evaluation MUST inventory Go, TypeScript, JavaScript, TSX, Python, and Java separately. Each construct and query case MUST state its scope, evidence source, expected facts, and evaluation status. Missing or unsupported cases MUST remain visible.
+The evaluation MUST inventory Go, TypeScript, JavaScript, TSX, Python, and Java separately. Each construct and query case MUST state its scope, target specification revision, evidence source, expected facts, and status. Evaluated planned forms within that target contract MUST use known-gap status until supported. Explicitly excluded forms MUST use unsupported status. Missing or unsupported cases MUST remain visible.
 
 #### Scenario: A language lacks a feature
 - **WHEN** Python attribute extraction has no passing acceptance case
@@ -112,6 +112,11 @@ Cases MUST distinguish supported, known-gap, unsupported, and unevaluated status
 #### Scenario: A known omission grows
 - **WHEN** a known failure lists one missing variable but the new result misses two
 - **THEN** the gate fails and names the additional omission
+
+#### Scenario: A planned field is not implemented yet
+- **WHEN** the target specification includes a #239 field form that the current extractor omits
+- **THEN** its manifest uses known-gap status with an exact exception linked to #239
+- **AND** the missing field reduces recall before the implementation lands
 
 #### Scenario: A known omission is fixed
 - **WHEN** every listed mismatch of a known-gap case disappears and no new mismatch occurs
