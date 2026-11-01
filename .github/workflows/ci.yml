@@ -5,10 +5,16 @@
 # "SLSA/reproducibility claims asserted without ever being independently
 # re-verified"):
 #
-#   - test: go build + go test ./... with internal/daemon's known-flaky
-#     soak/flush-lock tests isolated into their own -count=1 step (STATE.md
-#     documents this as a PRE-EXISTING flake under full-suite parallel load,
-#     not a new regression to paper over).
+#   - changes: dorny/paths-filter decides which legs a pull request needs
+#     (#221, design D2). The filters name what a leg can skip, not what it
+#     needs, because a list of inputs misses some. A push to main, a failed
+#     filter step and a change under the `ci` filter run every leg.
+#   - go, go-race, daemon, web, release-checks: the test legs (design D3).
+#     Each Go leg runs gotestsum, which writes a JUnit report and prints the
+#     slowest tests, and never reruns a failed test.
+#   - test: the aggregate job. It needs every leg and fails if any leg failed
+#     or was cancelled, so the required check `test` keeps its name and
+#     reports on every pull request, whichever legs ran (design D1).
 #   - govulncheck: a BLOCKING vulnerability gate, deliberately its own job —
 #     never combined with SBOM generation into one step (RESEARCH
 #     anti-pattern: "conflating SBOM generation with vulnerability scanning
@@ -17,12 +23,10 @@
 #     Blocks on linux/amd64 (the canonical, lowest-variance target, D-03);
 #     the linux/arm64 cross-target leg is reported via continue-on-error,
 #     never silently green across all targets.
-#   - changes: a first job that classifies the push or pull request as
-#     planning-only (every changed file under openspec/, #135). The five
-#     heavy jobs below depend on it and skip through a job-level `if`
-#     when it says so; a skipped job still reports its required check as
-#     Success, which a workflow-level paths filter would not. The
-#     classifier fails open: an empty or false verdict runs everything.
+#
+# A skipped job still reports its required check as Success, which a
+# workflow-level paths filter would not; that is why the legs skip through a
+# job-level `if`.
 #
 # The perf regression check (PERF-02, INDX-06) is not a gate here. It runs
 # in bench.yml, nightly and on dispatch, and blocks no pull request.
@@ -45,46 +49,86 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels its superseded run. A push to main
+# always runs to completion, so each merged commit gets its full set of
+# checks (design D4).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Each output is the string 'true' or 'false'. A filter step that did not
+  # succeed (it failed, or it was skipped on a push) makes every output true,
+  # so the classifier errs toward running.
   changes:
-    name: changes (planning-only classifier)
+    name: changes (paths-filter)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      planning_only: ${{ steps.classify.outputs.planning_only }}
+      go: ${{ steps.skip.outcome != 'success' || steps.skip.outputs.go == 'true' }}
+      release: ${{ steps.skip.outcome != 'success' || steps.skip.outputs.release == 'true' }}
+      web: ${{ steps.need.outcome != 'success' || steps.need.outputs.web == 'true' }}
+      ci: ${{ steps.need.outcome != 'success' || steps.need.outputs.ci == 'true' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up tools
-        uses: ./.github/actions/setup-tools
+      # Every pattern of a filter must match a file (`every`): the file is
+      # outside the paths that the leg can skip. Go tests read Markdown
+      # (README.md, docs/CLI-REFERENCE.md and others), so Markdown does not
+      # skip the Go legs.
+      - name: Filter what a leg can skip
+        id: skip
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          tools: uv
+          predicate-quantifier: every
+          filters: |
+            go:
+              - '**'
+              - '!openspec/**'
+              - '!web/src/**'
+              - '!web/tests/**'
+            release:
+              - '**'
+              - '!openspec/**'
+              - '!web/src/**'
+              - '!web/tests/**'
 
-      # scripts/planning_only.py prints planning_only=true only when every
-      # changed path (and every rename's previous path) is under openspec/.
-      # Untrusted values reach it through env:, never through the run: text.
-      - name: Classify the change
-        id: classify
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.event.after }}
-          GH_TOKEN: ${{ github.token }}
-        run: uv run scripts/planning_only.py
+      # Any pattern of a filter matches a file (`some`).
+      - name: Filter what a leg needs
+        id: need
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - '**/*.proto'
+              - 'buf*.yaml'
+              - 'Taskfile.yml'
+              - 'mise.toml'
+              - 'mise.lock'
+            ci:
+              - '.github/**'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'Taskfile.yml'
+              - 'mise.toml'
+              - 'mise.lock'
+              - '.golangci.yml'
 
-  test:
-    name: test
+  go:
+    name: test (go)
     runs-on: namespace-profile-linux-amd64-4x8
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
+    if: ${{ !cancelled() && (needs.changes.outputs.go == 'true' || needs.changes.outputs.ci == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -97,210 +141,234 @@ jobs:
       - name: Build
         run: task build
 
-      # DEV-01 (Phase 10): NEW enforcement, not a rewiring — plain
-      # `go vet ./...` was never in CI before this step; only two
-      # package-scoped GOOS=windows vets existed, and those went away with
-      # native Windows support (quick task 260807-gho). Findings surfaced
-      # on this gate's first run are fixed, not suppressed.
+      # DEV-01 (Phase 10): plain `go vet ./...`. Findings are fixed, not
+      # suppressed.
       - name: Vet (go vet ./...)
         run: task vet
 
-      # IN-04 (03-REVIEW.md): folded into this ALREADY-REQUIRED `test` job
-      # rather than kept as the separate `lint-go` job 03-10-PLAN.md
-      # originally added — GitHub ruleset 20157557 (this repository's
-      # required-status-check config) lives OUTSIDE this repo, so a new
-      # top-level job is not required to merge without an out-of-band
-      # `gh api` edit. Phase 2's D-13 made the identical call for this job's
-      # other gates.
-      # Placed right after Vet — before the slower Go/JS test and build
-      # steps below — so a lint failure surfaces early.
+      # Placed right after Vet, before the slower test steps, so a lint
+      # failure surfaces early.
       - name: Lint (golangci-lint via task lint:go)
         run: task lint:go
 
-      - name: Test (excluding internal/daemon — isolated below)
-        # IN-08 (03-REVIEW.md): `set -e` does not propagate failures out of
-        # a process substitution — `mapfile -t pkgs < <(go list ... | grep
-        # ...)` succeeds regardless of go list's exit status, so a partial
-        # emission before a failure would silently test a subset of packages
-        # under a green check. Materialize the list first so go list's exit
-        # code is checked by set -e before anything consumes it.
-        run: task test:unit
-
-      # GOLDEN-01 (02-REVIEW-2.md) + FIXT-03 (D-04): the go tool ignores any
-      # directory named "testdata" when expanding "./..." — `go list ./...`
-      # above therefore NEVER discovers testdata/golden. The golden suite
-      # used to run here, but its locked-corpus tests FAIL LOUDLY on an empty
-      # corpus root on a fresh runner, and a skip is exactly what FIXT-03
-      # forbids. It now runs ONLY in corpora.yml's `golden` job, where the
-      # pinned corpora are fetched and asserted first.
-
-      # FIXT-01 (D-08 cheap half): the corpus coverage guard reconciles the
-      # three COMMITTED documents (manifest, observations, selection) against
-      # each other — no fetched corpora, no indexing, so it is safe on every
-      # CI run. internal/corpora IS already reached by the test:unit package
-      # expansion above, but this explicitly named step guards against a
-      # future refactor of that filtered `go list` line silently dropping it
-      # too — the same rationale test:integration documents above — and this
-      # check is the one thing standing between a stale coverage claim and a
-      # green build.
-      - name: Corpus coverage claim (committed record)
-        run: task corpora:verify
-
-      # BLD-01/D-13: frozen-lockfile install with the pnpm mise.toml pins.
-      # task web:deps also asserts web/pnpm-lock.yaml was not
-      # rewritten by the install, failing loudly rather than drifting
-      # silently between a developer's machine and this runner.
+      # proto:drift runs protoc-gen-es from web/node_modules/.bin, so the
+      # frozen web install comes first (BLD-01).
       - name: Install JS deps (frozen lockfile, BLD-01)
         run: task web:deps
 
-      # BRW-06 (03-01): the JS unit-test suite, run immediately after the
-      # frozen install and before the heavier build/audit steps so a
-      # failing suite fails fast. This step's target asserts a POSITIVE
-      # executed-test count before judging pass/fail (rule 84d1gfpywd) —
-      # it cannot report success while having run zero tests.
-      - name: web unit tests (vitest)
-        run: task web:test
+      # Every package except internal/daemon, which the daemon leg runs.
+      # test/integration and test/wireoracle are packages of ./..., so this
+      # step runs them. No -count=1: the restored test cache skips a package
+      # whose inputs did not change.
+      - name: Test (excluding internal/daemon)
+        run: task test:unit
 
-      # BLD-05/D-13: positive assertion that strictDepBuilds is actually in
-      # effect and that pnpm-workspace.yaml's allowBuilds approval map is
-      # committed (even if empty) — never a grep of pnpm's own "Ignored
-      # build scripts" warning text, which a reword would silently break.
-      - name: pnpm build-script approval gate (BLD-05)
-        run: task web:deps:strict
+      # FIXT-01 (D-08 cheap half): the corpus coverage guard reconciles the
+      # three committed documents (manifest, observations, selection)
+      # against each other, with no fetched corpora.
+      - name: Corpus coverage claim (committed record)
+        run: task corpora:verify
 
-      # BLD-06/D-13/D-15: pnpm audit gate, classified on OUTPUT SHAPE (never
-      # on exit code alone — a clean scan and a registry-unreachable scan
-      # both exit 1). Its sibling non-vacuity assertion (task web:lockfile)
-      # runs first and never reads pnpm audit's exit code or output.
-      - name: pnpm audit gate (BLD-06)
-        run: task web:audit
-
-      # BLD-01: proves the pinned toolchain still produces a structurally
-      # valid build from this source on a clean runner — ROADMAP criterion
-      # 3's rebuild half, previously asserted by no gate at all. Builds
-      # into a scratch directory (never web/build/) and asserts the
-      # committed tree is untouched afterwards. Deliberately NOT a
-      # byte-identity check against web/build/: Vite content hashes are not
-      # reproducible across runs (RESEARCH.md Pitfall 1), so comparing
-      # bytes here would reintroduce the false-RED problem this phase's
-      # guard shape exists to avoid.
-      - name: SPA clean-checkout rebuild check (BLD-01)
-        run: task web:build:verify
-
-      # BLD-03: proves both that the committed web/build/ is current with
-      # respect to its source AND that its committed bytes are the ones
-      # task web:build produced, by comparing two independent digests
-      # against the committed web/build/.build-manifest marker. Does not
-      # attempt to reproduce the build — the same Vite non-reproducibility
-      # the rebuild check above already accounts for. Runs last of the two
-      # JS gates on purpose: if the rebuild check above ever did mutate the
-      # committed tree, this guard would catch it.
-      - name: SPA build drift guard (BLD-03)
-        run: task web:drift
-
-      # BLD-04: proves the committed generated files under internal/schema/
-      # and internal/uiproto/uiv1/ still match what the pinned buf toolchain
-      # emits from their .proto sources — including the generated header, a
-      # header-only rewrite counts as drift from 01-01's restamp commit
-      # onward. Regenerates into a temporary tree (never in place) so this
-      # step can never clobber a developer's working-tree edit; it is not
-      # relevant on a CI runner, but the task is written once and shared.
+      # BLD-04: the committed generated files under internal/schema/ and
+      # internal/uiproto/uiv1/ still match what the pinned buf toolchain
+      # emits from their .proto sources.
       - name: Proto codegen drift guard (BLD-04)
         run: task proto:drift
 
-      # DOCS-05, v0.13.0 Phase 12: proves the committed docs/CLI-REFERENCE.md
-      # still matches what tools/clidoc generates from the live Cobra tree.
-      # Regenerated into a temp file, never in place; fires on every flag
-      # addition that forgets `task docs:cli`.
+      # DOCS-05: docs/CLI-REFERENCE.md still matches what tools/clidoc
+      # generates from the live Cobra tree.
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
-      # CHG-03/CHG-04, v0.15.0 Phase 1: proves the pinned changie
-      # (mise.toml) answers the v0.14.0 baseline version,
-      # reproduces CHANGELOG.md from .changes/ byte for byte, writes a
-      # fragment non-interactively with CI=true, and refuses a malformed
-      # one (missing PR, undeclared kind) on changie's own stderr text —
-      # all inside a scratch copy that never mutates the tree.
-      - name: Changie baseline and fragment guard (CHG-03/CHG-04)
-        run: task check:changie
+      - name: Upload the test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-go
+          path: test-results/
+          if-no-files-found: error
 
-      # GRD-11/GRF-10: this target's three positive-controlled halves
-      # (govulncheck source mode over the main module, syft SBOM by
-      # name+version, cgo-closure walk) ran only locally since v0.13.0
-      # Phase 11. `test` is already a required context, so this blocks
-      # merges the moment it lands — no ruleset edit needed (D-04). Needs
-      # `node` and `syft`, both from Set up tools.
-      - name: Gonum dependency-shape guard (GRD-11/GRF-10)
-        run: task check:gonum
+  # WR-03 (03-REVIEW.md): the goroutine lifecycles of the watcher packages,
+  # and internal/cli's serveWatchStart tests, under the race detector. The
+  # packages run in parallel; only internal/daemon needs -p 1.
+  go-race:
+    name: test (go-race)
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.outputs.go == 'true' || needs.changes.outputs.ci == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
-      # GRD-11/GRF-06: runs the script's --self-test first, then the real
-      # scan over web/src for forbidden force-directed layout names. Needs
-      # only `node`, no pnpm install.
-      - name: No-force-layout guard (GRD-11/GRF-06)
-        run: task check:no-force-layout
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
 
-      # GATE-01..GATE-04 (v0.15.0 Phase 4): runs the fragment gate's offline
-      # unittest suite and asserts that every defined test executed. The gate
-      # itself runs from fragment-required.yml under pull_request_target.
-      - name: Fragment policy unit suite (GATE-01..GATE-04)
-        run: task check:fragment-policy
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
 
-      # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
-      # by `go list ./...` above (it's a normal package, not testdata/), but
-      # an explicit named step guards against a future refactor of that
-      # filtered `go list` line silently dropping it too — the same
-      # rationale the golden-suite step above already documents.
-      - name: Test subprocess integration harness (test/integration)
-        run: task test:integration
-
-      # VRFY-01/VRFY-04 (v0.3.0 Phase 1): the wire-level regression oracle
-      # spawns the real binary over real stdio and byte-compares normalized
-      # transcripts against testdata/wireoracle/transcripts/*.golden — a
-      # required PR leg from the moment it lands, never relaxed or
-      # re-baselined during the Phase 2 SDK swap.
-      - name: Test wire oracle (test/wireoracle)
-        run: task test:wireoracle
-
-      - name: Test internal/daemon (isolated, -count=1)
-        # internal/daemon's TestSoak + flush-lock tests are a documented,
-        # PRE-EXISTING flake under full-suite parallel load (STATE.md,
-        # 08-CONTEXT.md "Flake note"). Isolating them into their own
-        # -count=1 step is the documented handling — the tests are NOT
-        # removed or skipped, just run without contention from the rest of
-        # the suite.
-        run: task test:daemon
-
-      # WR-03 (03-REVIEW.md): the watcher-on-MCP-default phase's entire
-      # surface is goroutine lifecycles (serveWatchStart's spawn/teardown,
-      # RunWithRetry's cancel-vs-sleep select, Debouncer.fireWG accounting,
-      # the two-session convergence soak) — and the soak tests' iteration
-      # counts are explicitly sized for CI "under -race", an assumption no
-      # step verified until now. Targeted at the concurrency packages (plus
-      # internal/cli, whose serveWatchStart tests exercise the same
-      # goroutine seams) rather than the full suite, keeping the added wall
-      # time bounded; -p 1 preserves the same no-parallel-package-contention
-      # isolation the internal/daemon step above documents. The goleak gate
-      # catches leaks, not races — the two are complementary.
       - name: Test concurrency packages under the race detector (-race)
         run: task test:race
 
-      # Native Windows is not a supported platform (quick task 260807-gho);
-      # Windows users run the linux binary under WSL2. The two GOOS=windows
-      # vet steps that used to live here — one typechecking graphstore's
-      # windows lock classifier, one typechecking internal/daemon's windows
-      # PPID watchdog behind a mingw-w64 cross-CGO toolchain — guarded
-      # windows-tagged files that no longer exist. Re-adding either means
-      # reversing the platform decision recorded in README.md's Supported
-      # platforms section.
+      - name: Upload the test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-go-race
+          path: test-results/
+          if-no-files-found: error
+
+  # internal/daemon runs once, under -race, -p 1 and -count=1. The daemon
+  # runs indexer.Sync and opens the store, so any Go change can break it.
+  daemon:
+    name: test (daemon)
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.outputs.go == 'true' || needs.changes.outputs.ci == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Test internal/daemon under the race detector (-race -p 1)
+        run: task test:race:daemon
+
+      - name: Upload the test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-daemon
+          path: test-results/
+          if-no-files-found: error
+
+  web:
+    name: test (web)
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.outputs.web == 'true' || needs.changes.outputs.ci == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      # BLD-01/D-13: frozen-lockfile install with the pnpm mise.toml pins.
+      # pnpm enforces strictDepBuilds from web/pnpm-workspace.yaml (BLD-05).
+      - name: Install JS deps (frozen lockfile, BLD-01)
+        run: task web:deps
+
+      # BRW-06 (03-01): the JS unit-test suite. The target asserts a
+      # positive executed-test count before it judges pass or fail.
+      - name: web unit tests (vitest)
+        run: task web:test
+
+      - name: pnpm audit gate (BLD-06)
+        run: task web:audit
+
+      # BLD-01: the pinned toolchain still produces a structurally valid
+      # build from this source on a clean runner. Builds into a scratch
+      # directory and asserts the committed tree is untouched.
+      - name: SPA clean-checkout rebuild check (BLD-01)
+        run: task web:build:verify
+
+      # BLD-03: the committed web/build/ is current with its source, by two
+      # digests against web/build/.build-manifest. Runs after the rebuild
+      # check on purpose: if that check mutated the tree, this guard sees it.
+      - name: SPA build drift guard (BLD-03)
+        run: task web:drift
+
+      # GRD-11/GRF-06: forbidden force-directed layout names in web/src.
+      - name: No-force-layout guard (GRD-11/GRF-06)
+        run: task check:no-force-layout
+
+  release-checks:
+    name: test (release-checks)
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.outputs.release == 'true' || needs.changes.outputs.ci == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      # GRD-11/GRF-10: govulncheck source mode over the main module, the syft
+      # SBOM by name and version, and the cgo-closure walk.
+      - name: Gonum dependency-shape guard (GRD-11/GRF-10)
+        run: task check:gonum
+
+      # CHG-03: the pinned changie reproduces CHANGELOG.md from .changes/.
+      - name: Changie reproduces CHANGELOG.md (CHG-03)
+        run: task check:changie
+
+  # The required check `test`. It reads the result of every job it needs:
+  # success or skipped passes, and anything else fails. It runs whatever the
+  # legs did (`always()`), so a failed leg cannot leave the check unreported.
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    needs: [changes, go, go-race, daemon, web, release-checks]
+    if: ${{ always() }}
+    steps:
+      - name: Require every leg to pass or skip
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          echo "changes and leg results: ${RESULTS}"
+          read -r -a results <<< "${RESULTS}"
+          if [ "${#results[@]}" -ne 6 ]; then
+            echo "::error::read ${#results[@]} results, want 6 (changes and five legs)"
+            exit 1
+          fi
+          for result in "${results[@]}"; do
+            case "${result}" in
+              success | skipped) ;;
+              *)
+                echo "::error::a job this check needs reported ${result}"
+                exit 1
+                ;;
+            esac
+          done
 
   govulncheck:
     name: govulncheck (DIST-03, blocking)
     runs-on: ubuntu-latest
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
+    if: ${{ !cancelled() && (needs.changes.outputs.release == 'true' || needs.changes.outputs.ci == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -342,10 +410,12 @@ jobs:
     name: tool-vuln (VULN-01/02/03, advisory)
     runs-on: namespace-profile-linux-amd64-4x8
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
+    if: ${{ !cancelled() && (needs.changes.outputs.release == 'true' || needs.changes.outputs.ci == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -368,11 +438,12 @@ jobs:
     name: reproducibility (double-build hash-diff, DIST-04)
     runs-on: namespace-profile-linux-amd64-4x8
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
+    if: ${{ !cancelled() && (needs.changes.outputs.release == 'true' || needs.changes.outputs.ci == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Set up tools
@@ -383,22 +454,9 @@ jobs:
         with:
           cache: go
 
-      - name: Compute determinism inputs
-        id: repro
-        run: |
-          set -euo pipefail
-          echo "epoch=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: linux/amd64 double build (BLOCKING — canonical target, D-03)
-        # Mirrors .goreleaser.yaml's own reproducibility flags exactly
-        # (-trimpath, -buildid=, mod-time pinned via SOURCE_DATE_EPOCH) so
-        # this gate actually proves what release.yml will produce is
-        # deterministic, per 08-RESEARCH.md's Double-build reproducibility
-        # gate code example.
-        env:
-          SOURCE_DATE_EPOCH: ${{ steps.repro.outputs.epoch }}
-          COMMIT: ${{ steps.repro.outputs.commit }}
+        # goreleaser build reads .goreleaser.yaml's flags and the commit
+        # itself, so this gate proves what release.yml will produce (#212).
         run: task check:reproducibility
 
       - name: linux/arm64 double build (REPORTED ONLY, non-blocking — D-03 cross-target)
@@ -409,72 +467,7 @@ jobs:
         # (08-CONTEXT.md prohibition: "MUST NOT make the double-build gate
         # silently green across all targets").
         continue-on-error: true
-        env:
-          SOURCE_DATE_EPOCH: ${{ steps.repro.outputs.epoch }}
-          COMMIT: ${{ steps.repro.outputs.commit }}
         run: task check:reproducibility:arm64
-
-  # tmux-e2e (TTY-01..TTY-07, 08-tmux-real-pty-harness): the real-PTY harness
-  # gives the terminal UI the missing rung between the piped, TTY-blind
-  # integration suite and manual human UAT — it builds the real codegraph
-  # binary, drives it inside a genuine tmux pane, and asserts on
-  # capture-pane output.
-  #
-  #   - runs-on: ubuntu-latest, not a Namespace profile (D-10): this job's
-  #     entire purpose is to prove a real pty behaves correctly, and a
-  #     documented, publicly-inspectable image matters more here than the
-  #     Namespace cache speedup the rest of this workflow otherwise prefers.
-  #     govulncheck already made the same call.
-  #   - tmux is install-then-assert, not apt-pinned (D-11): `apt-get install
-  #     tmux=<exact-version>` starts failing the moment the archive snapshot
-  #     rolls, turning an unrelated event into a red build. Instead,
-  #     test:tmux installs whatever ubuntu-latest currently ships and then
-  #     fails loudly when `tmux -V` doesn't match the committed
-  #     TMUX_EXPECTED_VERSION constant in Taskfile.yml — drift becomes a
-  #     visible one-line decision, not a silent behavior change.
-  #   - What actually gates this job is the EXECUTED-COUNT EQUALITY inside
-  #     `task test:tmux`, not the job's exit code in isolation: a runner
-  #     without tmux, a misspelled build tag, or one silently-skipping case
-  #     all produce an executed count that is not exactly
-  #     TMUX_EXPECTED_TESTS, and each fails the job rather than passing it
-  #     empty (D-01/D-02). Nothing on this job or any of its steps can turn
-  #     a failure soft or make a step conditional — a job that can silently
-  #     skip its own count assertion is the failure shape this phase exists
-  #     to close.
-  #     The only condition on this job is the planning-only skip shared
-  #     with every heavy job (the `changes` classifier, #135): the job
-  #     either runs whole, with its count assertion, or is skipped as a
-  #     unit before any step starts.
-  tmux-e2e:
-    name: tmux e2e (real-pty harness, TTY-01..TTY-07)
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: ${{ !cancelled() && needs.changes.outputs.planning_only != 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up tools
-        uses: ./.github/actions/setup-tools
-        with:
-          go-cache: "true"
-
-      - name: Install tmux
-        run: task test:tmux:install
-
-      # CI is carried through this step-level env: key, never interpolated
-      # into the run: body — taskCallLineRe
-      # (internal/upgrade/taskfile_shape_test.go:204) matches only a bare
-      # `task <target>` line, so `CI=1 task test:tmux` here would be a hard
-      # TestWorkflowRunBodiesInvokeTask failure. GitHub already exports CI
-      # on every hosted runner; this entry is kept anyway so the
-      # strict-mode trigger is visible in the job rather than implicit in
-      # the platform (matches transcript-freeze's TRANSCRIPT_FREEZE_BASE
-      # pattern above).
-      - name: tmux real-pty harness (TTY-01..TTY-07)
-        env:
-          CI: "1"
-        run: task test:tmux
 
   # actionlint: the release chain's guarantees live in workflow files
   # (ci.yml, release.yml, release-pr.yml, release-tag.yml and pr-title.yml
@@ -489,6 +482,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -501,9 +496,8 @@ jobs:
       - name: Run actionlint
         run: task lint:actions
 
-      # The classifier's own tests run here, in a job the classifier never
-      # gates, so a change to scripts/planning_only.py cannot skip them.
-      - name: CI script unit suites (planning-only classifier, vuln report)
+      # The CI scripts' unit suites run here, in a job no path filter gates.
+      - name: CI script unit suites (vuln report, PR-template policy)
         run: task check:ci-scripts
 
   transcript-freeze:
@@ -517,6 +511,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Set up tools
@@ -541,6 +536,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools

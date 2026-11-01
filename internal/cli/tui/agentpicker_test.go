@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
 )
@@ -328,5 +330,106 @@ func TestAgentPickerFootprint_EmptyRoster(t *testing.T) {
 	}
 	if !strings.Contains(content, "space: toggle") {
 		t.Fatalf("view content missing footer text \"space: toggle\" on empty roster:\n%s", content)
+	}
+}
+
+// idleMsg is a message no model handles. Sending it makes the Program run
+// Update and View again with no input and no state change.
+type idleMsg struct{}
+
+// TestInstallPickerFrameStableWhileIdle is TTY-06: once the picker has drawn
+// its first frame, an idle picker writes no further text. The pane is 12
+// rows, too short for the 8 rows plus title and footer, so the frame stays
+// in place only in the alternate screen. The idle messages make Update and
+// View run again, and quitting forces a last flush of the current view, so
+// any difference between the first frame and the idle view is written as
+// text after the first frame.
+func TestInstallPickerFrameStableWhileIdle(t *testing.T) {
+	tm := teatest.NewTestModel(t, newAgentPickerModel(agents.AllTargets(), nil), teatest.WithInitialTermSize(100, 12))
+
+	first := waitForFrame(t, tm, "space: toggle")
+	for range 5 {
+		tm.Send(idleMsg{})
+	}
+	if err := tm.Quit(); err != nil {
+		t.Fatalf("quit: %v", err)
+	}
+	rest := finalOutput(t, tm)
+
+	if len(first) == 0 {
+		t.Fatal("the program wrote 0 bytes before its first frame")
+	}
+	for _, want := range []string{"Select agents to configure", "[ ]", "space: toggle"} {
+		if !bytes.Contains(first, []byte(want)) {
+			t.Fatalf("first frame does not contain %q:\n%q", want, first)
+		}
+	}
+	if text := textOf(rest); text != "" {
+		t.Fatalf("TTY-06: the idle picker wrote text after its first frame:\n%q\nfull tail:\n%q", text, rest)
+	}
+}
+
+// TestInstallPickerFooterAt100x30 is the program-level check of FIX-03 at
+// the default 100x30 pane: the frame the Program writes shows the help
+// footer and every registered target's display name. In the alternate
+// screen a frame taller than the pane is cut at the bottom, so a row that
+// costs two lines pushes the footer out of the written bytes.
+func TestInstallPickerFooterAt100x30(t *testing.T) {
+	all := agents.AllTargets()
+	if len(all) != 8 {
+		t.Fatalf("agents.AllTargets() returned %d targets, want 8 (D-26)", len(all))
+	}
+
+	tm := teatest.NewTestModel(t, newAgentPickerModel(all, nil), teatest.WithInitialTermSize(100, 30))
+	tm.Send(quitKeyMsg())
+	out := finalOutput(t, tm)
+
+	if len(out) == 0 {
+		t.Fatal("the program wrote 0 bytes")
+	}
+	if !bytes.Contains(out, []byte("space: toggle")) {
+		t.Fatalf("the frame written at 100x30 does not contain the footer \"space: toggle\":\n%q", out)
+	}
+	for _, target := range all {
+		if !bytes.Contains(out, []byte(target.DisplayName())) {
+			t.Fatalf("the frame written at 100x30 does not contain target %q:\n%q", target.DisplayName(), out)
+		}
+	}
+}
+
+// TestInstallPickerCancelWritesNoConfig is TTY-05: a row checked with space
+// and then cancelled with q or esc resolves to no targets. install
+// configures exactly the targets RunAgentPicker returns, and an empty list
+// writes nothing ("no agents selected"). On a fresh HOME no agent is
+// detected, so without the space toggle nothing is checked and a cancel that
+// kept the checked set would still resolve to nothing.
+func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
+	cancels := map[string]tea.KeyPressMsg{
+		"q":   quitKeyMsg(),
+		"esc": {Code: tea.KeyEscape},
+	}
+	for name, cancel := range cancels {
+		t.Run(name, func(t *testing.T) {
+			tm := teatest.NewTestModel(t, newAgentPickerModel(agents.AllTargets(), nil), teatest.WithInitialTermSize(100, 30))
+			tm.Send(spaceKeyMsg())
+			tm.Send(cancel)
+
+			fm, ok := tm.FinalModel(t, teatest.WithFinalTimeout(programDeadline)).(agentPickerModel)
+			if !ok {
+				t.Fatalf("final model is not an agentPickerModel")
+			}
+			if out := finalOutput(t, tm); len(out) == 0 {
+				t.Fatal("the program wrote 0 bytes")
+			}
+			if !fm.delegate.checked[0] {
+				t.Fatal("space did not check the focused row, so the cancel had nothing to discard")
+			}
+			if fm.confirmed {
+				t.Fatalf("%s confirmed the picker", name)
+			}
+			if got := fm.resolvedTargets(); len(got) != 0 {
+				t.Fatalf("TTY-05: %s resolved %d targets, want 0", name, len(got))
+			}
+		})
 	}
 }

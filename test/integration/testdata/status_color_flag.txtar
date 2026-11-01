@@ -1,0 +1,21 @@
+# D-09, D-11, CLI-02, CLI-03: --color sets ANSI output independently of the
+# pipe. always forces ANSI on a pipe, never gives no ANSI and the same bytes
+# as no flag, and an unknown value is a usage error naming all three values.
+
+fixture repo
+exec codegraph init $WORK/repo
+cd repo
+
+exec codegraph status --path $WORK/repo --color=always
+stdout '\x1b\['
+
+exec codegraph status --path $WORK/repo
+cp stdout $WORK/bare
+exec codegraph status --path $WORK/repo --color=never
+! stdout '\x1b\['
+cmp stdout $WORK/bare
+
+! exec codegraph status --path $WORK/repo --color=bogus
+stderr 'auto'
+stderr 'always'
+stderr 'never'

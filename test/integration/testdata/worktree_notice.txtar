@@ -1,0 +1,41 @@
+# TEST-04's D-20 anchor. `serve --mcp` started with its cwd in a linked
+# worktree at .claude/worktrees/probe, with the worktree index off, returns
+# a codegraph_explore payload with the bare U+26A0 notice (not the U+FE0F
+# emoji form that EXPL-04 uses). With the worktree index on, the worktree
+# gets its own .codegraph/ and the notice goes away. Started in the main
+# checkout, there is no notice. The cwd must reach mcp.BuildServer through
+# serve.go: passing repoPath as the start path (CR-01) makes the first
+# check fail.
+
+[!exec:git] skip 'git is not on PATH'
+fixture repo
+cd repo
+exec git init
+exec git add -A
+exec git commit -m init
+exec git worktree add -b probe .claude/worktrees/probe
+exec codegraph init $WORK/repo
+
+cd .claude/worktrees/probe
+env CODEGRAPH_NO_WORKTREE_INDEX=1
+exec mcpclient explore Alpha
+stdout ${NOTICE_GLYPH}'([^\x{FE0F}]|$)'
+! exists .codegraph
+
+env CODEGRAPH_NO_WORKTREE_INDEX=
+exec mcpclient explore Alpha
+! stdout ${NOTICE_GLYPH}'([^\x{FE0F}]|$)'
+exists .codegraph/store
+
+cd $WORK/repo
+exec mcpclient explore Alpha
+! stdout ${NOTICE_GLYPH}'([^\x{FE0F}]|$)'
+
+-- home/.gitconfig --
+[init]
+	defaultBranch = main
+[user]
+	name = codegraph-test
+	email = test@example.invalid
+[commit]
+	gpgsign = false

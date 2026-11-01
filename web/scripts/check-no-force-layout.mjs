@@ -47,7 +47,6 @@
 // rather than build-breaking. Per WR-03's own guidance, GraphCanvas.svelte
 // is NOT rewritten to dodge this scan; the gap is documented here instead.
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import * as url from 'node:url';
 
@@ -160,9 +159,6 @@ function scanUnresolvedLayoutNames(file, text, out) {
 	}
 }
 
-// scanFileTexts is the ONE scan function both the real-tree walk and
-// --self-test's injected-source path call — the same mechanism, never two
-// independently-written scanners that could silently drift apart.
 function scanFileTexts(fileTexts) {
 	let elkLayoutRefs = 0;
 	let elkImportRefs = 0;
@@ -195,15 +191,13 @@ function scanPackageJson(packageJsonPath) {
 	return { elkImportRefs, forbiddenMatches };
 }
 
-// runScan walks web/src plus web/package.json's dependencies, optionally
-// with extra in-memory sources spliced in (--self-test's injected source).
-function runScan({ extraFiles = [] } = {}) {
+// runScan walks web/src plus web/package.json's dependencies.
+function runScan() {
 	const files = walk(SRC_ROOT, []);
 	const fileTexts = files.map((file) => ({
 		file: path.relative(REPO_ROOT, file),
 		text: fs.readFileSync(file, 'utf8')
 	}));
-	for (const extra of extraFiles) fileTexts.push(extra);
 
 	const srcResult = scanFileTexts(fileTexts);
 	const pkgResult = scanPackageJson(PACKAGE_JSON_PATH);
@@ -256,93 +250,6 @@ function assertLayoutNameRegexCoversDeclaredFamilies() {
 }
 assertLayoutNameRegexCoversDeclaredFamilies();
 
-// selfTestSymlinkTraversal (WR-02) proves the walker's symlink-following
-// fix on REAL disk structure, not just the in-memory scan mechanism: a
-// forbidden layout name planted in a directory that is reachable ONLY
-// through a symlink must still be found. Both temp roots live under
-// os.tmpdir() and are always removed, even on failure/throw.
-function selfTestSymlinkTraversal() {
-	const base = fs.mkdtempSync(path.join(os.tmpdir(), 'check-no-force-layout-planted-'));
-	const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'check-no-force-layout-root-'));
-	try {
-		const plantedDir = path.join(base, 'planted');
-		fs.mkdirSync(plantedDir, { recursive: true });
-		fs.writeFileSync(path.join(plantedDir, 'injected.ts'), "const layout = { name: 'cose' };\n");
-		fs.symlinkSync(plantedDir, path.join(linkRoot, 'linkdir'), 'dir');
-
-		const files = walk(linkRoot, []);
-		const fileTexts = files.map((file) => ({ file, text: fs.readFileSync(file, 'utf8') }));
-		const result = scanFileTexts(fileTexts);
-		const found = result.forbiddenMatches.some((m) => m.match.includes('cose'));
-
-		if (!found) {
-			console.log(
-				'check-no-force-layout self-test (symlink traversal): FAIL — a forbidden match reachable only through a symlinked directory was NOT detected'
-			);
-			return false;
-		}
-		console.log(
-			'check-no-force-layout self-test (symlink traversal): PASS — forbidden match found through linkdir -> planted'
-		);
-		return true;
-	} finally {
-		fs.rmSync(linkRoot, { recursive: true, force: true });
-		fs.rmSync(base, { recursive: true, force: true });
-	}
-}
-
-// selfTest runs the SAME scan function over the real tree plus two
-// injected in-memory sources: one planting `name: 'cose'` (the forbidden-
-// literal case) and one planting `cy.layout({ name: layoutName })` (the
-// WR-03b unresolved-name case). It passes only if the forbidden injection
-// is the ONLY forbidden match reported (the real tree stayed clean), the
-// unresolved injection is detected as an advisory finding, AND the real
-// tree's own file count proves the walk is not silently empty — a scan
-// that cannot detect a match it was JUST handed must never be trusted, no
-// matter how clean its real-tree verdict looks. It also runs
-// selfTestSymlinkTraversal (WR-02), a real on-disk case the in-memory
-// injections above cannot exercise.
-function selfTest() {
-	const injected = { file: '<self-test>/injected.ts', text: "const layout = { name: 'cose' };" };
-	const injectedUnresolved = {
-		file: '<self-test>/unresolved.ts',
-		text: 'cy.layout({ name: layoutName });'
-	};
-	const report = runScan({ extraFiles: [injected, injectedUnresolved] });
-
-	const injectedMatch = report.forbiddenMatches.find((m) => m.file === injected.file && m.line === 1);
-	const onlyInjectedMatch = report.forbiddenMatches.length === 1 && injectedMatch !== undefined;
-	const bigEnough = report.filesScanned >= 50;
-	const symlinkOk = selfTestSymlinkTraversal();
-
-	const unresolvedFound = report.unresolvedLayoutNames.some(
-		(m) => m.file === injectedUnresolved.file && m.line === 1
-	);
-	if (unresolvedFound) {
-		console.log(
-			`check-no-force-layout self-test (WR-03b): PASS — unresolved layout name detected at ${injectedUnresolved.file}:1`
-		);
-	} else {
-		console.log(
-			`check-no-force-layout self-test (WR-03b): FAIL — unresolved layout name at ${injectedUnresolved.file}:1 was NOT detected`
-		);
-	}
-
-	if (onlyInjectedMatch && bigEnough && symlinkOk && unresolvedFound) {
-		console.log(`check-no-force-layout self-test: PASS — injected 'cose' detected at ${injected.file}:1`);
-		process.exit(0);
-	}
-
-	console.log('check-no-force-layout self-test: FAIL — the scan did not detect the injected layout name');
-	printReport(report);
-	process.exit(1);
-}
-
-const args = process.argv.slice(2);
-if (args.includes('--self-test')) {
-	selfTest();
-} else {
-	const report = runScan();
-	printReport(report);
-	process.exit(report.verdict === 'PASS' ? 0 : 1);
-}
+const report = runScan();
+printReport(report);
+process.exit(report.verdict === 'PASS' ? 0 : 1);

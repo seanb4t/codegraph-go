@@ -14,6 +14,8 @@ import (
 	"charm.land/lipgloss/v2"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
+	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 )
@@ -473,5 +475,77 @@ func TestDaemonPickerFootprintFitsDefaultPane(t *testing.T) {
 	}
 	if !strings.Contains(content, "enter: stop selected") {
 		t.Fatalf("view content missing footer text \"enter: stop selected\":\n%s", content)
+	}
+}
+
+// TestDaemonPickerLeavesAltScreenLast is TTY-04 at the model level: the
+// picker draws its frame, including the seeded record, inside the alternate
+// screen. Once it leaves the alternate screen it writes only DEC private
+// mode resets: no text in the restored main buffer and no mode query whose
+// reply could reach the shell after exit. The test quits only after the
+// first frame, as a user does; a Program that quits before its first render
+// tick writes its startup queries after the leave sequence, which this
+// model cannot control.
+func TestDaemonPickerLeavesAltScreenLast(t *testing.T) {
+	records := []daemon.Record{rec("/repo/alpha", 101), rec("/repo/bravo", 102)}
+	tm := teatest.NewTestModel(t, newDaemonPickerModel("/repo/alpha", records), teatest.WithInitialTermSize(100, 30))
+
+	first := waitForFrame(t, tm, "enter: stop selected")
+	tm.Send(quitKeyMsg())
+	out := slices.Concat(first, finalOutput(t, tm))
+
+	if len(out) == 0 {
+		t.Fatal("the program wrote 0 bytes")
+	}
+	if n := bytes.Count(out, []byte(altScreenEnter)); n != 1 {
+		t.Fatalf("alt-screen enter written %d times, want 1:\n%q", n, out)
+	}
+	if n := bytes.Count(out, []byte(altScreenLeave)); n != 1 {
+		t.Fatalf("alt-screen leave written %d times, want 1:\n%q", n, out)
+	}
+	enter := bytes.Index(out, []byte(altScreenEnter))
+	leave := bytes.Index(out, []byte(altScreenLeave))
+	if leave < enter {
+		t.Fatalf("alt-screen leave at byte %d comes before the enter at byte %d:\n%q", leave, enter, out)
+	}
+
+	if text := textOf(out[:enter]); text != "" {
+		t.Fatalf("text written to the main buffer before the alt screen: %q", text)
+	}
+	inside := out[enter:leave]
+	for _, want := range []string{"Running daemons", "alpha", "bravo"} {
+		if !bytes.Contains(inside, []byte(want)) {
+			t.Fatalf("the alt-screen frame does not contain %q:\n%q", want, inside)
+		}
+	}
+	tail := out[leave+len(altScreenLeave):]
+	if !privateModesOnly.Match(tail) {
+		t.Fatalf("TTY-04: after leaving the alt screen the picker wrote more than mode resets:\n%q", tail)
+	}
+}
+
+// TestDaemonEmptyRegistryWritesNoModeQuery is TTY-03: on an empty registry
+// RunDaemonPicker prints the plain notice and starts no Program. A Program
+// writes its DECRQM mode queries at startup; one that quits at once lets the
+// terminal's replies reach the shell (G-07-1). So the output must be the
+// notice alone, with no mode query and no control sequence at all.
+func TestDaemonEmptyRegistryWritesNoModeQuery(t *testing.T) {
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetOut(&out)
+
+	if _, err := RunDaemonPicker(cmd, "/repo/a", nil); err != nil {
+		t.Fatalf("RunDaemonPicker: %v", err)
+	}
+
+	if out.Len() == 0 {
+		t.Fatal("RunDaemonPicker wrote 0 bytes on an empty registry")
+	}
+	if loc := modeQuery.FindIndex(out.Bytes()); loc != nil {
+		t.Fatalf("TTY-03: empty registry wrote a mode query at byte %d:\n%q", loc[0], out.Bytes())
+	}
+	if got, want := out.String(), "no running daemons\n"; got != want {
+		t.Fatalf("empty registry output = %q, want %q", got, want)
 	}
 }

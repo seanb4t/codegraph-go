@@ -1,8 +1,8 @@
 // Package mcp implements the codegraph stdio MCP server (D-08): a
 // startup-time conditional tool registration surface. It imports only
 // internal/query (the read-only engine + formatters) — never
-// internal/graphstore's Pebble implementation directly — so the
-// internal/graphstore/archtest boundary holds (D-08b). Every tool handler in
+// internal/graphstore's Pebble implementation directly — so the D-04a
+// boundary holds (D-08b). Every tool handler in
 // tools.go delegates to the same internal/query.Engine methods and
 // formatters the CLI uses, taking a fresh query.OpenAt snapshot per call
 // (D-02/D-08b, RESEARCH Pitfall 2) — one engine, two front-ends, so MCP

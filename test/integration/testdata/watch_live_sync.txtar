@@ -1,0 +1,201 @@
+# WATCH-01: a file written while a `serve --mcp` session is live reaches
+# codegraph_explore with no manual sync, and no explore call fails during
+# the flush. This is also CR-01's regression anchor: the explores run
+# back to back, so their store opens collide with the flush's open on
+# Pebble's exclusive LOCK. The burst of 26 files keeps the sync holding
+# the LOCK long enough to collide. Without bounded lock retries in
+# graphstore.Open and the daemon's flush requeue, either an explore gets a
+# lock error or the flush loses the race and Zeta never appears.
+# CODEGRAPH_DEBOUNCE_MS=100 makes the flush fire within a CI-friendly time.
+# The files wait in $WORK/live, outside the watched tree, until mcpclient
+# copies them in after the handshake.
+
+fixture repo
+exec codegraph init $WORK/repo
+cd repo
+env CODEGRAPH_DEBOUNCE_MS=100
+exec mcpclient live-edit -from $WORK/live -to $WORK/repo/pkga -touch zeta.go -query Zeta -want 'func Zeta'
+stdout 'func Zeta'
+
+-- live/zeta.go --
+package pkga
+
+// Zeta is a live-session addition written while serve --mcp was running.
+func Zeta() int {
+	return Alpha() + 1
+}
+-- live/gen_live_00.go --
+package pkga
+
+// LiveGen00 pads the live-edit burst.
+func LiveGen00() int {
+	return Alpha() + 0
+}
+-- live/gen_live_01.go --
+package pkga
+
+// LiveGen01 pads the live-edit burst.
+func LiveGen01() int {
+	return Alpha() + 1
+}
+-- live/gen_live_02.go --
+package pkga
+
+// LiveGen02 pads the live-edit burst.
+func LiveGen02() int {
+	return Alpha() + 2
+}
+-- live/gen_live_03.go --
+package pkga
+
+// LiveGen03 pads the live-edit burst.
+func LiveGen03() int {
+	return Alpha() + 3
+}
+-- live/gen_live_04.go --
+package pkga
+
+// LiveGen04 pads the live-edit burst.
+func LiveGen04() int {
+	return Alpha() + 4
+}
+-- live/gen_live_05.go --
+package pkga
+
+// LiveGen05 pads the live-edit burst.
+func LiveGen05() int {
+	return Alpha() + 5
+}
+-- live/gen_live_06.go --
+package pkga
+
+// LiveGen06 pads the live-edit burst.
+func LiveGen06() int {
+	return Alpha() + 6
+}
+-- live/gen_live_07.go --
+package pkga
+
+// LiveGen07 pads the live-edit burst.
+func LiveGen07() int {
+	return Alpha() + 7
+}
+-- live/gen_live_08.go --
+package pkga
+
+// LiveGen08 pads the live-edit burst.
+func LiveGen08() int {
+	return Alpha() + 8
+}
+-- live/gen_live_09.go --
+package pkga
+
+// LiveGen09 pads the live-edit burst.
+func LiveGen09() int {
+	return Alpha() + 9
+}
+-- live/gen_live_10.go --
+package pkga
+
+// LiveGen10 pads the live-edit burst.
+func LiveGen10() int {
+	return Alpha() + 10
+}
+-- live/gen_live_11.go --
+package pkga
+
+// LiveGen11 pads the live-edit burst.
+func LiveGen11() int {
+	return Alpha() + 11
+}
+-- live/gen_live_12.go --
+package pkga
+
+// LiveGen12 pads the live-edit burst.
+func LiveGen12() int {
+	return Alpha() + 12
+}
+-- live/gen_live_13.go --
+package pkga
+
+// LiveGen13 pads the live-edit burst.
+func LiveGen13() int {
+	return Alpha() + 13
+}
+-- live/gen_live_14.go --
+package pkga
+
+// LiveGen14 pads the live-edit burst.
+func LiveGen14() int {
+	return Alpha() + 14
+}
+-- live/gen_live_15.go --
+package pkga
+
+// LiveGen15 pads the live-edit burst.
+func LiveGen15() int {
+	return Alpha() + 15
+}
+-- live/gen_live_16.go --
+package pkga
+
+// LiveGen16 pads the live-edit burst.
+func LiveGen16() int {
+	return Alpha() + 16
+}
+-- live/gen_live_17.go --
+package pkga
+
+// LiveGen17 pads the live-edit burst.
+func LiveGen17() int {
+	return Alpha() + 17
+}
+-- live/gen_live_18.go --
+package pkga
+
+// LiveGen18 pads the live-edit burst.
+func LiveGen18() int {
+	return Alpha() + 18
+}
+-- live/gen_live_19.go --
+package pkga
+
+// LiveGen19 pads the live-edit burst.
+func LiveGen19() int {
+	return Alpha() + 19
+}
+-- live/gen_live_20.go --
+package pkga
+
+// LiveGen20 pads the live-edit burst.
+func LiveGen20() int {
+	return Alpha() + 20
+}
+-- live/gen_live_21.go --
+package pkga
+
+// LiveGen21 pads the live-edit burst.
+func LiveGen21() int {
+	return Alpha() + 21
+}
+-- live/gen_live_22.go --
+package pkga
+
+// LiveGen22 pads the live-edit burst.
+func LiveGen22() int {
+	return Alpha() + 22
+}
+-- live/gen_live_23.go --
+package pkga
+
+// LiveGen23 pads the live-edit burst.
+func LiveGen23() int {
+	return Alpha() + 23
+}
+-- live/gen_live_24.go --
+package pkga
+
+// LiveGen24 pads the live-edit burst.
+func LiveGen24() int {
+	return Alpha() + 24
+}

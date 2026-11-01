@@ -1,0 +1,26 @@
+# WATCH-03: with CODEGRAPH_NO_WATCH=1, `serve --mcp` still completes
+# initialize (disabling the watcher never fails serve, D-06), and its stderr
+# carries the D-12/D-13 disabled message with the `codegraph sync` advice.
+
+[!exec:git] skip 'git is not on PATH'
+fixture repo
+cd repo
+exec git init
+exec git add -A
+exec git commit -m init
+exec git worktree add -b probe .claude/worktrees/probe
+exec codegraph init $WORK/repo
+
+env CODEGRAPH_NO_WATCH=1
+exec mcpclient stderr 'File watcher disabled — CODEGRAPH_NO_WATCH=1 is set'
+stdout 'File watcher disabled — CODEGRAPH_NO_WATCH=1 is set'
+stdout 'codegraph sync'
+
+-- home/.gitconfig --
+[init]
+	defaultBranch = main
+[user]
+	name = codegraph-test
+	email = test@example.invalid
+[commit]
+	gpgsign = false

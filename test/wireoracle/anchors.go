@@ -31,8 +31,8 @@ const (
 // (03-RESEARCH.md "Code Examples", case 2's empirically captured response).
 // Hand-authored here, never imported from the SDK under test — the SDK's
 // own equivalently-named exported error-code constant matches
-// internal/mcp/archtest's VRFY-02 `(?i)protocol.?version` name heuristic
-// (which has no code-level allowlist), so referencing it directly would
+// the VRFY-02 forbidigo rule's protocol-version name heuristic in
+// .golangci.yml (which has no allowlist), so referencing it directly would
 // trip that guard in addition to breaking VRFY-01 (never use the SDK under
 // test as the source of its own expected values).
 const codeUnsupportedProtocolVersion = -32022

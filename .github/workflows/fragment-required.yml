@@ -1,24 +1,23 @@
 # GATE-01..GATE-03: a pull request that changes shipped code (cmd/** or
 # internal/**, excluding *_test.go and testdata/) must add a changelog fragment
 # under .changes/unreleased/ or carry a reasoned
-# `<!-- changelog-exempt: <reason> -->` marker in its body. The gate fails
-# closed whenever it cannot see the whole change.
+# `<!-- changelog-exempt: <reason> -->` marker in its body.
 #
-# pull_request_target, checking out the BASE branch (no ref:), exactly as
-# pr-template-format.yml does (D-02): the policy that judges a pull request is
-# always the one on main, so a fork cannot weaken its own gate by editing it.
-# Untrusted input (the PR body, the changed paths) reaches Python only through
-# the environment, never through a shell.
+# dorny/paths-filter reads the pull request's file list through the REST API
+# and sets two outputs: `code` (shipped code changed) and `fragment` (a
+# fragment was added). `task check:fragment-required` reads both and the
+# body, and fails unless both outputs are exactly true or false, so a filter
+# that did not run fails the gate. The filter step has no continue-on-error,
+# so a filter failure fails the gate too. At release time changie itself
+# rejects a fragment with an unknown kind.
+#
+# pull_request_target, with no checkout of the pull request's code: the policy
+# that judges a pull request is always the one on main. The base checkout
+# below provides only the Taskfile and the tools. Untrusted input (the PR
+# body) reaches the shell only through the environment.
 #
 # The workflow posts no comment and holds only read scopes (D-03). The check
 # log is the whole of the guidance, and the exit status is the verdict.
-#
-# The job body is a single `task` call (D-10), so it stays under
-# TestWorkflowRunBodiesInvokeTask. The changed-file list is fetched by the
-# script itself, through gh's paginated REST listing: `gh pr view --json files`
-# stops at 100 files, and a $GITHUB_OUTPUT heredoc step would put fork-authored
-# paths into a delimiter-sensitive write that check-workflow-output-delimiter
-# does not cover.
 #
 # The job's `name:` is the ruleset's required-check context string. Keep it
 # `fragment-required`.
@@ -45,18 +44,35 @@ jobs:
       - name: Check out policy from the base branch
         # No `ref:` on purpose: this checks out the base, not the PR head.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      # Every pattern of a filter must match a file (`every`).
+      - name: Filter the changed files
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '{cmd,internal}/**'
+              - '!**/*_test.go'
+              - '!**/testdata/**'
+            fragment:
+              - added: '.changes/unreleased/**'
+              - '!**/.gitkeep'
 
       # No cache is read or written under pull_request_target.
       - name: Set up tools
         uses: ./.github/actions/setup-tools
         with:
-          tools: task uv
+          tools: task
           cache: "false"
 
       - name: Evaluate fragment policy
         env:
-          # Untrusted input reaches Python via the environment only.
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CODE_CHANGED: ${{ steps.filter.outputs.code }}
+          FRAGMENT_ADDED: ${{ steps.filter.outputs.fragment }}
+          # Untrusted input reaches the shell via the environment only.
           PR_BODY: ${{ github.event.pull_request.body }}
         run: task check:fragment-required

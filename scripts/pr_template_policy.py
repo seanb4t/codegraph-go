@@ -89,13 +89,18 @@ EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:(?P<reason>[^>]*?)-->", r
 ROUTER_MARKER = re.compile(r"Wrong template\s*—\s*please pick", re.I)
 
 
+# The pull-request files REST listing returns at most this many files (#106).
+FILE_LIST_LIMIT = 3000
+
+
 def is_housekeeping(paths: Sequence[str]) -> bool:
     """True when the list is non-empty and every path is on the exempt allowlist.
 
     Comparison is exact and case-sensitive. A prefix matches only as written, so
-    `.changesX/a.md` is not under `.changes/`.
+    `.changesX/a.md` is not under `.changes/`. A list at FILE_LIST_LIMIT may be
+    cut short, so it is never housekeeping.
     """
-    return bool(paths) and all(
+    return bool(paths) and len(paths) < FILE_LIST_LIMIT and all(
         p in EXEMPT_EXACT or p.startswith(EXEMPT_PREFIXES) for p in paths
     )
 
@@ -104,7 +109,8 @@ def find_exemption(body: str) -> str | None:
     """The stripped reason of the first pr-template-exempt marker, or None.
 
     The first marker decides. A reason that is empty after strip, or starts
-    with `-`, does not exempt. scripts/fragment_policy.find_exemption mirrors this.
+    with `-`, does not exempt. task check:fragment-required reads the
+    changelog-exempt marker with the same rules.
     """
     match = EXEMPT_MARKER.search(body)
     if match is None:
@@ -116,6 +122,11 @@ def find_exemption(body: str) -> str | None:
 
 
 def emit(action: str, reason: str) -> None:
+    # A reason can carry PR-body text. A line that starts with `::` is a
+    # workflow command, so the reason becomes one line with no leading `::` (#106).
+    reason = " ".join(reason.splitlines())
+    while reason.startswith("::"):
+        reason = reason[2:]
     payload = json.dumps({"action": action, "reason": reason})
     out = os.environ.get("GITHUB_OUTPUT")
     if out:

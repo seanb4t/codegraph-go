@@ -245,7 +245,7 @@ func scanArrivalLines(r io.Reader) ([]ArrivalLine, error) {
 }
 
 // syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer.
-// Copied from test/integration/mcp_stdout_purity_test.go's syncBuffer
+// It began as a copy of test/integration's syncBuffer
 // (WR-01): os/exec starts a background goroutine to copy a subprocess's
 // stderr pipe into cmd.Stderr whenever that field is a non-*os.File
 // io.Writer, and that goroutine is only joined by cmd.Wait() — a plain
@@ -581,8 +581,7 @@ func hermeticEnviron() []string {
 	return out
 }
 
-// copyTree copies src into dst, preserving directory structure. Lifted
-// from test/integration/main_test.go's copyFixture mechanics, pointed at
+// copyTree copies src into dst, preserving directory structure, for
 // whatever fixture the caller supplies.
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {

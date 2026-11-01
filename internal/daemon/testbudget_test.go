@@ -87,7 +87,7 @@ const (
 	// constrained CI runner (e.g. GOMAXPROCS=4) buy headroom without
 	// editing source. Unset in normal CI/dev use today — this is
 	// defensive/contributor-facing (04-CONTEXT.md's RESOLVED assumption:
-	// ci.yml's existing test:daemon/test:race isolation shows no occurrence
+	// ci.yml's daemon and race isolation shows no occurrence
 	// of these failures on the real runner across the last 52 runs), not a
 	// knob CI is expected to need to turn.
 	testBudgetScaleEnvVar = "CODEGRAPH_DAEMON_TEST_BUDGET_SCALE"

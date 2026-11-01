@@ -80,16 +80,14 @@ var forbiddenTaskfileGateKeys = []string{"status", "platforms"}
 var crossToolchainTokens = []string{"zig"}
 
 // taskWrapperExpectedLegs is the literal D-10 fixture for the `test`
-// wrapper's five host-only legs, compared as a sorted set against the
+// wrapper's four host-only legs, compared as a sorted set against the
 // wrapper's actual cmds: list in TestTaskfileWrapperIsSerial — so both a
 // missing leg and an extra one fail the guard.
 var taskWrapperExpectedLegs = []string{
-	"test:daemon",
 	"test:golden",
-	"test:integration",
 	"test:race",
+	"test:race:daemon",
 	"test:unit",
-	"test:wireoracle",
 }
 
 // inScopeJob names one job, by its YAML map key (not its `name:` display
@@ -111,7 +109,11 @@ type inScopeJob struct {
 // Including either file here would fail this test for reasons the project
 // already decided, not for a real regression.
 var inScopeJobs = []inScopeJob{
-	{Workflow: "ci.yml", JobID: "changes"},
+	{Workflow: "ci.yml", JobID: "go"},
+	{Workflow: "ci.yml", JobID: "go-race"},
+	{Workflow: "ci.yml", JobID: "daemon"},
+	{Workflow: "ci.yml", JobID: "web"},
+	{Workflow: "ci.yml", JobID: "release-checks"},
 	{Workflow: "ci.yml", JobID: "test"},
 	{Workflow: "ci.yml", JobID: "actionlint"},
 	{Workflow: "ci.yml", JobID: "goreleaser-check"},
@@ -119,7 +121,6 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "transcript-freeze"},
 	{Workflow: "ci.yml", JobID: "tool-vuln"},
 	{Workflow: "ci.yml", JobID: "govulncheck"},
-	{Workflow: "ci.yml", JobID: "tmux-e2e"},
 	{Workflow: "corpora.yml", JobID: "corpora"},
 	{Workflow: "corpora.yml", JobID: "golden"},
 	{Workflow: "components-drift.yml", JobID: "components-drift"},
@@ -146,15 +147,9 @@ type runBodyException struct {
 }
 
 // runBodyExceptions is the literal, exhaustive exception list for the
-// in-scope jobs above. Two entries, both in ci.yml:
-//   - "Compute determinism inputs" (job reproducibility) writes to the CI
-//     step-output file ($GITHUB_OUTPUT) via `id: repro`; it has no meaning
-//     outside a runner and produces no artifact a contributor would ever
-//     invoke directly.
-//   - "Classify the change" (job changes) writes planning_only to
-//     $GITHUB_OUTPUT from the event's pull request number or push SHAs;
-//     the same shape, and its unit suite runs through
-//     `task check:ci-scripts` instead.
+// in-scope jobs above. One entry, in ci.yml:
+//   - "Require every leg to pass or skip" (job test) reads the results of
+//     the jobs the aggregate check needs, which exist only inside a run.
 //
 // A second entry ("Install mingw-w64", job test) retired with native
 // Windows support (quick task 260807-gho) — the apt step it excepted no
@@ -164,15 +159,9 @@ type runBodyException struct {
 var runBodyExceptions = []runBodyException{
 	{
 		Workflow: "ci.yml",
-		Job:      "reproducibility",
-		Step:     "Compute determinism inputs",
-		Reason:   "writes to the CI step-output file ($GITHUB_OUTPUT) via id: repro; has no meaning outside a runner",
-	},
-	{
-		Workflow: "ci.yml",
-		Job:      "changes",
-		Step:     "Classify the change",
-		Reason:   "writes planning_only to $GITHUB_OUTPUT from the event's PR number or push SHAs; has no meaning outside a runner",
+		Job:      "test",
+		Step:     "Require every leg to pass or skip",
+		Reason:   "reads needs.*.result, the results of the jobs the aggregate check needs; has no meaning outside a runner",
 	},
 }
 
@@ -923,8 +912,8 @@ func TestZigTasksRedirectZigCache(t *testing.T) {
 // TestTaskfileWrapperIsSerial is the D-10 wrapper guard: the `test`
 // wrapper task must declare no deps: key (go-task runs deps: entries
 // concurrently, which would reintroduce exactly the cross-test contention
-// test:daemon's and test:race's -p 1 flags exist to prevent) and its
-// cmds: list must name exactly the five host-only legs, compared as a
+// test:race:daemon's -p 1 flag exists to prevent) and its
+// cmds: list must name exactly the four host-only legs, compared as a
 // sorted set against the literal D-10 fixture so both a missing leg and
 // an extra one fail this test.
 func TestTaskfileWrapperIsSerial(t *testing.T) {
@@ -940,7 +929,7 @@ func TestTaskfileWrapperIsSerial(t *testing.T) {
 	}
 
 	if blockDeclaresKey(block, "deps") {
-		t.Fatalf("task %q declares a deps: key — go-task runs deps: entries concurrently, which would reintroduce the cross-test contention test:daemon/test:race's -p 1 flags exist to prevent; use a serial cmds: list of '- task: <name>' entries instead", "test")
+		t.Fatalf("task %q declares a deps: key — go-task runs deps: entries concurrently, which would reintroduce the cross-test contention test:race:daemon's -p 1 flag exists to prevent; use a serial cmds: list of '- task: <name>' entries instead", "test")
 	}
 
 	actual := mustParseTaskCallList(t, block)
@@ -1262,7 +1251,13 @@ type usesOnlyJobException struct {
 	Reason   string
 }
 
-var usesOnlyJobExceptions = []usesOnlyJobException{}
+var usesOnlyJobExceptions = []usesOnlyJobException{
+	{
+		Workflow: "ci.yml",
+		JobID:    "changes",
+		Reason:   "runs only dorny/paths-filter, and sets its outputs from step-output expressions",
+	},
+}
 
 // inScopeWorkflowFiles is the SAME set of workflow files inScopeJobs
 // already covers — bench.yml and release.yml carry their own documented
@@ -3747,24 +3742,27 @@ func scanForMutableCache(jobID string) (mutableCacheScanResult, error) {
 }
 
 // TestJSInstallPathHasNoMutableCache is the BLD-01 structural invariant:
-// ci.yml's test job carries no mutable JS-scoped cache, either as its own
-// step or inside the setup-tools composite action, which installs node and
-// pnpm. AllowedCaches > 0 is what makes a clean verdict mean something:
-// ci.yml's test job contains a Go cache step (nscloud-cache-action, cache:
-// go), so a zero count would mean this scanner never reached it.
+// the ci.yml jobs that run `task web:deps` (the go and web legs) carry no
+// mutable JS-scoped cache, either as their own step or inside the
+// setup-tools composite action, which installs node and pnpm.
+// AllowedCaches > 0 is what makes a clean verdict mean something: each of
+// these jobs contains a Go cache step (nscloud-cache-action, cache: go), so
+// a zero count would mean this scanner never reached it.
 func TestJSInstallPathHasNoMutableCache(t *testing.T) {
-	result, err := scanForMutableCache("test")
-	if err != nil {
-		t.Fatalf("scanForMutableCache(%q): %v", "test", err)
-	}
-	if result.StepsExamined == 0 {
-		t.Fatalf("scanForMutableCache(%q): examined zero steps", "test")
-	}
-	if result.AllowedCaches == 0 {
-		t.Fatalf("scanForMutableCache(%q): AllowedCaches = 0 — ci.yml's test job demonstrably contains a Go cache step today; a zero count means this scanner never reached it, so its clean verdict means nothing", "test")
-	}
-	if len(result.Findings) != 0 {
-		t.Fatalf("scanForMutableCache(%q): found %d mutable-cache finding(s) on the JS install path — a stale cache producing a node_modules that differs from web/pnpm-lock.yaml is exactly the divergence BLD-01/BLD-03 forbid: %+v", "test", len(result.Findings), result.Findings)
+	for _, job := range []string{"go", "web"} {
+		result, err := scanForMutableCache(job)
+		if err != nil {
+			t.Fatalf("scanForMutableCache(%q): %v", job, err)
+		}
+		if result.StepsExamined == 0 {
+			t.Fatalf("scanForMutableCache(%q): examined zero steps", job)
+		}
+		if result.AllowedCaches == 0 {
+			t.Fatalf("scanForMutableCache(%q): AllowedCaches = 0 — ci.yml's %s job demonstrably contains a Go cache step today; a zero count means this scanner never reached it, so its clean verdict means nothing", job, job)
+		}
+		if len(result.Findings) != 0 {
+			t.Fatalf("scanForMutableCache(%q): found %d mutable-cache finding(s) on the JS install path — a stale cache producing a node_modules that differs from web/pnpm-lock.yaml is exactly the divergence BLD-01/BLD-03 forbid: %+v", job, len(result.Findings), result.Findings)
+		}
 	}
 }
 

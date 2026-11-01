@@ -37,7 +37,7 @@ const metaRecordName = "schema"
 // pebbleStore is the sole holder of a *pebble.DB in the whole module
 // (D-04). Every other package reaches the graph exclusively through the
 // GraphStore/Reader/Writer/EdgeIterator interfaces declared in store.go —
-// archtest.TestNoPackageBypassesGraphStore enforces this at test time
+// the depguard rule graphstore-owns-pebble in .golangci.yml enforces this
 // (D-04a).
 //
 // mu (WR-01) guards the closed-check-then-Pebble-call sequence in

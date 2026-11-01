@@ -13,7 +13,11 @@ goreleaser = "2.17.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 changie = "1.26.0"
 golangci-lint = "2.13.2"
+# Runs the Go tests with JUnit output and the slowest-test report; never with --rerun-fails.
+gotestsum = "1.13.0"
 actionlint = "1.7.12"
+# GitHub Actions security linter; lint:actions runs it after actionlint.
+zizmor = "1.31.1"
 buf = "1.72.0"
 # Must equal go.mod's google.golang.org/protobuf version (TestProtocGenGoMatchesProtobufRuntime).
 protoc-gen-go = "1.36.11"

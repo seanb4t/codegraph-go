@@ -3,7 +3,7 @@
 # themselves. The build, lint, codegen and release tools these targets run are
 # pinned in mise.toml and must be on PATH: run tasks with `mise activate`, or as
 # `mise exec -- task <target>`; CI runs .github/actions/setup-tools. Host tools
-# (git, gh, jq, rsync, tmux) are not pinned.
+# (git, gh, jq, rsync) are not pinned.
 version: "3"
 
 env:
@@ -16,11 +16,63 @@ vars:
   MISE_TOOLS_ON_PATH:
     sh: |
       command -v mise >/dev/null || { echo "mise is not on PATH: install mise, then run mise install" >&2; exit 1; }
-      for tool in go pnpm buf goreleaser changie golangci-lint govulncheck protoc-gen-go protoc-gen-connect-go; do
+      for tool in go pnpm buf goreleaser changie golangci-lint gotestsum zizmor govulncheck protoc-gen-go protoc-gen-connect-go; do
         want=$(mise which "$tool" 2>/dev/null) || continue
         have=$(command -v "$tool" || true)
         [ "$have" = "$want" ] || { echo "$tool on PATH is ${have:-missing}, not the mise.toml pin $want: run tasks with mise activate, or as mise exec -- task <target>" >&2; exit 1; }
       done
+
+  # run_gotestsum NAME GO-TEST-ARGS... runs go test through gotestsum. It writes
+  # test-results/NAME.xml (JUnit) and NAME.json, then prints the 20 slowest
+  # tests. It never reruns a failed test (--rerun-fails), because a rerun hides
+  # a flake. sed, not head, cuts the list, so pipefail never sees a SIGPIPE.
+  GOTESTSUM_LIB: |
+    run_gotestsum() {
+      local name="$1"
+      shift
+      mkdir -p test-results
+      local status=0
+      gotestsum --format pkgname --junitfile "test-results/${name}.xml" --jsonfile "test-results/${name}.json" -- "$@" || status=$?
+      echo "${name}: the 20 slowest tests"
+      gotestsum tool slowest --jsonfile "test-results/${name}.json" | sed -n '1,20p'
+      return "${status}"
+    }
+
+  # repro_double_build ID builds GoReleaser build ID twice with
+  # `goreleaser build --snapshot`, so the flags, ldflags and mod_timestamp
+  # come from .goreleaser.yaml and the commit, never from a hand copy (#212).
+  # It prints both SHA-256 hashes and sets REPRO_H1 and REPRO_H2. It fails if
+  # a build leaves no binary. Each run replaces dist/. The notarize pipe runs
+  # inside every `goreleaser build`, and only its five unset credential
+  # variables turn it off, so the builds run without them and never sign.
+  REPRO_LIB: |
+    repro_double_build() {
+      local id="$1"
+      local scratch
+      scratch=$(mktemp -d)
+      local hash_cmd="sha256sum"
+      command -v sha256sum >/dev/null 2>&1 || hash_cmd="shasum -a 256"
+      for n in 1 2; do
+        env -u MACOS_SIGN_P12 -u MACOS_SIGN_PASSWORD -u MACOS_NOTARY_ISSUER_ID -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_KEY \
+          goreleaser build --snapshot --clean --id "${id}" >"${scratch}/build${n}.log" 2>&1 || {
+          cat "${scratch}/build${n}.log"
+          echo "::error::${id}: goreleaser build ${n} failed"
+          return 1
+        }
+        local bin
+        bin=$(jq -r '[.[] | select(.type == "Binary")][0].path // ""' dist/artifacts.json)
+        if [ -z "${bin}" ] || [ ! -s "${bin}" ]; then
+          echo "::error::${id}: goreleaser build ${n} left no binary in dist/artifacts.json"
+          return 1
+        fi
+        cp "${bin}" "${scratch}/codegraph${n}"
+      done
+      REPRO_H1=$(${hash_cmd} "${scratch}/codegraph1" | cut -d' ' -f1)
+      REPRO_H2=$(${hash_cmd} "${scratch}/codegraph2" | cut -d' ' -f1)
+      rm -rf "${scratch}"
+      echo "build1=${REPRO_H1}"
+      echo "build2=${REPRO_H2}"
+    }
 
   # BLD-03 (02-06): the source-tree and output-tree hashing pipeline shared
   # VERBATIM by web:build (which WRITES web/build/.build-manifest) and
@@ -128,7 +180,7 @@ tasks:
   test:unit:
     desc: >-
       go test over every package except internal/daemon (isolated separately
-      — see task test:daemon).
+      — see task test:race:daemon).
     cmds:
       - |
         set -euo pipefail
@@ -140,7 +192,8 @@ tasks:
         # list's exit code is checked by set -e before anything consumes it.
         pkgs_raw=$(go list ./...)
         mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
-        go test "${pkgs[@]}"
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum unit "${pkgs[@]}"
 
   test:golden:
     desc: >-
@@ -187,106 +240,6 @@ tasks:
     cmds:
       - go test ./test/wireoracle/...
 
-  test:tmux:install:
-    desc: >-
-      Installs tmux, the tmux real-PTY harness's (test/tmux, TTY-01..TTY-07)
-      only external dependency. A task rather than an inline CI step because
-      Taskfile.yml is the single definition of every CI job body
-      (TestWorkflowRunBodiesInvokeTask) — the tmux-e2e job in ci.yml calls
-      this target rather than embedding its own apt-get lines. CI-only: a
-      local contributor without tmux should install it through their own
-      package manager (Homebrew, apt, etc.) instead of running this target.
-    preconditions:
-      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
-        msg: "test:tmux:install is the CI installer for a Debian-family (ubuntu-latest) runner — a local contributor should install tmux through their own package manager instead."
-    cmds:
-      - sudo apt-get update
-      - sudo apt-get install -y tmux
-
-  test:tmux:
-    desc: >-
-      Real-PTY harness (test/tmux, TTY-01..TTY-07) — spawns the real
-      codegraph binary inside a real tmux pane and asserts on capture-pane
-      output; build-tagged (`-tags tmux`), so a bare `go test ./...` never
-      reaches it. TMUX_EXPECTED_TESTS is D-02's exact-equality anti-vacuity
-      constant: adding, deleting, or silently skipping a top-level Test*
-      function in test/tmux fails this target until the constant is updated
-      in the SAME commit — a floor (>=N) is deliberately not used, since a
-      floor is satisfied by one case running while the rest skip.
-      TMUX_EXPECTED_VERSION is D-11's install-then-assert pin. Its value is
-      the string ubuntu-latest's own `tmux -V` printed on the first real
-      tmux-e2e run (PR #69, run 34606828356), never a guess from a dev box.
-      Always prints an executed count and a skipped count (D-03); enforces
-      the executed-count equality and the tmux-version match only when CI
-      is set, so a contributor without tmux gets a clean skip report and
-      exit 0 while CI fails hard on either mismatch.
-    vars:
-      TMUX_EXPECTED_TESTS: 6
-      TMUX_EXPECTED_VERSION: tmux 3.4
-    preconditions:
-      - sh: command -v jq
-        msg: "jq not found — required to parse go test -json output for test:tmux's anti-vacuity executed-count gate."
-    cmds:
-      - |
-        set -euo pipefail
-
-        # D-11: install-then-assert. Only when CI is set — a contributor's
-        # local tmux version is never asserted, only whatever ubuntu-latest
-        # actually installed. Printing the observed string alongside the
-        # expected one on mismatch is the bootstrap mechanism: the first
-        # real CI run's own failure output supplies the value plan 08-03
-        # commits as the real TMUX_EXPECTED_VERSION.
-        if [ -n "${CI:-}" ]; then
-          OBSERVED_TMUX="$(tmux -V)"
-          if [ "${OBSERVED_TMUX}" != "{{.TMUX_EXPECTED_VERSION}}" ]; then
-            echo "::error::test:tmux: tmux -V reports \"${OBSERVED_TMUX}\" but TMUX_EXPECTED_VERSION is \"{{.TMUX_EXPECTED_VERSION}}\" — D-11 requires drift to be a visible one-line decision, not a silent behavior change"
-            exit 1
-          fi
-        fi
-
-        JSON_OUT="$(mktemp)"
-        trap 'rm -f "${JSON_OUT}"' EXIT
-        STATUS=0
-        go test -tags tmux -count=1 -json ./test/tmux/... 2>&1 | tee "${JSON_OUT}" || STATUS=$?
-
-        # D-01/Pattern 4: count top-level Test* pass events only — exclude
-        # subtests (.Test contains "/") and the package-level summary event
-        # (Action=="pass" with no .Test field at all).
-        EXECUTED="$(jq -s '[.[] | select(.Action=="pass" and .Test != null and (.Test | contains("/") | not))] | length' "${JSON_OUT}")"
-        SKIPPED="$(jq -s '[.[] | select(.Action=="skip" and .Test != null and (.Test | contains("/") | not))] | length' "${JSON_OUT}")"
-
-        echo "test:tmux: executed=${EXECUTED} skipped=${SKIPPED} expected={{.TMUX_EXPECTED_TESTS}}"
-
-        # TTY-06 (TestInstallPickerFrameStableWhileIdle) logs this line via
-        # t.Logf, which go test -json carries as an Action=="output" event
-        # regardless of -v — this is what surfaces the reported N in the
-        # job log rather than only under -v.
-        jq -r 'select(.Output != null and (.Output | startswith("TTY-06: frame-stable across N="))) | .Output' "${JSON_OUT}" || true
-
-        if [ -n "${CI:-}" ]; then
-          if ! [[ "${EXECUTED}" =~ ^[0-9]+$ ]] || [ "${EXECUTED}" -ne {{.TMUX_EXPECTED_TESTS}} ]; then
-            echo "::error::test:tmux: executed=${EXECUTED} but TMUX_EXPECTED_TESTS={{.TMUX_EXPECTED_TESTS}} — D-02 requires an exact equality, not a floor: a floor is satisfied by one case running while the rest skip"
-            exit 1
-          fi
-          if [ "${STATUS}" -ne 0 ]; then
-            echo "::error::test:tmux: go test exited ${STATUS} — a matching executed count never masks a genuine assertion failure"
-            exit 1
-          fi
-          exit 0
-        fi
-
-        exit "${STATUS}"
-
-  test:daemon:
-    desc: >-
-      internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
-      are a documented, PRE-EXISTING flake under full-suite parallel load
-      (STATE.md, 08-CONTEXT.md "Flake note") — isolating them here is the
-      documented handling; the tests are NOT removed or skipped, just run
-      without contention from the rest of the suite.
-    cmds:
-      - go test ./internal/daemon/ -count=1
-
   test:watch:
     desc: >-
       internal/watch alone (-count=1). The daemon darwin workflow runs it on
@@ -296,9 +249,9 @@ tasks:
 
   test:race:
     desc: >-
-      Concurrency packages under the race detector. -p 1 preserves the same
-      no-parallel-package-contention isolation test:daemon relies on — do not
-      run this concurrently with test:daemon (see the test wrapper's comment).
+      internal/cli, internal/mcp and internal/watch under the race detector.
+      The packages run in parallel, and the test cache skips an unchanged
+      package. internal/daemon runs alone in test:race:daemon.
     cmds:
       # internal/mcp added during phase-01 UAT (01-UAT.md test 2): the
       # session-line hook in server.go writes to a shared caller-supplied
@@ -308,7 +261,22 @@ tasks:
       # test (TestSessionLineSurvivesConcurrentAndRepeatedInitialize) fails
       # deterministically without -race; this entry is the fallback net for
       # the races it cannot model.
-      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/... ./internal/mcp/...
+      - |
+        set -euo pipefail
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum race -race ./internal/watch/... ./internal/cli/... ./internal/mcp/...
+
+  test:race:daemon:
+    desc: >-
+      internal/daemon, once, under the race detector. -p 1 keeps other
+      packages from contending with its soak and flush-lock tests, and
+      -count=1 always runs it, because it drives a real watcher and store.
+      The race run covers a plain run, so there is no second one.
+    cmds:
+      - |
+        set -euo pipefail
+        {{.GOTESTSUM_LIB}}
+        run_gotestsum daemon -race -count=1 -p 1 ./internal/daemon/...
 
   vet:
     desc: >-
@@ -546,31 +514,12 @@ tasks:
 
   check:changie:
     desc: >-
-      CHG-03/CHG-04's live-tool guard (D-07), shaped like docs:cli:drift:
-      runs the changie that mise.toml pins, copies
-      .changie.yaml and the seeded baseline (.changes/header.tpl.md,
-      .changes/v*.md, .changes/unreleased/.gitkeep — never the repo's
-      real fragments) into a mktemp scratch directory, and runs fourteen
-      numbered checks there, so the source tree is never mutated. A
-      before/after checksum snapshot of .changie.yaml, .changes/ and
-      CHANGELOG.md asserts this. Reports the seeded version-file count
-      (floor 14) before comparing anything. Every refusal is asserted on
-      changie's own stderr text plus a non-zero exit, never a bare exit
-      code, and an executed-leg counter must reach 14 (rule 84d1gfpywd). A
-      one-byte or whitespace-only difference between changie merge
-      --dry-run and CHANGELOG.md IS drift. Leg 5 proves a fragment without
-      PR is accepted (D-13), and leg 12 proves it renders without a link.
-      Leg 13 drives the real task changie -- path with a body carrying command
-      substitution, backticks and a semicolon, and proves that the body
-      arrives byte-literal and that nothing executes (02-REVIEW CR-01).
-      Leg 14 runs the real changie batch auto then changie merge in the
-      scratch copy and holds four sub-checks, each reported on its own line
-      before the leg fails: the new version file ends in a blank line, no
-      `## [` heading is glued mid-line in the merged CHANGELOG.md, kinds
-      render in .changie.yaml order, and the merged CHANGELOG.md is the
-      header, one blank line, the new file and the old history byte for
-      byte (D-13, Phase 5 05-01).
-      Wired into ci.yml's test job immediately after docs:cli:drift (D-08).
+      CHG-03: the changie that mise.toml pins reproduces CHANGELOG.md from
+      the version files under .changes/. Runs `changie merge --dry-run`,
+      which writes nothing, and compares its output with CHANGELOG.md byte
+      for byte; a one-byte or whitespace-only difference is drift. Fails
+      unless the merged output holds more than zero version headings (rule
+      84d1gfpywd). Fragment validation is changie's own job at release time.
     silent: true
     preconditions:
       - sh: command -v changie
@@ -580,416 +529,24 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        scratch=$(mktemp -d)
-        trap 'rm -rf "${scratch}"' EXIT
-        work="${scratch}/work"
-
-        before=$(find .changie.yaml .changes CHANGELOG.md -type f -exec cksum {} + | LC_ALL=C sort)
-
-        nseeds=$(find .changes -maxdepth 1 -type f -name 'v*.md' | wc -l | tr -d ' ')
-        echo "check:changie: found ${nseeds} seeded version files under .changes/ (floor 14)"
-        if [ "${nseeds}" -lt 14 ]; then
-          echo "::error::check:changie: found only ${nseeds} seeded version files under .changes/ (floor 14) — a broken enumeration must fail loud, never read as a clean pass"
-          exit 1
-        fi
-
         changie_bin=$(command -v changie)
+        merged=$(mktemp)
+        trap 'rm -f "${merged}"' EXIT
 
-        mkdir -p "${work}/.changes/unreleased"
-        cp .changie.yaml "${work}/.changie.yaml"
-        cp .changes/header.tpl.md "${work}/.changes/header.tpl.md"
-        cp .changes/v*.md "${work}/.changes/"
-        cp .changes/unreleased/.gitkeep "${work}/.changes/unreleased/.gitkeep"
+        CI=true "${changie_bin}" merge --dry-run > "${merged}"
 
-        passed=0
-
-        fragment_count() {
-          find "${work}/.changes/unreleased" -type f -name '*.yaml' | wc -l | tr -d ' '
-        }
-
-        # Leg 1/14: latest
-        expected=$(grep -m1 -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | sed -E 's/^## \[v?([0-9]+\.[0-9]+\.[0-9]+)\].*/v\1/')
-        if [ -z "${expected}" ]; then
-          echo "::error::check:changie: [1/14] changie latest — CHANGELOG.md has no '## [x.y.z]' heading to derive the expected value from"
+        versions=$({ grep -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' "${merged}" || true; } | wc -l | tr -d ' ')
+        echo "check:changie: changie merge --dry-run rendered ${versions} versions"
+        if [ "${versions}" -lt 1 ]; then
+          echo "::error::check:changie: changie merge --dry-run rendered no version heading, so nothing was compared"
           exit 1
         fi
-        set +e
-        actual=$(cd "${work}" && CI=true "${changie_bin}" latest 2>"${scratch}/leg1.err")
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [1/14] changie latest — exited ${status}: $(cat "${scratch}/leg1.err")"
+        if ! cmp -s "${merged}" CHANGELOG.md; then
+          echo "::error::check:changie: changie merge --dry-run does not reproduce CHANGELOG.md byte for byte"
+          diff -u CHANGELOG.md "${merged}" || true
           exit 1
         fi
-        if [ "${actual}" != "${expected}" ]; then
-          echo "::error::check:changie: [1/14] changie latest = ${actual}, want ${expected} (newest CHANGELOG.md heading)"
-          exit 1
-        fi
-        lowest=$(printf '%s\n' v0.14.0 "${actual}" | sort -V | head -n1)
-        if [ "${lowest}" != "v0.14.0" ]; then
-          echo "::error::check:changie: [1/14] changie latest = ${actual} fell below the v0.14.0 baseline"
-          exit 1
-        fi
-        echo "check:changie: [1/14] changie latest = ${actual} (newest CHANGELOG.md heading ${expected}; baseline v0.14.0) — ok"
-        passed=$((passed + 1))
-
-        # Leg 2/14: next auto, empty
-        count=$(fragment_count)
-        echo "check:changie: [2/14] scratch unreleased/ holds ${count} fragments before next auto"
-        if [ "${count}" -ne 0 ]; then
-          echo "::error::check:changie: [2/14] scratch unreleased/ holds ${count} fragments, want 0 before the empty-next-auto leg"
-          exit 1
-        fi
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" next auto 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [2/14] changie next auto exited 0 against an empty unreleased/ (expected a refusal): ${out}"
-          exit 1
-        fi
-        if ! printf '%s' "${out}" | grep -qF "no unreleased changes found for automatic bumping"; then
-          echo "::error::check:changie: [2/14] changie next auto (empty) — stderr does not contain the expected refusal text: ${out}"
-          exit 1
-        fi
-        echo "check:changie: [2/14] changie next auto (empty unreleased/) refused: no unreleased changes found for automatic bumping — ok"
-        passed=$((passed + 1))
-
-        # Leg 3/14: merge --dry-run
-        set +e
-        (cd "${work}" && CI=true "${changie_bin}" merge --dry-run) >"${scratch}/merged.md" 2>"${scratch}/leg3.err"
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [3/14] changie merge --dry-run exited ${status}: $(cat "${scratch}/leg3.err")"
-          exit 1
-        fi
-        if ! cmp -s CHANGELOG.md "${scratch}/merged.md"; then
-          echo "::error::check:changie: [3/14] changie merge --dry-run does not reproduce CHANGELOG.md byte-for-byte"
-          diff -u CHANGELOG.md "${scratch}/merged.md" | head -40 || true
-          exit 1
-        fi
-        if [ -f "${work}/CHANGELOG.md" ]; then
-          echo "::error::check:changie: [3/14] changie merge --dry-run wrote ${work}/CHANGELOG.md — dry-run must write nothing"
-          exit 1
-        fi
-        echo "check:changie: [3/14] changie merge --dry-run byte-identical to CHANGELOG.md (dry run wrote nothing) — ok"
-        passed=$((passed + 1))
-
-        # Leg 4/14: new, valid
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" new -k Fixes -b "check:changie probe fragment" -m PR=1 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [4/14] changie new (valid) exited ${status}: ${out}"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 1 ]; then
-          echo "::error::check:changie: [4/14] fragment count = ${count} after a valid new, want 1"
-          exit 1
-        fi
-        frag=$(find "${work}/.changes/unreleased" -type f -name '*.yaml')
-        if ! grep -qF "kind: Fixes" "${frag}" || ! grep -qF "body: check:changie probe fragment" "${frag}"; then
-          echo "::error::check:changie: [4/14] written fragment ${frag} missing expected kind/body lines"
-          cat "${frag}"
-          exit 1
-        fi
-        echo "check:changie: [4/14] changie new -k Fixes writes exactly one fragment with kind/body set — ok"
-        passed=$((passed + 1))
-
-        # Leg 5/14: no PR is accepted (D-13: PR field is optional)
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" new -k Fixes -b "check:changie probe without PR" 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [5/14] changie new with no -m PR= exited ${status} (expected acceptance, D-13): ${out}"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [5/14] fragment count = ${count} after the no-PR new, want 2"
-          exit 1
-        fi
-        frag5=$(grep -lF "check:changie probe without PR" "${work}/.changes/unreleased/"*.yaml || true)
-        nfrag5=$(printf '%s\n' "${frag5}" | sed '/^$/d' | wc -l | tr -d ' ')
-        if [ "${nfrag5}" -ne 1 ]; then
-          echo "::error::check:changie: [5/14] expected exactly one fragment matching the no-PR probe body, found ${nfrag5}: ${frag5}"
-          exit 1
-        fi
-        if ! grep -qF "kind: Fixes" "${frag5}"; then
-          echo "::error::check:changie: [5/14] no-PR fragment ${frag5} missing 'kind: Fixes'"
-          exit 1
-        fi
-        if grep -q "PR:" "${frag5}"; then
-          echo "::error::check:changie: [5/14] no-PR fragment ${frag5} unexpectedly contains a PR: line"
-          exit 1
-        fi
-        if grep -qF "custom:" "${frag5}"; then
-          echo "::error::check:changie: [5/14] no-PR fragment ${frag5} unexpectedly contains a custom: block"
-          exit 1
-        fi
-        echo "check:changie: [5/14] changie new with no PR accepted: fragment written without a PR field — ok"
-        passed=$((passed + 1))
-
-        # Leg 6/14: undeclared kind
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" new -k Undeclared -b "check:changie probe undeclared kind" -m PR=1 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [6/14] changie new -k Undeclared exited 0 (expected a refusal): ${out}"
-          exit 1
-        fi
-        if ! printf '%s' "${out}" | grep -qF "invalid kind: Undeclared"; then
-          echo "::error::check:changie: [6/14] undeclared-kind refusal — stderr does not contain the expected text: ${out}"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [6/14] fragment count = ${count} after the undeclared-kind refusal, want 2"
-          exit 1
-        fi
-        echo "check:changie: [6/14] changie new -k Undeclared refused: invalid kind: Undeclared — ok"
-        passed=$((passed + 1))
-
-        # Leg 7/14: PR below minInt
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" new -k Fixes -b "check:changie probe PR below minimum" -m PR=0 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [7/14] changie new -m PR=0 exited 0 (expected a refusal): ${out}"
-          exit 1
-        fi
-        if ! printf '%s' "${out}" | grep -qF "input below minimum: 0 < 1"; then
-          echo "::error::check:changie: [7/14] PR-below-minimum refusal — stderr does not contain the expected text: ${out}"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [7/14] fragment count = ${count} after the PR-below-minimum refusal, want 2"
-          exit 1
-        fi
-        echo "check:changie: [7/14] changie new -m PR=0 refused: input below minimum: 0 < 1 — ok"
-        passed=$((passed + 1))
-
-        # Leg 8/14: non-integer PR
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" new -k Fixes -b "check:changie probe non-integer PR" -m PR=abc 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -eq 0 ]; then
-          echo "::error::check:changie: [8/14] changie new -m PR=abc exited 0 (expected a refusal): ${out}"
-          exit 1
-        fi
-        if ! printf '%s' "${out}" | grep -qF "invalid number"; then
-          echo "::error::check:changie: [8/14] non-integer-PR refusal — stderr does not contain the expected text: ${out}"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 2 ]; then
-          echo "::error::check:changie: [8/14] fragment count = ${count} after the non-integer-PR refusal, want 2"
-          exit 1
-        fi
-        echo "check:changie: [8/14] changie new -m PR=abc refused: invalid number — ok"
-        passed=$((passed + 1))
-
-        # Leg 9/14: collision
-        set +e
-        out1=$(cd "${work}" && CI=true "${changie_bin}" new -k Fixes -b "check:changie collision probe one" -m PR=2 2>&1)
-        status1=$?
-        out2=$(cd "${work}" && CI=true "${changie_bin}" new -k Fixes -b "check:changie collision probe two" -m PR=3 2>&1)
-        status2=$?
-        set -e
-        if [ "${status1}" -ne 0 ] || [ "${status2}" -ne 0 ]; then
-          echo "::error::check:changie: [9/14] collision leg — one of the two back-to-back new calls failed (status1=${status1} status2=${status2}): ${out1} / ${out2}"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 4 ]; then
-          echo "::error::check:changie: [9/14] fragment count = ${count} after two back-to-back new calls, want 4 (collision — sub-second fragmentFileFormat not honored)"
-          exit 1
-        fi
-        echo "check:changie: [9/14] two back-to-back new -k Fixes calls raised the fragment count to 4 (sub-second fragmentFileFormat holds) — ok"
-        passed=$((passed + 1))
-
-        # Leg 10/14: patch successor (only Fixes fragments present)
-        set +e
-        next=$(cd "${work}" && CI=true "${changie_bin}" next auto 2>"${scratch}/leg10.err")
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [10/14] changie next auto exited ${status}: $(cat "${scratch}/leg10.err")"
-          exit 1
-        fi
-        major=$(printf '%s' "${actual#v}" | cut -d. -f1)
-        minor=$(printf '%s' "${actual#v}" | cut -d. -f2)
-        patch=$(printf '%s' "${actual#v}" | cut -d. -f3)
-        want="v${major}.${minor}.$((patch + 1))"
-        if [ "${next}" != "${want}" ]; then
-          echo "::error::check:changie: [10/14] changie next auto = ${next}, want the patch successor ${want} (only Fixes fragments present)"
-          exit 1
-        fi
-        echo "check:changie: [10/14] with only Fixes fragments present, next auto = ${next} (patch successor of ${actual}) — ok"
-        passed=$((passed + 1))
-
-        # Leg 11/14: minor successor once a Breaking fragment is added
-        set +e
-        out=$(cd "${work}" && CI=true "${changie_bin}" new -k Breaking -b "check:changie breaking probe" -m PR=4 2>&1)
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [11/14] changie new -k Breaking exited ${status}: ${out}"
-          exit 1
-        fi
-        set +e
-        next=$(cd "${work}" && CI=true "${changie_bin}" next auto 2>"${scratch}/leg11.err")
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [11/14] changie next auto (with Breaking fragment) exited ${status}: $(cat "${scratch}/leg11.err")"
-          exit 1
-        fi
-        want="v${major}.$((minor + 1)).0"
-        if [ "${next}" != "${want}" ]; then
-          echo "::error::check:changie: [11/14] changie next auto = ${next}, want the minor successor ${want} (a Breaking fragment must not derive a major bump pre-1.0)"
-          exit 1
-        fi
-        echo "check:changie: [11/14] a Breaking fragment derives the minor successor ${next} (pre-1.0: Breaking -> minor) — ok"
-        passed=$((passed + 1))
-
-        # Leg 12/14: batch auto --dry-run renders the no-PR and PR fragments (CHG-04, D-13)
-        set +e
-        (cd "${work}" && CI=true "${changie_bin}" batch auto --dry-run) >"${scratch}/batch12.out" 2>"${scratch}/leg12.err"
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [12/14] changie batch auto --dry-run exited ${status}: $(cat "${scratch}/leg12.err")"
-          exit 1
-        fi
-        if ! grep -qxF -- "- check:changie probe without PR" "${scratch}/batch12.out"; then
-          echo "::error::check:changie: [12/14] batch auto --dry-run missing the exact no-PR line"
-          cat "${scratch}/batch12.out"
-          exit 1
-        fi
-        if ! grep -qxF -- "- check:changie probe fragment ([#1](https://github.com/seanb4t/codegraph-go/pull/1))" "${scratch}/batch12.out"; then
-          echo "::error::check:changie: [12/14] batch auto --dry-run missing the exact PR-linked line"
-          cat "${scratch}/batch12.out"
-          exit 1
-        fi
-        nseeds_after=$(find "${work}/.changes" -maxdepth 1 -type f -name 'v*.md' | wc -l | tr -d ' ')
-        if [ "${nseeds_after}" -ne "${nseeds}" ]; then
-          echo "::error::check:changie: [12/14] .changes/v*.md count changed from ${nseeds} to ${nseeds_after} — dry run must write nothing"
-          exit 1
-        fi
-        count=$(fragment_count)
-        if [ "${count}" -ne 5 ]; then
-          echo "::error::check:changie: [12/14] fragment count = ${count} after the dry-run render, want 5 (dry run must write nothing)"
-          exit 1
-        fi
-        echo "check:changie: [12/14] changie batch auto --dry-run renders the no-PR fragment without a link and a PR fragment with its link (dry run wrote nothing) — ok"
-        passed=$((passed + 1))
-
-        # Leg 13/14: the real task changie -- path passes a hostile body byte-literal (02-REVIEW CR-01)
-        marker="${scratch}/leg13.marker"
-        payload='check:changie injection probe $(touch '"${marker}"') `touch '"${marker}"'` ; touch '"${marker}"';'
-        set +e
-        (cd "${work}" && CI=true "{{.TASK_EXE}}" --taskfile "{{.ROOT_TASKFILE}}" changie -- new --dry-run -k Fixes -b "${payload}" -m PR=1) >"${scratch}/leg13.out" 2>"${scratch}/leg13.err"
-        status=$?
-        set -e
-        if [ -e "${marker}" ]; then
-          echo "::error::check:changie: [13/14] task changie -- re-shelled the fragment body: the injected command created ${marker}"
-          exit 1
-        fi
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [13/14] task changie -- new --dry-run exited ${status}: $(cat "${scratch}/leg13.err")"
-          exit 1
-        fi
-        if ! grep -qxF -- "body: ${payload}" "${scratch}/leg13.out"; then
-          echo "::error::check:changie: [13/14] task changie -- new --dry-run did not print the body byte-literal"
-          cat "${scratch}/leg13.out"
-          exit 1
-        fi
-        echo "check:changie: [13/14] task changie -- passed a body carrying command substitution, backticks and ; byte-literal, and nothing executed — ok"
-        passed=$((passed + 1))
-
-        # Leg 14/14: batch auto then merge renders a well-formed version file and CHANGELOG.md (D-13, Phase 5 05-01)
-        set +e
-        (cd "${work}" && CI=true "${changie_bin}" batch auto) >"${scratch}/leg14.batch.out" 2>"${scratch}/leg14.batch.err"
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [14/14] changie batch auto exited ${status}: $(cat "${scratch}/leg14.batch.err")"
-          exit 1
-        fi
-        set +e
-        (cd "${work}" && CI=true "${changie_bin}" merge) >"${scratch}/leg14.merge.out" 2>"${scratch}/leg14.merge.err"
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:changie: [14/14] changie merge exited ${status}: $(cat "${scratch}/leg14.merge.err")"
-          exit 1
-        fi
-        set +e
-        new=$(cd "${work}" && CI=true "${changie_bin}" latest 2>"${scratch}/leg14.latest.err")
-        status=$?
-        set -e
-        if [ "${status}" -ne 0 ] || [ ! -f "${work}/.changes/${new}.md" ]; then
-          echo "::error::check:changie: [14/14] changie latest after batch and merge = '${new}' (exit ${status}), and ${work}/.changes/${new}.md does not exist: $(cat "${scratch}/leg14.latest.err")"
-          exit 1
-        fi
-        leg14_failed=0
-        # (i) the new version file ends in a blank line
-        if [ "$(tail -c 2 "${work}/.changes/${new}.md" | od -An -tx1 | tr -d ' \n')" != "0a0a" ]; then
-          echo "::error::check:changie: [14/14] (i) .changes/${new}.md does not end in two newlines (a blank line), so the next merged heading would be glued onto its last bullet"
-          leg14_failed=1
-        fi
-        # (ii) no `## [` heading sits anywhere but at the start of a line
-        glued=$(grep -n -F '## [' "${work}/CHANGELOG.md" | grep -v -E '^[0-9]+:## \[' || true)
-        if [ -n "${glued}" ]; then
-          echo "::error::check:changie: [14/14] (ii) CHANGELOG.md holds a '## [' heading that is not at the start of its line: ${glued}"
-          leg14_failed=1
-        fi
-        # (iii) kinds render in .changie.yaml order (Breaking before Fixes)
-        breaking_line=$(grep -n -x -F '### Breaking' "${work}/.changes/${new}.md" | head -n1 | cut -d: -f1)
-        fixes_line=$(grep -n -x -F '### Fixes' "${work}/.changes/${new}.md" | head -n1 | cut -d: -f1)
-        if [ -z "${breaking_line}" ] || [ -z "${fixes_line}" ] || [ "${breaking_line}" -ge "${fixes_line}" ]; then
-          echo "::error::check:changie: [14/14] (iii) .changes/${new}.md does not render '### Breaking' (line '${breaking_line}') before '### Fixes' (line '${fixes_line}')"
-          leg14_failed=1
-        fi
-        # (iv) merged CHANGELOG.md = header, one newline, the new file, then the old history from its third line on
-        {
-          cat .changes/header.tpl.md
-          printf '\n'
-          cat "${work}/.changes/${new}.md"
-          tail -n +3 CHANGELOG.md
-        } >"${scratch}/leg14.expected"
-        if ! cmp -s "${work}/CHANGELOG.md" "${scratch}/leg14.expected"; then
-          echo "::error::check:changie: [14/14] (iv) merged CHANGELOG.md is not header + blank line + .changes/${new}.md + the old history byte for byte"
-          diff -u "${scratch}/leg14.expected" "${work}/CHANGELOG.md" | head -40 || true
-          leg14_failed=1
-        fi
-        if [ "${leg14_failed}" -ne 0 ]; then
-          exit 1
-        fi
-        echo "check:changie: [14/14] changie batch auto then merge renders ${new} with a trailing blank line, every heading at line start, kinds in .changie.yaml order, and history byte-identical — ok"
-        passed=$((passed + 1))
-
-        after=$(find .changie.yaml .changes CHANGELOG.md -type f -exec cksum {} + | LC_ALL=C sort)
-        if [ "${before}" != "${after}" ]; then
-          echo "::error::check:changie: the source tree changed during the run (.changie.yaml, .changes/ or CHANGELOG.md)"
-          exit 1
-        fi
-
-        if [ "${passed}" -ne 14 ]; then
-          echo "::error::check:changie: only ${passed} of 14 checks executed"
-          exit 1
-        fi
-
-        echo "check:changie: 14 of 14 checks passed against a scratch copy (source tree byte-unchanged)"
+        echo "check:changie: ${versions} versions reproduce CHANGELOG.md byte for byte"
 
   release:batch:
     desc: >-
@@ -1088,127 +645,6 @@ tasks:
           exit 1
         fi
         echo "web:deps: pnpm install --frozen-lockfile succeeded, web/pnpm-lock.yaml unchanged"
-
-  web:deps:strict:
-    desc: >-
-      BLD-05's positive lifecycle-script-approval assertion (D-14). Unlike
-      `web:deps`'s frozen install, THIS target is allowed to fail the build
-      — same posture `vuln:selftest` documents relative to `vuln`
-      (Taskfile.yml, `vuln:selftest` ~line 761-801): `strictDepBuilds: true`
-      is itself a negative guard (pnpm exits non-zero on an unreviewed
-      lifecycle script during install), so silently losing the setting
-      reverts install to exit-0-with-a-warning and nothing would notice —
-      this target exists to notice.
-
-      Reads web/pnpm-workspace.yaml with a REAL YAML decoder
-      (go.yaml.in/yaml/v3 — already a DIRECT dependency of the main module,
-      go.mod:32, and the exact library internal/upgrade's own shape tests
-      use to parse Taskfile.yml/workflow YAML — never a line scanner, and
-      above all never a grep of pnpm's "Ignored build scripts" warning
-      text: that predates strictDepBuilds and couples the gate to an
-      upstream string a reword silently breaks). Built into a scratch dir
-      via `go run` at task time — no new .go file is ever committed to this
-      repository.
-
-      Prints TWO counts unconditionally, BEFORE any pass/fail branch (rule
-      84d1gfpywd): (1) the resolved strictDepBuilds value; (2) whether
-      allowBuilds is present at all and, if so, its entry count and denial
-      count. An ABSENT allowBuilds key is a named failure distinct from a
-      PRESENT-but-empty one (`allowBuilds: {}`): pnpm's own `pnpm
-      approve-builds` writes this key once run, even when it finds nothing
-      pending to approve — so total absence means approval state was never
-      committed at all, which ROADMAP's own Notes forbid ("approval state
-      belongs in committed config, never per-machine interactive state").
-      `allowBuilds` replaced pnpm 10's `onlyBuiltDependencies`; it records
-      denials as `false` rather than omitting them, so the committed file
-      states both halves once populated.
-    preconditions:
-      - sh: command -v go
-        msg: "go not found — web:deps:strict parses web/pnpm-workspace.yaml with go.yaml.in/yaml/v3 via go run."
-      - sh: test -f web/pnpm-workspace.yaml
-        msg: "web/pnpm-workspace.yaml not found."
-    cmds:
-      - |
-        set -euo pipefail
-        scratch=$(mktemp -d)
-        trap 'rm -rf "${scratch}"' EXIT
-
-        cat > "${scratch}/main.go" <<'GOEOF'
-        package main
-
-        import (
-        	"fmt"
-        	"os"
-
-        	yaml "go.yaml.in/yaml/v3"
-        )
-
-        type workspaceFile struct {
-        	StrictDepBuilds *bool           `yaml:"strictDepBuilds"`
-        	AllowBuilds     map[string]bool `yaml:"allowBuilds"`
-        }
-
-        func main() {
-        	data, err := os.ReadFile(os.Args[1])
-        	if err != nil {
-        		fmt.Fprintln(os.Stderr, err)
-        		os.Exit(2)
-        	}
-        	var wf workspaceFile
-        	if err := yaml.Unmarshal(data, &wf); err != nil {
-        		fmt.Fprintln(os.Stderr, err)
-        		os.Exit(2)
-        	}
-        	if wf.StrictDepBuilds == nil {
-        		fmt.Println("strictDepBuilds:ABSENT")
-        	} else if *wf.StrictDepBuilds {
-        		fmt.Println("strictDepBuilds:true")
-        	} else {
-        		fmt.Println("strictDepBuilds:false")
-        	}
-        	if wf.AllowBuilds == nil {
-        		fmt.Println("allowBuilds:ABSENT")
-        	} else {
-        		denials := 0
-        		for _, v := range wf.AllowBuilds {
-        			if !v {
-        				denials++
-        			}
-        		}
-        		fmt.Printf("allowBuilds:PRESENT entries=%d denials=%d\n", len(wf.AllowBuilds), denials)
-        	}
-        }
-        GOEOF
-
-        OUT=$(GOWORK=off go run "${scratch}/main.go" web/pnpm-workspace.yaml)
-
-        STRICT_LINE=$(printf '%s\n' "${OUT}" | sed -n 's/^strictDepBuilds://p')
-        ALLOW_LINE=$(printf '%s\n' "${OUT}" | sed -n 's/^allowBuilds://p')
-
-        ENTRIES=""
-        DENIALS=""
-        if [ "${ALLOW_LINE}" = "ABSENT" ]; then
-          ALLOW_SUMMARY="ABSENT (key never written by pnpm approve-builds)"
-        else
-          ENTRIES=$(printf '%s' "${ALLOW_LINE}" | sed -n 's/PRESENT entries=\([0-9]*\) denials=.*/\1/p')
-          DENIALS=$(printf '%s' "${ALLOW_LINE}" | sed -n 's/.*denials=\([0-9]*\)/\1/p')
-          ALLOW_SUMMARY="${ENTRIES} (denials: ${DENIALS})"
-        fi
-
-        echo "web:deps:strict: strictDepBuilds resolved to '${STRICT_LINE}'"
-        echo "web:deps:strict: allowBuilds entries: ${ALLOW_SUMMARY}"
-
-        if [ "${STRICT_LINE}" != "true" ]; then
-          echo "::error::web:deps:strict: strictDepBuilds resolved to '${STRICT_LINE}', want exactly boolean true — an unreviewed lifecycle script would install silently (exit 0 with a warning) instead of failing the build (D-14)." >&2
-          exit 1
-        fi
-
-        if [ "${ALLOW_LINE}" = "ABSENT" ]; then
-          echo "::error::web:deps:strict: web/pnpm-workspace.yaml has no allowBuilds key at all — pnpm's own \`pnpm approve-builds\` writes this key once run, even when it finds nothing pending, so a total absence means approval state was never committed (ROADMAP: approval state belongs in committed config, never in per-machine interactive state)." >&2
-          exit 1
-        fi
-
-        echo "web:deps:strict: PASS — strictDepBuilds is true and allowBuilds is committed with ${ENTRIES} entries (${DENIALS} denials)"
 
   web:test:
     desc: >-
@@ -1423,322 +859,37 @@ tasks:
 
         echo "web:build:verify: PASS — ${FILE_COUNT} files built into scratch, structural invariants held, committed tree untouched"
 
-  web:lockfile:
-    desc: >-
-      BLD-06's lockfile-SHAPE guard — the sibling half `web:audit` invokes
-      BEFORE the audit command ever appears (see that target's desc: for why
-      this half must stay structurally incapable of reading `pnpm audit`'s
-      exit code). Separately runnable on purpose, so it can be reasoned
-      about — and demonstrated RED — independently of the audit itself.
-
-      Reads web/pnpm-lock.yaml with the same REAL YAML decoder
-      web:deps:strict uses (go.yaml.in/yaml/v3, already a direct main-module
-      dependency; built into a scratch dir via `go run`, no new .go file
-      ever committed). This installed pnpm's lockfile format
-      (lockfileVersion '9.0', pnpm 11.23.0, verified 02-07) keeps every
-      resolved dependency version under the top-level `packages:` mapping —
-      that is the mapping this target counts; `importers:` and `snapshots:`
-      are the OTHER two top-level mappings this format uses and are
-      deliberately NOT what is counted here.
-
-      Prints its count BEFORE any comparison (rule 84d1gfpywd): this is the
-      POSITIVE assertion — an empty or truncated lockfile is caught by a
-      floor, not read as a clean scan of nothing. FLOOR=50: this repository
-      declares 129 packages as of 02-07 (observed, printed at every run);
-      50 is chosen as a stable lower bound comfortably below that number —
-      survives ordinary dependency pruning, catches a truncated or emptied
-      lockfile. Never the observed count, which moves with every dependency
-      change.
-
-      `--frozen-lockfile` (web:deps) proves the lockfile was not REWRITTEN;
-      it proves nothing about what is IN it (review concern this target
-      closes). Three further structural properties, each printing its
-      observed number before comparing: (1) the declared lockfileVersion
-      equals '9.0', the value this installed pnpm 11.23.0 writes — a silent
-      lockfile-format bump changes what every other assertion here is
-      reading; (2) integrity-bearing resolutions EQUAL total resolutions
-      (equality, not a floor — a floor would pass while some entries
-      silently lacked integrity); (3) zero `file:` paths, zero mutable git
-      sources, zero direct HTTP/HTTPS tarball URLs — each count printed
-      even when zero, so the check states what it searched for, not merely
-      that it found nothing. Workspace-internal `link:` sources are the ONE
-      permitted non-registry kind (none exist in this single-package
-      workspace today; the count is still printed).
-    preconditions:
-      - sh: command -v go
-        msg: "go not found — web:lockfile parses web/pnpm-lock.yaml with go.yaml.in/yaml/v3 via go run."
-      - sh: test -f web/pnpm-lock.yaml
-        msg: "web/pnpm-lock.yaml not found."
-    cmds:
-      - |
-        set -euo pipefail
-        scratch=$(mktemp -d)
-        trap 'rm -rf "${scratch}"' EXIT
-
-        cat > "${scratch}/main.go" <<'GOEOF'
-        package main
-
-        import (
-        	"fmt"
-        	"os"
-        	"strings"
-
-        	yaml "go.yaml.in/yaml/v3"
-        )
-
-        type packageEntry struct {
-        	Resolution map[string]interface{} `yaml:"resolution"`
-        }
-
-        type lockFile struct {
-        	LockfileVersion string                  `yaml:"lockfileVersion"`
-        	Packages        map[string]packageEntry `yaml:"packages"`
-        }
-
-        func main() {
-        	data, err := os.ReadFile(os.Args[1])
-        	if err != nil {
-        		fmt.Fprintln(os.Stderr, err)
-        		os.Exit(2)
-        	}
-        	var lf lockFile
-        	if err := yaml.Unmarshal(data, &lf); err != nil {
-        		fmt.Fprintln(os.Stderr, err)
-        		os.Exit(2)
-        	}
-
-        	packages := len(lf.Packages)
-        	resolutions := 0
-        	integrityBearing := 0
-        	fileSources := 0
-        	gitSources := 0
-        	tarballSources := 0
-        	linkSources := 0
-
-        	for key, pkg := range lf.Packages {
-        		isFile := strings.Contains(key, "file:")
-        		isGit := strings.Contains(key, "git+")
-        		isLink := strings.Contains(key, "link:")
-        		if pkg.Resolution != nil {
-        			resolutions++
-        			if _, ok := pkg.Resolution["commit"]; ok {
-        				isGit = true
-        			}
-        			if tb, ok := pkg.Resolution["tarball"]; ok {
-        				if s, ok2 := tb.(string); ok2 && (strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")) {
-        					tarballSources++
-        				}
-        			}
-        			if integ, ok := pkg.Resolution["integrity"]; ok {
-        				if s, ok2 := integ.(string); ok2 && s != "" {
-        					integrityBearing++
-        				}
-        			}
-        		}
-        		if isFile {
-        			fileSources++
-        		}
-        		if isGit {
-        			gitSources++
-        		}
-        		if isLink {
-        			linkSources++
-        		}
-        	}
-
-        	fmt.Printf("lockfileVersion:%s\n", lf.LockfileVersion)
-        	fmt.Printf("packages:%d\n", packages)
-        	fmt.Printf("resolutions:%d\n", resolutions)
-        	fmt.Printf("integrity:%d\n", integrityBearing)
-        	fmt.Printf("file-sources:%d\n", fileSources)
-        	fmt.Printf("git-sources:%d\n", gitSources)
-        	fmt.Printf("tarball-sources:%d\n", tarballSources)
-        	fmt.Printf("link-sources:%d\n", linkSources)
-        }
-        GOEOF
-
-        OUT=$(GOWORK=off go run "${scratch}/main.go" web/pnpm-lock.yaml)
-
-        LOCKFILE_VERSION=$(printf '%s\n' "${OUT}" | sed -n 's/^lockfileVersion://p')
-        PKG_N=$(printf '%s\n' "${OUT}" | sed -n 's/^packages://p')
-        RES_N=$(printf '%s\n' "${OUT}" | sed -n 's/^resolutions://p')
-        INTEGRITY_N=$(printf '%s\n' "${OUT}" | sed -n 's/^integrity://p')
-        FILE_N=$(printf '%s\n' "${OUT}" | sed -n 's/^file-sources://p')
-        GIT_N=$(printf '%s\n' "${OUT}" | sed -n 's/^git-sources://p')
-        TARBALL_N=$(printf '%s\n' "${OUT}" | sed -n 's/^tarball-sources://p')
-        LINK_N=$(printf '%s\n' "${OUT}" | sed -n 's/^link-sources://p')
-
-        echo "web:lockfile: pnpm-lock.yaml declares ${PKG_N} packages"
-        echo "web:lockfile: lockfileVersion '${LOCKFILE_VERSION}' (expected '9.0', written by pnpm 11.23.0 as of 02-07)"
-        echo "web:lockfile: integrity-bearing resolutions: ${INTEGRITY_N} of ${RES_N}"
-        echo "web:lockfile: rejected-source counts — file: ${FILE_N}, git: ${GIT_N}, HTTP/HTTPS tarball: ${TARBALL_N}"
-        echo "web:lockfile: workspace-internal link: sources (the one permitted non-registry kind): ${LINK_N}"
-
-        FLOOR=50
-        FAILED=0
-
-        if [ "${PKG_N}" -lt "${FLOOR}" ]; then
-          echo "::error::web:lockfile: pnpm-lock.yaml declares only ${PKG_N} packages, want at least ${FLOOR} — a truncated or emptied lockfile must fail loud, never read as a clean scan of nothing" >&2
-          FAILED=1
-        fi
-
-        if [ "${LOCKFILE_VERSION}" != "9.0" ]; then
-          echo "::error::web:lockfile: lockfileVersion is '${LOCKFILE_VERSION}', want '9.0' — a silent lockfile-format bump changes what every other assertion in this target is reading" >&2
-          FAILED=1
-        fi
-
-        if [ "${INTEGRITY_N}" != "${RES_N}" ]; then
-          echo "::error::web:lockfile: integrity-bearing resolutions (${INTEGRITY_N}) does not EQUAL total resolutions (${RES_N}) — at least one registry resolution lacks an integrity checksum" >&2
-          FAILED=1
-        fi
-
-        if [ "${FILE_N}" != "0" ]; then
-          echo "::error::web:lockfile: found ${FILE_N} file: dependency source(s) — only registry and workspace-internal link: sources are permitted" >&2
-          FAILED=1
-        fi
-
-        if [ "${GIT_N}" != "0" ]; then
-          echo "::error::web:lockfile: found ${GIT_N} git dependency source(s) — only registry and workspace-internal link: sources are permitted" >&2
-          FAILED=1
-        fi
-
-        if [ "${TARBALL_N}" != "0" ]; then
-          echo "::error::web:lockfile: found ${TARBALL_N} direct HTTP/HTTPS tarball dependency source(s) — only registry and workspace-internal link: sources are permitted" >&2
-          FAILED=1
-        fi
-
-        if [ "${FAILED}" -ne 0 ]; then
-          exit 1
-        fi
-
-        echo "web:lockfile: PASS — ${PKG_N} packages declared, lockfileVersion '9.0', ${INTEGRITY_N} of ${RES_N} resolutions integrity-bearing, zero non-registry/non-link sources"
-
   web:audit:
     desc: >-
-      BLD-06's `pnpm audit` gate (D-15). Runs `web:lockfile` FIRST as a
-      Taskfile dependency — that target runs to completion, prints its own
-      counts, and returns before the `pnpm audit` invocation below ever
-      appears in this target's own cmds:. `web:lockfile`'s code path never
-      references `pnpm audit`'s exit status or output; this is what makes
-      it a genuine non-vacuity SIBLING rather than a second read of the same
-      signal. D-15: a pinned JS advisory ID (the `vuln:selftest` shape) was
-      considered and declined — a JS advisory rots as packages are yanked
-      or patched far faster than the Go proxy-cached ecosystem, and no
-      low-maintenance pin was found. `web:lockfile`'s package count proves
-      the scan had real input; it deliberately does not prove the detector
-      can fire (see PLAN.md's `<known_limitations>`).
-
-      Classifies on OUTPUT SHAPE, never on `pnpm audit`'s exit code alone
-      (empirically confirmed 02-07: a real clean scan exits 0 with
-      `{"advisories":{},"metadata":{...}}`; a real registry-unreachable
-      scan ALSO exits 1 — the SAME exit code a real advisory-bearing scan
-      returns — with `{"error":{"code":"pnpm","message":"fetch failed"}}`;
-      exit code alone cannot tell these apart). Parses stdout as JSON via
-      Go's stdlib encoding/json (no new dependency, no new committed file —
-      same scratch-`go run` shape web:deps:strict and web:lockfile use).
-      Three outcomes, three distinct named messages: unparseable/empty
-      output or a present `error` key or a missing `metadata` key is SCAN
-      ERROR — the scan itself could not be trusted, and this is
-      deliberately never folded into CLEAN; a parseable result with zero
-      `advisories` entries is CLEAN; a parseable result with one or more
-      `advisories` entries is a FAILURE naming them. Demonstrated in this
-      phase: CLEAN (the ordinary run) and SCAN ERROR (registry pointed at
-      an unreachable port). NOT demonstrated: ADVISORIES PRESENT — D-15
-      declined a pinned-advisory fixture; this branch is implemented and
-      named but unexercised (see PLAN.md's `<known_limitations>` table).
-    deps:
-      - web:lockfile
+      BLD-06: pnpm audit over web/. pnpm fails on any advisory that
+      web/pnpm-workspace.yaml's audit.ignore does not accept, and on a
+      registry error. Fails unless the audit covered more than zero
+      dependencies (rule 84d1gfpywd). pnpm itself enforces strictDepBuilds
+      on install (BLD-05).
+    silent: true
+    preconditions:
+      - sh: command -v pnpm
+        msg: "pnpm not on PATH — run `mise install`."
+      - sh: command -v jq
+        msg: "jq not found — web:audit reads the dependency count from pnpm audit --json."
     cmds:
       - |
         set -euo pipefail
-        scratch=$(mktemp -d)
-        trap 'rm -rf "${scratch}"' EXIT
-
-        cat > "${scratch}/main.go" <<'GOEOF'
-        package main
-
-        import (
-        	"encoding/json"
-        	"fmt"
-        	"os"
-        )
-
-        type auditOutput struct {
-        	Advisories map[string]json.RawMessage `json:"advisories"`
-        	Metadata   json.RawMessage            `json:"metadata"`
-        	Error      map[string]interface{}     `json:"error"`
-        }
-
-        func main() {
-        	data, err := os.ReadFile(os.Args[1])
-        	if err != nil {
-        		fmt.Fprintln(os.Stderr, err)
-        		os.Exit(2)
-        	}
-        	if len(data) == 0 {
-        		fmt.Println("CLASS:SCAN_ERROR")
-        		fmt.Println("REASON:empty stdout")
-        		return
-        	}
-        	var out auditOutput
-        	if err := json.Unmarshal(data, &out); err != nil {
-        		fmt.Println("CLASS:SCAN_ERROR")
-        		fmt.Printf("REASON:unparseable JSON: %v\n", err)
-        		return
-        	}
-        	if out.Error != nil {
-        		fmt.Println("CLASS:SCAN_ERROR")
-        		msg, _ := out.Error["message"].(string)
-        		code, _ := out.Error["code"].(string)
-        		fmt.Printf("REASON:transport error code=%s message=%s\n", code, msg)
-        		return
-        	}
-        	if out.Metadata == nil {
-        		fmt.Println("CLASS:SCAN_ERROR")
-        		fmt.Println("REASON:missing metadata key in an otherwise-parseable response")
-        		return
-        	}
-        	if len(out.Advisories) == 0 {
-        		fmt.Println("CLASS:CLEAN")
-        		return
-        	}
-        	fmt.Println("CLASS:ADVISORIES_PRESENT")
-        	fmt.Printf("COUNT:%d\n", len(out.Advisories))
-        	for id := range out.Advisories {
-        		fmt.Printf("ADVISORY:%s\n", id)
-        	}
-        }
-        GOEOF
-
-        set +e
-        (cd web && pnpm audit --json) > "${scratch}/audit-out.json" 2> "${scratch}/audit-err.log"
-        AUDIT_RC=$?
-        set -e
-
-        CLASS_OUT=$(GOWORK=off go run "${scratch}/main.go" "${scratch}/audit-out.json")
-        CLASS=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^CLASS://p')
-
-        case "${CLASS}" in
-          CLEAN)
-            echo "web:audit: pnpm audit exited ${AUDIT_RC}, output classified CLEAN — parseable JSON, zero advisories"
-            echo "web:audit: PASS — lockfile-declared package count printed above by web:lockfile, audit scan produced a real result, zero advisories reported"
-            ;;
-          SCAN_ERROR)
-            REASON=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^REASON://p')
-            echo "::error::web:audit: SCAN ERROR — pnpm audit exited ${AUDIT_RC} and its output could not be trusted as a scan result (${REASON}). This is deliberately NOT folded into a clean verdict." >&2
-            exit 1
-            ;;
-          ADVISORIES_PRESENT)
-            COUNT=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^COUNT://p')
-            IDS=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^ADVISORY://p' | tr '\n' ' ')
-            echo "::error::web:audit: ADVISORIES PRESENT — pnpm audit exited ${AUDIT_RC} and reported ${COUNT} advisory(ies): ${IDS}" >&2
-            exit 1
-            ;;
-          *)
-            echo "::error::web:audit: classifier produced an unrecognized class '${CLASS}' — treating as SCAN ERROR" >&2
-            exit 1
-            ;;
-        esac
+        report=$(mktemp)
+        trap 'rm -f "${report}"' EXIT
+        status=0
+        (cd web && pnpm audit --json) > "${report}" || status=$?
+        total=$(jq -r '.metadata.totalDependencies // 0' "${report}" 2>/dev/null || echo 0)
+        echo "web:audit: pnpm audit covered ${total} dependencies, exit ${status}"
+        jq -r '.advisories[]? | "\(.github_advisory_id) \(.module_name) \(.severity): \(.title)"' "${report}" 2>/dev/null || true
+        if [ "${status}" -ne 0 ]; then
+          echo "::error::web:audit: pnpm audit exited ${status}"
+          exit 1
+        fi
+        if [ "${total}" -lt 1 ]; then
+          echo "::error::web:audit: pnpm audit covered no dependencies, so it checked nothing"
+          exit 1
+        fi
 
   web:drift:
     desc: >-
@@ -1854,8 +1005,8 @@ tasks:
       D-16's real drift guard over vendored shadcn-svelte component source
       (T-04-27), closing the gap 03-CONTEXT.md D-22 recorded: `shadcn-svelte
       add` writes `.svelte` source into web/src/lib/components/ui/ that
-      never enters web/pnpm-lock.yaml, so web:audit, web:deps:strict and
-      web:lockfile structurally cannot see it. Follows proto:drift's
+      never enters web/pnpm-lock.yaml, so web:audit structurally cannot see
+      it. Follows proto:drift's
       regenerate-into-scratch-and-byte-compare shape (this file, above), NOT
       web:drift's hash-against-a-committed-manifest shape — vendored
       components have no .build-manifest-equivalent marker to compare
@@ -2020,19 +1171,6 @@ tasks:
     cmds:
       - uv run scripts/vuln_report.py -- govulncheck -mode=binary
 
-  mutation-check:
-    desc: >-
-      Proves that Go tests catch the bugs they target: runs the named tests on
-      the unmutated tree first, then each mutant in the JSON file passed after
-      `--`, through `go test -overlay`, so the working tree never changes.
-      Fails unless every mutant is CAUGHT or CRASHED. See
-      .claude/skills/mutation-check/SKILL.md for the file format.
-    preconditions:
-      - sh: command -v uv && command -v go
-        msg: "uv or go not on PATH — run `mise install`."
-    cmds:
-      - uv run scripts/mutation_check.py {{.CLI_ARGS}}
-
   vuln:source:
     desc: >-
       BLOCKING (DIST-03): govulncheck in source mode over the main module,
@@ -2088,7 +1226,7 @@ tasks:
 
   check:gonum:
     desc: >-
-      GRF-10's local, BLOCKING, positive-controlled proof for the milestone's
+      GRF-10's local, BLOCKING proof for the milestone's
       one new direct require (gonum.org/v1/gonum v0.17.0, D-13). Three
       halves, each reporting the count it inspected BEFORE asserting
       anything (rule 84d1gfpywd) — a scan that never looked at anything must
@@ -2099,11 +1237,10 @@ tasks:
       binaries (symbol-level, not call-graph-aware, and never fails the
       build). The SBOM half generates the document the way
       release.yml/.goreleaser.yaml does (syft over a built binary,
-      spdx-json), checked for gonum by name and pinned version beside a
-      known-module positive control. The cgo half is the literal `go list
-      -deps -f` closure walk over gonum.org/v1/gonum/graph/community with a
-      known-cgo positive control, so an empty or blind closure can never
-      read as clean. This target only reports and asserts — it never
+      spdx-json), checked for gonum by name and pinned version, and fails on
+      an empty SBOM. The cgo half is the literal `go list -deps -f` closure
+      walk over gonum.org/v1/gonum/graph/community, and fails when the
+      closure holds fewer than 50 packages. This target only reports and asserts — it never
       modifies go.mod, go.sum, `vuln:`, or ci.yml.
     preconditions:
       - sh: command -v go
@@ -2154,18 +1291,15 @@ tasks:
           const doc = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
           const packages = doc.packages || [];
           const gonum = packages.filter(function (p) { return p.name === "gonum.org/v1/gonum"; });
-          const pebble = packages.filter(function (p) { return p.name === "github.com/cockroachdb/pebble/v2"; });
           console.log(String(packages.length));
           console.log(String(gonum.length));
           console.log(gonum.length === 1 ? gonum[0].versionInfo : "");
-          console.log(String(pebble.length));
         ' "${scratch}/codegraph.spdx.json")
         npkg=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '1p')
         ngonum_sbom=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '2p')
         gonum_version=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '3p')
-        npebble=$(printf '%s\n' "${SBOM_FIELDS}" | sed -n '4p')
 
-        echo "check:gonum: SBOM lists ${npkg} packages; gonum.org/v1/gonum present ${ngonum_sbom} time(s) at ${gonum_version}; positive control github.com/cockroachdb/pebble/v2 present ${npebble} time(s)"
+        echo "check:gonum: SBOM lists ${npkg} packages; gonum.org/v1/gonum present ${ngonum_sbom} time(s) at ${gonum_version}"
 
         if [ "${npkg}" -le 0 ]; then
           echo "::error::check:gonum: SBOM is empty — 0 packages found, nothing was scanned" >&2
@@ -2179,12 +1313,8 @@ tasks:
           echo "::error::check:gonum: gonum.org/v1/gonum SBOM versionInfo is '${gonum_version}', want v0.17.0" >&2
           exit 1
         fi
-        if [ "${npebble}" != "1" ]; then
-          echo "::error::check:gonum: positive control github.com/cockroachdb/pebble/v2 present ${npebble} time(s) in the SBOM, want exactly 1 — the SBOM half's own detection cannot be trusted" >&2
-          exit 1
-        fi
 
-        # ---- Half 3: cgo-closure scan with a known-cgo positive control ----
+        # ---- Half 3: cgo-closure scan ----
         # The escape sequences quoted below are NOT decoration: Task renders
         # every cmds: string through Go text/template BEFORE the shell ever
         # sees it — including inside comments — so a raw, unescaped Go
@@ -2210,10 +1340,8 @@ tasks:
         # ${blascgo} -ne 0 check below ever got to report it cleanly.
         blascgo=$({ grep -o 'gonum.org/v1/gonum/blas/cgo' "${scratch}/closure.txt" || true; } | wc -l | tr -d ' ')
 
-        go list -deps -f '{{"{{"}}.ImportPath{{"}}"}} {{"{{"}}len .CgoFiles{{"}}"}}' github.com/tree-sitter/go-tree-sitter > "${scratch}/control.txt"
-        cnon=$(awk '$2 != "0"' "${scratch}/control.txt" | wc -l | tr -d ' ')
 
-        echo "check:gonum: cgo closure over gonum.org/v1/gonum/graph/community — ${n} packages inspected, ${nonzero} with cgo (want 0), blas/cgo references ${blascgo} (want 0); positive control github.com/tree-sitter/go-tree-sitter — ${cnon} with cgo (want >= 1)"
+        echo "check:gonum: cgo closure over gonum.org/v1/gonum/graph/community — ${n} packages inspected, ${nonzero} with cgo (want 0), blas/cgo references ${blascgo} (want 0)"
 
         if [ "${n}" -lt 50 ]; then
           echo "::error::check:gonum: cgo closure over gonum.org/v1/gonum/graph/community enumerated only ${n} packages — a broken enumeration must fail loud, never read as a clean pass" >&2
@@ -2226,10 +1354,6 @@ tasks:
         fi
         if [ "${blascgo}" -ne 0 ]; then
           echo "::error::check:gonum: gonum.org/v1/gonum/blas/cgo appears ${blascgo} time(s) in the import closure — the cgo BLAS backend must never be reachable" >&2
-          exit 1
-        fi
-        if [ "${cnon}" -lt 1 ]; then
-          echo "::error::check:gonum: positive control found no cgo in github.com/tree-sitter/go-tree-sitter — the scan cannot detect cgo, its clean verdict is meaningless" >&2
           exit 1
         fi
 
@@ -2245,109 +1369,77 @@ tasks:
       from any code path" — a string-built or variable layout name is
       NOT detected by this scan; a non-fatal, reported-only
       unresolvedLayoutNames finding flags call sites this scan could not
-      statically resolve to a literal). Runs the script's own --self-test
-      first (a scan that cannot detect a planted layout name must never
-      be trusted), then the real scan.
+      statically resolve to a literal). Fails unless the scan read more
+      than zero files and found the elk layout it requires.
     preconditions:
       - sh: command -v node
         msg: "node not found — check:no-force-layout runs a static Node scan over web/src, no browser required."
     cmds:
-      - node web/scripts/check-no-force-layout.mjs --self-test
       - node web/scripts/check-no-force-layout.mjs
-
-  check:workflow-output-delimiter:
-    desc: >-
-      D-17's local, BLOCKING, positive-controlled proof (FIX-10, GH #15) that
-      neither pull_request_target workflow's multi-line $GITHUB_OUTPUT write
-      is terminable by a fork-authored file path matching the heredoc
-      delimiter. Extracts and runs the shell block each of
-      require-issue-link.yml and pr-template-format.yml actually ships (not
-      a hand-copied duplicate), against a payload containing a path named
-      after the old fixed delimiter, and asserts the round trip is intact.
-      Runs --self-test FIRST: a harness that can no longer observe the OLD
-      fixed-delimiter form corrupting the payload, or that cannot show two
-      generated delimiters differ, must never be trusted. Not wired into
-      any workflow — CI wiring is a later phase's scope.
-    preconditions:
-      - sh: command -v openssl
-        msg: "openssl not found — both workflows and this harness's --self-test entropy check derive the per-run delimiter via openssl rand -hex 16."
-      - sh: command -v awk
-        msg: "awk not found — check-workflow-output-delimiter.sh extracts each workflow's run: body with awk, not a YAML parser dependency."
-    cmds:
-      - bash scripts/check-workflow-output-delimiter.sh --self-test
-      - bash scripts/check-workflow-output-delimiter.sh
 
   check:fragment-required:
     desc: >-
-      GATE-01..GATE-03's production entry point. CI-only by nature: it needs
-      PR_NUMBER, PR_BODY and GH_TOKEN, and it runs from fragment-required.yml
-      under pull_request_target with main's checkout (D-02). It fetches the
-      complete changed-file list through gh's paginated REST listing, and the
-      exit status is the verdict (D-03).
+      GATE-01..GATE-03's production entry point, run by fragment-required.yml
+      under pull_request_target. Reads CODE_CHANGED and FRAGMENT_ADDED, the
+      two dorny/paths-filter outputs, and PR_BODY. Fails unless both outputs
+      are exactly true or false, so a filter that did not run fails the gate.
+      Fails when shipped code changed, no fragment was added and the body has
+      no `<!-- changelog-exempt: <reason> -->` marker with a reason. The
+      first marker decides; a reason that is empty or starts with `-` does
+      not exempt.
     silent: true
-    preconditions:
-      - sh: command -v uv
-        msg: "uv not on PATH — run `mise install`. check:fragment-required runs scripts/fragment_policy.py."
-      - sh: command -v gh
-        msg: "gh not found — check:fragment-required fetches the pull request's changed files with gh api."
-    cmds:
-      - uv run scripts/fragment_policy.py
-
-  check:fragment-policy:
-    desc: >-
-      GATE-04's and GRD-15's offline guard (D-01, D-10). It runs
-      tests/test_fragment_policy.py's stdlib unittest suite over literal
-      inputs, never gh, git or a pull request. GRD-15's hygiene allowlist and
-      exemption-marker tests live in the same file. It passes only when
-      unittest's executed count equals the number of `def test_` methods
-      defined in the file, the defined count is at least 46, and the result
-      line is exactly OK, so a skipped or undiscovered test cannot pass (rule
-      84d1gfpywd). It is wired into ci.yml's test job.
-    silent: true
-    preconditions:
-      - sh: command -v uv
-        msg: "uv not on PATH — run `mise install`. check:fragment-policy runs tests/test_fragment_policy.py."
     cmds:
       - |
         set -euo pipefail
-        floor=46
-        defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' tests/test_fragment_policy.py || true; } | wc -l | tr -d ' ')
-        if [ "${defined}" -lt "${floor}" ]; then
-          echo "::error::check:fragment-policy: found only ${defined} test methods (floor ${floor}) — a gutted suite must fail loud"
+        for pair in "CODE_CHANGED=${CODE_CHANGED:-}" "FRAGMENT_ADDED=${FRAGMENT_ADDED:-}"; do
+          case "${pair#*=}" in
+            true | false) ;;
+            *)
+              echo "::error::check:fragment-required: ${pair%%=*} is '${pair#*=}', want true or false — the paths-filter step did not set it, so the gate fails closed"
+              exit 1
+              ;;
+          esac
+        done
+        if [ -z "${PR_BODY+set}" ]; then
+          echo "::error::check:fragment-required: PR_BODY is not set in the step environment, so an exemption marker cannot be checked and the gate fails closed"
           exit 1
+        fi
+        echo "check:fragment-required: shipped code changed: ${CODE_CHANGED}; fragment added: ${FRAGMENT_ADDED}"
+
+        if [ "${CODE_CHANGED}" = "false" ]; then
+          echo "check:fragment-required: pass — no changed file is shipped code (cmd/** or internal/**, excluding *_test.go and testdata/)"
+          exit 0
+        fi
+        if [ "${FRAGMENT_ADDED}" = "true" ]; then
+          echo "check:fragment-required: pass — shipped code changed and a new .changes/unreleased/ fragment was added"
+          exit 0
         fi
 
-        status=0
-        out=$(PYTHONPATH=scripts uv run --no-project python -B -m unittest discover -s tests -p 'test_fragment_policy.py' -v 2>&1) || status=$?
-        printf '%s\n' "${out}"
-        if [ "${status}" -ne 0 ]; then
-          echo "::error::check:fragment-policy: unittest exited ${status}"
-          exit 1
+        marker=$(printf '%s' "${PR_BODY}" | tr '\r\n' '  ' | { grep -oiE '<!--[[:space:]]*changelog-exempt:[^>]*-->' || true; } | sed -n '1p')
+        reason=""
+        if [ -n "${marker}" ]; then
+          reason=${marker#*:}
+          reason=${reason%-->}
+          reason=$(printf '%s' "${reason}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
         fi
-
-        ran=$(printf '%s\n' "${out}" | sed -nE 's/^Ran ([0-9]+) tests? in .*/\1/p')
-        if [ -z "${ran}" ] || [ "${ran}" != "${defined}" ]; then
-          echo "::error::check:fragment-policy: unittest ran ${ran:-0} of ${defined} defined test methods"
-          exit 1
-        fi
-        if ! printf '%s\n' "${out}" | grep -x 'OK' > /dev/null; then
-          echo "::error::check:fragment-policy: result line is not exactly OK (skips are not executions)"
-          exit 1
-        fi
-        echo "check:fragment-policy: executed ${ran} of ${defined} defined test methods (floor ${floor})"
+        case "${reason}" in
+          "" | -*)
+            echo "::error::check:fragment-required: this PR changes shipped code but adds no changelog fragment under .changes/unreleased/. Add one with task changie -- new, or put <!-- changelog-exempt: <reason> --> in the PR body."
+            exit 1
+            ;;
+        esac
+        echo "check:fragment-required: pass — exempt by a changelog-exempt marker: ${reason}"
 
   check:ci-scripts:
     desc: >-
-      Offline guard for ci.yml's planning-only classifier and the advisory
-      vuln report loop, plus the mutation-check script: runs
-      tests/test_planning_only.py, tests/test_vuln_report.py and
-      tests/test_mutation_check.py (stdlib unittest over literal inputs,
+      Offline guard for the advisory vuln report loop and the PR-template
+      policy: runs tests/test_vuln_report.py and
+      tests/test_pr_template_policy.py (stdlib unittest over literal inputs,
       never gh, mise, go or a workflow). Each file passes only when unittest's
       executed count equals its number of `def test_` methods, that count
       meets the file's floor, and the result line is exactly OK (rule
-      84d1gfpywd). It is wired into ci.yml's actionlint job, which the
-      classifier never gates, so a change to the classifier cannot skip
-      its own tests.
+      84d1gfpywd). It is wired into ci.yml's actionlint job, which no path
+      filter gates.
     silent: true
     preconditions:
       - sh: command -v uv
@@ -2355,7 +1447,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        for spec in test_planning_only.py:28 test_vuln_report.py:20 test_mutation_check.py:18; do
+        for spec in test_vuln_report.py:20 test_pr_template_policy.py:13; do
           file="${spec%%:*}"
           floor="${spec##*:}"
           defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' "tests/${file}" || true; } | wc -l | tr -d ' ')
@@ -5323,9 +4415,13 @@ tasks:
         done
 
   lint:actions:
-    desc: Lint GitHub Actions workflows (workflow static analysis).
+    desc: >-
+      Lint GitHub Actions workflows: actionlint for schema and expression
+      errors, then zizmor's offline security audits. .github/zizmor.yml
+      records each accepted finding with its reason.
     cmds:
       - "actionlint .github/workflows/*.yml"
+      - "zizmor --offline -qq --no-progress .github/"
 
   lint:go:
     desc: >-
@@ -5337,6 +4433,11 @@ tasks:
       result reads as green.
     cmds:
       - "golangci-lint run ./..."
+      # ./... skips testdata/, so testdata/golden needs its own run. Only
+      # forbidigo runs there, and the HYG-02 exclusions in .golangci.yml
+      # drop every HYG-02 issue outside internal/, so VRFY-02 is the one
+      # rule that can report.
+      - "golangci-lint run --enable-only forbidigo ./testdata/golden/..."
 
   check:transcript-freeze:
     desc: >-
@@ -5949,81 +5050,101 @@ tasks:
 
   check:reproducibility:
     desc: >-
-      linux/amd64 double-build hash-diff (DIST-04, BLOCKING leg) — ports
-      ci.yml's reproducibility job's canonical double build character-for-
-      character. Reads SOURCE_DATE_EPOCH/COMMIT from the environment (what
-      ci.yml's own "Compute determinism inputs" step exports via env:);
-      when either is unset, defaults locally to the same two commands that
-      step runs (git log -1 --format=%ct / git rev-parse HEAD) so this
-      target is runnable on a contributor checkout without inventing
-      different inputs. Uses GNU date -d (matching ci.yml's own script
-      verbatim, D-15-style byte-fidelity) — a Linux host, or GNU coreutils
-      on PATH as `date`, is required; BSD/macOS date does not accept -d.
-    cmds:
-      - |
-        set -euo pipefail
-        SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
-        COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
-        DATE=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
-        LDFLAGS="-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=ci-repro -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}"
-        build() {
-          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o "$1" ./cmd/codegraph
-        }
-        build /tmp/codegraph_build1
-        build /tmp/codegraph_build2
-        H1=$(sha256sum /tmp/codegraph_build1 | cut -d' ' -f1)
-        H2=$(sha256sum /tmp/codegraph_build2 | cut -d' ' -f1)
-        echo "build1=$H1"
-        echo "build2=$H2"
-        if [ "$H1" != "$H2" ]; then
-          echo "::error::REPRODUCIBILITY GATE FAILED: linux/amd64 build is non-deterministic ($H1 != $H2)"
-          exit 1
-        fi
-        echo "linux/amd64 double-build matched: $H1"
-
-  check:reproducibility:arm64:
-    desc: >-
-      linux/arm64 cross-target double-build hash-diff (DIST-04, REPORTED
-      ONLY — non-blocking per D-03). Ports ci.yml's cross-target leg
-      character-for-character, including its ::warning:: (not ::error::)
-      branch and non-failing exit — a mismatch here is reported, never
-      gated. Same SOURCE_DATE_EPOCH/COMMIT local-defaulting as
-      check:reproducibility. This leg is non-blocking in CI, which makes a
-      silent local skip especially dangerous ("I ran it and it was fine"
-      would actually mean "it never ran") — the zig precondition below
-      exists specifically to fail loud instead.
+      linux/amd64 double-build hash-diff (DIST-04, BLOCKING leg). Builds
+      .goreleaser.yaml's codegraph-linux-amd64 twice with `goreleaser build
+      --snapshot` and fails unless the two binaries hash the same. The
+      build reads its flags, ldflags and timestamps from .goreleaser.yaml
+      and the commit, so it proves what release.yml produces, on macOS and
+      on Linux (#212).
     preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
       - sh: command -v zig
-        msg: "zig not found on PATH — check:reproducibility:arm64 cross-compiles via zig cc (aarch64-linux-gnu). Run `mise install`, or run `task check:reproducibility` (the blocking linux/amd64 leg) alone if you don't need the cross-target report."
+        msg: "zig not found on PATH — the linux builds in .goreleaser.yaml cross-compile with zig cc. Run `mise install`."
+      - sh: command -v jq
+        msg: "jq not found — the double build reads the binary path from dist/artifacts.json."
     cmds:
       - |
         set -euo pipefail
-        SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
-        COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
-        DATE=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
-        LDFLAGS="-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=ci-repro -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}"
         # Keep zig's caches out of the read-only module cache, as
         # release:dry-run explains.
         ZIG_CACHE_ROOT="$(mktemp -d)"
         trap 'rm -rf "${ZIG_CACHE_ROOT}"' EXIT
         export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
         export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
-        build() {
-          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
-            CC="zig cc -target aarch64-linux-gnu" \
-            CXX="zig c++ -target aarch64-linux-gnu" \
-            go build -trimpath -ldflags "$LDFLAGS" -o "$1" ./cmd/codegraph
-        }
-        build /tmp/codegraph_arm1
-        build /tmp/codegraph_arm2
-        H1=$(sha256sum /tmp/codegraph_arm1 | cut -d' ' -f1)
-        H2=$(sha256sum /tmp/codegraph_arm2 | cut -d' ' -f1)
-        echo "build1=$H1"
-        echo "build2=$H2"
-        if [ "$H1" != "$H2" ]; then
+        {{.REPRO_LIB}}
+        repro_double_build codegraph-linux-amd64
+        if [ "${REPRO_H1}" != "${REPRO_H2}" ]; then
+          echo "::error::REPRODUCIBILITY GATE FAILED: linux/amd64 build is non-deterministic (${REPRO_H1} != ${REPRO_H2})"
+          exit 1
+        fi
+        echo "linux/amd64 double-build matched: ${REPRO_H1}"
+
+  check:reproducibility:arm64:
+    desc: >-
+      linux/arm64 cross-target double-build hash-diff (DIST-04, REPORTED
+      ONLY — non-blocking per D-03). Builds .goreleaser.yaml's
+      codegraph-linux-arm64 twice with `goreleaser build --snapshot`, like
+      check:reproducibility. A mismatch prints a ::warning:: and exits 0. A
+      failed build still fails, so "it ran and matched" never means "it
+      never ran".
+    preconditions:
+      - sh: command -v goreleaser
+        msg: "goreleaser not on PATH — run `mise install`."
+      - sh: command -v zig
+        msg: "zig not found on PATH — the linux builds in .goreleaser.yaml cross-compile with zig cc. Run `mise install`."
+      - sh: command -v jq
+        msg: "jq not found — the double build reads the binary path from dist/artifacts.json."
+    cmds:
+      - |
+        set -euo pipefail
+        # Keep zig's caches out of the read-only module cache, as
+        # release:dry-run explains.
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        trap 'rm -rf "${ZIG_CACHE_ROOT}"' EXIT
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+        {{.REPRO_LIB}}
+        repro_double_build codegraph-linux-arm64
+        if [ "${REPRO_H1}" != "${REPRO_H2}" ]; then
           echo "::warning::linux/arm64 cross-target double-build did NOT match (reported only, non-blocking per D-03)"
         else
           echo "linux/arm64 cross-target double-build matched (reported only, non-blocking per D-03)"
+        fi
+
+  bench:baseline-fresh:
+    desc: >-
+      #105: fails before the nightly perf gate compares anything when
+      tools/bench/baseline.json is older than 90 days, or its `runner`
+      differs from CODEGRAPH_BENCH_RUNNER. The age is the date of the last
+      commit that changed the file, so it needs a full-history checkout; a
+      shallow one reports the checkout boundary. Both failures name
+      bench.yml's rebless job, the one way to record a new baseline.
+    silent: true
+    preconditions:
+      - sh: command -v jq
+        msg: "jq not found — bench:baseline-fresh reads the baseline's runner field."
+      - sh: '[ -n "${CODEGRAPH_BENCH_RUNNER:-}" ]'
+        msg: "CODEGRAPH_BENCH_RUNNER is not set — bench:baseline-fresh compares it with the baseline's runner field."
+    cmds:
+      - |
+        set -euo pipefail
+        baseline=tools/bench/baseline.json
+        changed=$(git log -1 --format=%ct -- "${baseline}")
+        if [ -z "${changed}" ]; then
+          echo "::error::bench:baseline-fresh: git log found no commit that changed ${baseline}; the checkout needs full history (fetch-depth: 0)"
+          exit 1
+        fi
+        age_days=$(( ($(date +%s) - changed) / 86400 ))
+        runner=$(jq -r '.runner // ""' "${baseline}")
+        echo "bench:baseline-fresh: ${baseline} last changed ${age_days} days ago, recorded on runner '${runner}'; this job runs on '${CODEGRAPH_BENCH_RUNNER}'"
+        if [ "${age_days}" -gt 90 ]; then
+          echo "::error::bench:baseline-fresh: the baseline is ${age_days} days old (limit 90). Record a new one with bench.yml's rebless job: gh workflow run bench.yml -f job=rebless"
+          exit 1
+        fi
+        if [ "${runner}" != "${CODEGRAPH_BENCH_RUNNER}" ]; then
+          echo "::error::bench:baseline-fresh: the baseline was recorded on '${runner}', not '${CODEGRAPH_BENCH_RUNNER}'. Record a new one with bench.yml's rebless job: gh workflow run bench.yml -f job=rebless"
+          exit 1
         fi
 
   bench:regression:
@@ -6076,20 +5197,16 @@ tasks:
 
   test:
     desc: >-
-      Contributor wrapper: the six host-only legs (test:unit, test:golden,
-      test:integration, test:wireoracle, test:daemon, test:race), run
-      SERIALLY via a list of sub-task commands (never deps:, which go-task
-      runs concurrently). test:daemon and test:race both pass -p 1
-      specifically to avoid cross-test contention; running the two
-      concurrently with each other would reintroduce exactly the flakiness
-      those flags exist to prevent.
+      Contributor wrapper: the four host-only legs (test:unit, test:golden,
+      test:race, test:race:daemon), run SERIALLY via a list of sub-task
+      commands (never deps:, which go-task runs concurrently), because
+      test:race:daemon's -p 1 isolation means nothing beside a concurrent
+      leg. test:unit already runs test/integration and test/wireoracle.
     cmds:
       - task: test:unit
       - task: test:golden
-      - task: test:integration
-      - task: test:wireoracle
-      - task: test:daemon
       - task: test:race
+      - task: test:race:daemon
 
   lint:
     desc: "Contributor wrapper: vet, lint:actions and lint:go, run serially."

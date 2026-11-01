@@ -1,6 +1,6 @@
-# macOS leg for internal/daemon: runs `task test:daemon` on a macOS host, where
-# the darwin-only files (procstart_darwin.go and its test) build and run. ci.yml's
-# `test` job runs the same task on Linux only.
+# macOS leg for internal/daemon: runs `task test:race:daemon` on a macOS host,
+# where the darwin-only files (procstart_darwin.go and its test) build and run.
+# ci.yml's daemon leg runs the same task on Linux only.
 #
 # Not a required check. The paths filter skips the whole workflow on a pull
 # request that touches none of the paths below; a required check skipped that
@@ -33,12 +33,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
 
-      - name: Test internal/daemon (isolated, -count=1)
-        run: task test:daemon
+      - name: Test internal/daemon under the race detector (-race -p 1)
+        run: task test:race:daemon
 
       - name: Test internal/watch (FSEvents backend, -count=1)
         run: task test:watch

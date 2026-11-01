@@ -42,12 +42,10 @@ var binPath string
 // twice in this package — this doc comment and the assignment below.
 const testBinEnvVar = "CODEGRAPH_TEST_BIN"
 
-// resolveTestBinPath is a deliberate SECOND COPY of
-// test/integration/main_test.go's function of the same name — Go test
-// helpers are not importable across packages, matching the precedent this
-// repo already set for its four runGit* helpers (test/integration's own
-// runGitI doc comment names the other three). A shared non-test
-// internal/testbin package was considered and rejected: two copies of a
+// resolveTestBinPath was once a deliberate SECOND COPY of
+// test/integration's function of the same name, which testscript replaced
+// (#221) — Go test helpers are not importable across packages. A shared
+// non-test internal/testbin package was considered and rejected: two copies of a
 // ~20-line pure function with identical table tests in both packages is
 // cheaper than a new exported internal package, and if a third harness
 // ever needs this seam, that is the signal to extract it.
@@ -102,8 +100,8 @@ func resolveTestBinPath(raw string) (path string, useEnv bool, err error) {
 }
 
 // TestMain resolves the testBinEnvVar override first (see
-// resolveTestBinPath), mirroring test/integration/main_test.go's TestMain
-// exactly (VRFY-04: the oracle must run against the real, unmodified
+// resolveTestBinPath), as test/integration did before its testscript
+// suite (VRFY-04: the oracle must run against the real, unmodified
 // binary — whether that binary was just built or externally supplied).
 // When unset, it builds the real binary hermetically, once, into a
 // package-level temp dir before any test in this package runs; a build

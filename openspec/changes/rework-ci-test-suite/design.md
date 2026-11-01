@@ -100,13 +100,13 @@ VRFY-02 today loads the module and also `testdata/golden`, which `./...` skips (
 
 ### D7. `testscript` for `test/integration`
 
-`test/integration` has 12 tests in 10 files, and its `TestMain` builds the binary or reads `CODEGRAPH_TEST_BIN`. `verify:notarized-suite` (`Taskfile.yml:5272-5279`), which `post-release-verify.yml` runs, sets `CODEGRAPH_TEST_BIN` to the downloaded, notarized release binary. So the integration suite tests the published artifact after each release, and that must not change.
+`test/integration` has 12 tests in 10 files (10 behavior tests, plus `TestMain` and the build-contract test), and its `TestMain` builds the binary or reads `CODEGRAPH_TEST_BIN`. `verify:notarized-suite` (`Taskfile.yml:5272-5279`), which `post-release-verify.yml` runs, sets `CODEGRAPH_TEST_BIN` to the downloaded, notarized release binary. So the integration suite tests the published artifact after each release, and that must not change.
 
 With `testscript.Main`, the scripts run a `codegraph` command. If `CODEGRAPH_TEST_BIN` is unset, that command is the test binary itself, so a normal run needs no build step. If `CODEGRAPH_TEST_BIN` is set, the `codegraph` command runs that file. Each test becomes a `.txtar` script under `test/integration/testdata/`. A test that needs a timeout or a pipe that never closes keeps a small Go helper command in the script. `binpath_test.go` and the build step in `TestMain` go. `github.com/rogpeppe/go-internal` moves from an indirect to a direct requirement.
 
 ### D8. `teatest/v2` for the tmux rig (#75)
 
-The decision on #75 stands. Five of the six tmux tests become in-process tests with `NewTestModel(..., WithInitialTermSize(100, 30))`. The mode-query leak test and the main-buffer test become model-level assertions on the output bytes: no query sequence appears outside the alt screen, and the alt-screen leave sequence is the last control sequence written. `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job go. The `protect-main` ruleset drops its required check right before the PR merges, with the maintainer's approval, because that is an edit outside the repository.
+The decision on #75 stands. Five of the six tmux tests become in-process tests with `NewTestModel(..., WithInitialTermSize(100, 30))`. The mode-query leak test and the main-buffer test become model-level assertions on the output bytes. Implementation found that bubbletea v2.0.8 writes its mode queries at startup, before it enters the alt screen, and writes cursor and paste mode resets after it leaves. So the daemon-picker test asserts that only mode set and reset sequences follow the alt-screen leave, with no text, query or cursor movement. The empty-registry test asserts that `RunDaemonPicker` starts no program at all and writes exactly its one line. `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job go. The `protect-main` ruleset drops its required check right before the PR merges, with the maintainer's approval, because that is an edit outside the repository.
 
 ### D9. Smaller replacements
 
@@ -132,7 +132,7 @@ Before the comparison, `bench.yml` reads the date of the last commit that change
 ### D13. The two flaky tests
 
 - #235: in `awaitDaemonLock` (`internal/cli/serve_worktree_test.go`), an `os.ErrNotExist` from `w.Add` on the index directory goes to the next loop pass, like a missing watch does today. Any other error still fails the test.
-- #185: the CR-01 test in `web/tests/browse-page.test.ts` waits with `vi.waitFor` on the RPC count and the URL, in place of a fixed number of microtask flushes. The fix is accepted after 20 full-suite runs with no failure.
+- #185: the CR-01 test in `web/tests/browse-page.test.ts` waits with `vi.waitFor` on the RPC count and the URL. A measurement during implementation showed the main cause: the test imported the route component inside its body, and that Vite transform took about 11 s of the 15 s test timeout when the file ran alone. So the stub client, `vi.doMock` and the import move to module scope, as in the other route tests. The fix is accepted after 20 full-suite runs with no failure.
 
 ### D14. Order of the commits
 

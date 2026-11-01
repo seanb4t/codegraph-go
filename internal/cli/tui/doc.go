@@ -5,11 +5,10 @@
 // package grows the stateful, interactive components (daemon picker,
 // install/uninstall multi-select) that later plans in this phase add.
 //
-// internal/cli/tui is excluded from the TUI-01 archtest's guarded closure
-// (internal/cli/present/archtest/import_graph_test.go already excludes the
-// whole internal/cli prefix), so importing bubbletea/bubbles here can never
-// leak into the serve-reachable surface (internal/daemon, internal/mcp,
-// etc.) by construction.
+// internal/cli/tui is outside the serve packages that TUI-01 guards
+// (internal/depclosure's TestDependencyClosure), so importing
+// bubbletea/bubbles here does not reach the serve-reachable surface
+// (internal/daemon, internal/mcp, etc.).
 //
 // 07-01 anchored bubbles/bubbletea here via blank imports so `go mod tidy`
 // wouldn't prune the requires before a real importer existed; both
