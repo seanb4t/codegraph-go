@@ -81,17 +81,17 @@ Add a test helper package, `internal/indexer/invariant`, with `Check(store) (Cou
 
 ### D8. One node per declaration, checked against tree-sitter
 
-`TestEveryDeclarationHasOneNode` parses each fixture file with tree-sitter and counts the declaration nodes with a small table of node kinds per language. It then compares the count with the extracted nodes of those kinds, and asserts that no two extracted nodes share an id. The table has rows for the languages of the fixtures and of the four pinned corpora:
+`TestEveryDeclarationHasOneNode` parses each fixture file with tree-sitter and lists the declaration occurrences with a small table of node kinds per language. It compares occurrences, not totals, because one missing declaration and one extra node can give equal totals. Each expected occurrence (name, kind and start line) must match exactly one extracted node, and each extracted node of a listed kind must match one expected occurrence. It also asserts that no two extracted nodes share an id. The table has rows for the languages of the fixtures and of the four pinned corpora:
 
 | language | declaration node kinds |
 |---|---|
 | Go | `function_declaration`, `method_declaration`, `type_spec`, each name in a `var_spec` and a `const_spec` (the #214 case) |
-| TypeScript, JavaScript | `function_declaration`, `class_declaration`, `method_definition`, `interface_declaration` |
+| TypeScript, JavaScript | `function_declaration`, `class_declaration`, `method_definition`, `interface_declaration`, and an `arrow_function` or `function_expression` bound in an exported `const` declaration, which `tsextract` emits as a function (`tsextract.go:599-635`) |
 | Java | `class_declaration`, `interface_declaration`, `enum_declaration`, `method_declaration`, `constructor_declaration` |
 | Python | `function_definition`, `class_definition` |
 | C# | `class_declaration`, `struct_declaration`, `interface_declaration`, `record_declaration`, `method_declaration`. The parts of one partial type count as one declaration |
 
-It runs over `internal/indexer/testdata/` and a new fixture with the #198 shape. If `CODEGRAPH_CORPUS_DIR` is set, the same test also runs over hugo (Go), guava (Java), requests (Python) and serilog (C#). `corpora.yml` sets it and already fetches them. If a row disagrees with an extractor on purpose, the row gets a named exception, and the test lists every exception in its failure message.
+It runs over `internal/indexer/testdata/` and a new fixture with the #198 shape. If `CODEGRAPH_CORPUS_DIR` is set, the same test also runs over hugo (Go), guava (Java), requests (Python) and serilog (C#). `corpora.yml` sets it and already fetches them. If a row disagrees with an extractor on purpose, the row gets a named exception. The test logs every exception on each run, not only on a failure. The table stays limited to these languages and the constructs the extractors support. A comparison with a compiler and other languages are separate work.
 
 ### D9. Watcher coverage after any sequence of directory changes, as a stateful `rapid` property
 
