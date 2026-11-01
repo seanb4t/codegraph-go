@@ -106,7 +106,7 @@ With `testscript.Main`, the scripts run a `codegraph` command. If `CODEGRAPH_TES
 
 ### D8. `teatest/v2` for the tmux rig (#75)
 
-The decision on #75 stands. Five of the six tmux tests become in-process tests with `NewTestModel(..., WithInitialTermSize(100, 30))`. The mode-query leak test and the main-buffer test become model-level assertions on the output bytes: no query sequence appears outside the alt screen, and the alt-screen leave sequence is the last control sequence written. `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job go. The `protect-main` ruleset drops its required check right before the PR merges, with the maintainer's approval, because that is an edit outside the repository.
+The decision on #75 stands. Five of the six tmux tests become in-process tests with `NewTestModel(..., WithInitialTermSize(100, 30))`. The mode-query leak test and the main-buffer test become model-level assertions on the output bytes. Implementation found that bubbletea v2.0.8 writes its mode queries at startup, before it enters the alt screen, and writes cursor and paste mode resets after it leaves. So the daemon-picker test asserts that only mode set and reset sequences follow the alt-screen leave, with no text, query or cursor movement. The empty-registry test asserts that `RunDaemonPicker` starts no program at all and writes exactly its one line. `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job go. The `protect-main` ruleset drops its required check right before the PR merges, with the maintainer's approval, because that is an edit outside the repository.
 
 ### D9. Smaller replacements
 

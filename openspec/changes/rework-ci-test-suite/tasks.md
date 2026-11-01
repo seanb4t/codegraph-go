@@ -36,9 +36,9 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 5. `teatest` in place of tmux (design.md D8, #75)
 
-- [ ] 5.1 Read the current `teatest/v2` docs with Context7. Make sure that the module path is correct and that it accepts a `charm.land/bubbletea/v2` model. If it does not, stop and report back.
-- [ ] 5.2 Add the module with `go get` and a hand edit of `go.mod`. Write `TestInstallPickerFrameStableWhileIdle`, `TestInstallPickerFooterAt100x30`, `TestInstallPickerCancelWritesNoConfig`, `TestDaemonPickerLeavesAltScreenLast` and `TestDaemonEmptyRegistryWritesNoModeQuery` next to the models they test. Each asserts that the program wrote more than zero bytes.
-- [ ] 5.3 Delete `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job.
+- [x] 5.1 Read the current `teatest/v2` docs with Context7. Make sure that the module path is correct and that it accepts a `charm.land/bubbletea/v2` model. If it does not, stop and report back.
+- [x] 5.2 Add the module with `go get` and a hand edit of `go.mod`. Write `TestInstallPickerFrameStableWhileIdle`, `TestInstallPickerFooterAt100x30`, `TestInstallPickerCancelWritesNoConfig`, `TestDaemonPickerLeavesAltScreenLast` and `TestDaemonEmptyRegistryWritesNoModeQuery` next to the models they test. Each asserts that the program wrote more than zero bytes.
+- [x] 5.3 Delete `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job.
 - [ ] 5.4 Right before the PR merges, and with the maintainer's approval, remove `tmux e2e (real-pty harness, TTY-01..TTY-07)` from the required status list of the `protect-main` ruleset.
 
 ## 6. `testscript` in place of the integration build contract (design.md D7)

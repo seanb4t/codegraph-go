@@ -44,8 +44,7 @@ A change lands only when all of these hold:
 2. All required checks pass: `test`,
    `actionlint (workflow static analysis)`, `govulncheck (DIST-03, blocking)`,
    `pr-title`, `reproducibility (double-build hash-diff, DIST-04)`,
-   `goreleaser check (config validation, DIST-01)`,
-   `tmux e2e (real-pty harness, TTY-01..TTY-07)`, `fragment-required`.
+   `goreleaser check (config validation, DIST-01)`, `fragment-required`.
 3. Review conversations are resolved.
 4. A maintainer merges it. `main` is protected; merges are **squash-only** and
    linear history is enforced.
