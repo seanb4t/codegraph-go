@@ -18,7 +18,9 @@ Non-goals: Replace the test runner, implement production compilers, or prove arb
 
 ## Decisions
 
-Use a small developer entry point, `task eval:semantic`, with authored fixtures under `testdata/semantic/`. Keep compiler adapters under `tools/semantic-eval/`. Use native Go tests for integration. Avoid a separate test framework or generated expectation language.
+Use a small developer entry point, `task eval:semantic`, with authored fixtures under `testdata/semantic/`. Keep reference integration under `tools/semantic-eval/`. Use native Go tests and the existing test runner. Avoid a separate test framework or generated expectation language.
+
+Assert nonempty inputs, required tools, exact differences, and exception validity inside the acceptance gate. Do not add companion gate self-tests or simulated workflow failures. Exercise normalization through tests of CodeGraph extraction and public queries against independent facts.
 
 The report is the new developer-facing behavior. It has a versioned JSON format and a short text rendering. This format does not alter production CLI or MCP responses.
 
@@ -28,26 +30,32 @@ Use these reference sources within their actual limits:
 
 | Language | Independent reference | Boundary |
 | --- | --- | --- |
-| Go | `go/parser`, `go/ast`, and `go/types` definitions, uses, and selections | Match build tags, platform, and package context. Do not equate interface method shape with concrete runtime dispatch. |
-| TypeScript, JavaScript, TSX | Pinned TypeScript compiler program and symbol APIs | Match module resolution and compiler configuration. Keep JS and TSX results separate. |
+| Go | Pinned `scip-go` definitions and reference occurrences | Match build tags, platform, package, and production/test contexts. Do not infer runtime dispatch from a reference. |
+| TypeScript, JavaScript, TSX | Pinned `scip-typescript` definitions and reference occurrences | Match module resolution and compiler configuration. Keep JS and TSX results separate. |
 | Python | Pinned CPython `ast` and `symtable`, plus reviewed expectations | Establish declarations and lexical bindings. Hand-review dynamic attributes and calls rather than claiming compiler-proven targets. |
-| Java | Pinned JDK `JavacTask` and `Trees.getElement` | Parse and analyze with `-proc:none`. Record missing dependencies. Do not execute source, processors, Maven, or Gradle. |
+| Java | Pinned `scip-javac` compiler plugin and SCIP aggregation | Invoke the pinned JDK directly with `-proc:none` and an explicit classpath. Do not execute source, processors, Maven, or Gradle. |
 
-The [Go type API](https://pkg.go.dev/go/types) exposes definitions and uses. The [TypeScript compiler guide](https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API) describes programs and type analysis.
+Prefer existing indexers over custom compiler walkers. [scip-go](https://github.com/scip-code/scip-go) and [scip-typescript](https://github.com/sourcegraph/scip-typescript) supply independent definitions and references. [scip-java manual integration](https://github.com/scip-code/scip-java/blob/main/docs/manual-configuration.md) supports direct compiler-plugin invocation without a project build tool.
 
-Python documents separate [AST](https://docs.python.org/3/library/ast.html) and [symbol table](https://docs.python.org/3/library/symtable.html) interfaces. Neither establishes arbitrary dynamic call targets.
+[SCIP](https://github.com/scip-code/scip/blob/main/scip.proto) stores symbol occurrences and source ranges. An ordinary reference occurrence does not establish a call edge. Use reviewed annotations for call kinds, ownership, or other facts that the selected indexer cannot establish. Record these boundaries per adapter.
 
-Java provides [parse and analysis operations](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.compiler/com/sun/source/util/JavacTask.html) and [tree-to-element lookup](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.compiler/com/sun/source/util/Trees.html). Its [compiler documentation](https://github.com/openjdk/jdk25u-dev/blob/master/src/jdk.compiler/share/man/javac.md) defines `-proc:none`.
+Python documents separate [AST](https://docs.python.org/3/library/ast.html) and [symbol table](https://docs.python.org/3/library/symtable.html) interfaces. Neither establishes arbitrary dynamic call targets. [scip-python](https://github.com/sourcegraph/scip-python/tree/scip) uses Pyright inference. Keep a narrow CPython bridge because this contract measures lexical bindings separately from inferred types. Review dynamic attributes and calls as source annotations.
+
+Java's [compiler documentation](https://github.com/openjdk/jdk25u-dev/blob/master/src/jdk.compiler/share/man/javac.md) defines `-proc:none`. Record missing dependencies as reference limitations. Require a qualification case for each chosen indexer before accepting its facts.
 
 Pin adapter tools through the repository's development tool mechanism. Record exact versions in reports. Reuse the repository's TypeScript pin when its compiler API meets the contract. Never depend on an unpinned upstream default branch.
 
-Normalize declarations to language, relative path, owner, role, name, and source span. Convert positions to UTF-8 byte offsets. Test Unicode and repeated names explicitly. Do not compare CodeGraph hashes with compiler-generated identifiers.
+Normalize declarations to language, relative path, owner, role, name, and the independently located identifier occurrence. Convert each reference format's declared position encoding to UTF-8 byte offsets. Do not compare CodeGraph hashes with compiler-generated identifiers.
+
+Define a source-reviewed span rule for each declaration construct. CodeGraph can span a complete declaration while the reference spans its identifier. Match each identifier once by owner, role, name, and its independently derived declaration envelope. Require the CodeGraph span to match that construct's span rule. Containment alone cannot establish a match.
+
+For Go multi-name specs, map each named binding to its own identifier within the shared declaration envelope. Preserve distinct occurrences for repeated same-line names. Report incorrect spans separately from missing identities. Include Unicode, nested equal names, and deliberately wrong product spans in product acceptance cases.
 
 Normalize relationships to source declaration, kind, and target declaration. CodeGraph deduplicates repeated relationships with those endpoints. Keep call-site counts separate. Normalize callable constants consistently so existing arrow-function identities do not create false duplicates.
 
 Report precision as correct emitted facts divided by evaluated emitted facts. Report recall as correct emitted facts divided by expected facts. Show both denominators, exact differences, and unavailable categories.
 
-Retain omitted files in source coverage when expectations exist. For incompletely labeled source, report unlabeled observations as unknown. Do not claim whole-repository precision from a reviewed sample.
+Retain omitted files in source coverage when expectations exist. For incompletely labeled source, report unlabeled observations as unknown. Exclude unknown facts from both precision and recall denominators and report their raw counts separately. Unknown targets cannot become true positives. Do not claim whole-repository precision from a reviewed sample.
 
 The first inventory covers the following dimensions:
 
@@ -65,9 +73,13 @@ Run small reviewed fixtures on pull requests. Run pinned source collections on a
 
 Choose a small licensed TypeScript collection during implementation and record its exact commit and digest before the first accepted run. Existing Java and Python collections remain useful. Each sample needs a declared denominator and independent labels.
 
-Hold a reviewed subset apart from routine fixture tuning. Keep its inventory visible. Acceptance changes require a stated language-contract reason and review of the source evidence. Never regenerate expectations from CodeGraph to make a run pass.
+Declare `development` and `acceptance` partitions in authored manifests. Keep acceptance cases under `testdata/semantic/heldout/` and exclude them from routine tuning commands. Run the acceptance partition in pull request CI and record its size and expectation revision.
 
-Supported fixture cases require zero unexpected missing or extra facts. Initial known failures list exact differences, an owner, an issue, and a review date. They remain failures in accuracy totals even when temporarily permitted by the regression gate. Expired, enlarged, or stale exceptions fail the gate.
+Review acceptance changes separately from extractor changes, with a language-contract reason and source evidence. This is a review policy, not another CI guard. The public corpus is not a secret or statistically unbiased benchmark. Never regenerate expectations from CodeGraph to make a run pass.
+
+Use distinct case statuses: `supported`, `known-gap`, `unsupported`, and `unevaluated`. Supported cases require zero missing or extra facts. Known-gap cases list exact differences, an owner, an issue, and a review date. They remain failures in accuracy totals even when temporarily permitted by the regression gate. Expired, enlarged, or stale exceptions fail the gate. A corrected case becomes supported only after its exception is removed.
+
+Compare fresh and incremental semantic facts and public answers under the same configuration and analysis context. Include no-op synchronization, edits, renames, deletion, and restoration. Name the evaluated fact subset and retain excluded categories in reports. Do not imply route-graph equality beyond the boundary defined by `index-invariants` in PR #237.
 
 Install the report and known-failure inventory first. Then enable the small acceptance gate. Product fixes in #239 remove exceptions as their cases pass. This order avoids weakening expectations to land the measurement change.
 

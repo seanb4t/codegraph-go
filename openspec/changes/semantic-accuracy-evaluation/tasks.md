@@ -3,30 +3,30 @@
 ## 1. Evaluation inputs and comparison
 
 - [ ] 1.1 Add authored case manifests and independent facts under `testdata/semantic/`. Include every initial language and all design matrix dimensions. Review the source-to-fact mapping and document the format beside the fixtures.
-- [ ] 1.2 Add semantic identity normalization and graph comparison under `tools/semantic-eval/`. Cover omissions, extra edges, Unicode, repeated names, and deduplication in `TestSemanticComparison`.
-- [ ] 1.3 Add versioned JSON and text reports with raw denominators and exact differences. Cover empty samples, parse failures, unknown facts, and missing inputs in `TestSemanticReport`.
-- [ ] 1.4 Add exact known-failure matching with issue, owner, and review date fields. Cover new, enlarged, expired, and stale exceptions in `TestSemanticKnownFailures`. Document that permitted exceptions still reduce accuracy.
+- [ ] 1.2 Add identity normalization and comparison under `tools/semantic-eval/`. Define independent identifier and construct-span mappings. Exercise multi-name declarations, Unicode, repeated names, wrong spans, and deduplication through `TestSemanticGo` and `TestSemanticTypeScript` product cases.
+- [ ] 1.3 Add versioned JSON and text reports with raw denominators and exact differences from `TestSemanticGo`, `TestSemanticTypeScript`, `TestSemanticPython`, and `TestSemanticJava`. Report parse failures, unknown counts, partitions, and missing inputs. Assert nonempty required inputs inside the gate. Keep unknown facts outside both accuracy denominators.
+- [ ] 1.4 Apply exact known-gap matching to `TestSemanticGo`, `TestSemanticTypeScript`, `TestSemanticPython`, and `TestSemanticJava` results. Require issue, owner, and review date fields. Reject new, enlarged, expired, and stale exceptions inside the gate. Keep exceptions visible in accuracy totals. Do not add companion gate self-tests.
 
 ## 2. Independent reference adapters
 
-- [ ] 2.1 Add the Go reference adapter through compiler definitions, uses, and selections. Cover grouped declarations, build context, fields, aliases, and shadowing in `TestSemanticGoReference`.
-- [ ] 2.2 Add the pinned TypeScript reference adapter for TypeScript, JavaScript, and TSX. Cover import resolution, destructuring, callable constants, fields, and Unicode in `TestSemanticTypeScriptReference`.
-- [ ] 2.3 Add pinned Python AST and symbol-table extraction with reviewed dynamic cases. Cover module bindings, class attributes, receiver attributes, and shadowing in `TestSemanticPythonReference`.
-- [ ] 2.4 Add pinned Java compiler analysis with annotation processing disabled. Cover field lists, owners, imports, and missing classpaths in `TestSemanticJavaReference`.
-- [ ] 2.5 Document each adapter's exact fact coverage and tool pin. Run all four adapter tests against source-reviewed expectations. Make sure that missing tools produce explicit failures.
+- [ ] 2.1 Integrate pinned `scip-go` output and reviewed call annotations. Compare CodeGraph grouped declarations, build contexts, fields, aliases, and shadowing in `TestSemanticGo`.
+- [ ] 2.2 Integrate pinned `scip-typescript` output for TypeScript, JavaScript, and TSX. Compare CodeGraph imports, destructuring, callable declarations, fields, and Unicode in `TestSemanticTypeScript`.
+- [ ] 2.3 Add the narrow CPython AST and symbol-table bridge with reviewed dynamic cases. Compare CodeGraph module bindings, class attributes, receiver attributes, and shadowing in `TestSemanticPython`.
+- [ ] 2.4 Integrate pinned `scip-javac` and aggregation through direct JDK invocation with `-proc:none`. Compare CodeGraph field lists, owners, imports, and missing classpaths in `TestSemanticJava`.
+- [ ] 2.5 Document exact reference coverage, position encodings, tool pins, and annotations for unsupported reference facts. Qualify references through the four product acceptance tests. Reject missing tools inside the gate. Retain the existing-tool comparison from the design.
 
 ## 3. Public answers and language evidence
 
 - [ ] 3.1 Add reviewed CLI and MCP cases for definitions, callers, callees, impact, and explore. Cover required facts, false matches, disambiguation, and budgets in `TestSemanticPublicQueries`.
 - [ ] 3.2 Tighten `testdata/golden/behavioral_tsjs_test.go` to assert exact expected relationships with language-qualified endpoints. Cover the unrelated-Go-edges failure in `TestSemanticTypeScriptCorpusEdges`.
-- [ ] 3.3 Add fresh-versus-incremental semantic comparisons for edits, renames, deletion, and restoration. Cover graph content and public answers in `TestSemanticLifecycle`.
+- [ ] 3.3 Add fresh-versus-incremental semantic comparisons for no-op synchronization, edits, renames, deletion, and restoration. Cover scoped graph facts and public answers in `TestSemanticLifecycle`. Match analysis contexts and report excluded categories.
 - [ ] 3.4 Update `docs/LANGUAGE-CAPABILITY-MATRIX.md` with construct-level evidence and explicit limits. Trace every changed claim to a passing case or a named gap. Preserve registry-consistency tests for their existing purpose.
 
 ## 4. Reproducible execution
 
-- [ ] 4.1 Add `task eval:semantic` through the existing Taskfile and pinned development tools. Cover success, semantic failure, and unavailable tools in `TestSemanticCommand`. Run the small suite offline after dependency installation. Document the command and report fields.
+- [ ] 4.1 Add `task eval:semantic` through the existing Taskfile and pinned tools to run the four language acceptance tests and `TestSemanticPublicQueries`. Run the small suite offline after dependency installation. Document failure exits and report fields. Assert required tools inside the command without a separate wrapper test suite.
 - [ ] 4.2 Add a small licensed TypeScript and TSX source collection through the existing corpus mechanism. Record its immutable revision and digest. Demonstrate nonempty expected TypeScript relationships through `TestSemanticTypeScriptCorpusEdges`.
-- [ ] 4.3 Add reviewed held-out query cases and pin the existing Go, Python, and Java evaluation inputs. Run `TestSemanticPublicQueries` with the held-out selection. Record sample sizes and unlabeled source limits.
+- [ ] 4.3 Add development and acceptance manifest partitions, with acceptance cases under `testdata/semantic/heldout/`. Pin Go, Python, and Java inputs. Run `TestSemanticPublicQueries` with acceptance cases. Record sample sizes and unlabeled limits. Document separate source review for acceptance revisions.
 - [ ] 4.4 Wire the small suite into pull request CI and the source collections into scheduled or manual CI. Demonstrate report retention on semantic and infrastructure failures. Reuse existing workflow actions and test reporting.
 
 ## 5. Integration acceptance

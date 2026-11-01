@@ -17,7 +17,7 @@ CodeGraph MUST represent POSIX shell, Bash, Zsh, and Fish as distinct languages.
 
 ### Requirement: Deterministic dialect discovery
 
-Discovery MUST recognize `.sh`, `.bash`, `.zsh`, and `.fish` files, supported shell shebangs, and documented startup filenames. A recognized shebang MUST take precedence over an extension or startup filename. An explicit unsupported interpreter MUST prevent a misleading shell fallback. Unidentified extensionless files MUST remain unsupported.
+Shell classification MUST apply only to `.sh`, `.bash`, `.zsh`, `.fish`, documented startup names, and eligible extensionless files. Registered non-shell extensions MUST retain their existing classification. Within shell candidates, recognized shebangs MUST precede startup names and extensions. Explicit unsupported interpreters MUST prevent shell fallback and use `EXCLUSION_REASON_INTERPRETER_MISMATCH`. Unidentified extensionless files MUST remain unsupported.
 
 #### Scenario: Bash uses the generic shell extension
 - **WHEN** `build.sh` starts with `#!/usr/bin/env bash`
@@ -32,14 +32,22 @@ Discovery MUST recognize `.sh`, `.bash`, `.zsh`, and `.fish` files, supported sh
 - **WHEN** an extensionless file has a supported Zsh shebang
 - **THEN** discovery selects Zsh without executing the interpreter
 
+#### Scenario: A registered non-shell file has a shebang
+- **WHEN** a `.py` or `.js` file contains a shell or unsupported shebang
+- **THEN** its existing Python or JavaScript extension classification remains unchanged
+
 ### Requirement: Bounded startup file discovery
 
-Discovery MUST include documented startup files within the repository, including `.config/fish/config.fish` and Fish function and configuration directories. Directory exceptions MUST remain path-specific. Discovery and file watching MUST use equivalent inclusion rules and preserve repository boundaries and existing size limits.
+Discovery MUST include documented startup files. The Fish hidden-directory exception MUST include only root-anchored `.config/fish/config.fish`, `.config/fish/functions/**/*.fish`, and `.config/fish/conf.d/**/*.fish`. Nested equivalents and hidden ancestors MUST remain excluded. Discovery, fsnotify registration and directory events, and macOS FSEvents filtering MUST use equivalent rules within repository and size boundaries.
 
 #### Scenario: A repository contains Fish configuration
 - **WHEN** `.config/fish/functions/prompt.fish` changes
 - **THEN** initial discovery and subsequent file watching both include the file
 - **AND** unrelated hidden directories remain excluded
+
+#### Scenario: A nested Fish directory resembles the allowed root
+- **WHEN** `home/.config/fish/config.fish` or `.hidden/.config/fish/config.fish` exists inside the repository
+- **THEN** the Fish exception does not include either path in discovery or watching
 
 #### Scenario: A source link escapes the repository
 - **WHEN** a shell file or sourced path points outside the repository through a symbolic link
@@ -79,7 +87,7 @@ CodeGraph MUST record statically resolved variable reads and direct calls to kno
 
 ### Requirement: Literal source relationships
 
-CodeGraph MUST record literal `.` or `source` relationships to eligible repository files. Relative-path candidates MUST carry the documented static path assumption. Runtime-dependent paths MUST remain unresolved. The graph MUST distinguish source relationships from calls and must terminate on source cycles.
+CodeGraph MUST resolve literal `.` or `source` paths through a shell-specific resolver to existing eligible file nodes, using imports edges. It MUST NOT use Go module-prefix resolution or synthetic Go packages for these paths. Relative candidates MUST carry their static path assumption. Runtime-dependent paths MUST remain unresolved, and source cycles MUST terminate.
 
 #### Scenario: A relative source path has one repository candidate
 - **WHEN** a script sources `./lib.sh` and that file exists beside the script
@@ -94,14 +102,15 @@ CodeGraph MUST record literal `.` or `source` relationships to eligible reposito
 - **WHEN** each file contains a literal source path to the other
 - **THEN** indexing terminates and retains the source relationships without duplicate declarations
 
-### Requirement: Partial parsing is visible
+### Requirement: Shell parse failures reject file extraction
 
-A shell parse failure MUST appear through existing indexing error reporting. CodeGraph MUST NOT report a file with rejected syntax as fully indexed. Recoverable declarations MUST follow the existing partial-result policy, and unresolved syntax MUST remain visible in evaluation results.
+A shell Tree-sitter error or missing node MUST reject all declarations and relationships from that file. The file record MUST retain indexing errors and count as failed. Synchronization MUST remove previously extracted facts for the failed file. Independent expected facts MUST remain in evaluation denominators. Other languages MUST retain their existing parse behavior.
 
 #### Scenario: Unsupported Zsh syntax appears beside a function
 - **WHEN** the selected parser cannot parse part of the file
 - **THEN** indexing reports the parse limitation
-- **AND** a nonempty graph does not count as full acceptance for that file
+- **AND** the file retains an error record but no extracted declarations or outgoing relationships
+- **AND** synchronization removes its former facts and invalidates dependent references
 
 ### Requirement: Public query and synchronization support
 
@@ -114,6 +123,10 @@ Definitions, callers, callees, impact, and explore MUST handle the new shell nod
 #### Scenario: A sourced function disappears
 - **WHEN** an edit deletes a function from a sourced repository file
 - **THEN** the updated graph contains no resolved references to the removed function
+
+#### Scenario: An existing index gains shell support
+- **WHEN** normal synchronization discovers unchanged shell files absent from an older index
+- **THEN** those files gain supported facts without a shell-specific rebuild marker
 
 ### Requirement: Runtime-free indexing
 

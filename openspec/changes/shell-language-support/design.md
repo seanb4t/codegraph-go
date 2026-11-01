@@ -10,7 +10,7 @@ The implementation must retain one released binary. CGo remains limited to permi
 
 ## Goals / Non-Goals
 
-Goals: Reuse parser, extractor, graph, and synchronization seams with explicit dialect boundaries. Make partial parsing and heuristic path resolution visible.
+Goals: Reuse parser, extractor, graph, and synchronization seams with explicit dialect boundaries. Make parse failures and heuristic path resolution visible.
 
 Non-goals: Emulate shell execution, discover the user's live shell environment, or index every hidden directory. Do not add embedded shell extraction in this change.
 
@@ -38,13 +38,17 @@ Register language IDs `shell`, `bash`, `zsh`, and `fish`. The `shell` ID means t
 
 Add bounded source classification before parser creation. Read only the shebang prefix after the existing size and file-type safeguards. Accept direct interpreter paths and supported `/usr/bin/env` forms, including literal `-S` interpreter selection. Do not expand environment variables or arbitrary command expressions.
 
-Use this precedence: recognized interpreter, explicit unsupported-interpreter exclusion, startup filename, then extension. `.sh` without a recognized interpreter selects `shell`. `.bash`, `.zsh`, and `.fish` select their named dialects. An unidentified extensionless file stays excluded.
+Apply shell classification only to shell extensions, recognized startup names, and otherwise eligible extensionless files. Registered non-shell extensions retain their existing classification regardless of shebang. Within shell candidates, use this precedence: recognized interpreter, explicit unsupported-interpreter exclusion, startup filename, then extension.
+
+`.sh` without an explicit interpreter selects `shell`. `.bash`, `.zsh`, and `.fish` select their named dialects. An unidentified extensionless file stays excluded. An explicit unsupported interpreter on a shell candidate uses the new `EXCLUSION_REASON_INTERPRETER_MISMATCH` reason, with the interpreter in diagnostic details.
+
+Add that enum value to the authored graph and UI protocol sources. Regenerate their clients through the owning generators. Update exclusion renderers and tests for the additive reason without changing response envelopes.
 
 Recognize `.profile` as POSIX shell. Recognize `.bashrc`, `.bash_profile`, `.bash_login`, and `.bash_logout` as Bash. Recognize `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`, and `.zlogout` as Zsh. Explicit shebangs take precedence.
 
-Allow `.config/fish/config.fish`, `.config/fish/functions/**/*.fish`, and `.config/fish/conf.d/**/*.fish` within the project root. Traverse only the ancestors needed for these paths. Keep other dot-prefixed directories excluded. Do not expand this exception to the user home directory.
+Allow only `<repo>/.config/fish/config.fish`, `<repo>/.config/fish/functions/**/*.fish`, and `<repo>/.config/fish/conf.d/**/*.fish`. Anchor this exception at the repository root, not any nested `.config/fish` suffix. Traverse only the required ancestors. Keep other dot-prefixed directories excluded, including `home/.config/fish` and hidden parents. Do not expand this exception to the user home directory.
 
-Replace the basename-only prune decision with a shared root-relative inclusion decision where necessary. Initial discovery, recursive watcher registration, and new-directory events must use it. Preserve exclusion accounting when a directory has permitted descendants.
+Replace the basename-only prune decision with a shared root-relative inclusion decision where necessary. Apply it to discovery, fsnotify recursive registration, new-directory events, and the macOS FSEvents path filter in `watcher_darwin.go`. Preserve exclusion accounting when a directory has permitted descendants. Keep unrelated directory consumers, including route discovery, within their existing scope.
 
 Do not follow file or directory symlinks outside the repository. Apply the same canonical-path boundary to sourced files. Respect source-size limits before shebang reads and extraction.
 
@@ -56,12 +60,12 @@ Use these extraction boundaries:
 | --- | --- | --- |
 | POSIX shell | Named functions, global assignment words, parameter reads, literal function commands, literal dot commands | Command-scoped environment assignments do not create persistent globals. Unsupported extensions remain visible. |
 | Bash | POSIX forms plus named arrays, `local`, `declare`, and `typeset` declarations | Dynamic scope, namerefs, indirect expansion, and computed command names do not receive definitive targets. |
-| Zsh | Named functions and statically named `typeset` or assignment bindings | Autoload, runtime option changes, and expansion-dependent binding remain unresolved. Unsupported grammar forms produce partial results. |
+| Zsh | Named functions and statically named `typeset` or assignment bindings | Autoload, runtime option changes, and expansion-dependent binding remain unresolved. Rejected grammar forms fail the whole file. |
 | Fish | Functions, `set` declarations, explicit local/global scope, parameter reads, and literal `source` commands | Universal variables and environment-dependent bindings remain unresolved. Do not infer autoload from a filename alone. |
 
 Record direct calls in pipelines, subshells, and command substitutions when a target is statically established. Respect process and scope boundaries for writes. Do not turn words inside quoted strings or literal heredocs into declarations. Interpolated expansions receive only their supported syntactic references.
 
-Use existing function and variable kinds plus `contains`, `references`, `calls`, and the existing import relationship convention. Reuse #239's access metadata convention without requiring every core-language extractor to land first. Add graph vocabulary only if an existing relationship cannot express the required distinction.
+Use existing function and variable kinds plus `contains`, `references`, `calls`, and `imports`. Reuse the imports edge kind, not the Go-only import resolver. Add a shell path resolver that targets existing indexed file nodes. Do not route shell paths through `isIntraModule` or create synthetic Go packages. Reuse #239's access metadata convention independently of core-language extractor rollout.
 
 External commands remain unresolved names. A literal command matches a repository function only when lexical and source evidence establish a unique candidate. Mark inferred imported targets with their source-path assumption. Ambiguous definitions do not resolve by traversal order.
 
@@ -71,11 +75,11 @@ Paths with expansion, command substitution, runtime search through `PATH`, or un
 
 Use cycle detection for sourced-file traversal. Do not create duplicate nodes when several scripts source the same file. Editing a sourced file must invalidate dependent resolution through the existing synchronization mechanism.
 
-Report Tree-sitter error and missing nodes through existing indexing diagnostics. A nonempty result cannot hide rejected syntax. Keep recovered declarations only under the current partial-result policy, with failure evidence visible in #238.
+Use an explicit all-or-nothing shell parse policy. Any Tree-sitter error or missing node rejects extraction for that file. Keep the file record with indexing errors, but emit no declarations or relationships from it. Count it as failed, retain independently expected facts in evaluation denominators, and remove stale facts during synchronization. Other languages retain their existing behavior.
 
 Add dialect-specific fixtures to #238's evaluation format. Independent hand-reviewed expectations define source facts. Include CLI and MCP query cases plus fresh-versus-incremental comparisons. Do not use an installed shell as a production oracle.
 
-Land classification and shared inclusion changes first. Add dialect adapters behind registration readiness. Enable each dialect only after its contract passes. Use an additive rebuild marker so existing indexes discover newly supported files.
+Land classification and shared inclusion changes first. Add dialect adapters behind registration readiness. Enable each dialect only after its contract passes. Existing `Sync` calls `DiscoverAll` and adds files absent from storage. Use that path to discover unchanged, newly supported shell files without a new rebuild marker. Test migration from an index created before shell registration.
 
 Rollback uses the prior binary and a fresh compatible index. Keep the release pipeline intact and use its existing build and dependency audit steps.
 

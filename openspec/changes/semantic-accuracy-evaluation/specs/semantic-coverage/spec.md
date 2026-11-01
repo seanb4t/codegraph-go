@@ -33,7 +33,7 @@ The evaluation MUST derive expected facts from reviewed source annotations or an
 
 ### Requirement: Comparable semantic identities
 
-The evaluation MUST compare facts through source location, language, declaration role, owner, and relationship kind. Internal node IDs MUST NOT define expected identity. Comparison MUST account for each language's source coordinates and the graph's edge deduplication rules.
+The evaluation MUST match declarations one-to-one by language, path, owner, role, name, and independent identifier occurrence. Each construct MUST define its declaration-span rule. Identifier and declaration spans MUST NOT require equal endpoints. Internal node IDs MUST NOT define expected identity. Positions MUST normalize to UTF-8 bytes.
 
 #### Scenario: Repeated names and Unicode
 - **WHEN** separate owners contain equal names after non-ASCII source text
@@ -44,9 +44,14 @@ The evaluation MUST compare facts through source location, language, declaration
 - **THEN** the graph-level denominator counts one expected edge
 - **AND** any call-site measurement uses a separately labeled denominator
 
+#### Scenario: Several Go names share a declaration span
+- **WHEN** a Go variable spec contains two independently identified names within one declaration span
+- **THEN** the comparison matches each binding exactly once through its name, owner, and construct span rule
+- **AND** a wrong span or an ambiguous same-name match fails acceptance
+
 ### Requirement: Accuracy and coverage accounting
 
-The report MUST show true positives, false positives, and false negatives by language and fact kind. It MUST show precision and recall with their raw denominators. Unknown expectations, excluded inputs, parse failures, and known gaps MUST appear separately. A zero denominator MUST display as unavailable, not perfect accuracy.
+The report MUST show true positives, false positives, false negatives, precision, and recall by language and fact kind, with raw denominators. Unknown facts MUST appear separately and MUST NOT enter either accuracy denominator or true positives. Excluded inputs, parse failures, and known gaps MUST remain visible. A zero denominator MUST display as unavailable.
 
 #### Scenario: A graph contains only functions
 - **WHEN** the source also contains independently expected variables
@@ -56,6 +61,11 @@ The report MUST show true positives, false positives, and false negatives by lan
 - **WHEN** the reference expects declarations in that file
 - **THEN** those declarations remain in the source-coverage denominator
 - **AND** the report distinguishes parse failure from successful extraction
+
+#### Scenario: A source sample has unlabeled facts
+- **WHEN** a sample has ten evaluated emitted facts and five observations without expected labels
+- **THEN** the precision denominator is ten and the unknown observation count is five
+- **AND** the unknown observations do not increase recall
 
 ### Requirement: Public query acceptance
 
@@ -72,11 +82,15 @@ The evaluation MUST exercise definitions, callers, callees, impact, and explore 
 
 ### Requirement: Adversarial and held-out cases
 
-The inventory MUST include omissions, incorrect extra edges, shadowing, repeated names, malformed input, and cross-file resolution. It MUST include reviewed cases held apart from routine tuning. Aggregate repository counts MUST NOT substitute for these cases.
+The inventory MUST include omissions, incorrect extra edges, shadowing, repeated names, malformed input, and cross-file resolution. Manifests MUST distinguish development and acceptance partitions. Routine tuning MUST exclude acceptance cases, while pull request evaluation MUST run them. Reports MUST name the partition and expectation revision. Aggregate counts MUST NOT substitute for these cases.
 
 #### Scenario: Unrelated corpus edges mask missing TypeScript edges
 - **WHEN** a repository contains many Go edges and no expected TypeScript edge
 - **THEN** the TypeScript acceptance case fails regardless of the total graph size
+
+#### Scenario: An acceptance fixture changes
+- **WHEN** an acceptance expectation requires revision
+- **THEN** a separate review records its language-contract reason and source evidence before the revised result establishes support
 
 ### Requirement: Reproducible evaluation inputs
 
@@ -89,7 +103,7 @@ The evaluation MUST record source revisions, source digests, reference tool vers
 
 ### Requirement: Honest regression gates
 
-Supported acceptance cases MUST pass exactly. Temporary known failures MUST identify exact mismatches, an owner, a linked issue, and a review date. Known failures MUST remain in reported accuracy totals. New mismatches and stale exceptions MUST fail the gate.
+Cases MUST distinguish supported, known-gap, unsupported, and unevaluated status. Supported cases MUST have zero missing or extra facts. Only known-gap cases can carry temporary exceptions with exact mismatches, an owner, an issue, and a review date. These mismatches MUST reduce accuracy. New mismatches and expired or stale exceptions MUST fail the gate.
 
 #### Scenario: A known omission grows
 - **WHEN** a known failure lists one missing variable but the new result misses two
@@ -99,6 +113,16 @@ Supported acceptance cases MUST pass exactly. Temporary known failures MUST iden
 - **WHEN** an expected mismatch no longer occurs
 - **THEN** the gate requires removal of the stale exception
 - **AND** the corrected fact increases the measured accuracy
+- **AND** the case changes from known-gap to supported
+
+### Requirement: Semantic lifecycle agreement
+
+The evaluation MUST compare fresh and incremental semantic facts and public answers after no-op synchronization, edits, renames, deletion, and restoration. Both paths MUST use the same configuration and analysis context. Each comparison MUST name its evaluated fact subset and excluded categories. Exclusions MUST NOT count as passing facts.
+
+#### Scenario: An edit changes a binding target
+- **WHEN** incremental indexing processes an edit and a fresh index processes the resulting sources
+- **THEN** their evaluated declarations, relationships, and public answers agree
+- **AND** both reports retain any excluded route or unsupported fact categories
 
 ### Requirement: Evidence-backed support claims
 

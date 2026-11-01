@@ -8,7 +8,7 @@ Let users find statically named variables and fields and follow their relationsh
 
 ### Requirement: Module and package data declarations
 
-CodeGraph MUST expose statically named package or module variables and constants in Go, TypeScript, JavaScript, TSX, and Python. Declaration lists MUST preserve each named binding. Discard bindings MUST NOT become symbols. Existing callable declarations MUST NOT acquire duplicate data nodes.
+CodeGraph MUST expose statically named package or module bindings in Go, TypeScript, JavaScript, TSX, and Python. Declaration lists MUST preserve each binding. Go `_` and JavaScript or TypeScript destructuring holes MUST NOT become symbols. Python, JavaScript, and TypeScript `_` identifiers within this declaration scope MUST remain symbols. Callable declarations MUST NOT acquire duplicate data nodes.
 
 #### Scenario: Grouped and destructured bindings
 - **WHEN** supported source declares multiple package or module bindings in one statement
@@ -18,6 +18,20 @@ CodeGraph MUST expose statically named package or module variables and constants
 #### Scenario: Existing exported arrow function
 - **WHEN** an exported TypeScript constant already represents an arrow function
 - **THEN** its existing callable identity remains the single declaration identity
+
+### Requirement: Deterministic declaration kinds
+
+Go package `var` and `const` MUST use variable and constant kinds. JavaScript and TypeScript module `var`/`let` MUST use variable, and `const` MUST use constant. Direct module arrow/function expressions MUST use function, with one identity regardless of export. Callable aliases MUST retain their data kind. Python module assignments MUST use variable. Named type members MUST use field, including Java final fields and callable class fields.
+
+#### Scenario: Modifiers do not invent new declaration kinds
+- **WHEN** source declares an uppercase Python assignment, a Java static final field, and a TypeScript readonly field
+- **THEN** their kinds are variable, field, and field respectively
+- **AND** supported modifiers remain metadata
+
+#### Scenario: A module callable is not exported
+- **WHEN** a JavaScript module binds a direct function expression to a nonexported constant
+- **THEN** that declaration has one function identity
+- **AND** a separate alias to that function retains its variable or constant kind
 
 ### Requirement: Statically named fields
 
@@ -31,6 +45,10 @@ CodeGraph MUST expose named Go struct fields, TypeScript and JavaScript class fi
 - **WHEN** two methods assign the same attribute through their declared instance receiver
 - **THEN** both assignments reference one field owned by that class
 - **AND** a same-named field in another class remains distinct
+
+#### Scenario: A Python instance write shadows a base class attribute
+- **WHEN** a subclass method assigns `self.value` and its base declares class attribute `value`
+- **THEN** the assignment establishes the subclass field and does not become a write to the base attribute
 
 #### Scenario: A field name is computed dynamically
 - **WHEN** a field name depends on runtime computation
@@ -61,9 +79,22 @@ CodeGraph MUST link statically resolvable reads and writes to the correct data d
 - **WHEN** one source symbol both reads and writes the same field
 - **THEN** the graph preserves both access roles even if storage combines the references into one edge
 
+### Requirement: Bounded inherited field resolution
+
+Java and TypeScript field lookup MUST follow uniquely established base-class chains to accessible declaring owners, unless a derived field shadows the name. Python receiver assignments MUST belong to the lexical class. Python reads MUST prefer established instance fields, then uniquely established class chains. Ambiguous ownership, inaccessible private fields, descriptors, and dynamic method resolution MUST remain unresolved.
+
+#### Scenario: An inherited Java or TypeScript field is read
+- **WHEN** a derived class reads an accessible field declared only in its established base class
+- **THEN** the reference targets the base field
+- **AND** adding a same-named derived field changes that reference to the derived owner
+
+#### Scenario: A Python descriptor controls an attribute
+- **WHEN** an attribute read depends on descriptor behavior rather than an established data field
+- **THEN** CodeGraph leaves the data target unresolved
+
 ### Requirement: Conservative calls through bindings
 
-CodeGraph MUST resolve calls through a uniquely established static callable binding. It MUST retain the binding path and identify the derived call's evidence. Competing assignments, unknown receivers, or ambiguous targets MUST NOT produce a definitive target. Caller queries MUST continue to represent calls rather than arbitrary references.
+CodeGraph MUST resolve calls through a unique static callable binding within a named analysis context. Evidence MUST retain the binding path and context. Competing assignments within that context, unknown receivers, or ambiguous targets MUST prevent a definitive target. Caller queries MUST represent calls rather than arbitrary references. Equal call edges MUST merge direct and derived evidence deterministically.
 
 #### Scenario: A unique imported function binding is invoked
 - **WHEN** a call invokes a variable bound to one imported function without competing writes in the analyzed scope
@@ -74,6 +105,24 @@ CodeGraph MUST resolve calls through a uniquely established static callable bind
 - **WHEN** the analyzed source assigns different callable values to one variable
 - **THEN** CodeGraph retains the known value references
 - **AND** it does not claim one definitive call target from the initializer alone
+
+#### Scenario: Direct and alias calls share endpoints
+- **WHEN** one function calls a target directly and through a supported alias
+- **THEN** one call edge retains direct evidence and the alias path with its context
+- **AND** reversed extraction order produces the same evidence
+
+### Requirement: Go production and test binding contexts
+
+Go production binding analysis MUST exclude `_test.go` writes without excluding test files from indexing. Test analysis MUST include production and test writes. Test callers MUST use test context. Non-test callers MUST carry evidence only for contexts that establish a unique target. Evidence MUST distinguish `go-production` from `go-test` and MUST NOT imply equivalent runtime behavior.
+
+#### Scenario: Tests replace the daemon function binding
+- **WHEN** `internal/cli/daemon.go` calls `daemonList` and `internal/cli/daemon_test.go` assigns a competing stub
+- **THEN** production evidence connects the non-test caller to `daemon.List`
+- **AND** conflicting test-context call evidence is absent while test declarations and known value references remain indexed
+
+#### Scenario: Production code replaces the binding
+- **WHEN** non-test source assigns a competing target to `daemonList`
+- **THEN** the initializer alone cannot establish the production call target
 
 ### Requirement: User-visible data symbol access
 

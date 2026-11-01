@@ -22,6 +22,16 @@ Reuse the identity finalization and rebuild mechanisms after the `index-invarian
 
 Use existing `variable` and `constant` kinds where they already apply. Add `field` as an additive kind. Preserve current callable identities for functions stored in exported constants. Do not emit both a function and a data node for the same declaration.
 
+Apply this declaration-kind mapping consistently across extraction and evaluation:
+
+| Language and form | Kind | Boundary |
+| --- | --- | --- |
+| Go package `var` / `const` | `variable` / `constant` | Explicitly named struct members use `field`. |
+| TypeScript, JavaScript, TSX module `var` / `let` / `const` | `variable` / `variable` / `constant` | A direct arrow or function expression uses `function`, including unexported bindings. An alias to another function retains its data kind. |
+| TypeScript, JavaScript, TSX class member | `field` | Static, readonly, private, and callable fields remain fields. Preserve modifiers as metadata. |
+| Python module assignment or annotation | `variable` | Uppercase spelling does not establish a constant. Class and declared-receiver attributes use `field`. |
+| Java class or interface member | `field` | Static, final, and interface fields retain modifiers without changing kind. |
+
 Qualify fields through their declaring type. Collect repeated writes before identity finalization so a Python attribute has one logical owner/name binding. Choose its earliest qualifying declaration or assignment as its source anchor. Keep write sites as reference evidence.
 
 Apply discard rules per language. Go's blank identifier and destructuring holes do not declare symbols. A Python or JavaScript variable named `_` remains a valid binding.
@@ -39,6 +49,12 @@ Python class-method receiver attributes require an explicit `classmethod` form a
 
 Resolve direct identifier reads and writes in their lexical scope. Track local bindings only far enough to reject shadowed global names. Resolve member accesses through explicit receiver types or established `this`, `self`, and class owners. Reject ambiguous owners.
 
+For Java and TypeScript, follow an explicit, uniquely resolved base-class chain for accessible fields. Reference the declaring base owner unless a derived declaration shadows that name. Do not resolve inaccessible private fields or ambiguous bases. This does not add arbitrary receiver inference or Go embedded-field promotion.
+
+For Python, a declared instance receiver's assignment establishes a field on its lexical class, even when a base defines a same-named class attribute. Prefer that established instance field for supported reads. Otherwise, follow only a uniquely established class chain. Leave descriptors, dynamic method resolution, and ambiguous class/instance storage unresolved.
+
+An explicit `classmethod` establishes a class receiver for declarations in its lexical class. Do not assume that inherited calls bind `cls` to that class. Preserve one logical field per owner/name and record class or instance assignment evidence. This field identity does not equate their runtime storage.
+
 Represent data access with the existing `references` edge and additive `access` metadata: `read`, `write`, or `read_write`. Merge access roles deterministically because storage combines edges with equal source, kind, and target. Preserve initializer binding evidence with an additive metadata key.
 
 Use the containing function or method as the source of executable reads and writes. Use the data declaration as the source of its initializer relationships. Reuse existing file or module anchors for top-level statements without a declaration owner.
@@ -47,11 +63,17 @@ Retain type relationships where the existing extractor can establish them. This 
 
 For callable aliases, retain a reference from the data symbol to the function value. When an actual call invokes a uniquely bound value, also emit a call edge from the caller to that function. Mark the edge with its static-binding evidence. Initialization alone never emits that call.
 
-Resolve bounded alias chains with cycle detection. Require a single established target and no conflicting writes in the indexed scope. A direct import alias can participate. Attribute lookup with an unknown receiver cannot.
+Resolve bounded alias chains with cycle detection. Require a single established target and no conflicting writes in the declared analysis context. A direct import alias can participate. Attribute lookup with an unknown receiver cannot.
 
-Collect syntactic assignments conservatively across indexed files. A competing write, augmented assignment, unknown target assignment, or relevant parse failure prevents definitive alias resolution. Do not simulate branches or execution order. Known value references remain available in explore even when call resolution is withheld.
+Collect syntactic assignments conservatively within each analysis context. A competing write, augmented assignment, unknown target assignment, or relevant parse failure prevents definitive alias resolution. Do not simulate branches or execution order. Known value references remain available in explore even when call resolution is withheld.
 
-These calls describe statically established potential calls, not guaranteed runtime execution. Unindexed code and external mutation remain documented limits. The #175 acceptance case includes the original binding and invocation plus a reassignment variant. Do not close #175 solely because the declaration becomes searchable.
+For Go, evaluate non-test call sites in `go-production`, which excludes `_test.go` assignments. Evaluate `go-test` with production and test assignments together. Retain test declarations and references in the graph. Attach `binding_context` to each derived call's evidence. A call established only in production makes no claim about the same function's execution under tests.
+
+Test-only callers use the test context. Non-test callers can carry evidence for either context when that context establishes a unique target. Test conflicts remove only test-context evidence. Other languages use the declared indexed scope without filename-based test exclusions. Build tags and platform selection remain explicit evaluation boundaries rather than new production compiler analysis.
+
+When direct and derived calls share source, kind, and target, retain one edge with a sorted, deduplicated evidence set. Preserve direct-call evidence, binding paths, and analysis contexts together. Merge before edge collapse and storage writes so extraction order cannot discard evidence.
+
+These calls describe statically established potential calls, not guaranteed runtime execution. Unindexed code and external mutation remain documented limits. The #175 acceptance includes this repository's `internal/cli/daemon.go` binding and invocation alongside replacements in `internal/cli/daemon_test.go`. Require production call visibility, withheld conflicting test evidence, and a production-reassignment variant. Do not close #175 solely because the declaration becomes searchable.
 
 Keep callers and callees on call edges. Existing impact traversal benefits from the derived call edge. Definitions and explore expose the binding and data-reference path. Broader impact analysis for arbitrary data reads remains separate work.
 

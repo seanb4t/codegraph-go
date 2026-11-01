@@ -9,8 +9,10 @@ Graph consistency tests cannot detect declarations that the extractor never emit
 
 - Add a semantic evaluation report for Go, TypeScript, JavaScript, TSX, Python, and Java.
 - Compare declarations, relationships, and public query results with independent expectations.
+- Reuse SCIP indexers for Go, TypeScript, JavaScript, TSX, and Java, with a narrow CPython bridge for lexical facts.
 - Report missing facts, extra facts, unsupported constructs, unresolved references, and unevaluated cases separately.
 - Add small pull request fixtures and a scheduled evaluation against pinned source collections.
+- Separate exact supported cases from issue-linked known gaps and preserve held-out acceptance cases.
 - Replace broad language support claims with evidence and explicit limits.
 - Reuse the graph consistency and test execution work proposed in [PR #237](https://github.com/seanb4t/codegraph-go/pull/237). Keep mutation testing in #222.
 
