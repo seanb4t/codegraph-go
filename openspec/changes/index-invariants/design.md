@@ -57,7 +57,9 @@ Each such map changes its key from the name to the declaration's start byte. Whe
 
 ### D3. The resolver prefers the first copy
 
-If two symbols share a name, `symbolIndex.addSymbol` (`internal/indexer/symbolindex.go:82-94`) keeps the lexically lowest id. With D1, the lowest hash can be any copy. So a new rule applies to two candidates with the same kind, qualified name and file. `addSymbol` prefers the one whose id equals `NodeID(kind, qualifiedName, filePath)`, which is the first copy. Other collisions keep the lowest-id rule. The full index and the store-seeded symbol index of `Sync` both build through `addSymbol`, so both get the rule.
+If two symbols share a name, `symbolIndex.addSymbol` (`internal/indexer/symbolindex.go:67-105`) keeps the lexically lowest id. With D1, the lowest hash can be any copy. A pairwise rule that prefers the first copy is not enough, because another declaration group can share the lookup name. With hashes in the order A2, B, A1, the insertion order A1, B, A2 gives A2, and the order A2, A1, B gives B.
+
+So the symbol index keeps every candidate for a lookup name, with its kind, qualified name and file, and picks the winner as a pure function of that set, in two steps. First, within each group of candidates with the same kind, qualified name and file, it keeps the one whose id equals `NodeID(kind, qualifiedName, filePath)`, which is the first copy. If no candidate in a group has that id, the group keeps its lowest id. Second, across groups, it keeps today's rule: the lowest id. Insertion order cannot change the result. The full index and the store-seeded symbol index of `Sync` both build through the same code, so both get the rule.
 
 ### D4. Counts come from distinct ids
 
