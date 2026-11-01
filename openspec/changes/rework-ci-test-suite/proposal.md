@@ -60,7 +60,7 @@ None.
 - `scripts/` and `tests/`: about 2,000 lines of Python and shell go.
 - `.golangci.yml`: two more linters. `internal/upgrade/golangci_shape_test.go` reads the linter count, so it changes too.
 - `mise.toml` and `mise.lock`: pins for `gotestsum` and `zizmor`.
-- `go.mod`: `github.com/charmbracelet/x/exp/teatest/v2` (test only) and a direct `github.com/rogpeppe/go-internal` (now indirect), through the minimal-dependency audit.
+- `go.mod`: `github.com/charmbracelet/x/exp/teatest/v2` is added (test only), and `github.com/rogpeppe/go-internal` moves from an indirect to a direct requirement. Both go through the minimal-dependency audit.
 - The `protect-main` ruleset: the required check `tmux e2e (real-pty harness, TTY-01..TTY-07)` goes, at the time this change merges. The required check `test` keeps its name.
 - Engram memory `gq9fpccbka` names the deleted `mutation-check` script. After this change merges, it gets a superseding record.
 - No user-visible change, so no changelog fragment.
