@@ -1,0 +1,30 @@
+# TUI-02 (D-02, D-04, D-06): status and files output on a pipe has no ANSI
+# escape and is byte-identical with and without NO_COLOR. The pretty
+# branch needs a TTY, which a pipe never is. --path pins the reported
+# project path, so the comparison is not affected by how os.Getwd resolves
+# the macOS /var symlink.
+
+fixture repo
+exec codegraph init $WORK/repo
+cd repo
+
+exec codegraph status --path $WORK/repo
+! stdout '\x1b\['
+cp stdout $WORK/status.plain
+exec codegraph files --path $WORK/repo
+! stdout '\x1b\['
+cp stdout $WORK/files.plain
+exec codegraph files --path $WORK/repo --format tree
+! stdout '\x1b\['
+cp stdout $WORK/tree.plain
+
+env NO_COLOR=1
+exec codegraph status --path $WORK/repo
+! stdout '\x1b\['
+cmp stdout $WORK/status.plain
+exec codegraph files --path $WORK/repo
+! stdout '\x1b\['
+cmp stdout $WORK/files.plain
+exec codegraph files --path $WORK/repo --format tree
+! stdout '\x1b\['
+cmp stdout $WORK/tree.plain

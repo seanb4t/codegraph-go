@@ -43,9 +43,9 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 6. `testscript` in place of the integration build contract (design.md D7)
 
-- [ ] 6.1 Make `github.com/rogpeppe/go-internal` a direct requirement. Add `testscript.Main` to `test/integration` with `codegraph` as the command. If `CODEGRAPH_TEST_BIN` is set, the command runs that file (design.md D7).
-- [ ] 6.2 Move the 12 integration tests to `.txtar` scripts under `test/integration/testdata/`. Keep a small Go helper command for the tests that need a timeout or a pipe that stays open. A guard asserts that the script directory holds 12 or more scripts.
-- [ ] 6.3 Delete `binpath_test.go` and the build step in `main_test.go`. Verify `go test ./test/integration/...` passes. Then build `codegraph`, run the suite with `CODEGRAPH_TEST_BIN` set to it, and verify it passes. Set `CODEGRAPH_TEST_BIN=/usr/bin/false` and verify that the suite fails, which shows that the scripts run the named file.
+- [x] 6.1 Make `github.com/rogpeppe/go-internal` a direct requirement. Add `testscript.Main` to `test/integration` with `codegraph` as the command. If `CODEGRAPH_TEST_BIN` is set, the command runs that file (design.md D7).
+- [x] 6.2 Move the 10 integration behavior tests to `.txtar` scripts under `test/integration/testdata/` (11 scripts, because the piped test splits in two). Keep a small Go helper command for the tests that need a timeout or a pipe that stays open. A guard asserts that the script directory holds 11 or more scripts.
+- [x] 6.3 Delete `binpath_test.go` and the build step in `main_test.go`. Verify `go test ./test/integration/...` passes. Then build `codegraph`, run the suite with `CODEGRAPH_TEST_BIN` set to it, and verify it passes. Set `CODEGRAPH_TEST_BIN=/usr/bin/false` and verify that the suite fails, which shows that the scripts run the named file.
 
 ## 7. Smaller replacements and deletions (design.md D9 to D12)
 

@@ -100,7 +100,7 @@ VRFY-02 today loads the module and also `testdata/golden`, which `./...` skips (
 
 ### D7. `testscript` for `test/integration`
 
-`test/integration` has 12 tests in 10 files, and its `TestMain` builds the binary or reads `CODEGRAPH_TEST_BIN`. `verify:notarized-suite` (`Taskfile.yml:5272-5279`), which `post-release-verify.yml` runs, sets `CODEGRAPH_TEST_BIN` to the downloaded, notarized release binary. So the integration suite tests the published artifact after each release, and that must not change.
+`test/integration` has 12 tests in 10 files (10 behavior tests, plus `TestMain` and the build-contract test), and its `TestMain` builds the binary or reads `CODEGRAPH_TEST_BIN`. `verify:notarized-suite` (`Taskfile.yml:5272-5279`), which `post-release-verify.yml` runs, sets `CODEGRAPH_TEST_BIN` to the downloaded, notarized release binary. So the integration suite tests the published artifact after each release, and that must not change.
 
 With `testscript.Main`, the scripts run a `codegraph` command. If `CODEGRAPH_TEST_BIN` is unset, that command is the test binary itself, so a normal run needs no build step. If `CODEGRAPH_TEST_BIN` is set, the `codegraph` command runs that file. Each test becomes a `.txtar` script under `test/integration/testdata/`. A test that needs a timeout or a pipe that never closes keeps a small Go helper command in the script. `binpath_test.go` and the build step in `TestMain` go. `github.com/rogpeppe/go-internal` moves from an indirect to a direct requirement.
 

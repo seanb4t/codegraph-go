@@ -1,0 +1,24 @@
+# WATCH-01 / WATCH-02: a bare `serve --mcp` (watcher on by default, D-01,
+# D-06) completes initialize and tools/list within mcpclient's 30s bound
+# and lists codegraph_explore. The watcher must not delay the handshake.
+
+[!exec:git] skip 'git is not on PATH'
+fixture repo
+cd repo
+exec git init
+exec git add -A
+exec git commit -m init
+exec git worktree add -b probe .claude/worktrees/probe
+exec codegraph init $WORK/repo
+
+exec mcpclient tools
+stdout '^codegraph_explore$'
+
+-- home/.gitconfig --
+[init]
+	defaultBranch = main
+[user]
+	name = codegraph-test
+	email = test@example.invalid
+[commit]
+	gpgsign = false

@@ -1,0 +1,16 @@
+# HYG-02 / D-06a: every stdout line of a real `serve --mcp` is a JSON-RPC
+# frame. The codegraph_status call opens the store a second time, after the
+# startup reconcile, which is the path that could print noise. mcpclient raw
+# fails on the first line that is not a frame and on a JSON-RPC error
+# response. CODEGRAPH_MCP_TOOLS=status makes codegraph_status visible.
+# CODEGRAPH_NO_WATCH=1 removes the watcher's timing, which writes only to
+# stderr anyway (WATCH-02).
+
+fixture repo
+exec codegraph init $WORK/repo
+cd repo
+env CODEGRAPH_MCP_TOOLS=status
+env CODEGRAPH_NO_WATCH=1
+exec mcpclient raw codegraph_status
+stdout '"id":1'
+stdout '"id":2'
