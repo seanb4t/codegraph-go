@@ -127,6 +127,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -197,6 +199,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -227,6 +231,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -255,6 +261,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -265,6 +273,7 @@ jobs:
           cache: go
 
       # BLD-01/D-13: frozen-lockfile install with the pnpm mise.toml pins.
+      # pnpm enforces strictDepBuilds from web/pnpm-workspace.yaml (BLD-05).
       - name: Install JS deps (frozen lockfile, BLD-01)
         run: task web:deps
 
@@ -272,9 +281,6 @@ jobs:
       # positive executed-test count before it judges pass or fail.
       - name: web unit tests (vitest)
         run: task web:test
-
-      - name: pnpm build-script approval gate (BLD-05)
-        run: task web:deps:strict
 
       - name: pnpm audit gate (BLD-06)
         run: task web:audit
@@ -303,6 +309,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -317,15 +325,9 @@ jobs:
       - name: Gonum dependency-shape guard (GRD-11/GRF-10)
         run: task check:gonum
 
-      # CHG-03/CHG-04: the pinned changie reproduces CHANGELOG.md from
-      # .changes/.
-      - name: Changie baseline and fragment guard (CHG-03/CHG-04)
+      # CHG-03: the pinned changie reproduces CHANGELOG.md from .changes/.
+      - name: Changie reproduces CHANGELOG.md (CHG-03)
         run: task check:changie
-
-      # GATE-01..GATE-04 (v0.15.0 Phase 4): the fragment gate's offline
-      # unittest suite. The gate itself runs from fragment-required.yml.
-      - name: Fragment policy unit suite (GATE-01..GATE-04)
-        run: task check:fragment-policy
 
   # The required check `test`. It reads the result of every job it needs:
   # success or skipped passes, and anything else fails. It runs whatever the
@@ -365,6 +367,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -410,6 +414,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -437,6 +443,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Set up tools
@@ -447,22 +454,9 @@ jobs:
         with:
           cache: go
 
-      - name: Compute determinism inputs
-        id: repro
-        run: |
-          set -euo pipefail
-          echo "epoch=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: linux/amd64 double build (BLOCKING — canonical target, D-03)
-        # Mirrors .goreleaser.yaml's own reproducibility flags exactly
-        # (-trimpath, -buildid=, mod-time pinned via SOURCE_DATE_EPOCH) so
-        # this gate actually proves what release.yml will produce is
-        # deterministic, per 08-RESEARCH.md's Double-build reproducibility
-        # gate code example.
-        env:
-          SOURCE_DATE_EPOCH: ${{ steps.repro.outputs.epoch }}
-          COMMIT: ${{ steps.repro.outputs.commit }}
+        # goreleaser build reads .goreleaser.yaml's flags and the commit
+        # itself, so this gate proves what release.yml will produce (#212).
         run: task check:reproducibility
 
       - name: linux/arm64 double build (REPORTED ONLY, non-blocking — D-03 cross-target)
@@ -473,9 +467,6 @@ jobs:
         # (08-CONTEXT.md prohibition: "MUST NOT make the double-build gate
         # silently green across all targets").
         continue-on-error: true
-        env:
-          SOURCE_DATE_EPOCH: ${{ steps.repro.outputs.epoch }}
-          COMMIT: ${{ steps.repro.outputs.commit }}
         run: task check:reproducibility:arm64
 
   # actionlint: the release chain's guarantees live in workflow files
@@ -491,6 +482,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools
@@ -504,7 +497,7 @@ jobs:
         run: task lint:actions
 
       # The CI scripts' unit suites run here, in a job no path filter gates.
-      - name: CI script unit suites (vuln report)
+      - name: CI script unit suites (vuln report, PR-template policy)
         run: task check:ci-scripts
 
   transcript-freeze:
@@ -518,6 +511,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Set up tools
@@ -542,6 +536,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools

@@ -31,6 +31,8 @@ jobs:
       - name: Check out policy from the base branch
         # No `ref:` — this deliberately checks out the base, not the PR head.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Collect changed files
         id: changed_files
@@ -48,12 +50,15 @@ jobs:
           # defect with more characters, since the workflow file is
           # public. 128 bits of per-run entropy is unguessable by a fork
           # authoring paths ahead of time. See also require-issue-link.yml,
-          # which has the byte-identical shape, and
-          # `task check:workflow-output-delimiter`.
+          # which has the byte-identical shape.
+          #
+          # The paginated REST listing returns up to 3,000 files; `gh pr view
+          # --json files` stopped at 100 (#106). A list at that cap is
+          # treated as not exempt, because it may be incomplete.
           DELIM="PRFILES_$(openssl rand -hex 16)"
           {
             echo "files<<${DELIM}"
-            gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json files --jq '.files[].path'
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename'
             echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 

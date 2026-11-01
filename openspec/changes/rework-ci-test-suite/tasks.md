@@ -49,12 +49,12 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 7. Smaller replacements and deletions (design.md D9 to D12)
 
-- [ ] 7.1 Shrink `check:changie` to the dry-run comparison with `CHANGELOG.md`. It asserts that it compared more than zero versions.
-- [ ] 7.2 Delete `web:lockfile`, `web:deps:strict` and the Go classifier of `web:audit`. Keep `web:deps` and `pnpm audit`.
-- [ ] 7.3 Pin `zizmor` in `mise.toml` and run it in the `actionlint` job. Fix or record each finding it reports. Delete `scripts/check-workflow-output-delimiter.sh` and `task check:workflow-output-delimiter`.
+- [x] 7.1 Shrink `check:changie` to the dry-run comparison with `CHANGELOG.md`. It asserts that it compared more than zero versions.
+- [x] 7.2 Delete `web:lockfile`, `web:deps:strict` and the Go classifier of `web:audit`. Keep `web:deps` and `pnpm audit`.
+- [x] 7.3 Pin `zizmor` in `mise.toml` and run it in the `actionlint` job. Fix or record each finding it reports. Delete `scripts/check-workflow-output-delimiter.sh` and `task check:workflow-output-delimiter`.
 - [ ] 7.4 Replace `scripts/fragment_policy.py` and `tests/test_fragment_policy.py` with the `paths-filter` rules and shell step of D9 in `fragment-required.yml`. Keep the job name `fragment-required`. Move the `pr_template_policy` tests that lived in `test_fragment_policy.py` to `tests/test_pr_template_policy.py`. Verify on the PR that `fragment-required` passes with this change's `changelog-exempt` marker.
-- [ ] 7.5 Remove the positive-control legs of `check:gonum` and `check:no-force-layout`. Each asserts that it scanned more than zero items.
-- [ ] 7.6 Delete `scripts/mutation_check.py`, `tests/test_mutation_check.py`, `task mutation-check` and `.claude/skills/mutation-check/`.
+- [x] 7.5 Remove the positive-control legs of `check:gonum` and `check:no-force-layout`. Each asserts that it scanned more than zero items.
+- [x] 7.6 Delete `scripts/mutation_check.py`, `tests/test_mutation_check.py`, `task mutation-check` and `.claude/skills/mutation-check/`.
 - [ ] 7.7 #212: rewrite `check:reproducibility` and `check:reproducibility:arm64` on `goreleaser build --snapshot` (D10), and remove the "Compute determinism inputs" step. Verify `task check:reproducibility` passes on macOS and in CI.
 - [ ] 7.8 #106: list PR files with `gh api --paginate` in `require-issue-link.yml` and `pr-template-format.yml`, and escape the reason in `pr_template_policy.emit` (D11). Add `test_emit_escapes_workflow_command` to `tests/test_pr_template_policy.py`, because the escape guards a workflow-command injection. The paginated file list needs no unit test. Verify it on the PR run.
 - [ ] 7.9 #105: add the baseline age and runner test to `bench.yml` (D12). Run it once with `gh workflow run bench.yml --ref <branch> -f job=regression`, and link the regression job's output in the PR body.

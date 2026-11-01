@@ -1,0 +1,40 @@
+# zizmor configuration. `task lint:actions` runs zizmor after actionlint, and
+# every finding below is recorded with its reason. Fix a finding instead of
+# adding it here when the fix can be proven on a pull request.
+rules:
+  # The `$/` self-repository form is newer than the pinned actionlint, which
+  # rejects it ("ref is missing"). `./` resolves inside the checkout of the
+  # same commit.
+  self-repository:
+    disable: true
+
+  # These workflows run on pull_request_target on purpose: they read the pull
+  # request's metadata with a write token and never check out or run its code.
+  dangerous-triggers:
+    ignore:
+      - auto-close-unsolicited-prs.yml
+      - close-draft-prs.yml
+      - fragment-required.yml
+      - pr-template-format.yml
+      - require-issue-link.yml
+      # workflow_run of the release workflow, which only runs on a tag.
+      - post-release-verify.yml
+
+  # Release-path workflows run only on a release merge or a tag, so a change
+  # to their credentials cannot be proven on a pull request. release-tag.yml
+  # keeps the persisted App token on purpose: `task release:tag` pushes the
+  # tag with it.
+  artipacked:
+    ignore:
+      - release.yml
+      - release-pr.yml
+      - release-tag.yml
+      - post-release-verify.yml
+
+  # The App tokens of the release path. Scoping each with permission-<name>
+  # inputs is a release-path change that a pull request cannot prove.
+  github-app:
+    ignore:
+      - release.yml
+      - release-pr.yml
+      - release-tag.yml

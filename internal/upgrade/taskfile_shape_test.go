@@ -147,11 +147,7 @@ type runBodyException struct {
 }
 
 // runBodyExceptions is the literal, exhaustive exception list for the
-// in-scope jobs above. Two entries, both in ci.yml:
-//   - "Compute determinism inputs" (job reproducibility) writes to the CI
-//     step-output file ($GITHUB_OUTPUT) via `id: repro`; it has no meaning
-//     outside a runner and produces no artifact a contributor would ever
-//     invoke directly.
+// in-scope jobs above. One entry, in ci.yml:
 //   - "Require every leg to pass or skip" (job test) reads the results of
 //     the jobs the aggregate check needs, which exist only inside a run.
 //
@@ -161,12 +157,6 @@ type runBodyException struct {
 // TestWorkflowRunStepsInvokeTaskTargets fails any exception that matches
 // no real step, so a stale entry cannot silently widen this allowlist.
 var runBodyExceptions = []runBodyException{
-	{
-		Workflow: "ci.yml",
-		Job:      "reproducibility",
-		Step:     "Compute determinism inputs",
-		Reason:   "writes to the CI step-output file ($GITHUB_OUTPUT) via id: repro; has no meaning outside a runner",
-	},
 	{
 		Workflow: "ci.yml",
 		Job:      "test",
