@@ -1,6 +1,6 @@
 # Tasks
 
-Run every target as `mise exec -- task <target>` in a shell without `mise activate`. Make one commit for each numbered section, in this order. Put each section's CI timing in the PR body, from `gh run view` and the `gotestsum` slowest-test report.
+Run every target as `mise exec -- task <target>` in a shell without `mise activate`. Make one commit for each numbered section, in this order. Put the CI timing in the PR body, from `gh run view` and the `gotestsum` slowest-test report: one before-and-after table for the whole branch, because the sections share one PR run.
 
 ## 0. Baseline
 
@@ -16,7 +16,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 ## 2. CI layout (design.md D1 to D4)
 
 - [x] 2.1 Replace the `changes` job with `dorny/paths-filter`, pinned by SHA, with the outputs of D2. If the filter step fails, set every output to `true`. Delete `scripts/planning_only.py` and `tests/test_planning_only.py`, and remove them from `check:ci-scripts`.
-- [x] 2.2 Split the `test` job into the legs of D3. The `go` leg installs the web dependencies before `proto:drift`. The `daemon` leg runs on the `go` output. Run `internal/daemon` once, under `-race -p 1`. Run `go-race` without `-p 1`. Drop `-count=1` except on the `daemon` leg. Remove the `test:integration` and `test:wireoracle` steps and `task test:daemon`.
+- [x] 2.2 Split the `test` job into the legs of D3. The `go` leg installs the web dependencies before `proto:drift`. The `daemon` leg runs on the `go` output. Run `internal/daemon` once, under `-race`, alone in its leg. Run `go-race` in parallel. Drop `-count=1` except on the `daemon` leg. Remove the `test:integration` and `test:wireoracle` steps and `task test:daemon`.
 - [x] 2.3 Add the aggregate job named `test` (D1). Gate `govulncheck`, `tool-vuln` and `reproducibility` on the `release` or `ci` output.
 - [x] 2.4 Add the `concurrency` block of D4.
 - [x] 2.5 Verify on the PR with three scratch commits, then drop them. A change to only `web/src/` runs the `web` leg and skips the Go legs, and the required `test` status still reports success. A change to only `.changes/` runs `release-checks`. A change to only `docs/LANGUAGE-CAPABILITY-MATRIX.md` runs the `go` leg, and the `gotestsum` report shows that `TestMatrix_DocMirrorsDescriptor` ran. Link the three runs in the PR body. Verify `task lint:actions` passes.
@@ -30,7 +30,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 ## 4. Timing in `internal/watch` and `internal/daemon` (design.md D5)
 
 - [x] 4.1 Move the debouncer-only tests in `internal/watch` into `synctest.Test`. Each moved test keeps its assertions.
-- [x] 4.2 Add `WithWatcher` and the `Watcher` interface, with `Run(context.Context, *watch.Debouncer)` and `Close() error`, to `internal/daemon` (design.md D5). If the option is absent, `Run` uses `watch.Open`. Add `TestRunUsesInjectedWatcher`, which feeds one event through a fake and asserts one sync.
+- [x] 4.2 Add the unexported `openWatcher` seam and the `watcher` interface, with `Run(context.Context, *watch.Debouncer)` and `Close() error`, to `internal/daemon` (design.md D5). If the seam is nil, `Run` uses `watch.Open`. Add `TestRunUsesInjectedWatcher`, which feeds one event through a fake and asserts one sync.
 - [x] 4.3 Move `TestDaemonFlushLockRequeueGivesUpPerEpisode` and the other debounce and quiet-gap tests to the fake watcher inside `synctest.Test`. Keep the tests that prove the real watcher on real files.
 - [x] 4.4 Verify `go test -race -count=20 ./internal/daemon ./internal/watch` passes, and record the `daemon` leg time in the PR body.
 
@@ -39,7 +39,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 - [x] 5.1 Read the current `teatest/v2` docs with Context7. Make sure that the module path is correct and that it accepts a `charm.land/bubbletea/v2` model. If it does not, stop and report back.
 - [x] 5.2 Add the module with `go get` and a hand edit of `go.mod`. Write `TestInstallPickerFrameStableWhileIdle`, `TestInstallPickerFooterAt100x30`, `TestInstallPickerCancelWritesNoConfig`, `TestDaemonPickerLeavesAltScreenLast` and `TestDaemonEmptyRegistryWritesNoModeQuery` next to the models they test. Each asserts that the program wrote more than zero bytes.
 - [x] 5.3 Delete `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job.
-- [ ] 5.4 Right before the PR merges, and with the maintainer's approval, remove `tmux e2e (real-pty harness, TTY-01..TTY-07)` from the required status list of the `protect-main` ruleset.
+- [x] 5.4 Right before the PR merges, and with the maintainer's approval, remove `tmux e2e (real-pty harness, TTY-01..TTY-07)` from the required status list of the `protect-main` ruleset.
 
 ## 6. `testscript` in place of the integration build contract (design.md D7)
 
@@ -58,6 +58,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 - [x] 7.7 #212: rewrite `check:reproducibility` and `check:reproducibility:arm64` on `goreleaser build --snapshot` (D10), and remove the "Compute determinism inputs" step. Verify `task check:reproducibility` passes on macOS and in CI.
 - [ ] 7.8 #106: list PR files with `gh api --paginate` in `require-issue-link.yml` and `pr-template-format.yml`, and escape the reason in `pr_template_policy.emit` (D11). Add `test_emit_escapes_workflow_command` to `tests/test_pr_template_policy.py`, because the escape guards a workflow-command injection. The paginated file list needs no unit test. Verify it on the PR run.
 - [x] 7.9 #105: add the baseline age and runner test to `bench.yml` (D12). Run it once with `gh workflow run bench.yml --ref <branch> -f job=regression`, and link the regression job's output in the PR body.
+- [x] 7.10 Delete `vuln:selftest` and `testdata/vulnredpoc`, and the `--self-test` mode and run of `check:graph-console` (design.md D9). Each tests third-party behavior. Verify that `rg 'vuln:selftest|vulnredpoc|self-test'` finds nothing outside archived records.
 
 ## 8. OpenSpec rules and close-out
 
