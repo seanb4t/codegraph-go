@@ -18,6 +18,13 @@ type Location struct {
 	Kind      string `json:"kind"`
 	FilePath  string `json:"filePath"`
 	StartLine int32  `json:"startLine"`
+
+	// Signature is the signature of the overload this row belongs to,
+	// set when the query spans an overload set or selects one overload.
+	// Ambiguous marks a call that static analysis could not decide: it
+	// targets the set, not one overload. Both are empty otherwise.
+	Signature string `json:"signature,omitempty"`
+	Ambiguous bool   `json:"ambiguous,omitempty"`
 }
 
 // lexicalTier ranks how a term matched a node's name/qualifiedName

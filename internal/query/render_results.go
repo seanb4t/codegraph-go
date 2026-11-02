@@ -45,13 +45,53 @@ func renderLocationTable(locs []Location) string {
 	if len(locs) == 0 {
 		return ""
 	}
+	overloaded := false
+	for _, l := range locs {
+		if l.Signature != "" || l.Ambiguous {
+			overloaded = true
+			break
+		}
+	}
 	var b strings.Builder
+	if overloaded {
+		// A query over an overload set adds the overload each row belongs
+		// to, or marks the row ambiguous.
+		b.WriteString("| Name | Kind | Location | Overload |\n")
+		b.WriteString("|---|---|---|---|\n")
+		for _, l := range locs {
+			fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` | %s |\n", l.Name, l.Kind, l.FilePath, l.StartLine, OverloadLabel(l))
+		}
+		return b.String()
+	}
 	b.WriteString("| Name | Kind | Location |\n")
 	b.WriteString("|---|---|---|\n")
 	for _, l := range locs {
 		fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` |\n", l.Name, l.Kind, l.FilePath, l.StartLine)
 	}
 	return b.String()
+}
+
+// OverloadLabel is the text that marks a row of a query over overloads:
+// the signature of the overload it belongs to, or "ambiguous". It is ""
+// for a row of an ordinary query, so the plain and styled renderers
+// print nothing extra there.
+func OverloadLabel(l Location) string {
+	switch {
+	case l.Ambiguous:
+		return "ambiguous"
+	case l.Signature != "":
+		return l.Signature
+	}
+	return ""
+}
+
+// OverloadSuffix is OverloadLabel in the form the plain location line
+// appends: a space and the label in brackets, or "".
+func OverloadSuffix(l Location) string {
+	if label := OverloadLabel(l); label != "" {
+		return " [" + label + "]"
+	}
+	return ""
 }
 
 // RenderCallersMarkdown renders a CallersResult as markdown: a bolded

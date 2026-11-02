@@ -235,10 +235,11 @@ func exploreHandler(repoPath, defaultPath string, detector *gitmeta.CachingDetec
 // omitempty — node's file-mode read means symbol is optional, matching
 // today's schema (never marked required).
 type NodeArgs struct {
-	File   string `json:"file,omitempty" jsonschema:"File path — disambiguates symbol, or selects file-mode when symbol is omitted"`
-	Line   int    `json:"line,omitempty" jsonschema:"Line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)"`
-	Path   string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
-	Symbol string `json:"symbol,omitempty" jsonschema:"Symbol name to look up (omit for a file-mode read)"`
+	File      string `json:"file,omitempty" jsonschema:"File path — disambiguates symbol, or selects file-mode when symbol is omitted"`
+	Line      int    `json:"line,omitempty" jsonschema:"Line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)"`
+	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
+	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
+	Symbol    string `json:"symbol,omitempty" jsonschema:"Symbol name to look up (omit for a file-mode read)"`
 }
 
 // SearchArgs is codegraph_search's input schema (D-07). Fields declared
@@ -255,27 +256,30 @@ type SearchArgs struct {
 // alphabetically by JSON name (limit, path, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type CallersArgs struct {
-	Limit  int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
-	Path   string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
-	Symbol string `json:"symbol" jsonschema:"Symbol name"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
+	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
+	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
+	Symbol    string `json:"symbol" jsonschema:"Symbol name"`
 }
 
 // CalleesArgs is codegraph_callees' input schema (D-07). Fields declared
 // alphabetically by JSON name (limit, path, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type CalleesArgs struct {
-	Limit  int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
-	Path   string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
-	Symbol string `json:"symbol" jsonschema:"Symbol name"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
+	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
+	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
+	Symbol    string `json:"symbol" jsonschema:"Symbol name"`
 }
 
 // ImpactArgs is codegraph_impact's input schema (D-07). Fields declared
 // alphabetically by JSON name (depth, path, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type ImpactArgs struct {
-	Depth  int    `json:"depth,omitempty" jsonschema:"BFS depth (default 2, max 50)"`
-	Path   string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
-	Symbol string `json:"symbol" jsonschema:"Symbol name"`
+	Depth     int    `json:"depth,omitempty" jsonschema:"BFS depth (default 2, max 50)"`
+	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
+	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
+	Symbol    string `json:"symbol" jsonschema:"Symbol name"`
 }
 
 // FilesArgs is codegraph_files' input schema (D-07). Fields declared
@@ -427,7 +431,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			out, err := eng.Node(args.Symbol, args.File, lineHint)
+			out, err := eng.NodeSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.File, lineHint)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -462,7 +466,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			result, err := eng.Callers(args.Symbol, args.Limit)
+			result, err := eng.CallersSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.Limit)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -480,7 +484,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			result, err := eng.Callees(args.Symbol, args.Limit)
+			result, err := eng.CalleesSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.Limit)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -498,7 +502,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			result, err := eng.Impact(args.Symbol, args.Depth)
+			result, err := eng.ImpactSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.Depth)
 			if err != nil {
 				return nil, nil, err
 			}

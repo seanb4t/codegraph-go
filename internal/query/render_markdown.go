@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -270,8 +271,14 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 // this block is ever reached for a caller-less root.
 func renderBlastBullet(bl ExploreBlast) string {
 	n := bl.Symbol
-	s := fmt.Sprintf("- `%s` (%s:%d) — %d %s in `%s`",
-		n.Name, n.FilePath, n.StartLine, bl.CallerCount, pluralize(bl.CallerCount, "caller"), n.FilePath)
+	// A folded overload set carries the count and signatures of its
+	// overloads in its signature (foldOverloadSets).
+	label := ""
+	if n.Kind == goextract.KindOverloadSet {
+		label = n.Signature
+	}
+	s := fmt.Sprintf("- `%s`%s (%s:%d) — %d %s in `%s`",
+		n.Name, label, n.FilePath, n.StartLine, bl.CallerCount, pluralize(bl.CallerCount, "caller"), n.FilePath)
 	switch {
 	case len(bl.TestFiles) > 0:
 		quoted := make([]string, len(bl.TestFiles))

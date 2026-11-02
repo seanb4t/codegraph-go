@@ -87,10 +87,11 @@ codegraph callees <symbol> [flags]
 ### Options
 
 ```
-  -h, --help          help for callees
-  -j, --json          emit JSON output
-  -l, --limit int     cap on results returned
-  -p, --path string   repo path (default: cwd)
+  -h, --help               help for callees
+  -j, --json               emit JSON output
+  -l, --limit int          cap on results returned
+  -p, --path string        repo path (default: cwd)
+      --signature string   parameter types that select one overload, for example "String, Throwable"
 ```
 
 ### Options inherited from parent commands
@@ -114,10 +115,11 @@ codegraph callers <symbol> [flags]
 ### Options
 
 ```
-  -h, --help          help for callers
-  -j, --json          emit JSON output
-  -l, --limit int     cap on results returned
-  -p, --path string   repo path (default: cwd)
+  -h, --help               help for callers
+  -j, --json               emit JSON output
+  -l, --limit int          cap on results returned
+  -p, --path string        repo path (default: cwd)
+      --signature string   parameter types that select one overload, for example "String, Throwable"
 ```
 
 ### Options inherited from parent commands
@@ -617,10 +619,11 @@ codegraph impact <symbol> [flags]
 ### Options
 
 ```
-  -d, --depth int     BFS depth (default 2, max 50)
-  -h, --help          help for impact
-  -j, --json          emit JSON output
-  -p, --path string   repo path (default: cwd)
+  -d, --depth int          BFS depth (default 2, max 50)
+  -h, --help               help for impact
+  -j, --json               emit JSON output
+  -p, --path string        repo path (default: cwd)
+      --signature string   parameter types that select one overload, for example "String, Throwable"
 ```
 
 ### Options inherited from parent commands
@@ -774,10 +777,11 @@ codegraph node [symbol] [flags]
 ### Options
 
 ```
-  -f, --file string   file path — disambiguates symbol, or selects file-mode when symbol is omitted
-  -h, --help          help for node
-  -l, --line int      line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)
-  -p, --path string   repo path (default: cwd)
+  -f, --file string        file path — disambiguates symbol, or selects file-mode when symbol is omitted
+  -h, --help               help for node
+  -l, --line int           line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)
+  -p, --path string        repo path (default: cwd)
+      --signature string   parameter types that select one overload, for example "String, Throwable"
 ```
 
 ### Options inherited from parent commands
