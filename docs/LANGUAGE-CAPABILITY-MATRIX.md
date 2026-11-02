@@ -52,6 +52,32 @@ ASP.NET (C#), Django/Flask/FastAPI (Python), Express/NestJS
 
 ---
 
+## Repeated names and overloads
+
+Each declaration gets one node. Two methods with one name under one type are overloads. The indexer gives them one `overload_set` node. The type contains the set, and the set contains each overload. A name with one declaration gets no set.
+
+A call resolves among the candidates of its name under its owner. The arity filter runs first. An optional, default or variadic parameter widens the range, and a spread argument sets a lower bound. The argument types that the extractor knows filter second. A type mismatch rejects a candidate in two cases. One of the two types is final, such as `int` or `String`. Or both types are in the index. When one candidate remains, the call gets an edge to it. When one candidate is more specific than the others, it wins. For example, `add(String)` wins over `add(Object)` for a `String` argument. When several candidates remain, the call gets an edge to the set, marked `ambiguous`. When none remains, the call stays unresolved.
+
+A receiver resolves through a type environment, not through its name. The extractor records the declared type of each parameter, local, field and receiver word. A call through a local that holds the result of another call takes that call's return type in a second pass. The extractor never reads the case of a name to decide what the name means.
+
+A same-file reference resolves to the innermost declaration of its name whose scope holds the reference. Only module-level declarations enter the cross-file index. In TypeScript, only exported declarations enter it. A JavaScript file with no ESM export keeps every module-level declaration reachable, because the extractor does not read `module.exports`.
+
+The `node`, `callers`, `callees` and `impact` commands accept `--signature`. The MCP tools with the same names accept the `signature` input. The value is the parameter types of one overload, such as `"String, Throwable"`. Without it, a name that has a set reports across every overload, and each row carries the overload it belongs to. An ambiguous caller is marked `ambiguous`. The `explore` command folds a set into one row that names the overloads.
+
+The rules for two declarations with one name under one owner differ by language.
+
+| Language | Rule |
+|---|---|
+| Java, C#, Kotlin, C++, Swift | The two are overloads. |
+| Python, Ruby, JavaScript | At module level the last definition wins, as at run time. |
+| C, C++ and C# under `#if`, PHP under a `function_exists` guard | The two are alternatives. A call to the name reaches their set as ambiguous. |
+| C, C++ | A prototype whose definition is in the same file gets no node. |
+| Ruby | A class or module that a file reopens is one node in that file. |
+| Swift | The qualified name carries the argument labels, so `move(to:)` and `move(by:)` are two functions. |
+| Go | A repeated `init` and any other repeat get ordinal ids. |
+
+Two limits remain. In Go, TypeScript, Java and C#, a local is visible from the end of its declaration to the end of its block. In the other languages a local is visible in the whole body. There, a local that shadows an import alias hides the alias in the whole body. A reference by path across languages, such as a route handler named in a string, is not resolved. The follow-up is [issue #249](https://github.com/seanb4t/codegraph-go/issues/249).
+
 ## Per-Language Gaps
 
 ### `go`
@@ -62,12 +88,13 @@ pinned golden corpora
 
 ### `java`
 
-- Same-package qualified call qualifiers are disambiguated from local-variable receivers via a PascalCase/camelCase naming-convention heuristic (no local-variable type table is tracked).
+- A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.
 - TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.
 
 ### `csharp`
 
 - A bare using-imported cross-namespace call or inheritance reference — C#'s dominant idiom — is an accepted, documented gap: only fully-qualified cross-namespace references and same-namespace references resolve, since no global symbol table is built at parse time.
+- The extractor reads the members under each branch of an `#if`. Two branches that declare one member are alternatives, and a call to that member is ambiguous.
 - partial class/struct/record/interface fragments share one node keyed by (qualifiedName, namespace) with a deterministic sentinel FilePath/StartLine, rather than a resolve.go-coordinated first-fragment-by-path tie-break (Pitfall 5, scheme-b variant).
 - TestCorpusBehavior_CSharp now resolves the Phase-1-locked serilog corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.
 
@@ -76,6 +103,7 @@ pinned golden corpora
 - pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.
 - A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.
 - Wildcard from-imports (`from x import *`) are not resolved.
+- At module level the last definition of a name wins, as at run time.
 - TestCorpusBehavior_Python now resolves the Phase-1-locked requests corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.
 
 ### `typescript`
@@ -120,6 +148,7 @@ pinned golden corpora
 ### `c`
 
 - #include never populates Imports — there is no cross-file call resolution for C; only same-file (unqualified) calls resolve.
+- A prototype whose definition is in the same file gets no node. Two definitions under the branches of one `#if` are alternatives, and a call to them is ambiguous.
 - Anonymous structs, preprocessor-macro-generated symbols, and multi-declarator declaration lines (only the first declarator is considered) are not extracted.
 - C has no interface/dispatch construct — not applicable to a procedural language; no implements synthesis is attempted.
 - No framework route detector exists for C — LANG-07 covers only the five priority frameworks.

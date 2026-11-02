@@ -1,0 +1,3 @@
+kind: Fixes
+body: On Linux, the watcher keeps a renamed or moved directory watched, so changes in it reach the index again.
+time: 2026-11-01T16:37:08.55572-05:00
