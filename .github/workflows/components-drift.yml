@@ -5,7 +5,7 @@
 # component family at the pinned shadcn-svelte@1.5.1 CLI into a scratch tree
 # and byte-compares it against what is committed under
 # web/src/lib/components/ui/ — the supply-chain surface no lockfile-based
-# gate (web:audit, web:deps:strict, web:lockfile) can see, because
+# gate (web:audit, pnpm's frozen-lockfile install) can see, because
 # `shadcn-svelte add` writes .svelte source that never enters
 # web/pnpm-lock.yaml (03-CONTEXT.md D-22).
 #
@@ -51,6 +51,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up tools
         uses: ./.github/actions/setup-tools

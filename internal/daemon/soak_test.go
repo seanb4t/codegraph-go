@@ -43,6 +43,7 @@ func TestSoak(t *testing.T) {
 		}
 		synced <- stats
 	}
+	opened := watcherOpened(d)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -57,6 +58,7 @@ func TestSoak(t *testing.T) {
 	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
+	waitWatcherOpened(t, opened)
 
 	lastSymbol := ""
 	for i := 0; i < soakIterations; i++ {
@@ -68,10 +70,6 @@ func TestSoak(t *testing.T) {
 		case <-time.After(testBudget(5 * time.Second)):
 			t.Fatalf("timed out waiting for sync #%d of the soak", i)
 		}
-	}
-
-	if names := nodeNames(t, storeDir); !names[lastSymbol] {
-		t.Fatalf("graph missing %q after %d edit->sync cycles — real path not exercised", lastSymbol, soakIterations)
 	}
 
 	// Cancel and join BEFORE any goleak assertion runs (TestMain's
@@ -86,6 +84,10 @@ func TestSoak(t *testing.T) {
 	err = <-runErr
 	if err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+
+	if names := nodeNames(t, storeDir); !names[lastSymbol] {
+		t.Fatalf("graph missing %q after %d edit->sync cycles — real path not exercised", lastSymbol, soakIterations)
 	}
 
 	if _, ok, err := readLock(codegraphDir); err != nil || ok {
@@ -151,15 +153,8 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	var deferredBCount int32
 	onDeferredB := func() { atomic.AddInt32(&deferredBCount, 1) }
 
-	// watchOpenB receives once session B's watcher has registered every
-	// directory. B reaches watch.Open only after it holds the lock.
-	watchOpenB := make(chan struct{}, 1)
-	dB.onWatchOpen = func(*watch.Watcher) {
-		select {
-		case watchOpenB <- struct{}{}:
-		default:
-		}
-	}
+	openedA := watcherOpened(dA)
+	openedB := watcherOpened(dB)
 
 	ctxA, cancelA := context.WithCancel(context.Background())
 	ctxB, cancelB := context.WithCancel(context.Background())
@@ -177,6 +172,7 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	joinDaemonRun(t, cancelA, runErrA)
 
 	waitForLock(t, codegraphDir)
+	waitWatcherOpened(t, openedA)
 
 	runErrB := make(chan error, 1)
 	wg.Add(1)
@@ -228,21 +224,13 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	// the watcher after it acquires the lock, and a file created between
 	// the two is never observed — a race distinct from the convergence
 	// property this test is proving.
-	select {
-	case <-watchOpenB:
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("session B did not open its watcher after session A exited")
-	}
+	waitWatcherOpened(t, openedB)
 
 	writeFixtureFile(t, root, "convB.go", "package main\n\nfunc convB() {}\n")
 	select {
 	case <-syncedB:
 	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("session B did not converge and become the sole writer after session A exited")
-	}
-
-	if names := nodeNames(t, storeDir); !names["convA"] || !names["convB"] {
-		t.Fatalf("committed graph = %v, want it to contain both convA (session A) and convB (session B, post-convergence)", names)
 	}
 
 	// Terminal discipline (D-15): all cancels + wg.Waits complete before
@@ -258,6 +246,10 @@ func TestConvergenceTwoSessions(t *testing.T) {
 		t.Fatal("session B did not shut down")
 	}
 	wg.Wait()
+
+	if names := nodeNames(t, storeDir); !names["convA"] || !names["convB"] {
+		t.Fatalf("committed graph = %v, want it to contain both convA (session A) and convB (session B, post-convergence)", names)
+	}
 
 	if _, ok, err := readLock(codegraphDir); err != nil || ok {
 		t.Fatalf("lockfile still present after both sessions shut down (ok=%v err=%v)", ok, err)

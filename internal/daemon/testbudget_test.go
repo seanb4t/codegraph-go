@@ -85,11 +85,8 @@ const (
 
 	// testBudgetScaleEnvVar lets a contended dev machine or a resource-
 	// constrained CI runner (e.g. GOMAXPROCS=4) buy headroom without
-	// editing source. Unset in normal CI/dev use today — this is
-	// defensive/contributor-facing (04-CONTEXT.md's RESOLVED assumption:
-	// ci.yml's existing test:daemon/test:race isolation shows no occurrence
-	// of these failures on the real runner across the last 52 runs), not a
-	// knob CI is expected to need to turn.
+	// editing source. No CI workflow sets it: it is a contributor-facing
+	// knob.
 	testBudgetScaleEnvVar = "CODEGRAPH_DAEMON_TEST_BUDGET_SCALE"
 
 	// joinTimeoutBase is joinDaemonRun's own bounded-wait input to

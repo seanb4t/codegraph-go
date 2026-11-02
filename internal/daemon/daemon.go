@@ -125,16 +125,18 @@ type Daemon struct {
 	// live-sync test. Production callers leave it nil.
 	syncFn func(repoRoot, storeDir string, opts indexer.Options) (indexer.Stats, error)
 
-	// onWatchOpen, when non-nil, is invoked with the freshly-opened
-	// watcher right after watch.Open succeeds inside Run, before the watch
-	// loop goroutine starts. It is a test-only control seam (unexported,
-	// no exported setter — mirrors onSyncStart) so daemon_test.go can
-	// capture the watcher handle and close its event stream out from under
-	// a running Run, deterministically driving the abnormal-teardown path
-	// that must return ErrWatcherClosed (03-REVIEW.md IN-07/WR-01) —
-	// fsnotify offers no other way to force its channels closed without
-	// the ctx being cancelled. Production callers leave it nil.
-	onWatchOpen func(*watch.Watcher)
+	// onWatchOpen, when non-nil, is called with the watcher right after
+	// Run opens it, before the watch loop goroutine starts. It is a
+	// test-only control seam (unexported, no exported setter — mirrors
+	// onSyncStart). daemon_test.go uses it to close a real watcher's event
+	// stream under a running Run, which must then return ErrWatcherClosed
+	// (IN-07/WR-01) with the real backend. Production callers leave it nil.
+	onWatchOpen func(watcher)
+
+	// openWatcher opens the watcher that Run drives. It is a test-only
+	// control seam (unexported, no exported setter): a test sets it to
+	// open a fake. Production callers leave it nil, and Run uses openWatch.
+	openWatcher func(root string) (watcher, error)
 
 	// getppid, when non-nil, replaces os.Getppid as the watchdog's
 	// parent-pid reader. It is a test-only control seam (unexported, no
@@ -174,11 +176,31 @@ type Daemon struct {
 type Option func(*Daemon)
 
 // WithProbe overrides the Daemon's watch.Probe (see the probe field's doc
-// comment). This is the only Option this plan introduces.
+// comment).
 func WithProbe(p watch.Probe) Option {
 	return func(d *Daemon) {
 		d.probe = p
 	}
+}
+
+// watcher is the part of *watch.Watcher that Daemon.Run uses. The
+// watcher's Run passes each changed path to deb.Add. It returns when ctx is
+// cancelled or Close ends the event stream, and it stops deb's pending
+// timer before it returns. Close is safe to call more than once, and while
+// the watcher's Run runs.
+type watcher interface {
+	Run(ctx context.Context, deb *watch.Debouncer)
+	Close() error
+}
+
+// openWatch is the default for Daemon.openWatcher. It returns a nil
+// interface on error, never a nil *watch.Watcher inside a non-nil one.
+func openWatch(root string) (watcher, error) {
+	w, err := watch.Open(root)
+	if err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 // New resolves repoRoot's .codegraph/ layout and returns a Daemon ready to
@@ -290,11 +312,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 		stop()
 	}()
 
-	w, err := watch.Open(d.repoRoot)
+	open := d.openWatcher
+	if open == nil {
+		open = openWatch
+	}
+	w, err := open(d.repoRoot)
 	if err != nil {
 		return err
 	}
-	defer w.Close()
+	defer func() {
+		if err := w.Close(); err != nil {
+			log.Printf("daemon: closing the watcher: %v", err)
+		}
+	}()
 
 	if d.onWatchOpen != nil {
 		d.onWatchOpen(w)

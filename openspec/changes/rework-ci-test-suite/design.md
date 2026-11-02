@@ -56,7 +56,7 @@ A change that matches `ci` runs every leg. On a push to `main`, every leg runs. 
 |---|---|---|
 | `go` | `go` or `ci` | build, vet, `lint:go`, `web:deps` (for `protoc-gen-es`), `gotestsum` over every package except `internal/daemon`, `corpora:verify`, `proto:drift`, `docs:cli:drift` |
 | `go-race` | `go` or `ci` | `gotestsum -- -race` over `internal/cli`, `internal/mcp` and `internal/watch`, in parallel |
-| `daemon` | `go` or `ci` | `gotestsum -- -race -p 1 ./internal/daemon` |
+| `daemon` | `go` or `ci` | `gotestsum -- -race -count=1 ./internal/daemon`, alone in its job |
 | `web` | `web` or `ci` | `web:deps`, vitest, `pnpm audit`, the SPA rebuild and drift guards, `check:no-force-layout` |
 | `release-checks` | `release` or `ci` | `check:gonum`, `check:changie` (D9) |
 
@@ -64,19 +64,19 @@ The daemon leg runs on any Go change, not only on a change under `internal/daemo
 
 `proto:drift` needs `web/node_modules/.bin/protoc-gen-es` (`Taskfile.yml:424`), so the `go` leg installs the frozen web dependencies first, from the pnpm cache.
 
-The plain `internal/daemon` run goes, because the race run covers it. `-count=1` stays only on the `daemon` leg. The other legs restore the Go build and test cache, so an unchanged package is a cache hit. `govulncheck`, `tool-vuln` and `reproducibility` keep their own jobs and their required-check names, and use the `release` or `ci` output in place of `planning_only`.
+The plain `internal/daemon` run goes, because the race run covers it. `-count=1` stays on the `daemon` leg and on `test/wireoracle`. The wire oracle tests a binary that a `go build` subprocess makes, and the test cache does not see the inputs of a subprocess, so a cached pass could hide a product change. The other packages restore the Go build and test cache, so an unchanged package is a cache hit. `govulncheck`, `tool-vuln` and `reproducibility` keep their own jobs and their required-check names, and use the `release` or `ci` output in place of `planning_only`.
 
 Each leg runs `gotestsum --junitfile` and prints the 20 slowest tests with `gotestsum tool slowest`. It never uses `--rerun-fails`, because a rerun hides a flake.
 
 ### D4. `concurrency` cancels a superseded PR run
 
-`ci.yml` gets `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: ${{ github.event_name == 'pull_request' }} }`. A push to `main` always runs to completion, so each merged commit gets its full set of checks.
+`ci.yml` gets `concurrency: { group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}, cancel-in-progress: ${{ github.event_name == 'pull_request' }} }`. Each push to `main` has a group of its own commit. A group keeps only one waiting run, so a shared group on `main` would cancel a waiting run. With one group for each commit, each merged commit gets its full set of checks.
 
 ### D5. `synctest` for timers, and a watcher seam for the daemon
 
 The tests in `internal/watch` that wait only on the debouncer move into `synctest.Test`, so their timers advance at once.
 
-`Daemon.Run` uses two methods of the watcher: `Run(ctx, deb)` (`daemon.go:349`) and `Close()` (`:297`). Both backends already have them. The Linux backend reads fsnotify channels inside its own `Run`, and the macOS backend reads FSEvents batches inside its own `Run`. So the seam is an interface with exactly those two methods, `Run(context.Context, *watch.Debouncer)` and `Close() error`, and an option `WithWatcher(open func(root string) (Watcher, error))`. A fake's `Run` feeds the debouncer by hand, inside `synctest.Test`. Then the quiet gap in `TestDaemonFlushLockRequeueGivesUpPerEpisode` and the debounce waits pass in fake time. The tests that prove the real watcher works keep real files and real time, and stay few.
+`Daemon.Run` uses two methods of the watcher: `Run(ctx, deb)` (`daemon.go:349`) and `Close()` (`:297`). Both backends already have them. The Linux backend reads fsnotify channels inside its own `Run`, and the macOS backend reads FSEvents batches inside its own `Run`. So the seam is an unexported interface with exactly those two methods, `Run(context.Context, *watch.Debouncer)` and `Close() error`, and an unexported field `openWatcher func(root string) (watcher, error)` that a test sets, like the other test seams of `Daemon`. A fake's `Run` feeds the debouncer by hand, inside `synctest.Test`. Then the quiet gap in `TestDaemonFlushLockRequeueGivesUpPerEpisode` and the debounce waits pass in fake time. The tests that prove the real watcher works keep real files and real time, and stay few.
 
 `synctest` fakes time only for goroutines that wait on channels, timers or a `WaitGroup`. A goroutine that waits on fsnotify or Pebble I/O keeps real time. That is why the daemon needs the seam.
 
@@ -96,30 +96,35 @@ HYG-02 keeps all three of its bans: `os.Stdout`, a bare `fmt.Print*`, and `log.S
 
 VRFY-02 today loads the module and also `testdata/golden`, which `./...` skips (`protocol_version_test.go:232`). So `lint:go` adds a second `golangci-lint run` over `./testdata/golden/...`, with only the VRFY-02 rule enabled.
 
+Implementation found that `forbidigo` also reports the last name of a selector chain, such as `req.Params.ProtocolVersion`, as a bare identifier with the package of the field. That report is never a reference to a constant of the SDK. So `.golangci.yml` has a second exclusion, for VRFY-02 reports of a bare identifier, in every file. It matches on the message text, because the selector chains occur in several files. It also drops a dot-imported constant, which the code base does not use.
+
+`TestDependencyClosure` also asserts that `internal/mcp` imports a package of a module that the SDK-02 and VRFY-02 rules name. A rule that names the wrong module matches nothing, and this assertion makes that fail.
+
 `TestDependencyClosure` runs `go list -deps` once for the production packages and once with `-test`. It asserts the three transitive rules, and keeps T-01-18's split: the wire-layer rule covers test variants, and the indexer-root rule covers production only. It asserts that each closure it read holds more than zero packages. The four `*_selftest_test.go` files go. `internal/upgrade/golangci_shape_test.go` reads `# enabled-linters: 5`, so the comment and the test change to 7.
 
 ### D7. `testscript` for `test/integration`
 
-`test/integration` has 12 tests in 10 files, and its `TestMain` builds the binary or reads `CODEGRAPH_TEST_BIN`. `verify:notarized-suite` (`Taskfile.yml:5272-5279`), which `post-release-verify.yml` runs, sets `CODEGRAPH_TEST_BIN` to the downloaded, notarized release binary. So the integration suite tests the published artifact after each release, and that must not change.
+`test/integration` has 12 tests in 10 files (10 behavior tests, plus `TestMain` and the build-contract test), and its `TestMain` builds the binary or reads `CODEGRAPH_TEST_BIN`. `verify:notarized-suite` (`Taskfile.yml:5272-5279`), which `post-release-verify.yml` runs, sets `CODEGRAPH_TEST_BIN` to the downloaded, notarized release binary. So the integration suite tests the published artifact after each release, and that must not change.
 
 With `testscript.Main`, the scripts run a `codegraph` command. If `CODEGRAPH_TEST_BIN` is unset, that command is the test binary itself, so a normal run needs no build step. If `CODEGRAPH_TEST_BIN` is set, the `codegraph` command runs that file. Each test becomes a `.txtar` script under `test/integration/testdata/`. A test that needs a timeout or a pipe that never closes keeps a small Go helper command in the script. `binpath_test.go` and the build step in `TestMain` go. `github.com/rogpeppe/go-internal` moves from an indirect to a direct requirement.
 
 ### D8. `teatest/v2` for the tmux rig (#75)
 
-The decision on #75 stands. Five of the six tmux tests become in-process tests with `NewTestModel(..., WithInitialTermSize(100, 30))`. The mode-query leak test and the main-buffer test become model-level assertions on the output bytes: no query sequence appears outside the alt screen, and the alt-screen leave sequence is the last control sequence written. `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job go. The `protect-main` ruleset drops its required check right before the PR merges, with the maintainer's approval, because that is an edit outside the repository.
+The decision on #75 stands. Five of the six tmux tests become in-process tests with `NewTestModel(..., WithInitialTermSize(100, 30))`. The mode-query leak test and the main-buffer test become model-level assertions on the output bytes. Implementation found that bubbletea v2.0.8 writes its mode queries at startup, before it enters the alt screen, and writes cursor and paste mode resets after it leaves. So the daemon-picker test asserts that only mode set and reset sequences follow the alt-screen leave, with no text, query or cursor movement. The empty-registry test asserts that `RunDaemonPicker` starts no program at all and writes exactly its one line. `test/tmux/`, `task test:tmux`, `task test:tmux:install` and the `tmux-e2e` job go. The `protect-main` ruleset drops its required check right before the PR merges, with the maintainer's approval, because that is an edit outside the repository.
 
 ### D9. Smaller replacements
 
 - `check:changie` becomes one dry-run merge whose output must equal `CHANGELOG.md`. It asserts that it compared more than zero versions.
 - `web:lockfile`, `web:deps:strict` and the Go classifier in `web:audit` go. `web:deps` (frozen lockfile, with `strictDepBuilds` enforced by pnpm) and `pnpm audit` with the existing `audit.ignore` stay.
-- `scripts/check-workflow-output-delimiter.sh` goes. `zizmor`, pinned in `mise.toml`, runs beside `actionlint` in the `actionlint` job, so no required-check name changes.
-- `scripts/fragment_policy.py` goes. `fragment-required.yml` runs `paths-filter` with an `added` rule on `.changes/unreleased/**` and a code rule on `cmd/**` and `internal/**`. A short shell step reads three facts: code changed, no fragment was added, and the PR body has no `changelog-exempt` marker. If all three hold, the step fails. At release time, `changie` itself rejects a fragment with an unknown kind.
+- `scripts/check-workflow-output-delimiter.sh` goes, and nothing replaces it: `zizmor` has no audit for the delimiter of a `$GITHUB_OUTPUT` heredoc. `require-issue-link.yml` and `pr-template-format.yml` write their file lists with a delimiter from `openssl rand`. `zizmor`, pinned in `mise.toml`, runs beside `actionlint` in the `actionlint` job, so no required-check name changes.
+- `scripts/fragment_policy.py` goes. `fragment-required.yml` runs `paths-filter` with an `added` rule on `.changes/unreleased/*.yaml` and a code rule on `cmd/**` and `internal/**`. `task check:fragment-required` reads four facts: code changed, no fragment was added, the PR changes fewer than 3,000 files, and the PR body has no `changelog-exempt` marker. `scripts/pr_template_policy.py changelog-exempt` reads the marker, with the same tested rules as the `pr-template-exempt` marker. The step fails at 3,000 files or more, because the file listing stops there. It also fails when code changed with no fragment and no marker.
 - `check:gonum` and `check:no-force-layout` lose their positive-control legs. Each asserts that it scanned more than zero items.
-- `scripts/mutation_check.py`, `tests/test_mutation_check.py`, `task mutation-check` and `.claude/skills/mutation-check/` go. `check:ci-scripts` keeps only `test_vuln_report`.
+- `vuln:selftest` and `testdata/vulnredpoc` go, and `check:graph-console` loses its `--self-test` run. The first tests that govulncheck detects a known vulnerability, and the second tests that Playwright captures console output. Both test third-party behavior.
+- `scripts/mutation_check.py`, `tests/test_mutation_check.py`, `task mutation-check` and `.claude/skills/mutation-check/` go. `check:ci-scripts` keeps `test_vuln_report` and `test_pr_template_policy`.
 
 ### D10. `goreleaser build` for the reproducibility check (#212)
 
-`check:reproducibility` runs `goreleaser build --snapshot --clean --id codegraph-linux-amd64` twice, copies the binary out of `dist/` after each run, and compares the two hashes. The arm64 task does the same with `--id codegraph-linux-arm64` and stays advisory. Both use the flags in `.goreleaser.yaml`, so no flags are copied by hand and no shell formats a date. GoReleaser and zig are pinned in `mise.toml`, so the check runs on macOS and Linux. The CI step "Compute determinism inputs" goes, because GoReleaser reads the commit itself.
+`check:reproducibility` runs `goreleaser build --snapshot --clean --id codegraph-linux-amd64` twice, copies the binary out of `dist/` after each run, and compares the two hashes. The second build uses an empty `GOCACHE` and empty zig caches, so it compiles every package again, and a compile step that is not deterministic changes its hash. The arm64 task does the same with `--id codegraph-linux-arm64` and stays advisory. Both use the flags in `.goreleaser.yaml`, so no flags are copied by hand and no shell formats a date. GoReleaser and zig are pinned in `mise.toml`, so the check runs on macOS and Linux. The CI step "Compute determinism inputs" goes, because GoReleaser reads the commit itself.
 
 ### D11. The hygiene checks read every file (#106)
 
@@ -127,12 +132,12 @@ The decision on #75 stands. Five of the six tmux tests become in-process tests w
 
 ### D12. The perf gate checks its baseline (#105)
 
-Before the comparison, `bench.yml` reads the date of the last commit that changed the baseline, with `git log -1 --format=%ct -- tools/bench/baseline.json`. The checkout sets `fetch-depth: 0`, because a shallow checkout reports the checkout boundary, not the last change. If the command prints nothing, the job fails. The job also reads the `runner` field of the file. If the baseline is older than 90 days, or `runner` differs from `CODEGRAPH_BENCH_RUNNER`, the job fails with a message that names the `rebless` job. The file keeps its fields.
+Before the comparison, `bench.yml` reads the date of the last commit that changed the baseline, with `git log -1 --format=%ct -- tools/bench/baseline.json`. The checkout sets `fetch-depth: 0`, because a shallow checkout reports the checkout boundary, not the last change. If `git rev-parse --is-shallow-repository` reports a shallow checkout, or the command prints nothing, the job fails. The job also reads the `runner` field of the file. If the baseline is older than 90 days, or `runner` differs from `CODEGRAPH_BENCH_RUNNER`, the job fails with a message that names the `rebless` job. The file keeps its fields.
 
 ### D13. The two flaky tests
 
-- #235: in `awaitDaemonLock` (`internal/cli/serve_worktree_test.go`), an `os.ErrNotExist` from `w.Add` on the index directory goes to the next loop pass, like a missing watch does today. Any other error still fails the test.
-- #185: the CR-01 test in `web/tests/browse-page.test.ts` waits with `vi.waitFor` on the RPC count and the URL, in place of a fixed number of microtask flushes. The fix is accepted after 20 full-suite runs with no failure.
+- #235: in `awaitDaemonLock` (`internal/cli/serve_worktree_test.go`), an `os.ErrNotExist` from `w.Add` on the index directory starts the next loop pass at once, with no timer. Any other error still fails the test.
+- #185: the CR-01 test in `web/tests/browse-page.test.ts` waits with `vi.waitFor` on the RPC count and the URL. A measurement during implementation showed the main cause: the test imported the route component inside its body, and that Vite transform took about 11 s of the 15 s test timeout when the file ran alone. So the stub client, `vi.doMock` and the import move to module scope, as in the other route tests. The fix is accepted after 20 full-suite runs with no failure.
 
 ### D14. Order of the commits
 
@@ -149,7 +154,7 @@ Before the comparison, `bench.yml` reads the date of the last commit that change
 
 - One large PR is harder to review than seven small ones. The commit order above, with the timing of each commit in the PR body, keeps it readable. The user chose fewer PRs.
 - A path filter that is too narrow skips a leg that a change needs. So the Go filters list only what a leg can skip (D2). The `ci` filter runs every leg, and every push to `main` runs every leg.
-- `forbidigo` on each package except `internal/cli` is stricter than the closure walk of HYG-02, because it also covers packages that `serve` does not reach. Each exclusion in `.golangci.yml` names one file and one source line, as the `ServeStdio` exclusion does, never a whole package.
+- `forbidigo` on each package except `internal/cli` is stricter than the closure walk of HYG-02, because it also covers packages that `serve` does not reach. Each exclusion in `.golangci.yml` names one file and one source line, as the `ServeStdio` exclusion does, never a whole package. The one other exclusion is the VRFY-02 bare-identifier exclusion of D6.
 - The model-level byte assertions in D8 do not prove what a real terminal shows. The maintainer accepted this on #75.
 - The `teatest/v2` module path and its API for `charm.land/bubbletea/v2` are not yet verified. The implementation reads the current docs first. If the module does not fit, the implementation stops and reports back before it writes the tests.
 - `zizmor` and `gotestsum` need a prebuilt release in mise with a `mise.lock` checksum. If one of them has none, the implementation asks before it picks another install path.

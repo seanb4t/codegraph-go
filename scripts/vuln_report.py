@@ -21,7 +21,6 @@ keep a blocking gate red forever. The exit status is about the loop itself. It i
 every roster tool, so NOT FOUND means a broken environment, and a run that scans
 less than the whole roster must never read as clean.
 
-`vuln:selftest` in Taskfile.yml stays the proof that the real scanner can detect;
 tests/test_vuln_report.py proves this loop reports what the scanner says.
 """
 

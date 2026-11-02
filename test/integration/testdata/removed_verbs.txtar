@@ -1,0 +1,28 @@
+# VERB-09 (D-01, D-02): the removed verbs `query` and `unlock` get cobra's
+# own unknown-command error from main's error printer and exit 1. No alias,
+# SuggestFor entry, hidden command or hint may revive either name.
+
+fixture repo
+exec codegraph init $WORK/repo
+cd repo
+
+exits 1 codegraph query main
+! stdout .
+cmp stderr $WORK/want-query
+
+exits 1 codegraph query --json main
+! stdout .
+cmp stderr $WORK/want-query
+
+exits 1 codegraph unlock -p $WORK/repo
+! stdout .
+cmp stderr $WORK/want-unlock
+
+exits 1 codegraph unlock -p /nonexistent
+! stdout .
+cmp stderr $WORK/want-unlock
+
+-- want-query --
+unknown command "query" for "codegraph"
+-- want-unlock --
+unknown command "unlock" for "codegraph"

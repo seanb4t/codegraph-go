@@ -7,11 +7,8 @@ import (
 	"testing"
 )
 
-// TestResolveTestBinPath mirrors test/integration/binpath_test.go's table
-// test of the same name exactly, over this package's own deliberate
-// second copy of resolveTestBinPath (main_test.go) — Go test helpers are
-// not importable across packages, matching the precedent this repo
-// already set for its four runGit* helpers. Every case also re-checks the
+// TestResolveTestBinPath is the table test of resolveTestBinPath
+// (main_test.go). Every case also re-checks the
 // "no third outcome" invariant inline: useEnv=true never pairs with a
 // non-nil error, and a non-empty raw value never resolves to useEnv=false
 // with a nil error.

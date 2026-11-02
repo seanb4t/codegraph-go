@@ -1,0 +1,13 @@
+# HYG-01 / D-09: quietLogger keeps Pebble's noise off the stderr of a real
+# `sync`. sync, not status, runs more of Pebble's Infof surface (flush and
+# possible compaction). Only the noise shapes are forbidden: codegraph's
+# own warnings may still appear on stderr.
+
+fixture repo
+exec codegraph init $WORK/repo
+cd repo
+exec codegraph sync
+! stderr '\[JOB '
+! stderr 'WAL '
+! stderr 'compaction'
+! stderr 'pickAuto'

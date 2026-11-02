@@ -334,7 +334,7 @@ func computeSkeletonFiles(groups []ExploreFileGroup, centralFiles map[string]boo
 // renderSkeleton renders H20's signature-only view of symbols: one
 // "<kind> <name><signature>" line per symbol inside a fenced code block —
 // plain text, no ANSI, matching render_markdown.go's package-wide
-// constraint (Phase 6 archtest will enforce it later).
+// constraint.
 func renderSkeleton(symbols []*schema.Node) string {
 	var b strings.Builder
 	b.WriteString("```go\n")
