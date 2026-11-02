@@ -38,6 +38,23 @@ var declarationExceptions = map[string]string{
 	"python-function-not-at-module-or-class":   "the Python extractor emits module-level functions and class methods only",
 	"csharp-member-outside-type-body":          "the C# extractor reads the members of a type body, under #if branches included, so it skips a member declared outside any type body",
 	"csharp-partial-type":                      "a C# partial type has one shared node with no location, so all its parts count as one declaration",
+	"ruby-reopened-type":                       "a reopened Ruby class or module adds to the node of its first declaration",
+	"ruby-dynamic-type-name":                   "the Ruby extractor skips a class or module whose name is not a constant, and the methods in it",
+	"ruby-method-not-at-module-or-class":       "the Ruby extractor emits top-level methods and the methods of a class or module body only",
+	"c-prototype-of-defined-function":          "a C prototype of a function the same file defines is a forward declaration of that definition",
+	"c-typedef-without-plain-name":             "the C extractor emits a typedef whose declarator is a plain name, not a function pointer",
+	"kotlin-object-not-extracted":              "the Kotlin extractor emits no node for an object declaration",
+	"kotlin-nested-type-not-extracted":         "the Kotlin extractor emits top-level types only",
+	"kotlin-function-not-at-top-or-class-body": "the Kotlin extractor emits top-level functions and the functions of a top-level class or interface body only",
+	"swift-extension-not-extracted":            "the Swift extractor emits no node for an extension or its members",
+	"swift-nested-type-not-extracted":          "the Swift extractor emits top-level types only",
+	"swift-operator-function-not-extracted":    "the Swift extractor emits functions with a simple name only",
+	"swift-function-not-at-top-or-type-body":   "the Swift extractor emits top-level functions and the functions of a top-level type body only",
+	"rust-item-not-at-top-level":               "the Rust extractor emits top-level items only, not the items of a module block",
+	"rust-function-not-at-top-level-or-impl":   "the Rust extractor emits top-level functions and the functions of an impl block only",
+	"php-enum-not-extracted":                   "the PHP extractor emits no node for an enum or its methods",
+	"php-method-outside-type-body":             "the PHP extractor emits the methods of a class, interface or trait declaration only",
+	"php-function-not-at-top-level":            "the PHP extractor emits functions at the top level, under a namespace or under a top-level if only",
 }
 
 // declarationKinds lists, per language, the node kinds the table covers.
@@ -51,6 +68,12 @@ var declarationKinds = map[string]map[string]bool{
 	"java":       kindSet(goextract.KindMethod, goextract.KindStruct, goextract.KindInterface),
 	"python":     kindSet(goextract.KindFunction, goextract.KindMethod, goextract.KindStruct),
 	"csharp":     kindSet(goextract.KindMethod, goextract.KindStruct, goextract.KindInterface),
+	"ruby":       kindSet(goextract.KindFunction, goextract.KindMethod, goextract.KindStruct),
+	"c":          kindSet(goextract.KindFunction, goextract.KindStruct, goextract.KindTypeAlias),
+	"kotlin":     kindSet(goextract.KindFunction, goextract.KindMethod, goextract.KindStruct, goextract.KindInterface),
+	"swift":      kindSet(goextract.KindFunction, goextract.KindMethod, goextract.KindStruct, goextract.KindInterface),
+	"rust":       kindSet(goextract.KindFunction, goextract.KindMethod, goextract.KindStruct, goextract.KindInterface),
+	"php":        kindSet(goextract.KindFunction, goextract.KindMethod, goextract.KindStruct, goextract.KindInterface),
 }
 
 func kindSet(kinds ...string) map[string]bool {
@@ -101,6 +124,12 @@ var declWalkers = map[string]func(c *declCollector, root *tree_sitter.Node){
 	"java":       javaDecls,
 	"python":     pythonDecls,
 	"csharp":     csharpDecls,
+	"ruby":       rubyDecls,
+	"c":          cDecls,
+	"kotlin":     kotlinDecls,
+	"swift":      swiftDecls,
+	"rust":       rustDecls,
+	"php":        phpDecls,
 }
 
 func walkTree(n *tree_sitter.Node, visit func(*tree_sitter.Node)) {
@@ -549,4 +578,446 @@ func TestEveryDeclarationHasOneNode(t *testing.T) {
 			}
 		})
 	}
+}
+
+// rubyConstant mirrors rubyextract.rubyConstantName: the text of a
+// constant, or the name part of a scope resolution.
+func rubyConstant(c *declCollector, n *tree_sitter.Node) string {
+	switch n.Kind() {
+	case "constant":
+		return c.text(n)
+	case "scope_resolution":
+		if name := n.ChildByFieldName("name"); name != nil {
+			return c.text(name)
+		}
+	}
+	return ""
+}
+
+func rubyDecls(c *declCollector, root *tree_sitter.Node) {
+	seen := make(map[string]bool)
+	walkTree(root, func(n *tree_sitter.Node) {
+		switch n.Kind() {
+		case "class", "module":
+			nameNode := n.ChildByFieldName("name")
+			if nameNode == nil {
+				return
+			}
+			name := rubyConstant(c, nameNode)
+			if name == "" {
+				c.except("ruby-dynamic-type-name")
+				return
+			}
+			if seen[name] {
+				c.except("ruby-reopened-type")
+				return
+			}
+			seen[name] = true
+			c.add(name, goextract.KindStruct, n)
+		case "method", "singleton_method":
+			name, ok := c.name(n)
+			if !ok {
+				return
+			}
+			parent := n.Parent()
+			switch {
+			case parent != nil && parent.Kind() == "program":
+				c.add(name, goextract.KindFunction, n)
+			case parent != nil && parent.Kind() == "body_statement" && (parentKind(parent) == "class" || parentKind(parent) == "module"):
+				owner := parent.Parent().ChildByFieldName("name")
+				if owner == nil || rubyConstant(c, owner) == "" {
+					c.except("ruby-dynamic-type-name")
+					return
+				}
+				c.add(name, goextract.KindMethod, n)
+			default:
+				c.except("ruby-method-not-at-module-or-class")
+			}
+		}
+	})
+}
+
+// cTopLevel mirrors cextract.topLevelDecls: the root's children, with
+// namespace bodies and preprocessor branches flattened.
+func cTopLevel(root *tree_sitter.Node) []*tree_sitter.Node {
+	var decls []*tree_sitter.Node
+	var walk func(n *tree_sitter.Node)
+	walk = func(n *tree_sitter.Node) {
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			child := n.NamedChild(i)
+			if child.Kind() == "namespace_definition" {
+				if body := child.ChildByFieldName("body"); body != nil {
+					walk(body)
+				}
+				continue
+			}
+			if goextract.IsPreprocBlock(child) {
+				walk(child)
+				continue
+			}
+			decls = append(decls, child)
+		}
+	}
+	walk(root)
+	return decls
+}
+
+// cFunctionName returns the plain name of the function that a
+// function_definition or declaration declares.
+func cFunctionName(c *declCollector, decl *tree_sitter.Node) (string, bool) {
+	d := decl.ChildByFieldName("declarator")
+	for d != nil && d.Kind() != "function_declarator" {
+		switch d.Kind() {
+		case "pointer_declarator", "init_declarator":
+			d = d.ChildByFieldName("declarator")
+		case "parenthesized_declarator":
+			if d.NamedChildCount() == 0 {
+				return "", false
+			}
+			d = d.NamedChild(0)
+		default:
+			return "", false
+		}
+	}
+	if d == nil {
+		return "", false
+	}
+	name := d.ChildByFieldName("declarator")
+	if name == nil || name.Kind() != "identifier" {
+		return "", false
+	}
+	return c.text(name), true
+}
+
+// cPlainName mirrors cextract.cDeclaratorName: the name under pointer,
+// array and parenthesized declarators, and none under a function
+// declarator.
+func cPlainName(c *declCollector, d *tree_sitter.Node) (string, bool) {
+	for d != nil {
+		switch d.Kind() {
+		case "identifier", "field_identifier", "type_identifier":
+			return c.text(d), true
+		case "pointer_declarator", "array_declarator", "reference_declarator", "init_declarator":
+			d = d.ChildByFieldName("declarator")
+		case "parenthesized_declarator":
+			if d.NamedChildCount() == 0 {
+				return "", false
+			}
+			d = d.NamedChild(0)
+		default:
+			return "", false
+		}
+	}
+	return "", false
+}
+
+func cDecls(c *declCollector, root *tree_sitter.Node) {
+	decls := cTopLevel(root)
+	defined := make(map[string]bool)
+	for _, d := range decls {
+		if d.Kind() == "function_definition" {
+			if name, ok := cFunctionName(c, d); ok {
+				defined[name] = true
+			}
+		}
+	}
+	for _, d := range decls {
+		switch d.Kind() {
+		case "function_definition":
+			if name, ok := cFunctionName(c, d); ok {
+				c.add(name, goextract.KindFunction, d)
+			}
+		case "declaration":
+			name, ok := cFunctionName(c, d)
+			if !ok {
+				continue
+			}
+			if defined[name] {
+				c.except("c-prototype-of-defined-function")
+				continue
+			}
+			c.add(name, goextract.KindFunction, d)
+		case "struct_specifier":
+			if name := d.ChildByFieldName("name"); name != nil && name.Kind() == "type_identifier" {
+				c.add(c.text(name), goextract.KindStruct, d)
+			}
+		case "type_definition":
+			name, ok := cPlainName(c, d.ChildByFieldName("declarator"))
+			if !ok {
+				c.except("c-typedef-without-plain-name")
+				continue
+			}
+			c.add(name, goextract.KindTypeAlias, d)
+		}
+	}
+}
+
+// keywordKind returns the first anonymous child of n whose kind is one of
+// kinds: the keyword that says what a declaration declares.
+func keywordKind(n *tree_sitter.Node, kinds ...string) string {
+	for i := uint(0); i < n.ChildCount(); i++ {
+		k := n.Child(i).Kind()
+		for _, want := range kinds {
+			if k == want {
+				return k
+			}
+		}
+	}
+	return ""
+}
+
+// kotlinTypeKind is the node kind the Kotlin extractor gives a top-level
+// class_declaration, or "" for one it skips.
+func kotlinTypeKind(decl *tree_sitter.Node) string {
+	switch keywordKind(decl, "class", "interface", "enum", "object") {
+	case "class", "enum":
+		return goextract.KindStruct
+	case "interface":
+		return goextract.KindInterface
+	}
+	return ""
+}
+
+func kotlinDecls(c *declCollector, root *tree_sitter.Node) {
+	walkTree(root, func(n *tree_sitter.Node) {
+		switch n.Kind() {
+		case "class_declaration":
+			if parentKind(n) != "source_file" {
+				c.except("kotlin-nested-type-not-extracted")
+				return
+			}
+			kind := kotlinTypeKind(n)
+			if kind == "" {
+				c.except("kotlin-object-not-extracted")
+				return
+			}
+			if name := n.ChildByFieldName("name"); name != nil && name.Kind() == "identifier" {
+				c.add(c.text(name), kind, n)
+			}
+		case "function_declaration":
+			name := n.ChildByFieldName("name")
+			if name == nil || name.Kind() != "identifier" {
+				return
+			}
+			parent := n.Parent()
+			switch {
+			case parent != nil && parent.Kind() == "source_file":
+				c.add(c.text(name), goextract.KindFunction, n)
+			case parent != nil && parent.Kind() == "class_body" && parentKind(parent) == "class_declaration" &&
+				parentKind(parent.Parent()) == "source_file" && kotlinTypeKind(parent.Parent()) != "":
+				c.add(c.text(name), goextract.KindMethod, n)
+			default:
+				c.except("kotlin-function-not-at-top-or-class-body")
+			}
+		}
+	})
+}
+
+// swiftTypeName mirrors swiftextract.swiftSimpleTypeName.
+func swiftTypeName(c *declCollector, n *tree_sitter.Node) (string, bool) {
+	if n == nil {
+		return "", false
+	}
+	switch n.Kind() {
+	case "type_identifier":
+		return c.text(n), true
+	case "user_type":
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			if t := n.NamedChild(i); t.Kind() == "type_identifier" {
+				return c.text(t), true
+			}
+		}
+	}
+	return "", false
+}
+
+// swiftEmittedType reports whether decl is a top-level class, struct,
+// enum or actor declaration the Swift extractor emits.
+func swiftEmittedType(c *declCollector, decl *tree_sitter.Node) bool {
+	if decl == nil || decl.Kind() != "class_declaration" || parentKind(decl) != "source_file" {
+		return false
+	}
+	switch keywordKind(decl, "class", "struct", "enum", "actor", "extension") {
+	case "class", "struct", "enum", "actor":
+		_, ok := swiftTypeName(c, decl.ChildByFieldName("name"))
+		return ok
+	}
+	return false
+}
+
+func swiftDecls(c *declCollector, root *tree_sitter.Node) {
+	walkTree(root, func(n *tree_sitter.Node) {
+		switch n.Kind() {
+		case "class_declaration":
+			if parentKind(n) != "source_file" {
+				c.except("swift-nested-type-not-extracted")
+				return
+			}
+			if keywordKind(n, "class", "struct", "enum", "actor", "extension") == "extension" {
+				c.except("swift-extension-not-extracted")
+				return
+			}
+			if name, ok := swiftTypeName(c, n.ChildByFieldName("name")); ok {
+				c.add(name, goextract.KindStruct, n)
+			}
+		case "protocol_declaration":
+			if parentKind(n) != "source_file" {
+				c.except("swift-nested-type-not-extracted")
+				return
+			}
+			if name, ok := swiftTypeName(c, n.ChildByFieldName("name")); ok {
+				c.add(name, goextract.KindInterface, n)
+			}
+		case "function_declaration":
+			parent := n.Parent()
+			atTop := parent != nil && parent.Kind() == "source_file"
+			inType := parent != nil && parent.Kind() == "class_body" && swiftEmittedType(c, parent.Parent())
+			if !atTop && !inType {
+				c.except("swift-function-not-at-top-or-type-body")
+				return
+			}
+			name := n.ChildByFieldName("name")
+			if name == nil || name.Kind() != "simple_identifier" {
+				c.except("swift-operator-function-not-extracted")
+				return
+			}
+			if atTop {
+				c.add(c.text(name), goextract.KindFunction, n)
+			} else {
+				c.add(c.text(name), goextract.KindMethod, n)
+			}
+		}
+	})
+}
+
+// rustImplType mirrors rustextract.rustTypeName on an impl block's type.
+func rustImplType(c *declCollector, n *tree_sitter.Node) (string, bool) {
+	for n != nil {
+		switch n.Kind() {
+		case "type_identifier":
+			return c.text(n), true
+		case "generic_type":
+			n = n.ChildByFieldName("type")
+		case "scoped_type_identifier", "scoped_identifier":
+			if name := n.ChildByFieldName("name"); name != nil {
+				return c.text(name), true
+			}
+			return "", false
+		default:
+			return "", false
+		}
+	}
+	return "", false
+}
+
+func rustDecls(c *declCollector, root *tree_sitter.Node) {
+	walkTree(root, func(n *tree_sitter.Node) {
+		switch n.Kind() {
+		case "struct_item", "enum_item", "trait_item":
+			if parentKind(n) != "source_file" {
+				c.except("rust-item-not-at-top-level")
+				return
+			}
+			kind := goextract.KindStruct
+			if n.Kind() == "trait_item" {
+				kind = goextract.KindInterface
+			}
+			if name, ok := c.name(n); ok {
+				c.add(name, kind, n)
+			}
+		case "function_item":
+			name, ok := c.name(n)
+			if !ok {
+				return
+			}
+			parent := n.Parent()
+			switch {
+			case parent != nil && parent.Kind() == "source_file":
+				c.add(name, goextract.KindFunction, n)
+			case parent != nil && parent.Kind() == "declaration_list" && parentKind(parent) == "impl_item" && parentKind(parent.Parent()) == "source_file":
+				if _, ok := rustImplType(c, parent.Parent().ChildByFieldName("type")); ok {
+					c.add(name, goextract.KindMethod, n)
+				}
+			default:
+				c.except("rust-function-not-at-top-level-or-impl")
+			}
+		}
+	})
+}
+
+// phpTopLevel mirrors phpextract.topLevelDecls: the root's children with
+// namespace bodies, top-level if branches and blocks flattened.
+func phpTopLevel(root *tree_sitter.Node) map[uintptr]bool {
+	decls := make(map[uintptr]bool)
+	var walk func(n *tree_sitter.Node)
+	walk = func(n *tree_sitter.Node) {
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			child := n.NamedChild(i)
+			switch child.Kind() {
+			case "namespace_definition":
+				if body := child.ChildByFieldName("body"); body != nil {
+					walk(body)
+				}
+				continue
+			case "if_statement":
+				for j := uint(0); j < child.NamedChildCount(); j++ {
+					if b := child.NamedChild(j); b.Kind() == "compound_statement" || b.Kind() == "else_clause" {
+						walk(b)
+					}
+				}
+				continue
+			case "compound_statement":
+				walk(child)
+				continue
+			}
+			decls[child.Id()] = true
+		}
+	}
+	walk(root)
+	return decls
+}
+
+func phpDecls(c *declCollector, root *tree_sitter.Node) {
+	top := phpTopLevel(root)
+	walkTree(root, func(n *tree_sitter.Node) {
+		switch n.Kind() {
+		case "class_declaration", "trait_declaration", "interface_declaration":
+			if !top[n.Id()] {
+				return
+			}
+			kind := goextract.KindStruct
+			if n.Kind() == "interface_declaration" {
+				kind = goextract.KindInterface
+			}
+			if name, ok := c.name(n); ok {
+				c.add(name, kind, n)
+			}
+		case "enum_declaration":
+			if top[n.Id()] {
+				c.except("php-enum-not-extracted")
+			}
+		case "method_declaration":
+			parent := n.Parent()
+			owner := ""
+			if parent != nil && parent.Kind() == "declaration_list" && parent.Parent() != nil && top[parent.Parent().Id()] {
+				owner = parentKind(parent)
+			}
+			switch owner {
+			case "class_declaration", "trait_declaration", "interface_declaration":
+				if name, ok := c.name(n); ok {
+					c.add(name, goextract.KindMethod, n)
+				}
+			default:
+				c.except("php-method-outside-type-body")
+			}
+		case "function_definition":
+			if !top[n.Id()] {
+				c.except("php-function-not-at-top-level")
+				return
+			}
+			if name, ok := c.name(n); ok {
+				c.add(name, goextract.KindFunction, n)
+			}
+		}
+	})
 }
