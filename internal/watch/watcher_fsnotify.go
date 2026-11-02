@@ -85,8 +85,8 @@ func addCreatedDir(w *fsnotify.Watcher, path string, skip func(name string) bool
 	return addRecursive(w, path, skip)
 }
 
-// removeMoved drops the watch of a directory that moved away from path,
-// and the watches of every directory below it. inotify keeps a watch on
+// removeMoved drops the watch of a directory that moved away from path
+// or was deleted, and the watches of every directory below it. inotify keeps a watch on
 // the moved directory, and fsnotify keeps it under the old path. Without
 // this step, the re-add on the Create event of the new path gets the same
 // watch back, and fsnotify's handling of the directory's IN_MOVE_SELF
@@ -132,7 +132,15 @@ func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *Debouncer) {
 				deb.Stop()
 				return
 			}
-			if ev.Has(fsnotify.Rename) {
+			if ev.Has(fsnotify.Rename) || ev.Has(fsnotify.Remove) {
+				// A deleted directory is dropped here as well, not left
+				// to inotify's own IN_IGNORED. fsnotify handles that
+				// event on its reader goroutine, so a directory deleted
+				// and created again under one name within a few
+				// milliseconds can have its fresh watch dropped by the
+				// late IN_IGNORED of the old one. Removing the path from
+				// this loop, before the Create of the new directory is
+				// handled, keeps the two apart.
 				removeMoved(w, ev.Name)
 			}
 			if ev.Has(fsnotify.Create) {
