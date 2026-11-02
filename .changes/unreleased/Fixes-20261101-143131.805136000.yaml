@@ -1,0 +1,3 @@
+kind: Fixes
+body: Each declaration gets its own node, calls to overloaded methods resolve by arity and argument type or point at the overload set, calls through typed variables resolve, the node count matches the store, and an existing index rebuilds once on its first sync.
+time: 2026-11-01T14:31:31.805136-05:00

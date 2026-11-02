@@ -259,6 +259,8 @@ func locationToProto(l query.Location) *uiv1.Location {
 		Kind:      l.Kind,
 		FilePath:  l.FilePath,
 		StartLine: l.StartLine,
+		Signature: l.Signature,
+		Ambiguous: l.Ambiguous,
 	}
 }
 

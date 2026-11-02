@@ -55,16 +55,16 @@
 //     implements-shaped refs.
 //   - call_expression -> goextract.RefKindCalls. A bare identifier callee is
 //     an unqualified call (empty PkgAlias). A field_expression callee
-//     (`recv.method()`) checks whether the receiver identifier is likely a
-//     same-module type name by PascalCase naming convention (Rust's own
-//     near-universal convention distinguishing a type from a local
-//     binding/parameter) — an empty PkgAlias routes it through
-//     resolveUnqualified; any other identifier or non-identifier receiver
-//     routes through the WR-02 synthetic-non-matching-alias pattern so it
-//     deterministically ends up "unresolved" rather than risking a false
-//     same-module match. A scoped_identifier callee (`Type::method()` /
-//     `Self::method()` / `crate::method()`) applies the same PascalCase
-//     heuristic to its path segment.
+//     (`recv.method()`) classifies its receiver through receiver() and
+//     goextract.Receiver, never by its case (D18): a name the body's
+//     TypeEnv declares gives its type, or a LocalAlias when the type is
+//     unknown; `self` takes its type from the environment; an imported
+//     name gives its import alias; any other identifier is a candidate
+//     type for pass 2; another expression gives its exprType, or
+//     UnknownAlias(kind). A scoped_identifier callee (`Type::method()` /
+//     `Self::method()` / `crate::method()`) sends an identifier path
+//     segment through Receiver, gives self, crate and super an empty
+//     alias, and UnknownAlias to anything else.
 //
 // Explicitly out of scope for this mainstream tier (named for the D-11
 // capability matrix, not silently missing):

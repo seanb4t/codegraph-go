@@ -1077,3 +1077,39 @@ func TestZeroMatchJSONShapesAreEmptyArraysNotNull(t *testing.T) {
 		assertJSONArrayNotNull(t, data, "files")
 	})
 }
+
+// TestBuildContainsIndexFoldsOverloadSets checks that a type whose
+// overloads sit under an overload_set node still lists each overload as
+// its member, and each overload names the type, not the set, as its
+// owner. Dispatch siblings and corroborated definitions read this index.
+func TestBuildContainsIndexFoldsOverloadSets(t *testing.T) {
+	set := goextract.KindOverloadSet + ":abc"
+	edges := []*schema.Edge{
+		{Source: "struct:A", Target: set, Kind: "contains", Provenance: "ast"},
+		{Source: set, Target: "method:a-foo-1", Kind: "contains", Provenance: "ast"},
+		{Source: set, Target: "method:a-foo-2", Kind: "contains", Provenance: "ast"},
+		{Source: "struct:A", Target: "method:a-bar", Kind: "contains", Provenance: "ast"},
+	}
+	byType, owner, err := buildContainsIndex(&traverseFakeReader{nodes: map[string]*schema.Node{}, edges: edges})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"method:a-foo-1", "method:a-foo-2", "method:a-bar"} {
+		if owner[id] != "struct:A" {
+			t.Errorf("owner[%s] = %q, want struct:A", id, owner[id])
+		}
+	}
+	if _, ok := owner[set]; ok {
+		t.Errorf("the set %s has an owner entry, want none", set)
+	}
+	var members []string
+	for _, e := range byType["struct:A"] {
+		members = append(members, e.Target)
+	}
+	if len(members) != 3 {
+		t.Errorf("struct:A contains %v, want its three methods", members)
+	}
+	if _, ok := byType[set]; ok {
+		t.Errorf("the set %s lists members of its own, want none", set)
+	}
+}

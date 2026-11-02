@@ -22,7 +22,7 @@ import (
 // per D-01b (the golden node.json corpus wraps this exact markdown as
 // {command, output}).
 func newNodeCmd() *cobra.Command {
-	var path, file string
+	var path, file, signature string
 	var line int
 
 	cmd := &cobra.Command{
@@ -59,7 +59,7 @@ func newNodeCmd() *cobra.Command {
 			// (04-05-SUMMARY.md's contract tests).
 			mode := resolveColor(cmd)
 			if mode.Styled {
-				d, err := eng.NodeDetail(symbol, file, lineHint)
+				d, err := eng.NodeDetailSelected(query.Selector{Symbol: symbol, Signature: signature}, file, lineHint)
 				if err != nil {
 					return err
 				}
@@ -71,7 +71,7 @@ func newNodeCmd() *cobra.Command {
 				return present.RenderNode(d, pal, w)
 			}
 
-			out, err := eng.Node(symbol, file, lineHint)
+			out, err := eng.NodeSelected(query.Selector{Symbol: symbol, Signature: signature}, file, lineHint)
 			if err != nil {
 				return err
 			}
@@ -89,6 +89,7 @@ func newNodeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().StringVarP(&file, "file", "f", "", "file path — disambiguates symbol, or selects file-mode when symbol is omitted")
 	cmd.Flags().IntVarP(&line, "line", "l", 0, "line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)")
+	cmd.Flags().StringVar(&signature, "signature", "", "parameter types that select one overload, for example \"String, Throwable\"")
 
 	return cmd
 }

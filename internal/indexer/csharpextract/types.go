@@ -55,15 +55,17 @@
 //     Helper.Assist()`) already spells out its own declaring namespace in
 //     its own AST shape (a qualified_name's "qualifier" field) — that text
 //     is used directly as PkgAlias, self-mapped into result.Imports so
-//     resolveSelector's exact-match lookup succeeds without needing a prior
+//     the resolver's exact-match lookup succeeds without needing a prior
 //     `using` declaration at all.
-//  2. An unqualified, PascalCase-leading simple name (`Helper.Assist()`,
-//     `: BaseClass`) is attempted as a SAME-NAMESPACE reference (empty
-//     PkgAlias, resolveUnqualified against the caller's own namespace) —
-//     mirroring javaextract's same-package heuristic. A camelCase-leading
-//     name is routed through a synthetic non-matching alias instead
-//     (mirrors goextract's WR-02 fix), since it is very likely a local
-//     variable/field/parameter, not a type.
+//  2. An unqualified simple name in a heritage clause or a type position
+//     (`: BaseClass`) carries an empty PkgAlias whatever its case (D18):
+//     the resolver looks it up by scope and in the caller's own
+//     namespace. A call receiver (`helper.Assist()`, `Helper.Assist()`)
+//     is classified by receiver() and goextract.ReceiverAt over the
+//     body's TypeEnv: a declared name gives its type, or a LocalAlias
+//     when the type is unknown; an imported name gives its alias; any
+//     other name is a candidate type in the caller's namespace for pass
+//     2.
 //
 // A bare (non-fully-qualified) reference to a type that is genuinely
 // declared in a DIFFERENT namespace, reached only via a namespace-level

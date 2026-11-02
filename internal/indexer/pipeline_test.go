@@ -42,12 +42,12 @@ func TestPipelineRun(t *testing.T) {
 	}
 	defer r.Close()
 
-	alphaID := nodeid.NodeID(goextract.KindFunction, "Alpha", "pkga/pkga.go")
+	alphaID := nodeid.DeclID(goextract.KindFunction, "Alpha", "pkga/pkga.go", "()")
 	if _, err := r.GetNode(alphaID); err != nil {
 		t.Errorf("GetNode(pkga.Alpha) = %v, want nil (node present in committed store)", err)
 	}
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "pkgb/pkgb.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "pkgb/pkgb.go", "()")
 	it, err := r.IterateEdges(runID)
 	if err != nil {
 		t.Fatalf("IterateEdges: %v", err)

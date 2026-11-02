@@ -187,7 +187,7 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 // This is the ONE gather path per shape (D-01): Node() and
 // (*Engine).NodeDetail both call this exact function, so CLI, MCP and UI
 // cannot disagree about what a node is.
-func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, error) {
+func (e *Engine) buildNodeDetail(symbol, file string, line *int, signature string) (NodeDetail, error) {
 	if symbol == "" {
 		if file == "" {
 			return NodeDetail{}, invalidArgumentf("query: node requires a symbol name or a file path")
@@ -202,7 +202,9 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, er
 	// NODE-04: file supplied with no line hint tries the pre-CR-02
 	// exact-match single-def path first, returning immediately on
 	// success — unchanged output for every existing exact-match caller.
-	if file != "" && line == nil {
+	// A signature takes the narrowing path below instead, so that it
+	// selects among the overloads of the file.
+	if file != "" && line == nil && signature == "" {
 		if node, err := e.resolveNodeForDetail(symbol, file); err == nil {
 			d, err := e.buildSingleDefDetail(node)
 			if err != nil {
@@ -220,6 +222,12 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, er
 		return NodeDetail{}, notFoundf("query: symbol %q not found", symbol)
 	}
 
+	if signature != "" {
+		matches, err = narrowBySignature(symbol, matches, signature)
+		if err != nil {
+			return NodeDetail{}, err
+		}
+	}
 	// NODE-03: narrow by substring file hint and/or line containment; a
 	// no-op when neither hint is set (narrowNodeMatches returns matches
 	// unchanged), preserving NODE-01/02's identical behavior for the
@@ -248,7 +256,13 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, er
 // dependency (D-03) — internal/query imports nothing from the UI wire
 // layer.
 func (e *Engine) NodeDetail(symbol, file string, line *int) (NodeDetail, error) {
-	return e.buildNodeDetail(symbol, file, line)
+	return e.buildNodeDetail(symbol, file, line, "")
+}
+
+// NodeDetailSelected is NodeDetail with sel.Signature selecting one
+// overload, as `--signature` does.
+func (e *Engine) NodeDetailSelected(sel Selector, file string, line *int) (NodeDetail, error) {
+	return e.buildNodeDetail(sel.Symbol, file, line, sel.Signature)
 }
 
 // SourceFor reads relPath fresh from disk through the same repo-root-
@@ -621,6 +635,11 @@ func (e *Engine) buildExploreResult(query string, maxFiles int) (ExploreResult, 
 		}
 	}
 
+	ranked, folded, err := e.foldOverloadSets(ranked)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
 	groups, symbolCount := groupMatchesByFile(ranked, maxFiles)
 	if len(groups) == 0 {
 		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
@@ -634,7 +653,7 @@ func (e *Engine) buildExploreResult(query string, maxFiles int) (ExploreResult, 
 	blasts := make([]ExploreBlast, 0, symbolCount)
 	for _, g := range groups {
 		for _, n := range g.Symbols {
-			bl, err := e.buildBlastEntry(n, rev)
+			bl, err := e.buildBlastEntry(n, rev, folded[n.Id])
 			if err != nil {
 				return ExploreResult{}, err
 			}

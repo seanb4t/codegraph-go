@@ -111,7 +111,7 @@ func TestSyncReparsesOnlyChangedFiles(t *testing.T) {
 	r, closeAll := openSnapshot(t, storeDir)
 	defer closeAll()
 
-	id := nodeid.NodeID(goextract.KindFunction, "Standalone", "pkg/a.go")
+	id := nodeid.DeclID(goextract.KindFunction, "Standalone", "pkg/a.go", "()")
 	if _, err := r.GetNode(id); err != nil {
 		t.Fatalf("GetNode(Standalone): %v", err)
 	}
@@ -146,8 +146,8 @@ func TestSyncResolvesAcrossUnchangedFiles(t *testing.T) {
 	r, closeAll := openSnapshot(t, storeDir)
 	defer closeAll()
 
-	callerID := nodeid.NodeID(goextract.KindFunction, "Caller", "pkg/caller.go")
-	standaloneID := nodeid.NodeID(goextract.KindFunction, "Standalone", "pkg/unchanged.go")
+	callerID := nodeid.DeclID(goextract.KindFunction, "Caller", "pkg/caller.go", "()")
+	standaloneID := nodeid.DeclID(goextract.KindFunction, "Standalone", "pkg/unchanged.go", "()")
 	if !hasEdge(t, r, callerID, "calls", standaloneID) {
 		t.Fatalf("expected calls edge Caller -> Standalone across an unchanged file (Pitfall 1: store-seeded index required)")
 	}
@@ -169,8 +169,8 @@ func TestSyncReExtractsDependents(t *testing.T) {
 		t.Fatalf("Sync (backfill): %v", err)
 	}
 
-	oldFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
-	useFooID := nodeid.NodeID(goextract.KindFunction, "UseFoo", "pkg/b.go")
+	oldFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
+	useFooID := nodeid.DeclID(goextract.KindFunction, "UseFoo", "pkg/b.go", "()")
 
 	// Move Foo out of a.go into a2.go. b.go's own source is left byte-for-
 	// byte untouched — its content hash does not change.
@@ -188,7 +188,7 @@ func TestSyncReExtractsDependents(t *testing.T) {
 		t.Errorf("expected old Foo node (pkg/a.go) to be pruned after the move")
 	}
 
-	newFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a2.go")
+	newFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a2.go", "()")
 	if _, err := r.GetNode(newFooID); err != nil {
 		t.Fatalf("GetNode(new Foo in a2.go): %v", err)
 	}
@@ -212,7 +212,7 @@ func TestSyncPrunesDeletedFile(t *testing.T) {
 		t.Fatalf("Sync (backfill): %v", err)
 	}
 
-	fooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
+	fooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
 
 	if err := os.Remove(filepath.Join(repoRoot, "pkg", "a.go")); err != nil {
 		t.Fatalf("os.Remove: %v", err)
@@ -262,7 +262,7 @@ func TestSyncDetectsAddedFile(t *testing.T) {
 	r, closeAll := openSnapshot(t, storeDir)
 	defer closeAll()
 
-	barID := nodeid.NodeID(goextract.KindFunction, "Bar", "pkg/b.go")
+	barID := nodeid.DeclID(goextract.KindFunction, "Bar", "pkg/b.go", "()")
 	if _, err := r.GetNode(barID); err != nil {
 		t.Fatalf("GetNode(Bar): %v", err)
 	}
@@ -655,8 +655,8 @@ func TestSyncResolvesSymbolAddedAfterCaller(t *testing.T) {
 			func() {
 				r, closeAll := openSnapshot(t, storeDir)
 				defer closeAll()
-				aID := nodeid.NodeID(goextract.KindFunction, "A", "pkg/a.go")
-				bID := nodeid.NodeID(goextract.KindFunction, "B", tc.calleeRel)
+				aID := nodeid.DeclID(goextract.KindFunction, "A", "pkg/a.go", "()")
+				bID := nodeid.DeclID(goextract.KindFunction, "B", tc.calleeRel, "()")
 				if !hasEdge(t, r, aID, "calls", bID) {
 					t.Fatalf("no calls edge A -> B after the Sync that added B")
 				}
@@ -695,8 +695,8 @@ func TestSyncRestoresEdgesToRestoredFile(t *testing.T) {
 	func() {
 		r, closeAll := openSnapshot(t, storeDir)
 		defer closeAll()
-		xID := nodeid.NodeID(goextract.KindFunction, "X", "pkg/x.go")
-		yID := nodeid.NodeID(goextract.KindFunction, "Y", "pkg/y.go")
+		xID := nodeid.DeclID(goextract.KindFunction, "X", "pkg/x.go", "()")
+		yID := nodeid.DeclID(goextract.KindFunction, "Y", "pkg/y.go", "()")
 		if !hasEdge(t, r, xID, "calls", yID) {
 			t.Fatalf("no calls edge X -> Y after y.go was restored")
 		}
@@ -758,12 +758,12 @@ func TestSyncWaitingFileReparsedOnce(t *testing.T) {
 			func() {
 				r, closeAll := openSnapshot(t, storeDir)
 				defer closeAll()
-				xID := nodeid.NodeID(goextract.KindFunction, "X", "pkg/x.go")
+				xID := nodeid.DeclID(goextract.KindFunction, "X", "pkg/x.go", "()")
 				zPath := "pkg/z.go"
 				if _, ok := tc.edits[zPath]; !ok {
 					zPath = "pkg/y.go"
 				}
-				zID := nodeid.NodeID(goextract.KindFunction, "Z", zPath)
+				zID := nodeid.DeclID(goextract.KindFunction, "Z", zPath, "()")
 				if !hasEdge(t, r, xID, "calls", zID) {
 					t.Fatalf("no calls edge X -> Z after the Sync that added Z")
 				}
@@ -1096,7 +1096,7 @@ func TestSyncBackfillsGraphWithoutMethodSpecs(t *testing.T) {
 	if !meta.GetHasMethodSpecs() {
 		t.Error("Meta.HasMethodSpecs = false after backfill, want true")
 	}
-	method, err := r.GetNode(nodeid.NodeID(goextract.KindMethod, "S.Read", "pkg/r.go"))
+	method, err := r.GetNode(nodeid.DeclID(goextract.KindMethod, "S.Read", "pkg/r.go", "([]byte)"))
 	if err != nil {
 		t.Fatalf("GetNode(S.Read): %v", err)
 	}
@@ -1191,8 +1191,8 @@ func TestSyncFollowsModulePathRename(t *testing.T) {
 
 	r, closeAll := openSnapshot(t, storeDir)
 	defer closeAll()
-	aID := nodeid.NodeID(goextract.KindFunction, "A", "pkg/a.go")
-	bID := nodeid.NodeID(goextract.KindFunction, "B", "cmd/b.go")
+	aID := nodeid.DeclID(goextract.KindFunction, "A", "pkg/a.go", "()")
+	bID := nodeid.DeclID(goextract.KindFunction, "B", "cmd/b.go", "()")
 	if !hasEdge(t, r, bID, "calls", aID) {
 		t.Fatalf("no calls edge B -> A after the module rename")
 	}
@@ -1237,8 +1237,8 @@ func TestSyncMaxChanged(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(repoRoot, "pkg", "d.go"), "package pkg\n\nfunc Added() {}\n")
 
-	oldID := nodeid.NodeID(goextract.KindFunction, "Old", "pkg/a.go")
-	newID := nodeid.NodeID(goextract.KindFunction, "New", "pkg/a.go")
+	oldID := nodeid.DeclID(goextract.KindFunction, "Old", "pkg/a.go", "()")
+	newID := nodeid.DeclID(goextract.KindFunction, "New", "pkg/a.go", "()")
 	hasNode := func(id string) bool {
 		t.Helper()
 		r, closeAll := openSnapshot(t, storeDir)

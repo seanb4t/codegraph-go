@@ -180,6 +180,12 @@ message Location {
   string kind = 2;
   string file_path = 3;
   int32 start_line = 4;
+  // signature is the signature of the overload this row belongs to, set
+  // when the query spans an overload set or selects one overload.
+  // ambiguous marks a call that static analysis could not decide: it
+  // targets the set, not one overload.
+  string signature = 5;
+  bool ambiguous = 6;
 }
 
 // GetStatusRequest is presently empty of consulted fields — v1's server

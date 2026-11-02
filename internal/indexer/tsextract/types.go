@@ -164,8 +164,8 @@
 // A bare identifier call (`Foo()`) or a bare heritage-clause identifier
 // (`class Derived extends Foo`) first checks namedImportOrigin: a hit
 // emits UnresolvedRef{PkgAlias: localAlias, Name: originModuleOwnName} —
-// PkgAlias must be a literal key in FileResult.Imports (resolveSelector's
-// own, unchanged, narrowest-safe-set contract), and Name is looked up
+// PkgAlias must be a literal key in FileResult.Imports (the resolver
+// reads the alias from that map and nowhere else), and Name is looked up
 // WITHIN that target module's own symbol bucket. A miss falls through to
 // an ordinary unqualified (empty PkgAlias) same-module resolution attempt
 // — the same fallback every sibling's bare-identifier-call handling uses.
@@ -187,13 +187,11 @@
 //
 // A qualified member-access call/heritage reference (`X.method()`, `class
 // Derived extends X.Base`) resolves its PkgAlias via: a real import alias
-// (any shape) in Imports -> qualified; otherwise an uppercase-leading
-// (PascalCase, the near-universal TS/JS class-naming convention, mirroring
-// every priority-4 sibling's identical heuristic) identifier -> a
-// same-module (empty PkgAlias) attempt; otherwise a synthetic non-matching
-// alias, mirroring goextract's own WR-02 fix, so a local-variable/parameter
-// receiver (`myWidget.render()`) deterministically falls through to
-// "unresolved" rather than risking a same-module false match.
+// (any shape) in Imports -> qualified; otherwise the receiver is
+// classified through receiver() and goextract.ReceiverAt over the body's
+// TypeEnv, never by its case (D18): a declared name (`myWidget.render()`)
+// gives its type, or a LocalAlias when the type is unknown, and any other
+// identifier is a candidate type in the caller's module for pass 2.
 package tsextract
 
 import "sync"

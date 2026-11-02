@@ -48,7 +48,7 @@ func TestAddCreatedDirSkipsExcludedDirs(t *testing.T) {
 	}
 
 	for _, d := range []string{filepath.Join(root, ".venv"), filepath.Join(root, "pkg")} {
-		if err := addCreatedDir(w.fsw, d, indexer.ShouldSkipDir); err != nil {
+		if err := addCreatedDir(w, d, indexer.ShouldSkipDir); err != nil {
 			t.Fatalf("addCreatedDir %s: %v", d, err)
 		}
 	}
@@ -114,4 +114,50 @@ func TestWatcherErrorsDrained(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// TestRemoveMovedDropsTheSubtree checks removeMoved on its own: after a
+// directory with a subdirectory moves, the old paths leave the watch list
+// and the directory set, and adding the new path watches the subtree
+// under its new name.
+func TestRemoveMovedDropsTheSubtree(t *testing.T) {
+	root := t.TempDir()
+	old := filepath.Join(root, "old")
+	sub := filepath.Join(old, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	w, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer w.Close()
+
+	moved := filepath.Join(root, "moved")
+	if err := os.Rename(old, moved); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	removeMoved(w, filepath.Join(root, "unrelated.txt"))
+	removeMoved(w, old)
+	if err := addCreatedDir(w, moved, indexer.ShouldSkipDir); err != nil {
+		t.Fatalf("addCreatedDir: %v", err)
+	}
+
+	watched := make(map[string]bool)
+	for _, p := range w.fsw.WatchList() {
+		watched[p] = true
+	}
+	for _, want := range []string{root, moved, filepath.Join(moved, "sub")} {
+		if !watched[want] || !w.dirs[want] {
+			t.Errorf("%s is not watched; watch list %v, dirs %v", want, w.fsw.WatchList(), w.dirs)
+		}
+	}
+	for _, gone := range []string{old, sub} {
+		if watched[gone] || w.dirs[gone] {
+			t.Errorf("%s is still watched after the move; watch list %v, dirs %v", gone, w.fsw.WatchList(), w.dirs)
+		}
+	}
+	if len(watched) != len(w.dirs) {
+		t.Errorf("watch list has %d entries, the directory set %d", len(watched), len(w.dirs))
+	}
 }

@@ -407,18 +407,82 @@ func buildContainsIndex(r graphstore.Reader) (byType map[string][]*schema.Edge, 
 
 	byType = make(map[string][]*schema.Edge)
 	methodOwner = make(map[string]string)
+	// An overload set sits between a type and its overloads: type
+	// contains set, set contains each overload. The index folds the set
+	// away, so a type lists its overloads and an overload names its type.
+	setOwner := make(map[string]string)
+	var viaSet []*schema.Edge
 	for it.Next() {
 		e := it.Edge()
 		if e.Kind != "contains" {
 			continue
 		}
-		byType[e.Source] = append(byType[e.Source], e)
-		methodOwner[e.Target] = e.Source
+		switch {
+		case isOverloadSetID(e.Target):
+			setOwner[e.Target] = e.Source
+		case isOverloadSetID(e.Source):
+			viaSet = append(viaSet, e)
+		default:
+			byType[e.Source] = append(byType[e.Source], e)
+			methodOwner[e.Target] = e.Source
+		}
 	}
 	if err := it.Err(); err != nil {
 		return nil, nil, err
 	}
+	for _, e := range viaSet {
+		owner, ok := setOwner[e.Source]
+		if !ok {
+			continue
+		}
+		folded := &schema.Edge{Source: owner, Target: e.Target, Kind: e.Kind, Provenance: e.Provenance}
+		byType[owner] = append(byType[owner], folded)
+		methodOwner[e.Target] = owner
+	}
 	return byType, methodOwner, nil
+}
+
+// isOverloadSetID reports whether id names an overload_set node: a node
+// id starts with its kind.
+func isOverloadSetID(id string) bool {
+	return strings.HasPrefix(id, goextract.KindOverloadSet+":")
+}
+
+// setsOfMembers returns, sorted by id, the overload set nodes that
+// contain a member whose id is in members.
+func (e *Engine) setsOfMembers(members map[string]bool) ([]*schema.Node, error) {
+	it, err := e.reader.IterateEdges("")
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+	ids := make(map[string]bool)
+	for it.Next() {
+		edge := it.Edge()
+		if edge.Kind == goextract.RefKindContains && isOverloadSetID(edge.Source) && members[edge.Target] {
+			ids[edge.Source] = true
+		}
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	sorted := make([]string, 0, len(ids))
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	var sets []*schema.Node
+	for _, id := range sorted {
+		n, err := e.reader.GetNode(id)
+		if err != nil {
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		sets = append(sets, n)
+	}
+	return sets, nil
 }
 
 // implementedInterfaces inverts implementsIdx (Target/interface-keyed)
@@ -594,40 +658,56 @@ type AffectedResult struct {
 // needed for the forward direction), capped at limit (0/negative means
 // unlimited, validated by validateLimit before any scan runs, V5).
 func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
+	return e.CalleesSelected(Selector{Symbol: symbol}, limit)
+}
+
+// CalleesSelected is Callees over a Selector. Over an overload set it
+// lists the callees of every overload, each with the signature of the
+// overload that makes the call. A callee that is itself a set is marked
+// ambiguous.
+func (e *Engine) CalleesSelected(sel Selector, limit int) (CalleesResult, error) {
 	if err := validateLimit(limit); err != nil {
 		return CalleesResult{}, err
 	}
 
-	node, err := e.resolveSymbolNode(symbol)
+	tg, err := e.symbolTargets(sel)
 	if err != nil {
 		return CalleesResult{}, err
 	}
 
-	it, err := e.reader.IterateEdges(node.Id)
-	if err != nil {
-		return CalleesResult{}, err
-	}
-	defer it.Close()
-
+	seen := make(map[string]bool)
 	locs := []Location{}
-	for it.Next() {
-		edge := it.Edge()
-		if edge.Kind != goextract.RefKindCalls {
+	for _, t := range tg.nodes {
+		if t.ambiguous {
 			continue
 		}
-		target, err := e.reader.GetNode(edge.Target)
+		it, err := e.reader.IterateEdges(t.node.Id)
 		if err != nil {
-			// WR-04: a dangling edge (target node pruned/missing) degrades
-			// gracefully — skip it rather than aborting the whole call.
-			if errors.Is(err, graphstore.ErrNotFound) {
-				continue
-			}
 			return CalleesResult{}, err
 		}
-		locs = append(locs, nodeLocation(target))
-	}
-	if err := it.Err(); err != nil {
-		return CalleesResult{}, err
+		for it.Next() {
+			edge := it.Edge()
+			if edge.Kind != goextract.RefKindCalls || seen[t.node.Id+"|"+edge.Target] {
+				continue
+			}
+			callee, err := e.reader.GetNode(edge.Target)
+			if err != nil {
+				// WR-04: a dangling edge (target node pruned/missing) degrades
+				// gracefully — skip it rather than aborting the whole call.
+				if errors.Is(err, graphstore.ErrNotFound) {
+					continue
+				}
+				it.Close()
+				return CalleesResult{}, err
+			}
+			seen[t.node.Id+"|"+edge.Target] = true
+			locs = append(locs, calleeLocation(callee, t, tg.overloaded))
+		}
+		err = it.Err()
+		it.Close()
+		if err != nil {
+			return CalleesResult{}, err
+		}
 	}
 
 	// WR-05/WR-02: sort BEFORE applying limit/MaxLimit caps — mirrors
@@ -641,7 +721,7 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 	if len(locs) > MaxLimit {
 		locs = locs[:MaxLimit]
 	}
-	return CalleesResult{Symbol: symbol, Callees: locs}, nil
+	return CalleesResult{Symbol: sel.Symbol, Callees: locs}, nil
 }
 
 // Callers returns symbol's reverse callers via the D-04 in-memory
@@ -655,11 +735,21 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 // "contains" index — both fresh-per-call, same discipline as
 // BuildReverseAdjacency).
 func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
+	return e.CallersSelected(Selector{Symbol: symbol}, limit)
+}
+
+// CallersSelected is Callers over a Selector. Over an overload set it
+// lists the callers of every overload, each with the signature of the
+// overload it calls, and the set's ambiguous callers marked ambiguous.
+// With a signature it lists the callers of that overload and the set's
+// ambiguous callers, and never a caller that resolved to another
+// overload.
+func (e *Engine) CallersSelected(sel Selector, limit int) (CallersResult, error) {
 	if err := validateLimit(limit); err != nil {
 		return CallersResult{}, err
 	}
 
-	node, err := e.resolveSymbolNode(symbol)
+	tg, err := e.symbolTargets(sel)
 	if err != nil {
 		return CallersResult{}, err
 	}
@@ -676,29 +766,40 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 	if err != nil {
 		return CallersResult{}, err
 	}
-	siblings, err := dispatchSiblingIDs(e.reader, node, methodOwner, containsByType, implementsIdx)
-	if err != nil {
-		return CallersResult{}, err
-	}
-	targetIDs := append([]string{node.Id}, siblings...)
 
 	seen := make(map[string]bool)
 	locs := []Location{}
-	for _, tid := range targetIDs {
-		for _, edge := range rev[tid] {
-			if seen[edge.Source] {
-				continue
-			}
-			src, err := e.reader.GetNode(edge.Source)
+	for _, t := range tg.nodes {
+		targetIDs := []string{t.node.Id}
+		if !t.ambiguous {
+			siblings, err := dispatchSiblingIDs(e.reader, t.node, methodOwner, containsByType, implementsIdx)
 			if err != nil {
-				// WR-04: skip a dangling edge rather than aborting.
-				if errors.Is(err, graphstore.ErrNotFound) {
-					continue
-				}
 				return CallersResult{}, err
 			}
-			seen[edge.Source] = true
-			locs = append(locs, nodeLocation(src))
+			targetIDs = append(targetIDs, siblings...)
+		}
+		for _, tid := range targetIDs {
+			for _, edge := range rev[tid] {
+				// Over one target a caller is listed once. Over overloads
+				// a caller is listed once per overload it calls.
+				key := edge.Source
+				if tg.overloaded {
+					key = edge.Source + "|" + t.node.Id
+				}
+				if seen[key] {
+					continue
+				}
+				src, err := e.reader.GetNode(edge.Source)
+				if err != nil {
+					// WR-04: skip a dangling edge rather than aborting.
+					if errors.Is(err, graphstore.ErrNotFound) {
+						continue
+					}
+					return CallersResult{}, err
+				}
+				seen[key] = true
+				locs = append(locs, overloadLocation(src, t, tg.overloaded))
+			}
 		}
 	}
 
@@ -713,7 +814,7 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 	if len(locs) > MaxLimit {
 		locs = locs[:MaxLimit]
 	}
-	return CallersResult{Symbol: symbol, Callers: locs}, nil
+	return CallersResult{Symbol: sel.Symbol, Callers: locs}, nil
 }
 
 // Impact returns the depth-bounded reverse blast radius of symbol: a
@@ -732,12 +833,19 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 // this method's tests exercise), dispatch siblings are always empty and
 // this composition is a no-op — the arithmetic above is unchanged.
 func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
+	return e.ImpactSelected(Selector{Symbol: symbol}, depth)
+}
+
+// ImpactSelected is Impact over a Selector. Over an overload set the
+// walk starts from every overload and from the set, so the ambiguous
+// callers count as affected.
+func (e *Engine) ImpactSelected(sel Selector, depth int) (ImpactResult, error) {
 	if err := validateDepth(depth); err != nil {
 		return ImpactResult{}, err
 	}
 	depth = clampDepth(depth)
 
-	node, err := e.resolveSymbolNode(symbol)
+	tg, err := e.symbolTargets(sel)
 	if err != nil {
 		return ImpactResult{}, err
 	}
@@ -755,9 +863,14 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 		return ImpactResult{}, err
 	}
 
-	visited := map[string]bool{node.Id: true}
-	affected := []Location{nodeLocation(node)}
-	frontier := []*schema.Node{node}
+	visited := make(map[string]bool)
+	affected := []Location{}
+	var frontier []*schema.Node
+	for _, t := range tg.nodes {
+		visited[t.node.Id] = true
+		affected = append(affected, overloadLocation(t.node, t, tg.overloaded))
+		frontier = append(frontier, t.node)
+	}
 	edgeCount := 0
 
 	for d := 0; d < depth && len(frontier) > 0; d++ {
@@ -800,7 +913,7 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 	sortLocations(affected)
 
 	return ImpactResult{
-		Symbol:    symbol,
+		Symbol:    sel.Symbol,
 		Depth:     depth,
 		NodeCount: len(affected),
 		EdgeCount: edgeCount,
@@ -900,6 +1013,19 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 	}
 	if err := it.Err(); err != nil {
 		return AffectedResult{}, err
+	}
+	// An overload set whose members span files has no file of its own.
+	// Its ambiguous callers depend on every member, so a changed member
+	// puts the set on the frontier too.
+	sets, err := e.setsOfMembers(visited)
+	if err != nil {
+		return AffectedResult{}, err
+	}
+	for _, set := range sets {
+		if !visited[set.Id] {
+			frontier = append(frontier, set)
+			visited[set.Id] = true
+		}
 	}
 
 	tests := []Location{}

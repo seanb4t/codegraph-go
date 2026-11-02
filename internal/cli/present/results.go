@@ -24,12 +24,22 @@ import (
 // plain bytes. name/kind/filePath are repo-derived and may be adversarial
 // — each passes through sanitizeControl before styling (CR-01).
 func writeLocationLine(b *strings.Builder, pal Palette, indent, name, kind, filePath string, line int32) {
+	writeLocationLineSuffix(b, pal, indent, name, kind, filePath, line, "")
+}
+
+// writeLocationLineSuffix is writeLocationLine with the overload suffix
+// of a query over overloads (query.OverloadSuffix) after the location,
+// or "" for none.
+func writeLocationLineSuffix(b *strings.Builder, pal Palette, indent, name, kind, filePath string, line int32, suffix string) {
 	b.WriteString(indent)
 	b.WriteString(pal.Value.Render(sanitizeControl(name)))
 	b.WriteString(" (")
 	b.WriteString(pal.Label.Render(sanitizeControl(kind)))
 	b.WriteString(") ")
 	b.WriteString(pal.Path.Render(sanitizeControl(filePath) + ":" + strconv.Itoa(int(line))))
+	if suffix != "" {
+		b.WriteString(pal.Label.Render(sanitizeControl(suffix)))
+	}
 	b.WriteString("\n")
 }
 
@@ -82,7 +92,7 @@ func RenderCallers(r query.CallersResult, pal Palette, w io.Writer) error {
 	b.WriteString(pal.Count.Render(strconv.Itoa(len(r.Callers))))
 	b.WriteString(" caller(s):\n")
 	for _, l := range r.Callers {
-		writeLocationLine(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine)
+		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -98,7 +108,7 @@ func RenderCallees(r query.CalleesResult, pal Palette, w io.Writer) error {
 	b.WriteString(pal.Count.Render(strconv.Itoa(len(r.Callees))))
 	b.WriteString(" callee(s):\n")
 	for _, l := range r.Callees {
-		writeLocationLine(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine)
+		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -118,7 +128,7 @@ func RenderImpact(r query.ImpactResult, pal Palette, w io.Writer) error {
 	b.WriteString(pal.Count.Render(strconv.Itoa(r.EdgeCount)))
 	b.WriteString(" edge(s)\n")
 	for _, l := range r.Affected {
-		writeLocationLine(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine)
+		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err

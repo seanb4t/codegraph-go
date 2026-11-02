@@ -333,8 +333,14 @@ public:
 	if !hasUnresolved(cresult, goextract.RefKindCalls, "staticMethod", "") {
 		t.Errorf("expected Widget::staticMethod() calls ref with empty PkgAlias, got %+v", cresult.Unresolved)
 	}
-	if !hasUnresolved(cresult, goextract.RefKindCalls, "size", "<local:w>") {
-		t.Errorf("expected local-variable-receiver calls ref to w.size with a synthetic non-matching alias, got %+v", cresult.Unresolved)
+	found := false
+	for _, r := range cresult.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == "size" && r.PkgAlias == "" && r.ReceiverType == "w" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the call w.size() through an undeclared name to record w as a candidate type for pass 2, got %+v", cresult.Unresolved)
 	}
 }
 

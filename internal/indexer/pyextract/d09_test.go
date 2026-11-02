@@ -33,8 +33,11 @@ func TestPyInstantiates(t *testing.T) {
 	if !hasUnresolved(result, goextract.RefKindInstantiates, "Widget", "") {
 		t.Errorf("expected instantiates ref to Widget (Widget()), got %+v", result.Unresolved)
 	}
-	if hasUnresolved(result, goextract.RefKindInstantiates, "helper_func", "") {
-		t.Errorf("expected NO instantiates ref for a snake_case call (helper_func()), got %+v", result.Unresolved)
+	// Every call is an instantiates candidate (design.md D18): pass 2
+	// keeps the edge only when the target is a class, so helper_func()
+	// gets no edge there, not here.
+	if !hasUnresolved(result, goextract.RefKindInstantiates, "helper_func", "") {
+		t.Errorf("expected an instantiates candidate for helper_func() too, got %+v", result.Unresolved)
 	}
 }
 

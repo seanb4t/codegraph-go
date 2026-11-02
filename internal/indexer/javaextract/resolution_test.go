@@ -190,7 +190,7 @@ func TestResolve_ImportedCrossPackageInheritance(t *testing.T) {
 // unqualified call to a method declared ONLY on a superclass in a
 // DIFFERENT package (`baseMethod()`, no `this.`/qualifier — Java's
 // implicit-receiver call shape) resolves into a real "calls" edge by
-// walking the extends chain, even though pass 1's own resolveUnqualified
+// walking the extends chain, even though pass 1's own same-module lookup
 // (same-moduleKey-only lookup) cannot see across the package boundary on
 // its own.
 func TestResolve_InheritedMethodCallResolvesViaConformanceRetry(t *testing.T) {

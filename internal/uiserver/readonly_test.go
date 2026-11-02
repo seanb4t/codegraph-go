@@ -301,7 +301,7 @@ const uiProtoFieldFixtureLenAtPlan1001 = uiProtoFieldFixtureLenAtPlan0901 + 17
 // 16. Declared in terms of the prior constant, never as a bare literal,
 // mirroring the established chained-extension pattern (01-10, 01-11,
 // 03-05, 04-03, 05-02, 05-06, 06-01, 09-01, 10-01).
-const uiProtoFieldFixtureLenAtPlan1101 = uiProtoFieldFixtureLenAtPlan1001 + 2
+const uiProtoFieldFixtureLenAtPlan1101 = uiProtoFieldFixtureLenAtPlan1001 + 4
 
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
@@ -368,6 +368,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"Location", "kind", 2},
 	{"Location", "file_path", 3},
 	{"Location", "start_line", 4},
+	{"Location", "signature", 5},
+	{"Location", "ambiguous", 6},
 	{"GetStatusRequest", "path", 1},
 	{"GetStatusResponse", "initialized", 1},
 	{"GetStatusResponse", "version", 2},

@@ -31,8 +31,8 @@ func TestSyncPruneOwnedEdgesRemovesStaleFileIndexEntry(t *testing.T) {
 		t.Fatalf("Sync (seed): %v", err)
 	}
 
-	fooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
-	useFooID := nodeid.NodeID(goextract.KindFunction, "UseFoo", "pkg/b.go")
+	fooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
+	useFooID := nodeid.DeclID(goextract.KindFunction, "UseFoo", "pkg/b.go", "()")
 
 	assertFileIndexHasEdge(t, storeDir, "pkg/b.go", useFooID, "calls", fooID)
 

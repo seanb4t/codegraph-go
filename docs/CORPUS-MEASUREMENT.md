@@ -20,15 +20,15 @@ Do NOT hand-edit this file.
 
 | Kind | Threshold | Supplying Repository | Measured Count |
 |------|-----------|---------------------|---------------|
-| calls | 29406 | google/guava | 58812 |
-| extends | 1265 | google/guava | 2531 |
+| calls | 29406 | google/guava | 90152 |
+| extends | 1265 | google/guava | 2553 |
 | implements | 509 | gohugoio/hugo | 1018 |
 | imports | 1080 | gohugoio/hugo | 2160 |
-| instantiates | 938 | google/guava | 1053 |
-| overrides | 2329 | google/guava | 4658 |
-| references | 6531 | google/guava | 13063 |
-| returns | 2795 | google/guava | 5591 |
-| type_of | 5928 | google/guava | 11857 |
+| instantiates | 938 | google/guava | 5709 |
+| overrides | 2329 | google/guava | 9847 |
+| references | 6531 | google/guava | 14673 |
+| returns | 2795 | google/guava | 6693 |
+| type_of | 5928 | google/guava | 11990 |
 
 ## Per-Language File Counts
 
@@ -65,15 +65,15 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 2547
 - **Edges by kind:**
-  - calls: 6217
-  - contains: 11033
+  - calls: 10748
+  - contains: 11159
   - embeds: 155
   - extends: 131
   - implements: 1018
   - imports: 2160
-  - instantiates: 636
-  - overrides: 24
-  - references: 1342
+  - instantiates: 644
+  - overrides: 25
+  - references: 1524
   - returns: 1096
   - type_of: 30
 - **Files by language:**
@@ -85,17 +85,17 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 3317
 - **Edges by kind:**
-  - calls: 58812
-  - contains: 56641
+  - calls: 90152
+  - contains: 62839
   - embeds: 139
-  - extends: 2531
-  - implements: 735
+  - extends: 2553
+  - implements: 759
   - imports: 0
-  - instantiates: 1053
-  - overrides: 4658
-  - references: 13063
-  - returns: 5591
-  - type_of: 11857
+  - instantiates: 5709
+  - overrides: 9847
+  - references: 14673
+  - returns: 6693
+  - type_of: 11990
 - **Files by language:**
   - java: 3229
   - javascript: 2
@@ -124,14 +124,14 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 130
 - **Edges by kind:**
-  - calls: 166
-  - contains: 734
+  - calls: 172
+  - contains: 766
   - extends: 38
   - implements: 0
   - imports: 0
   - instantiates: 32
   - overrides: 11
-  - references: 20
+  - references: 21
   - returns: 6
   - type_of: 2
 - **Files by language:**
@@ -160,16 +160,16 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 284
 - **Edges by kind:**
-  - calls: 387
-  - contains: 1227
+  - calls: 516
+  - contains: 1742
   - extends: 17
   - implements: 2
   - imports: 0
-  - instantiates: 12
-  - overrides: 12
+  - instantiates: 35
+  - overrides: 15
   - references: 3
-  - returns: 15
-  - type_of: 18
+  - returns: 7
+  - type_of: 17
 - **Files by language:**
   - csharp: 216
 ### tiangolo/fastapi (a1fa70d4)

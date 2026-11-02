@@ -1371,3 +1371,12 @@ func TestWithEngineRefusesAnAlreadyCancelledRequest(t *testing.T) {
 		}
 	})
 }
+
+// TestLocationToProtoCarriesOverloadFields checks that the signature of
+// an overload and the ambiguous mark of a call reach the UI wire shape.
+func TestLocationToProtoCarriesOverloadFields(t *testing.T) {
+	got := locationToProto(query.Location{Name: "add", Kind: "method", FilePath: "Sink.java", StartLine: 4, Signature: "(String s)", Ambiguous: true})
+	if got.Signature != "(String s)" || !got.Ambiguous {
+		t.Errorf("locationToProto = %+v, want signature (String s) and ambiguous", got)
+	}
+}

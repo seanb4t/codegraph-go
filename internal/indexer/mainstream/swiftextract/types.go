@@ -74,13 +74,12 @@
 //     `navigation_expression` callee (`recv.method()`) resolves through its
 //     own "target"/"suffix" fields (suffix is a wrapping navigation_suffix
 //     node with its OWN "suffix" field holding the final simple_identifier
-//     member name) — an uppercase-leading identifier target is a
-//     same-module attempt (empty PkgAlias, mirroring
-//     pyextract/rustextract's PascalCase-type-name heuristic); any other
-//     identifier target is forced through the WR-02 synthetic-non-matching-
-//     alias pattern (`<local:name>`); any other target shape (including
-//     `self`, deliberately NOT special-cased — see below) gets a synthetic
-//     `<kind>` alias.
+//     member name) — the target is classified through receiver() over
+//     the body's TypeEnv, never by its case (D18): a declared name gives
+//     its type, or a LocalAlias when the type is unknown; any other
+//     identifier is a candidate type for pass 2; another target shape
+//     (including `self`, deliberately NOT special-cased — see below)
+//     gives its exprType or UnknownAlias(kind).
 //
 // Explicitly out of scope for this mainstream tier (named for the D-11
 // capability matrix, not silently missing):

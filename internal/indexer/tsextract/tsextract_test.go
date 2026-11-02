@@ -323,11 +323,10 @@ func TestExtract_ExtendsImplements(t *testing.T) {
 	})
 }
 
-// TestExtract_Calls proves the three call-resolution disambiguation shapes:
-// a PascalCase non-imported qualified call attempts a same-module
-// resolution, a camelCase non-imported qualified call is forced through a
-// synthetic non-matching alias (mirrors goextract's WR-02 fix), and a bare
-// unqualified call attempts a same-module resolution.
+// TestExtract_Calls proves the three call shapes: a call through a name
+// declared in the file records that type as the receiver, a call through
+// a typed parameter records the parameter's type, and a bare unqualified
+// call attempts a same-module resolution (design.md D17, D18).
 func TestExtract_Calls(t *testing.T) {
 	src := `class Helper {
   static assist(): void {}
@@ -343,11 +342,19 @@ export function run(myWidget: Widget): void {
 	if err != nil {
 		t.Fatalf("Extract returned error: %v", err)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "assist", "") {
-		t.Errorf("expected a same-module call attempt to assist (PascalCase Helper), got %+v", result.Unresolved)
+	receiverOf := func(name string) string {
+		for _, r := range result.Unresolved {
+			if r.Kind == goextract.RefKindCalls && r.Name == name && r.PkgAlias == "" {
+				return r.ReceiverType
+			}
+		}
+		return "<none>"
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "render", "<local:myWidget>") {
-		t.Errorf("expected a forced-unresolved call to render (camelCase local var), got %+v", result.Unresolved)
+	if got := receiverOf("assist"); got != "Helper" {
+		t.Errorf("Helper.assist(): receiver type = %q, want Helper", got)
+	}
+	if got := receiverOf("render"); got != "Widget" {
+		t.Errorf("myWidget.render(): receiver type = %q, want the parameter's type Widget", got)
 	}
 	if !hasUnresolved(result, goextract.RefKindCalls, "helper", "") {
 		t.Errorf("expected a same-module call attempt to helper (bare identifier), got %+v", result.Unresolved)
@@ -524,5 +531,69 @@ func TestExtract_OversizedFileSkippedNotFatal(t *testing.T) {
 	}
 	if len(result.Nodes) != 0 {
 		t.Errorf("expected no nodes for a skipped file, got %+v", result.Nodes)
+	}
+}
+
+// TestExtract_ExportClauseMarksExported checks that a declaration named
+// by an `export { a, B as C }` clause or by `export default name` is
+// exported, as one under the `export` keyword is.
+func TestExtract_ExportClauseMarksExported(t *testing.T) {
+	src := `function a(): void {}
+class B {}
+function d(): void {}
+function hidden(): void {}
+export { a, B as C };
+export default d;
+`
+	p := newTestParser(t, "ts")
+	result, err := Extract(p, "m", "clause.ts", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	for _, c := range []struct {
+		kind, name string
+		want       bool
+	}{
+		{goextract.KindFunction, "a", true},
+		{goextract.KindStruct, "B", true},
+		{goextract.KindFunction, "d", true},
+		{goextract.KindFunction, "hidden", false},
+	} {
+		n := findNode(result, c.kind, c.name)
+		if n == nil {
+			t.Fatalf("no %s node named %s", c.kind, c.name)
+		}
+		if n.Node.IsExported != c.want {
+			t.Errorf("%s.IsExported = %v, want %v", c.name, n.Node.IsExported, c.want)
+		}
+	}
+}
+
+// TestExtract_NamespaceMembersAreNotNested checks that the body of a
+// namespace is not a local scope: its members are visible across files,
+// unlike a function declared inside a function body.
+func TestExtract_NamespaceMembersAreNotNested(t *testing.T) {
+	src := `export namespace NS {
+  export function inNamespace(): void {}
+}
+export function outer(): void {
+  function inner(): void {}
+  inner();
+}
+`
+	p := newTestParser(t, "ts")
+	result, err := Extract(p, "m", "ns.ts", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	if n := findNode(result, goextract.KindFunction, "inNamespace"); n == nil {
+		t.Fatal("no node for inNamespace")
+	} else if n.Node.Nested {
+		t.Error("inNamespace.Nested = true, want false")
+	}
+	if n := findNode(result, goextract.KindFunction, "inner"); n == nil {
+		t.Fatal("no node for inner")
+	} else if !n.Node.Nested {
+		t.Error("inner.Nested = false, want true")
 	}
 }

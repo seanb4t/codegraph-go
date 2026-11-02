@@ -5,7 +5,7 @@ Project: <FIXTURE>
 Index Statistics:
   Files:     4
   Nodes:     20
-  Edges:     22
+  Edges:     23
   DB Size:   <SIZE> MB
   Backend:   pebble
 Nodes by Kind:
@@ -20,7 +20,7 @@ Nodes by Kind:
   variable        1
 Edges by Kind:
   contains        14
-  calls           3
+  calls           4
   imports         2
   embeds          1
   extends         1

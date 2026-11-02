@@ -221,8 +221,8 @@ func TestRealRepoStructure(t *testing.T) {
 	}
 	defer r.Close()
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "pkgb/pkgb.go")
-	alphaID := nodeid.NodeID(goextract.KindFunction, "Alpha", "pkga/pkga.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "pkgb/pkgb.go", "()")
+	alphaID := nodeid.DeclID(goextract.KindFunction, "Alpha", "pkga/pkga.go", "()")
 	derivedID := nodeid.NodeID(goextract.KindStruct, "Derived", "pkga/embed.go")
 	baseID := nodeid.NodeID(goextract.KindStruct, "Base", "pkga/embed.go")
 	rwID := nodeid.NodeID(goextract.KindInterface, "ReadWriter", "pkga/embed.go")

@@ -55,14 +55,13 @@
 //     (RES-02) resolve-time job, out of this plan's scope.
 //   - call -> goextract.RefKindCalls. `self.method()`/`cls.method()` are
 //     treated as an implicit same-class call (empty PkgAlias, mirrors
-//     Java's `this.method()`); an uppercase-leading (PascalCase) bare
-//     identifier receiver that is not a real import is treated as a
-//     likely same-module class reference (empty PkgAlias, the same naming-
-//     convention heuristic javaextract/csharpextract already use, since
-//     this extractor tracks no local-variable type table); any other
-//     identifier or non-identifier receiver routes through the WR-02
-//     synthetic-non-matching-alias pattern so it deterministically ends up
-//     "unresolved" rather than risking a false same-module match.
+//     Java's `this.method()`); any other identifier receiver is
+//     classified through receiver() and goextract.Receiver over the
+//     body's TypeEnv, never by its case (D18): a declared name gives its
+//     annotated type, or a LocalAlias when the type is unknown; an
+//     imported name gives its alias; any other name is a candidate type
+//     for pass 2; a non-identifier receiver gives its exprType or
+//     UnknownAlias(kind).
 //
 // Python's resolution fidelity is inherently more heuristic than Go/Java/
 // C#'s: Python has no static types on most references, PEP 420 implicit

@@ -606,11 +606,17 @@ func (x *Node) GetReturnType() string {
 // Callees, Impact, Affected) reuses this one message rather than a
 // per-rpc variant.
 type Location struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	FilePath      string                 `protobuf:"bytes,3,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
-	StartLine     int32                  `protobuf:"varint,4,opt,name=start_line,json=startLine,proto3" json:"start_line,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Kind      string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	FilePath  string                 `protobuf:"bytes,3,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
+	StartLine int32                  `protobuf:"varint,4,opt,name=start_line,json=startLine,proto3" json:"start_line,omitempty"`
+	// signature is the signature of the overload this row belongs to, set
+	// when the query spans an overload set or selects one overload.
+	// ambiguous marks a call that static analysis could not decide: it
+	// targets the set, not one overload.
+	Signature     string `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+	Ambiguous     bool   `protobuf:"varint,6,opt,name=ambiguous,proto3" json:"ambiguous,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -671,6 +677,20 @@ func (x *Location) GetStartLine() int32 {
 		return x.StartLine
 	}
 	return 0
+}
+
+func (x *Location) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
+func (x *Location) GetAmbiguous() bool {
+	if x != nil {
+		return x.Ambiguous
+	}
+	return false
 }
 
 // GetStatusRequest is presently empty of consulted fields — v1's server
@@ -4376,13 +4396,15 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\vis_exported\x18\x0e \x01(\bR\n" +
 	"isExported\x12\x1f\n" +
 	"\vreturn_type\x18\x0f \x01(\tR\n" +
-	"returnType\"n\n" +
+	"returnType\"\xaa\x01\n" +
 	"\bLocation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1b\n" +
 	"\tfile_path\x18\x03 \x01(\tR\bfilePath\x12\x1d\n" +
 	"\n" +
-	"start_line\x18\x04 \x01(\x05R\tstartLine\"&\n" +
+	"start_line\x18\x04 \x01(\x05R\tstartLine\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\tR\tsignature\x12\x1c\n" +
+	"\tambiguous\x18\x06 \x01(\bR\tambiguous\"&\n" +
 	"\x10GetStatusRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\"\xb6\x02\n" +
 	"\x11GetStatusResponse\x12 \n" +

@@ -7,7 +7,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -80,8 +79,10 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		fileID:            fileID,
 		language:          lang,
 		result:            &result,
-		typeNodesByName:   make(map[string]string),
+		alloc:             nodeid.NewAllocator(relPath),
+		typeNodesByStart:  make(map[uint]string),
 		namedImportOrigin: make(map[string]string),
+		exportedNames:     make(map[string]bool),
 	}
 
 	// Imports are collected first so every subsequent phase (types,
@@ -90,12 +91,14 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	// namedImportOrigin table regardless of declaration order in the
 	// source (ES imports are hoisted at the language level; this extractor
 	// mirrors that by ordering its own collection the same way).
+	ex.collectExportClauses(root)
 	ex.collectImports(root)
 	ex.collectTypes(root)
 	ex.collectMethods(root)
 	ex.collectFunctions(root)
 	ex.collectExportedConsts(root)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
@@ -104,12 +107,21 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 // TS/JS-specific namedImportOrigin table (types.go's package doc, "Named-
 // import call/heritage resolution").
 type extractor struct {
-	src             []byte
-	relPath         string
-	fileID          string
-	language        string
-	result          *goextract.FileResult
-	typeNodesByName map[string]string
+	src      []byte
+	relPath  string
+	fileID   string
+	language string
+	result   *goextract.FileResult
+	alloc    *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
+
+	// typeNodesByStart maps the start byte of each class or interface
+	// declaration to its node id, so that each copy of a repeated class
+	// gets its own methods.
+	typeNodesByStart map[uint]string
 
 	// namedImportOrigin maps a default/named import's LOCAL alias to the
 	// target module's OWN declared symbol name — see types.go's package
@@ -117,6 +129,11 @@ type extractor struct {
 	// import needs no entry (always referenced via member access, which
 	// resolves through the ordinary Imports-membership check).
 	namedImportOrigin map[string]string
+
+	// exportedNames are the local names an `export { a, b as c }` clause
+	// with no source, or an `export default name`, exports. A declaration
+	// of such a name is exported, as one under `export` is.
+	exportedNames map[string]bool
 }
 
 // languageForPath derives the LanguageSpec ID this file was registered
@@ -386,10 +403,10 @@ func (ex *extractor) emitTypeDecl(node *tree_sitter.Node, kind string) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(kind, name, ex.relPath)
+	id := ex.alloc.Declare(kind, name, "", node.StartByte())
 	start := node.StartPosition()
 	end := node.EndPosition()
-	exported := isDirectlyExported(node)
+	exported := ex.exported(node, name)
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
 		Id:            id,
@@ -408,7 +425,7 @@ func (ex *extractor) emitTypeDecl(node *tree_sitter.Node, kind string) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	ex.typeNodesByStart[node.StartByte()] = id
 
 	ex.collectSupertypeRefs(id, node)
 }
@@ -419,10 +436,10 @@ func (ex *extractor) emitTypeAlias(node *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindTypeAlias, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindTypeAlias, name, "", node.StartByte())
 	start := node.StartPosition()
 	end := node.EndPosition()
-	exported := isDirectlyExported(node)
+	exported := ex.exported(node, name)
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
 		Id:            id,
@@ -499,7 +516,7 @@ func (ex *extractor) emitSupertypeRef(fromID string, t *tree_sitter.Node) {
 			return
 		}
 		name = propNode.Utf8Text(ex.src)
-		pkgAlias = ex.memberAccessAlias(t.ChildByFieldName("object"))
+		pkgAlias = ex.receiverAlias(t.ChildByFieldName("object"))
 	default:
 		n, ok := typeRefFromExpr(t, ex.src)
 		if !ok {
@@ -562,8 +579,8 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
-	exported := isDirectlyExported(decl)
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
+	exported := ex.exported(decl, name)
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{
 		Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl, decl, exported),
@@ -581,8 +598,10 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(nil, "", decl, body)
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
 	}
 }
 
@@ -624,7 +643,7 @@ func (ex *extractor) emitExportedConstDeclarator(d *tree_sitter.Node) {
 	if valueNode != nil {
 		switch valueNode.Kind() {
 		case "arrow_function", "function_expression", "generator_function":
-			id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+			id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(valueNode), d.StartByte())
 			ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{
 				Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, d, valueNode, true),
 			})
@@ -633,14 +652,16 @@ func (ex *extractor) emitExportedConstDeclarator(d *tree_sitter.Node) {
 			}})
 			ex.emitNamedTypeRef(id, valueNode.ChildByFieldName("return_type"), goextract.RefKindReturns)
 			if body := valueNode.ChildByFieldName("body"); body != nil {
+				ex.env = ex.bodyEnv(nil, "", valueNode, body)
 				ex.collectCalls(id, body)
 				ex.collectReferencesAndInstantiates(id, body)
+				ex.env = nil
 			}
 			return
 		}
 	}
 
-	id := nodeid.NodeID(goextract.KindConstant, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindConstant, name, "", d.StartByte())
 	start := d.StartPosition()
 	end := d.EndPosition()
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
@@ -686,7 +707,7 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, posNode
 		returnType = rt.Utf8Text(ex.src)
 	}
 
-	return &schema.Node{
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -702,6 +723,9 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, posNode
 		Visibility:    visibilityFor(exported),
 		IsExported:    exported,
 	}
+	params, ret := collectParams(sigNode, ex.src)
+	goextract.FillSignature(n, params, ret)
+	return n
 }
 
 // --- methods ---
@@ -722,7 +746,7 @@ func (ex *extractor) emitMethodsForType(typeNode *tree_sitter.Node) {
 		return
 	}
 	typeName := nameNode.Utf8Text(ex.src)
-	typeID, ok := ex.typeNodesByName[typeName]
+	typeID, ok := ex.typeNodesByStart[typeNode.StartByte()]
 	if !ok {
 		return
 	}
@@ -730,22 +754,23 @@ func (ex *extractor) emitMethodsForType(typeNode *tree_sitter.Node) {
 	if body == nil {
 		return
 	}
+	fields := ex.fieldsOf(body)
 	for i := uint(0); i < body.NamedChildCount(); i++ {
 		m := body.NamedChild(i)
 		if m.Kind() == "method_definition" {
-			ex.emitMethod(typeID, typeName, m)
+			ex.emitMethod(typeID, typeName, fields, m)
 		}
 	}
 }
 
-func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node) {
+func (ex *extractor) emitMethod(typeID, typeName string, fields *goextract.TypeEnv, decl *tree_sitter.Node) {
 	nameNode := decl.ChildByFieldName("name")
 	if nameNode == nil {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
 	qualifiedName := typeName + "." + name
-	id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 
 	vis := methodVisibility(decl, ex.src)
 	node := ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, decl, decl, vis == "public")
@@ -761,8 +786,10 @@ func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node)
 	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(fields, typeName, decl, body)
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
 	}
 }
 
@@ -798,20 +825,23 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	pos := call.StartPosition()
 	line, col := int32(pos.Row)+1, int32(pos.Column)
 
+	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	switch fn.Kind() {
 	case "identifier":
 		pkgAlias, name := ex.resolveBareIdentifier(fn.Utf8Text(ex.src))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "member_expression":
 		propNode := fn.ChildByFieldName("property")
 		if propNode == nil {
 			return
 		}
-		pkgAlias := ex.memberAccessAlias(fn.ChildByFieldName("object"))
+		pkgAlias, receiverType := ex.receiver(ex.env, fn.ChildByFieldName("object"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	}
 }
@@ -825,37 +855,6 @@ func (ex *extractor) resolveBareIdentifier(ident string) (pkgAlias, name string)
 		return ident, orig
 	}
 	return "", ident
-}
-
-// memberAccessAlias resolves a member_expression call/heritage reference's
-// PkgAlias from its "object" operand — see types.go's package doc,
-// "Named-import call/heritage resolution", for the full disambiguation
-// rationale (real import alias -> qualified; PascalCase non-import ->
-// same-module attempt; camelCase non-import -> forced-unresolved local
-// variable, mirroring goextract's WR-02 fix).
-func (ex *extractor) memberAccessAlias(object *tree_sitter.Node) string {
-	if object == nil {
-		return ""
-	}
-	switch object.Kind() {
-	case "this", "super":
-		return ""
-	case "identifier":
-		name := object.Utf8Text(ex.src)
-		if _, ok := ex.result.Imports[name]; ok {
-			return name
-		}
-		if isLikelyTypeName(name) {
-			return ""
-		}
-		return "<local:" + name + ">"
-	default:
-		// A non-identifier operand (another call_expression, a
-		// subscript_expression, another member_expression chain, a `new`
-		// expression, ...) can never be a real import alias — same
-		// synthetic-alias treatment, mirroring goextract's WR-02 fix.
-		return "<" + object.Kind() + ">"
-	}
 }
 
 // --- D-09 edge kinds (01-RESEARCH.md §B): instantiates/type_of/returns/references ---
@@ -889,7 +888,7 @@ func (ex *extractor) emitNamedTypeRef(fromID string, annotation *tree_sitter.Nod
 			return
 		}
 		name = propNode.Utf8Text(ex.src)
-		pkgAlias = ex.memberAccessAlias(t.ChildByFieldName("object"))
+		pkgAlias = ex.receiverAlias(t.ChildByFieldName("object"))
 	default:
 		n, ok := typeRefFromExpr(t, ex.src)
 		if !ok {
@@ -931,7 +930,7 @@ func (ex *extractor) recordInstantiate(fromID string, expr *tree_sitter.Node) {
 		if propNode == nil {
 			return
 		}
-		pkgAlias := ex.memberAccessAlias(ctor.ChildByFieldName("object"))
+		pkgAlias := ex.receiverAlias(ctor.ChildByFieldName("object"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindInstantiates, Line: line, Col: col,
 		})
@@ -1073,14 +1072,14 @@ func (ex *extractor) captureMemberAccessRead(fromID string, sel *tree_sitter.Nod
 	if propNode == nil {
 		return
 	}
-	pkgAlias := ex.memberAccessAlias(object)
+	pkgAlias, receiverType := ex.receiver(ex.env, object)
 	if object != nil && object.Kind() != "identifier" && object.Kind() != "this" {
 		ex.captureExprRead(fromID, object)
 	}
 	pos := sel.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
-		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column), ReceiverType: receiverType,
 	})
 }
 
@@ -1095,22 +1094,47 @@ func isDirectlyExported(node *tree_sitter.Node) bool {
 	return parent != nil && parent.Kind() == "export_statement"
 }
 
+// exported reports whether the declaration node named name is exported:
+// under an `export` keyword, or named by an export clause of the file.
+func (ex *extractor) exported(node *tree_sitter.Node, name string) bool {
+	return isDirectlyExported(node) || ex.exportedNames[name]
+}
+
+// collectExportClauses records the names that `export { a, b as c }`
+// clauses without a source, and `export default name`, export from this
+// file. A clause with a source is a re-export and names nothing local.
+func (ex *extractor) collectExportClauses(root *tree_sitter.Node) {
+	for i := uint(0); i < root.NamedChildCount(); i++ {
+		stmt := root.NamedChild(i)
+		if stmt.Kind() != "export_statement" || stmt.ChildByFieldName("source") != nil {
+			continue
+		}
+		for j := uint(0); j < stmt.NamedChildCount(); j++ {
+			c := stmt.NamedChild(j)
+			switch c.Kind() {
+			case "export_clause":
+				for k := uint(0); k < c.NamedChildCount(); k++ {
+					spec := c.NamedChild(k)
+					if spec.Kind() != "export_specifier" {
+						continue
+					}
+					if nameNode := spec.ChildByFieldName("name"); nameNode != nil {
+						ex.exportedNames[nameNode.Utf8Text(ex.src)] = true
+					}
+				}
+			case "identifier":
+				// export default name
+				ex.exportedNames[c.Utf8Text(ex.src)] = true
+			}
+		}
+	}
+}
+
 func visibilityFor(exported bool) string {
 	if exported {
 		return "public"
 	}
 	return "module"
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter — the near-universal TS/JS class-naming convention, mirroring
-// javaextract's/csharpextract's/pyextract's identical heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 // walkDescendants performs an iterative (stack-based, non-recursive)

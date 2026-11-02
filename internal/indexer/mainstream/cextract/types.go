@@ -94,15 +94,12 @@
 //   - call_expression -> goextract.RefKindCalls. A bare `identifier` callee
 //     is an unqualified call (empty PkgAlias). A `field_expression` callee
 //     (`recv.method()` / `recv->method()`, C's "argument"/"field" field
-//     names) checks its "argument" receiver: `this` is treated as an
-//     implicit same-class call (empty PkgAlias); an uppercase-leading
-//     identifier receiver is treated as a same-module attempt (empty
-//     PkgAlias, mirroring pyextract/rustextract's PascalCase-type-name
-//     heuristic); any other identifier receiver is forced through the
-//     WR-02 synthetic-non-matching-alias pattern (`<local:name>`) so it
-//     deterministically ends up "unresolved" rather than risking a false
-//     same-module match; any other receiver shape gets a synthetic
-//     `<kind>` alias. A `qualified_identifier` callee (`Type::method()` /
+//     names) classifies its "argument" receiver through receiver() over
+//     the body's TypeEnv, never by its case (D18): `this` takes the
+//     enclosing type; a declared name gives its type, or a LocalAlias
+//     when the type is unknown; any other identifier is a candidate type
+//     for pass 2; another receiver shape gives its exprType or
+//     UnknownAlias(kind). A `qualified_identifier` callee (`Type::method()` /
 //     `Namespace::func()`) is recorded with an empty PkgAlias — a
 //     same-module attempt (this tier cannot distinguish a namespace
 //     qualifier from a class qualifier at this node shape, matching C++'s

@@ -249,6 +249,14 @@ type Writer interface {
 	// m/n/e/f/a/x.
 	DeleteAllExcludedFiles() error
 
+	// DeleteGraph stages range-deletes of the whole n/, e/, f/ and x/
+	// namespaces: every node, edge, file record and file-index entry. A
+	// from-scratch rewrite over an existing store (Sync's backfill path)
+	// calls it first on the same Writer, so the old graph goes in the same
+	// commit that writes the new one, and nothing of the old graph
+	// survives. Meta and the c/ and a/ namespaces are left alone.
+	DeleteGraph() error
+
 	// DeleteNode stages a point-delete of the node record identified by
 	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after
 	// finding id via IterateFileIndex.

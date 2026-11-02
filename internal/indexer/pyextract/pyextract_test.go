@@ -2,6 +2,7 @@ package pyextract
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -199,8 +200,8 @@ func TestExtract_Imports(t *testing.T) {
 	if result.Imports["u"] != "pkg.util" {
 		t.Errorf("Imports[u] = %q, want %q", result.Imports["u"], "pkg.util")
 	}
-	if _, ok := result.Imports["pkg"]; ok {
-		t.Errorf("expected no Imports entry for a plain unaliased `import pkg.raw`, got Imports[pkg]=%q", result.Imports["pkg"])
+	if result.Imports["pkg"] != "pkg" {
+		t.Errorf("Imports[pkg] = %q, want %q: a plain `import pkg.raw` binds pkg", result.Imports["pkg"], "pkg")
 	}
 	if result.Imports["Helper"] != "pkg.helpers" {
 		t.Errorf("Imports[Helper] = %q, want %q", result.Imports["Helper"], "pkg.helpers")
@@ -296,10 +297,16 @@ class Widget:
 		t.Errorf("expected calls ref to u.assist with PkgAlias %q, got %+v", "u", result.Unresolved)
 	}
 	if !hasUnresolved(result, goextract.RefKindCalls, "assist", "") {
-		t.Errorf("expected Helper.assist() (Helper not a real import, PascalCase convention) to resolve with empty PkgAlias, got %+v", result.Unresolved)
+		t.Errorf("expected Helper.assist() (Helper declared in the module) to record Helper as the receiver with an empty PkgAlias, got %+v", result.Unresolved)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "helper", "<local:w>") {
-		t.Errorf("expected local-variable-receiver calls ref to w.helper with a synthetic non-matching alias, got %+v", result.Unresolved)
+	deferred := false
+	for _, r := range result.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == "helper" && strings.HasPrefix(r.ReceiverType, goextract.DeferredTypePrefix) {
+			deferred = true
+		}
+	}
+	if !deferred {
+		t.Errorf("expected the call w.helper() to record a deferred receiver type, the return type of Widget(), got %+v", result.Unresolved)
 	}
 }
 

@@ -269,14 +269,20 @@ public class Widget {
 	if !hasUnresolved(result, goextract.RefKindCalls, "assist", "Helper") {
 		t.Errorf("expected calls ref to Helper.assist with PkgAlias %q, got %+v", "Helper", result.Unresolved)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "helper", "<local:w>") {
-		t.Errorf("expected local-variable-receiver calls ref to w.helper with a synthetic non-matching alias, got %+v", result.Unresolved)
+	found := false
+	for _, r := range result.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == "helper" && r.ReceiverType == "Widget" && r.PkgAlias == "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the call w.helper() to record the receiver type Widget of the local w, got %+v", result.Unresolved)
 	}
 }
 
 // TestExtract_SamePackageQualifiedCall proves an uppercase-leading
 // identifier receiver that is NOT a real import resolves as a same-package
-// candidate (empty PkgAlias, routes through resolveUnqualified) rather than
+// candidate (empty PkgAlias, resolved in the caller's own module) rather than
 // a doomed selector lookup — the Java-specific counterpart to Go's WR-02
 // fix, since Java allows `ClassName.method()` for a same-package class with
 // no import statement at all.

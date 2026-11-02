@@ -117,9 +117,9 @@ func sanitizeControlForTest(s string) string {
 }
 
 func plainLocationLine(indent string, l query.Location) string {
-	return fmt.Sprintf("%s%s (%s) %s:%d\n", indent,
+	return fmt.Sprintf("%s%s (%s) %s:%d%s\n", indent,
 		sanitizeControlForTest(l.Name), sanitizeControlForTest(l.Kind),
-		sanitizeControlForTest(l.FilePath), l.StartLine)
+		sanitizeControlForTest(l.FilePath), l.StartLine, sanitizeControlForTest(query.OverloadSuffix(l)))
 }
 
 func plainSearch(locs []query.Location) string {

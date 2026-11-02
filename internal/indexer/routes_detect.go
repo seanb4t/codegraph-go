@@ -256,8 +256,8 @@ func (h *fileHandlerIndex) ResolveByLine(line int32) (string, bool) {
 // function/method node this language's own results declare, ANY file —
 // the cross-file fallback fileHandlerIndex.ResolveByName consults. A
 // same-name collision resolves deterministically (lowest node id wins),
-// mirroring symbolIndex.addSymbol's own WR-01 tie-break — never last-
-// write-wins, so the resolved handler is stable across runs regardless of
+// mirroring pickSymbol's own WR-01 tie-break — never last-write-wins, so
+// the resolved handler is stable across runs regardless of
 // file-processing order.
 func buildGlobalHandlerIndex(results []goextract.FileResult, language string) map[string]string {
 	out := make(map[string]string)

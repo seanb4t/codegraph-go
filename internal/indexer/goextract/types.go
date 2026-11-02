@@ -1,6 +1,13 @@
 package goextract
 
-import "github.com/seanb4t/codegraph-go/internal/schema"
+import (
+	"errors"
+	"fmt"
+	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/schema"
+)
 
 // Node kinds this extractor emits (D-06). No other kind is ever produced —
 // in particular, no "field" node is emitted (ratified skip, 02-RESEARCH.md
@@ -20,6 +27,11 @@ const (
 	// heuristic-provenance edge. Additive within SchemaVersion 1 — no
 	// pre-existing Kind* constant above is renamed or removed.
 	KindRoute = "route"
+
+	// KindOverloadSet is the node that holds two or more overloads of one
+	// name under one owner (design D14).
+	// It is not a declaration: it has no source text of its own.
+	KindOverloadSet = "overload_set"
 )
 
 // UnresolvedRef.Kind values. "calls" and "imports" and "embeds" are the
@@ -94,10 +106,49 @@ type MethodSpec struct {
 }
 
 // ExtractedNode wraps a fully-formed schema.Node produced during the
-// tree-walk. Its id is already computed via nodeid.NodeID, so Pass 2 never
-// needs to recompute or rename it.
+// tree-walk. Its id is final once the extractor calls FinalizeIDs, so
+// Pass 2 never needs to recompute or rename it.
 type ExtractedNode struct {
 	Node *schema.Node
+
+	// Scope is the enclosing local scope of a nested declaration, such
+	// as the body of the function that declares it, or the zero Range
+	// for a module-level declaration or a type member (design D15). A same-file reference resolves to the
+	// innermost declaration of its name whose Scope contains it.
+	Scope Range
+}
+
+// Range is a span of source text in 1-based lines and 0-based columns,
+// as nodes and references record positions.
+type Range struct {
+	StartLine, StartCol, EndLine, EndCol int32
+}
+
+// IsZero reports whether r is the zero Range.
+func (r Range) IsZero() bool {
+	return r == Range{}
+}
+
+// Contains reports whether the position (line, col) is inside r.
+func (r Range) Contains(line, col int32) bool {
+	if line < r.StartLine || line > r.EndLine {
+		return false
+	}
+	if line == r.StartLine && col < r.StartCol {
+		return false
+	}
+	if line == r.EndLine && col >= r.EndCol {
+		return false
+	}
+	return true
+}
+
+// Within reports whether r is inside o: o is an outer scope of r.
+func (r Range) Within(o Range) bool {
+	if r == o {
+		return false
+	}
+	return o.Contains(r.StartLine, r.StartCol) && (o.Contains(r.EndLine, r.EndCol) || (r.EndLine == o.EndLine && r.EndCol == o.EndCol))
 }
 
 // IntraEdge wraps a schema.Edge whose source and target ids are BOTH known
@@ -137,6 +188,49 @@ type UnresolvedRef struct {
 	// Line and Col are the 1-based line / 0-based column of the
 	// reference's call/use site (D-04).
 	Line, Col int32
+	// EndLine and EndCol are the 1-based line / 0-based column where a
+	// call ends. Every link of a chain such as a.b().c() starts at the
+	// same position, so the end is what tells the calls apart: the
+	// deferred type of a call expression (DeferredType) names it.
+	EndLine, EndCol int32
+
+	// The call-site data of a RefKindCalls ref (design D13 and D17).
+	// ReceiverType is the receiver's static type when the extractor knew
+	// it. ArgTypes has one entry per argument, "" for an unknown type. A
+	// type that is the return type of another call in the same body is
+	// deferred: it is DeferredTypePrefix plus the "line:col" where that
+	// call ends, and pass 2 fills it (D17). ArgLabels are the argument
+	// labels or keyword-argument names, one per argument, "" for an
+	// unlabeled one; empty when no argument is labeled.
+	ReceiverType string
+	ArgCount     int32
+	HasSpread    bool
+	ArgTypes     []string
+	ArgLabels    []string
+}
+
+// DeferredTypePrefix starts a type that pass 2 fills from another call's
+// return type: "@call 12:8" names the call that ends at line 12, column
+// 8.
+const DeferredTypePrefix = "@call "
+
+// ErrInternal marks an extraction failure that is a defect of the
+// indexer, not of the source file. Run and Sync fail on it instead of
+// skipping the file.
+var ErrInternal = errors.New("goextract: internal error")
+
+// CallArgs is the argument data of one call site, as the extractors
+// build it for an UnresolvedRef: Types and Labels have one entry per
+// argument.
+type CallArgs struct {
+	Spread bool
+	Types  []string
+	Labels []string
+}
+
+// Count is the number of arguments.
+func (c CallArgs) Count() int32 {
+	return int32(len(c.Types))
 }
 
 // FileResult is the complete Pass-1 intermediate for one Go source file:
@@ -197,4 +291,67 @@ type FileResult struct {
 	// Err is set instead of returning a non-nil error from Extract when
 	// this specific file could not be parsed/extracted.
 	Err error
+}
+
+// RewriteIDs replaces each node id r holds with rewrite(id): node ids,
+// intra-file edge endpoints, the origin of each unresolved reference, and
+// the keys of InterfaceMethods and MethodArity. nodeid.Allocator.Finalize
+// calls it to turn provisional ids into final ones.
+func (r *FileResult) RewriteIDs(rewrite func(id string) string) {
+	for _, en := range r.Nodes {
+		en.Node.Id = rewrite(en.Node.Id)
+	}
+	for _, ie := range r.IntraEdges {
+		ie.Edge.Source = rewrite(ie.Edge.Source)
+		ie.Edge.Target = rewrite(ie.Edge.Target)
+	}
+	for i := range r.Unresolved {
+		r.Unresolved[i].FromID = rewrite(r.Unresolved[i].FromID)
+	}
+	if len(r.InterfaceMethods) > 0 {
+		m := make(map[string][]MethodSpec, len(r.InterfaceMethods))
+		for id, specs := range r.InterfaceMethods {
+			m[rewrite(id)] = specs
+		}
+		r.InterfaceMethods = m
+	}
+	if len(r.MethodArity) > 0 {
+		m := make(map[string]int32, len(r.MethodArity))
+		for id, arity := range r.MethodArity {
+			m[rewrite(id)] = arity
+		}
+		r.MethodArity = m
+	}
+}
+
+// FinalizeIDs fills the scope of each declaration from the syntax tree
+// under root, then turns the provisional ids that a's Declare returned
+// into final ids in r. A provisional id that is left, or a node whose
+// Nested flag disagrees with its Scope, is a defect of the extractor: r
+// keeps no symbols and records the error as ErrInternal, which fails
+// the run.
+func FinalizeIDs(a *nodeid.Allocator, root *tree_sitter.Node, r *FileResult) {
+	FillScopes(root, r.Nodes)
+	err := a.Finalize(r)
+	if err == nil {
+		err = checkNesting(r.Nodes)
+	}
+	if err != nil {
+		r.Nodes, r.IntraEdges, r.Unresolved = nil, nil, nil
+		r.InterfaceMethods, r.MethodArity = nil, nil
+		r.Err = fmt.Errorf("%w: %w", ErrInternal, err)
+	}
+}
+
+// checkNesting reports the first node whose Nested flag and Scope
+// disagree. FillScopes sets both together: a nested declaration has the
+// scope it is visible in, and sameFile drops a nested candidate whose
+// scope does not hold the reference.
+func checkNesting(nodes []ExtractedNode) error {
+	for _, en := range nodes {
+		if en.Node != nil && en.Node.Nested != (en.Scope != Range{}) {
+			return fmt.Errorf("%s %q: nested is %v but the scope is %+v", en.Node.Kind, en.Node.QualifiedName, en.Node.Nested, en.Scope)
+		}
+	}
+	return nil
 }

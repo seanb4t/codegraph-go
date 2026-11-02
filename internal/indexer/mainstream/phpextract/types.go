@@ -58,13 +58,12 @@
 //     (`Type::method()`) -> goextract.RefKindCalls. `$this->method()`
 //     is treated as an implicit same-class call (empty PkgAlias, mirrors
 //     Java's `this.method()`); `Type::method()`/`self::`/`static::`/
-//     `parent::` are treated as same-module attempts (empty PkgAlias) —
-//     PHP class names are conventionally PascalCase and this is the
-//     dominant static-call idiom, mirroring pyextract/javaextract's
-//     naming-convention heuristic; any other receiver (a local
-//     variable/parameter/expression result) routes through the WR-02
-//     synthetic-non-matching-alias pattern so it deterministically ends up
-//     "unresolved" rather than risking a false same-module match.
+//     `parent::` are treated as same-module attempts (empty PkgAlias),
+//     whatever the case of the name (D18). A member-call receiver
+//     (`$obj->method()`) is classified through receiver() over the body's
+//     TypeEnv: a declared variable gives its type, or a LocalAlias when
+//     the type is unknown, and another expression gives its exprType or
+//     UnknownAlias.
 //     object_creation_expression (`new Widget()`) is NOT extracted as a
 //     calls edge at all — an accepted, documented gap (constructor
 //     invocation tracking would need a distinct ref shape this tier does

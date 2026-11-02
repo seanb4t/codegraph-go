@@ -66,8 +66,8 @@ func TestResolve_CrossPackageCall(t *testing.T) {
 	_ = files
 	_ = unresolved
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "pkgb/pkgb.go")
-	alphaID := nodeid.NodeID(goextract.KindFunction, "Alpha", "pkga/pkga.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "pkgb/pkgb.go", "()")
+	alphaID := nodeid.DeclID(goextract.KindFunction, "Alpha", "pkga/pkga.go", "()")
 
 	if !findEdge(edges, runID, "calls", alphaID) {
 		t.Fatalf("expected calls edge %s -> %s (pkgb.Run -> pkga.Alpha), got %+v", runID, alphaID, edges)
@@ -80,8 +80,8 @@ func TestResolve_IntraPackageCall(t *testing.T) {
 	results, modulePath := fixtureResults(t)
 	_, _, edges, _, _ := resolveRefs(results, modulePath)
 
-	alphaID := nodeid.NodeID(goextract.KindFunction, "Alpha", "pkga/pkga.go")
-	helperID := nodeid.NodeID(goextract.KindFunction, "helper", "pkga/pkga.go")
+	alphaID := nodeid.DeclID(goextract.KindFunction, "Alpha", "pkga/pkga.go", "()")
+	helperID := nodeid.DeclID(goextract.KindFunction, "helper", "pkga/pkga.go", "()")
 
 	if !findEdge(edges, alphaID, "calls", helperID) {
 		t.Fatalf("expected calls edge %s -> %s (pkga.Alpha -> pkga.helper), got %+v", alphaID, helperID, edges)
@@ -200,8 +200,8 @@ func (b B) Greet() string { return "hello" }
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	aGreetID := nodeid.NodeID(goextract.KindMethod, "A.Greet", "p.go")
-	bGreetID := nodeid.NodeID(goextract.KindMethod, "B.Greet", "p.go")
+	aGreetID := nodeid.DeclID(goextract.KindMethod, "A.Greet", "p.go", "()")
+	bGreetID := nodeid.DeclID(goextract.KindMethod, "B.Greet", "p.go", "()")
 
 	e := findEdgeFull(edges, bGreetID, goextract.EdgeKindOverrides, aGreetID)
 	if e == nil {
@@ -241,8 +241,8 @@ func (b B) Greet(name string) string { return "hello " + name }
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	aGreetID := nodeid.NodeID(goextract.KindMethod, "A.Greet", "p.go")
-	bGreetID := nodeid.NodeID(goextract.KindMethod, "B.Greet", "p.go")
+	aGreetID := nodeid.DeclID(goextract.KindMethod, "A.Greet", "p.go", "()")
+	bGreetID := nodeid.DeclID(goextract.KindMethod, "B.Greet", "p.go", "()")
 
 	if e := findEdgeFull(edges, bGreetID, goextract.EdgeKindOverrides, aGreetID); e != nil {
 		t.Fatalf("expected NO overrides edge for an arity-mismatched same-named method, got %+v", e)
@@ -293,7 +293,7 @@ func TestResolveOverrides_OverloadedMethodsBothSynthesized(t *testing.T) {
 	}
 	nodeStartLineByID := map[string]int32{}
 
-	synthesized := synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nodeStartLineByID)
+	synthesized := synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nil, nodeStartLineByID)
 
 	if e := findEdgeFull(synthesized, derivedFoo1, goextract.EdgeKindOverrides, baseFoo1); e == nil {
 		t.Errorf("expected overrides edge %s -> %s (arity-1 overload), got %+v", derivedFoo1, baseFoo1, synthesized)
@@ -488,7 +488,7 @@ func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
 // two-pass conformance retry (Task 2): an unqualified call
 // (`baseMethod()`) whose target is declared ONLY on a supertype in a
 // DIFFERENT module-key scope cannot resolve via pass 1's own
-// resolveUnqualified (same-moduleKey-only lookup) — it resolves only once
+// the same-module lookup — it resolves only once
 // the retry walks Derived's own "embeds" edge to Base and finds
 // baseMethod there. unresolvedCount ends at 0; a single-pass-only run
 // (i.e. this fixture minus the retry step) would leave it at 1 — this is
@@ -497,9 +497,9 @@ func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
 // path that could resolve this call.
 func TestResolve_ConformanceRetryResolvesInheritedCall(t *testing.T) {
 	baseID := nodeid.NodeID(goextract.KindStruct, "Base", "base.java")
-	baseMethodID := nodeid.NodeID(goextract.KindMethod, "Base.baseMethod", "base.java")
+	baseMethodID := nodeid.DeclID(goextract.KindMethod, "Base.baseMethod", "base.java", "()")
 	derivedID := nodeid.NodeID(goextract.KindStruct, "Derived", "derived.java")
-	runID := nodeid.NodeID(goextract.KindMethod, "Derived.run", "derived.java")
+	runID := nodeid.DeclID(goextract.KindMethod, "Derived.run", "derived.java", "()")
 
 	results := []goextract.FileResult{
 		{
@@ -630,7 +630,7 @@ func Consume(x int) {}
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "p.go", "()")
 	sharedID := nodeid.NodeID(goextract.KindVariable, "Shared", "p.go")
 
 	e := findEdgeFull(edges, runID, goextract.RefKindReferences, sharedID)
@@ -662,7 +662,7 @@ func Run() {
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "p.go", "()")
 	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "p.go")
 
 	if !findEdge(edges, runID, goextract.RefKindInstantiates, widgetID) {
@@ -678,7 +678,7 @@ func Run() {
 // produces no edge — counted as unresolved, never silently mis-typed.
 func TestInstantiates_NonStructTargetUnresolved(t *testing.T) {
 	ifaceID := nodeid.NodeID(goextract.KindInterface, "Iface", "p.go")
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "p.go", "()")
 
 	results := []goextract.FileResult{
 		{
@@ -748,7 +748,7 @@ func MakeWidget() Widget { return Widget{} }
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	makeWidgetID := nodeid.NodeID(goextract.KindFunction, "MakeWidget", "p.go")
+	makeWidgetID := nodeid.DeclID(goextract.KindFunction, "MakeWidget", "p.go", "()")
 	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "p.go")
 
 	if !findEdge(edges, makeWidgetID, goextract.RefKindReturns, widgetID) {
@@ -779,14 +779,16 @@ func F() {
 
 	_, _, edges, _, unresolved := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	fID := nodeid.NodeID(goextract.KindFunction, "F", "p.go")
-	describeID := nodeid.NodeID(goextract.KindMethod, "Widget.Describe", "p.go")
+	fID := nodeid.DeclID(goextract.KindFunction, "F", "p.go", "()")
+	describeID := nodeid.DeclID(goextract.KindMethod, "Widget.Describe", "p.go", "()")
 
-	if findEdge(edges, fID, "calls", describeID) {
-		t.Fatalf("did not expect a resolved calls edge for a local-variable receiver call, got %+v", edges)
+	// design.md D17: the local w has the declared type Widget, so the call
+	// resolves to Widget.Describe through the receiver type.
+	if !findEdge(edges, fID, "calls", describeID) {
+		t.Fatalf("expected the call w.Describe() through `var w Widget` to resolve to Widget.Describe, got %+v", edges)
 	}
-	if unresolved == 0 {
-		t.Errorf("expected unresolved count > 0 for the unresolvable method call, got 0")
+	if unresolved != 0 {
+		t.Errorf("expected no unresolved reference, got %d", unresolved)
 	}
 }
 
@@ -817,14 +819,16 @@ func Run() {
 
 	_, _, edges, _, unresolved := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
-	barID := nodeid.NodeID(goextract.KindMethod, "Widget.Bar", "p.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "p.go", "()")
+	barID := nodeid.DeclID(goextract.KindMethod, "Widget.Bar", "p.go", "()")
 
-	if findEdge(edges, runID, "calls", barID) {
-		t.Fatalf("WR-02: foo().Bar() must NOT mis-resolve to Widget.Bar as a same-package unqualified call, got edges %+v", edges)
+	// design.md D17: foo() returns Widget, which pass 2 fills into the
+	// deferred receiver type, so the call resolves to Widget.Bar.
+	if !findEdge(edges, runID, "calls", barID) {
+		t.Fatalf("expected foo().Bar() to resolve to Widget.Bar through foo's return type, got edges %+v", edges)
 	}
-	if unresolved == 0 {
-		t.Errorf("expected the foo().Bar() call ref to be counted as unresolved, got 0")
+	if unresolved != 0 {
+		t.Errorf("expected no unresolved reference, got %d", unresolved)
 	}
 }
 
@@ -849,9 +853,9 @@ func inner() int { return 1 }
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
-	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
-	outerID := nodeid.NodeID(goextract.KindFunction, "outer", "p.go")
-	innerID := nodeid.NodeID(goextract.KindFunction, "inner", "p.go")
+	runID := nodeid.DeclID(goextract.KindFunction, "Run", "p.go", "()")
+	outerID := nodeid.DeclID(goextract.KindFunction, "outer", "p.go", "(int)")
+	innerID := nodeid.DeclID(goextract.KindFunction, "inner", "p.go", "()")
 
 	if !findEdge(edges, runID, "calls", outerID) {
 		t.Errorf("expected calls edge Run -> outer, got %+v", edges)
@@ -888,7 +892,7 @@ func (w Widget) Describe() string { return "" }
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{typeResult, methodResult}, "example.com/p")
 
 	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "type.go")
-	describeID := nodeid.NodeID(goextract.KindMethod, "Widget.Describe", "method.go")
+	describeID := nodeid.DeclID(goextract.KindMethod, "Widget.Describe", "method.go", "()")
 
 	if !findEdge(edges, widgetID, "contains", describeID) {
 		t.Fatalf("expected contains edge %s -> %s (Widget -> cross-file Describe), got %+v", widgetID, describeID, edges)
@@ -1051,6 +1055,14 @@ func (w *stubWriter) DeleteExcludedFile(path string) error {
 	if w.failOn == "DeleteExcludedFile" {
 		return errStubWrite
 	}
+	return nil
+}
+
+func (w *stubWriter) DeleteGraph() error {
+	if w.failOn == "DeleteGraph" {
+		return errStubWrite
+	}
+	w.order = append(w.order, "DeleteGraph")
 	return nil
 }
 
@@ -1453,9 +1465,60 @@ func G() q.Thing {
 		"example.com/m/p Missing",
 		"example.com/m/p Recv",
 		"example.com/m/q Absent",
+		// w has the type q.Widget, so the call w.Describe() waits on
+		// Describe in q, not on a Describe in p (design.md D17).
+		"example.com/m/q Describe",
 		"example.com/m/q Thing",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("unresolved names = %q, want %q", got, want)
+	}
+}
+
+// TestOverridesSynthesizedAcrossOverloadSets indexes a subclass that
+// overrides two overloads of one name. The type contains an overload set
+// that contains the methods, and the overrides synthesis still pairs
+// each overload with the one it overrides.
+func TestOverridesSynthesizedAcrossOverloadSets(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"Base.java": `package p;
+
+public class Base {
+    public void foo(int n) {}
+
+    public void foo(String s) {}
+}
+`,
+		"Derived.java": `package p;
+
+public class Derived extends Base {
+    @Override
+    public void foo(int n) {}
+
+    @Override
+    public void foo(String s) {}
+}
+`,
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	g := readGraph(t, storeDir)
+	for _, sig := range []string{"(int n)", "(String s)"} {
+		from := g.node(t, "Derived.java", goextract.KindMethod, "foo", sig)
+		to := g.node(t, "Base.java", goextract.KindMethod, "foo", sig)
+		found := false
+		for _, e := range g.edges {
+			if e.Kind == goextract.EdgeKindOverrides && e.Source == from.Id {
+				if e.Target != to.Id {
+					t.Errorf("Derived.foo%s overrides %s, want Base.foo%s", sig, g.describe(e.Target), sig)
+				}
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no overrides edge from Derived.foo%s", sig)
+		}
 	}
 }
