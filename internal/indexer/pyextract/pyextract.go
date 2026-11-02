@@ -649,17 +649,12 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 // recordInstantiateCandidate emits a D-09 `instantiates` Pass-1 ref
 // (01-RESEARCH.md §B) candidate alongside a `calls` ref recordCall already
-// emitted, gated on receiver(name): Python instantiation is
-// syntactically IDENTICAL to a plain call (`Foo()` may call a function OR
-// construct a class — RESEARCH §B's "overlaps calls syntactically" note),
-// so resolve.go's existing Kind-check disambiguation (plan 05, the resolved
-// target must be a struct/class node) is what actually decides whether this
-// becomes a real edge, not this Pass-1 site. The PascalCase gate here is a
-// volume-reduction precision note (mirrors goextract's predeclared-type
-// filtering discipline), not a semantic decision: it avoids emitting an
-// instantiates candidate — and inflating unresolvedCount — for every
-// ordinary snake_case function call, which by PEP 8 convention is never a
-// class reference.
+// emitted for every call: Python instantiation is syntactically IDENTICAL
+// to a plain call (`Foo()` may call a function OR construct a class —
+// RESEARCH §B's "overlaps calls syntactically" note), so resolve.go's
+// Kind-check (the resolved target must be a struct/class node) decides
+// whether this becomes a real edge, not this Pass-1 site, and no casing
+// rule gates it (D18).
 func (ex *extractor) recordInstantiateCandidate(fromID, name, pkgAlias string, line, col int32) {
 	// Every call is a candidate: pass 2 keeps the edge only when the
 	// target is a class (resolve.go's kind check), so no casing rule is

@@ -50,15 +50,14 @@
 //   - call -> goextract.RefKindCalls (except the require/require_relative
 //     shape above). No receiver, or receiver == self -> an implicit
 //     same-class call (empty PkgAlias). A `constant`-receiver call
-//     (`Widget.build`) is treated as a same-module attempt (empty PkgAlias)
-//     since Ruby constants are PascalCase by the language's own convention —
-//     this extractor tracks no import-alias table for constants (require
-//     binds no name the way Python's `import`/JS's named-import does), so
-//     unlike pyextract/tsextract there is no "genuine import alias" branch
-//     to check first. Any other receiver (a local variable/parameter/method
-//     call result) routes through the WR-02 synthetic-non-matching-alias
-//     pattern so it deterministically ends up "unresolved" rather than
-//     risking a false same-module match.
+//     (`Widget.build`) names a type: the receiver type is the constant
+//     and the alias is empty, so pass 2 looks the type up by scope and
+//     module (D18). This extractor tracks no import-alias table for
+//     constants (require binds no name the way Python's `import` does).
+//     An identifier receiver goes through receiver() over the body's
+//     TypeEnv: a declared name gives its type, or a LocalAlias when the
+//     type is unknown; another receiver expression gives its exprType or
+//     UnknownAlias.
 //
 // Explicitly out of scope for this mainstream tier (named for the D-11
 // capability matrix, not silently missing):

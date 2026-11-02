@@ -65,12 +65,13 @@
 //     PkgAlias, covers both a bare function call AND a bare constructor
 //     call `Circle(1.0)`, indistinguishable at this tier). A
 //     `navigation_expression` callee (`recv.method()`, itself field-less —
-//     receiver is its first named child, member name its second) resolves
-//     the same PascalCase-vs-lowercase heuristic every other mainstream
-//     extractor in this project uses; a non-identifier receiver (including
-//     a CHAINED call, `c.area().toInt()`, whose own receiver is itself a
-//     call_expression) gets a synthetic `<kind>` alias rather than being
-//     silently dropped.
+//     receiver is its first named child, member name its second)
+//     classifies its receiver through receiver() and goextract.Receiver
+//     over the body's TypeEnv, never by its case (D18): a declared name
+//     gives its type, an imported name its alias, any other identifier a
+//     candidate type for pass 2. A chained call (`c.area().toInt()`)
+//     gets the deferred type of the inner call, which pass 2 fills (D17),
+//     and another receiver shape gets UnknownAlias.
 //
 // Explicitly out of scope for this mainstream tier (named for the D-11
 // capability matrix, not silently missing):
