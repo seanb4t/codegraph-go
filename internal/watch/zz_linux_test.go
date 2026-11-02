@@ -89,7 +89,9 @@ func TestZZMoveOutOfExcludedDir(t *testing.T) {
 			t.Logf("iteration %d (from %s): stat of the destination took %s, final error %v, not-exist %v", i, filepath.Base(filepath.Dir(from)), time.Since(start), statErr, errors.Is(statErr, fs.ErrNotExist))
 		}
 		probe := filepath.Join(root, "probe.txt")
-		os.WriteFile(probe, []byte("x"), 0o644)
+		if err := os.WriteFile(probe, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		deadline := time.After(5 * time.Second)
 		seen := false
 		for !seen {
