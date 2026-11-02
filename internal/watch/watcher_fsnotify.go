@@ -87,7 +87,14 @@ func addCreatedDir(w *Watcher, path string, skip func(name string) bool) error {
 		return nil
 	}
 	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// Created and removed before the event was handled.
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
 		return nil
 	}
 	return addRecursive(w, path, skip)

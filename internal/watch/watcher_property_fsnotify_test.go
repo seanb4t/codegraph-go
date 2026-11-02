@@ -41,6 +41,11 @@ func checkCoverage(t *rapid.T, h *watchHarness, m dirTree, _ stepResult) {
 	if len(missing) > 0 || len(extra) > 0 {
 		sort.Strings(missing)
 		sort.Strings(extra)
-		t.Fatalf("watch list differs from the tree: not watched %v, watched but not in the tree %v", missing, extra)
+		dirs := make([]string, 0, len(h.w.dirs))
+		for d := range h.w.dirs {
+			dirs = append(dirs, d)
+		}
+		sort.Strings(dirs)
+		t.Fatalf("watch list differs from the tree: not watched %v, watched but not in the tree %v; the watcher's directory set is %v", missing, extra, dirs)
 	}
 }
