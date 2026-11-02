@@ -66,6 +66,21 @@ message Node {
   // every other kind.
   repeated MethodSpec interface_methods = 17;
 
+  // params lists a function's or method's parameters as data, in order:
+  // what signature shows as text. arity equals len(params). A type,
+  // constant or variable has none.
+  repeated Param params = 18;
+
+  // return_type_name is the return type's name without decorations, the
+  // name the resolver matches against a parameter type. return_type keeps
+  // the text as written.
+  string return_type_name = 19;
+
+  // nested is true for a declaration inside a function body or another
+  // local scope. A nested declaration is visible only in that scope and
+  // never enters the cross-file index.
+  bool nested = 20;
+
   // Reserved now, before any consumer exists, so a future embedding-vector
   // or community/cluster-assignment field lands at a pre-agreed number
   // instead of colliding with whatever the next organic field would be.
@@ -76,6 +91,19 @@ message Node {
 
 // Edge is a directed relationship between two Node ids (calls, imports,
 // implements, etc.).
+// Param is one parameter of a function or method, as the source writes
+// it. type is the type text as written, or "" when the language or the
+// author wrote none. A parameter with a default has_default; an optional
+// parameter (TypeScript `x?`) is optional; a variadic one (Go `...T`, Java
+// `T...`, Python `*args`) is variadic.
+message Param {
+  string name = 1;
+  string type = 2;
+  bool optional = 3;
+  bool has_default = 4;
+  bool variadic = 5;
+}
+
 message Edge {
   string source = 1;
   string target = 2;
@@ -101,6 +129,19 @@ message Edge {
   // annotations that do not warrant their own field yet. Additive schema
   // field (D-03).
   map<string, string> metadata = 7;
+
+  // The call-site data of a calls edge, from which the resolver picked the
+  // target among the overloads of a name (index-invariants, D13):
+  // receiver_type is the receiver's static type when the extractor knew
+  // it, arg_count the number of arguments, has_spread whether an argument
+  // is spread, arg_types one entry per argument with "" for an unknown
+  // type, and arg_labels the Swift argument labels. Other edge kinds leave
+  // them empty.
+  string receiver_type = 8;
+  int32 arg_count = 9;
+  bool has_spread = 10;
+  repeated string arg_types = 11;
+  repeated string arg_labels = 12;
 
   reserved 50 to 59; // future: embedding vector, community/cluster assignment
 }
@@ -283,6 +324,13 @@ message Meta {
   // those blocks: `sync` then rebuilds it from scratch once, since it
   // does not reparse the unchanged files that lack the nodes.
   bool has_grouped_vars = 14;
+
+  // has_unique_decl_ids reports whether each declaration in this graph has
+  // its own node: the second and later copies of a declaration that a file
+  // repeats get an id with an ordinal. Absent or false means a graph
+  // written before that change, whose copies share one node and whose
+  // node_count can be too high: `sync` then rebuilds it from scratch once.
+  bool has_unique_decl_ids = 15;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of
