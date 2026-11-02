@@ -59,7 +59,7 @@ func renderLocationTable(locs []Location) string {
 		b.WriteString("| Name | Kind | Location | Overload |\n")
 		b.WriteString("|---|---|---|---|\n")
 		for _, l := range locs {
-			fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` | %s |\n", l.Name, l.Kind, l.FilePath, l.StartLine, OverloadLabel(l))
+			fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` | %s |\n", l.Name, l.Kind, l.FilePath, l.StartLine, strings.ReplaceAll(OverloadLabel(l), "|", "\\|"))
 		}
 		return b.String()
 	}

@@ -202,7 +202,9 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int, signature strin
 	// NODE-04: file supplied with no line hint tries the pre-CR-02
 	// exact-match single-def path first, returning immediately on
 	// success — unchanged output for every existing exact-match caller.
-	if file != "" && line == nil {
+	// A signature takes the narrowing path below instead, so that it
+	// selects among the overloads of the file.
+	if file != "" && line == nil && signature == "" {
 		if node, err := e.resolveNodeForDetail(symbol, file); err == nil {
 			d, err := e.buildSingleDefDetail(node)
 			if err != nil {
@@ -220,16 +222,16 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int, signature strin
 		return NodeDetail{}, notFoundf("query: symbol %q not found", symbol)
 	}
 
-	// NODE-03: narrow by substring file hint and/or line containment; a
-	// no-op when neither hint is set (narrowNodeMatches returns matches
-	// unchanged), preserving NODE-01/02's identical behavior for the
-	// plain `node <symbol>` case.
 	if signature != "" {
 		matches, err = narrowBySignature(symbol, matches, signature)
 		if err != nil {
 			return NodeDetail{}, err
 		}
 	}
+	// NODE-03: narrow by substring file hint and/or line containment; a
+	// no-op when neither hint is set (narrowNodeMatches returns matches
+	// unchanged), preserving NODE-01/02's identical behavior for the
+	// plain `node <symbol>` case.
 	matches = narrowNodeMatches(matches, file, line)
 
 	if len(matches) == 1 {

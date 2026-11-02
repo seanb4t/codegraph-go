@@ -407,18 +407,82 @@ func buildContainsIndex(r graphstore.Reader) (byType map[string][]*schema.Edge, 
 
 	byType = make(map[string][]*schema.Edge)
 	methodOwner = make(map[string]string)
+	// An overload set sits between a type and its overloads: type
+	// contains set, set contains each overload. The index folds the set
+	// away, so a type lists its overloads and an overload names its type.
+	setOwner := make(map[string]string)
+	var viaSet []*schema.Edge
 	for it.Next() {
 		e := it.Edge()
 		if e.Kind != "contains" {
 			continue
 		}
-		byType[e.Source] = append(byType[e.Source], e)
-		methodOwner[e.Target] = e.Source
+		switch {
+		case isOverloadSetID(e.Target):
+			setOwner[e.Target] = e.Source
+		case isOverloadSetID(e.Source):
+			viaSet = append(viaSet, e)
+		default:
+			byType[e.Source] = append(byType[e.Source], e)
+			methodOwner[e.Target] = e.Source
+		}
 	}
 	if err := it.Err(); err != nil {
 		return nil, nil, err
 	}
+	for _, e := range viaSet {
+		owner, ok := setOwner[e.Source]
+		if !ok {
+			continue
+		}
+		folded := &schema.Edge{Source: owner, Target: e.Target, Kind: e.Kind, Provenance: e.Provenance}
+		byType[owner] = append(byType[owner], folded)
+		methodOwner[e.Target] = owner
+	}
 	return byType, methodOwner, nil
+}
+
+// isOverloadSetID reports whether id names an overload_set node: a node
+// id starts with its kind.
+func isOverloadSetID(id string) bool {
+	return strings.HasPrefix(id, goextract.KindOverloadSet+":")
+}
+
+// setsOfMembers returns, sorted by id, the overload set nodes that
+// contain a member whose id is in members.
+func (e *Engine) setsOfMembers(members map[string]bool) ([]*schema.Node, error) {
+	it, err := e.reader.IterateEdges("")
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+	ids := make(map[string]bool)
+	for it.Next() {
+		edge := it.Edge()
+		if edge.Kind == goextract.RefKindContains && isOverloadSetID(edge.Source) && members[edge.Target] {
+			ids[edge.Source] = true
+		}
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	sorted := make([]string, 0, len(ids))
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	var sets []*schema.Node
+	for _, id := range sorted {
+		n, err := e.reader.GetNode(id)
+		if err != nil {
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		sets = append(sets, n)
+	}
+	return sets, nil
 }
 
 // implementedInterfaces inverts implementsIdx (Target/interface-keyed)
@@ -637,11 +701,7 @@ func (e *Engine) CalleesSelected(sel Selector, limit int) (CalleesResult, error)
 				return CalleesResult{}, err
 			}
 			seen[t.node.Id+"|"+edge.Target] = true
-			l := overloadLocation(callee, t, tg.overloaded)
-			if callee.Kind == goextract.KindOverloadSet {
-				l.Ambiguous = true
-			}
-			locs = append(locs, l)
+			locs = append(locs, calleeLocation(callee, t, tg.overloaded))
 		}
 		err = it.Err()
 		it.Close()
@@ -953,6 +1013,19 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 	}
 	if err := it.Err(); err != nil {
 		return AffectedResult{}, err
+	}
+	// An overload set whose members span files has no file of its own.
+	// Its ambiguous callers depend on every member, so a changed member
+	// puts the set on the frontier too.
+	sets, err := e.setsOfMembers(visited)
+	if err != nil {
+		return AffectedResult{}, err
+	}
+	for _, set := range sets {
+		if !visited[set.Id] {
+			frontier = append(frontier, set)
+			visited[set.Id] = true
+		}
 	}
 
 	tests := []Location{}

@@ -73,7 +73,8 @@ func (e *Engine) FileSymbols(path string) (FileSymbolsResult, error) {
 		// declares (it IS the file), and a synthetic package-kind
 		// pseudo-node is excluded for the same reason it is excluded
 		// from Engine.FileGraph's rollup (D-08, filegraphKindPackage).
-		if n.Kind == goextract.KindFile || n.Kind == filegraphKindPackage {
+		if n.Kind == goextract.KindFile || n.Kind == filegraphKindPackage || n.Kind == goextract.KindOverloadSet {
+			// An overload set stands for members the file lists itself.
 			continue
 		}
 		matches = append(matches, n)

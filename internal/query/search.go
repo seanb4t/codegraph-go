@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -19,10 +20,13 @@ type Location struct {
 	FilePath  string `json:"filePath"`
 	StartLine int32  `json:"startLine"`
 
-	// Signature is the signature of the overload this row belongs to,
-	// set when the query spans an overload set or selects one overload.
-	// Ambiguous marks a call that static analysis could not decide: it
-	// targets the set, not one overload. Both are empty otherwise.
+	// Signature and Ambiguous are set when the query spans an overload
+	// set or selects one overload, and are empty otherwise. In callers
+	// and impact, Signature is the overload the row calls and Ambiguous
+	// marks a caller whose call targets the set, not one overload. In
+	// callees, Signature is the overload the call is made from and
+	// Ambiguous marks a callee that is itself a set, so one row can carry
+	// both. Signature is rendered on one line.
 	Signature string `json:"signature,omitempty"`
 	Ambiguous bool   `json:"ambiguous,omitempty"`
 }
@@ -88,7 +92,9 @@ func (e *Engine) matchNodes(term, kind string) ([]rankedNode, error) {
 	var results []rankedNode
 	for it.Next() {
 		n := it.Node()
-		if kind != "" && n.Kind != kind {
+		// An overload set stands for its members, which match on their
+		// own; a set that spans files has no location to show.
+		if n.Kind == goextract.KindOverloadSet || (kind != "" && n.Kind != kind) {
 			continue
 		}
 		tier := lexicalMatchTier(term, n.Name, n.QualifiedName)

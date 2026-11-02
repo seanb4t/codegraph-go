@@ -70,3 +70,43 @@ func TestMCPToolSchemasExposeSignature(t *testing.T) {
 		}
 	}
 }
+
+// TestSignatureInputOnEveryTool checks the signature input of the node,
+// callees and impact tools: each one narrows to the named overload.
+func TestSignatureInputOnEveryTool(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"Logger.java": "package app;\n\npublic class Logger {\n    public void log(String msg) {}\n\n    public void log(String msg, Throwable t) {}\n}\n",
+		"A.java":      "package app;\n\npublic class A {\n    public void useA(Logger logger) {\n        logger.log(\"a\");\n    }\n}\n",
+		"B.java":      "package app;\n\npublic class B {\n    public void useB(Logger logger, Throwable e) {\n        logger.log(\"b\", e);\n    }\n}\n",
+	}
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	indexFixture(t, dir)
+	s := BuildServer(true, map[string]bool{"node": true, "callees": true, "impact": true}, dir, dir)
+	text := func(result *mcp.CallToolResult) string {
+		var b strings.Builder
+		for _, c := range result.Content {
+			if tc, ok := c.(*mcp.TextContent); ok {
+				b.WriteString(tc.Text)
+			}
+		}
+		return b.String()
+	}
+
+	node := text(callTool(t, s, "codegraph_node", map[string]any{"symbol": "log", "signature": "String, Throwable"}))
+	if !strings.Contains(node, "(String msg, Throwable t)") || strings.Contains(node, "2 definitions") {
+		t.Errorf("codegraph_node with a signature = \n%s\nwant the two-parameter overload alone", node)
+	}
+	impact := text(callTool(t, s, "codegraph_impact", map[string]any{"symbol": "log", "signature": "String"}))
+	if !strings.Contains(impact, "`useA`") || strings.Contains(impact, "`useB`") {
+		t.Errorf("codegraph_impact with a signature = \n%s\nwant useA and not useB", impact)
+	}
+	callees := text(callTool(t, s, "codegraph_callees", map[string]any{"symbol": "useB", "signature": "Logger, Throwable"}))
+	if !strings.Contains(callees, "`log`") {
+		t.Errorf("codegraph_callees with a signature = \n%s\nwant the log callee", callees)
+	}
+}

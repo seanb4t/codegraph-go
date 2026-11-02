@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // overloadFixture writes and indexes a Java tree with two overloaded
@@ -178,5 +181,133 @@ func TestExploreFoldsAnOverloadSet(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("explore lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestExploreFoldTruncatesLongSets checks the fold's truncation branch:
+// a set with more overloads than the label shows ends with "and N more".
+func TestExploreFoldTruncatesLongSets(t *testing.T) {
+	dir := t.TempDir()
+	var b strings.Builder
+	b.WriteString("package app;\n\npublic class Wide {\n")
+	for _, typ := range []string{"int", "long", "double", "String", "Object", "char", "boolean"} {
+		b.WriteString("    public void put(" + typ + " v) {}\n\n")
+	}
+	b.WriteString("}\n")
+	if err := os.WriteFile(filepath.Join(dir, "Wide.java"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	indexFixture(t, dir)
+	engine, closer, err := OpenAt(dir)
+	if err != nil {
+		t.Fatalf("OpenAt: %v", err)
+	}
+	defer closer.Close()
+	out, err := engine.Explore("put", 0)
+	if err != nil {
+		t.Fatalf("Explore: %v", err)
+	}
+	for _, want := range []string{"7 overloads", ", and 1 more)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("explore lacks %q:\n%s", want, out)
+		}
+	}
+	label := ""
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "- `put`") {
+			label = line
+		}
+	}
+	if strings.Count(label, " v)") != 6 {
+		t.Errorf("the fold label shows a number of signatures other than six: %s", label)
+	}
+}
+
+// TestSearchAndFileSymbolsSkipOverloadSets checks that a search and a
+// file's symbol list show the overloads and not the set that stands for
+// them.
+func TestSearchAndFileSymbolsSkipOverloadSets(t *testing.T) {
+	engine := overloadFixture(t)
+	locs, err := engine.Search("log", "", 0)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	methods := 0
+	for _, l := range locs {
+		if l.Kind == goextract.KindOverloadSet {
+			t.Errorf("search lists an overload set: %+v", l)
+		}
+		if l.Name == "log" && l.Kind == goextract.KindMethod {
+			methods++
+		}
+	}
+	if methods != 2 {
+		t.Errorf("search lists %d log methods, want 2: %+v", methods, locs)
+	}
+	syms, err := engine.FileSymbols("Logger.java")
+	if err != nil {
+		t.Fatalf("FileSymbols: %v", err)
+	}
+	for _, n := range syms.Symbols {
+		if n.Kind == goextract.KindOverloadSet {
+			t.Errorf("file symbols list an overload set: %s", n.QualifiedName)
+		}
+	}
+}
+
+// TestNodeDetailWithFileAndSignature checks that a file hint without a
+// line still honors the signature: the detail is the selected overload.
+func TestNodeDetailWithFileAndSignature(t *testing.T) {
+	engine := overloadFixture(t)
+	d, err := engine.NodeDetailSelected(Selector{Symbol: "log", Signature: "String, Throwable"}, "Logger.java", nil)
+	if err != nil {
+		t.Fatalf("NodeDetailSelected: %v", err)
+	}
+	if d.Mode != NodeDetailModeSingleDef || d.Definition == nil {
+		t.Fatalf("mode = %v, want a single definition", d.Mode)
+	}
+	if got := d.Definition.Node.Signature; got != "(String msg, Throwable t)" {
+		t.Errorf("definition signature = %q, want the two-parameter overload", got)
+	}
+}
+
+// TestCompactSignatureRendersOneLine checks that a label collapses a
+// multi-line parameter list and drops control runes.
+func TestCompactSignatureRendersOneLine(t *testing.T) {
+	got := compactSignature("(\n    String msg,\n\tThrowable t\x07\n)")
+	if got != "( String msg, Throwable t )" {
+		t.Errorf("compactSignature = %q", got)
+	}
+}
+
+// TestAffectedReachesACrossFileSet checks that a changed member of a set
+// that spans files puts the set on the frontier, so the set's ambiguous
+// callers count as affected.
+func TestAffectedReachesACrossFileSet(t *testing.T) {
+	set := goextract.KindOverloadSet + ":s"
+	nodes := map[string]*schema.Node{
+		set:         {Id: set, Kind: goextract.KindOverloadSet, Name: "add", QualifiedName: "Sink.add", Language: "csharp"},
+		"method:m1": {Id: "method:m1", Kind: goextract.KindMethod, Name: "add", QualifiedName: "Sink.add", FilePath: "Sink.cs", Language: "csharp", StartLine: 3},
+		"method:m2": {Id: "method:m2", Kind: goextract.KindMethod, Name: "add", QualifiedName: "Sink.add", FilePath: "Sink2.cs", Language: "csharp", StartLine: 3},
+		"func:t":    {Id: "func:t", Kind: goextract.KindFunction, Name: "TestAdd", QualifiedName: "TestAdd", FilePath: "sink_test.go", Language: "go", StartLine: 5},
+	}
+	edges := []*schema.Edge{
+		{Source: set, Target: "method:m1", Kind: goextract.RefKindContains, Provenance: "ast"},
+		{Source: set, Target: "method:m2", Kind: goextract.RefKindContains, Provenance: "ast"},
+		{Source: "func:t", Target: set, Kind: goextract.RefKindCalls, Provenance: "ast", Metadata: map[string]string{"ambiguous": "true"}},
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+	got, err := e.Affected([]string{"Sink.cs"}, 1)
+	if err != nil {
+		t.Fatalf("Affected: %v", err)
+	}
+	found := false
+	for _, l := range got.AffectedTests {
+		if l.Name == "TestAdd" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Affected(Sink.cs) = %+v, want TestAdd through the cross-file set", got.AffectedTests)
 	}
 }

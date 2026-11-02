@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -156,8 +157,10 @@ func (e *Engine) setMembers(set *schema.Node) ([]*schema.Node, error) {
 }
 
 // matchesSignature reports whether n's parameter types are the types in
-// signature: a comma-separated list, with or without parentheses, names
-// or spaces. "String, Throwable" matches `log(String msg, Throwable t)`.
+// signature: a comma-separated list, with or without parentheses or
+// spaces, so "String, Throwable" matches `log(String msg, Throwable t)`.
+// A list with parameter names matches only when it is the node's own
+// signature text.
 func matchesSignature(n *schema.Node, signature string) bool {
 	want := normalizeTypeList(signature)
 	var types []string
@@ -174,17 +177,38 @@ func matchesSignature(n *schema.Node, signature string) bool {
 	return normalizeTypeList(n.Signature) == want
 }
 
-// normalizeTypeList strips parentheses and spaces from a type list, so
-// "(String, Throwable)" and "String,Throwable" compare equal.
+// normalizeTypeList strips parentheses and spaces from a type list, and
+// reduces each type as goextract.TypeName does on the node side, so
+// "(String, Throwable)" and "String,Throwable" compare equal, and "*T"
+// matches a Go parameter stored as T.
 func normalizeTypeList(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "(")
 	s = strings.TrimSuffix(s, ")")
 	parts := strings.Split(s, ",")
 	for i, p := range parts {
-		parts[i] = strings.Join(strings.Fields(p), " ")
+		variadic := strings.HasSuffix(strings.TrimSpace(p), "...")
+		t := goextract.TypeName(strings.TrimSuffix(strings.TrimSpace(p), "..."))
+		if variadic {
+			t += "..."
+		}
+		parts[i] = t
 	}
 	return strings.Join(parts, ",")
+}
+
+// compactSignature renders a signature on one line for a label: runs of
+// whitespace, newlines included, become one space, and control runes are
+// dropped. The source text of a multi-line parameter list stays in the
+// node; only the label is compact.
+func compactSignature(sig string) string {
+	sig = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, sig)
+	return strings.Join(strings.Fields(sig), " ")
 }
 
 func compactStrings(in []string) []string {
@@ -197,6 +221,18 @@ func compactStrings(in []string) []string {
 	return out
 }
 
+// calleeLocation is the row of a callee reached from the overload t: the
+// Signature names t, the overload the call was made from, and Ambiguous
+// marks a callee that is itself an overload set, so one row can carry
+// both.
+func calleeLocation(callee *schema.Node, t target, overloaded bool) Location {
+	l := overloadLocation(callee, t, overloaded)
+	if callee.Kind == goextract.KindOverloadSet {
+		l.Ambiguous = true
+	}
+	return l
+}
+
 // overloadLocation is nodeLocation plus the overload fields, for a row
 // that belongs to target t of a query that spans overloads.
 func overloadLocation(n *schema.Node, t target, overloaded bool) Location {
@@ -207,7 +243,7 @@ func overloadLocation(n *schema.Node, t target, overloaded bool) Location {
 	if t.ambiguous {
 		l.Ambiguous = true
 	} else {
-		l.Signature = t.node.Signature
+		l.Signature = compactSignature(t.node.Signature)
 	}
 	return l
 }

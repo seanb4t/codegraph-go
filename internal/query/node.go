@@ -207,18 +207,6 @@ func absInt32(n int32) int32 {
 	return n
 }
 
-// narrowNodeMatches filters matches by an optional fileHint and/or
-// lineHint (NODE-03, RESEARCH §9) — a PURE in-memory filter over the
-// already-enumerated slice: it opens no file handle and performs no
-// fresh disk read keyed on the raw hint (T-01-06 — the file-READ path
-// stays behind resolveSourcePath/readSourceFile). fileHint matches when
-// the normalized node path ends with or contains the normalized hint;
-// the working set is only replaced when the filtered result is
-// non-empty. lineHint first prefers a def whose [StartLine,EndLine]
-// contains it, falling back to the single nearest def by
-// |StartLine-lineHint| when none contains it. The final result is never
-// empty as long as matches was non-empty — every stage is a
-// best-effort narrowing, never a hard filter that can zero out the set.
 // narrowBySignature keeps the matches whose parameter types are the
 // types in signature. When none matches, the error lists the signatures
 // the symbol has.
@@ -229,7 +217,7 @@ func narrowBySignature(symbol string, matches []*schema.Node, signature string) 
 		if n.Kind != goextract.KindFunction && n.Kind != goextract.KindMethod {
 			continue
 		}
-		signatures = append(signatures, n.Signature)
+		signatures = append(signatures, compactSignature(n.Signature))
 		if matchesSignature(n, signature) {
 			kept = append(kept, n)
 		}
@@ -245,6 +233,18 @@ func narrowBySignature(symbol string, matches []*schema.Node, signature string) 
 	return nil, notFoundf("query: no overload of %q has the signature %q; the signatures are %s", symbol, signature, strings.Join(signatures, ", "))
 }
 
+// narrowNodeMatches filters matches by an optional fileHint and/or
+// lineHint (NODE-03, RESEARCH §9) — a PURE in-memory filter over the
+// already-enumerated slice: it opens no file handle and performs no
+// fresh disk read keyed on the raw hint (T-01-06 — the file-READ path
+// stays behind resolveSourcePath/readSourceFile). fileHint matches when
+// the normalized node path ends with or contains the normalized hint;
+// the working set is only replaced when the filtered result is
+// non-empty. lineHint first prefers a def whose [StartLine,EndLine]
+// contains it, falling back to the single nearest def by
+// |StartLine-lineHint| when none contains it. The final result is never
+// empty as long as matches was non-empty — every stage is a
+// best-effort narrowing, never a hard filter that can zero out the set.
 func narrowNodeMatches(matches []*schema.Node, fileHint string, lineHint *int) []*schema.Node {
 	if len(matches) <= 1 {
 		return matches

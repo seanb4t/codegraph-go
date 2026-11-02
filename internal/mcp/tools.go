@@ -231,7 +231,7 @@ func exploreHandler(repoPath, defaultPath string, detector *gitmeta.CachingDetec
 }
 
 // NodeArgs is codegraph_node's input schema (D-07). Fields declared
-// alphabetically by JSON name (file, line, path, symbol). Symbol carries
+// alphabetically by JSON name (file, line, path, signature, symbol). Symbol carries
 // omitempty — node's file-mode read means symbol is optional, matching
 // today's schema (never marked required).
 type NodeArgs struct {
@@ -253,7 +253,7 @@ type SearchArgs struct {
 }
 
 // CallersArgs is codegraph_callers' input schema (D-07). Fields declared
-// alphabetically by JSON name (limit, path, symbol). Symbol carries no
+// alphabetically by JSON name (limit, path, signature, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type CallersArgs struct {
 	Limit     int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
@@ -263,7 +263,7 @@ type CallersArgs struct {
 }
 
 // CalleesArgs is codegraph_callees' input schema (D-07). Fields declared
-// alphabetically by JSON name (limit, path, symbol). Symbol carries no
+// alphabetically by JSON name (limit, path, signature, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type CalleesArgs struct {
 	Limit     int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
@@ -273,7 +273,7 @@ type CalleesArgs struct {
 }
 
 // ImpactArgs is codegraph_impact's input schema (D-07). Fields declared
-// alphabetically by JSON name (depth, path, symbol). Symbol carries no
+// alphabetically by JSON name (depth, path, signature, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type ImpactArgs struct {
 	Depth     int    `json:"depth,omitempty" jsonschema:"BFS depth (default 2, max 50)"`

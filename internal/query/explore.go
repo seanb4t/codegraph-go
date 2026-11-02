@@ -70,10 +70,9 @@ func groupMatchesByFile(ranked []rankedNode, maxFiles int) ([]ExploreFileGroup, 
 	return groups, symbolCount
 }
 
-// buildBlastEntry computes n's blast-radius bullet data from the shared
-// D-04 reverse-adjacency map: total caller count, plus the distinct files
-// among those callers that pass isTestSymbol (D-07).
-// buildBlastEntry builds the blast bullet of n. For an overload set that
+// buildBlastEntry builds the blast bullet of n from the shared D-04
+// reverse-adjacency map: the caller count and the distinct files among
+// those callers that pass isTestSymbol (D-07). For an overload set that
 // explore folded, members are the overloads it stands for, and the
 // callers of every overload count with the set's own ambiguous callers.
 func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge, members []*schema.Node) (ExploreBlast, error) {
@@ -106,10 +105,6 @@ func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge, 
 	return ExploreBlast{Symbol: n, CallerCount: len(callers), TestFiles: testFiles}, nil
 }
 
-// exploreZeroResult is the shared "no results" render (WR-05's sibling for
-// a query that tokenizes to nothing matchable, or whose full pipeline
-// gates every candidate file out) — kept as a single helper so the empty
-// message text lives in exactly one place.
 // foldOverloadSets folds each overload set in ranked into one row: the
 // set's overloads leave the list, and the set's signature names them, so
 // an overload-heavy name such as a Java `checkArgument` with forty
@@ -152,7 +147,7 @@ func overloadSetLabel(members []*schema.Node) string {
 	const shown = 6
 	sigs := make([]string, 0, len(members))
 	for _, m := range members {
-		sigs = append(sigs, m.Signature)
+		sigs = append(sigs, compactSignature(m.Signature))
 	}
 	sort.Strings(sigs)
 	more := ""
@@ -163,6 +158,10 @@ func overloadSetLabel(members []*schema.Node) string {
 	return fmt.Sprintf(" (%d overloads: %s%s)", len(members), strings.Join(sigs, ", "), more)
 }
 
+// exploreZeroResult is the shared "no results" render (WR-05's sibling for
+// a query that tokenizes to nothing matchable, or whose full pipeline
+// gates every candidate file out) — kept as a single helper so the empty
+// message text lives in exactly one place.
 func exploreZeroResult(query string, stale bool) string {
 	return fmt.Sprintf("%s**Exploration: %s**\n\nFound 0 symbols across 0 files.\n", staleBanner(stale), query)
 }
