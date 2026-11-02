@@ -43,7 +43,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 5. The watcher and key properties
 
-- [ ] 5.1 Add `TestWatcherCoversEveryDirectory` to `internal/watch`, with the Linux and macOS assertions of design.md D9. It asserts that each run made at least one step. Verify that it passes on macOS locally and on Linux in CI.
+- [x] 5.1 Add `TestWatcherCoversEveryDirectory` to `internal/watch`, with the Linux and macOS assertions of design.md D9. It asserts that each run made at least one step. Verify that it passes on macOS locally and on Linux in CI.
 - [x] 5.2 Add `FuzzSegmentRoundTrip` and `FuzzSegmentBoundaries` to `internal/graphstore` (design.md D10). The seeds are the empty string, a string with a zero byte, and strings of 127 and 128 bytes (the varint boundary). Verify that `go test ./internal/graphstore -run 'Fuzz' -count=1` runs the seeds, and that `go test ./internal/graphstore -fuzz FuzzSegmentRoundTrip -fuzztime 60s` finds nothing.
 - [ ] 5.3 Add `.github/workflows/fuzz.yml` with a weekly cron and `workflow_dispatch`. It runs each fuzz target for five minutes and the `rapid` properties with `-rapid.checks=10000`. It uploads `testdata/fuzz/` and the `rapid` failure file on a failure. Pin each action by SHA. Verify `task lint:actions` passes. Then run it once with `gh workflow run fuzz.yml --ref <branch>`, and link the run in the PR body.
 - [x] 5.4 Run `TestEveryDeclarationHasOneNode` over the four pinned corpora in `corpora.yml` through `CODEGRAPH_CORPUS_DIR` (design.md D8). Verify on the PR that the job runs it and reports more than zero declarations for each of hugo, guava, requests and serilog.
