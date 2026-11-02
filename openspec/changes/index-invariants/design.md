@@ -88,7 +88,7 @@ Add a test helper package, `internal/indexer/invariant`, with `Check(store) (Cou
 
 ### D7. Sync equals a fresh index, as a model-based `rapid` property
 
-`TestSyncEqualsFreshIndex` uses `pgregory.net/rapid`. The generator picks a sequence of operations over a small tree of Go, TypeScript and Java files in `t.TempDir()`. The generator uses eleven operations. Three change files: add, delete and rename. Eight change declarations: add, remove, rename and add a call. The other four add a repeated declaration, a repeated class with a method, an overload with a typed call to it, and a call through a local typed from a call into another Java file. After each operation, the test runs `Sync` and then `invariant.Check`. So an invalid graph after one step cannot hide behind a later step that repairs it. At the end, it builds a fresh index of the same tree in a second directory and calls `invariant.Equal`. The comparison leaves out route nodes and their edges, because route detection runs only in a full index. That is a documented limitation (`docs/LANGUAGE-CAPABILITY-MATRIX.md`), and this change does not alter it. `rapid` shrinks a failing sequence to a short one. Twenty cases run on every push, set by the package's TestMain when no `-rapid.checks` flag is given, because each case runs real syncs on disk. A higher count (`-rapid.checks`) runs in the weekly workflow from D10.
+`TestSyncEqualsFreshIndex` uses `pgregory.net/rapid`. The generator picks a sequence of operations over a small tree of Go, TypeScript and Java files in `t.TempDir()`. The generator uses eleven operations. Three change files: add, delete and rename. Eight change declarations: add, remove, rename and add a call. The other four add a repeated declaration, a repeated class with a method, and an overload with a typed call to it. The last one adds a call through a local typed from a call into another Java file. After each operation, the test runs `Sync` and then `invariant.Check`. So an invalid graph after one step cannot hide behind a later step that repairs it. At the end, it builds a fresh index of the same tree in a second directory and calls `invariant.Equal`. The comparison leaves out route nodes and their edges, because route detection runs only in a full index. That is a documented limitation (`docs/LANGUAGE-CAPABILITY-MATRIX.md`), and this change does not alter it. `rapid` shrinks a failing sequence to a short one. Twenty cases run on every push. The package's TestMain sets that count when no `-rapid.checks` flag is given, because each case runs real syncs on disk. A higher count (`-rapid.checks`) runs in the weekly workflow from D10.
 
 ### D8. One node per declaration, checked against tree-sitter
 
@@ -134,6 +134,8 @@ A stored edge does not record the name it was resolved from. So `Sync` finds eac
 
 fsnotify reports the `Rename` of the old path before the `Create` of the new one. On the `Rename` event, the loop now removes the watches of the old path and of every watched path below it. The re-add then starts from fresh watches. fsnotify's recursive mode handles moves itself, but it is enabled only in fsnotify's own tests.
 
+A deleted directory gets the same treatment on its `Remove` event. fsnotify drops the watch of a deleted directory when its reader goroutine handles inotify's `IN_IGNORED`. That event can arrive after a directory of the same name is created again, and then it drops the fresh watch. The loop removes the path itself, before it handles the `Create` of the new directory.
+
 ### D13. Signatures and arguments are data in the schema
 
 `Node` gains `repeated Param params` and `return_type_name`, the type name without decorations. `Param` has `name`, `type` as written, `optional`, `has_default` and `variadic`. `Signature` and `ReturnType` stay as display strings. `Arity` stays and equals `len(params)`, so the existing dispatch code keeps working.
@@ -167,6 +169,7 @@ A function declared inside a callback or another function is visible only in its
 | Swift | the qualified name includes the argument labels, so `foo(x:)` and `foo(y:)` are different functions |
 | Go | a repeated `init` is never callable, and any other repeat is an error, so each gets an ordinal id |
 | shell | a redefinition is last-wins, with an empty signature key |
+| C, C++ | a prototype with its definition in the same file declares that definition and gets no node. A prototype with no definition in the file keeps its node |
 
 The extractors mark a declaration under a conditional-compilation block, and the resolver treats the copies under different blocks as alternatives.
 

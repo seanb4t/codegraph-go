@@ -46,7 +46,12 @@ The signature key SHALL be the ordered parameter types as written, with a placeh
 
 ### Requirement: Each declaration has its own node
 
-When a file declares two or more symbols with the same kind and qualified name, the indexer SHALL store one node for each. Names and qualified names SHALL NOT change. A C# `partial` type SHALL keep one node for all of its parts, and a reopened Ruby class or module SHALL keep one node.
+When a file declares two or more symbols with the same kind and qualified name, the indexer SHALL store one node for each. Names and qualified names SHALL NOT change. A C# `partial` type SHALL keep one node for all of its parts, and a reopened Ruby class or module SHALL keep one node. In C and C++, a prototype whose definition is in the same file declares that definition, so it SHALL get no node of its own.
+
+#### Scenario: A C prototype with its definition in the file
+
+- **WHEN** a C file declares `int f(int a);`, defines `int f(int a)` below it, and `g` calls `f(1)`
+- **THEN** `f` has one node, and the call in `g` targets it
 
 #### Scenario: A helper declared in several callbacks
 
@@ -94,7 +99,7 @@ Each function and method node SHALL record its parameters as data: each paramete
 #### Scenario: A Java method with a variadic parameter
 
 - **WHEN** a Java class declares `format(String fmt, Object... args)`
-- **THEN** `codegraph node format --json` lists two parameters, the second marked variadic, and the return type
+- **THEN** the stored node of `format` lists two parameters, the second marked variadic, and the return type `String`
 
 ### Requirement: A call resolves to the declaration the language selects (RES-01)
 
