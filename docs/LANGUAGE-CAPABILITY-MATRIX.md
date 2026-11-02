@@ -62,7 +62,7 @@ A receiver resolves through a type environment, not through its name. The extrac
 
 A same-file reference resolves to the innermost declaration of its name whose scope holds the reference. Only module-level declarations enter the cross-file index. In TypeScript, only exported declarations enter it. A JavaScript file with no ESM export keeps every module-level declaration reachable, because the extractor does not read `module.exports`.
 
-The `node`, `callers`, `callees` and `impact` commands accept `--signature`. The MCP tools with the same names accept the `signature` input. The value is the parameter types of one overload, such as `"String, Throwable"`. Without it, a name that has a set reports across every overload, and each row carries the overload it belongs to. An ambiguous caller is marked `ambiguous`. The `explore` command folds a set into one row that names the overloads.
+The `node`, `callers`, `callees` and `impact` commands accept `--signature`. The MCP tools with the same names accept the `signature` input. The value is the parameter types of one overload, such as `"String, Throwable"`. Without it, `callers`, `callees` and `impact` report across every overload of the name, and each row carries the overload it belongs to. The output marks an ambiguous caller as `ambiguous`. Without it, `node` lists each overload as a definition. The `explore` command folds a set into one row that names the overloads.
 
 The rules for two declarations with one name under one owner differ by language.
 

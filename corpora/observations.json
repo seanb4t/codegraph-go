@@ -63,9 +63,9 @@
       "trackedFiles": 2547,
       "status": {
         "backend": "pebble",
-        "edgeCount": 28496,
+        "edgeCount": 28690,
         "edgesByKind": {
-          "calls": 10554,
+          "calls": 10748,
           "contains": 11159,
           "embeds": 155,
           "extends": 131,
@@ -125,16 +125,16 @@
       "trackedFiles": 3317,
       "status": {
         "backend": "pebble",
-        "edgeCount": 201617,
+        "edgeCount": 205354,
         "edgesByKind": {
-          "calls": 87635,
-          "contains": 62845,
+          "calls": 90152,
+          "contains": 62839,
           "embeds": 139,
           "extends": 2553,
           "implements": 759,
           "imports": 0,
           "instantiates": 5709,
-          "overrides": 8621,
+          "overrides": 9847,
           "references": 14673,
           "returns": 6693,
           "type_of": 11990
@@ -159,12 +159,12 @@
           "javascript",
           "kotlin"
         ],
-        "nodeCount": 66078,
+        "nodeCount": 66072,
         "nodesByKind": {
           "file": 3233,
           "interface": 452,
           "method": 53732,
-          "overload_set": 2307,
+          "overload_set": 2301,
           "struct": 6354
         },
         "pendingChanges": {
@@ -242,10 +242,10 @@
       "trackedFiles": 130,
       "status": {
         "backend": "pebble",
-        "edgeCount": 1057,
+        "edgeCount": 1048,
         "edgesByKind": {
           "calls": 172,
-          "contains": 775,
+          "contains": 766,
           "extends": 38,
           "implements": 0,
           "imports": 0,
@@ -271,12 +271,11 @@
         "languages": [
           "python"
         ],
-        "nodeCount": 812,
+        "nodeCount": 803,
         "nodesByKind": {
           "file": 37,
           "function": 146,
           "method": 524,
-          "overload_set": 9,
           "struct": 96
         },
         "pendingChanges": {
@@ -352,18 +351,18 @@
       "trackedFiles": 284,
       "status": {
         "backend": "pebble",
-        "edgeCount": 2355,
+        "edgeCount": 2354,
         "edgesByKind": {
-          "calls": 513,
+          "calls": 516,
           "contains": 1742,
           "extends": 17,
           "implements": 2,
           "imports": 0,
           "instantiates": 35,
-          "overrides": 10,
+          "overrides": 15,
           "references": 3,
-          "returns": 15,
-          "type_of": 18
+          "returns": 7,
+          "type_of": 17
         },
         "fileCount": 216,
         "filesByLanguage": {

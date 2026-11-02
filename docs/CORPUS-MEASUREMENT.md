@@ -20,12 +20,12 @@ Do NOT hand-edit this file.
 
 | Kind | Threshold | Supplying Repository | Measured Count |
 |------|-----------|---------------------|---------------|
-| calls | 29406 | google/guava | 87635 |
+| calls | 29406 | google/guava | 90152 |
 | extends | 1265 | google/guava | 2553 |
 | implements | 509 | gohugoio/hugo | 1018 |
 | imports | 1080 | gohugoio/hugo | 2160 |
 | instantiates | 938 | google/guava | 5709 |
-| overrides | 2329 | google/guava | 8621 |
+| overrides | 2329 | google/guava | 9847 |
 | references | 6531 | google/guava | 14673 |
 | returns | 2795 | google/guava | 6693 |
 | type_of | 5928 | google/guava | 11990 |
@@ -65,7 +65,7 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 2547
 - **Edges by kind:**
-  - calls: 10554
+  - calls: 10748
   - contains: 11159
   - embeds: 155
   - extends: 131
@@ -85,14 +85,14 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 3317
 - **Edges by kind:**
-  - calls: 87635
-  - contains: 62845
+  - calls: 90152
+  - contains: 62839
   - embeds: 139
   - extends: 2553
   - implements: 759
   - imports: 0
   - instantiates: 5709
-  - overrides: 8621
+  - overrides: 9847
   - references: 14673
   - returns: 6693
   - type_of: 11990
@@ -125,7 +125,7 @@ Do NOT hand-edit this file.
 - **Tracked files:** 130
 - **Edges by kind:**
   - calls: 172
-  - contains: 775
+  - contains: 766
   - extends: 38
   - implements: 0
   - imports: 0
@@ -160,16 +160,16 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 284
 - **Edges by kind:**
-  - calls: 513
+  - calls: 516
   - contains: 1742
   - extends: 17
   - implements: 2
   - imports: 0
   - instantiates: 35
-  - overrides: 10
+  - overrides: 15
   - references: 3
-  - returns: 15
-  - type_of: 18
+  - returns: 7
+  - type_of: 17
 - **Files by language:**
   - csharp: 216
 ### tiangolo/fastapi (a1fa70d4)
