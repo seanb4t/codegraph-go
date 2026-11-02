@@ -6,9 +6,9 @@
   "runner": "ubuntu-latest",
   "scratch_fs": "disk",
   "median_of_trials": 7,
-  "files_per_sec": 17090.87527197409,
-  "bytes_per_sec": 2588799.9585264884,
-  "query_latency_median_ms": 258.199,
-  "peak_rss_bytes": 845950976,
-  "cold_start_ms": 12.708
+  "files_per_sec": 18545.796066253068,
+  "bytes_per_sec": 2809180.6489212695,
+  "query_latency_median_ms": 193.799,
+  "peak_rss_bytes": 875036672,
+  "cold_start_ms": 8.161
 }
