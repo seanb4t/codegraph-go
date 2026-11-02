@@ -173,7 +173,8 @@ func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
 	var matches []*schema.Node
 	for it.Next() {
 		n := it.Node()
-		if n.Name == symbol {
+		// An overload set is not a definition: its overloads are.
+		if n.Name == symbol && n.Kind != goextract.KindOverloadSet {
 			matches = append(matches, n)
 		}
 	}
@@ -218,6 +219,32 @@ func absInt32(n int32) int32 {
 // |StartLine-lineHint| when none contains it. The final result is never
 // empty as long as matches was non-empty — every stage is a
 // best-effort narrowing, never a hard filter that can zero out the set.
+// narrowBySignature keeps the matches whose parameter types are the
+// types in signature. When none matches, the error lists the signatures
+// the symbol has.
+func narrowBySignature(symbol string, matches []*schema.Node, signature string) ([]*schema.Node, error) {
+	var kept []*schema.Node
+	var signatures []string
+	for _, n := range matches {
+		if n.Kind != goextract.KindFunction && n.Kind != goextract.KindMethod {
+			continue
+		}
+		signatures = append(signatures, n.Signature)
+		if matchesSignature(n, signature) {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) > 0 {
+		return kept, nil
+	}
+	sort.Strings(signatures)
+	signatures = compactStrings(signatures)
+	if len(signatures) == 0 {
+		return nil, notFoundf("query: no overload of %q has the signature %q: %q is not a function or method", symbol, signature, symbol)
+	}
+	return nil, notFoundf("query: no overload of %q has the signature %q; the signatures are %s", symbol, signature, strings.Join(signatures, ", "))
+}
+
 func narrowNodeMatches(matches []*schema.Node, fileHint string, lineHint *int) []*schema.Node {
 	if len(matches) <= 1 {
 		return matches
@@ -335,7 +362,13 @@ func (e *Engine) resolveNodeForDetail(symbol, file string) (*schema.Node, error)
 // return for the same arguments — CLI, MCP and UI cannot disagree about
 // what a node is.
 func (e *Engine) Node(symbol, file string, line *int) (string, error) {
-	d, err := e.buildNodeDetail(symbol, file, line)
+	return e.NodeSelected(Selector{Symbol: symbol}, file, line)
+}
+
+// NodeSelected is Node with sel.Signature selecting one overload, as
+// `--signature` does.
+func (e *Engine) NodeSelected(sel Selector, file string, line *int) (string, error) {
+	d, err := e.buildNodeDetail(sel.Symbol, file, line, sel.Signature)
 	if err != nil {
 		return "", err
 	}

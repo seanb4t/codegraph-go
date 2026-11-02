@@ -140,8 +140,20 @@ type Node struct {
 	// source order, without those of interfaces it embeds. It is empty for
 	// every other kind.
 	InterfaceMethods []*MethodSpec `protobuf:"bytes,17,rep,name=interface_methods,json=interfaceMethods,proto3" json:"interface_methods,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// params lists a function's or method's parameters as data, in order:
+	// what signature shows as text. arity equals len(params). A type,
+	// constant or variable has none.
+	Params []*Param `protobuf:"bytes,18,rep,name=params,proto3" json:"params,omitempty"`
+	// return_type_name is the return type's name without decorations, the
+	// name the resolver matches against a parameter type. return_type keeps
+	// the text as written.
+	ReturnTypeName string `protobuf:"bytes,19,opt,name=return_type_name,json=returnTypeName,proto3" json:"return_type_name,omitempty"`
+	// nested is true for a declaration inside a function body or another
+	// local scope. A nested declaration is visible only in that scope and
+	// never enters the cross-file index.
+	Nested        bool `protobuf:"varint,20,opt,name=nested,proto3" json:"nested,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Node) Reset() {
@@ -293,8 +305,110 @@ func (x *Node) GetInterfaceMethods() []*MethodSpec {
 	return nil
 }
 
+func (x *Node) GetParams() []*Param {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+func (x *Node) GetReturnTypeName() string {
+	if x != nil {
+		return x.ReturnTypeName
+	}
+	return ""
+}
+
+func (x *Node) GetNested() bool {
+	if x != nil {
+		return x.Nested
+	}
+	return false
+}
+
 // Edge is a directed relationship between two Node ids (calls, imports,
 // implements, etc.).
+// Param is one parameter of a function or method, as the source writes
+// it. type is the type text as written, or "" when the language or the
+// author wrote none. A parameter with a default has_default; an optional
+// parameter (TypeScript `x?`) is optional; a variadic one (Go `...T`, Java
+// `T...`, Python `*args`) is variadic.
+type Param struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Optional      bool                   `protobuf:"varint,3,opt,name=optional,proto3" json:"optional,omitempty"`
+	HasDefault    bool                   `protobuf:"varint,4,opt,name=has_default,json=hasDefault,proto3" json:"has_default,omitempty"`
+	Variadic      bool                   `protobuf:"varint,5,opt,name=variadic,proto3" json:"variadic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Param) Reset() {
+	*x = Param{}
+	mi := &file_internal_schema_graph_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Param) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Param) ProtoMessage() {}
+
+func (x *Param) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_schema_graph_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Param.ProtoReflect.Descriptor instead.
+func (*Param) Descriptor() ([]byte, []int) {
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Param) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Param) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Param) GetOptional() bool {
+	if x != nil {
+		return x.Optional
+	}
+	return false
+}
+
+func (x *Param) GetHasDefault() bool {
+	if x != nil {
+		return x.HasDefault
+	}
+	return false
+}
+
+func (x *Param) GetVariadic() bool {
+	if x != nil {
+		return x.Variadic
+	}
+	return false
+}
+
 type Edge struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Source string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
@@ -317,14 +431,26 @@ type Edge struct {
 	// metadata is an open extension bag for edge-kind-specific extractor
 	// annotations that do not warrant their own field yet. Additive schema
 	// field (D-03).
-	Metadata      map[string]string `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Metadata map[string]string `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// The call-site data of a calls edge, from which the resolver picked the
+	// target among the overloads of a name (index-invariants, D13):
+	// receiver_type is the receiver's static type when the extractor knew
+	// it, arg_count the number of arguments, has_spread whether an argument
+	// is spread, arg_types one entry per argument with "" for an unknown
+	// type, and arg_labels the Swift argument labels. Other edge kinds leave
+	// them empty.
+	ReceiverType  string   `protobuf:"bytes,8,opt,name=receiver_type,json=receiverType,proto3" json:"receiver_type,omitempty"`
+	ArgCount      int32    `protobuf:"varint,9,opt,name=arg_count,json=argCount,proto3" json:"arg_count,omitempty"`
+	HasSpread     bool     `protobuf:"varint,10,opt,name=has_spread,json=hasSpread,proto3" json:"has_spread,omitempty"`
+	ArgTypes      []string `protobuf:"bytes,11,rep,name=arg_types,json=argTypes,proto3" json:"arg_types,omitempty"`
+	ArgLabels     []string `protobuf:"bytes,12,rep,name=arg_labels,json=argLabels,proto3" json:"arg_labels,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Edge) Reset() {
 	*x = Edge{}
-	mi := &file_internal_schema_graph_proto_msgTypes[1]
+	mi := &file_internal_schema_graph_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -336,7 +462,7 @@ func (x *Edge) String() string {
 func (*Edge) ProtoMessage() {}
 
 func (x *Edge) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[1]
+	mi := &file_internal_schema_graph_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -349,7 +475,7 @@ func (x *Edge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Edge.ProtoReflect.Descriptor instead.
 func (*Edge) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{1}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Edge) GetSource() string {
@@ -401,6 +527,41 @@ func (x *Edge) GetMetadata() map[string]string {
 	return nil
 }
 
+func (x *Edge) GetReceiverType() string {
+	if x != nil {
+		return x.ReceiverType
+	}
+	return ""
+}
+
+func (x *Edge) GetArgCount() int32 {
+	if x != nil {
+		return x.ArgCount
+	}
+	return 0
+}
+
+func (x *Edge) GetHasSpread() bool {
+	if x != nil {
+		return x.HasSpread
+	}
+	return false
+}
+
+func (x *Edge) GetArgTypes() []string {
+	if x != nil {
+		return x.ArgTypes
+	}
+	return nil
+}
+
+func (x *Edge) GetArgLabels() []string {
+	if x != nil {
+		return x.ArgLabels
+	}
+	return nil
+}
+
 // File is a per-source-file record: identity, content hash, and
 // aggregate counts for the symbols/edges attributed to it.
 type File struct {
@@ -448,7 +609,7 @@ type File struct {
 
 func (x *File) Reset() {
 	*x = File{}
-	mi := &file_internal_schema_graph_proto_msgTypes[2]
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -460,7 +621,7 @@ func (x *File) String() string {
 func (*File) ProtoMessage() {}
 
 func (x *File) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[2]
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -473,7 +634,7 @@ func (x *File) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use File.ProtoReflect.Descriptor instead.
 func (*File) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{2}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *File) GetPath() string {
@@ -558,7 +719,7 @@ type MethodSpec struct {
 
 func (x *MethodSpec) Reset() {
 	*x = MethodSpec{}
-	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +731,7 @@ func (x *MethodSpec) String() string {
 func (*MethodSpec) ProtoMessage() {}
 
 func (x *MethodSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +744,7 @@ func (x *MethodSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MethodSpec.ProtoReflect.Descriptor instead.
 func (*MethodSpec) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MethodSpec) GetName() string {
@@ -614,7 +775,7 @@ type UnresolvedName struct {
 
 func (x *UnresolvedName) Reset() {
 	*x = UnresolvedName{}
-	mi := &file_internal_schema_graph_proto_msgTypes[4]
+	mi := &file_internal_schema_graph_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -626,7 +787,7 @@ func (x *UnresolvedName) String() string {
 func (*UnresolvedName) ProtoMessage() {}
 
 func (x *UnresolvedName) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[4]
+	mi := &file_internal_schema_graph_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -639,7 +800,7 @@ func (x *UnresolvedName) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnresolvedName.ProtoReflect.Descriptor instead.
 func (*UnresolvedName) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{4}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *UnresolvedName) GetModuleKey() string {
@@ -676,7 +837,7 @@ type ExcludedFile struct {
 
 func (x *ExcludedFile) Reset() {
 	*x = ExcludedFile{}
-	mi := &file_internal_schema_graph_proto_msgTypes[5]
+	mi := &file_internal_schema_graph_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -688,7 +849,7 @@ func (x *ExcludedFile) String() string {
 func (*ExcludedFile) ProtoMessage() {}
 
 func (x *ExcludedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[5]
+	mi := &file_internal_schema_graph_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -701,7 +862,7 @@ func (x *ExcludedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExcludedFile.ProtoReflect.Descriptor instead.
 func (*ExcludedFile) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{5}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ExcludedFile) GetPath() string {
@@ -810,13 +971,19 @@ type Meta struct {
 	// those blocks: `sync` then rebuilds it from scratch once, since it
 	// does not reparse the unchanged files that lack the nodes.
 	HasGroupedVars bool `protobuf:"varint,14,opt,name=has_grouped_vars,json=hasGroupedVars,proto3" json:"has_grouped_vars,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// has_unique_decl_ids reports whether each declaration in this graph has
+	// its own node: the second and later copies of a declaration that a file
+	// repeats get an id with an ordinal. Absent or false means a graph
+	// written before that change, whose copies share one node and whose
+	// node_count can be too high: `sync` then rebuilds it from scratch once.
+	HasUniqueDeclIds bool `protobuf:"varint,15,opt,name=has_unique_decl_ids,json=hasUniqueDeclIds,proto3" json:"has_unique_decl_ids,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
 	*x = Meta{}
-	mi := &file_internal_schema_graph_proto_msgTypes[6]
+	mi := &file_internal_schema_graph_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +995,7 @@ func (x *Meta) String() string {
 func (*Meta) ProtoMessage() {}
 
 func (x *Meta) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_schema_graph_proto_msgTypes[6]
+	mi := &file_internal_schema_graph_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +1008,7 @@ func (x *Meta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Meta.ProtoReflect.Descriptor instead.
 func (*Meta) Descriptor() ([]byte, []int) {
-	return file_internal_schema_graph_proto_rawDescGZIP(), []int{6}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Meta) GetSchemaVersion() uint32 {
@@ -942,11 +1109,18 @@ func (x *Meta) GetHasGroupedVars() bool {
 	return false
 }
 
+func (x *Meta) GetHasUniqueDeclIds() bool {
+	if x != nil {
+		return x.HasUniqueDeclIds
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
 	"\n" +
-	"\x1binternal/schema/graph.proto\x12\fcodegraph.v1\"\x8f\x04\n" +
+	"\x1binternal/schema/graph.proto\x12\fcodegraph.v1\"\xfe\x04\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -970,7 +1144,17 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\vreturn_type\x18\x0f \x01(\tR\n" +
 	"returnType\x12\x14\n" +
 	"\x05arity\x18\x10 \x01(\x05R\x05arity\x12E\n" +
-	"\x11interface_methods\x18\x11 \x03(\v2\x18.codegraph.v1.MethodSpecR\x10interfaceMethodsJ\x04\b2\x10<\"\x91\x02\n" +
+	"\x11interface_methods\x18\x11 \x03(\v2\x18.codegraph.v1.MethodSpecR\x10interfaceMethods\x12+\n" +
+	"\x06params\x18\x12 \x03(\v2\x13.codegraph.v1.ParamR\x06params\x12(\n" +
+	"\x10return_type_name\x18\x13 \x01(\tR\x0ereturnTypeName\x12\x16\n" +
+	"\x06nested\x18\x14 \x01(\bR\x06nestedJ\x04\b2\x10<\"\x88\x01\n" +
+	"\x05Param\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
+	"\boptional\x18\x03 \x01(\bR\boptional\x12\x1f\n" +
+	"\vhas_default\x18\x04 \x01(\bR\n" +
+	"hasDefault\x12\x1a\n" +
+	"\bvariadic\x18\x05 \x01(\bR\bvariadic\"\xae\x03\n" +
 	"\x04Edge\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x12\n" +
@@ -980,7 +1164,15 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\n" +
 	"provenance\x18\x06 \x01(\tR\n" +
 	"provenance\x12<\n" +
-	"\bmetadata\x18\a \x03(\v2 .codegraph.v1.Edge.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\a \x03(\v2 .codegraph.v1.Edge.MetadataEntryR\bmetadata\x12#\n" +
+	"\rreceiver_type\x18\b \x01(\tR\freceiverType\x12\x1b\n" +
+	"\targ_count\x18\t \x01(\x05R\bargCount\x12\x1d\n" +
+	"\n" +
+	"has_spread\x18\n" +
+	" \x01(\bR\thasSpread\x12\x1b\n" +
+	"\targ_types\x18\v \x03(\tR\bargTypes\x12\x1d\n" +
+	"\n" +
+	"arg_labels\x18\f \x03(\tR\targLabels\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xeb\x02\n" +
@@ -1012,7 +1204,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xb5\x04\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xe4\x04\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -1031,7 +1223,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x14has_unresolved_names\x18\v \x01(\bR\x12hasUnresolvedNames\x127\n" +
 	"\x18has_declared_module_keys\x18\f \x01(\bR\x15hasDeclaredModuleKeys\x12(\n" +
 	"\x10has_method_specs\x18\r \x01(\bR\x0ehasMethodSpecs\x12(\n" +
-	"\x10has_grouped_vars\x18\x0e \x01(\bR\x0ehasGroupedVarsJ\x04\b2\x10<*\xe5\x01\n" +
+	"\x10has_grouped_vars\x18\x0e \x01(\bR\x0ehasGroupedVars\x12-\n" +
+	"\x13has_unique_decl_ids\x18\x0f \x01(\bR\x10hasUniqueDeclIdsJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +
@@ -1053,28 +1246,30 @@ func file_internal_schema_graph_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_schema_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_internal_schema_graph_proto_goTypes = []any{
 	(ExclusionReason)(0),   // 0: codegraph.v1.ExclusionReason
 	(*Node)(nil),           // 1: codegraph.v1.Node
-	(*Edge)(nil),           // 2: codegraph.v1.Edge
-	(*File)(nil),           // 3: codegraph.v1.File
-	(*MethodSpec)(nil),     // 4: codegraph.v1.MethodSpec
-	(*UnresolvedName)(nil), // 5: codegraph.v1.UnresolvedName
-	(*ExcludedFile)(nil),   // 6: codegraph.v1.ExcludedFile
-	(*Meta)(nil),           // 7: codegraph.v1.Meta
-	nil,                    // 8: codegraph.v1.Edge.MetadataEntry
+	(*Param)(nil),          // 2: codegraph.v1.Param
+	(*Edge)(nil),           // 3: codegraph.v1.Edge
+	(*File)(nil),           // 4: codegraph.v1.File
+	(*MethodSpec)(nil),     // 5: codegraph.v1.MethodSpec
+	(*UnresolvedName)(nil), // 6: codegraph.v1.UnresolvedName
+	(*ExcludedFile)(nil),   // 7: codegraph.v1.ExcludedFile
+	(*Meta)(nil),           // 8: codegraph.v1.Meta
+	nil,                    // 9: codegraph.v1.Edge.MetadataEntry
 }
 var file_internal_schema_graph_proto_depIdxs = []int32{
-	4, // 0: codegraph.v1.Node.interface_methods:type_name -> codegraph.v1.MethodSpec
-	8, // 1: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
-	5, // 2: codegraph.v1.File.unresolved_names:type_name -> codegraph.v1.UnresolvedName
-	0, // 3: codegraph.v1.ExcludedFile.reason:type_name -> codegraph.v1.ExclusionReason
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 0: codegraph.v1.Node.interface_methods:type_name -> codegraph.v1.MethodSpec
+	2, // 1: codegraph.v1.Node.params:type_name -> codegraph.v1.Param
+	9, // 2: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
+	6, // 3: codegraph.v1.File.unresolved_names:type_name -> codegraph.v1.UnresolvedName
+	0, // 4: codegraph.v1.ExcludedFile.reason:type_name -> codegraph.v1.ExclusionReason
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_internal_schema_graph_proto_init() }
@@ -1088,7 +1283,7 @@ func file_internal_schema_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_schema_graph_proto_rawDesc), len(file_internal_schema_graph_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

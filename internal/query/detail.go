@@ -187,7 +187,7 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 // This is the ONE gather path per shape (D-01): Node() and
 // (*Engine).NodeDetail both call this exact function, so CLI, MCP and UI
 // cannot disagree about what a node is.
-func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, error) {
+func (e *Engine) buildNodeDetail(symbol, file string, line *int, signature string) (NodeDetail, error) {
 	if symbol == "" {
 		if file == "" {
 			return NodeDetail{}, invalidArgumentf("query: node requires a symbol name or a file path")
@@ -224,6 +224,12 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, er
 	// no-op when neither hint is set (narrowNodeMatches returns matches
 	// unchanged), preserving NODE-01/02's identical behavior for the
 	// plain `node <symbol>` case.
+	if signature != "" {
+		matches, err = narrowBySignature(symbol, matches, signature)
+		if err != nil {
+			return NodeDetail{}, err
+		}
+	}
 	matches = narrowNodeMatches(matches, file, line)
 
 	if len(matches) == 1 {
@@ -248,7 +254,13 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, er
 // dependency (D-03) — internal/query imports nothing from the UI wire
 // layer.
 func (e *Engine) NodeDetail(symbol, file string, line *int) (NodeDetail, error) {
-	return e.buildNodeDetail(symbol, file, line)
+	return e.buildNodeDetail(symbol, file, line, "")
+}
+
+// NodeDetailSelected is NodeDetail with sel.Signature selecting one
+// overload, as `--signature` does.
+func (e *Engine) NodeDetailSelected(sel Selector, file string, line *int) (NodeDetail, error) {
+	return e.buildNodeDetail(sel.Symbol, file, line, sel.Signature)
 }
 
 // SourceFor reads relPath fresh from disk through the same repo-root-
@@ -621,6 +633,11 @@ func (e *Engine) buildExploreResult(query string, maxFiles int) (ExploreResult, 
 		}
 	}
 
+	ranked, folded, err := e.foldOverloadSets(ranked)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
 	groups, symbolCount := groupMatchesByFile(ranked, maxFiles)
 	if len(groups) == 0 {
 		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
@@ -634,7 +651,7 @@ func (e *Engine) buildExploreResult(query string, maxFiles int) (ExploreResult, 
 	blasts := make([]ExploreBlast, 0, symbolCount)
 	for _, g := range groups {
 		for _, n := range g.Symbols {
-			bl, err := e.buildBlastEntry(n, rev)
+			bl, err := e.buildBlastEntry(n, rev, folded[n.Id])
 			if err != nil {
 				return ExploreResult{}, err
 			}

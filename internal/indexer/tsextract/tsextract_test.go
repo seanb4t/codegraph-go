@@ -323,11 +323,10 @@ func TestExtract_ExtendsImplements(t *testing.T) {
 	})
 }
 
-// TestExtract_Calls proves the three call-resolution disambiguation shapes:
-// a PascalCase non-imported qualified call attempts a same-module
-// resolution, a camelCase non-imported qualified call is forced through a
-// synthetic non-matching alias (mirrors goextract's WR-02 fix), and a bare
-// unqualified call attempts a same-module resolution.
+// TestExtract_Calls proves the three call shapes: a call through a name
+// declared in the file records that type as the receiver, a call through
+// a typed parameter records the parameter's type, and a bare unqualified
+// call attempts a same-module resolution (design.md D17, D18).
 func TestExtract_Calls(t *testing.T) {
 	src := `class Helper {
   static assist(): void {}
@@ -343,11 +342,19 @@ export function run(myWidget: Widget): void {
 	if err != nil {
 		t.Fatalf("Extract returned error: %v", err)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "assist", "") {
-		t.Errorf("expected a same-module call attempt to assist (PascalCase Helper), got %+v", result.Unresolved)
+	receiverOf := func(name string) string {
+		for _, r := range result.Unresolved {
+			if r.Kind == goextract.RefKindCalls && r.Name == name && r.PkgAlias == "" {
+				return r.ReceiverType
+			}
+		}
+		return "<none>"
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "render", "<local:myWidget>") {
-		t.Errorf("expected a forced-unresolved call to render (camelCase local var), got %+v", result.Unresolved)
+	if got := receiverOf("assist"); got != "Helper" {
+		t.Errorf("Helper.assist(): receiver type = %q, want Helper", got)
+	}
+	if got := receiverOf("render"); got != "Widget" {
+		t.Errorf("myWidget.render(): receiver type = %q, want the parameter's type Widget", got)
 	}
 	if !hasUnresolved(result, goextract.RefKindCalls, "helper", "") {
 		t.Errorf("expected a same-module call attempt to helper (bare identifier), got %+v", result.Unresolved)

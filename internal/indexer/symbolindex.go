@@ -2,6 +2,8 @@ package indexer
 
 import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // symbolIndex is the global (moduleKey, declaredName) -> nodeID index Pass
@@ -18,8 +20,19 @@ type symbolIndex struct {
 	// it is the bare method name (NOT "Recv.Method" — that lives in
 	// QualifiedName), matching how goextract records call-site references
 	// (UnresolvedRef.Name is always the bare identifier text at the call
-	// site, never receiver-qualified).
+	// site, never receiver-qualified). The id is the winner pickSymbol
+	// chose from candidates.
 	byModuleKeyAndName map[string]map[string]string
+
+	// candidates holds, per moduleKey and declaredName, every distinct
+	// symbol that add received, so that the winner is a function of the
+	// set and not of the insertion order.
+	candidates map[string]map[string][]symbolCandidate
+
+	// membersByOwner holds, per type node id and member name, the methods
+	// that a type contains (design D3): the candidate set of a call
+	// through a receiver of that type.
+	membersByOwner map[string]map[string][]symbolCandidate
 
 	// Collisions counts every same-(moduleKey, name) collision addSymbol
 	// resolved deterministically (WR-01) instead of silently
@@ -27,6 +40,94 @@ type symbolIndex struct {
 	// silently dropped (D-06a), even though this plan's file scope does
 	// not yet wire it through to Sync's Stats/CLI --verbose output.
 	Collisions int
+}
+
+// symbolCandidate is one declaration that a name can resolve to.
+type symbolCandidate struct {
+	id, kind, qualifiedName, filePath, key string
+	// node is the declaration itself: its parameters and return type
+	// drive the arity and type filters and the deferred-type fill.
+	node *schema.Node
+}
+
+func candidateOf(n *schema.Node) symbolCandidate {
+	return symbolCandidate{id: n.Id, kind: n.Kind, qualifiedName: n.QualifiedName, filePath: n.FilePath, key: goextract.SignatureKeyOfNode(n), node: n}
+}
+
+func newEmptySymbolIndex() *symbolIndex {
+	return &symbolIndex{
+		byModuleKeyAndName: make(map[string]map[string]string),
+		candidates:         make(map[string]map[string][]symbolCandidate),
+		membersByOwner:     make(map[string]map[string][]symbolCandidate),
+	}
+}
+
+// reachable reports whether another file can refer to n (design D15): a
+// nested declaration never, and in TypeScript only an exported one. A
+// JavaScript file that uses ESM exports follows the TypeScript rule; a
+// file without any, a CommonJS module or a script, keeps every
+// module-level declaration reachable, since the extractor does not read
+// `module.exports`. Every other language reaches each module-level
+// declaration through its module key.
+func reachable(n *schema.Node, fileExports bool) bool {
+	if n.Nested {
+		return false
+	}
+	switch n.Language {
+	case "typescript", "tsx":
+		return n.IsExported
+	case "javascript":
+		return !fileExports || n.IsExported
+	}
+	return true
+}
+
+// addMember records that the type ownerID contains member, from a
+// contains edge. Re-adding the same member is not a change.
+func (idx *symbolIndex) addMember(ownerID string, member *schema.Node) {
+	byName := idx.membersByOwner[ownerID]
+	if byName == nil {
+		byName = make(map[string][]symbolCandidate)
+		idx.membersByOwner[ownerID] = byName
+	}
+	for _, c := range byName[member.Name] {
+		if c.id == member.Id {
+			return
+		}
+	}
+	byName[member.Name] = append(byName[member.Name], candidateOf(member))
+}
+
+// members returns the candidates named name that ownerID contains.
+func (idx *symbolIndex) members(ownerID, name string) []symbolCandidate {
+	return idx.membersByOwner[ownerID][name]
+}
+
+// candidatesIn returns every candidate named name in moduleKey.
+func (idx *symbolIndex) candidatesIn(moduleKey, name string) []symbolCandidate {
+	return idx.candidates[moduleKey][name]
+}
+
+// typeIn returns the type named name in moduleKey: a struct, interface or
+// type alias, chosen by pickSymbol when there are several.
+func (idx *symbolIndex) typeIn(moduleKey, name string) (symbolCandidate, bool) {
+	var types []symbolCandidate
+	for _, c := range idx.candidates[moduleKey][name] {
+		switch c.kind {
+		case goextract.KindStruct, goextract.KindInterface, goextract.KindTypeAlias:
+			types = append(types, c)
+		}
+	}
+	if len(types) == 0 {
+		return symbolCandidate{}, false
+	}
+	winner := pickSymbol(types)
+	for _, c := range types {
+		if c.id == winner {
+			return c, true
+		}
+	}
+	return types[0], true
 }
 
 // newSymbolIndex builds the index by ranging results in the order given.
@@ -37,12 +138,12 @@ type symbolIndex struct {
 // symbols, matching goextract's own "no nodes for a skipped file"
 // contract.
 func newSymbolIndex(results []goextract.FileResult) *symbolIndex {
-	idx := &symbolIndex{byModuleKeyAndName: make(map[string]map[string]string, len(results))}
+	idx := newEmptySymbolIndex()
 	idx.overlay(results)
 	return idx
 }
 
-// overlay adds results' own declared symbols into idx via addSymbol — the
+// overlay adds results' own declared symbols into idx via add — the
 // shared per-result loop both newSymbolIndex (fresh index) and Sync's
 // store-seeded index (layering the reparse batch on top) use, so the two
 // never drift (Phase 4 RESEARCH Pattern 1 step 10).
@@ -51,10 +152,11 @@ func (idx *symbolIndex) overlay(results []goextract.FileResult) {
 		if r.Err != nil {
 			continue
 		}
-		names := idx.byModuleKeyAndName[r.ImportPath]
-		if names == nil {
-			names = make(map[string]string)
-			idx.byModuleKeyAndName[r.ImportPath] = names
+		byID := make(map[string]*schema.Node, len(r.Nodes))
+		fileExports := false
+		for _, en := range r.Nodes {
+			byID[en.Node.Id] = en.Node
+			fileExports = fileExports || en.Node.IsExported
 		}
 		for _, en := range r.Nodes {
 			if en.Node.Kind == goextract.KindFile {
@@ -64,68 +166,82 @@ func (idx *symbolIndex) overlay(results []goextract.FileResult) {
 				// RelPath) and a genuinely declared symbol.
 				continue
 			}
-			idx.addSymbol(names, en.Node.Name, en.Node.Id)
+			if !reachable(en.Node, fileExports) {
+				continue
+			}
+			idx.add(r.ImportPath, en.Node)
+		}
+		for _, ie := range r.IntraEdges {
+			if ie.Edge.Kind != goextract.RefKindContains {
+				continue
+			}
+			owner, member := byID[ie.Edge.Source], byID[ie.Edge.Target]
+			if owner == nil || member == nil || owner.Kind == goextract.KindFile {
+				continue
+			}
+			idx.addMember(owner.Id, member)
 		}
 	}
 }
 
-// addSymbol inserts (name -> id) into names, the moduleKey-scoped bucket
-// addSymbol's caller looked up/created. A same-(moduleKey, name) collision
-// (WR-01 — e.g. two files in the same Go package both declaring a
-// same-named func/method) is resolved deterministically: the candidate
-// with the lexicographically lowest node Id wins, mirroring
-// query.Engine.resolveSymbolNode's own lowest-Id tie-break
-// (internal/query/traverse.go) — so the resolved edge target is stable
-// across runs regardless of file-processing order. Every genuine collision
-// increments idx.Collisions; re-inserting the identical id (e.g. re-overlay
-// of an unchanged file during Sync) is not a collision.
-func (idx *symbolIndex) addSymbol(names map[string]string, name, id string) {
-	existing, ok := names[name]
-	if !ok {
-		names[name] = id
-		return
-	}
-	if existing == id {
-		return
-	}
-	idx.Collisions++
-	if id < existing {
-		names[name] = id
-	}
-}
-
-// add files (name -> id) under moduleKey through addSymbol, creating the
-// moduleKey bucket on first use.
-func (idx *symbolIndex) add(moduleKey, name, id string) {
+// add files n under moduleKey and its bare name, and updates the winner
+// for that name. Re-adding a candidate with the same id (e.g. re-overlay
+// of an unchanged file during Sync) is not a collision. Every other
+// candidate for a name that already has one increments idx.Collisions.
+func (idx *symbolIndex) add(moduleKey string, n *schema.Node) {
 	names := idx.byModuleKeyAndName[moduleKey]
 	if names == nil {
 		names = make(map[string]string)
 		idx.byModuleKeyAndName[moduleKey] = names
+		idx.candidates[moduleKey] = make(map[string][]symbolCandidate)
 	}
-	idx.addSymbol(names, name, id)
+	cands := idx.candidates[moduleKey][n.Name]
+	for _, c := range cands {
+		if c.id == n.Id {
+			return
+		}
+	}
+	if len(cands) > 0 {
+		idx.Collisions++
+	}
+	cands = append(cands, candidateOf(n))
+	idx.candidates[moduleKey][n.Name] = cands
+	names[n.Name] = pickSymbol(cands)
 }
 
-// resolveSelector resolves a package-qualified reference (pkg.Name) using
-// the calling file's own Imports map (RESEARCH §Import Resolution):
-// pkgAlias must be a real import alias present in callerImports — an alias
-// that is NOT a key there is not a package reference at all (e.g. a local
-// variable receiver in `w.Describe()`), and correctly never resolves here.
-// This is what implements RQ-2's narrowest-safe-set boundary: resolve.go
-// never attempts local-variable type tracking, so a method call through a
-// variable simply falls through to "unresolved" via this same check. This
-// narrowest-safe-set boundary is preserved verbatim (unchanged this plan)
-// as the pattern every future per-language selector resolver follows.
-func (idx *symbolIndex) resolveSelector(callerImports map[string]string, pkgAlias, name string) (string, bool) {
-	moduleKey, ok := callerImports[pkgAlias]
-	if !ok {
-		return "", false
+// pickSymbol chooses the id that a name resolves to (WR-01, design D3 of
+// the index-invariants change), as a pure function of the candidate set.
+// First, in each group of candidates with one kind, qualified name and
+// file and signature key — the copies of a repeated declaration — it
+// keeps the first copy in source order, whose id is DeclID. A
+// group without such a candidate keeps its lowest id. Second, across the
+// groups, it keeps the lowest id, mirroring
+// query.Engine.resolveSymbolNode's own lowest-Id tie-break
+// (internal/query/traverse.go).
+func pickSymbol(cands []symbolCandidate) string {
+	if len(cands) == 1 {
+		return cands[0].id
 	}
-	names, ok := idx.byModuleKeyAndName[moduleKey]
-	if !ok {
-		return "", false
+	best := make(map[symbolCandidate]string, len(cands))
+	for _, c := range cands {
+		group := symbolCandidate{kind: c.kind, qualifiedName: c.qualifiedName, filePath: c.filePath, key: c.key}
+		first := nodeid.DeclID(c.kind, c.qualifiedName, c.filePath, c.key)
+		cur, ok := best[group]
+		switch {
+		case !ok:
+			best[group] = c.id
+		case cur == first:
+		case c.id == first || c.id < cur:
+			best[group] = c.id
+		}
 	}
-	id, ok := names[name]
-	return id, ok
+	winner := ""
+	for _, id := range best {
+		if winner == "" || id < winner {
+			winner = id
+		}
+	}
+	return winner
 }
 
 // resolveUnqualified resolves an unqualified reference against the calling

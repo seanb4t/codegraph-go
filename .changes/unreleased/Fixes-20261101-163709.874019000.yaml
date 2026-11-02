@@ -1,0 +1,3 @@
+kind: Fixes
+body: A sync that adds a symbol which takes over a name now moves the existing references to it, as a fresh index does.
+time: 2026-11-01T16:37:09.874019-05:00

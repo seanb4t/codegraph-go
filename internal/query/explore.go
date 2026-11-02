@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -72,8 +73,14 @@ func groupMatchesByFile(ranked []rankedNode, maxFiles int) ([]ExploreFileGroup, 
 // buildBlastEntry computes n's blast-radius bullet data from the shared
 // D-04 reverse-adjacency map: total caller count, plus the distinct files
 // among those callers that pass isTestSymbol (D-07).
-func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge) (ExploreBlast, error) {
+// buildBlastEntry builds the blast bullet of n. For an overload set that
+// explore folded, members are the overloads it stands for, and the
+// callers of every overload count with the set's own ambiguous callers.
+func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge, members []*schema.Node) (ExploreBlast, error) {
 	callers := rev[n.Id]
+	for _, m := range members {
+		callers = append(callers, rev[m.Id]...)
+	}
 
 	testFileSet := make(map[string]bool)
 	for _, edge := range callers {
@@ -103,6 +110,59 @@ func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge) 
 // a query that tokenizes to nothing matchable, or whose full pipeline
 // gates every candidate file out) — kept as a single helper so the empty
 // message text lives in exactly one place.
+// foldOverloadSets folds each overload set in ranked into one row: the
+// set's overloads leave the list, and the set's signature names them, so
+// an overload-heavy name such as a Java `checkArgument` with forty
+// overloads takes one line, not forty. `node <name>` lists each overload
+// and `callers --signature` selects one. It returns the ranked rows that
+// remain and, per set id, the overloads it stands for.
+func (e *Engine) foldOverloadSets(ranked []rankedNode) ([]rankedNode, map[string][]*schema.Node, error) {
+	folded := make(map[string][]*schema.Node)
+	memberOf := make(map[string]string)
+	for _, r := range ranked {
+		if r.node.Kind != goextract.KindOverloadSet {
+			continue
+		}
+		members, err := e.setMembers(r.node)
+		if err != nil {
+			return nil, nil, err
+		}
+		folded[r.node.Id] = members
+		for _, m := range members {
+			memberOf[m.Id] = r.node.Id
+		}
+		r.node.Signature = overloadSetLabel(members)
+	}
+	if len(folded) == 0 {
+		return ranked, folded, nil
+	}
+	kept := ranked[:0:0]
+	for _, r := range ranked {
+		if _, inSet := folded[memberOf[r.node.Id]]; inSet {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	return kept, folded, nil
+}
+
+// overloadSetLabel is the signature text of a folded set: the count and
+// the first signatures of its overloads.
+func overloadSetLabel(members []*schema.Node) string {
+	const shown = 6
+	sigs := make([]string, 0, len(members))
+	for _, m := range members {
+		sigs = append(sigs, m.Signature)
+	}
+	sort.Strings(sigs)
+	more := ""
+	if len(sigs) > shown {
+		more = fmt.Sprintf(", and %d more", len(sigs)-shown)
+		sigs = sigs[:shown]
+	}
+	return fmt.Sprintf(" (%d overloads: %s%s)", len(members), strings.Join(sigs, ", "), more)
+}
+
 func exploreZeroResult(query string, stale bool) string {
 	return fmt.Sprintf("%s**Exploration: %s**\n\nFound 0 symbols across 0 files.\n", staleBanner(stale), query)
 }

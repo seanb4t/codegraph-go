@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -79,6 +78,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		fileID:          fileID,
 		result:          &result,
 		typeNodesByName: make(map[string]string),
+		alloc:           nodeid.NewAllocator(relPath),
 	}
 
 	// Imports are collected first for consistency with javaextract/
@@ -88,6 +88,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectTypes(root)
 	ex.collectTopLevelFunctions(root)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
@@ -115,6 +116,11 @@ type extractor struct {
 	fileID          string
 	result          *goextract.FileResult
 	typeNodesByName map[string]string
+	alloc           *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
 }
 
 // --- import ---
@@ -192,7 +198,7 @@ func (ex *extractor) emitType(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(symbolKind, name, ex.relPath)
+	id := ex.alloc.Declare(symbolKind, name, "", decl.StartByte())
 
 	start := decl.StartPosition()
 	end := decl.EndPosition()
@@ -284,7 +290,7 @@ func (ex *extractor) collectMethods(typeID, typeName string, body *tree_sitter.N
 		}
 		name := nameNode.Utf8Text(ex.src)
 		qualifiedName := typeName + "." + name
-		id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+		id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(m), m.StartByte())
 		ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, m)})
 		ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 			Source: typeID, Target: id, Kind: "contains", Provenance: "ast",
@@ -293,7 +299,9 @@ func (ex *extractor) collectMethods(typeID, typeName string, body *tree_sitter.N
 		// collectCalls is simply skipped (mirrors phpextract's identical
 		// bodyless-interface-method handling).
 		if fbody := firstChildOfKind(m, "function_body"); fbody != nil {
+			ex.env = ex.bodyEnv(m)
 			ex.collectCalls(id, fbody)
+			ex.env = nil
 		}
 	}
 }
@@ -309,13 +317,15 @@ func (ex *extractor) collectTopLevelFunctions(root *tree_sitter.Node) {
 			continue
 		}
 		name := nameNode.Utf8Text(ex.src)
-		id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+		id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(d), d.StartByte())
 		ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, d)})
 		ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 			Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 		}})
 		if body := firstChildOfKind(d, "function_body"); body != nil {
+			ex.env = ex.bodyEnv(d)
 			ex.collectCalls(id, body)
+			ex.env = nil
 		}
 	}
 }
@@ -323,7 +333,8 @@ func (ex *extractor) collectTopLevelFunctions(root *tree_sitter.Node) {
 func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *tree_sitter.Node) *schema.Node {
 	start := decl.StartPosition()
 	end := decl.EndPosition()
-	return &schema.Node{
+	params, ret := collectParams(decl, ex.src)
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -336,7 +347,11 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		EndCol:        int32(end.Column),
 		Visibility:    "public",
 		IsExported:    true,
+		Signature:     goextract.SignatureKeyOf(params),
+		ReturnType:    ret,
 	}
+	goextract.FillSignature(n, params, ret)
+	return n
 }
 
 // --- calls ---
@@ -360,8 +375,10 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 	switch callee.Kind() {
 	case "identifier":
+		args := ex.callArgs(ex.env, call)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: callee.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	case "navigation_expression":
 		if callee.NamedChildCount() < 2 {
@@ -373,35 +390,13 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 			return
 		}
 		name := member.Utf8Text(ex.src)
-		var pkgAlias string
-		switch {
-		case receiver.Kind() == "identifier" && isLikelyTypeName(receiver.Utf8Text(ex.src)):
-			// A rare PascalCase bare-name receiver -- same-module attempt.
-		case receiver.Kind() == "identifier":
-			// A lowercase-leading receiver (including `this`, deliberately
-			// not special-cased -- types.go) is forced through the WR-02
-			// synthetic-non-matching-alias pattern.
-			pkgAlias = "<local:" + receiver.Utf8Text(ex.src) + ">"
-		default:
-			pkgAlias = "<" + receiver.Kind() + ">"
-		}
+		pkgAlias, receiverType := ex.receiver(ex.env, receiver)
+		args := ex.callArgs(ex.env, call)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	}
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter -- Kotlin's own near-universal naming convention distinguishing a
-// type name (PascalCase) from a local variable/parameter/function name
-// (camelCase), mirroring pyextract/rustextract/phpextract's identical
-// heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 func firstNamedChild(n *tree_sitter.Node) *tree_sitter.Node {

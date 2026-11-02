@@ -7,6 +7,7 @@ Show a symbol's signature, calls, and callers, or a line-numbered file read.
 - `file` (string, optional) — File path — disambiguates symbol, or selects file-mode when symbol is omitted.
 - `line` (integer, optional) — Line number — narrows an overloaded symbol to the definition containing (or nearest) this line.
 - `path` (string, optional) — Repo path (default: server cwd).
+- `signature` (string, optional) — Parameter types that select one overload, for example `"String, Throwable"`. Without it, a name that has several overloads reports across all of them, with the overload each row belongs to.
 - `symbol` (string, optional) — Symbol name to look up (omit for a file-mode read).
 
 ## Result

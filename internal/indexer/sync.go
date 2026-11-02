@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"os"
 	"runtime"
 	"sort"
@@ -205,11 +206,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			return Stats{}, err
 		}
 		newMeta := schema.NewMeta()
-		newMeta.HasFileIndex = true
-		newMeta.HasUnresolvedNames = true
-		newMeta.HasDeclaredModuleKeys = true
-		newMeta.HasMethodSpecs = true
-		newMeta.HasGroupedVars = true
+		stampCapabilities(newMeta)
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
@@ -378,6 +375,16 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
+	// A sync can also change a candidate set that already resolves: a
+	// new overload can fit a call better, or the old winner can be gone.
+	// The files that own an edge into a changed set are reparsed the same
+	// way, so their references resolve as in a fresh index (design D11).
+	outbid, err := filesResolvingToChangedSets(r0, discovered, results, changedSet, dependentPaths)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting = mergeSortedPaths(waiting, outbid)
 	if len(waiting) > 0 {
 		waitingFiles := make([]DiscoveredFile, 0, len(waiting))
 		for _, path := range waiting {
@@ -424,6 +431,22 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
 		nodeFilePath[n.Id] = n.FilePath
+	}
+
+	// An overload set whose members span files has no file of its own,
+	// so no prune reaches it. When this resolve no longer declares it,
+	// delete it here (design D14).
+	for id := range view.storedSets {
+		if _, live := nodeFilePath[id]; live {
+			continue
+		}
+		if n, ok := view.nodes[id]; ok && n.FilePath == "" {
+			if err := w.DeleteNode(id); err != nil {
+				w.Close()
+				return Stats{}, err
+			}
+			nodesRemoved++
+		}
 	}
 	collapsedEdges := collapseEdges(edges, nodeFilePath)
 
@@ -474,13 +497,20 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// committed graph after this Sync: either they were just pruned above
 	// (goneIDs — a node id is stable across a content-unrelated edit
 	// elsewhere in its file, D-02/nodeid.NodeID depends only on
-	// (kind,qualifiedName,filePath), so "pruned then re-added with the
+	// (kind,qualifiedName,filePath) and, for a repeated declaration, its
+	// ordinal (nodeid.OrdinalID), so "pruned then re-added with the
 	// same id" nets to zero) or they never existed in the base graph at
 	// all (a genuinely new symbol, or a dependent/package node getting
 	// re-staged with an id that already existed and was NOT pruned — that
 	// case must NOT be double-counted as an addition).
+	//
+	// allNodes is sorted by id, and an id that appears twice is stored
+	// once, so it is counted once (#188).
 	nodesAdded := 0
-	for _, n := range allNodes {
+	for i, n := range allNodes {
+		if i > 0 && allNodes[i-1].Id == n.Id {
+			continue
+		}
 		if _, gone := goneIDs[n.Id]; gone {
 			nodesAdded++
 			continue
@@ -529,11 +559,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	newMeta := schema.NewMeta()
-	newMeta.HasFileIndex = true
-	newMeta.HasUnresolvedNames = true
-	newMeta.HasDeclaredModuleKeys = true
-	newMeta.HasMethodSpecs = true
-	newMeta.HasGroupedVars = true
+	stampCapabilities(newMeta)
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
@@ -618,8 +644,8 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
-// has_unresolved_names, has_declared_module_keys, has_method_specs or
-// has_grouped_vars flag is false (D-02b) — opening and closing the
+// has_unresolved_names, has_declared_module_keys, has_method_specs,
+// has_grouped_vars or has_unique_decl_ids flag is false (D-02b) — opening and closing the
 // store in isolation from Sync's own main open, so the two never race a
 // Pebble lock against each other.
 func needsFileIndexBackfill(storeDir string) (bool, error) {
@@ -642,7 +668,8 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		}
 		return false, err
 	}
-	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() || !meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars(), nil
+	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() ||
+		!meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars() || !meta.GetHasUniqueDeclIds(), nil
 }
 
 // NeedsFullIndex reports whether Sync on the store at storeDir would build
@@ -749,6 +776,170 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 		}
 	}
 	return names, nil
+}
+
+// filesResolvingToChangedSets returns, sorted, the paths of r0's
+// unchanged files that own an edge into a candidate set this sync
+// changes (design D11 of the index-invariants change). A set is the
+// declarations of one name under one module key. It changes when the
+// reparsed files add a candidate to it or remove one from it, which can
+// change the outcome of resolution for a call that already resolved: a
+// new overload can fit better, or the old winner can be gone. The files
+// that own an edge into any candidate of such a set, before or after, or
+// into the set's overload_set node, are reparsed like a file waiting on
+// a new name. A same-file contains edge is made by the extractor and is
+// left out. The sync's own batch and dependents are left out as well.
+func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
+	declared := make(map[string]string)
+	fit, err := r0.IterateFiles()
+	if err != nil {
+		return nil, err
+	}
+	for fit.Next() {
+		if f := fit.File(); f.GetDeclaredModuleKey() != "" {
+			declared[f.GetPath()] = f.GetDeclaredModuleKey()
+		}
+	}
+	err = fit.Err()
+	fit.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	before := make(map[unresolvedKey]map[string]struct{})
+	after := make(map[unresolvedKey]map[string]struct{})
+	touched := make(map[unresolvedKey]struct{})
+	setsByName := make(map[string][]string)
+	fileOf := make(map[string]string)
+	record := func(m map[unresolvedKey]map[string]struct{}, key unresolvedKey, id string) {
+		ids := m[key]
+		if ids == nil {
+			ids = make(map[string]struct{})
+			m[key] = ids
+		}
+		ids[id] = struct{}{}
+	}
+	nit, err := r0.IterateNodes()
+	if err != nil {
+		return nil, err
+	}
+	for nit.Next() {
+		n := nit.Node()
+		fileOf[n.Id] = n.FilePath
+		if n.Kind == goextract.KindOverloadSet {
+			setsByName[n.Name] = append(setsByName[n.Name], n.Id)
+			continue
+		}
+		if n.Kind == goextract.KindFile || n.Kind == kindPackage {
+			continue
+		}
+		moduleKey, ok := declared[n.FilePath]
+		if !ok {
+			f, found := discovered[n.FilePath]
+			if !found {
+				continue
+			}
+			moduleKey = f.ImportPath
+		}
+		key := unresolvedKey{moduleKey: moduleKey, name: n.Name}
+		record(before, key, n.Id)
+		if _, ok := changed[n.FilePath]; ok {
+			touched[key] = struct{}{}
+		} else {
+			record(after, key, n.Id)
+		}
+	}
+	err = nit.Err()
+	nit.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range results {
+		if r.Err != nil {
+			continue
+		}
+		for _, en := range r.Nodes {
+			if en.Node.Kind == goextract.KindFile || en.Node.Kind == goextract.KindOverloadSet {
+				continue
+			}
+			key := unresolvedKey{moduleKey: r.ImportPath, name: en.Node.Name}
+			record(after, key, en.Node.Id)
+			touched[key] = struct{}{}
+		}
+	}
+
+	targets := make(map[string]struct{})
+	for key := range touched {
+		if maps.Equal(before[key], after[key]) {
+			continue
+		}
+		for id := range before[key] {
+			targets[id] = struct{}{}
+		}
+		for id := range after[key] {
+			targets[id] = struct{}{}
+		}
+		for _, id := range setsByName[key.name] {
+			targets[id] = struct{}{}
+		}
+	}
+	if len(targets) == 0 {
+		return nil, nil
+	}
+
+	eit, err := r0.IterateEdges("")
+	if err != nil {
+		return nil, err
+	}
+	defer eit.Close()
+	set := make(map[string]struct{})
+	for eit.Next() {
+		e := eit.Edge()
+		// A contains edge is resolved by its source's name: a method
+		// names its receiver type. Every other edge is resolved by its
+		// target's name.
+		resolved := e.Target
+		if e.Kind == goextract.RefKindContains {
+			resolved = e.Source
+		}
+		if _, ok := targets[resolved]; !ok {
+			continue
+		}
+		path := fileOf[edgeOwnerID(e)]
+		if e.Kind == goextract.RefKindContains && path == fileOf[resolved] {
+			// The extractor makes a same-file contains edge itself, from
+			// the declaration, so no other file can outbid it. Every
+			// other edge resolves through the symbol index, in the same
+			// file or not.
+			continue
+		}
+		if path == "" {
+			continue
+		}
+		if _, ok := changed[path]; ok {
+			continue
+		}
+		if _, ok := dependents[path]; ok {
+			continue
+		}
+		set[path] = struct{}{}
+	}
+	if err := eit.Err(); err != nil {
+		return nil, err
+	}
+	return sortedKeys(set), nil
+}
+
+// mergeSortedPaths returns the sorted union of a and b.
+func mergeSortedPaths(a, b []string) []string {
+	if len(b) == 0 {
+		return a
+	}
+	set := make(map[string]struct{}, len(a)+len(b))
+	for _, p := range append(a, b...) {
+		set[p] = struct{}{}
+	}
+	return sortedKeys(set)
 }
 
 // filesWaitingOn returns, sorted, the paths of r0's files that are in

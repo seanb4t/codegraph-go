@@ -8,11 +8,13 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/fsnotify/fsnotify"
@@ -83,6 +85,28 @@ func addCreatedDir(w *fsnotify.Watcher, path string, skip func(name string) bool
 	return addRecursive(w, path, skip)
 }
 
+// removeMoved drops the watch of a directory that moved away from path
+// or was deleted, and the watches of every directory below it. inotify keeps a watch on
+// the moved directory, and fsnotify keeps it under the old path. Without
+// this step, the re-add on the Create event of the new path gets the same
+// watch back, and fsnotify's handling of the directory's IN_MOVE_SELF
+// event then removes it, so the moved directory goes unwatched. Its
+// subdirectories would also stay in the watch list under their old
+// paths. fsnotify reports the Rename of the old path before the Create of
+// the new one, so the re-add starts from fresh watches. A path that holds
+// no watch, such as a file, is ignored.
+func removeMoved(w *fsnotify.Watcher, path string) {
+	prefix := path + string(filepath.Separator)
+	for _, p := range w.WatchList() {
+		if p != path && !strings.HasPrefix(p, prefix) {
+			continue
+		}
+		if err := w.Remove(p); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
+			log.Printf("watch: removing moved directory %s: %v", p, err)
+		}
+	}
+}
+
 // Run consumes fsnotify events until ctx is cancelled, feeding each
 // changed path into deb so a burst coalesces into one debounced flush
 // (Pattern 3). Run returns (and stops deb's pending timer) once ctx is
@@ -107,6 +131,17 @@ func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *Debouncer) {
 			if !ok {
 				deb.Stop()
 				return
+			}
+			if ev.Has(fsnotify.Rename) || ev.Has(fsnotify.Remove) {
+				// A deleted directory is dropped here as well, not left
+				// to inotify's own IN_IGNORED. fsnotify handles that
+				// event on its reader goroutine, so a directory deleted
+				// and created again under one name within a few
+				// milliseconds can have its fresh watch dropped by the
+				// late IN_IGNORED of the old one. Removing the path from
+				// this loop, before the Create of the new directory is
+				// handled, keeps the two apart.
+				removeMoved(w, ev.Name)
 			}
 			if ev.Has(fsnotify.Create) {
 				if err := addCreatedDir(w, ev.Name, indexer.ShouldSkipDir); err != nil {

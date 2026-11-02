@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -76,11 +75,12 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	decls := topLevelDecls(root)
 
 	ex := &extractor{
-		src:             src,
-		relPath:         relPath,
-		fileID:          fileID,
-		result:          &result,
-		typeNodesByName: make(map[string]string),
+		src:              src,
+		relPath:          relPath,
+		fileID:           fileID,
+		result:           &result,
+		typeNodesByStart: make(map[uint]string),
+		alloc:            nodeid.NewAllocator(relPath),
 	}
 
 	// Imports are collected first so supertype/call qualifier checks below
@@ -91,6 +91,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectMethods(decls)
 	ex.collectFunctions(decls)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
@@ -123,29 +124,53 @@ func namespaceOverride(root *tree_sitter.Node, src []byte) (string, bool) {
 // form needs this one-level expansion).
 func topLevelDecls(root *tree_sitter.Node) []*tree_sitter.Node {
 	var decls []*tree_sitter.Node
-	for i := uint(0); i < root.NamedChildCount(); i++ {
-		c := root.NamedChild(i)
-		if c.Kind() == "namespace_definition" {
-			if body := c.ChildByFieldName("body"); body != nil {
-				for j := uint(0); j < body.NamedChildCount(); j++ {
-					decls = append(decls, body.NamedChild(j))
+	var walk func(n *tree_sitter.Node)
+	walk = func(n *tree_sitter.Node) {
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			c := n.NamedChild(i)
+			switch c.Kind() {
+			case "namespace_definition":
+				if body := c.ChildByFieldName("body"); body != nil {
+					walk(body)
 				}
+				continue
+			case "if_statement":
+				// A function declared under a top-level `if`, such as a
+				// `function_exists` guard, is global once the file runs
+				// (design D16). The walk visits the guarded body.
+				for j := uint(0); j < c.NamedChildCount(); j++ {
+					if b := c.NamedChild(j); b.Kind() == "compound_statement" || b.Kind() == "else_clause" {
+						walk(b)
+					}
+				}
+				continue
+			case "compound_statement":
+				walk(c)
+				continue
 			}
-			continue
+			decls = append(decls, c)
 		}
-		decls = append(decls, c)
 	}
+	walk(root)
 	return decls
 }
 
 // extractor carries the per-file state threaded through the tree-walk
 // helpers below, mirroring goextract/pyextract's extractor shape.
 type extractor struct {
-	src             []byte
-	relPath         string
-	fileID          string
-	result          *goextract.FileResult
-	typeNodesByName map[string]string
+	src     []byte
+	relPath string
+	fileID  string
+	result  *goextract.FileResult
+	alloc   *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
+
+	// typeNodesByStart maps the start byte of each type declaration to its
+	// node id, so that each copy of a repeated type gets its own methods.
+	typeNodesByStart map[uint]string
 }
 
 // --- namespace_use_declaration ---
@@ -260,7 +285,7 @@ func (ex *extractor) emitTypeDecl(kind string, decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(kind, name, ex.relPath)
+	id := ex.alloc.Declare(kind, name, "", decl.StartByte())
 
 	start := decl.StartPosition()
 	end := decl.EndPosition()
@@ -281,7 +306,7 @@ func (ex *extractor) emitTypeDecl(kind string, decl *tree_sitter.Node) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	ex.typeNodesByStart[decl.StartByte()] = id
 
 	ex.collectSupertypes(id, decl)
 }
@@ -338,7 +363,7 @@ func (ex *extractor) emitMethodsForType(decl *tree_sitter.Node) {
 		return
 	}
 	typeName := nameNode.Utf8Text(ex.src)
-	typeID, ok := ex.typeNodesByName[typeName]
+	typeID, ok := ex.typeNodesByStart[decl.StartByte()]
 	if !ok {
 		return
 	}
@@ -360,7 +385,7 @@ func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node)
 	}
 	name := nameNode.Utf8Text(ex.src)
 	qualifiedName := typeName + "." + name
-	id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -370,7 +395,9 @@ func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node)
 	// An interface method has no body (abstract) -- ChildByFieldName
 	// returns nil, collectCalls is simply skipped.
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
@@ -390,7 +417,7 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -398,7 +425,9 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	}})
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
@@ -414,7 +443,7 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		returnType = rt.Utf8Text(ex.src)
 	}
 
-	return &schema.Node{
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -430,6 +459,9 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		Visibility:    "public",
 		IsExported:    true,
 	}
+	params, _ := collectParams(decl, ex.src)
+	goextract.FillSignature(n, params, returnType)
+	return n
 }
 
 // --- calls ---
@@ -458,16 +490,20 @@ func (ex *extractor) recordFunctionCall(fromID string, call *tree_sitter.Node) {
 
 	switch fn.Kind() {
 	case "name":
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	case "qualified_name", "relative_name":
 		simple, _ := phpSimpleAndFullName(fn, ex.src)
 		if simple == "" {
 			return
 		}
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: simple, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	default:
 		// A dynamic callee (a variable holding a callable, an expression
@@ -484,19 +520,11 @@ func (ex *extractor) recordMemberCall(fromID string, call *tree_sitter.Node) {
 	pos := call.StartPosition()
 	line, col := int32(pos.Row)+1, int32(pos.Column)
 
-	var pkgAlias string
-	switch {
-	case object.Kind() == "variable_name" && phpVariableName(object, ex.src) == "this":
-		// $this->method() -- implicit same-class call.
-	case object.Kind() == "variable_name":
-		pkgAlias = "<local:" + phpVariableName(object, ex.src) + ">"
-	case object.Kind() == "name" && isLikelyTypeName(object.Utf8Text(ex.src)):
-		// A rare PascalCase bare-name receiver -- same-module attempt.
-	default:
-		pkgAlias = "<" + object.Kind() + ">"
-	}
+	pkgAlias, receiverType := ex.receiver(ex.env, object)
+	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 	})
 }
 
@@ -509,24 +537,11 @@ func (ex *extractor) recordScopedCall(fromID string, call *tree_sitter.Node) {
 	pos := call.StartPosition()
 	line, col := int32(pos.Row)+1, int32(pos.Column)
 
-	var pkgAlias string
-	switch scope.Kind() {
-	case "name":
-		scopeText := scope.Utf8Text(ex.src)
-		if _, imported := ex.result.Imports[scopeText]; imported {
-			pkgAlias = scopeText
-		}
-		// else: self/static/parent, or a same-module Type::method() attempt
-		// (the dominant PHP static-call idiom; PHP class names are
-		// conventionally PascalCase) -- empty PkgAlias either way, mirroring
-		// pyextract/javaextract's naming-convention heuristic.
-	case "variable_name":
-		pkgAlias = "<local:" + phpVariableName(scope, ex.src) + ">"
-	default:
-		pkgAlias = "<" + scope.Kind() + ">"
-	}
+	pkgAlias, receiverType := ex.scope(ex.env, scope)
+	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 	})
 }
 
@@ -537,19 +552,6 @@ func phpVariableName(n *tree_sitter.Node, src []byte) string {
 		return ""
 	}
 	return n.NamedChild(0).Utf8Text(src)
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter — PHP's own near-universal PSR convention distinguishing a
-// class/interface/trait name (PascalCase) from a local variable/function
-// name (camelCase/snake_case), mirroring pyextract/rustextract's identical
-// heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 // walkDescendants performs an iterative (stack-based, non-recursive)
