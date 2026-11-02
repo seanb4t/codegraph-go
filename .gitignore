@@ -43,3 +43,6 @@ __pycache__/
 .DS_Store
 .archify/
 .boost/
+
+# Failure files that pgregory.net/rapid writes when a property fails.
+**/testdata/rapid/
