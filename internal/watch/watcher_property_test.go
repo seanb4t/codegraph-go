@@ -179,8 +179,9 @@ func dirStep(t *rapid.T, root string, m dirTree) stepResult {
 // TestWatcherCoversEveryDirectory runs a watcher over a tree, applies a
 // generated sequence of directory creates, renames and deletes, and checks
 // after each step that the watcher covers every directory that the indexer
-// does not exclude (the #208 class). checkCoverage holds the check of each
-// backend.
+// does not exclude. checkCoverage holds the check of each backend: the
+// inotify watch list equals the tree, and the FSEvents stream reports a
+// file written in each directory the step touched.
 func TestWatcherCoversEveryDirectory(t *testing.T) {
 	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "5")
 	base := t.TempDir()

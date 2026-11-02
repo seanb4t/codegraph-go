@@ -28,6 +28,10 @@ import (
 type Watcher struct {
 	fsw    *fsnotify.Watcher
 	closed atomic.Bool
+	// dirs holds the directories the watcher watches, so a Rename or
+	// Remove event of a file costs no scan of the watch list. Open fills
+	// it, and only the Run loop changes it after that.
+	dirs map[string]bool
 }
 
 // Open opens a native fsnotify watcher rooted at root and walks the tree,
@@ -40,8 +44,8 @@ func Open(root string) (*Watcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("watch: creating fsnotify watcher: %w", err)
 	}
-	w := &Watcher{fsw: fsw}
-	if err := addRecursive(fsw, root, indexer.ShouldSkipDir); err != nil {
+	w := &Watcher{fsw: fsw, dirs: make(map[string]bool)}
+	if err := addRecursive(w, root, indexer.ShouldSkipDir); err != nil {
 		_ = fsw.Close()
 		return nil, fmt.Errorf("watch: walking %s: %w", root, err)
 	}
@@ -53,7 +57,7 @@ func Open(root string) (*Watcher, error) {
 // (RESEARCH Pattern 3) — recursive coverage requires this explicit walk at
 // startup, plus a re-addRecursive call on any subdirectory discovered
 // later via a Create event (see watchLoop).
-func addRecursive(w *fsnotify.Watcher, root string, skip func(name string) bool) error {
+func addRecursive(w *Watcher, root string, skip func(name string) bool) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -64,7 +68,11 @@ func addRecursive(w *fsnotify.Watcher, root string, skip func(name string) bool)
 		if p != root && skip(d.Name()) {
 			return filepath.SkipDir
 		}
-		return w.Add(p)
+		if err := w.fsw.Add(p); err != nil {
+			return err
+		}
+		w.dirs[p] = true
+		return nil
 	})
 }
 
@@ -74,7 +82,7 @@ func addRecursive(w *fsnotify.Watcher, root string, skip func(name string) bool)
 // sibling of a watched directory is walked in full, and kqueue holds one
 // file descriptor for every file in it. A path that is not a directory is
 // ignored.
-func addCreatedDir(w *fsnotify.Watcher, path string, skip func(name string) bool) error {
+func addCreatedDir(w *Watcher, path string, skip func(name string) bool) error {
 	if skip(filepath.Base(path)) {
 		return nil
 	}
@@ -86,22 +94,23 @@ func addCreatedDir(w *fsnotify.Watcher, path string, skip func(name string) bool
 }
 
 // removeMoved drops the watch of a directory that moved away from path
-// or was deleted, and the watches of every directory below it. inotify keeps a watch on
-// the moved directory, and fsnotify keeps it under the old path. Without
-// this step, the re-add on the Create event of the new path gets the same
-// watch back, and fsnotify's handling of the directory's IN_MOVE_SELF
-// event then removes it, so the moved directory goes unwatched. Its
-// subdirectories would also stay in the watch list under their old
-// paths. fsnotify reports the Rename of the old path before the Create of
-// the new one, so the re-add starts from fresh watches. A path that holds
-// no watch, such as a file, is ignored.
-func removeMoved(w *fsnotify.Watcher, path string) {
+// or was deleted, and the watches of every directory below it. The
+// removal must happen before the Create event of the directory's new
+// path, or of a new directory under the same name, is handled: a watch
+// left under the old path is dropped later by fsnotify, and that drop
+// takes the fresh watch with it. A path that is not a watched directory,
+// such as a file, costs one map lookup.
+func removeMoved(w *Watcher, path string) {
+	if !w.dirs[path] {
+		return
+	}
 	prefix := path + string(filepath.Separator)
-	for _, p := range w.WatchList() {
+	for p := range w.dirs {
 		if p != path && !strings.HasPrefix(p, prefix) {
 			continue
 		}
-		if err := w.Remove(p); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
+		delete(w.dirs, p)
+		if err := w.fsw.Remove(p); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
 			log.Printf("watch: removing moved directory %s: %v", p, err)
 		}
 	}
@@ -112,7 +121,7 @@ func removeMoved(w *fsnotify.Watcher, path string) {
 // (Pattern 3). Run returns (and stops deb's pending timer) once ctx is
 // done or the watcher's channels are closed.
 func (w *Watcher) Run(ctx context.Context, deb *Debouncer) {
-	watchLoop(ctx, w.fsw, deb)
+	watchLoop(ctx, w, deb)
 }
 
 // watchLoop selects on both Events AND Errors in a single loop (Pitfall
@@ -121,26 +130,20 @@ func (w *Watcher) Run(ctx context.Context, deb *Debouncer) {
 // fsnotify's own goroutine indefinitely. Errors are logged, never treated
 // as fatal — a stuck-not-crashed watcher is exactly the failure mode
 // Pitfall 6 warns about.
-func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *Debouncer) {
+func watchLoop(ctx context.Context, w *Watcher, deb *Debouncer) {
 	for {
 		select {
 		case <-ctx.Done():
 			deb.Stop()
 			return
-		case ev, ok := <-w.Events:
+		case ev, ok := <-w.fsw.Events:
 			if !ok {
 				deb.Stop()
 				return
 			}
 			if ev.Has(fsnotify.Rename) || ev.Has(fsnotify.Remove) {
-				// A deleted directory is dropped here as well, not left
-				// to inotify's own IN_IGNORED. fsnotify handles that
-				// event on its reader goroutine, so a directory deleted
-				// and created again under one name within a few
-				// milliseconds can have its fresh watch dropped by the
-				// late IN_IGNORED of the old one. Removing the path from
-				// this loop, before the Create of the new directory is
-				// handled, keeps the two apart.
+				// Removed here, before the Create of a directory under
+				// the same name is handled: see removeMoved.
 				removeMoved(w, ev.Name)
 			}
 			if ev.Has(fsnotify.Create) {
@@ -149,7 +152,7 @@ func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *Debouncer) {
 				}
 			}
 			deb.Add(ev.Name)
-		case err, ok := <-w.Errors:
+		case err, ok := <-w.fsw.Errors:
 			if !ok {
 				deb.Stop()
 				return
