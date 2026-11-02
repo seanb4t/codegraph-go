@@ -774,9 +774,6 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	}
 }
 
-// receiver resolves a member_access_expression's PkgAlias from its
-// "expression" (object) operand.
-
 // chainRoot walks down a member_access_expression chain's "expression"
 // field until it reaches a non-member_access_expression node — the root
 // operand the whole dotted chain is ultimately built on (e.g. "Other" in
