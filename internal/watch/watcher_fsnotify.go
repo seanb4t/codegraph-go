@@ -153,7 +153,10 @@ func watchLoop(ctx context.Context, w *Watcher, deb *Debouncer) {
 				// the same name is handled: see removeMoved.
 				removeMoved(w, ev.Name)
 			}
-			if ev.Has(fsnotify.Create) {
+			if !ev.Has(fsnotify.Remove) && !w.dirs[ev.Name] {
+				// A directory that is not watched yet: created, moved in,
+				// or seen through another event when its create event was
+				// not delivered. A file or a gone path costs one stat.
 				if err := addCreatedDir(w, ev.Name, indexer.ShouldSkipDir); err != nil {
 					log.Printf("watch: adding new directory %s: %v", ev.Name, err)
 				}

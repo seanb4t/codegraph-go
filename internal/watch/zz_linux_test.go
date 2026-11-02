@@ -5,12 +5,16 @@ package watch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 // TestZZMoveOutOfExcludedDir is a temporary probe for the CI runner: it
@@ -37,6 +41,24 @@ func TestZZMoveOutOfExcludedDir(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// A second inotify instance on the root records what the kernel
+		// delivers, independent of the watcher under test.
+		raw, err := fsnotify.NewWatcher()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := raw.Add(root); err != nil {
+			t.Fatal(err)
+		}
+		var rawMu sync.Mutex
+		var rawEvents []string
+		go func() {
+			for ev := range raw.Events {
+				rawMu.Lock()
+				rawEvents = append(rawEvents, fmt.Sprintf("%s %s", ev.Op, strings.TrimPrefix(ev.Name, root)))
+				rawMu.Unlock()
+			}
+		}()
 		flushed := make(chan map[string]struct{}, 64)
 		ctx, cancel := context.WithCancel(context.Background())
 		deb := NewDebouncer(ctx, 5*time.Millisecond, func(p map[string]struct{}) { flushed <- p })
@@ -84,9 +106,16 @@ func TestZZMoveOutOfExcludedDir(t *testing.T) {
 		for _, p := range w.fsw.WatchList() {
 			watched[p] = true
 		}
+		time.Sleep(50 * time.Millisecond)
+		rawMu.Lock()
+		events := append([]string(nil), rawEvents...)
+		rawMu.Unlock()
 		if !watched[to] || !w.dirs[to] {
-			t.Errorf("iteration %d (from %s): c not watched; list %v dirs %v", i, filepath.Base(filepath.Dir(from)), w.fsw.WatchList(), w.dirs)
+			t.Errorf("iteration %d (from %s): c not watched; list %v dirs %v; raw events %v", i, filepath.Base(filepath.Dir(from)), w.fsw.WatchList(), w.dirs, events)
+		} else if i < 3 {
+			t.Logf("iteration %d (from %s): raw events %v", i, filepath.Base(filepath.Dir(from)), events)
 		}
+		raw.Close()
 		cancel()
 		<-done
 		w.Close()
