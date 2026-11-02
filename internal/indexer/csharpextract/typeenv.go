@@ -220,7 +220,7 @@ func (ex *extractor) receiver(env *goextract.TypeEnv, object *tree_sitter.Node) 
 	case "qualified_name":
 		q, name := object.ChildByFieldName("qualifier"), object.ChildByFieldName("name")
 		if q != nil && name != nil {
-			return ex.namespacePrefixAlias(q.Utf8Text(ex.src), ""), name.Utf8Text(ex.src)
+			return ex.namespacePrefixAlias(q.Utf8Text(ex.src)), name.Utf8Text(ex.src)
 		}
 		return goextract.UnknownAlias(object.Kind()), ""
 	}
@@ -235,7 +235,7 @@ func (ex *extractor) receiver(env *goextract.TypeEnv, object *tree_sitter.Node) 
 			}
 			inner, name := object.ChildByFieldName("expression"), object.ChildByFieldName("name")
 			if inner != nil && name != nil {
-				return ex.namespacePrefixAlias(inner.Utf8Text(ex.src), ""), name.Utf8Text(ex.src)
+				return ex.namespacePrefixAlias(inner.Utf8Text(ex.src)), name.Utf8Text(ex.src)
 			}
 		}
 	}

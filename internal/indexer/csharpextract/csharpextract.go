@@ -291,7 +291,7 @@ func (ex *extractor) emitSupertypeRef(fromID string, t *tree_sitter.Node) {
 	if !ok {
 		return
 	}
-	pkgAlias := ex.namespacePrefixAlias(prefix, simpleName)
+	pkgAlias := ex.namespacePrefixAlias(prefix)
 	pos := t.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: simpleName, PkgAlias: pkgAlias, Kind: goextract.RefKindEmbeds,
@@ -336,11 +336,9 @@ func csharpQualifiedParts(t *tree_sitter.Node, src []byte) (simpleName, prefix s
 // carry — see types.go's package doc comment ("Cross-namespace call/embeds
 // qualifier resolution") for the full, documented rationale. prefix is
 // non-empty only when the reference's own AST shape already spells out its
-// declaring namespace (a fully-qualified qualified_name); simpleName is
-// only consulted when prefix is empty, to apply the PascalCase (type-like,
-// same-namespace attempt) vs. camelCase (local-variable-like, synthetic
-// non-matching alias) heuristic.
-func (ex *extractor) namespacePrefixAlias(prefix, simpleName string) string {
+// declaring namespace (a fully-qualified qualified_name). A bare name
+// carries no alias: the resolver looks it up by scope and module (D18).
+func (ex *extractor) namespacePrefixAlias(prefix string) string {
 	if prefix != "" {
 		// Self-mapped: the resolver's exact-match lookup needs
 		// result.Imports[pkgAlias] to resolve to a moduleKey, and a fully-
@@ -486,7 +484,7 @@ func (ex *extractor) namedTypeRef(t *tree_sitter.Node) (name, pkgAlias string, o
 	if !ok {
 		return "", "", false
 	}
-	return simple, ex.namespacePrefixAlias(prefix, simple), true
+	return simple, ex.namespacePrefixAlias(prefix), true
 }
 
 // emitNamedTypeRef emits a D-09 Pass-1 ref (01-RESEARCH.md §B) of the given
