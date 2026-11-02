@@ -269,8 +269,14 @@ public class Widget {
 	if !hasUnresolved(result, goextract.RefKindCalls, "assist", "Helper") {
 		t.Errorf("expected calls ref to Helper.assist with PkgAlias %q, got %+v", "Helper", result.Unresolved)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "helper", "<local:w>") {
-		t.Errorf("expected local-variable-receiver calls ref to w.helper with a synthetic non-matching alias, got %+v", result.Unresolved)
+	found := false
+	for _, r := range result.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == "helper" && r.ReceiverType == "Widget" && r.PkgAlias == "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the call w.helper() to record the receiver type Widget of the local w, got %+v", result.Unresolved)
 	}
 }
 

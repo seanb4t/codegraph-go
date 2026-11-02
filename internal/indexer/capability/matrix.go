@@ -111,7 +111,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Same-package qualified call qualifiers are disambiguated from local-variable receivers via a PascalCase/camelCase naming-convention heuristic (no local-variable type table is tracked).",
+			"A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.",
 			"TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.",
 		},
 	},
@@ -122,6 +122,7 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageFull,
 		Gaps: []string{
 			"A bare using-imported cross-namespace call or inheritance reference — C#'s dominant idiom — is an accepted, documented gap: only fully-qualified cross-namespace references and same-namespace references resolve, since no global symbol table is built at parse time.",
+			"The extractor reads the members under each branch of an `#if`. Two branches that declare one member are alternatives, and a call to that member is ambiguous.",
 			"partial class/struct/record/interface fragments share one node keyed by (qualifiedName, namespace) with a deterministic sentinel FilePath/StartLine, rather than a resolve.go-coordinated first-fragment-by-path tie-break (Pitfall 5, scheme-b variant).",
 			"TestCorpusBehavior_CSharp now resolves the Phase-1-locked serilog corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.",
 		},
@@ -135,6 +136,7 @@ var matrix = map[string]CapabilityEntry{
 			"pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.",
 			"A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.",
 			"Wildcard from-imports (`from x import *`) are not resolved.",
+			"At module level the last definition of a name wins, as at run time.",
 			"TestCorpusBehavior_Python now resolves the Phase-1-locked requests corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.",
 		},
 	},
@@ -217,6 +219,7 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageNone,
 		Gaps: []string{
 			"#include never populates Imports — there is no cross-file call resolution for C; only same-file (unqualified) calls resolve.",
+			"A prototype whose definition is in the same file gets no node. Two definitions under the branches of one `#if` are alternatives, and a call to them is ambiguous.",
 			"Anonymous structs, preprocessor-macro-generated symbols, and multi-declarator declaration lines (only the first declarator is considered) are not extracted.",
 			"C has no interface/dispatch construct — not applicable to a procedural language; no implements synthesis is attempted.",
 			"No framework route detector exists for C — LANG-07 covers only the five priority frameworks.",

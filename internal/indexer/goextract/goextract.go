@@ -74,7 +74,9 @@ func Extract(p parser.Parser, importPath, relPath string, src []byte) (FileResul
 		relPath:         relPath,
 		fileID:          fileID,
 		result:          &result,
+		alloc:           nodeid.NewAllocator(relPath),
 		typeNodesByName: make(map[string]string),
+		fields:          make(map[string]*TypeEnv),
 	}
 
 	// Types are collected first so a same-file method's receiver-type
@@ -85,16 +87,29 @@ func Extract(p parser.Parser, importPath, relPath string, src []byte) (FileResul
 	ex.collectImports(root)
 	ex.collectFuncsAndMethods(root)
 
+	FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
 // extractor carries the per-file state threaded through the tree-walk
 // helpers below.
 type extractor struct {
-	src             []byte
-	relPath         string
-	fileID          string
-	result          *FileResult
+	src     []byte
+	relPath string
+	fileID  string
+	result  *FileResult
+	alloc   *nodeid.Allocator
+
+	// fields maps each struct type declared in the file to the
+	// environment of its fields, and env is the type environment of the
+	// function body under extraction (design D17), or nil outside a body.
+	fields map[string]*TypeEnv
+	env    *TypeEnv
+
+	// typeNodesByName maps a type name to the node id of its first
+	// declaration in the file. A Go method names its receiver type, not a
+	// declaration, so a method of a repeated type attaches to the first
+	// copy, the copy that a reference to the name resolves to.
 	typeNodesByName map[string]string
 }
 
@@ -148,7 +163,7 @@ func (ex *extractor) emitTypeSpec(spec *tree_sitter.Node) {
 		}
 	}
 
-	id := nodeid.NodeID(kind, name, ex.relPath)
+	id := ex.alloc.Declare(kind, name, "", spec.StartByte())
 	start := spec.StartPosition()
 	end := spec.EndPosition()
 	ex.result.Nodes = append(ex.result.Nodes, ExtractedNode{Node: &schema.Node{
@@ -168,12 +183,17 @@ func (ex *extractor) emitTypeSpec(spec *tree_sitter.Node) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	if _, ok := ex.typeNodesByName[name]; !ok {
+		ex.typeNodesByName[name] = id
+	}
 
 	switch kind {
 	case KindStruct:
 		if typeNode != nil {
 			ex.collectStructEmbeds(id, typeNode)
+			if _, ok := ex.fields[name]; !ok {
+				ex.fields[name] = ex.structFieldsOf(typeNode)
+			}
 		}
 	case KindInterface:
 		if typeNode != nil {
@@ -447,7 +467,7 @@ func (ex *extractor) emitConstVarSpec(kind string, spec *tree_sitter.Node) {
 		if name == "_" {
 			continue
 		}
-		id := nodeid.NodeID(kind, name, ex.relPath)
+		id := ex.alloc.Declare(kind, name, "", c.StartByte())
 		ex.result.Nodes = append(ex.result.Nodes, ExtractedNode{Node: &schema.Node{
 			Id:            id,
 			Kind:          kind,
@@ -584,7 +604,7 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(KindFunction, name, ex.relPath)
+	id := ex.alloc.Declare(KindFunction, name, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, ExtractedNode{Node: ex.buildSymbolNode(KindFunction, id, name, name, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, IntraEdge{Edge: &schema.Edge{
@@ -593,8 +613,10 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	ex.collectReturnTypeRef(id, decl)
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
 	}
 }
 
@@ -610,7 +632,7 @@ func (ex *extractor) emitMethod(decl *tree_sitter.Node) {
 	if hasRecv {
 		qualifiedName = recvType + "." + name
 	}
-	id := nodeid.NodeID(KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, ExtractedNode{Node: ex.buildSymbolNode(KindMethod, id, name, qualifiedName, decl)})
 	ex.result.MethodArity[id] = countParams(decl.ChildByFieldName("parameters"), ex.src)
@@ -641,8 +663,10 @@ func (ex *extractor) emitMethod(decl *tree_sitter.Node) {
 	ex.collectReturnTypeRef(id, decl)
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
 	}
 }
 
@@ -701,7 +725,7 @@ func (ex *extractor) buildSymbolNode(kind, id, name, qualifiedName string, decl 
 		}
 	}
 
-	return &schema.Node{
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -717,6 +741,9 @@ func (ex *extractor) buildSymbolNode(kind, id, name, qualifiedName string, decl 
 		IsExported:    isExported(name),
 		ReturnType:    returnType,
 	}
+	params, _ := collectParams(decl, ex.src)
+	FillSignature(n, params, returnType)
+	return n
 }
 
 // collectCalls walks a function/method body with an explicit stack (T-02-04
@@ -747,10 +774,12 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	line := int32(pos.Row) + 1
 	col := int32(pos.Column)
 
+	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	switch fn.Kind() {
 	case "identifier":
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "selector_expression":
 		operand := fn.ChildByFieldName("operand")
@@ -764,32 +793,10 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		if field == nil {
 			return
 		}
-		var pkgAlias string
-		switch {
-		case operand == nil:
-			// No operand at all (malformed/unusual source) — fall through
-			// to the pre-existing empty-PkgAlias (unqualified) shape;
-			// unchanged from before this fix.
-		case operand.Kind() == "identifier":
-			pkgAlias = operand.Utf8Text(ex.src)
-		default:
-			// WR-02: a non-identifier operand (call_expression,
-			// index_expression, etc. — e.g. `foo().Bar()` or
-			// `arr[i].Bar()`) is never a package alias. Leaving PkgAlias
-			// empty here would make resolveNameRef treat this as an
-			// UNQUALIFIED same-package reference, which could wrongly
-			// match an unrelated same-package symbol that happens to
-			// share the bare field name (the exact WR-02 mis-resolution
-			// bug). Force this ref through resolveSelector's
-			// narrowest-safe-set alias-membership boundary instead, using
-			// a synthetic alias that can never equal a real import alias
-			// (a valid Go package_identifier never contains "<"/">"), so
-			// it deterministically ends up "unresolved" — matching the
-			// local-variable-receiver case's own fall-through behavior.
-			pkgAlias = "<" + operand.Kind() + ">"
-		}
+		pkgAlias, receiverType := ex.receiver(ex.env, operand)
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	}
 }
@@ -1025,21 +1032,14 @@ func (ex *extractor) captureSelectorRead(fromID string, sel *tree_sitter.Node) {
 	if field == nil {
 		return
 	}
-	var pkgAlias string
-	switch {
-	case operand == nil:
-		// No operand at all (malformed/unusual source) — fall through to
-		// the empty-PkgAlias (unqualified) shape.
-	case operand.Kind() == "identifier":
-		pkgAlias = operand.Utf8Text(ex.src)
-	default:
-		pkgAlias = "<" + operand.Kind() + ">"
+	pkgAlias, receiverType := ex.receiver(ex.env, operand)
+	if operand != nil && operand.Kind() != "identifier" {
 		ex.captureExprRead(fromID, operand)
 	}
 	pos := sel.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindReferences,
-		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column), ReceiverType: receiverType,
 	})
 }
 

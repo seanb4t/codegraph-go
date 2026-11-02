@@ -2,6 +2,7 @@ package kotlinextract
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -228,8 +229,8 @@ fun helper() {}
 	if !hasUnresolved(result, goextract.RefKindCalls, "helper", "") {
 		t.Errorf("expected unqualified calls ref to helper, got %+v", result.Unresolved)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "area", "<local:c>") {
-		t.Errorf("expected local-variable-receiver calls ref to c.area with a synthetic non-matching alias, got %+v", result.Unresolved)
+	if got := receiverTypeOfCall(result, "area"); !strings.HasPrefix(got, goextract.DeferredTypePrefix) {
+		t.Errorf("expected the call c.area to record a deferred receiver type, the return type of the local's initializer, got %q in %+v", got, result.Unresolved)
 	}
 }
 
@@ -276,4 +277,15 @@ func TestExtract_OversizedFileSkippedNotFatal(t *testing.T) {
 	if len(result.Nodes) != 0 {
 		t.Errorf("expected no nodes for a skipped file, got %+v", result.Nodes)
 	}
+}
+
+// receiverTypeOfCall returns the receiver type of the first calls ref
+// named name with no alias, or "<none>".
+func receiverTypeOfCall(result goextract.FileResult, name string) string {
+	for _, r := range result.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == name && r.PkgAlias == "" {
+			return r.ReceiverType
+		}
+	}
+	return "<none>"
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -72,6 +71,8 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		fileID:          fileID,
 		result:          &result,
 		typeNodesByName: make(map[string]string),
+		fields:          make(map[string]*goextract.TypeEnv),
+		alloc:           nodeid.NewAllocator(relPath),
 	}
 
 	// Types are collected first so an impl block's receiver-type lookup
@@ -83,6 +84,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectImpls(root)
 	ex.collectFunctions(root)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
@@ -94,6 +96,15 @@ type extractor struct {
 	fileID          string
 	result          *goextract.FileResult
 	typeNodesByName map[string]string
+	alloc           *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
+
+	// fields maps each struct declared in the file to the environment of
+	// its fields, for `self.field` in its impl blocks.
+	fields map[string]*goextract.TypeEnv
 }
 
 // --- struct / enum / trait declarations (top-level only) ---
@@ -118,7 +129,7 @@ func (ex *extractor) emitTypeItem(kind string, decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(kind, name, ex.relPath)
+	id := ex.alloc.Declare(kind, name, "", decl.StartByte())
 
 	start := decl.StartPosition()
 	end := decl.EndPosition()
@@ -141,7 +152,17 @@ func (ex *extractor) emitTypeItem(kind string, decl *tree_sitter.Node) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	// A method declared outside its type's body names the type, not a
+	// declaration, so it attaches to the first copy of a repeated type,
+	// the copy that a reference to the name resolves to.
+	if _, ok := ex.typeNodesByName[name]; !ok {
+		ex.typeNodesByName[name] = id
+	}
+	if decl.Kind() == "struct_item" {
+		if _, ok := ex.fields[name]; !ok {
+			ex.fields[name] = ex.structFieldsOf(decl)
+		}
+	}
 }
 
 // rustVisibility reports "public" when decl carries a visibility_modifier
@@ -300,7 +321,7 @@ func (ex *extractor) emitMethod(implType string, decl *tree_sitter.Node) {
 	}
 	name := nameNode.Utf8Text(ex.src)
 	qualifiedName := implType + "." + name
-	id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, decl)})
 
@@ -321,7 +342,9 @@ func (ex *extractor) emitMethod(implType string, decl *tree_sitter.Node) {
 	}
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
@@ -342,7 +365,7 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -350,7 +373,9 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	}})
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
@@ -367,7 +392,7 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 	}
 	vis := rustVisibility(decl)
 
-	return &schema.Node{
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -383,6 +408,9 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		Visibility:    vis,
 		IsExported:    vis == "public",
 	}
+	params, _ := collectParams(decl, ex.src)
+	goextract.FillSignature(n, params, returnType)
+	return n
 }
 
 // --- calls ---
@@ -407,8 +435,10 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 	switch fn.Kind() {
 	case "identifier":
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "field_expression":
 		field := fn.ChildByFieldName("field")
@@ -416,62 +446,35 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		if field == nil {
 			return
 		}
-		var pkgAlias string
-		switch {
-		case value == nil:
-		case value.Kind() == "identifier" && isLikelyTypeName(value.Utf8Text(ex.src)):
-			// A PascalCase-leading receiver that is NOT a real, tracked
-			// local variable is, by Rust's own naming convention, very
-			// likely a same-module type reference (rare shape — Rust's
-			// idiomatic method calls almost always go through
-			// scoped_identifier's Type::method() form, but this covers a
-			// PascalCase-named binding holding a same-module value too).
-		case value.Kind() == "identifier":
-			// A lowercase-leading identifier is very likely a local
-			// variable/parameter this extractor tracks no type for — force
-			// it through resolveSelector's alias-membership boundary via a
-			// synthetic non-matching alias (mirrors goextract's WR-02 fix).
-			pkgAlias = "<local:" + value.Utf8Text(ex.src) + ">"
-		default:
-			pkgAlias = "<" + value.Kind() + ">"
-		}
+		pkgAlias, receiverType := ex.receiver(ex.env, value)
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "scoped_identifier":
 		nameNode := fn.ChildByFieldName("name")
 		if nameNode == nil {
 			return
 		}
-		var pkgAlias string
+		var pkgAlias, receiverType string
 		if pathNode := fn.ChildByFieldName("path"); pathNode != nil {
-			switch {
-			case pathNode.Kind() == "self", pathNode.Kind() == "crate":
-				// Self::method() / crate::method() — treated as a
-				// same-module attempt, empty PkgAlias.
-			case pathNode.Kind() == "identifier" && isLikelyTypeName(pathNode.Utf8Text(ex.src)):
-				// Type::associated_fn() — the dominant Rust idiom for a
-				// same-module associated-function/constructor call.
+			switch pathNode.Kind() {
+			case "self", "crate", "super":
+			case "identifier":
+				// A path's first segment names a type or a module: a
+				// candidate type for pass 2, whatever its case (D18).
+				pkgAlias, receiverType = goextract.Receiver(ex.env, ex.result.Imports, pathNode.Utf8Text(ex.src))
 			default:
-				pkgAlias = "<" + pathNode.Kind() + ">"
+				pkgAlias = goextract.UnknownAlias(pathNode.Kind())
 			}
 		}
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	}
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter — Rust's own near-universal convention (RFC 430) distinguishing a
-// type/trait name (PascalCase) from a local variable/parameter/function
-// name (snake_case), mirroring pyextract/javaextract's identical heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 // walkDescendants performs an iterative (stack-based, non-recursive)

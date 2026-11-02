@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/parser"
@@ -474,13 +475,10 @@ func inner() int { return 1 }
 	}
 }
 
-// TestExtract_SelectorNonIdentifierOperandNeverAliasQualified proves WR-02:
-// a selector call whose operand is a non-identifier expression
-// (`foo().Bar()`, operand is a call_expression) never carries a PkgAlias
-// that would route resolveNameRef to a same-package unqualified match —
-// its PkgAlias must be non-empty (so resolveNameRef routes it through
-// resolveSelector, not resolveUnqualified) and must never equal a real
-// import alias present in the file.
+// TestExtract_SelectorNonIdentifierOperandNeverAliasQualified checks a
+// selector call whose operand is a call, `foo().Bar()`: the receiver's
+// type is the return type of foo(), which pass 2 fills, so the ref
+// records a deferred receiver type and no alias (design.md D17).
 func TestExtract_SelectorNonIdentifierOperandNeverAliasQualified(t *testing.T) {
 	src := `package p
 
@@ -511,16 +509,15 @@ func Run() {
 	if found == nil {
 		t.Fatalf("expected a calls ref for Bar, got %+v", result.Unresolved)
 	}
-	if found.PkgAlias == "" {
-		t.Fatalf("WR-02: Bar's calls ref has empty PkgAlias, which resolveNameRef treats as unqualified and would mis-resolve to a same-package Bar symbol")
+	if found.PkgAlias != "" || !strings.HasPrefix(found.ReceiverType, DeferredTypePrefix) {
+		t.Fatalf("Bar's calls ref = alias %q, receiver type %q; want no alias and a deferred receiver type", found.PkgAlias, found.ReceiverType)
 	}
 }
 
-// TestExtract_LocalVariableReceiverCallUnchanged proves an identifier
-// operand that is a local variable (not a real import alias) keeps its
-// existing behavior: PkgAlias is set to the identifier text, later falling
-// through to "unresolved" via resolveSelector's own alias-membership
-// boundary — this plan does not touch that path.
+// TestExtract_LocalVariableReceiverCallUnchanged checks a call through a
+// local variable with a declared type: the ref records the receiver's
+// type and no alias, so pass 2 resolves the method on that type
+// (design.md D17).
 func TestExtract_LocalVariableReceiverCallUnchanged(t *testing.T) {
 	src := `package p
 
@@ -538,8 +535,14 @@ func F() {
 	if err != nil {
 		t.Fatalf("Extract returned error: %v", err)
 	}
-	if !hasUnresolved(result, RefKindCalls, "Describe", "w") {
-		t.Errorf("expected calls ref to Describe with PkgAlias %q (local-var receiver, unchanged), got %+v", "w", result.Unresolved)
+	found := false
+	for _, u := range result.Unresolved {
+		if u.Kind == RefKindCalls && u.Name == "Describe" && u.PkgAlias == "" && u.ReceiverType == "Widget" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the call w.Describe() to record the receiver type Widget of the local w, got %+v", result.Unresolved)
 	}
 }
 

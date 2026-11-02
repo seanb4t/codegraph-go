@@ -19,10 +19,11 @@ type storeView struct {
 	// file's ImportPath in discovered, which its language's
 	// LanguageSpec.ModuleKey computed on this run. File and package nodes
 	// are left out, as newSymbolIndex leaves them out, and collisions
-	// route through the same addSymbol tie-break (WR-01).
+	// route through the same pickSymbol tie-break (WR-01).
 	symbols *symbolIndex
 
 	kinds, names     map[string]string
+	nodes            map[string]*schema.Node
 	startLines       map[string]int32
 	arity            map[string]int32
 	interfaceMethods dispatch.InterfaceSpecs
@@ -31,10 +32,21 @@ type storeView struct {
 	// edges that unchanged files own.
 	edges []*schema.Edge
 
-	// synthesized maps each structural implements or override edge an
-	// unchanged file owns to that file. The sync synthesizes these again
-	// over the whole graph and keeps, adds or deletes each one.
+	// synthesized maps each structural implements, override or overload
+	// set edge an unchanged file owns to that file. The sync synthesizes
+	// these again over the whole graph and keeps, adds or deletes each
+	// one.
 	synthesized map[edgeTriple]string
+
+	// storedSets are the overload sets the unchanged files hold, by set
+	// id: the resolver puts their members under the set's owner, and
+	// gives the members of a set that dissolved back to it.
+	storedSets map[string]storedSet
+
+	// moduleOf maps each unchanged file to its module key, for the
+	// deferred types of design D17: a return type resolves in the
+	// callee's module.
+	moduleOf map[string]string
 }
 
 // loadStoreView reads r's files, nodes and edges once each, skipping what
@@ -42,13 +54,16 @@ type storeView struct {
 // symbols the batch supersedes or removes.
 func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, exclude map[string]bool) (*storeView, error) {
 	v := &storeView{
-		symbols:          &symbolIndex{byModuleKeyAndName: make(map[string]map[string]string)},
+		symbols:          newEmptySymbolIndex(),
 		kinds:            make(map[string]string),
 		names:            make(map[string]string),
+		nodes:            make(map[string]*schema.Node),
 		startLines:       make(map[string]int32),
 		arity:            make(map[string]int32),
 		interfaceMethods: make(dispatch.InterfaceSpecs),
 		synthesized:      make(map[edgeTriple]string),
+		storedSets:       make(map[string]storedSet),
+		moduleOf:         make(map[string]string),
 	}
 
 	declared := make(map[string]string)
@@ -68,6 +83,7 @@ func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, ex
 	}
 
 	fileOf := make(map[string]string)
+	fileExports := make(map[string]bool)
 	nit, err := r.IterateNodes()
 	if err != nil {
 		return nil, err
@@ -80,25 +96,32 @@ func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, ex
 		}
 		v.kinds[n.Id] = n.Kind
 		v.names[n.Id] = n.Name
+		v.nodes[n.Id] = n
 		v.startLines[n.Id] = n.StartLine
 		if n.Arity != 0 {
 			v.arity[n.Id] = n.Arity
 		}
+		if n.IsExported {
+			fileExports[n.FilePath] = true
+		}
 		for _, m := range n.InterfaceMethods {
 			v.interfaceMethods[n.Id] = append(v.interfaceMethods[n.Id], goextract.MethodSpec{Name: m.Name, Arity: m.Arity})
 		}
-		if n.Kind != goextract.KindFile {
-			moduleKey, ok := declared[n.FilePath]
-			if !ok {
-				moduleKey = discovered[n.FilePath].ImportPath
-			}
-			v.symbols.add(moduleKey, n.Name, n.Id)
+		moduleKey, ok := declared[n.FilePath]
+		if !ok {
+			moduleKey = discovered[n.FilePath].ImportPath
 		}
+		v.moduleOf[n.FilePath] = moduleKey
 	}
 	err = nit.Err()
 	nit.Close()
 	if err != nil {
 		return nil, err
+	}
+	for _, n := range v.nodes {
+		if n.Kind != goextract.KindFile && reachable(n, fileExports[n.FilePath]) {
+			v.symbols.add(v.moduleOf[n.FilePath], n)
+		}
 	}
 
 	eit, err := r.IterateEdges("")
@@ -116,11 +139,47 @@ func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, ex
 		switch {
 		case isSynthesizedEdge(e):
 			v.synthesized[k] = owner
+			if e.Kind == "contains" {
+				v.recordSetEdge(e)
+			}
 		case e.Kind == "contains", e.Kind == "embeds", e.Kind == goextract.EdgeKindExtends, e.Kind == goextract.EdgeKindImplements:
 			v.edges = append(v.edges, e)
+			if e.Kind == "contains" {
+				if member, ok := v.nodes[e.Target]; ok && v.kinds[e.Source] != goextract.KindFile && v.kinds[e.Source] != "" {
+					v.symbols.addMember(e.Source, member)
+				}
+			}
 		}
 	}
-	return v, eit.Err()
+	if err := eit.Err(); err != nil {
+		return nil, err
+	}
+	for _, set := range v.storedSets {
+		if set.owner == "" || v.kinds[set.owner] == goextract.KindFile {
+			continue
+		}
+		for _, m := range set.members {
+			if member, ok := v.nodes[m]; ok {
+				v.symbols.addMember(set.owner, member)
+			}
+		}
+	}
+	return v, nil
+}
+
+// recordSetEdge reads one stored overload set edge: owner to set, or set
+// to member.
+func (v *storeView) recordSetEdge(e *schema.Edge) {
+	switch {
+	case v.kinds[e.Target] == goextract.KindOverloadSet:
+		set := v.storedSets[e.Target]
+		set.owner = e.Source
+		v.storedSets[e.Target] = set
+	case v.kinds[e.Source] == goextract.KindOverloadSet:
+		set := v.storedSets[e.Source]
+		set.members = append(set.members, e.Target)
+		v.storedSets[e.Source] = set
+	}
 }
 
 // isSynthesizedEdge reports whether e comes from structural implements or
@@ -131,6 +190,8 @@ func isSynthesizedEdge(e *schema.Edge) bool {
 		return true
 	case goextract.EdgeKindImplements:
 		return e.Metadata["synthesizedBy"] == dispatch.SynthesizedBy
+	case goextract.RefKindContains:
+		return e.Metadata["synthesizedBy"] == SynthesizedBySet
 	}
 	return false
 }

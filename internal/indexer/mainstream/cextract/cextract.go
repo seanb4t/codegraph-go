@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -77,6 +76,8 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		language:        language,
 		result:          &result,
 		typeNodesByName: make(map[string]string),
+		fields:          make(map[string]*goextract.TypeEnv),
+		alloc:           nodeid.NewAllocator(relPath),
 	}
 
 	// Types are collected first so an out-of-line method's qualifier lookup
@@ -88,6 +89,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectTypedefs(decls)
 	ex.collectFunctions(decls)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
@@ -113,12 +115,25 @@ func languageForExt(relPath string) string {
 // extractor carries the per-file state threaded through the tree-walk
 // helpers below, mirroring goextract/rustextract's extractor shape.
 type extractor struct {
+	// definedKeys holds name|signature of every function the file
+	// defines, so that a prototype of one of them gets no node.
+	definedKeys map[string]bool
+
 	src             []byte
 	relPath         string
 	fileID          string
 	language        string
 	result          *goextract.FileResult
 	typeNodesByName map[string]string
+	alloc           *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
+
+	// fields maps each class or struct declared in the file to the
+	// environment of its fields, for an out-of-line method's `this`.
+	fields map[string]*goextract.TypeEnv
 }
 
 // topLevelDecls returns the effective list of "top-level" declaration nodes
@@ -135,6 +150,12 @@ func topLevelDecls(root *tree_sitter.Node) []*tree_sitter.Node {
 				if body := c.ChildByFieldName("body"); body != nil {
 					walk(body)
 				}
+				continue
+			}
+			if goextract.IsPreprocBlock(c) {
+				// The declarations under each branch of an `#if` are
+				// alternatives (design D16); the walk visits them all.
+				walk(c)
 				continue
 			}
 			decls = append(decls, c)
@@ -192,7 +213,7 @@ func (ex *extractor) emitType(decl *tree_sitter.Node, isClass bool) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindStruct, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindStruct, name, "", decl.StartByte())
 
 	start := decl.StartPosition()
 	end := decl.EndPosition()
@@ -213,7 +234,13 @@ func (ex *extractor) emitType(decl *tree_sitter.Node, isClass bool) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	// A method declared outside its type's body names the type, not a
+	// declaration, so it attaches to the first copy of a repeated type,
+	// the copy that a reference to the name resolves to.
+	if _, ok := ex.typeNodesByName[name]; !ok {
+		ex.typeNodesByName[name] = id
+		ex.fields[name] = ex.fieldsOf(decl)
+	}
 
 	if !isClass {
 		return
@@ -277,13 +304,15 @@ func (ex *extractor) collectInlineMethods(typeID, typeName string, body *tree_si
 			continue
 		}
 		qualifiedName := typeName + "." + name
-		id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+		id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(m), m.StartByte())
 		ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, m)})
 		ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 			Source: typeID, Target: id, Kind: "contains", Provenance: "ast",
 		}})
 		if mbody := m.ChildByFieldName("body"); mbody != nil {
+			ex.env = ex.bodyEnv(m)
 			ex.collectCalls(id, mbody)
+			ex.env = nil
 		}
 	}
 }
@@ -308,7 +337,7 @@ func (ex *extractor) emitTypedef(decl *tree_sitter.Node) {
 	if !ok {
 		return
 	}
-	id := nodeid.NodeID(goextract.KindTypeAlias, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindTypeAlias, name, "", decl.StartByte())
 	start := decl.StartPosition()
 	end := decl.EndPosition()
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
@@ -333,12 +362,42 @@ func (ex *extractor) emitTypedef(decl *tree_sitter.Node) {
 // --- top-level functions, prototypes, and C++ out-of-line methods ---
 
 func (ex *extractor) collectFunctions(decls []*tree_sitter.Node) {
+	// A prototype whose definition is in the same file is a forward
+	// declaration of that definition, not a second declaration (design
+	// D16 of the index-invariants change): it gets no node, so a call
+	// reaches the definition and never an ambiguous pair.
+	ex.definedKeys = make(map[string]bool)
+	for _, d := range decls {
+		if d.Kind() == "function_definition" {
+			if name, ok := ex.freeFunctionName(d); ok {
+				ex.definedKeys[name+"|"+ex.sigKey(d)] = true
+			}
+		}
+	}
 	for _, d := range decls {
 		switch d.Kind() {
 		case "function_definition", "declaration":
 			ex.emitFreeFunctionLike(d)
 		}
 	}
+}
+
+// freeFunctionName returns the name of the free function that decl
+// declares or defines, and false for anything else.
+func (ex *extractor) freeFunctionName(decl *tree_sitter.Node) (string, bool) {
+	declarator := decl.ChildByFieldName("declarator")
+	if declarator == nil {
+		return "", false
+	}
+	fd := findFunctionDeclarator(declarator)
+	if fd == nil {
+		return "", false
+	}
+	nameDeclarator := fd.ChildByFieldName("declarator")
+	if nameDeclarator == nil || nameDeclarator.Kind() != "identifier" {
+		return "", false
+	}
+	return nameDeclarator.Utf8Text(ex.src), true
 }
 
 // emitFreeFunctionLike handles a root-level (or namespace-flattened)
@@ -362,7 +421,11 @@ func (ex *extractor) emitFreeFunctionLike(decl *tree_sitter.Node) {
 	}
 	switch nameDeclarator.Kind() {
 	case "identifier":
-		ex.emitFunction(decl, nameDeclarator.Utf8Text(ex.src))
+		name := nameDeclarator.Utf8Text(ex.src)
+		if decl.Kind() == "declaration" && ex.definedKeys[name+"|"+ex.sigKey(decl)] {
+			return
+		}
+		ex.emitFunction(decl, name)
 	case "qualified_identifier":
 		if scope, name, ok := splitQualifiedMethod(nameDeclarator, ex.src); ok {
 			ex.emitOutOfLineMethod(decl, scope, name)
@@ -374,19 +437,21 @@ func (ex *extractor) emitFreeFunctionLike(decl *tree_sitter.Node) {
 }
 
 func (ex *extractor) emitFunction(decl *tree_sitter.Node, name string) {
-	id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
 func (ex *extractor) emitOutOfLineMethod(decl *tree_sitter.Node, scope, name string) {
 	qualifiedName := scope + "." + name
-	id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, decl)})
 
 	if typeID, found := ex.typeNodesByName[scope]; found {
@@ -406,14 +471,17 @@ func (ex *extractor) emitOutOfLineMethod(decl *tree_sitter.Node, scope, name str
 	}
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
 func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *tree_sitter.Node) *schema.Node {
 	start := decl.StartPosition()
 	end := decl.EndPosition()
-	return &schema.Node{
+	params, ret := collectParams(decl, ex.src)
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -426,7 +494,11 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		EndCol:        int32(end.Column),
 		Visibility:    "public",
 		IsExported:    true,
+		Signature:     goextract.SignatureKeyOf(params),
+		ReturnType:    ret,
 	}
+	goextract.FillSignature(n, params, ret)
+	return n
 }
 
 // splitQualifiedMethod extracts (scope, name) from a C++ qualified_identifier
@@ -529,8 +601,10 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 	switch fn.Kind() {
 	case "identifier":
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "field_expression":
 		field := fn.ChildByFieldName("field")
@@ -538,22 +612,11 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		if field == nil {
 			return
 		}
-		var pkgAlias string
-		switch {
-		case arg == nil, arg.Kind() == "this":
-			// this->method() -- implicit same-class call, empty PkgAlias.
-		case arg.Kind() == "identifier" && isLikelyTypeName(arg.Utf8Text(ex.src)):
-			// A rare PascalCase bare-name receiver -- same-module attempt.
-		case arg.Kind() == "identifier":
-			// A lowercase-leading identifier is very likely a local
-			// variable/parameter this extractor tracks no type for -- force
-			// it through the WR-02 synthetic-non-matching-alias pattern.
-			pkgAlias = "<local:" + arg.Utf8Text(ex.src) + ">"
-		default:
-			pkgAlias = "<" + arg.Kind() + ">"
-		}
+		pkgAlias, receiverType := ex.receiver(ex.env, arg)
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "qualified_identifier":
 		nameNode := fn.ChildByFieldName("name")
@@ -567,23 +630,18 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		default:
 			return
 		}
+		receiverType := ""
+		if scope := fn.ChildByFieldName("scope"); scope != nil {
+			// `Foo::bar()`: the scope names a type or a namespace, a
+			// candidate type for pass 2 whatever its case (D18).
+			receiverType = scope.Utf8Text(ex.src)
+		}
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	}
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter -- C++'s own near-universal naming convention distinguishing a
-// type/class name (PascalCase) from a local variable/parameter/function
-// name (snake_case/camelCase), mirroring pyextract/rustextract/phpextract's
-// identical heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 // walkDescendants performs an iterative (stack-based, non-recursive)

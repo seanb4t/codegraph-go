@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -74,6 +73,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		fileID:          fileID,
 		result:          &result,
 		typeNodesByName: make(map[string]string),
+		alloc:           nodeid.NewAllocator(relPath),
 	}
 
 	// Types are collected first so a method's containing-type lookup always
@@ -84,6 +84,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectTypes(root)
 	ex.collectTopLevelFunctions(root)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
@@ -95,6 +96,11 @@ type extractor struct {
 	fileID          string
 	result          *goextract.FileResult
 	typeNodesByName map[string]string
+	alloc           *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
 }
 
 // --- import_declaration ---
@@ -174,7 +180,7 @@ func (ex *extractor) emitClassLike(decl *tree_sitter.Node) {
 	if !ok {
 		return
 	}
-	id := nodeid.NodeID(goextract.KindStruct, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindStruct, name, "", decl.StartByte())
 
 	start := decl.StartPosition()
 	end := decl.EndPosition()
@@ -209,7 +215,7 @@ func (ex *extractor) emitProtocol(decl *tree_sitter.Node) {
 	if !ok {
 		return
 	}
-	id := nodeid.NodeID(goextract.KindInterface, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindInterface, name, "", decl.StartByte())
 
 	start := decl.StartPosition()
 	end := decl.EndPosition()
@@ -299,14 +305,17 @@ func (ex *extractor) collectMethods(typeID, typeName string, body *tree_sitter.N
 			continue
 		}
 		name := nameNode.Utf8Text(ex.src)
-		qualifiedName := typeName + "." + name
-		id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+		_, labels, _ := collectParams(m, ex.src)
+		qualifiedName := typeName + "." + labeledName(name, labels)
+		id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(m), m.StartByte())
 		ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, m)})
 		ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 			Source: typeID, Target: id, Kind: "contains", Provenance: "ast",
 		}})
 		if fbody := m.ChildByFieldName("body"); fbody != nil {
+			ex.env = ex.bodyEnv(m)
 			ex.collectCalls(id, fbody)
+			ex.env = nil
 		}
 	}
 }
@@ -322,13 +331,17 @@ func (ex *extractor) collectTopLevelFunctions(root *tree_sitter.Node) {
 			continue
 		}
 		name := nameNode.Utf8Text(ex.src)
-		id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
-		ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, d)})
+		_, labels, _ := collectParams(d, ex.src)
+		qualifiedName := labeledName(name, labels)
+		id := ex.alloc.Declare(goextract.KindFunction, qualifiedName, ex.sigKey(d), d.StartByte())
+		ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, qualifiedName, d)})
 		ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 			Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 		}})
 		if body := d.ChildByFieldName("body"); body != nil {
+			ex.env = ex.bodyEnv(d)
 			ex.collectCalls(id, body)
+			ex.env = nil
 		}
 	}
 }
@@ -336,7 +349,8 @@ func (ex *extractor) collectTopLevelFunctions(root *tree_sitter.Node) {
 func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *tree_sitter.Node) *schema.Node {
 	start := decl.StartPosition()
 	end := decl.EndPosition()
-	return &schema.Node{
+	params, _, ret := collectParams(decl, ex.src)
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -349,7 +363,11 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		EndCol:        int32(end.Column),
 		Visibility:    "public",
 		IsExported:    true,
+		Signature:     goextract.SignatureKeyOf(params),
+		ReturnType:    ret,
 	}
+	goextract.FillSignature(n, params, ret)
+	return n
 }
 
 // --- calls ---
@@ -373,8 +391,10 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 	switch callee.Kind() {
 	case "simple_identifier":
+		args := ex.callArgs(ex.env, call)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: callee.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	case "navigation_expression":
 		target := callee.ChildByFieldName("target")
@@ -387,35 +407,13 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 			return
 		}
 		name := memberNode.Utf8Text(ex.src)
-		var pkgAlias string
-		switch {
-		case target.Kind() == "simple_identifier" && isLikelyTypeName(target.Utf8Text(ex.src)):
-			// A rare PascalCase bare-name target -- same-module attempt.
-		case target.Kind() == "simple_identifier":
-			// A lowercase-leading target (including `self`, deliberately
-			// not special-cased -- types.go) is forced through the WR-02
-			// synthetic-non-matching-alias pattern.
-			pkgAlias = "<local:" + target.Utf8Text(ex.src) + ">"
-		default:
-			pkgAlias = "<" + target.Kind() + ">"
-		}
+		pkgAlias, receiverType := ex.receiver(ex.env, target)
+		args := ex.callArgs(ex.env, call)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	}
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter -- Swift's own near-universal naming convention distinguishing a
-// type name (PascalCase) from a local variable/parameter/function name
-// (camelCase), mirroring pyextract/rustextract/phpextract's identical
-// heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 // walkDescendants performs an iterative (stack-based, non-recursive)

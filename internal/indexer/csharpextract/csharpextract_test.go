@@ -280,8 +280,14 @@ public class Widget {
 	if !hasUnresolved(result, goextract.RefKindCalls, "Assist", "") {
 		t.Errorf("expected same-namespace calls ref to SameNamespaceHelper.Assist with empty PkgAlias (same-namespace attempt), got %+v", result.Unresolved)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "Helper", "<local:w>") {
-		t.Errorf("expected local-variable-receiver calls ref to w.Helper with a synthetic non-matching alias, got %+v", result.Unresolved)
+	found := false
+	for _, r := range result.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == "Helper" && r.PkgAlias == "" && r.ReceiverType == "Widget" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the call w.Helper() to record the receiver type Widget of the local w, got %+v", result.Unresolved)
 	}
 	if !hasUnresolved(result, goextract.RefKindCalls, "Assist", "Other.Namespace") {
 		t.Errorf("expected fully-qualified cross-namespace calls ref to Other.Namespace.Helper.Assist with PkgAlias %q, got %+v", "Other.Namespace", result.Unresolved)

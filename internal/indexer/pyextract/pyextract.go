@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path"
 	"strings"
-	"unicode"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -74,12 +73,13 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	}})
 
 	ex := &extractor{
-		src:             src,
-		relPath:         relPath,
-		fileID:          fileID,
-		result:          &result,
-		typeNodesByName: make(map[string]string),
-		ownPackage:      ownPackageFor(moduleKey, relPath),
+		src:              src,
+		relPath:          relPath,
+		fileID:           fileID,
+		result:           &result,
+		alloc:            nodeid.NewAllocator(relPath),
+		typeNodesByStart: make(map[uint]string),
+		ownPackage:       ownPackageFor(moduleKey, relPath),
 	}
 
 	// Imports are collected first so calls and base-class references below
@@ -89,23 +89,32 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	// csharpextract's ordering discipline.
 	ex.collectImports(root)
 	// Classes are collected before methods (05-PATTERNS.md's ordering
-	// discipline) so a method's enclosing-class lookup (typeNodesByName)
+	// discipline) so a method's enclosing-class lookup (typeNodesByStart)
 	// always succeeds regardless of declaration order in the source.
 	ex.collectClasses(root)
 	ex.collectMethods(root)
 	ex.collectTopLevelFunctions(root)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
 // extractor carries the per-file state threaded through the tree-walk
 // helpers below, mirroring goextract/javaextract's extractor shape.
 type extractor struct {
-	src             []byte
-	relPath         string
-	fileID          string
-	result          *goextract.FileResult
-	typeNodesByName map[string]string
+	src     []byte
+	relPath string
+	fileID  string
+	result  *goextract.FileResult
+	alloc   *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
+
+	// typeNodesByStart maps the start byte of each class definition to its
+	// node id, so that each copy of a repeated class gets its own methods.
+	typeNodesByStart map[uint]string
 
 	// ownPackage is this file's own enclosing dotted package path (its
 	// moduleKey with the last segment stripped, or the moduleKey itself for
@@ -193,6 +202,11 @@ func (ex *extractor) emitImportName(nameEntry *tree_sitter.Node) {
 	fullPath := dotted.Utf8Text(ex.src)
 	if alias != "" {
 		ex.result.Imports[alias] = fullPath
+	} else {
+		// `import a.b` binds the name `a` in the module, so a later
+		// `a.f()` names the module a.
+		first, _, _ := strings.Cut(fullPath, ".")
+		ex.result.Imports[first] = first
 	}
 	pos := nameEntry.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
@@ -328,7 +342,7 @@ func (ex *extractor) emitClass(node *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindStruct, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindStruct, name, "", node.StartByte())
 
 	start := node.StartPosition()
 	end := node.EndPosition()
@@ -351,7 +365,7 @@ func (ex *extractor) emitClass(node *tree_sitter.Node) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	ex.typeNodesByStart[node.StartByte()] = id
 
 	ex.collectBaseClasses(id, node)
 	if body := node.ChildByFieldName("body"); body != nil {
@@ -453,7 +467,7 @@ func (ex *extractor) emitMethodsForClass(classNode *tree_sitter.Node) {
 		return
 	}
 	className := nameNode.Utf8Text(ex.src)
-	classID, ok := ex.typeNodesByName[className]
+	classID, ok := ex.typeNodesByStart[classNode.StartByte()]
 	if !ok {
 		// collectClasses (pass 1) skipped this declaration (e.g. a missing
 		// name node) — nothing to attach methods to.
@@ -505,7 +519,7 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -520,8 +534,10 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
 	}
 }
 
@@ -532,7 +548,7 @@ func (ex *extractor) emitMethod(classID, className string, decl *tree_sitter.Nod
 	}
 	name := nameNode.Utf8Text(ex.src)
 	qualifiedName := className + "." + name
-	id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -545,8 +561,10 @@ func (ex *extractor) emitMethod(classID, className string, decl *tree_sitter.Nod
 	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
 	}
 }
 
@@ -563,7 +581,7 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 	}
 	vis := pythonVisibility(name)
 
-	return &schema.Node{
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -579,6 +597,9 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		Visibility:    vis,
 		IsExported:    vis == "public",
 	}
+	params, _ := collectParams(decl, ex.src)
+	goextract.FillSignature(n, params, returnType)
+	return n
 }
 
 func (ex *extractor) collectCalls(fromID string, body *tree_sitter.Node) {
@@ -602,8 +623,10 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	switch fn.Kind() {
 	case "identifier":
 		name := fn.Utf8Text(ex.src)
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 		ex.recordInstantiateCandidate(fromID, name, "", line, col)
 	case "attribute":
@@ -612,48 +635,13 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		if object == nil || field == nil {
 			return
 		}
-		var pkgAlias string
-		switch {
-		case object.Kind() == "identifier":
-			ident := object.Utf8Text(ex.src)
-			_, isImport := ex.result.Imports[ident]
-			switch {
-			case ident == "self" || ident == "cls":
-				// self.method()/cls.method() — implicit same-class call,
-				// resolved same-module via an empty PkgAlias
-				// (resolveUnqualified), mirroring Java's `this.method()`.
-			case isImport:
-				// A real import alias — routes through resolveSelector to
-				// the imported module's own declaring moduleKey.
-				pkgAlias = ident
-			case isLikelyTypeName(ident):
-				// An uppercase-leading identifier that is NOT a real import
-				// is, by Python naming convention, very likely a
-				// same-module class reference (a class defined earlier in
-				// this same file) — an empty PkgAlias correctly routes
-				// through resolveUnqualified (RESEARCH Pitfall 3's
-				// declared-import ambiguity, resolved here by convention,
-				// mirroring javaextract/csharpextract).
-			default:
-				// A lowercase-leading identifier is very likely a local
-				// variable/parameter/module receiver this extractor tracks
-				// no type for — force it through resolveSelector's
-				// alias-membership boundary via a synthetic non-matching
-				// alias so it deterministically falls through to
-				// "unresolved" instead of risking a same-module false
-				// match (mirrors goextract's WR-02 fix).
-				pkgAlias = "<local:" + ident + ">"
-			}
-		default:
-			// A non-identifier operand (another call, a chained attribute,
-			// a subscript, ...) can never be a real import alias — same
-			// synthetic-alias treatment as the local-variable case above.
-			pkgAlias = "<" + object.Kind() + ">"
-		}
+		pkgAlias, receiverType := ex.receiver(ex.env, object)
+		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		name := field.Utf8Text(ex.src)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls,
-			Line: line, Col: col,
+			Line: line, Col: col, ReceiverType: receiverType,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 		ex.recordInstantiateCandidate(fromID, name, pkgAlias, line, col)
 	}
@@ -661,7 +649,7 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 // recordInstantiateCandidate emits a D-09 `instantiates` Pass-1 ref
 // (01-RESEARCH.md §B) candidate alongside a `calls` ref recordCall already
-// emitted, gated on isLikelyTypeName(name): Python instantiation is
+// emitted, gated on receiver(name): Python instantiation is
 // syntactically IDENTICAL to a plain call (`Foo()` may call a function OR
 // construct a class — RESEARCH §B's "overlaps calls syntactically" note),
 // so resolve.go's existing Kind-check disambiguation (plan 05, the resolved
@@ -673,9 +661,9 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 // ordinary snake_case function call, which by PEP 8 convention is never a
 // class reference.
 func (ex *extractor) recordInstantiateCandidate(fromID, name, pkgAlias string, line, col int32) {
-	if !isLikelyTypeName(name) {
-		return
-	}
+	// Every call is a candidate: pass 2 keeps the edge only when the
+	// target is a class (resolve.go's kind check), so no casing rule is
+	// needed here (D18).
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindInstantiates,
 		Line: line, Col: col,
@@ -899,55 +887,22 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 // `obj.attr` used as a value, not called — recordCall's own "call" handling
 // already captures the call-callee shape via collectCalls' separate walk).
 // Mirrors recordCall's local-vs-type alias discipline exactly (self/cls,
-// isLikelyTypeName, the WR-02 synthetic-non-matching-alias pattern for a
-// local-variable/parameter receiver).
 func (ex *extractor) captureAttributeRead(fromID string, sel *tree_sitter.Node) {
 	object := sel.ChildByFieldName("object")
 	field := sel.ChildByFieldName("attribute")
 	if field == nil {
 		return
 	}
-	var pkgAlias string
-	switch {
-	case object == nil:
-		// No object at all (malformed/unusual source) — fall through to
-		// the empty-PkgAlias (unqualified) shape.
-	case object.Kind() == "identifier":
-		ident := object.Utf8Text(ex.src)
-		_, isImport := ex.result.Imports[ident]
-		switch {
-		case ident == "self" || ident == "cls":
-			// self.attr/cls.attr — same-class implicit reference, mirrors
-			// recordCall's identical self/cls handling.
-		case isImport:
-			pkgAlias = ident
-		case isLikelyTypeName(ident):
-			// Same-module type reference — empty PkgAlias correctly routes
-			// through resolveUnqualified.
-		default:
-			pkgAlias = "<local:" + ident + ">"
-		}
-	default:
-		pkgAlias = "<" + object.Kind() + ">"
+	pkgAlias, receiverType := ex.receiver(ex.env, object)
+	if object != nil && object.Kind() != "identifier" {
 		ex.captureExprRead(fromID, object)
 	}
 	pos := sel.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
 		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		ReceiverType: receiverType,
 	})
-}
-
-// isLikelyTypeName reports whether name starts with an uppercase Unicode
-// letter — the near-universal Python convention (PEP 8) distinguishing a
-// class name (PascalCase) from a local variable/parameter/function name
-// (snake_case), mirroring javaextract/csharpextract's identical heuristic.
-func isLikelyTypeName(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := []rune(name)[0]
-	return unicode.IsUpper(r)
 }
 
 // walkDescendants performs an iterative (stack-based, non-recursive)

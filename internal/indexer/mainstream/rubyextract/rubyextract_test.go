@@ -238,8 +238,8 @@ end
 	if !hasUnresolved(result, goextract.RefKindCalls, "build", "") {
 		t.Errorf("expected same-module constant-qualified calls ref to Widget.build with empty PkgAlias, got %+v", result.Unresolved)
 	}
-	if !hasUnresolved(result, goextract.RefKindCalls, "size", "<local:w>") {
-		t.Errorf("expected local-variable-receiver calls ref to w.size with a synthetic non-matching alias, got %+v", result.Unresolved)
+	if got := receiverTypeOfCall(result, "size"); got != "Widget" {
+		t.Errorf("expected the call w.size to record the receiver type Widget of the local w, got %q in %+v", got, result.Unresolved)
 	}
 	for _, u := range result.Unresolved {
 		if u.Kind == goextract.RefKindCalls && u.Name == "require" {
@@ -291,4 +291,15 @@ func TestExtract_OversizedFileSkippedNotFatal(t *testing.T) {
 	if len(result.Nodes) != 0 {
 		t.Errorf("expected no nodes for a skipped file, got %+v", result.Nodes)
 	}
+}
+
+// receiverTypeOfCall returns the receiver type of the first calls ref
+// named name with no alias, or "<none>".
+func receiverTypeOfCall(result goextract.FileResult, name string) string {
+	for _, r := range result.Unresolved {
+		if r.Kind == goextract.RefKindCalls && r.Name == name && r.PkgAlias == "" {
+			return r.ReceiverType
+		}
+	}
+	return "<none>"
 }

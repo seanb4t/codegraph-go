@@ -136,7 +136,7 @@ func hasNode(t *testing.T, storeDir, id string) bool {
 }
 
 func nodeID(function, file string) string {
-	return nodeid.NodeID(goextract.KindFunction, function, file)
+	return nodeid.DeclID(goextract.KindFunction, function, file, "()")
 }
 
 var onlyHereID = nodeID("OnlyHere", "only.go")

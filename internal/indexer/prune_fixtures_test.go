@@ -152,8 +152,8 @@ func TestPruneFixtures(t *testing.T) {
 		r, closeAll := openSnapshot(t, storeDir)
 		defer closeAll()
 
-		newID := nodeid.NodeID(goextract.KindFunction, "UseFooToo", "pkg/extra.go")
-		fooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
+		newID := nodeid.DeclID(goextract.KindFunction, "UseFooToo", "pkg/extra.go", "()")
+		fooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
 		if _, err := r.GetNode(newID); err != nil {
 			t.Fatalf("GetNode(UseFooToo): %v", err)
 		}
@@ -170,7 +170,7 @@ func TestPruneFixtures(t *testing.T) {
 			t.Fatalf("Sync (seed): %v", err)
 		}
 
-		oldFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
+		oldFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
 
 		// MODIFY: rename Foo -> Foo2 within pkg/a.go. nodeid.NodeID (Phase-2
 		// D-02a) hashes (kind, qualifiedName, filePath) — not source
@@ -192,7 +192,7 @@ func TestPruneFixtures(t *testing.T) {
 		if _, err := r.GetNode(oldFooID); err == nil {
 			t.Error("expected old Foo node to be pruned after modify")
 		}
-		newFoo2ID := nodeid.NodeID(goextract.KindFunction, "Foo2", "pkg/a.go")
+		newFoo2ID := nodeid.DeclID(goextract.KindFunction, "Foo2", "pkg/a.go", "()")
 		if _, err := r.GetNode(newFoo2ID); err != nil {
 			t.Fatalf("GetNode(Foo2): %v", err)
 		}
@@ -200,7 +200,7 @@ func TestPruneFixtures(t *testing.T) {
 		// UseFoo (pkg/b.go) had an edge into the now-gone Foo id; D-02a's
 		// dependent detection re-extracts it, and since Foo no longer
 		// resolves under that name, no edge may still target oldFooID.
-		useFooID := nodeid.NodeID(goextract.KindFunction, "UseFoo", "pkg/b.go")
+		useFooID := nodeid.DeclID(goextract.KindFunction, "UseFoo", "pkg/b.go", "()")
 		eit, err := r.IterateEdges(useFooID)
 		if err != nil {
 			t.Fatalf("IterateEdges(UseFoo): %v", err)
@@ -225,7 +225,7 @@ func TestPruneFixtures(t *testing.T) {
 			t.Fatalf("Sync (seed): %v", err)
 		}
 
-		fooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
+		fooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
 
 		if err := os.Remove(filepath.Join(repoRoot, "pkg", "a.go")); err != nil {
 			t.Fatalf("os.Remove: %v", err)
@@ -256,7 +256,7 @@ func TestPruneFixtures(t *testing.T) {
 			t.Fatalf("Sync (seed): %v", err)
 		}
 
-		oldFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
+		oldFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
 
 		oldPath := filepath.Join(repoRoot, "pkg", "a.go")
 		newPath := filepath.Join(repoRoot, "pkg", "a2.go")
@@ -291,12 +291,12 @@ func TestPruneFixtures(t *testing.T) {
 		// shape (D-03), even though the literal node id itself changes
 		// because nodeid.NodeID's preimage includes filePath (see
 		// SUMMARY.md for the full note on this).
-		newFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a2.go")
+		newFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a2.go", "()")
 		if _, err := r.GetNode(newFooID); err != nil {
 			t.Fatalf("GetNode(Foo at pkg/a2.go): %v", err)
 		}
 
-		useFooID := nodeid.NodeID(goextract.KindFunction, "UseFoo", "pkg/b.go")
+		useFooID := nodeid.DeclID(goextract.KindFunction, "UseFoo", "pkg/b.go", "()")
 		if !hasEdge(t, r, useFooID, "calls", newFooID) {
 			t.Fatalf("expected UseFoo -> Foo(pkg/a2.go) edge to regenerate after rename")
 		}
@@ -311,8 +311,8 @@ func TestPruneFixtures(t *testing.T) {
 			t.Fatalf("Sync (seed): %v", err)
 		}
 
-		oldFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/a.go")
-		oldUseFooID := nodeid.NodeID(goextract.KindFunction, "UseFoo", "pkg/b.go")
+		oldFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/a.go", "()")
+		oldUseFooID := nodeid.DeclID(goextract.KindFunction, "UseFoo", "pkg/b.go", "()")
 
 		// MOVE relocates the Foo/UseFoo pair TOGETHER into pkg/sub/ — Go's
 		// import path is directory-derived (RESEARCH/resolve.go), so
@@ -359,8 +359,8 @@ func TestPruneFixtures(t *testing.T) {
 			t.Error("expected old UseFoo node (pkg/b.go) pruned after move")
 		}
 
-		newFooID := nodeid.NodeID(goextract.KindFunction, "Foo", "pkg/sub/a.go")
-		newUseFooID := nodeid.NodeID(goextract.KindFunction, "UseFoo", "pkg/sub/b.go")
+		newFooID := nodeid.DeclID(goextract.KindFunction, "Foo", "pkg/sub/a.go", "()")
+		newUseFooID := nodeid.DeclID(goextract.KindFunction, "UseFoo", "pkg/sub/b.go", "()")
 		if _, err := r.GetNode(newFooID); err != nil {
 			t.Fatalf("GetNode(Foo at pkg/sub/a.go): %v", err)
 		}
@@ -416,7 +416,7 @@ func TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile(t *testing.T) {
 	}
 
 	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "pkg/types.go")
-	describeID := nodeid.NodeID(goextract.KindMethod, "Widget.Describe", "pkg/methods.go")
+	describeID := nodeid.DeclID(goextract.KindMethod, "Widget.Describe", "pkg/methods.go", "()")
 
 	// The seed (from-scratch) sync already indexes the edge correctly —
 	// confirms the fixture and ids are set up as expected before the

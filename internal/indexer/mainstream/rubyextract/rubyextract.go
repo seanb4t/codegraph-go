@@ -67,11 +67,13 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	}})
 
 	ex := &extractor{
-		src:             src,
-		relPath:         relPath,
-		fileID:          fileID,
-		result:          &result,
-		typeNodesByName: make(map[string]string),
+		src:              src,
+		relPath:          relPath,
+		fileID:           fileID,
+		result:           &result,
+		typeNodesByStart: make(map[uint]string),
+		typeNodeByName:   make(map[string]int),
+		alloc:            nodeid.NewAllocator(relPath),
 	}
 
 	// Requires are collected first so a same-file class's superclass check
@@ -82,17 +84,31 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectMethods(root)
 	ex.collectTopLevelFunctions(root)
 
+	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
 }
 
 // extractor carries the per-file state threaded through the tree-walk
 // helpers below, mirroring goextract/pyextract's extractor shape.
 type extractor struct {
-	src             []byte
-	relPath         string
-	fileID          string
-	result          *goextract.FileResult
-	typeNodesByName map[string]string
+	src     []byte
+	relPath string
+	fileID  string
+	result  *goextract.FileResult
+	alloc   *nodeid.Allocator
+
+	// env is the type environment of the function body under extraction
+	// (design D17), or nil outside a body.
+	env *goextract.TypeEnv
+
+	// typeNodesByStart maps the start byte of each type declaration to its
+	// node id, so that each copy of a repeated type gets its own methods.
+	typeNodesByStart map[uint]string
+
+	// typeNodeByName maps a class or module name to the index in
+	// result.Nodes of its node: a reopened class or module is one node
+	// (design D16), whose span grows to cover every block.
+	typeNodeByName map[string]int
 }
 
 // --- require / require_relative (ordinary calls in Ruby's own grammar) ---
@@ -212,10 +228,27 @@ func (ex *extractor) emitClassOrModule(node *tree_sitter.Node) {
 		return
 	}
 	kind := goextract.KindStruct
-	id := nodeid.NodeID(kind, name, ex.relPath)
-
 	start := node.StartPosition()
 	end := node.EndPosition()
+	if i, reopened := ex.typeNodeByName[name]; reopened {
+		// A reopened class or module adds to the one node (design D16):
+		// its methods join the node, and the span grows to cover the
+		// new block.
+		prev := ex.result.Nodes[i].Node
+		ex.typeNodesByStart[node.StartByte()] = prev.Id
+		if int32(end.Row)+1 > prev.EndLine || (int32(end.Row)+1 == prev.EndLine && int32(end.Column) > prev.EndCol) {
+			prev.EndLine, prev.EndCol = int32(end.Row)+1, int32(end.Column)
+		}
+		if node.Kind() == "class" {
+			if sc := node.ChildByFieldName("superclass"); sc != nil {
+				ex.emitSuperclass(prev.Id, sc)
+			}
+		}
+		return
+	}
+	id := ex.alloc.Declare(kind, name, "", node.StartByte())
+	ex.typeNodeByName[name] = len(ex.result.Nodes)
+
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
 		Id:            id,
 		Kind:          kind,
@@ -233,7 +266,7 @@ func (ex *extractor) emitClassOrModule(node *tree_sitter.Node) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
-	ex.typeNodesByName[name] = id
+	ex.typeNodesByStart[node.StartByte()] = id
 
 	if node.Kind() == "class" {
 		if sc := node.ChildByFieldName("superclass"); sc != nil {
@@ -301,7 +334,7 @@ func (ex *extractor) emitMethodsForScope(scopeNode *tree_sitter.Node) {
 		return
 	}
 	scopeName := rubyConstantName(nameNode, ex.src)
-	scopeID, ok := ex.typeNodesByName[scopeName]
+	scopeID, ok := ex.typeNodesByStart[scopeNode.StartByte()]
 	if !ok {
 		return
 	}
@@ -325,7 +358,7 @@ func (ex *extractor) emitScopedMethod(scopeID, scopeName string, decl *tree_sitt
 	}
 	name := nameNode.Utf8Text(ex.src)
 	qualifiedName := scopeName + "." + name
-	id := nodeid.NodeID(goextract.KindMethod, qualifiedName, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindMethod, qualifiedName, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindMethod, id, name, qualifiedName, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -333,7 +366,9 @@ func (ex *extractor) emitScopedMethod(scopeID, scopeName string, decl *tree_sitt
 	}})
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
@@ -356,7 +391,7 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		return
 	}
 	name := nameNode.Utf8Text(ex.src)
-	id := nodeid.NodeID(goextract.KindFunction, name, ex.relPath)
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
@@ -364,7 +399,9 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	}})
 
 	if body := decl.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(decl)
 		ex.collectCalls(id, body)
+		ex.env = nil
 	}
 }
 
@@ -377,7 +414,7 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		signature = params.Utf8Text(ex.src)
 	}
 
-	return &schema.Node{
+	n := &schema.Node{
 		Id:            id,
 		Kind:          kind,
 		Name:          name,
@@ -392,6 +429,8 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		Visibility:    "public",
 		IsExported:    true,
 	}
+	goextract.FillSignature(n, collectParams(decl, ex.src), "")
+	return n
 }
 
 func (ex *extractor) collectCalls(fromID string, body *tree_sitter.Node) {
@@ -414,30 +453,21 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	line := int32(pos.Row) + 1
 	col := int32(pos.Column)
 	name := methodNode.Utf8Text(ex.src)
+	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 
 	receiver := call.ChildByFieldName("receiver")
 	if receiver == nil {
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
+			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 		return
 	}
 
-	var pkgAlias string
-	switch receiver.Kind() {
-	case "self":
-		// self.method() -- implicit same-class call, empty PkgAlias.
-	case "constant":
-		// Widget.build() -- Ruby constants are PascalCase by convention;
-		// require binds no alias table (see types.go), so this is always
-		// treated as a same-module attempt, never a genuine import lookup.
-	case "identifier":
-		pkgAlias = "<local:" + receiver.Utf8Text(ex.src) + ">"
-	default:
-		pkgAlias = "<" + receiver.Kind() + ">"
-	}
+	pkgAlias, receiverType := ex.receiver(ex.env, receiver)
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
+		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 	})
 }
 

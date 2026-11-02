@@ -125,6 +125,19 @@ func (w *pebbleWriter) DeleteAllExcludedFiles() error {
 	return w.batch.DeleteRange([]byte{prefixExcludedFile}, rangeUpperBound([]byte{prefixExcludedFile}), nil)
 }
 
+// DeleteGraph stages one range-delete per graph namespace (n/, e/, f/,
+// x/), each bounded by its prefix byte, so it cannot reach m/, c/ or a/.
+// Puts staged after it in the same batch survive: a later batch entry
+// has a higher sequence number than the range-delete.
+func (w *pebbleWriter) DeleteGraph() error {
+	for _, prefix := range []byte{prefixNode, prefixEdge, prefixFile, prefixFileIndex} {
+		if err := w.batch.DeleteRange([]byte{prefix}, rangeUpperBound([]byte{prefix}), nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (w *pebbleWriter) PutMeta(m *schema.Meta) error {
 	data, err := deterministicMarshal(m)
 	if err != nil {
