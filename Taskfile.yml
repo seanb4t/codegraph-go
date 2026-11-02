@@ -153,6 +153,74 @@ tasks:
     cmds:
       - go test -count=1 ./testdata/golden/...
 
+  test:declarations:
+    desc: >-
+      Runs TestEveryDeclarationHasOneNode over the in-repository fixtures and
+      over the locked corpora under CODEGRAPH_CORPUS_DIR, which corpora:fetch
+      fills. The test fails when a locked corpus is missing or when it
+      matches no declaration in a tree. This target fails when
+      CODEGRAPH_CORPUS_DIR is not set, because the test then checks the
+      fixtures only.
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "${CODEGRAPH_CORPUS_DIR:-}" ]; then
+          echo "::error::test:declarations: CODEGRAPH_CORPUS_DIR is not set; set it to the root that corpora:fetch filled"
+          exit 1
+        fi
+        listed=$(go test -list '^TestEveryDeclarationHasOneNode$' ./internal/indexer)
+        if ! printf '%s\n' "$listed" | grep -qx TestEveryDeclarationHasOneNode; then
+          echo "::error::test:declarations: ./internal/indexer has no test TestEveryDeclarationHasOneNode"
+          exit 1
+        fi
+        go test -count=1 -v -run '^TestEveryDeclarationHasOneNode$' ./internal/indexer
+
+  test:fuzz:
+    desc: >-
+      Runs one native Go fuzz target for a fixed time: FUZZ_TARGET in the
+      package FUZZ_PKG, for FUZZ_TIME (default 5m). A failing input lands in
+      the package's testdata/fuzz/ directory. The target is listed first,
+      because -fuzz with a pattern that matches nothing passes without
+      fuzzing. `go test` runs every seed corpus on each push; this target
+      is for the weekly fuzz workflow and for local runs.
+    requires:
+      vars: [FUZZ_PKG, FUZZ_TARGET]
+    vars:
+      FUZZ_TIME: '{{.FUZZ_TIME | default "5m"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        listed=$(go test -list '^{{.FUZZ_TARGET}}$' '{{.FUZZ_PKG}}')
+        if ! printf '%s\n' "$listed" | grep -qx '{{.FUZZ_TARGET}}'; then
+          echo "::error::test:fuzz: {{.FUZZ_PKG}} has no fuzz target {{.FUZZ_TARGET}}"
+          exit 1
+        fi
+        go test -run '^$' -fuzz '^{{.FUZZ_TARGET}}$' -fuzztime '{{.FUZZ_TIME}}' '{{.FUZZ_PKG}}'
+
+  test:properties:
+    desc: >-
+      Runs the rapid property tests with RAPID_CHECKS generated cases each
+      (default 10000), for the weekly fuzz workflow and for local runs. `go
+      test` runs them with rapid's default count on each push. A failure
+      writes its shrunk case to the package's testdata/rapid/ directory.
+      Each test is listed first, because -run with a pattern that matches
+      nothing passes without testing.
+    vars:
+      RAPID_CHECKS: '{{.RAPID_CHECKS | default "10000"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        for prop in ./internal/indexer:TestSyncEqualsFreshIndex ./internal/watch:TestWatcherCoversEveryDirectory; do
+          pkg=${prop%%:*}
+          name=${prop##*:}
+          listed=$(go test -list "^${name}\$" "$pkg")
+          if ! printf '%s\n' "$listed" | grep -qx "$name"; then
+            echo "::error::test:properties: $pkg has no test $name"
+            exit 1
+          fi
+          go test -count=1 -timeout 0 -run "^${name}\$" "$pkg" -rapid.checks='{{.RAPID_CHECKS}}'
+        done
+
   golden:regen:
     desc: >-
       Regenerate all Go-side golden fixtures (gocapture) — the reviewed

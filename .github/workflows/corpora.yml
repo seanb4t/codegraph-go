@@ -266,3 +266,10 @@ jobs:
         # actually executes the suite against the fetched corpora
         # (T-03-P1-06).
         run: task test:golden
+
+      - name: Check one node per declaration over the corpora
+        # TestEveryDeclarationHasOneNode compares a tree-sitter list of the
+        # declarations with the extracted nodes (index-invariants, D8). The
+        # target fails when CODEGRAPH_CORPUS_DIR is unset, and the test fails
+        # when a locked corpus is missing or yields no declaration.
+        run: task test:declarations

@@ -1,0 +1,86 @@
+# Weekly fuzz and property run (index-invariants, design D10).
+#
+# On every push, `go test` runs the seed corpus of each native fuzz target
+# and each rapid property at rapid's default count (ci.yml, task test:unit).
+# This workflow runs longer, once a week and on dispatch: each fuzz target
+# for five minutes, and each rapid property with 10,000 generated cases. A
+# failure fails the job and uploads its input: the fuzzer writes it under
+# the package's testdata/fuzz/, rapid under testdata/rapid/.
+#
+# The jobs call task targets, which list each named test or fuzz target
+# before they run it, so a rename cannot turn a job into a run that tests
+# nothing.
+name: fuzz
+
+on:
+  schedule:
+    - cron: "0 7 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: namespace-profile-linux-amd64-4x8
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [FuzzSegmentRoundTrip, FuzzSegmentBoundaries]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Fuzz for five minutes
+        env:
+          FUZZ_PKG: ./internal/graphstore
+          FUZZ_TARGET: ${{ matrix.target }}
+          FUZZ_TIME: 5m
+        run: task test:fuzz
+
+      - name: Upload the failing input
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: internal/graphstore/testdata/fuzz/
+          if-no-files-found: warn
+
+  properties:
+    name: rapid properties (10,000 cases)
+    runs-on: namespace-profile-linux-amd64-4x8
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up tools
+        uses: ./.github/actions/setup-tools
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Run the properties
+        env:
+          RAPID_CHECKS: "10000"
+        run: task test:properties
+
+      - name: Upload the rapid failure file
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rapid-failure
+          path: internal/*/testdata/rapid/
+          if-no-files-found: warn
