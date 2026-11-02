@@ -119,18 +119,18 @@ production scale (see `tools/bench/BASELINE.md` for full provenance):
   "runner": "ubuntu-latest",
   "scratch_fs": "disk",
   "median_of_trials": 7,
-  "files_per_sec": 17090.87527197409,
-  "bytes_per_sec": 2588799.9585264884,
-  "query_latency_median_ms": 258.199,
-  "peak_rss_bytes": 845950976,
-  "cold_start_ms": 12.708
+  "files_per_sec": 18545.796066253068,
+  "bytes_per_sec": 2809180.6489212695,
+  "query_latency_median_ms": 193.799,
+  "peak_rss_bytes": 875036672,
+  "cold_start_ms": 8.161
 }
 ```
 
 This is a from-scratch `index --force` of a deterministic, network-free,
 120,000-file synthetic corpus. `bench.yml`'s `rebless` job recorded it on
 `ubuntu-latest`, the runner class that the regression job also runs on.
-Its peak RSS is about 807 MiB, well under the regression check's absolute
+Its peak RSS is about 835 MiB, well under the regression check's absolute
 ceiling (§3 below).
 
 ## 3. Regression gate (PERF-02, INDX-06)
