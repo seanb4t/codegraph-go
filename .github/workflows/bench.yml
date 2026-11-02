@@ -186,8 +186,8 @@ jobs:
         with:
           go-cache: "true"
 
-      # #105: a baseline older than 90 days, or recorded on another runner,
-      # fails here with a message that names the rebless job.
+      # A baseline older than 90 days, or recorded on another runner, fails
+      # here with a message that names the rebless job.
       - name: Baseline age and runner check
         run: task bench:baseline-fresh
 

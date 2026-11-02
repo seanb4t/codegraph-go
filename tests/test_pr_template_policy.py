@@ -1,4 +1,4 @@
-"""Unit suite for scripts/pr_template_policy.py (GRD-15, WR-01, #106).
+"""Unit suite for scripts/pr_template_policy.py (GRD-15, WR-01).
 
 Every case feeds literal inputs to the policy's functions. Nothing here calls
 GitHub, gh or a workflow; how those behave is not ours to test.
@@ -28,6 +28,11 @@ REQUIRE_ISSUE_LINK_WORKFLOW = (
 
 LINEAR_BOUND_SECONDS = 1.0
 MARKER = "pr-template-exempt"
+# Each marker name with the pattern find_exemption takes for it.
+MARKERS = (
+    ("pr-template-exempt", pr_template_policy.EXEMPT_MARKER),
+    ("changelog-exempt", pr_template_policy.CHANGELOG_EXEMPT_MARKER),
+)
 
 
 def _workflow_allowlist():
@@ -153,12 +158,15 @@ class MarkerGrammarTests(unittest.TestCase):
                 self.assertIsNone(match)
 
     def test_unterminated_marker_does_not_exempt(self):
-        self.assertIsNone(pr_template_policy.find_exemption(f"<!-- {MARKER}: reason"))
+        for name, marker in MARKERS:
+            with self.subTest(marker=name):
+                self.assertIsNone(pr_template_policy.find_exemption(f"<!-- {name}: reason", marker))
 
     def test_marker_reason_starting_with_dash_does_not_exempt(self):
-        for body in (f"<!-- {MARKER}: - -->", f"<!-- {MARKER}: --x -->"):
-            with self.subTest(body=body):
-                self.assertIsNone(pr_template_policy.find_exemption(body))
+        for name, marker in MARKERS:
+            for body in (f"<!-- {name}: - -->", f"<!-- {name}: --x -->"):
+                with self.subTest(body=body):
+                    self.assertIsNone(pr_template_policy.find_exemption(body, marker))
 
     def test_marker_semantics(self):
         table = (
@@ -171,16 +179,35 @@ class MarkerGrammarTests(unittest.TestCase):
             ("<!-- {n}: reason with no closer", None),
             ("<!-- {n}: --> text <!-- {n}: second marker is ignored -->", None),
             ("<!-- {n}: a - b -->", "a - b"),
+            ("text\r\n<!--\n{n}: spans\nlines -->", "spans\nlines"),
+            ("<!-- {other}: reason -->", None),
             ("no marker at all", None),
         )
-        for template, expected in table:
-            body = template.format(n=MARKER, N=MARKER.upper())
+        for name, marker in MARKERS:
+            other = next(n for n, _ in MARKERS if n != name)
+            for template, expected in table:
+                body = template.format(n=name, N=name.upper(), other=other)
+                with self.subTest(body=body):
+                    self.assertEqual(pr_template_policy.find_exemption(body, marker), expected)
+
+    def test_changelog_exempt_prints_the_reason_on_one_line(self):
+        table = (
+            ("<!-- changelog-exempt: CI only -->", 0, "CI only\n"),
+            ("<!-- changelog-exempt:\nCI\nonly -->", 0, "CI only\n"),
+            ("<!-- changelog-exempt: -->", 1, ""),
+            ("<!-- pr-template-exempt: docs -->", 1, ""),
+            ("", 1, ""),
+        )
+        for body, want_status, want_out in table:
             with self.subTest(body=body):
-                self.assertEqual(pr_template_policy.find_exemption(body), expected)
+                stdout = io.StringIO()
+                with mock.patch.dict(os.environ, {"PR_BODY": body}), contextlib.redirect_stdout(stdout):
+                    status = pr_template_policy.main(["changelog-exempt"])
+                self.assertEqual((status, stdout.getvalue()), (want_status, want_out))
 
 
 class EmitTests(unittest.TestCase):
-    """#106, D11: PR-body text in a reason cannot become a workflow command."""
+    """D11: PR-body text in a reason cannot become a workflow command."""
 
     def test_emit_escapes_workflow_command(self):
         reason = "explicitly exempt: ok\n::error::injected\r\n::add-mask::x"

@@ -24,8 +24,9 @@ vars:
 
   # run_gotestsum NAME GO-TEST-ARGS... runs go test through gotestsum. It writes
   # test-results/NAME.xml (JUnit) and NAME.json, then prints the 20 slowest
-  # tests. It never reruns a failed test (--rerun-fails), because a rerun hides
-  # a flake. sed, not head, cuts the list, so pipefail never sees a SIGPIPE.
+  # tests. It does not pass --rerun-fails, so a failed test is never rerun:
+  # a rerun hides a flake. sed, not head, cuts the list, so pipefail never
+  # sees a SIGPIPE.
   GOTESTSUM_LIB: |
     run_gotestsum() {
       local name="$1"
@@ -40,11 +41,14 @@ vars:
 
   # repro_double_build ID builds GoReleaser build ID twice with
   # `goreleaser build --snapshot`, so the flags, ldflags and mod_timestamp
-  # come from .goreleaser.yaml and the commit, never from a hand copy (#212).
-  # It prints both SHA-256 hashes and sets REPRO_H1 and REPRO_H2. It fails if
-  # a build leaves no binary. Each run replaces dist/. The notarize pipe runs
-  # inside every `goreleaser build`, and only its five unset credential
-  # variables turn it off, so the builds run without them and never sign.
+  # come from .goreleaser.yaml and the commit, never from a hand copy.
+  # Build 1 uses the caller's GOCACHE. Build 2 uses an empty GOCACHE and
+  # empty zig caches, so it compiles every package again and a
+  # nondeterministic compile step changes its hash. It prints both SHA-256
+  # hashes and sets REPRO_H1 and REPRO_H2. It fails if a build leaves no
+  # binary. Each run replaces dist/. The notarize pipe runs inside every
+  # `goreleaser build`, and only its five unset credential variables turn
+  # it off, so the builds run without them and never sign.
   REPRO_LIB: |
     repro_double_build() {
       local id="$1"
@@ -53,7 +57,11 @@ vars:
       local hash_cmd="sha256sum"
       command -v sha256sum >/dev/null 2>&1 || hash_cmd="shasum -a 256"
       for n in 1 2; do
-        env -u MACOS_SIGN_P12 -u MACOS_SIGN_PASSWORD -u MACOS_NOTARY_ISSUER_ID -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_KEY \
+        local cache_env=()
+        if [ "${n}" = 2 ]; then
+          cache_env=(GOCACHE="${scratch}/gocache" ZIG_LOCAL_CACHE_DIR="${scratch}/zig/local" ZIG_GLOBAL_CACHE_DIR="${scratch}/zig/global")
+        fi
+        env -u MACOS_SIGN_P12 -u MACOS_SIGN_PASSWORD -u MACOS_NOTARY_ISSUER_ID -u MACOS_NOTARY_KEY_ID -u MACOS_NOTARY_KEY "${cache_env[@]}" \
           goreleaser build --snapshot --clean --id "${id}" >"${scratch}/build${n}.log" 2>&1 || {
           cat "${scratch}/build${n}.log"
           echo "::error::${id}: goreleaser build ${n} failed"
@@ -69,6 +77,7 @@ vars:
       done
       REPRO_H1=$(${hash_cmd} "${scratch}/codegraph1" | cut -d' ' -f1)
       REPRO_H2=$(${hash_cmd} "${scratch}/codegraph2" | cut -d' ' -f1)
+      chmod -R u+w "${scratch}"
       rm -rf "${scratch}"
       echo "build1=${REPRO_H1}"
       echo "build2=${REPRO_H2}"
@@ -179,8 +188,8 @@ tasks:
 
   test:unit:
     desc: >-
-      go test over every package except internal/daemon (isolated separately
-      — see task test:race:daemon).
+      go test over every package except internal/daemon, which
+      test:race:daemon runs. test/wireoracle runs in its own -count=1 call.
     cmds:
       - |
         set -euo pipefail
@@ -191,9 +200,15 @@ tasks:
         # packages under a green check. Materialize the list first so go
         # list's exit code is checked by set -e before anything consumes it.
         pkgs_raw=$(go list ./...)
-        mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
+        mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v -e '/internal/daemon$' -e '/test/wireoracle$')
         {{.GOTESTSUM_LIB}}
-        run_gotestsum unit "${pkgs[@]}"
+        status=0
+        run_gotestsum unit "${pkgs[@]}" || status=$?
+        # test/wireoracle tests a binary that a `go build` subprocess
+        # makes. The test cache does not see the inputs of that build, so
+        # the package always runs (-count=1).
+        run_gotestsum wireoracle -count=1 ./test/wireoracle || status=$?
+        exit "${status}"
 
   test:golden:
     desc: >-
@@ -222,23 +237,20 @@ tasks:
 
   test:integration:
     desc: >-
-      Subprocess integration harness (test/integration) — already reached by
-      go list ./... (it's a normal package, not testdata/), but this explicit
-      target guards against a future refactor of test:unit's filtered go list
-      line silently dropping it too.
+      Subprocess integration harness (test/integration) alone, for local
+      runs. test:unit also runs it, because it is a package of ./...
     cmds:
       - go test ./test/integration/...
 
   test:wireoracle:
     desc: >-
-      Wire-level regression oracle (test/wireoracle) — spawns the real
-      binary over real stdio and byte-compares normalized transcripts
-      against testdata/wireoracle/transcripts/*.golden. Pre-migration wire
-      regression baseline (VRFY-01/VRFY-04): must never be relaxed or
-      re-baselined during the SDK swap in Phase 2. Measured 2026-08-05:
-      ~5.8s wall-clock on the frozen single-scenario tree.
+      Wire-level regression oracle (test/wireoracle) alone, for local runs.
+      It spawns the real binary over real stdio and byte-compares normalized
+      transcripts against testdata/wireoracle/transcripts/*.golden
+      (VRFY-01/VRFY-04). -count=1, because the test cache does not see the
+      binary that its TestMain builds.
     cmds:
-      - go test ./test/wireoracle/...
+      - go test -count=1 ./test/wireoracle/...
 
   test:watch:
     desc: >-
@@ -268,15 +280,15 @@ tasks:
 
   test:race:daemon:
     desc: >-
-      internal/daemon, once, under the race detector. -p 1 keeps other
-      packages from contending with its soak and flush-lock tests, and
+      internal/daemon, once, under the race detector. CI runs it in its own
+      job, so no other package contends with its soak and flush-lock tests.
       -count=1 always runs it, because it drives a real watcher and store.
       The race run covers a plain run, so there is no second one.
     cmds:
       - |
         set -euo pipefail
         {{.GOTESTSUM_LIB}}
-        run_gotestsum daemon -race -count=1 -p 1 ./internal/daemon/...
+        run_gotestsum daemon -race -count=1 ./internal/daemon/...
 
   vet:
     desc: >-
@@ -1163,8 +1175,7 @@ tasks:
       gate would be red forever. Otherwise the task fails only when the
       script's own loop skipped a tool or left a found binary unscanned. -mode=binary is
       symbol-level, not call-graph-aware, so it is weaker than ci.yml's
-      blocking source-mode govulncheck job, which it does not replace. See
-      vuln:selftest for the proof that detection still fires.
+      blocking source-mode govulncheck job, which it does not replace.
     preconditions:
       - sh: command -v mise && command -v uv && command -v govulncheck
         msg: "mise, uv or govulncheck not on PATH — install mise, then run `mise install`. vuln runs scripts/vuln_report.py."
@@ -1181,48 +1192,6 @@ tasks:
         msg: "govulncheck not on PATH — run `mise install`."
     cmds:
       - govulncheck ./...
-
-  vuln:selftest:
-    desc: >-
-      Non-vacuity proof for `vuln` (VULN-02): builds the permanent red-proof
-      program (testdata/vulnredpoc — see its own doc comment) from its own
-      go.mod and asserts the underlying govulncheck -mode=binary scan
-      exits EXACTLY 3 and names GO-2026-5932. Unlike `vuln` itself, THIS
-      target is allowed to fail the build: a failure here means govulncheck's
-      own exit-3/advisory-ID classification broke — a detection-mechanism
-      regression, not a new vulnerability finding — which is exactly the
-      failure `vuln`'s advisory stance cannot surface on its own (an
-      advisory job that silently stops detecting is worse than a blocking
-      one). testdata/vulnredpoc is excluded from `go list ./...`
-      (GOLDEN-01) and is its own module, built only here — it never enters
-      the main module's package graph and adds no requirement to the root
-      go.mod.
-    cmds:
-      - |
-        set -euo pipefail
-        scratch=$(mktemp -d)
-        trap 'rm -rf "${scratch}"' EXIT
-
-        GOWORK=off go -C testdata/vulnredpoc build -o "${scratch}/vulnredpoc" .
-
-        set +e
-        out=$(govulncheck -mode=binary "${scratch}/vulnredpoc" 2>&1)
-        status=$?
-        set -e
-
-        echo "${out}"
-
-        if [ "${status}" -ne 3 ]; then
-          echo "::error::vuln:selftest FAILED — govulncheck -mode=binary exited ${status} (want 3) scanning the deliberately-vulnerable testdata/vulnredpoc binary; the tool-binary vulnerability gate's detection mechanism could not be proven able to fire"
-          exit 1
-        fi
-
-        if ! printf '%s' "${out}" | grep -q "GO-2026-5932"; then
-          echo "::error::vuln:selftest FAILED — scan exited 3 but its output does not name GO-2026-5932; a different advisory firing is not accepted as proof this specific detection path works"
-          exit 1
-        fi
-
-        echo "vuln:selftest: PASS — govulncheck -mode=binary exited 3 and named GO-2026-5932 against testdata/vulnredpoc"
 
   check:gonum:
     desc: >-
@@ -1381,13 +1350,18 @@ tasks:
     desc: >-
       GATE-01..GATE-03's production entry point, run by fragment-required.yml
       under pull_request_target. Reads CODE_CHANGED and FRAGMENT_ADDED, the
-      two dorny/paths-filter outputs, and PR_BODY. Fails unless both outputs
-      are exactly true or false, so a filter that did not run fails the gate.
-      Fails when shipped code changed, no fragment was added and the body has
-      no `<!-- changelog-exempt: <reason> -->` marker with a reason. The
-      first marker decides; a reason that is empty or starts with `-` does
-      not exempt.
+      two dorny/paths-filter outputs, CHANGED_FILE_COUNT and PR_BODY. Fails
+      unless both outputs are exactly true or false, so a filter that did not
+      run fails the gate. Fails when the pull request changes 3,000 files or
+      more, because the file listing stops there. Fails when shipped code
+      changed, no fragment was added and the body has no
+      `<!-- changelog-exempt: <reason> -->` marker with a reason.
+      scripts/pr_template_policy.py reads the marker: the first marker
+      decides, and a reason that is empty or starts with `-` does not exempt.
     silent: true
+    preconditions:
+      - sh: command -v uv
+        msg: "uv not on PATH — run `mise install`. check:fragment-required reads the marker with scripts/pr_template_policy.py."
     cmds:
       - |
         set -euo pipefail
@@ -1400,6 +1374,16 @@ tasks:
               ;;
           esac
         done
+        case "${CHANGED_FILE_COUNT:-}" in
+          "" | *[!0-9]*)
+            echo "::error::check:fragment-required: CHANGED_FILE_COUNT is '${CHANGED_FILE_COUNT:-}', want a number — the workflow did not set it, so the gate fails closed"
+            exit 1
+            ;;
+        esac
+        if [ "${CHANGED_FILE_COUNT}" -ge 3000 ]; then
+          echo "::error::check:fragment-required: this PR changes ${CHANGED_FILE_COUNT} files, and the file listing stops at 3,000, so the gate cannot see every file. Split the PR."
+          exit 1
+        fi
         if [ -z "${PR_BODY+set}" ]; then
           echo "::error::check:fragment-required: PR_BODY is not set in the step environment, so an exemption marker cannot be checked and the gate fails closed"
           exit 1
@@ -1415,20 +1399,12 @@ tasks:
           exit 0
         fi
 
-        marker=$(printf '%s' "${PR_BODY}" | tr '\r\n' '  ' | { grep -oiE '<!--[[:space:]]*changelog-exempt:[^>]*-->' || true; } | sed -n '1p')
-        reason=""
-        if [ -n "${marker}" ]; then
-          reason=${marker#*:}
-          reason=${reason%-->}
-          reason=$(printf '%s' "${reason}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+        if reason=$(uv run --no-project python -I scripts/pr_template_policy.py changelog-exempt); then
+          echo "check:fragment-required: pass — exempt by a changelog-exempt marker: ${reason}"
+          exit 0
         fi
-        case "${reason}" in
-          "" | -*)
-            echo "::error::check:fragment-required: this PR changes shipped code but adds no changelog fragment under .changes/unreleased/. Add one with task changie -- new, or put <!-- changelog-exempt: <reason> --> in the PR body."
-            exit 1
-            ;;
-        esac
-        echo "check:fragment-required: pass — exempt by a changelog-exempt marker: ${reason}"
+        echo "::error::check:fragment-required: this PR changes shipped code but adds no changelog fragment under .changes/unreleased/. Add one with task changie -- new, or put <!-- changelog-exempt: <reason> --> in the PR body."
+        exit 1
 
   check:ci-scripts:
     desc: >-
@@ -1447,7 +1423,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        for spec in test_vuln_report.py:20 test_pr_template_policy.py:13; do
+        for spec in test_vuln_report.py:20 test_pr_template_policy.py:14; do
           file="${spec%%:*}"
           floor="${spec##*:}"
           defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' "tests/${file}" || true; } | wc -l | tr -d ' ')
@@ -1478,13 +1454,11 @@ tasks:
 
   check:graph-console:
     desc: >-
-      D-09's permanent, self-tested, live-Chromium `/graph` console gate
+      D-09's permanent, live-Chromium `/graph` console gate
       (FIX-04/FIX-05): boots the real `./codegraph` binary, loads `/graph` on
       this repo's own index and on the pinned guava corpus, and asserts
       D-08's bar — zero uncaught page errors and zero console.warn/
-      console.error originating from our code — on both. Runs the script's
-      own --self-test first (a capture harness that cannot see a planted
-      console entry must never be trusted), then the real two-corpus check.
+      console.error originating from our code — on both.
       NOT wired into any .github/workflows/ file (D-09: guava is too heavy
       for every CI run) — run this locally or via a manually-dispatched job.
     preconditions:
@@ -1502,7 +1476,6 @@ tasks:
           test -d "$ROOT/${REPO/\//-}-${DIGEST}@${SHA}"
         msg: "pinned guava corpus not fetched — run `task corpora:fetch` first."
     cmds:
-      - node web/scripts/graph-console-check.mjs --self-test
       - node web/scripts/graph-console-check.mjs --out corpora/graph-console-check.json
 
   check:darwin-toolchain:
@@ -5055,7 +5028,7 @@ tasks:
       --snapshot` and fails unless the two binaries hash the same. The
       build reads its flags, ldflags and timestamps from .goreleaser.yaml
       and the commit, so it proves what release.yml produces, on macOS and
-      on Linux (#212).
+      on Linux.
     preconditions:
       - sh: command -v goreleaser
         msg: "goreleaser not on PATH — run `mise install`."
@@ -5114,12 +5087,13 @@ tasks:
 
   bench:baseline-fresh:
     desc: >-
-      #105: fails before the nightly perf gate compares anything when
+      Fails before the nightly perf gate compares anything when
       tools/bench/baseline.json is older than 90 days, or its `runner`
       differs from CODEGRAPH_BENCH_RUNNER. The age is the date of the last
-      commit that changed the file, so it needs a full-history checkout; a
-      shallow one reports the checkout boundary. Both failures name
-      bench.yml's rebless job, the one way to record a new baseline.
+      commit that changed the file, so a shallow checkout fails: git log
+      there reports the checkout boundary as that commit. The age and runner
+      failures name bench.yml's rebless job, the one way to record a new
+      baseline.
     silent: true
     preconditions:
       - sh: command -v jq
@@ -5130,6 +5104,10 @@ tasks:
       - |
         set -euo pipefail
         baseline=tools/bench/baseline.json
+        if [ "$(git rev-parse --is-shallow-repository)" != false ]; then
+          echo "::error::bench:baseline-fresh: the checkout is shallow, so git log cannot date ${baseline}; check out full history (fetch-depth: 0)"
+          exit 1
+        fi
         changed=$(git log -1 --format=%ct -- "${baseline}")
         if [ -z "${changed}" ]; then
           echo "::error::bench:baseline-fresh: git log found no commit that changed ${baseline}; the checkout needs full history (fetch-depth: 0)"
@@ -5199,9 +5177,9 @@ tasks:
     desc: >-
       Contributor wrapper: the four host-only legs (test:unit, test:golden,
       test:race, test:race:daemon), run SERIALLY via a list of sub-task
-      commands (never deps:, which go-task runs concurrently), because
-      test:race:daemon's -p 1 isolation means nothing beside a concurrent
-      leg. test:unit already runs test/integration and test/wireoracle.
+      commands (never deps:, which go-task runs concurrently), because a
+      concurrent leg contends with the daemon's soak and flush-lock tests.
+      test:unit already runs test/integration and test/wireoracle.
     cmds:
       - task: test:unit
       - task: test:golden

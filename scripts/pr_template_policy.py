@@ -19,6 +19,10 @@ Writes `action` and `result` to $GITHUB_OUTPUT. Exit status is always 0 — the
 workflow decides what to do with the verdict, so a policy opinion never looks
 like a crashed step.
 
+With the argument `changelog-exempt`, it reads only PR_BODY instead. It prints
+the reason of the body's changelog-exempt marker and exits 0, or exits 1 when
+the body has no marker that exempts. task check:fragment-required runs it.
+
 Verdicts:
     pass   body follows a typed template, or is exempt
     warn   malformed, but the author is trusted — comment, do not fail
@@ -86,10 +90,11 @@ TEMPLATE_SIGNALS = (
 # beside `[^>]*?` and ran in cubic time on a body of spaces (WR-01). This one
 # runs once per `<!--` opener.
 EXEMPT_MARKER = re.compile(r"<!--\s*pr-template-exempt:(?P<reason>[^>]*?)-->", re.I)
+CHANGELOG_EXEMPT_MARKER = re.compile(r"<!--\s*changelog-exempt:(?P<reason>[^>]*?)-->", re.I)
 ROUTER_MARKER = re.compile(r"Wrong template\s*—\s*please pick", re.I)
 
 
-# The pull-request files REST listing returns at most this many files (#106).
+# The pull-request files REST listing returns at most this many files.
 FILE_LIST_LIMIT = 3000
 
 
@@ -105,14 +110,14 @@ def is_housekeeping(paths: Sequence[str]) -> bool:
     )
 
 
-def find_exemption(body: str) -> str | None:
-    """The stripped reason of the first pr-template-exempt marker, or None.
+def find_exemption(body: str, marker: re.Pattern[str] = EXEMPT_MARKER) -> str | None:
+    """The stripped reason of the first marker in body, or None.
 
+    marker is EXEMPT_MARKER (pr-template-exempt) or CHANGELOG_EXEMPT_MARKER.
     The first marker decides. A reason that is empty after strip, or starts
-    with `-`, does not exempt. task check:fragment-required reads the
-    changelog-exempt marker with the same rules.
+    with `-`, does not exempt.
     """
-    match = EXEMPT_MARKER.search(body)
+    match = marker.search(body)
     if match is None:
         return None
     reason = match.group("reason").strip()
@@ -122,8 +127,10 @@ def find_exemption(body: str) -> str | None:
 
 
 def emit(action: str, reason: str) -> None:
-    # A reason can carry PR-body text. A line that starts with `::` is a
-    # workflow command, so the reason becomes one line with no leading `::` (#106).
+    # A reason can carry PR-body text, and a log line that starts with `::` is
+    # a workflow command. The join makes the reason one line, so its text
+    # never starts a line: the printed line starts with the action. The
+    # strip removes a leading `::` from the reason as well.
     reason = " ".join(reason.splitlines())
     while reason.startswith("::"):
         reason = reason[2:]
@@ -136,7 +143,20 @@ def emit(action: str, reason: str) -> None:
     print(f"{action}: {reason}", file=sys.stderr)
 
 
-def main() -> int:
+def changelog_exempt() -> int:
+    reason = find_exemption(os.environ.get("PR_BODY") or "", CHANGELOG_EXEMPT_MARKER)
+    if reason is None:
+        return 1
+    print(" ".join(reason.splitlines()))
+    return 0
+
+
+def main(argv: Sequence[str]) -> int:
+    if list(argv) == ["changelog-exempt"]:
+        return changelog_exempt()
+    if argv:
+        print(f"usage: pr_template_policy.py [changelog-exempt], got {list(argv)}", file=sys.stderr)
+        return 2
     body = os.environ.get("PR_BODY") or ""
     assoc = (os.environ.get("AUTHOR_ASSOCIATION") or "NONE").upper()
     changed = [p.strip() for p in (os.environ.get("CHANGED_FILES") or "").splitlines() if p.strip()]
@@ -177,4 +197,4 @@ def fail(assoc: str, reason: str) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

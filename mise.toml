@@ -3,7 +3,7 @@
 # to [tools], run `mise lock --platform linux-x64,linux-arm64,macos-arm64` (hk publishes no
 # macos-x64 build) and commit mise.lock.
 [tools]
-# The `go` line of go.mod and of testdata/vulnredpoc/go.mod must not exceed this toolchain.
+# The `go` line of go.mod must not exceed this toolchain.
 go = "1.26.10"
 node = "24.22.1"
 pnpm = "11.23.0"

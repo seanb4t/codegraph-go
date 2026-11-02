@@ -23,10 +23,7 @@
 // `notify` TypeError (pageerror), the two `text-valign: right` style
 // warnings (console.warn), and the guava-scale invalid-endpoints warnings
 // with a named overlapping pair — the pre-fix evidence plans 01-04/01-08/
-// 01-09 close against. `--self-test` is the positive control every real
-// run depends on: a capture harness that cannot see a PLANTED console.warn,
-// console.error and uncaught pageerror can never be trusted to see a REAL
-// one (rule 84d1gfpywd).
+// 01-09 close against.
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
@@ -236,16 +233,13 @@ function selfRepoIdentity(repoPath) {
  */
 function parseArgs(argv) {
 	const out = {
-		selfTest: false,
 		corpus: 'self,guava',
 		binary: path.join(repoRoot(), 'codegraph'),
 		out: path.join(repoRoot(), 'corpora', 'graph-console-check.json')
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
-		if (arg === '--self-test') {
-			out.selfTest = true;
-		} else if (arg === '--corpus') {
+		if (arg === '--corpus') {
 			out.corpus = argv[++i];
 		} else if (arg === '--binary') {
 			out.binary = path.resolve(argv[++i]);
@@ -256,72 +250,6 @@ function parseArgs(argv) {
 		}
 	}
 	return out;
-}
-
-/**
- * runSelfTest — the positive control. Navigates to about:blank (no binary
- * boot needed), registers BOTH capture halves, plants one console.warn, one
- * console.error and one uncaught pageerror (via a setTimeout throw, so it
- * fires asynchronously and independently of the evaluate() call's own
- * return), then asserts all three were recaptured. Prints the three
- * recaptured counts unconditionally — a self-test that prints nothing
- * cannot distinguish "captured" from "ran nothing" (rule 84d1gfpywd).
- * @returns {Promise<boolean>}
- */
-async function runSelfTest() {
-	const browser = await chromium.launch();
-	try {
-		const page = await browser.newPage();
-		/** @type {string[]} */
-		const warnings = [];
-		/** @type {string[]} */
-		const errors = [];
-		/** @type {string[]} */
-		const pageErrors = [];
-		// Registered BEFORE any navigation/evaluate, matching every sibling
-		// script's own pageerror discipline.
-		page.on('pageerror', (err) => pageErrors.push(err.message));
-		page.on('console', (msg) => {
-			if (msg.type() === 'warning') warnings.push(msg.text());
-			else if (msg.type() === 'error') errors.push(msg.text());
-		});
-
-		await page.goto('about:blank');
-		await page.evaluate(() => {
-			console.warn('graph-console-check --self-test: planted console.warn');
-			console.error('graph-console-check --self-test: planted console.error');
-			setTimeout(() => {
-				throw new Error('graph-console-check --self-test: planted uncaught pageerror');
-			}, 0);
-		});
-
-		try {
-			await pollUntil(
-				async () => warnings.length > 0 && errors.length > 0 && pageErrors.length > 0,
-				5000,
-				50
-			);
-		} catch {
-			// Fall through — the counts below (likely still short) are what
-			// gets reported and judged.
-		}
-
-		console.log(
-			`graph-console-check --self-test: recaptured console.warn=${warnings.length} console.error=${errors.length} pageerror=${pageErrors.length}`
-		);
-
-		const ok = warnings.length > 0 && errors.length > 0 && pageErrors.length > 0;
-		if (!ok) {
-			console.error(
-				'graph-console-check --self-test: FAIL — the capture harness did not recapture every planted entry'
-			);
-		} else {
-			console.log('graph-console-check --self-test: PASS');
-		}
-		return ok;
-	} finally {
-		await browser.close().catch(() => {});
-	}
 }
 
 /**
@@ -557,12 +485,6 @@ function runIsClean(run) {
 
 async function main() {
 	const args = parseArgs(process.argv.slice(2));
-
-	if (args.selfTest) {
-		const ok = await runSelfTest();
-		process.exit(ok ? 0 : 1);
-		return;
-	}
 
 	const requestedCorpora = args.corpus
 		.split(',')

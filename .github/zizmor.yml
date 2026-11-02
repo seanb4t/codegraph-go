@@ -9,7 +9,8 @@ rules:
     disable: true
 
   # These workflows run on pull_request_target on purpose: they read the pull
-  # request's metadata with a write token and never check out or run its code.
+  # request's metadata, some of them with a write token, and never check out
+  # or run its code.
   dangerous-triggers:
     ignore:
       - auto-close-unsolicited-prs.yml
@@ -20,8 +21,9 @@ rules:
       # workflow_run of the release workflow, which only runs on a tag.
       - post-release-verify.yml
 
-  # Release-path workflows run only on a release merge or a tag, so a change
-  # to their credentials cannot be proven on a pull request. release-tag.yml
+  # Release-path workflows run on a push to main, a release merge or a tag,
+  # never on a pull request, so a change to their credentials cannot be
+  # proven on a pull request. release-tag.yml
   # keeps the persisted App token on purpose: `task release:tag` pushes the
   # tag with it.
   artipacked:

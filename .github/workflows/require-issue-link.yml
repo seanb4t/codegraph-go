@@ -52,11 +52,10 @@ jobs:
           # defect with more characters, since the workflow file is
           # public. 128 bits of per-run entropy is unguessable by a fork
           # authoring paths ahead of time. See also pr-template-format.yml,
-          # which has the byte-identical shape.
+          # which writes its list the same way.
           #
-          # The paginated REST listing returns up to 3,000 files; `gh pr view
-          # --json files` stopped at 100 (#106). A list at that cap is
-          # treated as not exempt, because it may be incomplete.
+          # The paginated REST listing returns up to 3,000 files. A list at
+          # that cap is treated as not exempt, because it may be incomplete.
           DELIM="PRFILES_$(openssl rand -hex 16)"
           {
             echo "list<<${DELIM}"

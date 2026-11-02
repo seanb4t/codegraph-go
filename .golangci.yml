@@ -9,7 +9,8 @@
 # HOW the seven report, not WHICH seven run. If you change the enabled set, changing N
 # here is the visible act that says so.
 #
-# ENABLED, with reasons (todo's own four categories, verbatim):
+# ENABLED, with reasons (the first four are the todo's own categories,
+# verbatim):
 #   errcheck    — "unused-result checking": flags ignored/unchecked error
 #                 returns, the todo's own named category.
 #   ineffassign — "ineffectual assignments": the todo's own named category,

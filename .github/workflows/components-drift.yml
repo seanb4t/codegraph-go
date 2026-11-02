@@ -5,7 +5,7 @@
 # component family at the pinned shadcn-svelte@1.5.1 CLI into a scratch tree
 # and byte-compares it against what is committed under
 # web/src/lib/components/ui/ — the supply-chain surface no lockfile-based
-# gate (web:audit, web:deps:strict, web:lockfile) can see, because
+# gate (web:audit, pnpm's frozen-lockfile install) can see, because
 # `shadcn-svelte add` writes .svelte source that never enters
 # web/pnpm-lock.yaml (03-CONTEXT.md D-22).
 #

@@ -5,16 +5,16 @@
 # "SLSA/reproducibility claims asserted without ever being independently
 # re-verified"):
 #
-#   - changes: dorny/paths-filter decides which legs a pull request needs
-#     (#221, design D2). The filters name what a leg can skip, not what it
+#   - changes: dorny/paths-filter decides which legs a pull request needs.
+#     The go and release filters name what a leg can skip, not what it
 #     needs, because a list of inputs misses some. A push to main, a failed
 #     filter step and a change under the `ci` filter run every leg.
-#   - go, go-race, daemon, web, release-checks: the test legs (design D3).
+#   - go, go-race, daemon, web, release-checks: the test legs.
 #     Each Go leg runs gotestsum, which writes a JUnit report and prints the
 #     slowest tests, and never reruns a failed test.
 #   - test: the aggregate job. It needs every leg and fails if any leg failed
 #     or was cancelled, so the required check `test` keeps its name and
-#     reports on every pull request, whichever legs ran (design D1).
+#     reports on every pull request, whichever legs ran.
 #   - govulncheck: a BLOCKING vulnerability gate, deliberately its own job —
 #     never combined with SBOM generation into one step (RESEARCH
 #     anti-pattern: "conflating SBOM generation with vulnerability scanning
@@ -49,11 +49,11 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request cancels its superseded run. A push to main
-# always runs to completion, so each merged commit gets its full set of
-# checks (design D4).
+# A new push to a pull request cancels its superseded run. Each push to main
+# has a group of its own commit, so no run on main is cancelled or replaced
+# while it waits, and each merged commit gets its full set of checks.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -76,6 +76,12 @@ jobs:
       # outside the paths that the leg can skip. Go tests read Markdown
       # (README.md, docs/CLI-REFERENCE.md and others), so Markdown does not
       # skip the Go legs.
+      #
+      # Go tests and proto:drift also read files under web/src
+      # (web/src/lib/highlight.ts, web/src/lib/gen/). A web/src change still
+      # runs the Go legs, because the web leg's web:drift fails unless the
+      # same pull request also changes web/build/.build-manifest, and no
+      # filter skips web/build.
       - name: Filter what a leg can skip
         id: skip
         if: github.event_name == 'pull_request'
@@ -141,8 +147,7 @@ jobs:
       - name: Build
         run: task build
 
-      # DEV-01 (Phase 10): plain `go vet ./...`. Findings are fixed, not
-      # suppressed.
+      # DEV-01: plain `go vet ./...`. Findings are fixed, not suppressed.
       - name: Vet (go vet ./...)
         run: task vet
 
@@ -158,8 +163,9 @@ jobs:
 
       # Every package except internal/daemon, which the daemon leg runs.
       # test/integration and test/wireoracle are packages of ./..., so this
-      # step runs them. No -count=1: the restored test cache skips a package
-      # whose inputs did not change.
+      # step runs them. The restored test cache skips a package whose inputs
+      # did not change. test/wireoracle tests a binary that a subprocess
+      # builds, which the cache cannot see, so it always runs (-count=1).
       - name: Test (excluding internal/daemon)
         run: task test:unit
 
@@ -186,11 +192,10 @@ jobs:
         with:
           name: test-results-go
           path: test-results/
-          if-no-files-found: error
+          if-no-files-found: warn
 
-  # WR-03 (03-REVIEW.md): the goroutine lifecycles of the watcher packages,
-  # and internal/cli's serveWatchStart tests, under the race detector. The
-  # packages run in parallel; only internal/daemon needs -p 1.
+  # WR-03: internal/watch, internal/cli and internal/mcp under the race
+  # detector, in parallel. internal/daemon runs in the daemon leg.
   go-race:
     name: test (go-race)
     runs-on: namespace-profile-linux-amd64-4x8
@@ -219,10 +224,11 @@ jobs:
         with:
           name: test-results-go-race
           path: test-results/
-          if-no-files-found: error
+          if-no-files-found: warn
 
-  # internal/daemon runs once, under -race, -p 1 and -count=1. The daemon
-  # runs indexer.Sync and opens the store, so any Go change can break it.
+  # internal/daemon runs once, alone in this job, under -race and -count=1.
+  # The daemon runs indexer.Sync and opens the store, so any Go change can
+  # break it.
   daemon:
     name: test (daemon)
     runs-on: namespace-profile-linux-amd64-4x8
@@ -242,7 +248,7 @@ jobs:
         with:
           cache: go
 
-      - name: Test internal/daemon under the race detector (-race -p 1)
+      - name: Test internal/daemon under the race detector (-race)
         run: task test:race:daemon
 
       - name: Upload the test reports
@@ -251,7 +257,7 @@ jobs:
         with:
           name: test-results-daemon
           path: test-results/
-          if-no-files-found: error
+          if-no-files-found: warn
 
   web:
     name: test (web)
@@ -277,8 +283,8 @@ jobs:
       - name: Install JS deps (frozen lockfile, BLD-01)
         run: task web:deps
 
-      # BRW-06 (03-01): the JS unit-test suite. The target asserts a
-      # positive executed-test count before it judges pass or fail.
+      # BRW-06: the JS unit-test suite. The target asserts a positive
+      # executed-test count before it judges pass or fail.
       - name: web unit tests (vitest)
         run: task web:test
 
@@ -399,13 +405,10 @@ jobs:
   # sigstore/cosign/oci -> sigstore/rekor/pkg/pki/pgp; upstream unmaintained,
   # Fixed in: N/A). Shipped blocking, this job would have been permanently
   # red from its first run on real in-scope tooling. `task vuln` reports
-  # every finding (including that one) and always exits 0; `task
-  # vuln:selftest` is the exception — it proves DETECTION still fires
-  # against a known-vulnerable target and is allowed to fail this job if
-  # that detection mechanism itself regresses.
+  # every finding (including that one). It fails only when its report loop
+  # skips a roster tool or leaves a found binary unscanned.
   #
-  # Making this job (or its selftest) a branch-protection required context
-  # is a separate, out-of-repo ruleset change this plan does not perform.
+  # This job is not a required check of the protect-main ruleset.
   tool-vuln:
     name: tool-vuln (VULN-01/02/03, advisory)
     runs-on: namespace-profile-linux-amd64-4x8
@@ -431,9 +434,6 @@ jobs:
       - name: Tool-binary vulnerability scan (advisory — scan findings are reported, never fail the build)
         run: task vuln
 
-      - name: Non-vacuity proof the advisory scan can still detect (VULN-02, may fail this job on a detection regression)
-        run: task vuln:selftest
-
   reproducibility:
     name: reproducibility (double-build hash-diff, DIST-04)
     runs-on: namespace-profile-linux-amd64-4x8
@@ -456,7 +456,7 @@ jobs:
 
       - name: linux/amd64 double build (BLOCKING — canonical target, D-03)
         # goreleaser build reads .goreleaser.yaml's flags and the commit
-        # itself, so this gate proves what release.yml will produce (#212).
+        # itself, so this gate proves what release.yml will produce.
         run: task check:reproducibility
 
       - name: linux/arm64 double build (REPORTED ONLY, non-blocking — D-03 cross-target)

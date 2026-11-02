@@ -137,17 +137,19 @@ const emptyExploreResponse = {
 // settle is the vi.waitFor schedule for every wait in this file. vi.waitFor
 // polls on real time, unlike testing-library's waitFor, whose setInterval
 // the fake timers below freeze. It advances the fake clock by `interval`
-// before each check, and 1ms keeps SearchPanel's 150ms search debounce
-// from firing.
-const settle = { interval: 1, timeout: 5000 };
+// before each check. At 1ms, SearchPanel's 150ms search debounce fires
+// only after 150 checks since a keystroke, and each wait here passes in a
+// few checks. The timeout is below Vitest's 5s test timeout, so a stuck
+// wait fails with its own assertion.
+const settle = { interval: 1, timeout: 3000 };
 
 const BASE_URL =
 	'http://localhost/browse?symbol=resolveSourcePath&file=internal%2Fquery%2Fnode.go&line=33';
 
 // The stub client, the doMock and the route import live at module scope, as in
 // the other route tests: the import transforms the whole route module graph,
-// which took 11s alone and passed the 15s test timeout under full-suite load
-// (#185). At module scope that cost falls in the file's import phase.
+// which can take longer than a test timeout under full-suite load. At module
+// scope that cost falls in the file's import phase.
 const nodeDetailReqs: Array<{ symbol: string; file: string }> = [];
 const nodeDetailDeferreds: Array<Deferred<GetNodeDetailResponse>> = [];
 let impactCalls = 0;
@@ -178,9 +180,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	// Never advanced (SearchPanel's own 150ms search debounce, IN-13,
-	// deliberately never fires in this test) — fake timers just prevent
-	// that pending real setTimeout from leaking into a later test file.
+	// The fake clock moves only by settle's 1ms steps, so SearchPanel's
+	// 150ms search debounce (IN-13) never fires in this test. Restoring
+	// real timers drops that pending fake timer, so it cannot leak into a
+	// later test file.
 	vi.useRealTimers();
 });
 
@@ -215,9 +218,8 @@ describe('browse route: typing in search does not tear down the open node view (
 		// the URL.
 		for (const value of ['C', 'Ca', 'Cal']) {
 			await fireEvent.input(input, { target: { value } });
-			// D-11's shareable-at-every-instant property must survive the
-			// fix: the URL still updates on every keystroke even though
-			// the load effect no longer reacts to it.
+			// D-11's shareable-at-every-instant property: the URL updates
+			// on every keystroke, and the load effect does not react to it.
 			await vi.waitFor(() => expect(mockPage.url.searchParams.get('q')).toBe(value), settle);
 			flushSync();
 			// NEGATIVE (rule 84d1gfpywd requires this be paired with a
