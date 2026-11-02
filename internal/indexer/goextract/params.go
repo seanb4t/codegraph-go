@@ -10,10 +10,12 @@ import (
 )
 
 // Param is one parameter of a function or method as the source writes it
-// (design D13). Type is the type text as
-// written, or "" when the language or the author wrote none. Every
-// extractor fills the same shape, so the signature key, the arity filter
-// and the type filter of the resolver work the same way in every language.
+// (design D13). Type is the type text as written, or "" when the language
+// or the author wrote none. Every extractor fills the same shape, so the
+// signature key, the arity filter and the type filter of the resolver
+// work the same way in every language. Optional, HasDefault and Variadic
+// describe one parameter in one way: no extractor sets Variadic together
+// with either of the others, and arityFits reads Variadic first.
 type Param struct {
 	Name       string
 	Type       string

@@ -238,6 +238,17 @@ var propOps = []func(t *rapid.T, m *propModel) string{
 		m.files[p][i].Calls = append(m.files[p][i].Calls, propCall{Callee: callee})
 		return fmt.Sprintf("add call to %s in %s of %s", callee, m.files[p][i].Name, p)
 	},
+	func(t *rapid.T, m *propModel) string { // remove a call
+		p, i, ok := drawDecl(t, m, true)
+		if !ok || len(m.files[p][i].Calls) == 0 {
+			return ""
+		}
+		calls := m.files[p][i].Calls
+		j := rapid.IntRange(0, len(calls)-1).Draw(t, "call")
+		removed := calls[j]
+		m.files[p][i].Calls = append(append([]propCall(nil), calls[:j]...), calls[j+1:]...)
+		return fmt.Sprintf("remove call to %s from %s of %s", removed.Callee, m.files[p][i].Name, p)
+	},
 	func(t *rapid.T, m *propModel) string { // add a repeated declaration
 		p, i, ok := drawDecl(t, m, true)
 		if !ok {
