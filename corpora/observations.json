@@ -63,17 +63,17 @@
       "trackedFiles": 2547,
       "status": {
         "backend": "pebble",
-        "edgeCount": 23842,
+        "edgeCount": 28496,
         "edgesByKind": {
-          "calls": 6217,
-          "contains": 11033,
+          "calls": 10554,
+          "contains": 11159,
           "embeds": 155,
           "extends": 131,
           "implements": 1018,
           "imports": 2160,
-          "instantiates": 636,
-          "overrides": 24,
-          "references": 1342,
+          "instantiates": 644,
+          "overrides": 25,
+          "references": 1524,
           "returns": 1096,
           "type_of": 30
         },
@@ -97,13 +97,13 @@
           "go",
           "javascript"
         ],
-        "nodeCount": 12134,
+        "nodeCount": 12260,
         "nodesByKind": {
           "constant": 686,
           "file": 918,
-          "function": 4014,
+          "function": 4124,
           "interface": 326,
-          "method": 4136,
+          "method": 4152,
           "package": 183,
           "struct": 974,
           "type_alias": 201,
@@ -125,19 +125,19 @@
       "trackedFiles": 3317,
       "status": {
         "backend": "pebble",
-        "edgeCount": 155080,
+        "edgeCount": 201617,
         "edgesByKind": {
-          "calls": 58812,
-          "contains": 56641,
+          "calls": 87635,
+          "contains": 62845,
           "embeds": 139,
-          "extends": 2531,
-          "implements": 735,
+          "extends": 2553,
+          "implements": 759,
           "imports": 0,
-          "instantiates": 1053,
-          "overrides": 4658,
-          "references": 13063,
-          "returns": 5591,
-          "type_of": 11857
+          "instantiates": 5709,
+          "overrides": 8621,
+          "references": 14673,
+          "returns": 6693,
+          "type_of": 11990
         },
         "fileCount": 3233,
         "filesByLanguage": {
@@ -159,12 +159,13 @@
           "javascript",
           "kotlin"
         ],
-        "nodeCount": 59874,
+        "nodeCount": 66078,
         "nodesByKind": {
           "file": 3233,
           "interface": 452,
-          "method": 49956,
-          "struct": 6233
+          "method": 53732,
+          "overload_set": 2307,
+          "struct": 6354
         },
         "pendingChanges": {
           "added": 0,
@@ -241,16 +242,16 @@
       "trackedFiles": 130,
       "status": {
         "backend": "pebble",
-        "edgeCount": 1009,
+        "edgeCount": 1057,
         "edgesByKind": {
-          "calls": 166,
-          "contains": 734,
+          "calls": 172,
+          "contains": 775,
           "extends": 38,
           "implements": 0,
           "imports": 0,
           "instantiates": 32,
           "overrides": 11,
-          "references": 20,
+          "references": 21,
           "returns": 6,
           "type_of": 2
         },
@@ -270,12 +271,13 @@
         "languages": [
           "python"
         ],
-        "nodeCount": 771,
+        "nodeCount": 812,
         "nodesByKind": {
           "file": 37,
-          "function": 140,
-          "method": 502,
-          "struct": 92
+          "function": 146,
+          "method": 524,
+          "overload_set": 9,
+          "struct": 96
         },
         "pendingChanges": {
           "added": 0,
@@ -350,15 +352,15 @@
       "trackedFiles": 284,
       "status": {
         "backend": "pebble",
-        "edgeCount": 1693,
+        "edgeCount": 2355,
         "edgesByKind": {
-          "calls": 387,
-          "contains": 1227,
+          "calls": 513,
+          "contains": 1742,
           "extends": 17,
           "implements": 2,
           "imports": 0,
-          "instantiates": 12,
-          "overrides": 12,
+          "instantiates": 35,
+          "overrides": 10,
           "references": 3,
           "returns": 15,
           "type_of": 18
@@ -379,11 +381,12 @@
         "languages": [
           "csharp"
         ],
-        "nodeCount": 1442,
+        "nodeCount": 1957,
         "nodesByKind": {
           "file": 216,
           "interface": 15,
-          "method": 969,
+          "method": 1400,
+          "overload_set": 84,
           "struct": 242
         },
         "pendingChanges": {
