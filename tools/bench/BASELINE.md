@@ -4,22 +4,25 @@
 baseline `tools/bench/runner -mode regression` gates every CI run
 against (via `internal/bench.CheckRegression`).
 
-## Status: valid — recorded on the gate's own runner class, reblessed 2026-08-02 after a staleness finding
+## Status: valid — recorded on the gate's own runner class, reblessed 2026-11-02 after the 90-day age limit
 
 The committed baseline was recorded on `ubuntu-latest` (`linux/amd64`,
-`scratch_fs: disk`) by `bench.yml`'s `rebless` job (run 30758999046,
-`trials: 7`) — the same runner class the regression check spends it on, and
-the same scratch-filesystem class the gate itself uses. Both frame
-descriptors (`runner`, `scratch_fs`) are populated for the first time in
-this baseline.
+`scratch_fs: disk`) by `bench.yml`'s `rebless` job (run 41458483109,
+`trials: 7`, commit `f30f635c`) — the same runner class the regression
+check spends it on, and the same scratch-filesystem class the gate itself
+uses.
 
-**`files_per_sec: 17090.88` — up 51.5% from the baseline this replaced
-(`11279.59`), which had been reblessed only two days earlier.** That is
-not a frame change: same runner class, same `scratch_fs: disk`, same
-`-seed 42 -count 120000 -mode regression`. See "10-04-PLAN: the staleness
-finding" below — this is likely the single most consequential thing this
-plan produced, and the cause of the jump is **not established**. Read
-that section before trusting any percentage this file reports.
+**`files_per_sec: 18545.80`, up 8.5% from the baseline this replaced
+(`17090.88`, run 30758999046, 2026-08-02).** That is not a code
+speed-up. A 3-trial rebless of the same commit an hour earlier (run
+41456029511) measured `15261.50`, and the last two nightly regression runs
+measured about `15660`. Trials inside one run agree to within about 5%,
+but separate runs of the same commit differ by about 21%, because each run
+lands on a different `ubuntu-latest` host. That spread is about twice the
+10% throughput tolerance, so a nightly run on a slow host can fail against
+this baseline with no code regression. Issue #252 tracks the fix. Read the
+"10-04-PLAN: the staleness finding" section below before trusting any
+percentage this file reports.
 
 It was not always so. The baseline this replaced was recorded on
 `darwin/arm64` while the gate ran on `ubuntu-latest`, and

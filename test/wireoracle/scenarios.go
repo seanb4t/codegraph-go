@@ -364,7 +364,7 @@ const legacyEraPrefix = "legacy-"
 // ValidProtocolVersions declares
 // [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/mcp/types.go:166-171],
 // transcribed here as package-local literals — never read from any SDK
-// constant (the plan 03 archtest forbids that; VRFY-01 forbids using the
+// constant (VRFY-02's forbidigo rule forbids that; VRFY-01 forbids using the
 // SDK under test as the source of its own expected values). Each of these
 // four negotiates to itself
 // [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1196-1210].

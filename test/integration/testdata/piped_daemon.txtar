@@ -1,0 +1,8 @@
+# D-17 / TUI-04: bare `daemon` with piped stdio exits promptly with plain
+# output and never starts an interactive bubbletea program. The fake home
+# has no daemon registry.
+
+exec within 10s codegraph daemon
+stdout 'no running daemons'
+! stdout '\x1b\['
+! stderr '\x1b\['

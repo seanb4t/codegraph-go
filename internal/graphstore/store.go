@@ -8,8 +8,8 @@ import (
 
 // GraphStore is the only door onto the embedded key-value engine (D-04).
 // No package outside internal/graphstore (and its own subpackages) may
-// import the engine directly — archtest.TestNoPackageBypassesGraphStore
-// enforces this boundary at test time (D-04a).
+// import the engine directly — the depguard rule graphstore-owns-pebble in
+// .golangci.yml enforces this boundary (D-04a).
 //
 // Concurrency model: many lock-free readers via Snapshot, plus one
 // coordinated writer via NewWriter, with no external locking required

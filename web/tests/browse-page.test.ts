@@ -13,7 +13,7 @@ if (!Element.prototype.scrollIntoView) {
 	Element.prototype.scrollIntoView = () => {};
 }
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
 
@@ -134,8 +134,45 @@ const emptyExploreResponse = {
 	blasts: []
 } as unknown as ExploreResponse;
 
+// settle is the vi.waitFor schedule for every wait in this file. vi.waitFor
+// polls on real time, unlike testing-library's waitFor, whose setInterval
+// the fake timers below freeze. It advances the fake clock by `interval`
+// before each check. At 1ms, SearchPanel's 150ms search debounce fires
+// only after 150 checks since a keystroke, and each wait here passes in a
+// few checks. The timeout is below Vitest's 5s test timeout, so a stuck
+// wait fails with its own assertion.
+const settle = { interval: 1, timeout: 3000 };
+
 const BASE_URL =
 	'http://localhost/browse?symbol=resolveSourcePath&file=internal%2Fquery%2Fnode.go&line=33';
+
+// The stub client, the doMock and the route import live at module scope, as in
+// the other route tests: the import transforms the whole route module graph,
+// which can take longer than a test timeout under full-suite load. At module
+// scope that cost falls in the file's import phase.
+const nodeDetailReqs: Array<{ symbol: string; file: string }> = [];
+const nodeDetailDeferreds: Array<Deferred<GetNodeDetailResponse>> = [];
+let impactCalls = 0;
+
+const stubUiClient = {
+	getNodeDetail: (req: { symbol: string; file: string }) => {
+		nodeDetailReqs.push({ symbol: req.symbol, file: req.file });
+		const deferred = createDeferred<GetNodeDetailResponse>();
+		nodeDetailDeferreds.push(deferred);
+		return deferred.promise;
+	},
+	impact: () => {
+		impactCalls += 1;
+		return Promise.resolve(impactResponseStub);
+	},
+	getPermalink: () => Promise.resolve(permalinkResponseStub),
+	search: () => Promise.resolve(emptySearchResponse),
+	files: () => Promise.resolve(emptyFilesResponse),
+	explore: () => Promise.resolve(emptyExploreResponse)
+};
+
+vi.doMock('$lib/client', () => ({ uiClient: stubUiClient }));
+const { default: BrowsePage } = await import('../src/routes/browse/+page.svelte');
 
 beforeEach(() => {
 	vi.useFakeTimers();
@@ -143,47 +180,15 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	// Never advanced (SearchPanel's own 150ms search debounce, IN-13,
-	// deliberately never fires in this test) — fake timers just prevent
-	// that pending real setTimeout from leaking into a later test file.
+	// The fake clock moves only by settle's 1ms steps, so SearchPanel's
+	// 150ms search debounce (IN-13) never fires in this test. Restoring
+	// real timers drops that pending fake timer, so it cannot leak into a
+	// later test file.
 	vi.useRealTimers();
 });
 
 describe('browse route: typing in search does not tear down the open node view (CR-01)', () => {
 	it('leaves the RPC call count and the rendered target unchanged across three keystrokes, but still updates the URL every time, and DOES reload for a target-field change', async () => {
-		// 06-03 (deviation, Rule 3): the default 5000ms test timeout leaves
-		// no margin once the suite grows past this plan's four new test
-		// files — measured in isolation, this test's own body consistently
-		// takes ~5.06s regardless of this plan's changes (reproduced against
-		// this file's pre-06-03 content too), so the added suite-wide
-		// contention was already right at the edge. Widening ONLY this
-		// test's own timeout (no logic change) is what the framework's own
-		// error message suggests; see 06-03-SUMMARY.md for the full
-		// isolation trace that ruled out a regression in this plan's code.
-		const nodeDetailReqs: Array<{ symbol: string; file: string }> = [];
-		const nodeDetailDeferreds: Array<Deferred<GetNodeDetailResponse>> = [];
-		let impactCalls = 0;
-
-		const stubUiClient = {
-			getNodeDetail: (req: { symbol: string; file: string }) => {
-				nodeDetailReqs.push({ symbol: req.symbol, file: req.file });
-				const deferred = createDeferred<GetNodeDetailResponse>();
-				nodeDetailDeferreds.push(deferred);
-				return deferred.promise;
-			},
-			impact: () => {
-				impactCalls += 1;
-				return Promise.resolve(impactResponseStub);
-			},
-			getPermalink: () => Promise.resolve(permalinkResponseStub),
-			search: () => Promise.resolve(emptySearchResponse),
-			files: () => Promise.resolve(emptyFilesResponse),
-			explore: () => Promise.resolve(emptyExploreResponse)
-		};
-
-		vi.doMock('$lib/client', () => ({ uiClient: stubUiClient }));
-		const { default: BrowsePage } = await import('../src/routes/browse/+page.svelte');
-
 		const statusGate = {
 			subscribe(run: (s: { verdict: string; commit: string; commitSha: string }) => void) {
 				run({ verdict: 'ok', commit: 'known', commitSha: 'deadbeef' });
@@ -197,13 +202,13 @@ describe('browse route: typing in search does not tear down the open node view (
 		// Initial mount: exactly one GetNodeDetail + one Impact for the
 		// symbol/file/line the URL named — the baseline this test's
 		// "unchanged" assertions below are measured against.
-		await waitFor(() => expect(nodeDetailReqs).toHaveLength(1));
+		await vi.waitFor(() => expect(nodeDetailReqs).toHaveLength(1), settle);
 		expect(nodeDetailReqs[0]).toEqual({
 			symbol: 'resolveSourcePath',
 			file: 'internal/query/node.go'
 		});
 		nodeDetailDeferreds[0].resolve(nodeDetailResponse('resolveSourcePath', 'internal/query/node.go', 33));
-		await waitFor(() => expect(screen.getByTestId('browse-source')).toBeInTheDocument());
+		await vi.waitFor(() => expect(screen.getByTestId('browse-source')).toBeInTheDocument(), settle);
 		expect(impactCalls).toBe(1);
 
 		const input = screen.getByPlaceholderText('Search symbols and files, or press Enter to ask...');
@@ -213,6 +218,10 @@ describe('browse route: typing in search does not tear down the open node view (
 		// the URL.
 		for (const value of ['C', 'Ca', 'Cal']) {
 			await fireEvent.input(input, { target: { value } });
+			// D-11's shareable-at-every-instant property: the URL updates
+			// on every keystroke, and the load effect does not react to it.
+			await vi.waitFor(() => expect(mockPage.url.searchParams.get('q')).toBe(value), settle);
+			flushSync();
 			// NEGATIVE (rule 84d1gfpywd requires this be paired with a
 			// positive below — see after the loop): the load effect must
 			// NOT have re-run for a `q`-only URL change.
@@ -220,10 +229,6 @@ describe('browse route: typing in search does not tear down the open node view (
 			expect(impactCalls).toBe(1);
 			expect(screen.queryByTestId('browse-loading')).not.toBeInTheDocument();
 			expect(screen.getByTestId('browse-source')).toBeInTheDocument();
-			// D-11's shareable-at-every-instant property must survive the
-			// fix: the URL still updates on every keystroke even though
-			// the load effect no longer reacts to it.
-			expect(mockPage.url.searchParams.get('q')).toBe(value);
 		}
 
 		// POSITIVE (the pairing this negative test needs to not be
@@ -236,12 +241,12 @@ describe('browse route: typing in search does not tear down the open node view (
 		);
 		flushSync();
 
-		expect(nodeDetailReqs).toHaveLength(2);
+		await vi.waitFor(() => expect(nodeDetailReqs).toHaveLength(2), settle);
 		expect(nodeDetailReqs[1]).toEqual({ symbol: 'otherFunc', file: 'internal/query/node.go' });
 		expect(impactCalls).toBe(2);
 		expect(screen.getByTestId('browse-loading')).toBeInTheDocument();
 
 		nodeDetailDeferreds[1].resolve(nodeDetailResponse('otherFunc', 'internal/query/node.go', 33));
-		await waitFor(() => expect(screen.getByTestId('browse-source')).toBeInTheDocument());
-	}, 15000);
+		await vi.waitFor(() => expect(screen.getByTestId('browse-source')).toBeInTheDocument(), settle);
+	});
 });

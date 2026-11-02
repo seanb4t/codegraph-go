@@ -1,0 +1,8 @@
+# D-17 / TUI-04: `install` with piped stdio takes the off-TTY automatic
+# path, prints its result and exits promptly, with no ANSI escape. It
+# writes only under the fake home.
+
+exec within 10s codegraph install
+stdout '\S'
+! stdout '\x1b\['
+! stderr '\x1b\['

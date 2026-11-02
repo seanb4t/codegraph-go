@@ -42,21 +42,11 @@ var binPath string
 // twice in this package — this doc comment and the assignment below.
 const testBinEnvVar = "CODEGRAPH_TEST_BIN"
 
-// resolveTestBinPath is a deliberate SECOND COPY of
-// test/integration/main_test.go's function of the same name — Go test
-// helpers are not importable across packages, matching the precedent this
-// repo already set for its four runGit* helpers (test/integration's own
-// runGitI doc comment names the other three). A shared non-test
-// internal/testbin package was considered and rejected: two copies of a
-// ~20-line pure function with identical table tests in both packages is
-// cheaper than a new exported internal package, and if a third harness
-// ever needs this seam, that is the signal to extract it.
-//
-// It resolves the raw value of the testBinEnvVar environment variable
-// into a usable binary path. It is a pure function — no os.Getenv, no
-// os.Exit, no writes — specifically so it is a table test's ideal
-// subject; TestMain is the only caller that touches the environment or
-// the process exit code.
+// resolveTestBinPath resolves the raw value of the testBinEnvVar
+// environment variable into a usable binary path. It is a pure function
+// — no os.Getenv, no os.Exit, no writes — specifically so it is a table
+// test's ideal subject; TestMain is the only caller that touches the
+// environment or the process exit code.
 //
 // Contract: for a non-empty raw value there are exactly two outcomes —
 // (path, true, nil): the override is valid, use it; or ("", false, err):
@@ -102,9 +92,9 @@ func resolveTestBinPath(raw string) (path string, useEnv bool, err error) {
 }
 
 // TestMain resolves the testBinEnvVar override first (see
-// resolveTestBinPath), mirroring test/integration/main_test.go's TestMain
-// exactly (VRFY-04: the oracle must run against the real, unmodified
-// binary — whether that binary was just built or externally supplied).
+// resolveTestBinPath). VRFY-04: the oracle must run against the real,
+// unmodified binary, whether that binary was just built or externally
+// supplied.
 // When unset, it builds the real binary hermetically, once, into a
 // package-level temp dir before any test in this package runs; a build
 // failure is a hard stop. When set and valid, it runs every test against

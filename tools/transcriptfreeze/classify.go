@@ -44,10 +44,8 @@ const transcriptDirPrefix = "testdata/wireoracle/transcripts/"
 const serverDirPrefix = "internal/mcp/"
 
 // mcpSDKModulePrefixes names the MCP SDK module paths whose go.mod diff
-// line counts as "the MCP dependency changed." The second entry is
-// deliberately forward-declared for Phase 2's SDK swap, exactly as the
-// SDK-02 archtest's own list is — a guard naming only today's dependency
-// would go vacuous at the moment the swap makes it matter most.
+// line counts as "the MCP dependency changed." It names the same two
+// modules as the SDK-02 depguard rule in .golangci.yml.
 var mcpSDKModulePrefixes = []string{
 	"github.com/mark3labs/mcp-go",
 	"github.com/modelcontextprotocol/go-sdk",
