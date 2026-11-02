@@ -458,16 +458,16 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	receiver := call.ChildByFieldName("receiver")
 	if receiver == nil {
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 		return
 	}
 
 	pkgAlias, receiverType := ex.receiver(ex.env, receiver)
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
-		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+		ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 	})
 }
 

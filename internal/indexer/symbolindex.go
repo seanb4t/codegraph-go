@@ -29,16 +29,14 @@ type symbolIndex struct {
 	// set and not of the insertion order.
 	candidates map[string]map[string][]symbolCandidate
 
-	// membersByOwner holds, per type node id and member name, the methods
-	// that a type contains (design D3): the candidate set of a call
-	// through a receiver of that type.
+	// membersByOwner holds, per owner node id and member name, every
+	// member a contains edge puts under a non-file owner (design D3): the
+	// candidate set of a call through a receiver of that type.
 	membersByOwner map[string]map[string][]symbolCandidate
 
-	// Collisions counts every same-(moduleKey, name) collision addSymbol
-	// resolved deterministically (WR-01) instead of silently
-	// last-write-wins overwriting — surfaced here so a collision is never
-	// silently dropped (D-06a), even though this plan's file scope does
-	// not yet wire it through to Sync's Stats/CLI --verbose output.
+	// Collisions counts every (moduleKey, name) that add received more
+	// than one symbol for. pickSymbol chooses among them as a function of
+	// the set, never by insertion order (WR-01).
 	Collisions int
 }
 
@@ -127,7 +125,7 @@ func (idx *symbolIndex) typeIn(moduleKey, name string) (symbolCandidate, bool) {
 			return c, true
 		}
 	}
-	return types[0], true
+	panic("symbolindex: pickSymbol chose an id outside its candidates")
 }
 
 // newSymbolIndex builds the index by ranging results in the order given.
@@ -209,22 +207,26 @@ func (idx *symbolIndex) add(moduleKey string, n *schema.Node) {
 	names[n.Name] = pickSymbol(cands)
 }
 
-// pickSymbol chooses the id that a name resolves to (WR-01, design D3 of
-// the index-invariants change), as a pure function of the candidate set.
-// First, in each group of candidates with one kind, qualified name and
-// file and signature key — the copies of a repeated declaration — it
-// keeps the first copy in source order, whose id is DeclID. A
-// group without such a candidate keeps its lowest id. Second, across the
-// groups, it keeps the lowest id, mirroring
-// query.Engine.resolveSymbolNode's own lowest-Id tie-break
-// (internal/query/traverse.go).
+// pickSymbol chooses the id that a name resolves to (WR-01, design D3),
+// as a pure function of the candidate set. First, in each group of
+// candidates with one kind, qualified name, file and signature key, the
+// copies of a repeated declaration, it keeps the copy whose id is the
+// DeclID of the group: the first copy in source order, when the
+// extractor keyed it by its parameters alone. A copy under a
+// conditional-compilation block has a key the group cannot see
+// (goextract.ConditionalBlockKey), so a group without such a candidate
+// keeps its lowest id. Second, across the groups, it keeps the lowest
+// id, mirroring query.Engine.resolveSymbolNode's own lowest-Id
+// tie-break (internal/query/traverse.go).
 func pickSymbol(cands []symbolCandidate) string {
 	if len(cands) == 1 {
 		return cands[0].id
 	}
-	best := make(map[symbolCandidate]string, len(cands))
+	// groupKey names the copies of one declaration.
+	type groupKey struct{ kind, qualifiedName, filePath, key string }
+	best := make(map[groupKey]string, len(cands))
 	for _, c := range cands {
-		group := symbolCandidate{kind: c.kind, qualifiedName: c.qualifiedName, filePath: c.filePath, key: c.key}
+		group := groupKey{c.kind, c.qualifiedName, c.filePath, c.key}
 		first := nodeid.DeclID(c.kind, c.qualifiedName, c.filePath, c.key)
 		cur, ok := best[group]
 		switch {
@@ -242,17 +244,4 @@ func pickSymbol(cands []symbolCandidate) string {
 		}
 	}
 	return winner
-}
-
-// resolveUnqualified resolves an unqualified reference against the calling
-// file's OWN moduleKey — any file sharing a module/package/namespace may
-// reference any other file's module-level symbol, so the lookup is scoped
-// by moduleKey, not by the specific file.
-func (idx *symbolIndex) resolveUnqualified(callerModuleKey, name string) (string, bool) {
-	names, ok := idx.byModuleKeyAndName[callerModuleKey]
-	if !ok {
-		return "", false
-	}
-	id, ok := names[name]
-	return id, ok
 }

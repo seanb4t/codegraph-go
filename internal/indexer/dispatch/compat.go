@@ -4,7 +4,7 @@ import "strings"
 
 // Compatible reports whether an argument of static type arg can be passed
 // to a parameter of type param in language lang, as far as the names
-// tell (design D3 of the index-invariants change). Both types are the
+// tell (design D3). Both types are the
 // normalized names the extractors record (goextract.TypeName). The table
 // is lenient on purpose: an unknown argument type matches anything, and a
 // widening or boxing conversion that the language allows matches. A
@@ -25,6 +25,12 @@ func Compatible(lang, arg, param string) bool {
 		if targets, ok := wide[arg]; ok && targets[param] {
 			return true
 		}
+	}
+	if (lang == "c" || lang == "cpp") && cArithmetic[arg] && cArithmetic[param] {
+		// C and C++ convert between every arithmetic type and bool
+		// without a cast, narrowing included. mostSpecific still
+		// prefers the exact match.
+		return true
 	}
 	if box, ok := boxing[lang]; ok {
 		if box[arg] == param || box[param] == arg {
@@ -51,21 +57,14 @@ func eraseGenerics(t string) string {
 	return t
 }
 
-// isTypeVariable reports whether t looks like a type parameter: one or
-// two capital letters, with an optional digit, such as T, K, V, T1 or TK.
+// isTypeVariable reports whether t is written like a type parameter: one
+// capital letter with an optional digit, such as T, K, V or T1. A longer
+// name such as URL is a type, not a parameter.
 func isTypeVariable(t string) bool {
-	if len(t) == 0 || len(t) > 3 {
+	if len(t) == 0 || len(t) > 2 || t[0] < 'A' || t[0] > 'Z' {
 		return false
 	}
-	for i, r := range t {
-		switch {
-		case r >= 'A' && r <= 'Z':
-		case i > 0 && r >= '0' && r <= '9':
-		default:
-			return false
-		}
-	}
-	return true
+	return len(t) == 1 || (t[1] >= '0' && t[1] <= '9')
 }
 
 // Final reports whether t is a type of lang that no type in the index
@@ -203,6 +202,12 @@ var widening = map[string]map[string]map[string]bool{
 		"float": set("double"),
 	},
 }
+
+// cArithmetic are the C and C++ types that convert to one another
+// without a cast.
+var cArithmetic = set("bool", "char", "signed char", "unsigned char", "short", "unsigned short", "int", "unsigned",
+	"unsigned int", "long", "unsigned long", "long long", "unsigned long long", "float", "double", "long double",
+	"size_t", "ssize_t", "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t")
 
 // boxing maps a primitive to its wrapper, per language, in both directions.
 var boxing = map[string]map[string]string{

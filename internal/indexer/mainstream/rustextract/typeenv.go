@@ -180,7 +180,6 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 		if a.Kind() == "attribute_item" {
 			continue
 		}
-		ca.Count++
 		ca.Types = append(ca.Types, ex.exprType(env, a))
 	}
 	return ca

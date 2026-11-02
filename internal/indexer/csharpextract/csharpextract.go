@@ -342,7 +342,7 @@ func csharpQualifiedParts(t *tree_sitter.Node, src []byte) (simpleName, prefix s
 // non-matching alias) heuristic.
 func (ex *extractor) namespacePrefixAlias(prefix, simpleName string) string {
 	if prefix != "" {
-		// Self-mapped: resolveSelector's exact-match lookup needs
+		// Self-mapped: the resolver's exact-match lookup needs
 		// result.Imports[pkgAlias] to resolve to a moduleKey, and a fully-
 		// qualified reference's own namespace prefix text IS that
 		// moduleKey (no `using` declaration required at all).
@@ -749,8 +749,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		// No object at all — an implicit `this.Method()` call.
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "member_access_expression":
 		nameNode := fn.ChildByFieldName("name")
@@ -764,8 +764,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		pkgAlias, receiverType := ex.receiver(ex.env, fn.ChildByFieldName("expression"))
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	default:
 		// Other function shapes (conditional_access_expression,

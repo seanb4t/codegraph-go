@@ -48,12 +48,17 @@ func TestPrototypeWithDefinitionInFileIsOneNode(t *testing.T) {
 		t.Fatalf("Extract: %v / %v", err, res.Err)
 	}
 	count := map[string]int{}
+	line := map[string]int32{}
 	for _, en := range res.Nodes {
 		if en.Node.Kind == goextract.KindFunction {
 			count[en.Node.Name]++
+			line[en.Node.Name] = en.Node.StartLine
 		}
 	}
 	if count["f"] != 1 || count["h"] != 1 || count["g"] != 1 {
 		t.Errorf("function nodes = %v, want one each of f, h and g", count)
+	}
+	if line["f"] != 3 {
+		t.Errorf("f is at line %d, want the definition at line 3, not the prototype", line["f"])
 	}
 }

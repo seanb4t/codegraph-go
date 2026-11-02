@@ -325,7 +325,8 @@ func drawDecl(t *rapid.T, m *propModel, functions bool) (string, int, bool) {
 }
 
 // writeModel makes the tree under root match m: it writes each file whose
-// content changed and removes each file that m no longer has.
+// content differs from written, and removes each written file that is not
+// in m.
 func writeModel(t *rapid.T, root string, m *propModel, written map[string]string) {
 	for p := range written {
 		if _, ok := m.files[p]; !ok {
@@ -405,7 +406,10 @@ func TestSyncEqualsFreshIndex(t *testing.T) {
 		}}
 		written := make(map[string]string)
 		writeModel(t, root, m, written)
-		if _, err := Run(root, storeDir, Options{Workers: 1}); err != nil {
+		// The worker count is drawn, so the parallel extraction path runs
+		// too.
+		workers := rapid.IntRange(1, 4).Draw(t, "workers")
+		if _, err := Run(root, storeDir, Options{Workers: workers}); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		checkStore(t, storeDir, len(m.files))
@@ -419,13 +423,13 @@ func TestSyncEqualsFreshIndex(t *testing.T) {
 			}
 			t.Logf("step %d: %s", i+1, desc)
 			writeModel(t, root, m, written)
-			if _, err := Sync(root, storeDir, Options{Workers: 1}); err != nil {
+			if _, err := Sync(root, storeDir, Options{Workers: workers}); err != nil {
 				t.Fatalf("Sync after %q: %v", desc, err)
 			}
 			checkStore(t, storeDir, len(m.files))
 		}
 
-		if _, err := Run(root, freshDir, Options{Workers: 1}); err != nil {
+		if _, err := Run(root, freshDir, Options{Workers: workers}); err != nil {
 			t.Fatalf("Run (fresh): %v", err)
 		}
 		synced, closeSynced := openRapidSnapshot(t, storeDir)

@@ -533,3 +533,67 @@ func TestExtract_OversizedFileSkippedNotFatal(t *testing.T) {
 		t.Errorf("expected no nodes for a skipped file, got %+v", result.Nodes)
 	}
 }
+
+// TestExtract_ExportClauseMarksExported checks that a declaration named
+// by an `export { a, B as C }` clause or by `export default name` is
+// exported, as one under the `export` keyword is.
+func TestExtract_ExportClauseMarksExported(t *testing.T) {
+	src := `function a(): void {}
+class B {}
+function d(): void {}
+function hidden(): void {}
+export { a, B as C };
+export default d;
+`
+	p := newTestParser(t, "ts")
+	result, err := Extract(p, "m", "clause.ts", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	for _, c := range []struct {
+		kind, name string
+		want       bool
+	}{
+		{goextract.KindFunction, "a", true},
+		{goextract.KindStruct, "B", true},
+		{goextract.KindFunction, "d", true},
+		{goextract.KindFunction, "hidden", false},
+	} {
+		n := findNode(result, c.kind, c.name)
+		if n == nil {
+			t.Fatalf("no %s node named %s", c.kind, c.name)
+		}
+		if n.Node.IsExported != c.want {
+			t.Errorf("%s.IsExported = %v, want %v", c.name, n.Node.IsExported, c.want)
+		}
+	}
+}
+
+// TestExtract_NamespaceMembersAreNotNested checks that the body of a
+// namespace is not a local scope: its members are visible across files,
+// unlike a function declared inside a function body.
+func TestExtract_NamespaceMembersAreNotNested(t *testing.T) {
+	src := `export namespace NS {
+  export function inNamespace(): void {}
+}
+export function outer(): void {
+  function inner(): void {}
+  inner();
+}
+`
+	p := newTestParser(t, "ts")
+	result, err := Extract(p, "m", "ns.ts", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	if n := findNode(result, goextract.KindFunction, "inNamespace"); n == nil {
+		t.Fatal("no node for inNamespace")
+	} else if n.Node.Nested {
+		t.Error("inNamespace.Nested = true, want false")
+	}
+	if n := findNode(result, goextract.KindFunction, "inner"); n == nil {
+		t.Fatal("no node for inner")
+	} else if !n.Node.Nested {
+		t.Error("inner.Nested = false, want true")
+	}
+}

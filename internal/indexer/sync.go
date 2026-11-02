@@ -356,6 +356,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	sort.Slice(batchFiles, func(i, j int) bool { return batchFiles[i].RelPath < batchFiles[j].RelPath })
 
 	results, err := Extract(batchFiles, workers)
+	if err == nil {
+		err = internalError(results)
+	}
 	if err != nil {
 		w.Close()
 		return Stats{}, err
@@ -434,8 +437,8 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	// An overload set whose members span files has no file of its own,
-	// so no prune reaches it. When this resolve no longer declares it,
-	// delete it here (design D14).
+	// so no prune reaches it. A stored set that this resolve does not
+	// declare is deleted here (design D14).
 	for id := range view.storedSets {
 		if _, live := nodeFilePath[id]; live {
 			continue
@@ -496,16 +499,17 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// nodesAdded counts only node ids that are GENUINELY new to the
 	// committed graph after this Sync: either they were just pruned above
 	// (goneIDs — a node id is stable across a content-unrelated edit
-	// elsewhere in its file, D-02/nodeid.NodeID depends only on
-	// (kind,qualifiedName,filePath) and, for a repeated declaration, its
-	// ordinal (nodeid.OrdinalID), so "pruned then re-added with the
-	// same id" nets to zero) or they never existed in the base graph at
-	// all (a genuinely new symbol, or a dependent/package node getting
-	// re-staged with an id that already existed and was NOT pruned — that
-	// case must NOT be double-counted as an addition).
+	// elsewhere in its file: nodeid.DeclID depends only on kind,
+	// qualified name, file path and signature key, and nodeid.OrdinalID
+	// adds the ordinal of a repeated declaration, so "pruned then
+	// re-added with the same id" nets to zero) or they never existed in
+	// the base graph at all (a genuinely new symbol, or a
+	// dependent/package node getting re-staged with an id that already
+	// existed and was NOT pruned — that case must NOT be double-counted
+	// as an addition).
 	//
 	// allNodes is sorted by id, and an id that appears twice is stored
-	// once, so it is counted once (#188).
+	// once, so it is counted once.
 	nodesAdded := 0
 	for i, n := range allNodes {
 		if i > 0 && allNodes[i-1].Id == n.Id {
@@ -780,14 +784,15 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 
 // filesResolvingToChangedSets returns, sorted, the paths of r0's
 // unchanged files that own an edge into a candidate set this sync
-// changes (design D11 of the index-invariants change). A set is the
+// changes (design D11). A set is the
 // declarations of one name under one module key. It changes when the
 // reparsed files add a candidate to it or remove one from it, which can
 // change the outcome of resolution for a call that already resolved: a
 // new overload can fit better, or the old winner can be gone. The files
 // that own an edge into any candidate of such a set, before or after, or
-// into the set's overload_set node, are reparsed like a file waiting on
-// a new name. A same-file contains edge is made by the extractor and is
+// into any overload_set node with that name, are reparsed like a file
+// waiting on a new name. The set lookup is by bare name, so a set of the
+// same name under another owner is reparsed too. A same-file contains edge is made by the extractor and is
 // left out. The sync's own batch and dependents are left out as well.
 func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
 	declared := make(map[string]string)

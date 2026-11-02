@@ -116,7 +116,6 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 	labeled := false
 	for i := uint(0); i < args.NamedChildCount(); i++ {
 		a := args.NamedChild(i)
-		ca.Count++
 		switch a.Kind() {
 		case "splat_argument", "hash_splat_argument":
 			ca.Spread = true

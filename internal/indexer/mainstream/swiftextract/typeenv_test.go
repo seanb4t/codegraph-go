@@ -53,7 +53,7 @@ func TestCallsRecordReceiverAndArgumentTypes(t *testing.T) {
 	want := map[string]callRecord{
 		"log@5":     {"log", "", "Logger", []string{"String", "Int"}, []string{"", "level"}},
 		"add@7":     {"add", "", "Builder", []string{"Int"}, []string{""}},
-		"assist@9":  {"assist", "", goextract.DeferredTypePrefix + "8:16", nil, nil},
+		"assist@9":  {"assist", "", goextract.DeferredTypePrefix + "8:24", nil, nil},
 		"add@11":    {"add", "", "Sink", []string{"Double"}, []string{""}},
 		"call@12":   {"call", "", "unknown", nil, nil},
 		"log@13":    {"log", "", "Logger", []string{"String"}, []string{""}},

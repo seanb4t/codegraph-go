@@ -189,11 +189,9 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 		switch a.Kind() {
 		case "variadic_unpacking":
 			ca.Spread = true
-			ca.Count++
 			ca.Types = append(ca.Types, "")
 			ca.Labels = append(ca.Labels, "")
 		case "argument":
-			ca.Count++
 			label := ""
 			if nm := a.ChildByFieldName("name"); nm != nil {
 				label = nm.Utf8Text(ex.src)

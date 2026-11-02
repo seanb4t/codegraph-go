@@ -10,7 +10,7 @@ import (
 )
 
 // Param is one parameter of a function or method as the source writes it
-// (design D13 of the index-invariants change). Type is the type text as
+// (design D13). Type is the type text as
 // written, or "" when the language or the author wrote none. Every
 // extractor fills the same shape, so the signature key, the arity filter
 // and the type filter of the resolver work the same way in every language.
@@ -36,7 +36,8 @@ func SchemaParams(params []Param) []*schema.Param {
 
 // SignatureKeyOf is the signature key of a declaration with params
 // (nodeid.SignatureKey). A parameter with a default is optional for the
-// key, because a call can leave it out.
+// key, because a call can leave it out. Every key starts with "(", which
+// nodeid.OrdinalID relies on.
 func SignatureKeyOf(params []Param) string {
 	keys := make([]nodeid.ParamKey, len(params))
 	for i, p := range params {

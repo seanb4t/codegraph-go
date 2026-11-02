@@ -7,7 +7,7 @@ import (
 )
 
 // TypeEnv holds the names that one function body can see and their static
-// types (design D17 of the index-invariants change): the parameters, the
+// types (design D17): the parameters, the
 // locals, the fields of the enclosing type through a parent environment,
 // and the receiver word (`this`, `self`). A name declared with an unknown
 // type is in the environment with the type "". A name declared twice with
@@ -45,9 +45,10 @@ func (e *TypeEnv) Declare(name, typ string) {
 // DeclareIn records a declaration of name at byte at whose scope ends at
 // byte end: a local is visible from its declaration to the end of the
 // block that holds it. A second declaration with the same span and a
-// different type makes the type unknown.
+// different type makes the type unknown. A declaration at or after the
+// end of its scope is visible nowhere and is dropped.
 func (e *TypeEnv) DeclareIn(name, typ string, at, end uint32) {
-	if e == nil || name == "" {
+	if e == nil || name == "" || at >= end {
 		return
 	}
 	typ = TypeName(typ)
@@ -104,16 +105,17 @@ func (e *TypeEnv) LookupAt(name string, pos uint32) (string, bool) {
 // DeferredType is the type of an expression that is a call: pass 2 fills
 // it from the return type of the call at n's position (D17).
 func DeferredType(n *tree_sitter.Node) string {
-	pos := n.StartPosition()
-	return fmt.Sprintf("%s%d:%d", DeferredTypePrefix, pos.Row+1, pos.Column)
+	return fmt.Sprintf("%s%d:%d", DeferredTypePrefix, EndLine(n), EndCol(n))
 }
 
-// CallArgs is the argument data of one call site.
-type CallArgs struct {
-	Count  int32
-	Spread bool
-	Types  []string
-	Labels []string
+// EndLine is the 1-based line where n ends.
+func EndLine(n *tree_sitter.Node) int32 {
+	return int32(n.EndPosition().Row) + 1
+}
+
+// EndCol is the 0-based column where n ends.
+func EndCol(n *tree_sitter.Node) int32 {
+	return int32(n.EndPosition().Column)
 }
 
 // Receiver classifies a bare receiver name without reading its case

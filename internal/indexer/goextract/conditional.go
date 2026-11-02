@@ -8,8 +8,7 @@ import (
 )
 
 // ConditionalBlockKey returns the marker of the conditional-compilation
-// block around decl, or "" when decl is not under one (design D16 of the
-// index-invariants change). The marker names the block's kind and start
+// block around decl, or "" when decl is not under one (design D16). The marker names the block's kind and start
 // byte, so two declarations under different branches of one `#if` get
 // different signature keys and form an overload set, and a call that
 // reaches both is ambiguous. A PHP `if` whose condition mentions

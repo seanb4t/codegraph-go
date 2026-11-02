@@ -492,8 +492,8 @@ func (ex *extractor) recordFunctionCall(fromID string, call *tree_sitter.Node) {
 	case "name":
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	case "qualified_name", "relative_name":
 		simple, _ := phpSimpleAndFullName(fn, ex.src)
@@ -502,8 +502,8 @@ func (ex *extractor) recordFunctionCall(fromID string, call *tree_sitter.Node) {
 		}
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: simple, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			FromID: fromID, Name: simple, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	default:
 		// A dynamic callee (a variable holding a callable, an expression
@@ -523,8 +523,8 @@ func (ex *extractor) recordMemberCall(fromID string, call *tree_sitter.Node) {
 	pkgAlias, receiverType := ex.receiver(ex.env, object)
 	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-		FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
-		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+		FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+		ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 	})
 }
 
@@ -540,8 +540,8 @@ func (ex *extractor) recordScopedCall(fromID string, call *tree_sitter.Node) {
 	pkgAlias, receiverType := ex.scope(ex.env, scope)
 	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-		FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
-		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+		FromID: fromID, Name: nameNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+		ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 	})
 }
 

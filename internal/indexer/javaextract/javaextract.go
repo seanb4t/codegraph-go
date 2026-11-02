@@ -82,9 +82,9 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	}
 
 	// Imports are collected first so extends/implements and call
-	// resolution below can tell an imported simple name (routes through
-	// resolveSelector via the Imports map, RESEARCH Pitfall 2) apart from
-	// a same-package one (routes through resolveUnqualified) — RESEARCH
+	// resolution below can tell an imported simple name (an alias in the
+	// Imports map, RESEARCH Pitfall 2) apart from a same-package one (an
+	// empty PkgAlias, resolved in the caller's own module) — RESEARCH
 	// Pitfall 3's declared-import ambiguity.
 	ex.collectImports(root)
 	// Types are collected before methods (05-PATTERNS.md's ordering
@@ -317,8 +317,8 @@ func (ex *extractor) emitSupertypeRef(fromID string, typeNode *tree_sitter.Node)
 	// A supertype reference is unambiguously a type by grammar shape (no
 	// local-variable ambiguity the way a call's operand can have) — only
 	// set PkgAlias when name is a genuine import; a same-package supertype
-	// needs no import in Java, so an empty PkgAlias correctly routes
-	// through resolveUnqualified against the caller's own moduleKey.
+	// needs no import in Java, so an empty PkgAlias resolves against the
+	// caller's own moduleKey.
 	pkgAlias := ""
 	if _, imported := ex.result.Imports[name]; imported {
 		pkgAlias = name
@@ -749,8 +749,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls,
-		Line: line, Col: col,
-		ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+		Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+		ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 	})
 }
 

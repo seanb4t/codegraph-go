@@ -1,7 +1,6 @@
 // Package invariant checks the properties every committed graph must have,
 // whatever wrote it: a full index, an incremental sync or a backfill. The
-// tests of the indexer call it after each write. It has no tests of its
-// own: the indexer tests that fail without the fixes it guards prove it.
+// tests of the indexer call it after each write.
 package invariant
 
 import (
@@ -41,8 +40,9 @@ var nestingLanguages = map[string]bool{
 	"ruby":       true,
 }
 
-// nestingParentKinds are the node kinds that hold their members lexically:
-// classes, structs and enums are KindStruct, interfaces KindInterface.
+// nestingParentKinds are the node kinds whose contains edge to a member
+// stands for lexical nesting: classes, structs and enums are KindStruct,
+// interfaces KindInterface, and an overload set spans its members.
 var nestingParentKinds = map[string]bool{
 	goextract.KindStruct:      true,
 	goextract.KindInterface:   true,

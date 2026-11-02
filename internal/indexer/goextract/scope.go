@@ -5,13 +5,15 @@ import (
 )
 
 // FillScopes sets the Scope of each node in nodes and marks its Node as
-// nested (design D15 of the index-invariants change). The scope of a
+// nested (design D15). The scope of a
 // declaration is the nearest local scope around it in the syntax tree:
 // a function body, a block, a lambda or an anonymous class body. A
 // declaration with no such ancestor is module-level or a type member,
-// and keeps the zero Scope. The scope kinds are the body kinds of every
-// grammar the indexer parses; a kind that means a class body in one
-// grammar and a block in another is told apart by its parent.
+// and keeps the zero Scope. So does a node with no position, or whose
+// position the tree does not hold: the extractor placed it, and it stays
+// where the extractor put it. The scope kinds are the body kinds of
+// every grammar the indexer parses; a kind that means a class body in
+// one grammar and a block in another is told apart by its parent.
 func FillScopes(root *tree_sitter.Node, nodes []ExtractedNode) {
 	if root == nil {
 		return
@@ -55,7 +57,11 @@ func isLocalScope(p *tree_sitter.Node, lang string) bool {
 		parent = pp.Kind()
 	}
 	switch p.Kind() {
-	case "statement_block", "function_body", "constructor_body",
+	case "statement_block":
+		// The body of a TypeScript namespace is a statement_block too,
+		// and its members are module-level declarations.
+		return parent != "internal_module" && parent != "module"
+	case "function_body", "constructor_body",
 		"lambda_literal", "lambda_body", "do_block", "anonymous_function", "closure_expression":
 		return true
 	case "compound_statement":

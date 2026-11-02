@@ -55,7 +55,7 @@ func TestCallsRecordReceiverAndArgumentTypes(t *testing.T) {
 		"log@5":     {"log", "", "Logger", []string{"String", "Int"}, nil},
 		"add@6":     {"add", "", "Sink", []string{"String"}, nil},
 		"add@8":     {"add", "", "Builder", []string{"Long"}, nil},
-		"assist@10": {"assist", "", goextract.DeferredTypePrefix + "9:16", nil, nil},
+		"assist@10": {"assist", "", goextract.DeferredTypePrefix + "9:24", nil, nil},
 		"add@12":    {"add", "", "Sink", []string{"Double", "Boolean"}, []string{"", "flag"}},
 		"call@13":   {"call", "", "unknown", nil, nil},
 		"log@14":    {"log", "", "Logger", []string{"String"}, nil},

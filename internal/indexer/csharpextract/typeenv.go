@@ -192,7 +192,6 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 		if a.Kind() != "argument" {
 			continue
 		}
-		ca.Count++
 		typ := ""
 		if k := a.NamedChildCount(); k > 0 {
 			typ = ex.exprType(env, a.NamedChild(k-1))
@@ -203,8 +202,9 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 }
 
 // receiver classifies the expression a member access reads: what it
-// names and its static type (D17, D18). A qualified name keeps today's
-// namespace-prefix import so pass 2 can look the type up in it.
+// names and its static type (D17, D18). A qualified name keeps the
+// self-mapped namespace prefix (namespacePrefixAlias) so pass 2 can look
+// the type up in it.
 func (ex *extractor) receiver(env *goextract.TypeEnv, object *tree_sitter.Node) (pkgAlias, receiverType string) {
 	if object == nil {
 		return "", ""

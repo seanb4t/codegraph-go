@@ -475,11 +475,11 @@ func inner() int { return 1 }
 	}
 }
 
-// TestExtract_SelectorNonIdentifierOperandNeverAliasQualified checks a
+// TestExtract_CallOperandRecordsDeferredReceiver checks a
 // selector call whose operand is a call, `foo().Bar()`: the receiver's
 // type is the return type of foo(), which pass 2 fills, so the ref
 // records a deferred receiver type and no alias (design.md D17).
-func TestExtract_SelectorNonIdentifierOperandNeverAliasQualified(t *testing.T) {
+func TestExtract_CallOperandRecordsDeferredReceiver(t *testing.T) {
 	src := `package p
 
 type Widget struct{}
@@ -514,11 +514,11 @@ func Run() {
 	}
 }
 
-// TestExtract_LocalVariableReceiverCallUnchanged checks a call through a
+// TestExtract_LocalVariableReceiverRecordsDeclaredType checks a call through a
 // local variable with a declared type: the ref records the receiver's
 // type and no alias, so pass 2 resolves the method on that type
 // (design.md D17).
-func TestExtract_LocalVariableReceiverCallUnchanged(t *testing.T) {
+func TestExtract_LocalVariableReceiverRecordsDeclaredType(t *testing.T) {
 	src := `package p
 
 type Widget struct{}

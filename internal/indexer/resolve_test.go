@@ -293,7 +293,7 @@ func TestResolveOverrides_OverloadedMethodsBothSynthesized(t *testing.T) {
 	}
 	nodeStartLineByID := map[string]int32{}
 
-	synthesized := synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nodeStartLineByID)
+	synthesized := synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nil, nodeStartLineByID)
 
 	if e := findEdgeFull(synthesized, derivedFoo1, goextract.EdgeKindOverrides, baseFoo1); e == nil {
 		t.Errorf("expected overrides edge %s -> %s (arity-1 overload), got %+v", derivedFoo1, baseFoo1, synthesized)
@@ -488,7 +488,7 @@ func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
 // two-pass conformance retry (Task 2): an unqualified call
 // (`baseMethod()`) whose target is declared ONLY on a supertype in a
 // DIFFERENT module-key scope cannot resolve via pass 1's own
-// resolveUnqualified (same-moduleKey-only lookup) — it resolves only once
+// the same-module lookup — it resolves only once
 // the retry walks Derived's own "embeds" edge to Base and finds
 // baseMethod there. unresolvedCount ends at 0; a single-pass-only run
 // (i.e. this fixture minus the retry step) would leave it at 1 — this is
@@ -1472,5 +1472,53 @@ func G() q.Thing {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("unresolved names = %q, want %q", got, want)
+	}
+}
+
+// TestOverridesSynthesizedAcrossOverloadSets indexes a subclass that
+// overrides two overloads of one name. The type contains an overload set
+// that contains the methods, and the overrides synthesis still pairs
+// each overload with the one it overrides.
+func TestOverridesSynthesizedAcrossOverloadSets(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"Base.java": `package p;
+
+public class Base {
+    public void foo(int n) {}
+
+    public void foo(String s) {}
+}
+`,
+		"Derived.java": `package p;
+
+public class Derived extends Base {
+    @Override
+    public void foo(int n) {}
+
+    @Override
+    public void foo(String s) {}
+}
+`,
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	g := readGraph(t, storeDir)
+	for _, sig := range []string{"(int n)", "(String s)"} {
+		from := g.node(t, "Derived.java", goextract.KindMethod, "foo", sig)
+		to := g.node(t, "Base.java", goextract.KindMethod, "foo", sig)
+		found := false
+		for _, e := range g.edges {
+			if e.Kind == goextract.EdgeKindOverrides && e.Source == from.Id {
+				if e.Target != to.Id {
+					t.Errorf("Derived.foo%s overrides %s, want Base.foo%s", sig, g.describe(e.Target), sig)
+				}
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no overrides edge from Derived.foo%s", sig)
+		}
 	}
 }

@@ -92,7 +92,7 @@ public class App {
 		"log@20":    {"log", "", "Logger", []string{"String"}},
 		"make@21":   {"make", "", "Factory", nil},
 		"make@22":   {"make", "", "Factory", nil},
-		"run@23":    {"run", "", goextract.DeferredTypePrefix + "22:16", nil},
+		"run@23":    {"run", "", goextract.DeferredTypePrefix + "22:30", nil},
 		"assist@24": {"assist", "", "helper", nil},
 	}
 	for key, w := range want {

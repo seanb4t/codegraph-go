@@ -61,7 +61,7 @@ class App {
 		"log@10":    {"log", "", "Logger", []string{"string", "int"}, nil},
 		"add@11":    {"add", "", "Sink", []string{"string"}, nil},
 		"add@13":    {"add", "", "Builder", []string{"int", "bool"}, []string{"", "flag"}},
-		"assist@15": {"assist", "", goextract.DeferredTypePrefix + "14:13", nil, nil},
+		"assist@15": {"assist", "", goextract.DeferredTypePrefix + "14:21", nil, nil},
 		"add@17":    {"add", "", "Sink", []string{"float"}, nil},
 		"call@18":   {"call", "<local:$unknown>", "", nil, nil},
 		"make@19":   {"make", "", "Factory", []string{"string"}, nil},

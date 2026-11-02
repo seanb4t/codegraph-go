@@ -364,7 +364,7 @@ func (ex *extractor) emitTypedef(decl *tree_sitter.Node) {
 func (ex *extractor) collectFunctions(decls []*tree_sitter.Node) {
 	// A prototype whose definition is in the same file is a forward
 	// declaration of that definition, not a second declaration (design
-	// D16 of the index-invariants change): it gets no node, so a call
+	// D16): it gets no node, so a call
 	// reaches the definition and never an ambiguous pair.
 	ex.definedKeys = make(map[string]bool)
 	for _, d := range decls {
@@ -603,8 +603,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	case "identifier":
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "field_expression":
 		field := fn.ChildByFieldName("field")
@@ -615,8 +615,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		pkgAlias, receiverType := ex.receiver(ex.env, arg)
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "qualified_identifier":
 		nameNode := fn.ChildByFieldName("name")
@@ -638,8 +638,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		}
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	}
 }

@@ -778,8 +778,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	switch fn.Kind() {
 	case "identifier":
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
-			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: RefKindCalls, Line: line, Col: col, EndLine: EndLine(call), EndCol: EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "selector_expression":
 		operand := fn.ChildByFieldName("operand")
@@ -795,8 +795,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		}
 		pkgAlias, receiverType := ex.receiver(ex.env, operand)
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
-			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindCalls, Line: line, Col: col,
-			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types,
+			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindCalls, Line: line, Col: col, EndLine: EndLine(call), EndCol: EndCol(call),
+			ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	}
 }
@@ -1039,7 +1039,7 @@ func (ex *extractor) captureSelectorRead(fromID string, sel *tree_sitter.Node) {
 	pos := sel.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindReferences,
-		Line: int32(pos.Row) + 1, Col: int32(pos.Column), ReceiverType: receiverType,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column), EndLine: EndLine(sel), EndCol: EndCol(sel), ReceiverType: receiverType,
 	})
 }
 

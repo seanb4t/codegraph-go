@@ -1,6 +1,8 @@
 package goextract
 
 import (
+	"errors"
+	"fmt"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
@@ -27,7 +29,7 @@ const (
 	KindRoute = "route"
 
 	// KindOverloadSet is the node that holds two or more overloads of one
-	// name under one owner (design D14 of the index-invariants change).
+	// name under one owner (design D14).
 	// It is not a declaration: it has no source text of its own.
 	KindOverloadSet = "overload_set"
 )
@@ -111,8 +113,7 @@ type ExtractedNode struct {
 
 	// Scope is the enclosing local scope of a nested declaration, such
 	// as the body of the function that declares it, or the zero Range
-	// for a module-level declaration or a type member (design D15 of the
-	// index-invariants change). A same-file reference resolves to the
+	// for a module-level declaration or a type member (design D15). A same-file reference resolves to the
 	// innermost declaration of its name whose Scope contains it.
 	Scope Range
 }
@@ -187,33 +188,50 @@ type UnresolvedRef struct {
 	// Line and Col are the 1-based line / 0-based column of the
 	// reference's call/use site (D-04).
 	Line, Col int32
+	// EndLine and EndCol are the 1-based line / 0-based column where a
+	// call ends. Every link of a chain such as a.b().c() starts at the
+	// same position, so the end is what tells the calls apart: the
+	// deferred type of a call expression (DeferredType) names it.
+	EndLine, EndCol int32
 
-	// The call-site data of a RefKindCalls ref (design D13 and D17 of the
-	// index-invariants change). ReceiverType is the receiver's static type
-	// when the extractor knew it. ArgTypes has one entry per argument,
-	// "" for an unknown type. A type that is the return type of another
-	// call in the same body is deferred: it is DeferredTypePrefix plus
-	// that call's "line:col", and pass 2 fills it (D17). ArgLabels are
-	// Swift's argument labels. Addressing is AddressingName for every
-	// reference today, and AddressingPath is reserved for a reference by
-	// file path across languages.
+	// The call-site data of a RefKindCalls ref (design D13 and D17).
+	// ReceiverType is the receiver's static type when the extractor knew
+	// it. ArgTypes has one entry per argument, "" for an unknown type. A
+	// type that is the return type of another call in the same body is
+	// deferred: it is DeferredTypePrefix plus the "line:col" where that
+	// call ends, and pass 2 fills it (D17). ArgLabels are the argument
+	// labels or keyword-argument names, one per argument, "" for an
+	// unlabeled one; empty when no argument is labeled.
 	ReceiverType string
 	ArgCount     int32
 	HasSpread    bool
 	ArgTypes     []string
 	ArgLabels    []string
-	Addressing   string
 }
 
 // DeferredTypePrefix starts a type that pass 2 fills from another call's
-// return type: "@call 12:8" names the call at line 12, column 8.
+// return type: "@call 12:8" names the call that ends at line 12, column
+// 8.
 const DeferredTypePrefix = "@call "
 
-// The addressing forms of an UnresolvedRef.
-const (
-	AddressingName = ""
-	AddressingPath = "path"
-)
+// ErrInternal marks an extraction failure that is a defect of the
+// indexer, not of the source file. Run and Sync fail on it instead of
+// skipping the file.
+var ErrInternal = errors.New("goextract: internal error")
+
+// CallArgs is the argument data of one call site, as the extractors
+// build it for an UnresolvedRef: Types and Labels have one entry per
+// argument.
+type CallArgs struct {
+	Spread bool
+	Types  []string
+	Labels []string
+}
+
+// Count is the number of arguments.
+func (c CallArgs) Count() int32 {
+	return int32(len(c.Types))
+}
 
 // FileResult is the complete Pass-1 intermediate for one Go source file:
 // every node it declares, every intra-file edge those nodes participate
@@ -308,13 +326,32 @@ func (r *FileResult) RewriteIDs(rewrite func(id string) string) {
 
 // FinalizeIDs fills the scope of each declaration from the syntax tree
 // under root, then turns the provisional ids that a's Declare returned
-// into final ids in r. If a provisional id is left, r keeps no symbols
-// and records the error, as a file that does not parse does.
+// into final ids in r. A provisional id that is left, or a node whose
+// Nested flag disagrees with its Scope, is a defect of the extractor: r
+// keeps no symbols and records the error as ErrInternal, which fails
+// the run.
 func FinalizeIDs(a *nodeid.Allocator, root *tree_sitter.Node, r *FileResult) {
 	FillScopes(root, r.Nodes)
-	if err := a.Finalize(r); err != nil {
+	err := a.Finalize(r)
+	if err == nil {
+		err = checkNesting(r.Nodes)
+	}
+	if err != nil {
 		r.Nodes, r.IntraEdges, r.Unresolved = nil, nil, nil
 		r.InterfaceMethods, r.MethodArity = nil, nil
-		r.Err = err
+		r.Err = fmt.Errorf("%w: %w", ErrInternal, err)
 	}
+}
+
+// checkNesting reports the first node whose Nested flag and Scope
+// disagree. FillScopes sets both together: a nested declaration has the
+// scope it is visible in, and sameFile drops a nested candidate whose
+// scope does not hold the reference.
+func checkNesting(nodes []ExtractedNode) error {
+	for _, en := range nodes {
+		if en.Node != nil && en.Node.Nested != (en.Scope != Range{}) {
+			return fmt.Errorf("%s %q: nested is %v but the scope is %+v", en.Node.Kind, en.Node.QualifiedName, en.Node.Nested, en.Scope)
+		}
+	}
+	return nil
 }

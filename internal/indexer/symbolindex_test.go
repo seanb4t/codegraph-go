@@ -49,12 +49,12 @@ func TestSymbolIndex_WR01_CollisionDeterministicOrderIndependent(t *testing.T) {
 	} {
 		idx := newSymbolIndex(order)
 
-		gotID, ok := idx.resolveUnqualified("example.com/pkg", "Foo")
+		gotID, ok := winnerOf(idx, "example.com/pkg", "Foo")
 		if !ok {
-			t.Fatalf("resolveUnqualified(Foo) not found for order %v", order)
+			t.Fatalf("winnerOf(Foo) not found for order %v", order)
 		}
 		if gotID != wantID {
-			t.Errorf("resolveUnqualified(Foo) = %s, want lowest-Id winner %s (order %v)", gotID, wantID, order)
+			t.Errorf("winnerOf(Foo) = %s, want lowest-Id winner %s (order %v)", gotID, wantID, order)
 		}
 		if idx.Collisions != 1 {
 			t.Errorf("Collisions = %d, want 1 (order %v)", idx.Collisions, order)
@@ -81,10 +81,10 @@ func TestSymbolIndex_NoCollisionForDistinctNames(t *testing.T) {
 	if idx.Collisions != 0 {
 		t.Errorf("Collisions = %d, want 0 for distinct names", idx.Collisions)
 	}
-	if _, ok := idx.resolveUnqualified("example.com/pkg", "Foo"); !ok {
+	if _, ok := winnerOf(idx, "example.com/pkg", "Foo"); !ok {
 		t.Error("expected Foo to resolve")
 	}
-	if _, ok := idx.resolveUnqualified("example.com/pkg", "Bar"); !ok {
+	if _, ok := winnerOf(idx, "example.com/pkg", "Bar"); !ok {
 		t.Error("expected Bar to resolve")
 	}
 }
@@ -140,7 +140,7 @@ func TestSymbolPickIgnoresInsertionOrder(t *testing.T) {
 		for _, n := range order {
 			idx.add("example.com/pick", n)
 		}
-		if got, _ := idx.resolveUnqualified("example.com/pick", name); got != b.Id {
+		if got, _ := winnerOf(idx, "example.com/pick", name); got != b.Id {
 			t.Errorf("insertion order %s %s %s: got %s, want B", label[order[0].Id], label[order[1].Id], label[order[2].Id], label[got])
 		}
 	}
@@ -180,4 +180,11 @@ func TestSymbolPickIgnoresInsertionOrder(t *testing.T) {
 		t.Fatalf("Sync reparsed %d files, want only c.go", stats.FilesReparsed)
 	}
 	requireCallTarget("sync")
+}
+
+// winnerOf returns the id that name resolves to in module, as the index
+// chose it from its candidates.
+func winnerOf(idx *symbolIndex, module, name string) (string, bool) {
+	id, ok := idx.byModuleKeyAndName[module][name]
+	return id, ok
 }

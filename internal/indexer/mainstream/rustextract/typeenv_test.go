@@ -57,7 +57,7 @@ impl App {
 		"close@8":   {"close", "", "App", nil},
 		"add@10":    {"add", "", "Builder", []string{"bool"}},
 		"assist@12": {"assist", "", "helper", nil},
-		"add@14":    {"add", "", goextract.DeferredTypePrefix + "13:20", []string{"str"}},
+		"add@14":    {"add", "", goextract.DeferredTypePrefix + "13:31", []string{"str"}},
 		"call@15":   {"call", "", "unknown", nil},
 		"make@16":   {"make", "", "Factory", []string{"str"}},
 		"assist@17": {"assist", "", "helper", nil},

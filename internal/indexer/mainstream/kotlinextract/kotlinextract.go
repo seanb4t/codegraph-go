@@ -377,8 +377,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	case "identifier":
 		args := ex.callArgs(ex.env, call)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: callee.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			FromID: fromID, Name: callee.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	case "navigation_expression":
 		if callee.NamedChildCount() < 2 {
@@ -393,8 +393,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		pkgAlias, receiverType := ex.receiver(ex.env, receiver)
 		args := ex.callArgs(ex.env, call)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ReceiverType: receiverType, ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ReceiverType: receiverType, ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 	}
 }

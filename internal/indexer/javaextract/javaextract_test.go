@@ -282,7 +282,7 @@ public class Widget {
 
 // TestExtract_SamePackageQualifiedCall proves an uppercase-leading
 // identifier receiver that is NOT a real import resolves as a same-package
-// candidate (empty PkgAlias, routes through resolveUnqualified) rather than
+// candidate (empty PkgAlias, resolved in the caller's own module) rather than
 // a doomed selector lookup — the Java-specific counterpart to Go's WR-02
 // fix, since Java allows `ClassName.method()` for a same-package class with
 // no import statement at all.

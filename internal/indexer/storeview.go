@@ -17,9 +17,10 @@ type storeView struct {
 	// the key overlay would give it: the module its file declares
 	// (File.declared_module_key) when it declares one, and otherwise the
 	// file's ImportPath in discovered, which its language's
-	// LanguageSpec.ModuleKey computed on this run. File and package nodes
-	// are left out, as newSymbolIndex leaves them out, and collisions
-	// route through the same pickSymbol tie-break (WR-01).
+	// LanguageSpec.ModuleKey computed on this run. It holds the nodes
+	// that reachable admits, as overlay does, so a nested declaration, an
+	// unexported TypeScript declaration and an overload set stay out, and
+	// collisions route through the same pickSymbol tie-break (WR-01).
 	symbols *symbolIndex
 
 	kinds, names     map[string]string
@@ -119,7 +120,12 @@ func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, ex
 		return nil, err
 	}
 	for _, n := range v.nodes {
-		if n.Kind != goextract.KindFile && reachable(n, fileExports[n.FilePath]) {
+		// A stored overload set is not a candidate: the resolver declares
+		// sets again from their members, as a fresh index does.
+		if n.Kind == goextract.KindFile || n.Kind == goextract.KindOverloadSet {
+			continue
+		}
+		if reachable(n, fileExports[n.FilePath]) {
 			v.symbols.add(v.moduleOf[n.FilePath], n)
 		}
 	}

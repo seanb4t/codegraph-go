@@ -186,7 +186,7 @@ func requireScopedResolution(t *testing.T, storeDir string) {
 }
 
 // TestNodeCountMatchesStoreAfterSyncs edits and syncs a file with repeated
-// declarations ten times and checks the invariants after each sync (#188).
+// declarations ten times and checks the invariants after each sync.
 func TestNodeCountMatchesStoreAfterSyncs(t *testing.T) {
 	root := copyFixture(t, repeatfixtureRoot)
 	storeDir := t.TempDir()
@@ -402,5 +402,37 @@ func TestSyncReresolvesWhenAnOverloadIsAdded(t *testing.T) {
 	}
 	g := readGraph(t, storeDir)
 	g.requireOnlyCallNamed(t, g.node(t, "c.kt", goextract.KindFunction, "run", ""), g.node(t, "b.kt", goextract.KindFunction, "add", ""))
+	requireSyncEqualsRun(t, root, storeDir)
+}
+
+// TestSyncReresolvesWhenAnOverloadIsRemoved is the removal direction of
+// TestSyncReresolvesWhenAnOverloadIsAdded: deleting the overload a call
+// resolved to dissolves the set, and the call moves to the overload that
+// is left.
+func TestSyncReresolvesWhenAnOverloadIsRemoved(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"a.kt": "package fixture\n\nfun add(o: Any) {}\n",
+		"b.kt": "package fixture\n\nfun add(s: String) {}\n",
+		"c.kt": "package fixture\n\nfun run(s: String) {\n    add(s)\n}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	g := readGraph(t, storeDir)
+	g.requireOnlyCallNamed(t, g.node(t, "c.kt", goextract.KindFunction, "run", ""), g.node(t, "b.kt", goextract.KindFunction, "add", ""))
+	if err := os.Remove(filepath.Join(root, "b.kt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	g = readGraph(t, storeDir)
+	g.requireOnlyCallNamed(t, g.node(t, "c.kt", goextract.KindFunction, "run", ""), g.node(t, "a.kt", goextract.KindFunction, "add", ""))
+	for _, n := range g.nodes {
+		if n.Kind == goextract.KindOverloadSet {
+			t.Errorf("overload set %s survived the removal of its second member", n.QualifiedName)
+		}
+	}
 	requireSyncEqualsRun(t, root, storeDir)
 }

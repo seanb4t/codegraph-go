@@ -203,7 +203,6 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, call *tree_sitter.Node) go
 		if a.Kind() != "value_argument" {
 			continue
 		}
-		ca.Count++
 		label, typ := "", ""
 		switch k := a.NamedChildCount(); {
 		case k == 0:

@@ -89,8 +89,6 @@ message Node {
   reserved 50 to 59; // future: embedding vector, community/cluster assignment
 }
 
-// Edge is a directed relationship between two Node ids (calls, imports,
-// implements, etc.).
 // Param is one parameter of a function or method, as the source writes
 // it. type is the type text as written, or "" when the language or the
 // author wrote none. A parameter with a default has_default; an optional
@@ -104,6 +102,8 @@ message Param {
   bool variadic = 5;
 }
 
+// Edge is a directed relationship between two Node ids (calls, imports,
+// implements, etc.).
 message Edge {
   string source = 1;
   string target = 2;
@@ -131,12 +131,13 @@ message Edge {
   map<string, string> metadata = 7;
 
   // The call-site data of a calls edge, from which the resolver picked the
-  // target among the overloads of a name (index-invariants, D13):
-  // receiver_type is the receiver's static type when the extractor knew
-  // it, arg_count the number of arguments, has_spread whether an argument
-  // is spread, arg_types one entry per argument with "" for an unknown
-  // type, and arg_labels the Swift argument labels. Other edge kinds leave
-  // them empty.
+  // target among the overloads of a name (design D13): receiver_type is
+  // the receiver's static type when the extractor knew it, arg_count the
+  // number of arguments, has_spread whether an argument is spread,
+  // arg_types one entry per argument with "" for an unknown type, and
+  // arg_labels the argument labels or keyword-argument names, one per
+  // argument with "" for an unlabeled one, empty when no argument is
+  // labeled. Other edge kinds leave them empty.
   string receiver_type = 8;
   int32 arg_count = 9;
   bool has_spread = 10;

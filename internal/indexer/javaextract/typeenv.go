@@ -159,7 +159,6 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 	}
 	for i := uint(0); i < args.NamedChildCount(); i++ {
 		a := args.NamedChild(i)
-		ca.Count++
 		ca.Types = append(ca.Types, ex.exprType(env, a))
 	}
 	return ca

@@ -177,7 +177,6 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, call *tree_sitter.Node) go
 		if a.Kind() != "value_argument" {
 			continue
 		}
-		ca.Count++
 		label := ""
 		if l := a.ChildByFieldName("name"); l != nil {
 			label = l.Utf8Text(ex.src)

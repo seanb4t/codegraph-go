@@ -68,7 +68,7 @@ public class App
 		"Call@20":   {"Call", "", "unknown", nil},
 		"Write@21":  {"Write", "", "ILogger", []string{"string"}},
 		"Make@22":   {"Make", "", "Factory", nil},
-		"Run@23":    {"Run", "", goextract.DeferredTypePrefix + "22:16", nil},
+		"Run@23":    {"Run", "", goextract.DeferredTypePrefix + "22:30", nil},
 		"Assist@24": {"Assist", "", "helper", nil},
 	}
 	for key, w := range want {

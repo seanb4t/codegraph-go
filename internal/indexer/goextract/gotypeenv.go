@@ -180,7 +180,6 @@ func (ex *extractor) callArgs(env *TypeEnv, args *tree_sitter.Node) CallArgs {
 		}
 		if c.Kind() == "variadic_argument" {
 			ca.Spread = true
-			ca.Count++
 			typ := ""
 			if c.NamedChildCount() > 0 {
 				typ = ex.exprType(env, c.NamedChild(0))
@@ -188,7 +187,6 @@ func (ex *extractor) callArgs(env *TypeEnv, args *tree_sitter.Node) CallArgs {
 			ca.Types = append(ca.Types, typ)
 			continue
 		}
-		ca.Count++
 		ca.Types = append(ca.Types, ex.exprType(env, c))
 	}
 	return ca

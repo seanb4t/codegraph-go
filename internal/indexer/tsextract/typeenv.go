@@ -164,11 +164,9 @@ func (ex *extractor) callArgs(env *goextract.TypeEnv, args *tree_sitter.Node) go
 		a := args.NamedChild(i)
 		if a.Kind() == "spread_element" {
 			ca.Spread = true
-			ca.Count++
 			ca.Types = append(ca.Types, "")
 			continue
 		}
-		ca.Count++
 		ca.Types = append(ca.Types, ex.exprType(env, a))
 	}
 	return ca

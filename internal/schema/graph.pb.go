@@ -326,8 +326,6 @@ func (x *Node) GetNested() bool {
 	return false
 }
 
-// Edge is a directed relationship between two Node ids (calls, imports,
-// implements, etc.).
 // Param is one parameter of a function or method, as the source writes
 // it. type is the type text as written, or "" when the language or the
 // author wrote none. A parameter with a default has_default; an optional
@@ -409,6 +407,8 @@ func (x *Param) GetVariadic() bool {
 	return false
 }
 
+// Edge is a directed relationship between two Node ids (calls, imports,
+// implements, etc.).
 type Edge struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Source string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
@@ -433,12 +433,13 @@ type Edge struct {
 	// field (D-03).
 	Metadata map[string]string `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The call-site data of a calls edge, from which the resolver picked the
-	// target among the overloads of a name (index-invariants, D13):
-	// receiver_type is the receiver's static type when the extractor knew
-	// it, arg_count the number of arguments, has_spread whether an argument
-	// is spread, arg_types one entry per argument with "" for an unknown
-	// type, and arg_labels the Swift argument labels. Other edge kinds leave
-	// them empty.
+	// target among the overloads of a name (design D13): receiver_type is
+	// the receiver's static type when the extractor knew it, arg_count the
+	// number of arguments, has_spread whether an argument is spread,
+	// arg_types one entry per argument with "" for an unknown type, and
+	// arg_labels the argument labels or keyword-argument names, one per
+	// argument with "" for an unlabeled one, empty when no argument is
+	// labeled. Other edge kinds leave them empty.
 	ReceiverType  string   `protobuf:"bytes,8,opt,name=receiver_type,json=receiverType,proto3" json:"receiver_type,omitempty"`
 	ArgCount      int32    `protobuf:"varint,9,opt,name=arg_count,json=argCount,proto3" json:"arg_count,omitempty"`
 	HasSpread     bool     `protobuf:"varint,10,opt,name=has_spread,json=hasSpread,proto3" json:"has_spread,omitempty"`

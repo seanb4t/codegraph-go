@@ -9,8 +9,7 @@ import (
 // TestMain lowers the rapid check count of this package's property tests
 // to twenty on a plain run, since each case of TestSyncEqualsFreshIndex
 // runs real syncs on disk and the default of one hundred costs about
-// ninety seconds on every push (design D7 of the index-invariants
-// change). A -rapid.checks flag on the command line wins: task
+// ninety seconds on every push (design D7). A -rapid.checks flag on the command line wins: task
 // test:properties and the weekly fuzz workflow pass the deep count.
 func TestMain(m *testing.M) {
 	flag.Parse()

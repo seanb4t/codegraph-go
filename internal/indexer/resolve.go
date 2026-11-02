@@ -122,9 +122,6 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		st := &fileState{r: r}
 		states = append(states, st)
 		for _, en := range r.Nodes {
-			if arity, ok := r.MethodArity[en.Node.Id]; ok {
-				en.Node.Arity = arity
-			}
 			en.Node.InterfaceMethods = schemaMethodSpecs(r.InterfaceMethods[en.Node.Id])
 			nodes = append(nodes, en.Node)
 		}
@@ -339,12 +336,24 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 			resolveOne(st, ref, false)
 		}
 	}
+	// A call that ends earlier never waits on one that ends later: the
+	// inner link of a chain, or the call that initializes a local, ends
+	// before the call that reads its type.
+	sort.SliceStable(deferredCalls, func(i, j int) bool {
+		a, b := deferredCalls[i], deferredCalls[j]
+		if a.st.r.RelPath != b.st.r.RelPath {
+			return a.st.r.RelPath < b.st.r.RelPath
+		}
+		if a.ref.EndLine != b.ref.EndLine {
+			return a.ref.EndLine < b.ref.EndLine
+		}
+		return a.ref.EndCol < b.ref.EndCol
+	})
 	for _, d := range deferredCalls {
 		resolveOne(d.st, d.ref, true)
 	}
 
 	nodes = append(nodes, rs.setNodes()...)
-	edges = rs.rewireSetEdges(edges)
 
 	for _, st := range states {
 		r := st.r
@@ -377,9 +386,20 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 
 	edges = append(edges, synthesizeGoImplements(interfaceMethods, methodArity, withViewEdges(edges), nodeKindByID, nodeNameByID, nodeStartLineByID)...)
 
-	edges = append(edges, synthesizeOverrides(withViewEdges(edges), nodeKindByID, nodeNameByID, methodArity, nodeStartLineByID)...)
+	methodKey := make(map[string]string, len(nodeByID))
+	for id, n := range nodeByID {
+		if k := goextract.SignatureKeyOfNode(n); k != "" {
+			methodKey[id] = k
+		}
+	}
+	edges = append(edges, synthesizeOverrides(withViewEdges(edges), nodeKindByID, nodeNameByID, methodArity, methodKey, nodeStartLineByID)...)
 
 	edges = append(edges, retryConformanceCalls(pending, withViewEdges(edges), nodeNameByID, &unresolvedCount)...)
+
+	// The overrides, implements and conformance synthesis above read a
+	// contains edge as type to member in one hop, so the set edges are
+	// made only now, after them.
+	edges = rs.rewireSetEdges(edges)
 
 	for _, f := range files {
 		f.UnresolvedNames = sortedUniqueNames(f.UnresolvedNames)
@@ -552,8 +572,8 @@ func walkSupertypes(typeID string, typeSupertypes map[string][]string, visit fun
 }
 
 // walkSupertypesForMethod looks for methodName in typeMethods among
-// typeID's own supertypes (never typeID itself — pass 1 already
-// attempted the calling type's own method set via resolveUnqualified),
+// typeID's own supertypes (never typeID itself: the resolver already
+// tried the calling type's own method set),
 // returning the first match's node id. See walkSupertypes for the
 // underlying BFS.
 func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]map[string]string, typeSupertypes map[string][]string) (string, bool) {
@@ -589,7 +609,12 @@ func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]m
 // them as MethodSpecs for structural implements matching), so
 // typeMethods[interfaceID] is always empty and an implements-only
 // supertype chain never yields an override match.
-func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, methodArity map[string]int32, nodeStartLineByID map[string]int32) []*schema.Edge {
+//
+// Overloads pair by signature key (parameter types) first; a supertype
+// method with the same name and arity pairs only when it is the one
+// such method, so two same-arity overloads never cross-link. methodKey
+// holds the signature key of each function or method node.
+func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, methodArity map[string]int32, methodKey map[string]string, nodeStartLineByID map[string]int32) []*schema.Edge {
 	// typeMethods is typeID -> methodName -> ALL methodIDs sharing that
 	// name (CR-01 fix): a bare map[string]string here would collapse
 	// same-name/different-arity overloads — legal and common in Java/C#
@@ -646,17 +671,23 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 		for _, name := range names {
 			for _, methodID := range typeMethods[typeID][name] {
 				arity := methodArity[methodID]
+				key := methodKey[methodID]
 
 				var superMethodID string
 				walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
-					// CR-01: check every same-named candidate on the
-					// supertype side against arity, not just a single
-					// collapsed methodID.
+					var byArity []string
 					for _, candidateID := range typeMethods[cur][name] {
-						if methodArity[candidateID] == arity {
+						if key != "" && methodKey[candidateID] == key {
 							superMethodID = candidateID
 							return true
 						}
+						if methodArity[candidateID] == arity {
+							byArity = append(byArity, candidateID)
+						}
+					}
+					if len(byArity) == 1 {
+						superMethodID = byArity[0]
+						return true
 					}
 					return false
 				})
@@ -838,24 +869,10 @@ func collapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*sche
 	return collapsed
 }
 
-// writeGraph collapses edges deterministically and stages the whole
-// resolved graph — package pseudo-nodes and symbol nodes (sorted by id),
-// then files (sorted by path), then collapsed edges (sorted by
-// source/kind/target), then excluded-file records (sorted by path,
-// Phase 10 D-07) — through exactly one GraphStore.Writer, committing once
-// (D-04a). Any staging error releases the batch via Close() (never a
-// partial Commit) and returns the error.
-//
-// coverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is a lower
-// bound on the generation this commit stamps — see
-// Options.CoverageGenerationFloor's doc comment (pipeline.go) for the
-// full rationale. Zero is a no-op: the store's own prior-generation read
-// below is used unchanged.
 // stampCapabilities sets every Meta flag whose absence makes
 // needsFileIndexBackfill rebuild the graph. Every writer of Meta calls it,
 // because each one builds a fresh Meta: a flag that only one writer set
-// would drop on the next incremental sync (design D5 of the
-// index-invariants change). A new flag goes here and into
+// would drop on the next incremental sync (design D5). A new flag goes here and into
 // needsFileIndexBackfill.
 func stampCapabilities(meta *schema.Meta) {
 	// Phase 4 D-02b: every PutNode/PutEdge a Writer stages populates the
@@ -879,7 +896,7 @@ func stampCapabilities(meta *schema.Meta) {
 
 // distinctNodeIDs counts the distinct ids in nodes, which are sorted by
 // id. PutNode writes an id once, so this is the number of stored nodes
-// even when two extracted nodes share an id (#188).
+// even when two extracted nodes share an id.
 func distinctNodeIDs(nodes []*schema.Node) int {
 	n := 0
 	for i, node := range nodes {
@@ -890,6 +907,19 @@ func distinctNodeIDs(nodes []*schema.Node) int {
 	return n
 }
 
+// writeGraph collapses edges deterministically and stages the whole
+// resolved graph — package pseudo-nodes and symbol nodes (sorted by id),
+// then files (sorted by path), then collapsed edges (sorted by
+// source/kind/target), then excluded-file records (sorted by path,
+// Phase 10 D-07) — through exactly one GraphStore.Writer, committing once
+// (D-04a). Any staging error releases the batch via Close() (never a
+// partial Commit) and returns the error.
+//
+// coverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is a lower
+// bound on the generation this commit stamps — see
+// Options.CoverageGenerationFloor's doc comment (pipeline.go) for the
+// full rationale. Zero is a no-op: the store's own prior-generation read
+// below is used unchanged.
 func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) error {
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {

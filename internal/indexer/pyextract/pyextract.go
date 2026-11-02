@@ -83,10 +83,10 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	}
 
 	// Imports are collected first so calls and base-class references below
-	// can tell an imported/aliased simple name (routes through
-	// resolveSelector via the Imports map) apart from a same-module one
-	// (routes through resolveUnqualified) — mirrors javaextract/
-	// csharpextract's ordering discipline.
+	// can tell an imported/aliased simple name (an alias in the Imports
+	// map) apart from a same-module one (an empty PkgAlias, resolved in
+	// the caller's own module) — mirrors javaextract/csharpextract's
+	// ordering discipline.
 	ex.collectImports(root)
 	// Classes are collected before methods (05-PATTERNS.md's ordering
 	// discipline) so a method's enclosing-class lookup (typeNodesByStart)
@@ -625,8 +625,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		name := fn.Utf8Text(ex.src)
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 		ex.recordInstantiateCandidate(fromID, name, "", line, col)
 	case "attribute":
@@ -640,8 +640,8 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 		name := field.Utf8Text(ex.src)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls,
-			Line: line, Col: col, ReceiverType: receiverType,
-			ArgCount: args.Count, HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
+			Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call), ReceiverType: receiverType,
+			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
 		ex.recordInstantiateCandidate(fromID, name, pkgAlias, line, col)
 	}

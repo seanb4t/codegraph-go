@@ -12,7 +12,7 @@ import (
 )
 
 // resolver resolves the calls of pass 2 against candidate sets (design D3
-// of the index-invariants change): the overloads of a name under a
+// ): the overloads of a name under a
 // receiver's type, the functions of a module, or the members of the
 // calling method's own type. It selects as the language does, by arity
 // and then by argument type, and it routes an undecidable call to the
@@ -41,8 +41,10 @@ type resolver struct {
 	storedSets map[string]storedSet
 
 	// typeNames are the names of the type nodes the graph holds, for the
-	// known-type rule of the type filter.
-	typeNames map[string]bool
+	// known-type rule of the type filter, and typesByName the ids of the
+	// type nodes under each name, for the subtype walk.
+	typeNames   map[string]bool
+	typesByName map[string][]string
 
 	// moduleOfFile maps each file to its module key. A deferred type is
 	// written in the callee's file, so it resolves in that module first.
@@ -53,8 +55,9 @@ type resolver struct {
 	fileNodes map[string]map[string][]goextract.ExtractedNode
 }
 
-// storedSet is an overload set as the store holds it: its owner and its
-// members.
+// storedSet is an overload set as the store holds it: the ids of its
+// owner and its members. It has no nodes, unlike overloadSet, because a
+// sync reads it from the files it does not reparse.
 type storedSet struct {
 	owner   string
 	members []string
@@ -68,7 +71,12 @@ type overloadSet struct {
 	members []symbolCandidate
 }
 
-// callOutcome is what resolveCall decides for one call.
+// callOutcome is what resolveCall decides for one call. At most one of
+// target, set, deferred and waitName is set. The zero outcome is a call
+// that does not resolve and names nothing to wait on: a receiver whose
+// deferred type did not fill, or a synthetic alias. Such a call is
+// counted as unresolved and leaves no trace in File.UnresolvedNames, so
+// no later sync revisits it on its own.
 type callOutcome struct {
 	// target is the one candidate the call reaches, or "".
 	target string
@@ -83,6 +91,16 @@ type callOutcome struct {
 	waitModule, waitName string
 }
 
+// waitOn is the outcome of a call that does not resolve and that the
+// file waits on: a later sync that declares name in module reparses the
+// file.
+func waitOn(module, name string) callOutcome {
+	if name == "" {
+		return callOutcome{}
+	}
+	return callOutcome{waitModule: module, waitName: name}
+}
+
 func newResolver(idx *symbolIndex, nodeKindByID map[string]string, nodeByID map[string]*schema.Node, storedSets map[string]storedSet, moduleOfFile map[string]string) *resolver {
 	rs := &resolver{
 		idx:            idx,
@@ -94,13 +112,18 @@ func newResolver(idx *symbolIndex, nodeKindByID map[string]string, nodeByID map[
 		sets:           make(map[string]*overloadSet),
 		storedSets:     storedSets,
 		typeNames:      make(map[string]bool),
+		typesByName:    make(map[string][]string),
 		moduleOfFile:   moduleOfFile,
 		fileNodes:      make(map[string]map[string][]goextract.ExtractedNode),
 	}
-	for _, n := range nodeByID {
+	for id, n := range nodeByID {
 		if isTypeKind(n.Kind) {
 			rs.typeNames[n.Name] = true
+			rs.typesByName[n.Name] = append(rs.typesByName[n.Name], id)
 		}
+	}
+	for _, ids := range rs.typesByName {
+		sort.Strings(ids)
 	}
 	return rs
 }
@@ -147,10 +170,7 @@ func (rs *resolver) knownType(lang, typ string) bool {
 // subtypeOf reports whether a type named arg extends, implements or
 // embeds a type named param, through the graph's supertype edges.
 func (rs *resolver) subtypeOf(arg, param string) bool {
-	for id, n := range rs.nodeByID {
-		if n.Name != arg || !isTypeKind(n.Kind) {
-			continue
-		}
+	for _, id := range rs.typesByName[arg] {
 		found := walkSupertypes(id, rs.typeSupertypes, func(sup string) bool {
 			s := rs.nodeByID[sup]
 			return s != nil && s.Name == param
@@ -162,14 +182,20 @@ func (rs *resolver) subtypeOf(arg, param string) bool {
 	return false
 }
 
-// recordTarget remembers where a call resolved, for deferred types.
+// recordTarget remembers where a call resolved, for deferred types. The
+// key is the call's end position, which is unique per link of a chain.
 func (rs *resolver) recordTarget(file string, ref goextract.UnresolvedRef, target string) {
 	byPos := rs.callTargets[file]
 	if byPos == nil {
 		byPos = make(map[string]string)
 		rs.callTargets[file] = byPos
 	}
-	byPos[fmt.Sprintf("%d:%d", ref.Line, ref.Col)] = target
+	if ref.EndLine == 0 {
+		// A reference with no end, such as a route handler, is never
+		// the operand of another call.
+		return
+	}
+	byPos[fmt.Sprintf("%d:%d", ref.EndLine, ref.EndCol)] = target
 }
 
 // isDeferred reports whether typ is a deferred type (D17).
@@ -192,10 +218,12 @@ func hasDeferred(ref goextract.UnresolvedRef) bool {
 }
 
 // fillDeferred replaces a deferred type with the type of the call it
-// names: the return type of a function or method, or the type itself for
-// a constructor-like call. It also returns the module the type is
-// written in, the callee's, where the type resolves first. It returns
-// false when that call did not resolve to one declaration.
+// names: the return type of a function or method, the type itself for a
+// constructor-like call, or the return type that every overload of a set
+// shares. It also returns the module the type is written in, the
+// callee's, where the type resolves first. It returns false when the
+// call did not resolve, when the declaration has no return type, or when
+// the overloads of a set return different types.
 func (rs *resolver) fillDeferred(file, typ string) (filled, module string, ok bool) {
 	if !isDeferred(typ) {
 		return typ, "", true
@@ -251,7 +279,8 @@ func baseTypeName(typ string) string {
 
 // findType finds the type node that typ names from file r, in the
 // language's lookup order (D17, D18): the module the type was written
-// in when it came from a deferred fill, the module an alias names, the
+// in when it came from a deferred fill, the same-file declaration whose
+// scope holds the reference (D15), the module an alias names, the
 // module a simple-name import names, the caller's own module, and the
 // module a qualifier names. It returns the module the type belongs to,
 // which is also the module to wait on when the type is missing.
@@ -381,14 +410,7 @@ func (rs *resolver) resolveRef(r goextract.FileResult, ref goextract.UnresolvedR
 		}
 	}
 	if len(kept) == 0 {
-		if typeOnly && len(cands) > 0 {
-			// No type of that name: fall back to any candidate, as
-			// before, so a language whose types the extractor records
-			// under another kind keeps its edges.
-			kept = cands
-		} else {
-			return "", false
-		}
+		return "", false
 	}
 	if len(kept) == 1 {
 		return kept[0].id, true
@@ -437,7 +459,8 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		filled, module, ok := rs.fillDeferred(r.RelPath, recv)
 		if isDeferred(recv) && !ok {
 			// The call it depends on did not resolve to one declaration
-			// with a return type: the receiver is unknown.
+			// with a return type: the receiver is unknown, and there is
+			// no name to wait on.
 			return callOutcome{}
 		}
 		recv, recvWrittenIn = filled, module
@@ -466,7 +489,7 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 				return rs.choose(r, ref, rs.idx.candidatesIn(mod, ref.Name), argTypes, mod)
 			}
 		}
-		return callOutcome{waitModule: module, waitName: ref.Name}
+		return waitOn(module, ref.Name)
 	case ref.PkgAlias != "":
 		mod, ok := r.Imports[ref.PkgAlias]
 		if !ok {
@@ -498,22 +521,33 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 	}
 }
 
-// choose picks among cands as the language does: arity first, argument
-// types second (D3). One survivor resolves. Several survivors that are
-// overloads of one owner reach their set. Several survivors that are not
-// overloads, such as the copies of a redefinition, go to pickSymbol.
+// choose picks among cands as the language does: in a last-wins
+// language the last definition per file first (D16), then arity, labels
+// and argument types (D3). One survivor resolves. Several survivors that
+// are overloads of one owner reach their set. Several survivors that are
+// not overloads go to lastDefinition, and when that declines, to
+// pickSymbol.
 func (rs *resolver) choose(r goextract.FileResult, ref goextract.UnresolvedRef, cands []symbolCandidate, argTypes []string, module string) callOutcome {
 	if len(cands) == 0 {
-		return callOutcome{waitModule: module, waitName: ref.Name}
+		return waitOn(module, ref.Name)
 	}
 	callables := make([]symbolCandidate, 0, len(cands))
 	others := make([]symbolCandidate, 0, len(cands))
 	for _, c := range cands {
-		if c.kind == goextract.KindFunction || c.kind == goextract.KindMethod {
+		switch c.kind {
+		case goextract.KindFunction, goextract.KindMethod:
 			callables = append(callables, c)
-		} else {
+		case goextract.KindOverloadSet:
+			// A set is reached through its members, never as a candidate.
+		default:
 			others = append(others, c)
 		}
+	}
+	if len(callables) > 1 && lastWins(r.Language) {
+		// A redefinition replaces the earlier one at run time, whatever
+		// its parameters (D16): only the last copy in each file is a
+		// candidate, before any filter reads its arity.
+		callables = lastPerFile(callables)
 	}
 	if len(callables) > 1 {
 		callables = rs.filterCallables(r.Language, ref, callables, argTypes)
@@ -524,7 +558,7 @@ func (rs *resolver) choose(r goextract.FileResult, ref goextract.UnresolvedRef, 
 	remaining := append(callables, others...)
 	switch len(remaining) {
 	case 0:
-		return callOutcome{waitModule: module, waitName: ref.Name}
+		return waitOn(module, ref.Name)
 	case 1:
 		return callOutcome{target: remaining[0].id}
 	}
@@ -537,15 +571,47 @@ func (rs *resolver) choose(r goextract.FileResult, ref goextract.UnresolvedRef, 
 	return callOutcome{target: pickSymbol(remaining)}
 }
 
+// lastWins reports whether lang replaces an earlier definition of a name
+// with a later one at run time (design D16), so that a repeat is never
+// an overload.
+func lastWins(lang string) bool {
+	switch lang {
+	case "python", "ruby", "javascript":
+		return true
+	}
+	return false
+}
+
+// lastPerFile keeps, per file, the candidate that is last in source
+// order.
+func lastPerFile(cands []symbolCandidate) []symbolCandidate {
+	last := make(map[string]symbolCandidate)
+	var order []string
+	for _, c := range cands {
+		prev, seen := last[c.filePath]
+		if !seen {
+			order = append(order, c.filePath)
+			last[c.filePath] = c
+			continue
+		}
+		if c.node.StartLine > prev.node.StartLine || (c.node.StartLine == prev.node.StartLine && c.node.StartCol > prev.node.StartCol) {
+			last[c.filePath] = c
+		}
+	}
+	out := make([]symbolCandidate, 0, len(order))
+	for _, f := range order {
+		out = append(out, last[f])
+	}
+	return out
+}
+
 // lastDefinition applies the runtime rule of Python, Ruby and JavaScript
 // to redefinitions in one file (design D16): the last definition of a
 // name wins. It returns false for any other language, for candidates in
 // several files, and for candidates that are not copies of one
 // declaration.
 func lastDefinition(lang string, cands []symbolCandidate) (string, bool) {
-	switch lang {
-	case "python", "ruby", "javascript":
-	default:
+	if !lastWins(lang) {
 		return "", false
 	}
 	first := cands[0]
@@ -585,8 +651,9 @@ func (rs *resolver) filterCallables(lang string, ref goextract.UnresolvedRef, ca
 
 // arityFits reports whether argc arguments can call a function with
 // params: at least the required parameters, and at most all of them
-// unless one is variadic. A spread argument makes argc a lower bound on
-// the arguments it stands for, so the required count can still be met.
+// unless one is variadic. A spread argument stands for any number of
+// arguments, so with one the call fits when the other argc-1 arguments
+// fit in params.
 func arityFits(params []*schema.Param, argc int32, spread bool) bool {
 	required, variadic := 0, false
 	for _, p := range params {
@@ -611,8 +678,8 @@ func arityFits(params []*schema.Param, argc int32, spread bool) bool {
 
 // labelsFit checks keyword and labeled arguments. Swift labels are part
 // of the qualified name, move(to:by:), and a call's unlabeled argument
-// matches a `_` label. Python and Kotlin keyword arguments must name a
-// parameter.
+// matches a `_` label. In every other language a labeled argument must
+// name a parameter.
 func labelsFit(lang string, c symbolCandidate, labels []string) bool {
 	if lang == "swift" {
 		declared := swiftLabels(c.qualifiedName)
@@ -665,7 +732,7 @@ func swiftLabels(qualifiedName string) []string {
 // argument. Otherwise every candidate stays.
 func (rs *resolver) mostSpecific(lang string, cands []symbolCandidate) []symbolCandidate {
 	assignable := func(from, to string) bool {
-		from, to = goextract.TypeName(from), goextract.TypeName(to)
+		from, to = unqualified(goextract.TypeName(from)), unqualified(goextract.TypeName(to))
 		if from == to {
 			return true
 		}
@@ -708,7 +775,8 @@ func (rs *resolver) mostSpecific(lang string, cands []symbolCandidate) []symbolC
 // typesFit reports whether each known argument type is compatible with
 // the parameter at its position. Extra arguments compare with the
 // variadic parameter's element type. A foreign type on either side
-// passes.
+// passes, and so does a deferred argument type that did not fill: an
+// unknown type never rejects an overload (D3).
 func (rs *resolver) typesFit(lang string, params []*schema.Param, argTypes []string, spread bool) bool {
 	for i, arg := range argTypes {
 		if arg == "" || isDeferred(arg) {
@@ -730,7 +798,7 @@ func (rs *resolver) typesFit(lang string, params []*schema.Param, argTypes []str
 		if spread && i == len(argTypes)-1 {
 			continue
 		}
-		a, pt := goextract.TypeName(arg), goextract.TypeName(paramType)
+		a, pt := unqualified(goextract.TypeName(arg)), unqualified(goextract.TypeName(paramType))
 		if !rs.canJudge(lang, a, pt) {
 			continue
 		}
@@ -742,42 +810,89 @@ func (rs *resolver) typesFit(lang string, params []*schema.Param, argTypes []str
 	return true
 }
 
+// unqualified drops the package or namespace prefix of a type name and
+// keeps its type arguments: java.util.List<String> is List<String>, and
+// loggers.Logger is Logger. A parameter type is written with the
+// qualifier its file uses, while a filled deferred type is the bare name
+// of a declaration, so the two compare without it.
+func unqualified(t string) string {
+	base, rest := t, ""
+	if i := strings.IndexAny(t, "<(["); i > 0 {
+		base, rest = t[:i], t[i:]
+	}
+	if i := strings.LastIndexAny(base, ".:"); i >= 0 {
+		base = base[i+1:]
+	}
+	return base + rest
+}
+
 // canJudge reports whether a mismatch between an argument type and a
-// parameter type can reject a candidate. Both must be known. One of them
-// must be final, or both must be types of the index, so that the
-// supertype chain the comparison needs is in view: an indexed type can
-// implement a library interface, and two library types can relate in
-// ways the index cannot see.
+// parameter type can reject a candidate. Both must be known, and the
+// parameter type must be one the comparison can see the whole of: a
+// final type, which nothing extends, or a type of the index whose
+// supertype chain is in view, compared with an argument that is final or
+// in the index too. A library interface or class as the parameter, such
+// as CharSequence or Number, never rejects: a String is a CharSequence
+// and an int boxes to a Number through relations the index cannot see.
 func (rs *resolver) canJudge(lang, arg, param string) bool {
 	if !rs.knownType(lang, arg) || !rs.knownType(lang, param) {
 		return false
 	}
 	ab, pb := baseTypeName(arg), baseTypeName(param)
-	if dispatch.Final(lang, ab) || dispatch.Final(lang, pb) {
+	if dispatch.Final(lang, pb) {
 		return true
 	}
-	return rs.typeNames[ab] && rs.typeNames[pb]
+	return rs.typeNames[pb] && (dispatch.Final(lang, ab) || rs.typeNames[ab])
 }
 
-// setFor returns the overload set of cands when they are the overloads of
-// one name under one owner: the same kind, the same owner, and distinct
-// signature keys. Copies with one key are redefinitions, not overloads,
-// and get no set, except in the languages where a repeated signature can
-// only be a conditional-compilation alternative (design D16): there the
-// copies form a set, and a call that fits both is ambiguous.
+// setFor returns the overload set that declareSets made for cands: the
+// set of their name under their shared owner. It makes no set itself,
+// so a call never creates a set that a fresh index would not hold. It
+// returns nil when the candidates have no shared owner, when one of
+// them is nested, or when no set exists for them.
 func (rs *resolver) setFor(cands []symbolCandidate) *overloadSet {
 	owner, ok := rs.groupOwner(cands)
 	if !ok {
 		return nil
 	}
+	for _, c := range cands {
+		if c.node.Nested {
+			return nil
+		}
+	}
+	set, ok := rs.sets[nodeid.NodeID(goextract.KindOverloadSet, cands[0].node.Name, owner)]
+	if !ok {
+		return nil
+	}
+	return set
+}
+
+// overloadGroup reports whether cands are the overloads of one name
+// under one owner (design D14): the same kind, the same owner, no nested
+// declaration, and distinct signature keys. Copies with one key are
+// redefinitions, not overloads, except in the languages where a
+// repeated signature can only be a conditional-compilation alternative
+// (D16), and a language that replaces a definition at run time has no
+// overloads at all.
+func (rs *resolver) overloadGroup(cands []symbolCandidate) (string, bool) {
+	if len(cands) < 2 || lastWins(cands[0].node.Language) {
+		return "", false
+	}
+	owner, ok := rs.groupOwner(cands)
+	if !ok {
+		return "", false
+	}
 	keys := make(map[string]bool, len(cands))
 	for _, c := range cands {
+		if c.node.Nested {
+			return "", false
+		}
 		if keys[c.key] && !duplicatesAreAlternatives(c.node.Language) {
-			return nil
+			return "", false
 		}
 		keys[c.key] = true
 	}
-	return rs.setOf(owner, cands[0].node.Name, cands)
+	return owner, true
 }
 
 // duplicatesAreAlternatives reports whether two declarations with one
@@ -816,8 +931,11 @@ func (rs *resolver) groupOwner(cands []symbolCandidate) (string, bool) {
 
 // setOf returns the overload set for name under ownerID, creating its
 // node from members on first use (D14). The node spans the members in
-// their file, and takes the partial-type sentinel location when they
-// span files.
+// their file. When they span files, the node has no location: its
+// FilePath is "", the sentinel a merged C# partial type uses too. The
+// sync relies on it: no file prune reaches such a set, so sync.go deletes
+// it when a resolve stops declaring it, and filesResolvingToChangedSets
+// treats it as owned by no file.
 func (rs *resolver) setOf(ownerID, name string, members []symbolCandidate) *overloadSet {
 	id := nodeid.NodeID(goextract.KindOverloadSet, name, ownerID)
 	if set, ok := rs.sets[id]; ok {
@@ -866,6 +984,11 @@ func (rs *resolver) setOf(ownerID, name string, members []symbolCandidate) *over
 // exists even when no call is ambiguous (D14): the members of each type,
 // and the functions of each file.
 func (rs *resolver) declareSets() {
+	declare := func(cands []symbolCandidate) {
+		if owner, ok := rs.overloadGroup(cands); ok {
+			rs.setOf(owner, cands[0].node.Name, cands)
+		}
+	}
 	for ownerID, byName := range rs.idx.membersByOwner {
 		for _, cands := range byName {
 			for _, c := range cands {
@@ -873,25 +996,32 @@ func (rs *resolver) declareSets() {
 					rs.ownerOf[c.id] = ownerID
 				}
 			}
-			if len(cands) >= 2 {
-				rs.setFor(cands)
-			}
+			declare(cands)
 		}
 	}
-	for _, byName := range rs.idx.candidates {
-		for _, cands := range byName {
-			byFile := make(map[string][]symbolCandidate)
-			for _, c := range cands {
-				if c.kind == goextract.KindFunction {
-					byFile[c.filePath] = append(byFile[c.filePath], c)
-				}
-			}
-			for _, group := range byFile {
-				if len(group) >= 2 {
-					rs.setFor(group)
-				}
-			}
+	// Free functions group by file and name over every node of the pass,
+	// reachable or not: a file's unexported functions overload too.
+	type fileName struct{ file, name string }
+	groups := make(map[fileName][]symbolCandidate)
+	for _, n := range rs.nodeByID {
+		if n.Kind != goextract.KindFunction || n.Nested {
+			continue
 		}
+		k := fileName{n.FilePath, n.Name}
+		groups[k] = append(groups[k], candidateOf(n))
+	}
+	keys := make([]fileName, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].file != keys[j].file {
+			return keys[i].file < keys[j].file
+		}
+		return keys[i].name < keys[j].name
+	})
+	for _, k := range keys {
+		declare(groups[k])
 	}
 }
 
@@ -917,7 +1047,9 @@ const SynthesizedBySet = "overload-set"
 // rewireSetEdges replaces, for every set, the contains edges from the
 // owner to each member with an edge from the owner to the set and one
 // from the set to each member. Other edges pass through. A stored set
-// that no longer exists gives each remaining member back to its owner.
+// that this pass does not declare is dissolved: each member that still
+// exists, under an owner that still exists, gets a contains edge from
+// that owner.
 func (rs *resolver) rewireSetEdges(edges []*schema.Edge) []*schema.Edge {
 	setOfMember := make(map[string]*overloadSet)
 	for _, set := range rs.sets {
@@ -956,6 +1088,9 @@ func (rs *resolver) rewireSetEdges(edges []*schema.Edge) []*schema.Edge {
 	sort.Strings(ids)
 	for _, id := range ids {
 		stored := rs.storedSets[id]
+		if _, exists := rs.nodeByID[stored.owner]; !exists {
+			continue
+		}
 		for _, m := range stored.members {
 			if _, exists := rs.nodeByID[m]; !exists {
 				continue

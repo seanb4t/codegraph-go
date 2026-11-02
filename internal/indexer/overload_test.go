@@ -187,8 +187,6 @@ func TestOverloadsResolveAsTheLanguageDoes(t *testing.T) {
 	})
 }
 
-// requireOnlyCallAmong fails unless src has a calls edge to dst. Other
-// targets are allowed: main calls two functions.
 // requireOnlyCallNamed fails unless, among src's calls to anything named
 // like dst, the only target is dst. The body's other calls do not count.
 func (g *overloadGraph) requireOnlyCallNamed(t *testing.T, src, dst *schema.Node) {
@@ -209,6 +207,8 @@ func (g *overloadGraph) requireOnlyCallNamed(t *testing.T, src, dst *schema.Node
 	}
 }
 
+// requireOnlyCallAmong fails unless src has a calls edge to dst. Other
+// targets are allowed: main calls two functions.
 func (g *overloadGraph) requireOnlyCallAmong(t *testing.T, src, dst *schema.Node) {
 	t.Helper()
 	if _, ok := g.callTargets(src)[dst.Id]; !ok {

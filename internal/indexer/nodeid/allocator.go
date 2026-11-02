@@ -27,8 +27,7 @@ type ParamKey struct {
 }
 
 // SignatureKey builds the signature key of a function or method from its
-// parameters, under one rule for every language (design D1 of the
-// index-invariants change): the ordered parameter types as written, `_`
+// parameters, under one rule for every language (design D1): the ordered parameter types as written, `_`
 // for an untyped parameter, a `?` suffix for an optional parameter or one
 // with a default, and a `...` suffix for a variadic one. Parameter names
 // are left out. A function without parameters keys as "()".
@@ -64,7 +63,9 @@ func DeclID(kind, qualifiedName, filePath, signatureKey string) string {
 // OrdinalID is the id of the n-th declaration (n of 2 or more) that
 // shares a kind, qualified name, file path and signature key with an
 // earlier one in the file: the segments of DeclID plus the decimal
-// ordinal.
+// ordinal. A signature key starts with "(", so an ordinal id with an
+// empty key never shares its segments with a DeclID whose key is the
+// ordinal's digits.
 func OrdinalID(kind, qualifiedName, filePath, signatureKey string, n int) string {
 	ord := strconv.Itoa(n)
 	if signatureKey == "" {
@@ -87,7 +88,7 @@ func hashSegments(kind string, segs ...string) string {
 }
 
 // Allocator gives each declaration occurrence of one file its own node id
-// (design D1 of the index-invariants change). An extractor declares every
+// (design D1). An extractor declares every
 // occurrence with Declare while it walks the file, in any order, and uses
 // the provisional id it gets back for the node and for every edge that
 // the declaration's body emits. Finalize then numbers the occurrences of
@@ -117,7 +118,7 @@ func (a *Allocator) Declare(kind, qualifiedName, signatureKey string, startByte 
 	prov := DeclID(kind, qualifiedName, a.filePath, signatureKey) + "@" + strconv.FormatUint(uint64(startByte), 10)
 	if !a.seen[prov] {
 		a.seen[prov] = true
-		a.decls = append(a.decls, declaration{kind, qualifiedName, signatureKey, startByte, prov})
+		a.decls = append(a.decls, declaration{kind: kind, qualifiedName: qualifiedName, signatureKey: signatureKey, startByte: startByte, provisional: prov})
 	}
 	return prov
 }

@@ -58,8 +58,8 @@
 //     (`recv.method()`) checks whether the receiver identifier is likely a
 //     same-module type name by PascalCase naming convention (Rust's own
 //     near-universal convention distinguishing a type from a local
-//     binding/parameter) — an empty PkgAlias routes it through
-//     resolveUnqualified; any other identifier or non-identifier receiver
+//     binding/parameter) — an empty PkgAlias resolves it in the caller's
+//     own module; any other identifier or non-identifier receiver
 //     routes through the WR-02 synthetic-non-matching-alias pattern so it
 //     deterministically ends up "unresolved" rather than risking a false
 //     same-module match. A scoped_identifier callee (`Type::method()` /

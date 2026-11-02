@@ -50,7 +50,7 @@ end
 	want := map[string]callRecord{
 		"log@4":     {"log", "", "Logger", []string{"", ""}, nil},
 		"add@6":     {"add", "", "Builder", []string{"String", "Integer", "Boolean"}, []string{"", "", "flag"}},
-		"assist@8":  {"assist", "", goextract.DeferredTypePrefix + "7:8", nil, nil},
+		"assist@8":  {"assist", "", goextract.DeferredTypePrefix + "7:16", nil, nil},
 		"call@9":    {"call", "", "unknown", nil, nil},
 		"make@10":   {"make", "", "Factory", []string{""}, nil},
 		"close@11":  {"close", "", "App", nil, nil},

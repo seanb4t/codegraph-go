@@ -62,13 +62,13 @@ class App:
 		"log@11":    {"log", "", "Logger", []string{"str", "int"}, nil},
 		"add@12":    {"add", "", "Sink", []string{"str"}, nil},
 		"add@14":    {"add", "", "Builder", []string{"int"}, nil},
-		"assist@16": {"assist", "", goextract.DeferredTypePrefix + "15:12", nil, nil},
-		"add@18":    {"add", "", goextract.DeferredTypePrefix + "17:16", []string{"float", "bool"}, []string{"", "flag"}},
+		"assist@16": {"assist", "", goextract.DeferredTypePrefix + "15:20", nil, nil},
+		"add@18":    {"add", "", goextract.DeferredTypePrefix + "17:22", []string{"float", "bool"}, []string{"", "flag"}},
 		"call@19":   {"call", "", "unknown", nil, nil},
 		"getcwd@20": {"getcwd", "os", "os", nil, nil},
 		"create@21": {"create", "Logger", "Logger", []string{"str"}, nil},
 		"make@22":   {"make", "", "Factory", nil, nil},
-		"run@23":    {"run", "", goextract.DeferredTypePrefix + "22:12", nil, nil},
+		"run@23":    {"run", "", goextract.DeferredTypePrefix + "22:26", nil, nil},
 		"assist@24": {"assist", "", "helper", []string{""}, nil},
 	}
 	for key, w := range want {

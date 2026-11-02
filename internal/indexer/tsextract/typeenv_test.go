@@ -70,7 +70,7 @@ class App {
 		"create@19": {"create", "Logger", "Logger", []string{"string"}, false},
 		"parse@20":  {"parse", "util", "util", []string{"string"}, false},
 		"open@21":   {"open", "util", "util", nil, false},
-		"close@22":  {"close", "", goextract.DeferredTypePrefix + "21:14", nil, false},
+		"close@22":  {"close", "", goextract.DeferredTypePrefix + "21:25", nil, false},
 		"join@23":   {"join", "util", "util", []string{""}, true},
 		"assist@24": {"assist", "", "helper", nil, false},
 	}

@@ -70,7 +70,7 @@ func (s *Server) Serve(name string, n int) {
 		"Call@22":  {"Call", "", "unknown", nil, false},
 		"Parse@23": {"Parse", "util", "util", []string{"string", "float64"}, false},
 		"Open@24":  {"Open", "util", "util", nil, false},
-		"Close@25": {"Close", "", DeferredTypePrefix + "24:6", nil, false},
+		"Close@25": {"Close", "", DeferredTypePrefix + "24:17", nil, false},
 		"Join@27":  {"Join", "util", "util", []string{"[]string"}, true},
 	}
 	for key, w := range want {

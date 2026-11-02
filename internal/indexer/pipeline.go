@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"time"
@@ -170,6 +171,9 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 	// writeGraph path every other edge already uses (D-06/D-07: no
 	// parallel commit). Wired into Run only, not Sync (incremental sync
 	// stays out of this plan's scope — see 05-12-SUMMARY.md).
+	if err := internalError(results); err != nil {
+		return Stats{Files: len(files), Duration: time.Since(start)}, err
+	}
 	routeNodes, routeEdges, err := detectRoutes(repoRoot, files, results)
 	if err != nil {
 		return Stats{Files: len(files), Duration: time.Since(start)}, err
@@ -209,6 +213,20 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 		Skipped:    skipped,
 		Duration:   time.Since(start),
 	}, nil
+}
+
+// internalError returns the first extraction failure that is a defect of
+// the indexer rather than of the source file, such as a provisional id
+// that Finalize could not rewrite. A file that does not parse is skipped
+// and counted; a file the indexer mishandles fails the run, so the
+// defect is seen.
+func internalError(results []goextract.FileResult) error {
+	for _, r := range results {
+		if r.Err != nil && errors.Is(r.Err, goextract.ErrInternal) {
+			return fmt.Errorf("extract %s: %w", r.RelPath, r.Err)
+		}
+	}
+	return nil
 }
 
 // readGraphCounts reads the just-committed Meta record's node/edge counts

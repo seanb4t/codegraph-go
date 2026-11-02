@@ -352,3 +352,295 @@ func TestLastDefinitionWinsAtModuleLevel(t *testing.T) {
 		})
 	}
 }
+
+// TestChainedCallsResolveEachLink checks that every link of a call chain
+// gets its own deferred type: a.b().c() starts each link at the same
+// position, and only the end of a call tells the links apart.
+func TestChainedCallsResolveEachLink(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"a/App.java": `package a;
+
+import z.Factory;
+
+public class App {
+    public void run(String s) {
+        Factory.make().build().add(s);
+    }
+}
+`,
+		"z/Builder.java": `package z;
+
+public class Builder {
+    public Builder add(int n) { return this; }
+
+    public Builder add(String s) { return this; }
+}
+`,
+		"z/Maker.java": `package z;
+
+public class Maker {
+    public Builder build() { return new Builder(); }
+}
+`,
+		"z/Factory.java": `package z;
+
+public class Factory {
+    public static Maker make() { return new Maker(); }
+}
+`,
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	g := readGraph(t, storeDir)
+	run := g.node(t, "a/App.java", goextract.KindMethod, "run", "")
+	g.requireOnlyCallNamed(t, run, g.node(t, "z/Builder.java", goextract.KindMethod, "add", "(String s)"))
+	g.requireOnlyCallNamed(t, run, g.node(t, "z/Maker.java", goextract.KindMethod, "build", ""))
+}
+
+// TestLibrarySupertypeNeverRejectsAnArgument checks canJudge: a parameter
+// typed as a library interface, such as CharSequence, keeps its
+// candidate for a String argument, because the relation between the two
+// lives outside the index. A final parameter type still rejects.
+func TestLibrarySupertypeNeverRejectsAnArgument(t *testing.T) {
+	param := func(name, typ string) *schema.Param { return &schema.Param{Name: name, Type: typ} }
+	owner := &schema.Node{Id: "struct:Sink", Kind: goextract.KindStruct, Name: "Sink", FilePath: "Sink.java", Language: "java"}
+	overloads := []*schema.Node{
+		{Id: "method:take:int", Kind: goextract.KindMethod, Name: "take", QualifiedName: "Sink.take", FilePath: "Sink.java", Language: "java",
+			Signature: "(int n)", Params: []*schema.Param{param("n", "int")}},
+		{Id: "method:take:CharSequence", Kind: goextract.KindMethod, Name: "take", QualifiedName: "Sink.take", FilePath: "Sink.java", Language: "java",
+			Signature: "(CharSequence cs)", Params: []*schema.Param{param("cs", "CharSequence")}},
+	}
+	file := goextract.FileResult{RelPath: "Use.java", ImportPath: "com.example", Language: "java"}
+	idx := newEmptySymbolIndex()
+	nodeByID := map[string]*schema.Node{owner.Id: owner}
+	kinds := map[string]string{owner.Id: owner.Kind}
+	idx.add(file.ImportPath, owner)
+	for _, n := range overloads {
+		idx.add(file.ImportPath, n)
+		idx.addMember(owner.Id, n)
+		nodeByID[n.Id] = n
+		kinds[n.Id] = n.Kind
+	}
+	rs := newResolver(idx, kinds, nodeByID, nil, nil)
+	rs.declareSets()
+	call := goextract.UnresolvedRef{
+		Kind: goextract.RefKindCalls, Name: "take", FromID: "method:use",
+		ReceiverType: "Sink", ArgCount: 1, ArgTypes: []string{"String"},
+	}
+	out := rs.resolveCall(file, call, false)
+	if out.target != "method:take:CharSequence" {
+		t.Errorf("take(String) resolved to %q (set %v), want method:take:CharSequence", out.target, out.set != nil)
+	}
+	for _, c := range []struct {
+		arg, param string
+		want       bool
+	}{
+		{"String", "CharSequence", false},
+		{"int", "Number", false},
+		{"String", "int", true},
+		{"Sink", "int", true},
+		{"Sink", "Sink", true},
+		{"Sink", "CharSequence", false},
+	} {
+		if got := rs.canJudge("java", c.arg, c.param); got != c.want {
+			t.Errorf("canJudge(%s -> %s) = %v, want %v", c.arg, c.param, got, c.want)
+		}
+	}
+}
+
+// TestRedefinitionWithAnotherArityWinsLast checks design D16 when the
+// redefinition changes the parameter count: the last definition wins
+// before any filter reads an arity, so a call that fits only the earlier
+// copy still reaches the last one, and no overload set exists.
+func TestRedefinitionWithAnotherArityWinsLast(t *testing.T) {
+	cases := []struct{ lang, file, src string }{
+		{"python", "m.py", "def f(a):\n    return 1\n\n\ndef f(a, b):\n    return 2\n\n\ndef g():\n    return f(1)\n"},
+		{"javascript", "m.js", "function f(a) {\n  return 1;\n}\n\nfunction f(a, b) {\n  return 2;\n}\n\nfunction g() {\n  return f(1);\n}\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.lang, func(t *testing.T) {
+			root := writeFixture(t, map[string]string{c.file: c.src})
+			storeDir := t.TempDir()
+			if _, err := Run(root, storeDir, Options{}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			g := readGraph(t, storeDir)
+			var last *schema.Node
+			for _, n := range g.nodes {
+				if n.Kind == goextract.KindOverloadSet {
+					t.Errorf("found overload set %s, want none in a last-wins language", n.QualifiedName)
+				}
+				if n.Name == "f" && n.Kind == goextract.KindFunction && (last == nil || n.StartLine > last.StartLine) {
+					last = n
+				}
+			}
+			if last == nil {
+				t.Fatal("no f node")
+			}
+			g.requireOnlyCall(t, g.node(t, c.file, goextract.KindFunction, "g", ""), last)
+		})
+	}
+}
+
+// TestLabeledCallsResolveByLabel checks labelsFit through resolution: a
+// Swift call picks the function whose labels it uses, and a Kotlin named
+// argument must name a parameter of the overload.
+func TestLabeledCallsResolveByLabel(t *testing.T) {
+	t.Run("swift", func(t *testing.T) {
+		root := writeFixture(t, map[string]string{
+			"app.swift": "func move(to point: Int) {}\nfunc move(by delta: Int) {}\nfunc run() {\n    move(by: 1)\n}\n",
+		})
+		storeDir := t.TempDir()
+		if _, err := Run(root, storeDir, Options{}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		g := readGraph(t, storeDir)
+		var want *schema.Node
+		for _, n := range g.nodes {
+			if n.QualifiedName == "move(by:)" {
+				want = n
+			}
+		}
+		if want == nil {
+			t.Fatal("no node for move(by:)")
+		}
+		g.requireOnlyCall(t, g.node(t, "app.swift", goextract.KindFunction, "run", ""), want)
+	})
+	t.Run("kotlin", func(t *testing.T) {
+		root := writeFixture(t, map[string]string{
+			"a.kt": "package fixture\n\nfun f(a: Int) {}\n\nfun f(b: Int, c: Int = 0) {}\n\nfun run() {\n    f(b = 1)\n}\n",
+		})
+		storeDir := t.TempDir()
+		if _, err := Run(root, storeDir, Options{}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		g := readGraph(t, storeDir)
+		var want *schema.Node
+		for _, n := range g.nodes {
+			if n.Kind == goextract.KindFunction && n.Name == "f" && len(n.Params) == 2 {
+				want = n
+			}
+		}
+		if want == nil {
+			t.Fatal("no node for the two-parameter f")
+		}
+		g.requireOnlyCall(t, g.node(t, "a.kt", goextract.KindFunction, "run", ""), want)
+	})
+}
+
+// TestArityFits checks the argument-count rule for defaults, optional and
+// variadic parameters, and for a spread argument.
+func TestArityFits(t *testing.T) {
+	p := func(name string) *schema.Param { return &schema.Param{Name: name} }
+	withDefault := &schema.Param{Name: "d", HasDefault: true}
+	optional := &schema.Param{Name: "o", Optional: true}
+	variadic := &schema.Param{Name: "v", Variadic: true}
+	cases := []struct {
+		name   string
+		params []*schema.Param
+		argc   int32
+		spread bool
+		want   bool
+	}{
+		{"exact", []*schema.Param{p("a"), p("b")}, 2, false, true},
+		{"too few", []*schema.Param{p("a"), p("b")}, 1, false, false},
+		{"too many", []*schema.Param{p("a")}, 2, false, false},
+		{"default left out", []*schema.Param{p("a"), withDefault}, 1, false, true},
+		{"optional left out", []*schema.Param{p("a"), optional}, 1, false, true},
+		{"variadic takes none", []*schema.Param{p("a"), variadic}, 1, false, true},
+		{"variadic takes many", []*schema.Param{p("a"), variadic}, 5, false, true},
+		{"spread meets the required count", []*schema.Param{p("a"), p("b"), p("c")}, 1, true, true},
+		{"spread with too many fixed arguments", []*schema.Param{p("a")}, 3, true, false},
+		{"spread into variadic", []*schema.Param{variadic}, 4, true, true},
+	}
+	for _, c := range cases {
+		if got := arityFits(c.params, c.argc, c.spread); got != c.want {
+			t.Errorf("%s: arityFits = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestDeclarationIdSurvivesEditsAbove checks the graph-index scenario "an
+// edit above a declaration keeps its id" through a sync: lines inserted
+// above a function move it, and its id is unchanged.
+func TestDeclarationIdSurvivesEditsAbove(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod": "module example.com/stable\n\ngo 1.26\n",
+		"a.go":   "package stable\n\nfunc Keep() {}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	before := readGraph(t, storeDir).node(t, "a.go", goextract.KindFunction, "Keep", "")
+	writeFile(t, filepath.Join(root, "a.go"), "package stable\n\n// Keep stays.\n\nfunc Added() {}\n\nfunc Keep() {}\n")
+	if _, err := Sync(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	after := readGraph(t, storeDir).node(t, "a.go", goextract.KindFunction, "Keep", "")
+	if after.Id != before.Id {
+		t.Errorf("Keep's id changed from %s to %s across an edit above it", before.Id, after.Id)
+	}
+	if after.StartLine != 7 {
+		t.Errorf("Keep starts at line %d after the edit, want 7", after.StartLine)
+	}
+}
+
+// TestAlternativesResolveToAmbiguousSet checks design D16 through
+// resolution for C and PHP: two copies of one signature under
+// conditional compilation or a function_exists guard are alternatives,
+// and a call that fits both reaches their set, marked ambiguous.
+func TestAlternativesResolveToAmbiguousSet(t *testing.T) {
+	cases := []struct{ lang, file, src string }{
+		{"c", "m.c", "#ifdef FAST\nint f(int a) { return 1; }\n#else\nint f(int a) { return 2; }\n#endif\nint g(void) { return f(1); }\n"},
+		{"php", "h.php", "<?php\nif (!function_exists('f')) {\n    function f($s) { return $s; }\n}\nif (!function_exists('f')) {\n    function f($s) { return strtolower($s); }\n}\nfunction g() { return f(\"A\"); }\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.lang, func(t *testing.T) {
+			root := writeFixture(t, map[string]string{c.file: c.src})
+			storeDir := t.TempDir()
+			if _, err := Run(root, storeDir, Options{}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			g := readGraph(t, storeDir)
+			set := g.node(t, c.file, goextract.KindOverloadSet, "f", "")
+			targets := g.callTargets(g.node(t, c.file, goextract.KindFunction, "g", ""))
+			if ambiguous, ok := targets[set.Id]; !ok || !ambiguous {
+				t.Errorf("g calls %v, want one ambiguous edge to the f set", targets)
+			}
+			for id := range targets {
+				if id != set.Id {
+					t.Errorf("g also calls %s", g.describe(id))
+				}
+			}
+		})
+	}
+}
+
+// TestQualifiedParameterTypeMatchesBareArgumentType checks that a
+// parameter written with a package qualifier, such as loggers.Logger,
+// accepts an argument whose type the resolver filled as the bare name
+// Logger: a Go package-qualified call reaches the package function and
+// not a method of the same name whose parameters fit anything.
+func TestQualifiedParameterTypeMatchesBareArgumentType(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod":             "module example.com/hx\n\ngo 1.26\n",
+		"loggers/loggers.go": "package loggers\n\ntype Logger interface{ Info(string) }\n\ntype logger struct{}\n\nfunc (l logger) Info(string) {}\n\nfunc NewDefault() Logger { return logger{} }\n",
+		"hexec/exec.go":      "package hexec\n\nimport \"example.com/hx/loggers\"\n\ntype Exec struct{}\n\nfunc New(workingDir string, log loggers.Logger) *Exec {\n\treturn &Exec{}\n}\n\nfunc (e *Exec) New(name string, arg ...any) error {\n\treturn nil\n}\n",
+		"app/app.go":         "package app\n\nimport (\n\t\"example.com/hx/hexec\"\n\t\"example.com/hx/loggers\"\n)\n\nfunc Build() *hexec.Exec {\n\treturn hexec.New(\"\", loggers.NewDefault())\n}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	g := readGraph(t, storeDir)
+	g.requireOnlyCallNamed(t, g.node(t, "app/app.go", goextract.KindFunction, "Build", ""), g.node(t, "hexec/exec.go", goextract.KindFunction, "New", ""))
+	if got := unqualified("java.util.List<String>"); got != "List<String>" {
+		t.Errorf("unqualified(java.util.List<String>) = %q", got)
+	}
+	if got := unqualified("std::vector<int>"); got != "vector<int>" {
+		t.Errorf("unqualified(std::vector<int>) = %q", got)
+	}
+}
