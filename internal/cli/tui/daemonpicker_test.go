@@ -481,11 +481,11 @@ func TestDaemonPickerFootprintFitsDefaultPane(t *testing.T) {
 // TestDaemonPickerLeavesAltScreenLast is TTY-04 at the model level: the
 // picker draws its frame, including the seeded record, inside the alternate
 // screen. Once it leaves the alternate screen it writes only DEC private
-// mode resets: no text in the restored main buffer and no mode query whose
-// reply could reach the shell after exit. The test quits only after the
-// first frame, as a user does; a Program that quits before its first render
-// tick writes its startup queries after the leave sequence, which this
-// model cannot control.
+// mode sets and resets: no text in the restored main buffer and no mode
+// query whose reply could reach the shell after exit. The test quits only
+// after the first frame, as a user does; a Program that quits before its
+// first render tick writes its startup queries after the leave sequence,
+// which this model cannot control.
 func TestDaemonPickerLeavesAltScreenLast(t *testing.T) {
 	records := []daemon.Record{rec("/repo/alpha", 101), rec("/repo/bravo", 102)}
 	tm := teatest.NewTestModel(t, newDaemonPickerModel("/repo/alpha", records), teatest.WithInitialTermSize(100, 30))
@@ -520,7 +520,7 @@ func TestDaemonPickerLeavesAltScreenLast(t *testing.T) {
 	}
 	tail := out[leave+len(altScreenLeave):]
 	if !privateModesOnly.Match(tail) {
-		t.Fatalf("TTY-04: after leaving the alt screen the picker wrote more than mode resets:\n%q", tail)
+		t.Fatalf("TTY-04: after leaving the alt screen the picker wrote more than private mode sets and resets:\n%q", tail)
 	}
 }
 

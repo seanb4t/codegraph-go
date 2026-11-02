@@ -53,8 +53,8 @@ func (f *fakeWatcher) Close() error {
 }
 
 // fakeFixture returns a repo root that holds only an empty .codegraph/,
-// which is all New needs. Tests that use it replace indexer.Sync through
-// syncFn, so no store is built.
+// which is all New needs. It builds no store, so a test that lets Run sync
+// replaces indexer.Sync through syncFn.
 func fakeFixture(t *testing.T) (root, codegraphDir string) {
 	t.Helper()
 	root = t.TempDir()
@@ -69,11 +69,11 @@ func fakeFixture(t *testing.T) (root, codegraphDir string) {
 func newFakeDaemon(t *testing.T, root string, fw *fakeWatcher) *Daemon {
 	t.Helper()
 	d, err := New(root, indexer.Options{Quiet: true},
-		WithProbe(watch.Probe{IsWSL: func() bool { return false }}),
-		WithWatcher(func(string) (Watcher, error) { return fw, nil }))
+		WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	d.openWatcher = func(string) (watcher, error) { return fw, nil }
 	return d
 }
 
@@ -92,7 +92,7 @@ func startFakeRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, 
 	return runErr
 }
 
-// TestRunUsesInjectedWatcher proves Run drives the watcher that WithWatcher
+// TestRunUsesInjectedWatcher proves Run drives the watcher that openWatcher
 // opens: one event from it produces exactly one sync, and Run closes it on
 // shutdown.
 func TestRunUsesInjectedWatcher(t *testing.T) {

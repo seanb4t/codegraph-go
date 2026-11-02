@@ -2,7 +2,6 @@
 # initialize (disabling the watcher never fails serve, D-06), and its stderr
 # carries the D-12/D-13 disabled message with the `codegraph sync` advice.
 
-[!exec:git] skip 'git is not on PATH'
 fixture repo
 cd repo
 exec git init

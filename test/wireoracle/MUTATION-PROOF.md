@@ -84,6 +84,10 @@ This is corroborating evidence only — the load-bearing result is `task test:wi
 failure above, which proves the *oracle itself* (a runtime, wire-level check) detected the
 corruption, not merely a static source-scan of `internal/mcp`'s package body.
 
+The `internal/graphstore/archtest` package no longer exists, so the archtest commands in this
+record find no package. The HYG-02 `forbidigo` rule in `.golangci.yml` now covers the same
+stdout boundary, and `task lint:go` runs it.
+
 **Revert confirmation:** the `fmt.Println` line was removed; `git diff internal/mcp/server.go`
 showed zero lines changed; `go build ./...` exited 0; `go test ./internal/graphstore/archtest/...
 -count=1` and `go test ./test/wireoracle/... -count=1` both exited 0.

@@ -171,11 +171,16 @@ func explore(ctx context.Context, session *mcp.ClientSession, query string) (str
 }
 
 // notifyBuffer is a concurrency-safe buffer that signals each write. The
-// os/exec goroutine that copies the server's stderr writes to it.
+// os/exec goroutine that copies the server's stderr writes to it. Make one
+// with newNotifyBuffer: a nil written channel never signals.
 type notifyBuffer struct {
 	mu      sync.Mutex
 	buf     bytes.Buffer
 	written chan struct{}
+}
+
+func newNotifyBuffer() *notifyBuffer {
+	return &notifyBuffer{written: make(chan struct{}, 1)}
 }
 
 func (b *notifyBuffer) Write(p []byte) (int, error) {
@@ -200,7 +205,7 @@ func (b *notifyBuffer) String() string {
 func mcpStderr(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	stderr := &notifyBuffer{written: make(chan struct{}, 1)}
+	stderr := newNotifyBuffer()
 	session, err := connect(ctx, stderr)
 	if err != nil {
 		return fmt.Errorf("%w; stderr: %q", err, stderr.String())
@@ -219,13 +224,14 @@ func mcpStderr(text string) error {
 	return nil
 }
 
-// mcpLiveEdit is WATCH-01's live-edit client. The anchor file named by
-// -touch is rewritten every 500ms with the same content: the watcher
-// starts off the handshake path (D-06) and can miss the first burst, and
-// the rewrite interval is longer than the debounce window the script sets,
-// so the rewrites cannot hold off the flush. Every explore in the loop
-// must succeed: a store-lock collision between an explore and the flush
-// (CR-01) must never surface as an error.
+// mcpLiveEdit is WATCH-01's live-edit client. It calls codegraph_explore
+// until the payload contains -want or its 90s context ends. Between calls,
+// at most once each 500ms, it rewrites the anchor file named by -touch
+// with the same content: the watcher starts off the handshake path (D-06)
+// and can miss the first burst, and the rewrite interval is longer than
+// the debounce window the script sets, so the rewrites cannot hold off the
+// flush. Every explore in the loop must succeed: a store-lock collision
+// between an explore and the flush (CR-01) must never surface as an error.
 func mcpLiveEdit(args []string) error {
 	fs := flag.NewFlagSet("live-edit", flag.ContinueOnError)
 	from := fs.String("from", "", "directory holding the new files")
@@ -267,10 +273,21 @@ func mcpLiveEdit(args []string) error {
 		return err
 	}
 
-	deadline := time.Now().Add(90 * time.Second)
-	lastTouch := time.Now()
+	waitCtx, waitCancel := context.WithTimeout(ctx, 90*time.Second)
+	defer waitCancel()
+	rewrite := time.NewTicker(500 * time.Millisecond)
+	defer rewrite.Stop()
 	var payload string
-	for time.Now().Before(deadline) {
+	for {
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("codegraph_explore %q never contained %q within 90s; last payload:\n%s", *query, *want, payload)
+		case <-rewrite.C:
+			if err := os.WriteFile(anchor, anchorData, 0o644); err != nil {
+				return err
+			}
+		default:
+		}
 		if payload, err = explore(ctx, session, *query); err != nil {
 			return fmt.Errorf("during a live watch session: %w", err)
 		}
@@ -278,22 +295,17 @@ func mcpLiveEdit(args []string) error {
 			fmt.Println(payload)
 			return nil
 		}
-		if time.Since(lastTouch) >= 500*time.Millisecond {
-			if err := os.WriteFile(anchor, anchorData, 0o644); err != nil {
-				return err
-			}
-			lastTouch = time.Now()
-		}
 	}
-	return fmt.Errorf("codegraph_explore %q never contained %q within 90s; last payload:\n%s", *query, *want, payload)
 }
 
 // mcpRaw is HYG-02's stdout-purity client. It owns the server's stdout
-// itself, because the SDK's stdio transport skips any line that is not
-// JSON-RPC, so a client built on it cannot see a violation. Every stdout
-// line up to both responses must be a JSON-RPC frame, and no response may
-// be a JSON-RPC error (WR-02: an error for the tools/call would mean the
-// store-open path was never exercised).
+// itself, so it can name the exact line that is not a JSON-RPC frame: the
+// SDK client reports only a decode error and ends the connection. Every
+// stdout line up to both responses must be a JSON-RPC frame. No response
+// may be a JSON-RPC error, and the tools/call result may not be a tool
+// error (WR-02: either one means the store-open path did not run to the
+// end). A frame with a method is a server request or notification, not a
+// response, so it does not count as one.
 func mcpRaw(tool string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -366,15 +378,25 @@ func mcpRaw(tool string) error {
 			var frame struct {
 				JSONRPC string          `json:"jsonrpc"`
 				ID      float64         `json:"id"`
+				Method  string          `json:"method"`
 				Error   json.RawMessage `json:"error"`
+				Result  struct {
+					IsError bool `json:"isError"`
+				} `json:"result"`
 			}
 			if err := json.Unmarshal(ln.raw, &frame); err != nil || frame.JSONRPC == "" {
 				return fmt.Errorf("non-JSON-RPC line on stdout: %q", ln.raw)
 			}
+			fmt.Printf("%s\n", ln.raw)
+			if frame.Method != "" {
+				continue
+			}
 			if len(frame.Error) > 0 {
 				return fmt.Errorf("response %v is a JSON-RPC error: %s", frame.ID, frame.Error)
 			}
-			fmt.Printf("%s\n", ln.raw)
+			if frame.Result.IsError {
+				return fmt.Errorf("response %v is a tool error: %s", frame.ID, ln.raw)
+			}
 			seen[frame.ID] = true
 		case <-ctx.Done():
 			return fmt.Errorf("no responses for both requests after 30s (initialize=%v tools/call=%v)", seen[1], seen[2])

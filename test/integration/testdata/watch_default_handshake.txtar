@@ -2,7 +2,6 @@
 # D-06) completes initialize and tools/list within mcpclient's 30s bound
 # and lists codegraph_explore. The watcher must not delay the handshake.
 
-[!exec:git] skip 'git is not on PATH'
 fixture repo
 cd repo
 exec git init

@@ -70,7 +70,7 @@ func waitForLock(t *testing.T, codegraphDir string) {
 // is never observed.
 func watcherOpened(d *Daemon) <-chan struct{} {
 	ch := make(chan struct{}, 1)
-	d.onWatchOpen = func(Watcher) {
+	d.onWatchOpen = func(watcher) {
 		select {
 		case ch <- struct{}{}:
 		default:
@@ -693,8 +693,8 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	watcherCh := make(chan Watcher, 1)
-	d.onWatchOpen = func(w Watcher) { watcherCh <- w }
+	watcherCh := make(chan watcher, 1)
+	d.onWatchOpen = func(w watcher) { watcherCh <- w }
 
 	// A real, cancellable ctx (rather than a bare context.Background())
 	// gives joinDaemonRun's t.Cleanup an actual escape hatch: the expected
@@ -714,7 +714,7 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 	}()
 	joinDaemonRun(t, cancel, retryErr)
 
-	var w Watcher
+	var w watcher
 	select {
 	case w = <-watcherCh:
 	case <-time.After(testBudget(5 * time.Second)):
@@ -927,8 +927,8 @@ func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
 			mu.Unlock()
 		}
 
-		// Long enough that a prompt ctx.Err() proves the sleep — not the
-		// interval — elapsed.
+		// Long enough that a prompt ctx.Err() proves the cancel interrupted
+		// the retry sleep before the interval elapsed.
 		const interval = 2 * time.Second
 		retryErr := make(chan error, 1)
 		go func() {

@@ -244,8 +244,7 @@ func scanArrivalLines(r io.Reader) ([]ArrivalLine, error) {
 	return out, err
 }
 
-// syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer.
-// It began as a copy of test/integration's syncBuffer
+// syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer
 // (WR-01): os/exec starts a background goroutine to copy a subprocess's
 // stderr pipe into cmd.Stderr whenever that field is a non-*os.File
 // io.Writer, and that goroutine is only joined by cmd.Wait() — a plain

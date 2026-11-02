@@ -304,7 +304,8 @@ func (w *syncWriter) String() string {
 }
 
 // awaitDaemonLock waits until <root>/.codegraph/daemon.lock names this
-// process, watching the filesystem rather than polling. It fails at once
+// process. It wakes on filesystem events and stderr writes, and it reads
+// the lock again at once when a watch could not be added. It fails at once
 // when stderr reports that the build or the watcher failed, and shows
 // stderr on every failure.
 func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
@@ -324,23 +325,28 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 		wakes = append(wakes, time.Since(start).Round(time.Microsecond).String()+": "+fmt.Sprintf(format, a...))
 	}
 	timeout := time.After(30 * time.Second)
+	timedOut := func() {
+		t.Helper()
+		t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s\nwake-ups:\n%s\nwatching: %v\n%s",
+			indexDir, stderr.String(), strings.Join(wakes, "\n"), w.WatchList(), daemonWaitState(indexDir, start))
+	}
 	for {
-		// retry wakes the loop after a failed Add, because no watch on
-		// indexDir then delivers the next event.
-		var retry <-chan time.Time
+		// retry is true after a failed Add: no watch on indexDir then
+		// delivers the next event, so the loop runs again without waiting.
+		retry := false
 		// .codegraph appears by a rename. A watch added on that rename's
 		// first event can still receive its IN_MOVE_SELF, and fsnotify
 		// then drops the watch, so add it again whenever it is missing.
 		// On macOS, kqueue's Add lstats each entry, and a .daemon.lock.tmp-*
 		// file can vanish between the directory read and the lstat, so an
-		// ErrNotExist also waits for the next pass (#235).
+		// ErrNotExist also retries the Add.
 		if pathExists(t, indexDir) && !slices.Contains(w.WatchList(), indexDir) {
 			switch err := w.Add(indexDir); {
 			case err == nil:
 				note("watching %s", indexDir)
 			case errors.Is(err, os.ErrNotExist):
 				note("watch %s: %v; retrying", indexDir, err)
-				retry = time.After(10 * time.Millisecond)
+				retry = true
 			default:
 				t.Fatalf("watch %s: %v", indexDir, err)
 			}
@@ -358,18 +364,23 @@ func awaitDaemonLock(t *testing.T, root string, stderr *syncWriter) {
 		if out := stderr.String(); strings.Contains(out, "could not make an index") || strings.Contains(out, "watcher:") {
 			t.Fatalf("the build or the watcher failed; stderr:\n%s", out)
 		}
+		if retry {
+			select {
+			case <-timeout:
+				timedOut()
+			default:
+			}
+			continue
+		}
 		select {
 		case ev := <-w.Events:
 			note("event %v", ev)
 		case <-stderr.wrote:
 			note("stderr written")
-		case <-retry:
-			note("retry")
 		case err := <-w.Errors:
 			t.Fatalf("fsnotify: %v; stderr:\n%s", err, stderr.String())
 		case <-timeout:
-			t.Fatalf("no daemon.lock naming this process appeared in %s within 30s; stderr:\n%s\nwake-ups:\n%s\nwatching: %v\n%s",
-				indexDir, stderr.String(), strings.Join(wakes, "\n"), w.WatchList(), daemonWaitState(indexDir, start))
+			timedOut()
 		}
 	}
 }

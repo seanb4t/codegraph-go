@@ -7,9 +7,8 @@ import (
 	"testing"
 )
 
-// TestResolveTestBinPath is the table test of this package's
-// resolveTestBinPath (main_test.go). test/integration's copy of both went
-// with its testscript suite (#221). Every case also re-checks the
+// TestResolveTestBinPath is the table test of resolveTestBinPath
+// (main_test.go). Every case also re-checks the
 // "no third outcome" invariant inline: useEnv=true never pairs with a
 // non-nil error, and a non-empty raw value never resolves to useEnv=false
 // with a nil error.

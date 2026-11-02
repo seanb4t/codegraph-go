@@ -148,14 +148,13 @@ type runBodyException struct {
 
 // runBodyExceptions is the literal, exhaustive exception list for the
 // in-scope jobs above. One entry, in ci.yml:
-//   - "Require every leg to pass or skip" (job test) reads the results of
-//     the jobs the aggregate check needs, which exist only inside a run.
+//   - "Require every leg to pass or skip" (job test, the aggregate
+//     required check) reads the results of the jobs that check needs,
+//     which exist only inside a run.
 //
-// A second entry ("Install mingw-w64", job test) retired with native
-// Windows support (quick task 260807-gho) — the apt step it excepted no
-// longer exists, and the loop at the bottom of
-// TestWorkflowRunStepsInvokeTaskTargets fails any exception that matches
-// no real step, so a stale entry cannot silently widen this allowlist.
+// The loop at the bottom of TestWorkflowRunBodiesInvokeTask fails any
+// exception that matches no real step, so a stale entry cannot silently
+// widen this allowlist.
 var runBodyExceptions = []runBodyException{
 	{
 		Workflow: "ci.yml",
@@ -912,7 +911,7 @@ func TestZigTasksRedirectZigCache(t *testing.T) {
 // TestTaskfileWrapperIsSerial is the D-10 wrapper guard: the `test`
 // wrapper task must declare no deps: key (go-task runs deps: entries
 // concurrently, which would reintroduce exactly the cross-test contention
-// test:race:daemon's -p 1 flag exists to prevent) and its
+// the daemon's soak and flush-lock tests are sensitive to) and its
 // cmds: list must name exactly the four host-only legs, compared as a
 // sorted set against the literal D-10 fixture so both a missing leg and
 // an extra one fail this test.
@@ -929,7 +928,7 @@ func TestTaskfileWrapperIsSerial(t *testing.T) {
 	}
 
 	if blockDeclaresKey(block, "deps") {
-		t.Fatalf("task %q declares a deps: key — go-task runs deps: entries concurrently, which would reintroduce the cross-test contention test:race:daemon's -p 1 flag exists to prevent; use a serial cmds: list of '- task: <name>' entries instead", "test")
+		t.Fatalf("task %q declares a deps: key — go-task runs deps: entries concurrently, which would reintroduce the cross-test contention the daemon's soak and flush-lock tests are sensitive to; use a serial cmds: list of '- task: <name>' entries instead", "test")
 	}
 
 	actual := mustParseTaskCallList(t, block)
@@ -3382,10 +3381,8 @@ func TestUnsupportedReachabilityEdgeIsLoud(t *testing.T) {
 
 // TestReleasePathScanIsNonVacuous is the non-vacuity companion required
 // before TestReleasePathHasNoJSToolchain's zero-findings result means
-// anything (Taskfile.yml's vuln:selftest is this repository's canonical
-// model: assert an exact result against a PLANTED case, never trust a
-// clean run alone — "a transcript grep is a claim about the grep, not
-// about the product", STATE.md). It plants each of the four forbidden
+// anything: it asserts an exact result against a PLANTED case, and never
+// trusts a clean run alone. It plants each of the four forbidden
 // command names in each of four reachable unit shapes — a workflow run:
 // scalar, a GoReleaser hooks: list entry, a local composite action's run:
 // scalar, and a Taskfile cmds: entry — the last two proving the

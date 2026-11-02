@@ -24,8 +24,17 @@ const module = "github.com/seanb4t/codegraph-go"
 type listedPackage struct {
 	ImportPath string
 	Dir        string
+	Standard   bool
+	Imports    []string
 	Deps       []string
 	CgoFiles   []string
+}
+
+// mcpSDKModules are the MCP SDK modules that the SDK-02 depguard rule and
+// the VRFY-02 forbidigo rule of .golangci.yml name.
+var mcpSDKModules = []string{
+	"github.com/modelcontextprotocol/go-sdk",
+	"github.com/mark3labs/mcp-go",
 }
 
 // goListDeps runs `go list -deps` over patterns and returns every listed
@@ -33,7 +42,7 @@ type listedPackage struct {
 // variant, such as "p [p.test]", "p_test [p.test]" and "p.test".
 func goListDeps(t *testing.T, test bool, patterns ...string) map[string]listedPackage {
 	t.Helper()
-	args := []string{"list", "-deps", "-json=ImportPath,Dir,Deps,CgoFiles"}
+	args := []string{"list", "-deps", "-json=ImportPath,Dir,Standard,Imports,Deps,CgoFiles"}
 	if test {
 		args = append(args, "-test")
 	}
@@ -153,6 +162,7 @@ func TestDependencyClosure(t *testing.T) {
 			"connectrpc.com/connect",
 		}
 		var checked, testVariants int
+		reachesGraphstore := false
 		for _, path := range slices.Sorted(maps.Keys(withTests)) {
 			p := withTests[path]
 			if !underPath(basePath(path), module+"/internal/query") {
@@ -162,15 +172,21 @@ func TestDependencyClosure(t *testing.T) {
 			if isTestVariant(path) {
 				testVariants++
 			}
-			deps := depSet(p)
+			deps := slices.Sorted(maps.Keys(depSet(p)))
+			reachesGraphstore = reachesGraphstore || slices.Contains(deps, module+"/internal/graphstore")
 			for _, f := range forbidden {
-				if deps[f] {
-					t.Errorf("%s depends on %s (perhaps indirectly); internal/query must not depend on the wire layer it is consumed by", path, f)
+				for _, dep := range deps {
+					if underPath(dep, f) {
+						t.Errorf("%s depends on %s (perhaps indirectly); internal/query must not depend on the wire layer %s it is consumed by", path, dep, f)
+					}
 				}
 			}
 		}
 		if checked == 0 || testVariants == 0 {
 			t.Fatalf("checked %d internal/query packages, %d of them test variants; want more than zero of each", checked, testVariants)
+		}
+		if !reachesGraphstore {
+			t.Fatalf("no internal/query package depends on internal/graphstore; the dependency lists hold nothing this rule can match")
 		}
 	})
 
@@ -194,6 +210,9 @@ func TestDependencyClosure(t *testing.T) {
 		}
 		if checked == 0 {
 			t.Fatal("checked zero production internal/query packages")
+		}
+		if !depSet(prod[module+"/internal/query"])[module+"/internal/graphstore"] {
+			t.Fatal("production internal/query does not depend on internal/graphstore; the dependency lists hold nothing this rule can match")
 		}
 	})
 
@@ -221,27 +240,58 @@ func TestDependencyClosure(t *testing.T) {
 		}
 	})
 
-	// REL-01: the Charm closure of internal/cli adds no CGo. tree-sitter is
-	// the one CGo dependency, and it is outside this closure.
+	// REL-01: the Charm closure of internal/cli adds no CGo. The closure is
+	// every charm.land package that internal/cli reaches, and every
+	// non-standard package those reach. tree-sitter is the one CGo
+	// dependency, and it is outside this closure.
 	t.Run("REL-01 Charm closure has no CGo", func(t *testing.T) {
-		charm := make(map[string]bool)
+		roots := make(map[string]bool)
 		for path, p := range prod {
 			if !underPath(path, module+"/internal/cli") {
 				continue
 			}
 			for _, d := range p.Deps {
 				if strings.HasPrefix(d, "charm.land/") {
-					charm[d] = true
+					roots[d] = true
 				}
 			}
 		}
-		if len(charm) == 0 {
+		if len(roots) == 0 {
 			t.Fatal("the internal/cli closure holds zero charm.land packages")
 		}
-		for _, path := range slices.Sorted(maps.Keys(charm)) {
+		closure := maps.Clone(roots)
+		for root := range roots {
+			for _, d := range prod[root].Deps {
+				if !prod[d].Standard {
+					closure[d] = true
+				}
+			}
+		}
+		if len(closure) <= len(roots) {
+			t.Fatalf("the Charm closure holds %d packages, no more than its %d charm.land roots", len(closure), len(roots))
+		}
+		for _, path := range slices.Sorted(maps.Keys(closure)) {
 			if len(prod[path].CgoFiles) > 0 {
 				t.Errorf("%s has CgoFiles %v; the Charm closure must add no CGo", path, prod[path].CgoFiles)
 			}
 		}
+	})
+
+	// SDK-02 and VRFY-02 name the MCP SDK modules in .golangci.yml. A rule
+	// that names the wrong module matches nothing, so internal/mcp must
+	// import a package of a module those rules name.
+	t.Run("SDK-02 lint rules name the SDK that internal/mcp imports", func(t *testing.T) {
+		p, ok := prod[module+"/internal/mcp"]
+		if !ok {
+			t.Fatalf("go list did not list %s/internal/mcp", module)
+		}
+		for _, imp := range p.Imports {
+			for _, sdk := range mcpSDKModules {
+				if underPath(imp, sdk) {
+					return
+				}
+			}
+		}
+		t.Fatalf("internal/mcp imports %v, and none is under the SDK modules %v that .golangci.yml's SDK-02 and VRFY-02 rules name; update both lists", p.Imports, mcpSDKModules)
 	})
 }

@@ -359,6 +359,9 @@ func TestInstallPickerFrameStableWhileIdle(t *testing.T) {
 	if len(first) == 0 {
 		t.Fatal("the program wrote 0 bytes before its first frame")
 	}
+	if !bytes.Contains(first, []byte(altScreenEnter)) {
+		t.Fatalf("TTY-06: the picker did not enter the alternate screen before its first frame:\n%q", first)
+	}
 	for _, want := range []string{"Select agents to configure", "[ ]", "space: toggle"} {
 		if !bytes.Contains(first, []byte(want)) {
 			t.Fatalf("first frame does not contain %q:\n%q", want, first)
@@ -400,9 +403,10 @@ func TestInstallPickerFooterAt100x30(t *testing.T) {
 // TestInstallPickerCancelWritesNoConfig is TTY-05: a row checked with space
 // and then cancelled with q or esc resolves to no targets. install
 // configures exactly the targets RunAgentPicker returns, and an empty list
-// writes nothing ("no agents selected"). On a fresh HOME no agent is
-// detected, so without the space toggle nothing is checked and a cancel that
-// kept the checked set would still resolve to nothing.
+// writes nothing ("no agents selected"). The model starts with a nil
+// detection map, so without the space toggle nothing is checked and a
+// cancel that kept the checked set would still resolve to nothing. The
+// test waits for the checked glyph [x] in a frame before it cancels.
 func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 	cancels := map[string]tea.KeyPressMsg{
 		"q":   quitKeyMsg(),
@@ -412,14 +416,12 @@ func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tm := teatest.NewTestModel(t, newAgentPickerModel(agents.AllTargets(), nil), teatest.WithInitialTermSize(100, 30))
 			tm.Send(spaceKeyMsg())
+			waitForFrame(t, tm, "[x]")
 			tm.Send(cancel)
 
 			fm, ok := tm.FinalModel(t, teatest.WithFinalTimeout(programDeadline)).(agentPickerModel)
 			if !ok {
 				t.Fatalf("final model is not an agentPickerModel")
-			}
-			if out := finalOutput(t, tm); len(out) == 0 {
-				t.Fatal("the program wrote 0 bytes")
 			}
 			if !fm.delegate.checked[0] {
 				t.Fatal("space did not check the focused row, so the cancel had nothing to discard")

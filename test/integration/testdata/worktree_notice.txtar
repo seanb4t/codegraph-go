@@ -7,7 +7,6 @@
 # serve.go: passing repoPath as the start path (CR-01) makes the first
 # check fail.
 
-[!exec:git] skip 'git is not on PATH'
 fixture repo
 cd repo
 exec git init
