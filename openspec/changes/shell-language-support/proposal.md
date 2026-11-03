@@ -35,4 +35,4 @@ The change affects language registration, discovery, directory exclusions, file 
 
 Parser dependencies require license and platform review. The released application remains one binary without a shell runtime dependency. Existing CLI and MCP output envelopes remain compatible.
 
-The implementation of `index-invariants`, proposed in [PR #237](https://github.com/seanb4t/codegraph-go/pull/237), supplies structural invariants. Issue #238 supplies evaluation conventions. Issue #239 supplies shared field and binding conventions where useful, but shell support does not depend on all core-language fixes.
+[PR #250](https://github.com/seanb4t/codegraph-go/pull/250) merged `index-invariants`, specified in `openspec/specs/graph-index`. It supplies structural invariants. Issue #238 supplies evaluation conventions. Issue #239 supplies shared field and binding conventions where useful, but shell support does not depend on all core-language fixes.

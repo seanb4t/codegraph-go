@@ -56,7 +56,7 @@ Replace the basename-only prune decision with a shared root-relative inclusion d
 
 Do not follow file or directory symlinks outside the repository. Apply the same canonical-path boundary to sourced files. Respect source-size limits before shebang reads and extraction.
 
-Keep one adapter per dialect and one common graph result shape. Reuse identity finalization after the `index-invariants` implementation proposed in PR #237 lands. Collect bindings before graph emission to consolidate repeated assignments.
+Keep one adapter per dialect and one common graph result shape. Reuse the identity finalization that PR #250 merged and `openspec/specs/graph-index` specifies. Collect bindings before graph emission to consolidate repeated assignments.
 
 Use these extraction boundaries:
 

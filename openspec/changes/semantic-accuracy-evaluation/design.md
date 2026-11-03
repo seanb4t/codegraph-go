@@ -2,7 +2,7 @@
 
 ## Context
 
-See [proposal.md](proposal.md) for motivation. This design addresses the evidence gap outside [PR #237](https://github.com/seanb4t/codegraph-go/pull/237).
+See [proposal.md](proposal.md) for motivation. This design addresses the evidence gap outside [PR #250](https://github.com/seanb4t/codegraph-go/pull/250) and [PR #242](https://github.com/seanb4t/codegraph-go/pull/242).
 
 The current [TypeScript behavioral test](../../../testdata/golden/behavioral_tsjs_test.go) counts edges across the Hugo graph. That total cannot establish TypeScript relationship correctness.
 
@@ -14,7 +14,7 @@ Frozen goldens remain useful regression evidence. Expected output captured throu
 
 Goals: Detect omitted facts and invented relationships with inspectable evidence. Make each support claim traceable to source, expectations, and an acceptance result.
 
-Non-goals: Replace the test runner, implement production compilers, or prove arbitrary runtime behavior. Structural invariants remain in #237. Mutation testing remains in #222.
+Non-goals: Replace the test runner, implement production compilers, or prove arbitrary runtime behavior. Structural invariants remain in `index-invariants`, which PR #250 merged. Mutation testing remains in #222.
 
 ## Decisions
 
@@ -89,7 +89,7 @@ Remove each repaired mismatch from its exception. Keep the case known-gap while 
 
 Unsupported cases are inventoried constructs outside the declared product contract. Unevaluated cases lack independent evaluation. Report their case counts and any observed fact counts separately, outside both accuracy denominators and the regression gate. They never establish support. Manifest labels control this scope, not whatever facts a reference tool happens to emit.
 
-Compare fresh and incremental semantic facts and public answers under the same configuration and analysis context. Include no-op synchronization, edits, renames, deletion, and restoration. Name the evaluated fact subset and retain excluded categories in reports. Do not imply route-graph equality beyond the boundary defined by `index-invariants` in PR #237.
+Compare fresh and incremental semantic facts and public answers under the same configuration and analysis context. Include no-op synchronization, edits, renames, deletion, and restoration. Name the evaluated fact subset and retain excluded categories in reports. Do not imply route-graph equality beyond the boundary that PR #250 merged in the `openspec/specs/graph-index` requirement "An incremental sync gives the same graph as a fresh index".
 
 Install the report and known-failure inventory first. Then enable the small acceptance gate. Product fixes in #239 remove exceptions as their cases pass. This order avoids weakening expectations to land the measurement change.
 
