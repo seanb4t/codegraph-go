@@ -18,7 +18,7 @@ CodeGraph omits several variable and field declarations across its core language
 
 Out of scope: unrestricted local-variable indexing, whole-program data flow, runtime reflection, general dynamic dispatch, Java overload resolution, and additional languages. Local scope analysis is limited to preventing incorrect bindings.
 
-This change incorporates #175. [PR #237](https://github.com/seanb4t/codegraph-go/pull/237) separately proposes graph identity and storage consistency work. These additions do not expand its scope.
+This change incorporates #175. [PR #250](https://github.com/seanb4t/codegraph-go/pull/250) separately merged graph identity and storage consistency work. These additions do not reopen it.
 
 ## Capabilities
 
@@ -36,4 +36,4 @@ The change affects `internal/indexer` extractors and resolution, graph kind hand
 
 New nodes and edges change query content. Existing CLI and MCP envelopes remain compatible. The implementation audits kind filters and generated clients through their owning tools.
 
-The implementation of `index-invariants`, proposed in PR #237, supplies identity finalization and structural invariants. Issue #238 supplies independent acceptance evidence. No production compiler or language runtime becomes required.
+PR #250 merged `index-invariants`, specified in `openspec/specs/graph-index`. It supplies identity finalization and structural invariants. Issue #238 supplies independent acceptance evidence. No production compiler or language runtime becomes required.

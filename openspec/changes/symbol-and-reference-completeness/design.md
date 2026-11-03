@@ -18,7 +18,7 @@ Non-goals: Add production compiler dependencies or a general data-flow engine. D
 
 ## Decisions
 
-Reuse the identity finalization and rebuild mechanisms after the `index-invariants` implementation lands. PR #237 proposes that implementation but does not contain it. Do not duplicate occurrence-ID logic. Finalization must remap every node-keyed side table and unresolved reference introduced here.
+Reuse the identity finalization and rebuild mechanisms that PR #250 merged and `openspec/specs/graph-index` specifies. Do not duplicate occurrence-ID logic. Finalization must remap every node-keyed side table and unresolved reference introduced here.
 
 Use existing `variable` and `constant` kinds where they already apply. Add `field` as an additive kind. Preserve current callable identities for functions stored in exported constants. Do not emit both a function and a data node for the same declaration.
 
@@ -83,13 +83,13 @@ Keep callers and callees on call edges. Existing impact traversal benefits from 
 
 Audit allowed kinds, result filters, graph presentation, and serialization. Change generated clients only through their owning generator when a protocol source actually changes. String kind values alone do not justify unrelated protocol changes.
 
-Allocate a rebuild capability marker after the `index-invariants` implementation lands. Do not reserve a protobuf field number from an unmerged snapshot. An index without the marker follows the existing clean rebuild path so unchanged files gain new facts.
+Allocate a rebuild capability marker in `Meta`, as PR #250 did with `has_unique_decl_ids` for the `openspec/specs/graph-index` rebuild requirement. At the start of this work, read the next free field number from `internal/schema/graph.proto` on `main`. An index without the marker follows the existing clean rebuild path so unchanged files gain new facts.
 
 Compare fresh indexing with edits, renames, deletion, and restoration. Include a field that moves between owners and an alias whose target changes. Identity stability applies to unchanged declarations, not removed or moved symbols.
 
 Persist each file's binding-write contributions and lookup dependencies through the existing schema source and generator. Include unresolved lookups, binding chains, analysis contexts, and every owner/name consulted by inherited-field lookup. Compare old and new contributions for each synchronization batch. Re-resolve dependent files when a write set, owner chain, or shadowing declaration changes, even when those files are unchanged.
 
-Propagate affected dependency keys until the dependent-file set stops growing, with cycle detection. Rebuild their outgoing relationships from the complete post-batch context and commit contributions and facts together. Removing a conflict must restore eligible calls, just as adding one removes them. PR #237 supplies structural invariants, not this new dependency mechanism.
+Propagate affected dependency keys until the dependent-file set stops growing, with cycle detection. Rebuild their outgoing relationships from the complete post-batch context and commit contributions and facts together. Removing a conflict must restore eligible calls, just as adding one removes them. PR #250 supplies structural invariants, not this new dependency mechanism.
 
 Land shared graph conventions first, followed by language-specific extraction changes and query acceptance. Each language must meet its exact fixture contract before its capability claim changes. Issue #238 supplies independent expectations and exposes remaining failures.
 
