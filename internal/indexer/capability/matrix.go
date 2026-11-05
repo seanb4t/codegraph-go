@@ -97,6 +97,10 @@ var matrix = map[string]CapabilityEntry{
 		Resolution: CoverageFull,
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
+		Gaps: []string{
+			"Struct fields have no node, and a call in a package-level initializer has no `calls` edge. Case `go/grouped-bindings` holds the exact differences (#239).",
+			"A local function binding that shadows a package function gets a false `calls` edge to the package function. See case `go/resolution` (#261).",
+		},
 	},
 
 	// --- Priority-4 (LANG-02..05): full extraction+resolution+dispatch,
@@ -111,6 +115,8 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
+			"Field declarations have no node. Case `java/fields-and-owners` holds the exact differences (#239).",
+			"When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).",
 			"A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.",
 			"TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.",
 		},
@@ -133,6 +139,8 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageNone,
 		Routing:    CoverageFull,
 		Gaps: []string{
+			"Module bindings, class attributes and receiver attributes have no node. Case `python/module-and-class-attributes` holds the exact differences (#239).",
+			"A call to a from-imported name has no `calls` edge. See case `python/resolution` (#262).",
 			"pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.",
 			"A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.",
 			"Wildcard from-imports (`from x import *`) are not resolved.",
@@ -146,9 +154,11 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
+			"Destructured bindings, module variables and class fields have no node, and a call in a class field has no `calls` edge. Case `typescript/module-bindings-and-fields` holds the exact differences (#239).",
+			"A local function binding that shadows an imported function gets a false `calls` edge to the imported function. See case `typescript/resolution` (#261).",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
-			"TestCorpusBehavior_TSJS now resolves through the language map to the Phase-1-locked hugo corpus (whose 25 JS files supply the tsjs leg despite hugo's manifest language being \"go\") via hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.",
+			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
 		},
 	},
 	"tsx": {
@@ -159,7 +169,7 @@ var matrix = map[string]CapabilityEntry{
 		Gaps: []string{
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
-			"TestCorpusBehavior_TSJS now resolves through the language map to the Phase-1-locked hugo corpus (whose 25 JS files supply the tsjs leg despite hugo's manifest language being \"go\") via hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.",
+			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
 		},
 	},
 	"javascript": {
@@ -168,10 +178,11 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageNone,
 		Routing:    CoverageFull,
 		Gaps: []string{
+			"Constants, destructured bindings, function expressions and class fields have no node, and a call in or to a function expression has no `calls` edge. Case `javascript/callable-declarations` holds the exact differences (#239).",
 			"JavaScript's own grammar has no interface_declaration node and no implements clause — class heritage is extends-only, so RefKindEmbeds refs never resolve to an interface target and never promote to an implements edge for pure-JavaScript files.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
-			"TestCorpusBehavior_TSJS now resolves through the language map to the Phase-1-locked hugo corpus (whose 25 JS files supply the tsjs leg despite hugo's manifest language being \"go\") via hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.",
+			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so the evidence for a cross-file JavaScript call is the fixture case `javascript/module-functions`.",
 		},
 	},
 
