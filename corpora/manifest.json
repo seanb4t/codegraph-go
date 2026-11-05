@@ -18,6 +18,14 @@
       "note": "Closes the TypeScript priority-4 coverage gap. Roadmap shortlist; also nominated for overrides coverage via its abstract-class lifecycle hooks."
     },
     {
+      "repo": "pmndrs/zustand",
+      "sha": "382d29c485e67018c06e75ec7235130d0968522c",
+      "license": "MIT",
+      "language": "typescript",
+      "locked": false,
+      "note": "Pinned for the semantic evaluation of #238: genuine TypeScript and TSX source, which hugo's JavaScript files do not supply. Tag v5.0.16, git tree 87fd63e396538b6cce5cc5d8a878566af6b997d1, 144 tracked files. Outside the locked set, so it plays no part in the kind or language thresholds."
+    },
+    {
       "repo": "google/guava",
       "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
       "license": "Apache-2.0",

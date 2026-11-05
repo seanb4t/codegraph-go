@@ -1,0 +1,358 @@
+{
+  "schemaVersion": 1,
+  "id": "typescript/module-bindings-and-fields",
+  "language": "typescript",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "declarations",
+  "construct": "destructuring, callable declarations, class fields, interfaces",
+  "status": "known-gap",
+  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "referenceExclusions": [
+    {
+      "symbol": "/(left|right)0:$",
+      "status": "unevaluated",
+      "reason": "object literal keys are not declarations in the target contract"
+    },
+    {
+      "symbol": "Shape#area",
+      "status": "unsupported",
+      "reason": "interface method signatures are outside the target contract"
+    }
+  ],
+  "declarations": [
+    {
+      "id": "left",
+      "path": "a.ts",
+      "owner": "",
+      "role": "constant",
+      "name": "left",
+      "at": {
+        "line": 2,
+        "col": 15
+      },
+      "spanRule": "ts-lexical-declarator",
+      "span": {
+        "start": {
+          "line": 2,
+          "col": 13
+        },
+        "end": {
+          "line": 2,
+          "col": 61
+        }
+      },
+      "evidence": "reviewed"
+    },
+    {
+      "id": "renamed",
+      "path": "a.ts",
+      "owner": "",
+      "role": "constant",
+      "name": "renamed",
+      "at": {
+        "line": 2,
+        "col": 28
+      },
+      "spanRule": "ts-lexical-declarator",
+      "span": {
+        "start": {
+          "line": 2,
+          "col": 13
+        },
+        "end": {
+          "line": 2,
+          "col": 61
+        }
+      },
+      "evidence": "reviewed"
+    },
+    {
+      "id": "arrow",
+      "path": "a.ts",
+      "owner": "",
+      "role": "function",
+      "name": "arrow",
+      "at": {
+        "line": 3,
+        "col": 13
+      },
+      "spanRule": "ts-callable-declarator",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 13
+        },
+        "end": {
+          "line": 3,
+          "col": 41
+        }
+      }
+    },
+    {
+      "id": "counter",
+      "path": "a.ts",
+      "owner": "",
+      "role": "variable",
+      "name": "counter",
+      "at": {
+        "line": 4,
+        "col": 11
+      },
+      "spanRule": "ts-lexical-declarator",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 11
+        },
+        "end": {
+          "line": 4,
+          "col": 22
+        }
+      }
+    },
+    {
+      "id": "Box",
+      "path": "a.ts",
+      "owner": "",
+      "role": "type",
+      "name": "Box",
+      "at": {
+        "line": 5,
+        "col": 13
+      },
+      "spanRule": "ts-class-declaration",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 7
+        },
+        "end": {
+          "line": 12,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Box.field",
+      "path": "a.ts",
+      "owner": "Box",
+      "role": "field",
+      "name": "field",
+      "at": {
+        "line": 6,
+        "col": 2
+      },
+      "spanRule": "ts-field-definition",
+      "span": {
+        "start": {
+          "line": 6,
+          "col": 2
+        },
+        "end": {
+          "line": 6,
+          "col": 11
+        }
+      }
+    },
+    {
+      "id": "Box.label",
+      "path": "a.ts",
+      "owner": "Box",
+      "role": "field",
+      "name": "label",
+      "at": {
+        "line": 7,
+        "col": 9
+      },
+      "spanRule": "ts-field-definition",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 2
+        },
+        "end": {
+          "line": 7,
+          "col": 21
+        }
+      }
+    },
+    {
+      "id": "Box.doubled",
+      "path": "a.ts",
+      "owner": "Box",
+      "role": "field",
+      "name": "doubled",
+      "at": {
+        "line": 8,
+        "col": 11
+      },
+      "spanRule": "ts-field-definition",
+      "span": {
+        "start": {
+          "line": 8,
+          "col": 2
+        },
+        "end": {
+          "line": 8,
+          "col": 29
+        }
+      }
+    },
+    {
+      "id": "Box.get",
+      "path": "a.ts",
+      "owner": "Box",
+      "role": "method",
+      "name": "get",
+      "at": {
+        "line": 9,
+        "col": 2
+      },
+      "spanRule": "ts-method-definition",
+      "span": {
+        "start": {
+          "line": 9,
+          "col": 2
+        },
+        "end": {
+          "line": 11,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Shape",
+      "path": "a.ts",
+      "owner": "",
+      "role": "interface",
+      "name": "Shape",
+      "at": {
+        "line": 13,
+        "col": 17
+      },
+      "spanRule": "ts-interface-declaration",
+      "span": {
+        "start": {
+          "line": 13,
+          "col": 7
+        },
+        "end": {
+          "line": 15,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Alias",
+      "path": "a.ts",
+      "owner": "",
+      "role": "type_alias",
+      "name": "Alias",
+      "at": {
+        "line": 16,
+        "col": 12
+      },
+      "spanRule": "ts-type-alias",
+      "span": {
+        "start": {
+          "line": 16,
+          "col": 7
+        },
+        "end": {
+          "line": 16,
+          "col": 27
+        }
+      }
+    },
+    {
+      "id": "plain",
+      "path": "a.ts",
+      "owner": "",
+      "role": "function",
+      "name": "plain",
+      "at": {
+        "line": 17,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 17,
+          "col": 7
+        },
+        "end": {
+          "line": 19,
+          "col": 1
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Box.get",
+      "kind": "calls",
+      "target": "arrow",
+      "path": "a.ts",
+      "site": {
+        "line": 10,
+        "col": 11
+      }
+    },
+    {
+      "source": "plain",
+      "kind": "calls",
+      "target": "Box.get",
+      "path": "a.ts",
+      "site": {
+        "line": 18,
+        "col": 19
+      }
+    },
+    {
+      "source": "Box.doubled",
+      "kind": "calls",
+      "target": "arrow",
+      "path": "a.ts",
+      "site": {
+        "line": 8,
+        "col": 21
+      }
+    }
+  ],
+  "sources": [
+    "a.ts"
+  ],
+  "exception": {
+    "issue": "#239",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "missing-declaration a.ts//constant/left@2:15",
+      "missing-declaration a.ts//constant/renamed@2:28",
+      "missing-declaration a.ts//variable/counter@4:11",
+      "missing-declaration a.ts/Box/field/doubled@8:11",
+      "missing-declaration a.ts/Box/field/field@6:2",
+      "missing-declaration a.ts/Box/field/label@7:9",
+      "missing-relationship Box.doubled calls arrow"
+    ]
+  }
+}

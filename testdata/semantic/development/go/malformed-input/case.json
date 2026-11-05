@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "go/malformed-input",
+  "language": "go",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "sampled",
+  "dimension": "source-boundaries",
+  "construct": "a file that does not parse",
+  "status": "supported",
+  "parseFailures": [
+    "broken.go"
+  ],
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "reviewed source",
+  "reviewedOnly": "the Go toolchain rejects this source, so scip-go cannot load it",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": []
+  },
+  "declarations": [
+    {
+      "id": "Before",
+      "path": "broken.go",
+      "owner": "",
+      "role": "function",
+      "name": "Before",
+      "at": {
+        "line": 3,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 3,
+          "col": 30
+        }
+      },
+      "evidence": "reviewed"
+    }
+  ],
+  "relationships": [],
+  "sources": [
+    "broken.go"
+  ]
+}

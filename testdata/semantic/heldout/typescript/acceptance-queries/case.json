@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "id": "typescript/acceptance-queries",
+  "language": "typescript",
+  "partition": "acceptance",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "queries",
+  "construct": "callers, callees, impact",
+  "status": "supported",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "reviewed required and forbidden answers",
+  "reviewedOnly": "the answers are reviewed against the source",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [],
+  "relationships": [],
+  "sources": [
+    "x.ts"
+  ],
+  "queries": [
+    {
+      "id": "callers",
+      "tool": "callers",
+      "symbol": "save",
+      "required": [
+        "commit"
+      ],
+      "forbidden": [
+        "rollback"
+      ]
+    },
+    {
+      "id": "callees",
+      "tool": "callees",
+      "symbol": "commit",
+      "required": [
+        "save"
+      ],
+      "forbidden": [
+        "audit"
+      ]
+    },
+    {
+      "id": "impact",
+      "tool": "impact",
+      "symbol": "write",
+      "required": [
+        "save",
+        "commit"
+      ],
+      "forbidden": [
+        "rollback"
+      ]
+    },
+    {
+      "id": "definition",
+      "tool": "node",
+      "symbol": "audit",
+      "required": [
+        "audit"
+      ]
+    },
+    {
+      "id": "explore",
+      "tool": "explore",
+      "symbol": "save",
+      "required": [
+        "save",
+        "write"
+      ]
+    }
+  ]
+}

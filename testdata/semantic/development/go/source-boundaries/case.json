@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "id": "go/source-boundaries",
+  "language": "go",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "source-boundaries",
+  "construct": "unicode, repeated names, build tags, vendored and generated files",
+  "status": "supported",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "scip-go definitions and enclosing ranges; reviewed call annotations",
+  "buildContext": "default tags",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "Größe",
+      "path": "unicode.go",
+      "owner": "",
+      "role": "function",
+      "name": "Größe",
+      "at": {
+        "line": 4,
+        "col": 16
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 11
+        },
+        "end": {
+          "line": 4,
+          "col": 42
+        }
+      }
+    },
+    {
+      "id": "note",
+      "path": "unicode.go",
+      "owner": "",
+      "role": "constant",
+      "name": "note",
+      "at": {
+        "line": 6,
+        "col": 6
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 6,
+          "col": 6
+        },
+        "end": {
+          "line": 6,
+          "col": 37
+        }
+      }
+    },
+    {
+      "id": "Ä",
+      "path": "unicode.go",
+      "owner": "",
+      "role": "type",
+      "name": "Ä",
+      "at": {
+        "line": 8,
+        "col": 5
+      },
+      "spanRule": "go-type-spec",
+      "span": {
+        "start": {
+          "line": 8,
+          "col": 5
+        },
+        "end": {
+          "line": 8,
+          "col": 16
+        }
+      }
+    },
+    {
+      "id": "Ä.Same",
+      "path": "unicode.go",
+      "owner": "Ä",
+      "role": "method",
+      "name": "Same",
+      "at": {
+        "line": 10,
+        "col": 10
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 10,
+          "col": 0
+        },
+        "end": {
+          "line": 10,
+          "col": 41
+        }
+      }
+    },
+    {
+      "id": "B",
+      "path": "unicode.go",
+      "owner": "",
+      "role": "type",
+      "name": "B",
+      "at": {
+        "line": 12,
+        "col": 5
+      },
+      "spanRule": "go-type-spec",
+      "span": {
+        "start": {
+          "line": 12,
+          "col": 5
+        },
+        "end": {
+          "line": 12,
+          "col": 15
+        }
+      }
+    },
+    {
+      "id": "B.Same",
+      "path": "unicode.go",
+      "owner": "B",
+      "role": "method",
+      "name": "Same",
+      "at": {
+        "line": 14,
+        "col": 9
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 14,
+          "col": 0
+        },
+        "end": {
+          "line": 14,
+          "col": 32
+        }
+      }
+    },
+    {
+      "id": "Untagged",
+      "path": "untagged.go",
+      "owner": "",
+      "role": "function",
+      "name": "Untagged",
+      "at": {
+        "line": 5,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 0
+        },
+        "end": {
+          "line": 5,
+          "col": 41
+        }
+      }
+    },
+    {
+      "id": "Generated",
+      "path": "gen.pb.go",
+      "owner": "",
+      "role": "function",
+      "name": "Generated",
+      "at": {
+        "line": 5,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 0
+        },
+        "end": {
+          "line": 5,
+          "col": 33
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Ä.Same",
+      "kind": "calls",
+      "target": "Größe",
+      "path": "unicode.go",
+      "site": {
+        "line": 10,
+        "col": 30
+      }
+    }
+  ],
+  "sources": [
+    "gen.pb.go",
+    "tagged.go",
+    "unicode.go",
+    "untagged.go",
+    "vendor/example.com/dep/dep.go"
+  ],
+  "excluded": {
+    "tagged.go": "EXCLUSION_REASON_BUILD_TAG",
+    "vendor/example.com/dep/dep.go": "EXCLUSION_REASON_DIR_VENDOR"
+  }
+}

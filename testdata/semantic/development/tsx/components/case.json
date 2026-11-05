@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "id": "tsx/components",
+  "language": "tsx",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "declarations",
+  "construct": "components, hooks, cross-file calls",
+  "status": "supported",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "format",
+      "path": "a.tsx",
+      "owner": "",
+      "role": "function",
+      "name": "format",
+      "at": {
+        "line": 1,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 1,
+          "col": 7
+        },
+        "end": {
+          "line": 3,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Label",
+      "path": "a.tsx",
+      "owner": "",
+      "role": "function",
+      "name": "Label",
+      "at": {
+        "line": 4,
+        "col": 13
+      },
+      "spanRule": "ts-callable-declarator",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 13
+        },
+        "end": {
+          "line": 6,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Page",
+      "path": "b.tsx",
+      "owner": "",
+      "role": "function",
+      "name": "Page",
+      "at": {
+        "line": 3,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 7
+        },
+        "end": {
+          "line": 5,
+          "col": 1
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Label",
+      "kind": "calls",
+      "target": "format",
+      "path": "a.tsx",
+      "site": {
+        "line": 5,
+        "col": 13
+      }
+    },
+    {
+      "source": "Page",
+      "kind": "calls",
+      "target": "format",
+      "path": "b.tsx",
+      "site": {
+        "line": 4,
+        "col": 19
+      }
+    }
+  ],
+  "sources": [
+    "a.tsx",
+    "b.tsx"
+  ]
+}

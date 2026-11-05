@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "id": "typescript/lifecycle",
+  "language": "typescript",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "lifecycle",
+  "construct": "no-op, edit, rename, deletion, restoration",
+  "status": "supported",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "fresh index of the same tree",
+  "reviewedOnly": "the fresh index is the comparison",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [],
+  "relationships": [],
+  "sources": [
+    "a.ts",
+    "b.ts"
+  ],
+  "queries": [
+    {
+      "id": "callers",
+      "tool": "callers",
+      "symbol": "keep",
+      "required": []
+    },
+    {
+      "id": "callees",
+      "tool": "callees",
+      "symbol": "keep",
+      "required": []
+    },
+    {
+      "id": "impact",
+      "tool": "impact",
+      "symbol": "gone",
+      "required": []
+    }
+  ],
+  "lifecycle": [
+    {
+      "name": "no-op"
+    },
+    {
+      "name": "edit",
+      "write": {
+        "a.ts": "export function keep() {\n  return 2 + gone();\n}\nexport function gone() {\n  return 1;\n}\n"
+      }
+    },
+    {
+      "name": "add",
+      "write": {
+        "b.ts": "import { keep, gone } from \"./a\";\n\nexport function other() {\n  return keep() + gone();\n}\n"
+      }
+    },
+    {
+      "name": "rename",
+      "rename": {
+        "b.ts": "moved.ts"
+      }
+    },
+    {
+      "name": "delete",
+      "delete": [
+        "moved.ts"
+      ]
+    },
+    {
+      "name": "restore",
+      "write": {
+        "b.ts": "import { keep, gone } from \"./a\";\n\nexport function other() {\n  return keep() + gone();\n}\n"
+      }
+    }
+  ]
+}

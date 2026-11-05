@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "id": "python/resolution",
+  "language": "python",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "sampled",
+  "dimension": "resolution",
+  "construct": "imports, aliases, shadowing, dynamic calls",
+  "status": "known-gap",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "CPython ast and symtable; reviewed dynamic annotations",
+  "scope": {
+    "roles": [
+      "function"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "referenceExclusions": [
+    {
+      "symbol": "^main:CB$",
+      "status": "unevaluated",
+      "reason": "module data bindings are measured in module-and-class-attributes"
+    }
+  ],
+  "declarations": [
+    {
+      "id": "helper",
+      "path": "lib.py",
+      "owner": "",
+      "role": "function",
+      "name": "helper",
+      "at": {
+        "line": 1,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 1,
+          "col": 0
+        },
+        "end": {
+          "line": 2,
+          "col": 12
+        }
+      }
+    },
+    {
+      "id": "other",
+      "path": "lib.py",
+      "owner": "",
+      "role": "function",
+      "name": "other",
+      "at": {
+        "line": 5,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 0
+        },
+        "end": {
+          "line": 6,
+          "col": 12
+        }
+      }
+    },
+    {
+      "id": "caller",
+      "path": "main.py",
+      "owner": "",
+      "role": "function",
+      "name": "caller",
+      "at": {
+        "line": 4,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 0
+        },
+        "end": {
+          "line": 5,
+          "col": 24
+        }
+      }
+    },
+    {
+      "id": "shadow",
+      "path": "main.py",
+      "owner": "",
+      "role": "function",
+      "name": "shadow",
+      "at": {
+        "line": 8,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 8,
+          "col": 0
+        },
+        "end": {
+          "line": 9,
+          "col": 18
+        }
+      }
+    },
+    {
+      "id": "dynamic",
+      "path": "main.py",
+      "owner": "",
+      "role": "function",
+      "name": "dynamic",
+      "at": {
+        "line": 12,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 12,
+          "col": 0
+        },
+        "end": {
+          "line": 13,
+          "col": 35
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "caller",
+      "kind": "calls",
+      "target": "helper",
+      "path": "main.py",
+      "site": {
+        "line": 5,
+        "col": 11
+      }
+    },
+    {
+      "source": "caller",
+      "kind": "calls",
+      "target": "other",
+      "path": "main.py",
+      "site": {
+        "line": 5,
+        "col": 17
+      }
+    }
+  ],
+  "sources": [
+    "lib.py",
+    "main.py"
+  ],
+  "forbidden": [
+    {
+      "source": "shadow",
+      "kind": "calls",
+      "target": "other"
+    }
+  ],
+  "exception": {
+    "issue": "#262",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "missing-relationship caller calls helper",
+      "missing-relationship caller calls other"
+    ]
+  }
+}
