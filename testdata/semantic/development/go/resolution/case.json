@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "id": "go/resolution",
+  "language": "go",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "resolution",
+  "construct": "imports, aliases, cross-file calls, receivers, shadowing",
+  "status": "known-gap",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "scip-go definitions and enclosing ranges; reviewed call annotations",
+  "buildContext": "GOOS=linux,GOARCH=amd64",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "Helper",
+      "path": "util/util.go",
+      "owner": "",
+      "role": "function",
+      "name": "Helper",
+      "at": {
+        "line": 3,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 3,
+          "col": 30
+        }
+      }
+    },
+    {
+      "id": "Thing",
+      "path": "util/util.go",
+      "owner": "",
+      "role": "type",
+      "name": "Thing",
+      "at": {
+        "line": 5,
+        "col": 5
+      },
+      "spanRule": "go-type-spec",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 5
+        },
+        "end": {
+          "line": 5,
+          "col": 19
+        }
+      }
+    },
+    {
+      "id": "Thing.Run",
+      "path": "util/util.go",
+      "owner": "Thing",
+      "role": "method",
+      "name": "Run",
+      "at": {
+        "line": 7,
+        "col": 13
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 0
+        },
+        "end": {
+          "line": 7,
+          "col": 42
+        }
+      }
+    },
+    {
+      "id": "local",
+      "path": "main.go",
+      "owner": "",
+      "role": "function",
+      "name": "local",
+      "at": {
+        "line": 5,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 0
+        },
+        "end": {
+          "line": 5,
+          "col": 29
+        }
+      }
+    },
+    {
+      "id": "Caller",
+      "path": "main.go",
+      "owner": "",
+      "role": "function",
+      "name": "Caller",
+      "at": {
+        "line": 7,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 0
+        },
+        "end": {
+          "line": 7,
+          "col": 59
+        }
+      }
+    },
+    {
+      "id": "Shadow",
+      "path": "main.go",
+      "owner": "",
+      "role": "function",
+      "name": "Shadow",
+      "at": {
+        "line": 9,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 9,
+          "col": 0
+        },
+        "end": {
+          "line": 12,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Recv",
+      "path": "main.go",
+      "owner": "",
+      "role": "function",
+      "name": "Recv",
+      "at": {
+        "line": 14,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 14,
+          "col": 0
+        },
+        "end": {
+          "line": 17,
+          "col": 1
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Caller",
+      "kind": "calls",
+      "target": "Helper",
+      "path": "main.go",
+      "site": {
+        "line": 7,
+        "col": 29
+      }
+    },
+    {
+      "source": "Caller",
+      "kind": "calls",
+      "target": "local",
+      "path": "main.go",
+      "site": {
+        "line": 7,
+        "col": 40
+      }
+    },
+    {
+      "source": "Recv",
+      "kind": "calls",
+      "target": "Thing.Run",
+      "path": "main.go",
+      "site": {
+        "line": 16,
+        "col": 10
+      }
+    },
+    {
+      "source": "Thing.Run",
+      "kind": "calls",
+      "target": "Helper",
+      "path": "util/util.go",
+      "site": {
+        "line": 7,
+        "col": 32
+      }
+    }
+  ],
+  "sources": [
+    "main.go",
+    "util/util.go"
+  ],
+  "forbidden": [
+    {
+      "source": "Shadow",
+      "kind": "calls",
+      "target": "local"
+    }
+  ],
+  "exception": {
+    "issue": "#261",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "forbidden-relationship Shadow calls local"
+    ]
+  }
+}

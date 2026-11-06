@@ -243,6 +243,46 @@ tasks:
         fi
         go test -count=1 -v -run '^TestEveryDeclarationHasOneNode$' ./internal/indexer
 
+  eval:semantic:
+    desc: >-
+      Runs the semantic accuracy evaluation over both manifest partitions and
+      writes test-results/semantic/. This is the pull request gate. See
+      testdata/semantic/README.md for failure exits and report fields.
+    cmds:
+      - task: eval:semantic:run
+        vars: {PARTITIONS: "development,acceptance"}
+
+  eval:semantic:dev:
+    desc: >-
+      Runs the semantic accuracy evaluation over the development partition
+      only, for local iteration. Acceptance cases do not run.
+    cmds:
+      - task: eval:semantic:run
+        vars: {PARTITIONS: "development"}
+
+  eval:semantic:run:
+    internal: true
+    cmds:
+      - |
+        set -euo pipefail
+        # The JDK and the plugin jars come from mise.toml. A JDK from the
+        # shell's own PATH must not stand in for the pin.
+        export PATH="$(mise where java)/bin:${PATH}"
+        cp=""
+        for tool in http:scip-javac http:scip-shared http:scip-java-bindings http:protobuf-java; do
+          for jar in "$(mise where "${tool}")"/*.jar; do cp="${cp:+${cp}:}${jar}"; done
+        done
+        export CODEGRAPH_SCIP_JAVAC_CLASSPATH="${cp}"
+        python=$(sed -n 's/^const PythonVersion = "\(.*\)"$/\1/p' tools/semantic-eval/adapters.go)
+        [ -n "${python}" ] || { echo "::error::eval:semantic: no PythonVersion in tools/semantic-eval/adapters.go"; exit 1; }
+        uv python install "${python}"
+        export CODEGRAPH_SEMANTIC_PARTITIONS="{{.PARTITIONS}}"
+        export CODEGRAPH_SEMANTIC_REPORT_DIR="${PWD}/test-results/semantic"
+        status=0
+        go test -tags semantic -count=1 ./tools/semantic-eval/ || status=$?
+        cat "${CODEGRAPH_SEMANTIC_REPORT_DIR}/semantic-report.txt"
+        exit "${status}"
+
   test:fuzz:
     desc: >-
       Runs one native Go fuzz target for a fixed time: FUZZ_TARGET in the
@@ -4815,6 +4855,7 @@ tasks:
       - |
         set -euo pipefail
         entries=$(go run ./tools/corpora -mode entries -locked)
+        all_entries=$(go run ./tools/corpora -mode entries)
         want=$(printf '%s' "$entries" | jq 'length')
         if [ "$want" -eq 0 ]; then
           echo "::error::corpora:fetch: the locked corpus set is empty — nothing to fetch. Lock at least one entry in corpora/manifest.json (Plan 01-06) before running this target."
@@ -4828,6 +4869,10 @@ tasks:
           CORPUS_REPO="$repo" CORPUS_SHA="$sha" task corpora:fetch-one
           fetched=$((fetched + 1))
         done
+        # The golden suite reads this TypeScript corpus, which is outside the locked set.
+        zustand=$(printf '%s' "$all_entries" | jq -r '.[] | select(.repo == "pmndrs/zustand") | .sha')
+        [ -n "$zustand" ] || { echo "::error::corpora:fetch: pmndrs/zustand has no manifest entry"; exit 1; }
+        CORPUS_REPO=pmndrs/zustand CORPUS_SHA="$zustand" task corpora:fetch-one
         echo "corpora:fetch: fetched or confirmed ${fetched}/${want} locked corpora"
 
   corpora:measure:

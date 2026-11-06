@@ -31,6 +31,32 @@ hk = "2.5.0"
 # `openspec update` writes the /opsx:* commands and openspec-* skills for the CLI version that
 # runs it. Run it after a bump and commit what it writes.
 "npm:@fission-ai/openspec" = "1.14.2"
+# Reference tools for `task eval:semantic`. They run in development and CI only and never ship.
+"github:scip-code/scip-go" = "0.2.9"
+"github:scip-code/scip" = "0.10.0"
+"npm:@sourcegraph/scip-typescript" = "0.5.2"
+java = "temurin-25.0.5+8.0.LTS"
+
+# The jars of the scip-javac compiler plugin. `task eval:semantic` passes them to javac.
+[tools."http:scip-javac"]
+version = "0.13.2"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-javac/0.13.2/scip-javac-0.13.2.jar"
+format = "raw"
+
+[tools."http:scip-shared"]
+version = "0.13.2"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-shared/0.13.2/scip-shared-0.13.2.jar"
+format = "raw"
+
+[tools."http:scip-java-bindings"]
+version = "0.10.0"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-java-bindings/0.10.0/scip-java-bindings-0.10.0.jar"
+format = "raw"
+
+[tools."http:protobuf-java"]
+version = "4.34.2"
+url = "https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/4.34.2/protobuf-java-4.34.2.jar"
+format = "raw"
 
 [env]
 # A go.mod that asks for a newer Go fails the build instead of downloading another toolchain.

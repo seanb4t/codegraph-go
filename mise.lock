@@ -91,6 +91,52 @@ url = "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-darwin
 url_api = "https://api.github.com/repos/sigstore/cosign/releases/assets/660069257"
 provenance = "cosign"
 
+[[tools."github:scip-code/scip"]]
+version = "0.10.0"
+backend = "github:scip-code/scip"
+specifiers = ["0.10.0"]
+
+[tools."github:scip-code/scip"."platforms.linux-arm64"]
+checksum = "sha256:6ab677dc2c4bf2955975d0530766152e45daaa988f9404068d8adecacd0bb24c"
+checksum_source = "mise-versions"
+url = "https://github.com/scip-code/scip/releases/download/v0.10.0/scip-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/scip-code/scip/releases/assets/543178566"
+
+[tools."github:scip-code/scip"."platforms.linux-x64"]
+checksum = "sha256:eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0"
+checksum_source = "mise-versions"
+url = "https://github.com/scip-code/scip/releases/download/v0.10.0/scip-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/scip-code/scip/releases/assets/543178672"
+
+[tools."github:scip-code/scip"."platforms.macos-arm64"]
+checksum = "sha256:7ea200390e0790b3da8999b7b1cd4e3597700dcb3d354911872523bfe0090779"
+checksum_source = "mise-versions"
+url = "https://github.com/scip-code/scip/releases/download/v0.10.0/scip-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/scip-code/scip/releases/assets/543178720"
+
+[[tools."github:scip-code/scip-go"]]
+version = "0.2.9"
+backend = "github:scip-code/scip-go"
+specifiers = ["0.2.9"]
+
+[tools."github:scip-code/scip-go"."platforms.linux-arm64"]
+checksum = "sha256:81a196420b1ee64a8820a59287f4bb9cab1849bc3d4e13c97a3130f75d8540fd"
+url = "https://github.com/scip-code/scip-go/releases/download/v0.2.9/scip-go-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/scip-code/scip-go/releases/assets/665717988"
+provenance = "github-attestations"
+
+[tools."github:scip-code/scip-go"."platforms.linux-x64"]
+checksum = "sha256:4ec4e45ecdbe6f43055ed555254e049f46f28389ade438db3d59679651fa1292"
+url = "https://github.com/scip-code/scip-go/releases/download/v0.2.9/scip-go-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/scip-code/scip-go/releases/assets/665719343"
+provenance = "github-attestations"
+
+[tools."github:scip-code/scip-go"."platforms.macos-arm64"]
+checksum = "sha256:3d8a0c14d0617debcf0c38debe4532d201c89c38a85eaac641da2200bb36d68f"
+url = "https://github.com/scip-code/scip-go/releases/download/v0.2.9/scip-go-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/scip-code/scip-go/releases/assets/665721824"
+provenance = "github-attestations"
+
 [[tools.go]]
 version = "1.26.10"
 backend = "core:go"
@@ -209,6 +255,103 @@ url = "https://github.com/jdx/hk/releases/download/v2.5.0/hk-aarch64-apple-darwi
 signer = "sigstore-oidc:https://github.com/jdx/hk/.github/workflows/release.yml"
 repository_ids = { repository = "922514152" }
 
+[[tools."http:protobuf-java"]]
+version = "4.34.2"
+backend = "http:protobuf-java"
+specifiers = ["4.34.2"]
+
+[tools."http:protobuf-java".options]
+format = "raw"
+
+[tools."http:protobuf-java"."platforms.linux-arm64"]
+checksum = "sha256:780e269712d59ae34b87b702ce26aede7982804299dd56a65aa84bda6c145268"
+url = "https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/4.34.2/protobuf-java-4.34.2.jar"
+
+[tools."http:protobuf-java"."platforms.linux-x64"]
+checksum = "sha256:780e269712d59ae34b87b702ce26aede7982804299dd56a65aa84bda6c145268"
+url = "https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/4.34.2/protobuf-java-4.34.2.jar"
+
+[tools."http:protobuf-java"."platforms.macos-arm64"]
+checksum = "blake3:d8796275423c4c8cc42dc59b980bd1268bd7b01977e2927ec46a13abf6249da5"
+url = "https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/4.34.2/protobuf-java-4.34.2.jar"
+
+[[tools."http:scip-java-bindings"]]
+version = "0.10.0"
+backend = "http:scip-java-bindings"
+specifiers = ["0.10.0"]
+
+[tools."http:scip-java-bindings".options]
+format = "raw"
+
+[tools."http:scip-java-bindings"."platforms.linux-arm64"]
+checksum = "sha256:fd3c27dabf59eab60be774ba228d38d94e01379c0790a8a66916d9ca5e8568d8"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-java-bindings/0.10.0/scip-java-bindings-0.10.0.jar"
+
+[tools."http:scip-java-bindings"."platforms.linux-x64"]
+checksum = "sha256:fd3c27dabf59eab60be774ba228d38d94e01379c0790a8a66916d9ca5e8568d8"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-java-bindings/0.10.0/scip-java-bindings-0.10.0.jar"
+
+[tools."http:scip-java-bindings"."platforms.macos-arm64"]
+checksum = "blake3:10c9c6d78696a4fc46ad7926482a184a78ffd485f865c823da6a2971238c79d8"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-java-bindings/0.10.0/scip-java-bindings-0.10.0.jar"
+
+[[tools."http:scip-javac"]]
+version = "0.13.2"
+backend = "http:scip-javac"
+specifiers = ["0.13.2"]
+
+[tools."http:scip-javac".options]
+format = "raw"
+
+[tools."http:scip-javac"."platforms.linux-arm64"]
+checksum = "sha256:1c7ad1c8361f6ea9f9758e4b55decd4869b0ac7bb8610127aca045173ff590ef"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-javac/0.13.2/scip-javac-0.13.2.jar"
+
+[tools."http:scip-javac"."platforms.linux-x64"]
+checksum = "sha256:1c7ad1c8361f6ea9f9758e4b55decd4869b0ac7bb8610127aca045173ff590ef"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-javac/0.13.2/scip-javac-0.13.2.jar"
+
+[tools."http:scip-javac"."platforms.macos-arm64"]
+checksum = "blake3:532d58f92a83358ca36172a7003226c55161c1384b1fc15d35b929f645cf49f0"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-javac/0.13.2/scip-javac-0.13.2.jar"
+
+[[tools."http:scip-shared"]]
+version = "0.13.2"
+backend = "http:scip-shared"
+specifiers = ["0.13.2"]
+
+[tools."http:scip-shared".options]
+format = "raw"
+
+[tools."http:scip-shared"."platforms.linux-arm64"]
+checksum = "sha256:8c58e069af784b178347849f9b0e127781d9070210201ac6617947ace4f895be"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-shared/0.13.2/scip-shared-0.13.2.jar"
+
+[tools."http:scip-shared"."platforms.linux-x64"]
+checksum = "sha256:8c58e069af784b178347849f9b0e127781d9070210201ac6617947ace4f895be"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-shared/0.13.2/scip-shared-0.13.2.jar"
+
+[tools."http:scip-shared"."platforms.macos-arm64"]
+checksum = "blake3:2896e5549dd04dab692a764caf1787ff5ef784eaef9d880d0072a317367bf2ae"
+url = "https://repo1.maven.org/maven2/org/scip-code/scip-shared/0.13.2/scip-shared-0.13.2.jar"
+
+[[tools.java]]
+version = "temurin-25.0.5+8.0.LTS"
+backend = "core:java"
+specifiers = ["temurin-25.0.5+8.0.LTS"]
+
+[tools.java."platforms.linux-arm64"]
+checksum = "sha256:bb5b2ded252f21c6090cf780b0a408ad0d83bbb557e702955643557f13231880"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_aarch64_linux_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.linux-x64"]
+checksum = "sha256:68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.macos-arm64"]
+checksum = "sha256:36dc14d797aaff6d89aab302cd053fdba6207dfdcf772052fa7b023a94b0e857"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_aarch64_mac_hotspot_25.0.5_8.tar.gz"
+
 [[tools.node]]
 version = "24.22.1"
 backend = "core:node"
@@ -231,6 +374,12 @@ version = "1.14.2"
 aube = { path = ".mise/locks/npm-fission-ai-openspec/1.14.2", digest = "sha256:7eca22e0444e0c6f876fd4f3dd194439cd31d288cc9e432922f2dfe2e8a1e58a" }
 backend = "npm:@fission-ai/openspec"
 specifiers = ["1.14.2"]
+
+[[tools."npm:@sourcegraph/scip-typescript"]]
+version = "0.5.2"
+aube = { path = ".mise/locks/npm-sourcegraph-scip-typescript/0.5.2", digest = "sha256:92956e6fa7a7887190926d37ebb48ab5f8db640e63ac5ef6457cd65947d4d229" }
+backend = "npm:@sourcegraph/scip-typescript"
+specifiers = ["0.5.2"]
 
 [[tools.pnpm]]
 version = "11.23.0"

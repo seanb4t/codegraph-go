@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "id": "go/grouped-bindings",
+  "language": "go",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "declarations",
+  "construct": "grouped bindings, constants, fields, methods",
+  "status": "known-gap",
+  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "evidence": "scip-go definitions and enclosing ranges; reviewed call annotations",
+  "buildContext": "GOOS=linux,GOARCH=amd64",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "exception": {
+    "issue": "#239",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "missing-declaration bindings.go/Point/field/Tag@22:1",
+      "missing-declaration bindings.go/Point/field/X@21:1",
+      "missing-declaration bindings.go/Point/field/Y@21:4",
+      "missing-relationship Third calls name"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "First",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "variable",
+      "name": "First",
+      "at": {
+        "line": 7,
+        "col": 1
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 1
+        },
+        "end": {
+          "line": 7,
+          "col": 21
+        }
+      }
+    },
+    {
+      "id": "Second",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "variable",
+      "name": "Second",
+      "at": {
+        "line": 7,
+        "col": 8
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 1
+        },
+        "end": {
+          "line": 7,
+          "col": 21
+        }
+      }
+    },
+    {
+      "id": "Third",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "variable",
+      "name": "Third",
+      "at": {
+        "line": 8,
+        "col": 1
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 8,
+          "col": 1
+        },
+        "end": {
+          "line": 8,
+          "col": 47
+        }
+      }
+    },
+    {
+      "id": "Alpha",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "constant",
+      "name": "Alpha",
+      "at": {
+        "line": 12,
+        "col": 1
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 12,
+          "col": 1
+        },
+        "end": {
+          "line": 12,
+          "col": 13
+        }
+      }
+    },
+    {
+      "id": "Beta",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "constant",
+      "name": "Beta",
+      "at": {
+        "line": 13,
+        "col": 1
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 13,
+          "col": 1
+        },
+        "end": {
+          "line": 13,
+          "col": 5
+        }
+      }
+    },
+    {
+      "id": "Single",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "variable",
+      "name": "Single",
+      "at": {
+        "line": 16,
+        "col": 4
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 16,
+          "col": 4
+        },
+        "end": {
+          "line": 16,
+          "col": 21
+        }
+      }
+    },
+    {
+      "id": "Other",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "variable",
+      "name": "Other",
+      "at": {
+        "line": 16,
+        "col": 12
+      },
+      "spanRule": "go-value-spec",
+      "span": {
+        "start": {
+          "line": 16,
+          "col": 4
+        },
+        "end": {
+          "line": 16,
+          "col": 21
+        }
+      }
+    },
+    {
+      "id": "name",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "function",
+      "name": "name",
+      "at": {
+        "line": 18,
+        "col": 5
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 18,
+          "col": 0
+        },
+        "end": {
+          "line": 18,
+          "col": 33
+        }
+      }
+    },
+    {
+      "id": "Point",
+      "path": "bindings.go",
+      "owner": "",
+      "role": "type",
+      "name": "Point",
+      "at": {
+        "line": 20,
+        "col": 5
+      },
+      "spanRule": "go-type-spec",
+      "span": {
+        "start": {
+          "line": 20,
+          "col": 5
+        },
+        "end": {
+          "line": 23,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Point.X",
+      "path": "bindings.go",
+      "owner": "Point",
+      "role": "field",
+      "name": "X",
+      "at": {
+        "line": 21,
+        "col": 1
+      },
+      "spanRule": "go-field-decl",
+      "span": {
+        "start": {
+          "line": 21,
+          "col": 1
+        },
+        "end": {
+          "line": 21,
+          "col": 9
+        }
+      }
+    },
+    {
+      "id": "Point.Y",
+      "path": "bindings.go",
+      "owner": "Point",
+      "role": "field",
+      "name": "Y",
+      "at": {
+        "line": 21,
+        "col": 4
+      },
+      "spanRule": "go-field-decl",
+      "span": {
+        "start": {
+          "line": 21,
+          "col": 1
+        },
+        "end": {
+          "line": 21,
+          "col": 9
+        }
+      }
+    },
+    {
+      "id": "Point.Tag",
+      "path": "bindings.go",
+      "owner": "Point",
+      "role": "field",
+      "name": "Tag",
+      "at": {
+        "line": 22,
+        "col": 1
+      },
+      "spanRule": "go-field-decl",
+      "span": {
+        "start": {
+          "line": 22,
+          "col": 1
+        },
+        "end": {
+          "line": 22,
+          "col": 12
+        }
+      }
+    },
+    {
+      "id": "Point.Label",
+      "path": "bindings.go",
+      "owner": "Point",
+      "role": "method",
+      "name": "Label",
+      "at": {
+        "line": 25,
+        "col": 15
+      },
+      "spanRule": "go-func-decl",
+      "span": {
+        "start": {
+          "line": 25,
+          "col": 0
+        },
+        "end": {
+          "line": 25,
+          "col": 55
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Point.Label",
+      "kind": "calls",
+      "target": "name",
+      "path": "bindings.go",
+      "site": {
+        "line": 25,
+        "col": 47
+      }
+    },
+    {
+      "source": "Third",
+      "kind": "calls",
+      "target": "name",
+      "path": "bindings.go",
+      "site": {
+        "line": 8,
+        "col": 41
+      }
+    }
+  ],
+  "sources": [
+    "bindings.go"
+  ]
+}

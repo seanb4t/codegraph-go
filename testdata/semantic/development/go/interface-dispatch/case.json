@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "go/interface-dispatch",
+  "language": "go",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "resolution",
+  "construct": "general interface dispatch",
+  "status": "unsupported",
+  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "evidence": "inventory only, outside the target specification",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [],
+  "relationships": [],
+  "sources": [
+    "d.go"
+  ]
+}

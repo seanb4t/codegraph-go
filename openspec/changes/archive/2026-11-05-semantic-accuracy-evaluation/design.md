@@ -36,8 +36,8 @@ Use these reference sources within their actual limits:
 | --- | --- | --- |
 | Go | Pinned `scip-go` definitions and reference occurrences | Match build tags, platform, package, and production/test contexts. Do not infer runtime dispatch from a reference. |
 | TypeScript, JavaScript, TSX | Pinned `scip-typescript` definitions and reference occurrences | Match module resolution and compiler configuration. Keep JS and TSX results separate. |
-| Python | Pinned CPython `ast` and `symtable`, plus reviewed expectations | Establish declarations and lexical bindings. Hand-review dynamic attributes and calls rather than claiming compiler-proven targets. |
-| Java | Pinned `scip-javac` compiler plugin and SCIP aggregation | Invoke the pinned JDK directly with `-proc:none` and an explicit classpath. Do not execute source, processors, Maven, or Gradle. |
+| Python | Pinned CPython `ast` and `symtable`, plus reviewed expectations | Run the version in `PythonVersion` through the pinned `uv`. Establish declarations and lexical bindings. Hand-review dynamic attributes and calls rather than claiming compiler-proven targets. |
+| Java | Pinned `scip-javac` compiler plugin | Invoke the pinned JDK directly with `-proc:none` and an explicit classpath. The plugin writes one index per source file, and `scip print --json` reads each file, so no aggregation step exists. Pin the plugin and its three jar dependencies as raw downloads in `mise.toml`. Do not execute source, processors, Maven, or Gradle. |
 
 Prefer existing indexers over custom compiler walkers. [scip-go](https://github.com/scip-code/scip-go) and [scip-typescript](https://github.com/sourcegraph/scip-typescript) supply independent definitions and references. [scip-java manual integration](https://github.com/scip-code/scip-java/blob/main/docs/manual-configuration.md) supports direct compiler-plugin invocation without a project build tool.
 
@@ -47,7 +47,7 @@ Python documents separate [AST](https://docs.python.org/3/library/ast.html) and 
 
 Java's [compiler documentation](https://github.com/openjdk/jdk25u-dev/blob/master/src/jdk.compiler/share/man/javac.md) defines `-proc:none`. Record missing dependencies as reference limitations. Require a qualification case for each chosen indexer before accepting its facts.
 
-Pin adapter tools through the repository's development tool mechanism. Record exact versions in reports. Reuse the repository's TypeScript pin when its compiler API meets the contract. Never depend on an unpinned upstream default branch.
+Source that no reference can parse uses `reviewedOnly` on its case, and every fact in that case is a reviewed annotation. Pin adapter tools through the repository's development tool mechanism. Record exact versions in reports. Reuse the repository's TypeScript pin when its compiler API meets the contract. Never depend on an unpinned upstream default branch.
 
 Normalize declarations to language, relative path, owner, role, name, and the independently located identifier occurrence. Convert each reference format's declared position encoding to UTF-8 byte offsets. Do not compare CodeGraph hashes with compiler-generated identifiers.
 

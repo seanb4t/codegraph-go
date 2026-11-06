@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "id": "typescript/resolution",
+  "language": "typescript",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "resolution",
+  "construct": "imports, aliases, cross-file calls, shadowing",
+  "status": "known-gap",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "helper",
+      "path": "lib.ts",
+      "owner": "",
+      "role": "function",
+      "name": "helper",
+      "at": {
+        "line": 1,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 1,
+          "col": 7
+        },
+        "end": {
+          "line": 3,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "other",
+      "path": "lib.ts",
+      "owner": "",
+      "role": "function",
+      "name": "other",
+      "at": {
+        "line": 4,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 7
+        },
+        "end": {
+          "line": 6,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "caller",
+      "path": "main.ts",
+      "owner": "",
+      "role": "function",
+      "name": "caller",
+      "at": {
+        "line": 3,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 7
+        },
+        "end": {
+          "line": 5,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "shadow",
+      "path": "main.ts",
+      "owner": "",
+      "role": "function",
+      "name": "shadow",
+      "at": {
+        "line": 7,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 7
+        },
+        "end": {
+          "line": 10,
+          "col": 1
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "caller",
+      "kind": "calls",
+      "target": "helper",
+      "path": "main.ts",
+      "site": {
+        "line": 4,
+        "col": 9
+      },
+      "evidence": "reviewed"
+    },
+    {
+      "source": "caller",
+      "kind": "calls",
+      "target": "other",
+      "path": "main.ts",
+      "site": {
+        "line": 4,
+        "col": 15
+      }
+    }
+  ],
+  "sources": [
+    "lib.ts",
+    "main.ts"
+  ],
+  "forbidden": [
+    {
+      "source": "shadow",
+      "kind": "calls",
+      "target": "other"
+    }
+  ],
+  "exception": {
+    "issue": "#261",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "forbidden-relationship shadow calls other"
+    ]
+  }
+}

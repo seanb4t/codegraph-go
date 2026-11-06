@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "id": "java/inherited-methods",
+  "language": "java",
+  "partition": "acceptance",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "resolution",
+  "construct": "inherited methods, static calls, repeated names",
+  "status": "supported",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "scip-javac definitions and enclosing ranges; reviewed call annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "referenceExclusions": [
+    {
+      "symbol": "<init>",
+      "status": "unsupported",
+      "reason": "implicit constructors have no source declaration"
+    }
+  ],
+  "declarations": [
+    {
+      "id": "Base",
+      "path": "p/Base.java",
+      "owner": "",
+      "role": "type",
+      "name": "Base",
+      "at": {
+        "line": 3,
+        "col": 6
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 7,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Base.name",
+      "path": "p/Base.java",
+      "owner": "Base",
+      "role": "method",
+      "name": "name",
+      "at": {
+        "line": 4,
+        "col": 6
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 2
+        },
+        "end": {
+          "line": 6,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Child",
+      "path": "p/Child.java",
+      "owner": "",
+      "role": "type",
+      "name": "Child",
+      "at": {
+        "line": 3,
+        "col": 6
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 7,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Child.use",
+      "path": "p/Child.java",
+      "owner": "Child",
+      "role": "method",
+      "name": "use",
+      "at": {
+        "line": 4,
+        "col": 6
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 2
+        },
+        "end": {
+          "line": 6,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Tools",
+      "path": "p/Child.java",
+      "owner": "",
+      "role": "type",
+      "name": "Tools",
+      "at": {
+        "line": 9,
+        "col": 6
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 9,
+          "col": 0
+        },
+        "end": {
+          "line": 13,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Tools.twice",
+      "path": "p/Child.java",
+      "owner": "Tools",
+      "role": "method",
+      "name": "twice",
+      "at": {
+        "line": 10,
+        "col": 13
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 10,
+          "col": 2
+        },
+        "end": {
+          "line": 12,
+          "col": 3
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Child.use",
+      "kind": "calls",
+      "target": "Base.name",
+      "path": "p/Child.java",
+      "site": {
+        "line": 5,
+        "col": 11
+      }
+    },
+    {
+      "source": "Child.use",
+      "kind": "calls",
+      "target": "Tools.twice",
+      "path": "p/Child.java",
+      "site": {
+        "line": 5,
+        "col": 26
+      }
+    }
+  ],
+  "sources": [
+    "p/Base.java",
+    "p/Child.java"
+  ]
+}

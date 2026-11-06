@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 1,
+  "id": "java/fields-and-owners",
+  "language": "java",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "declarations",
+  "construct": "field lists, owners, interface constants, methods",
+  "status": "known-gap",
+  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "evidence": "scip-javac definitions and enclosing ranges; reviewed call annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "referenceExclusions": [
+    {
+      "symbol": "<init>",
+      "status": "unsupported",
+      "reason": "implicit constructors have no source declaration"
+    }
+  ],
+  "declarations": [
+    {
+      "id": "Shape",
+      "path": "p/Shape.java",
+      "owner": "",
+      "role": "interface",
+      "name": "Shape",
+      "at": {
+        "line": 3,
+        "col": 17
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 7,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Shape.SIDES",
+      "path": "p/Shape.java",
+      "owner": "Shape",
+      "role": "field",
+      "name": "SIDES",
+      "at": {
+        "line": 4,
+        "col": 6
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 2
+        },
+        "end": {
+          "line": 4,
+          "col": 16
+        }
+      }
+    },
+    {
+      "id": "Shape.area",
+      "path": "p/Shape.java",
+      "owner": "Shape",
+      "role": "method",
+      "name": "area",
+      "at": {
+        "line": 6,
+        "col": 6
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 6,
+          "col": 2
+        },
+        "end": {
+          "line": 6,
+          "col": 13
+        }
+      }
+    },
+    {
+      "id": "Box",
+      "path": "p/Box.java",
+      "owner": "",
+      "role": "type",
+      "name": "Box",
+      "at": {
+        "line": 4,
+        "col": 13
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 0
+        },
+        "end": {
+          "line": 20,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Box.width",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "field",
+      "name": "width",
+      "at": {
+        "line": 5,
+        "col": 6
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 2
+        },
+        "end": {
+          "line": 5,
+          "col": 24
+        }
+      }
+    },
+    {
+      "id": "Box.height",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "field",
+      "name": "height",
+      "at": {
+        "line": 5,
+        "col": 13
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 2
+        },
+        "end": {
+          "line": 5,
+          "col": 24
+        }
+      }
+    },
+    {
+      "id": "Box.NAME",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "field",
+      "name": "NAME",
+      "at": {
+        "line": 6,
+        "col": 22
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 6,
+          "col": 2
+        },
+        "end": {
+          "line": 6,
+          "col": 34
+        }
+      }
+    },
+    {
+      "id": "Box.size.field",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "field",
+      "name": "size",
+      "at": {
+        "line": 7,
+        "col": 6
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 2
+        },
+        "end": {
+          "line": 7,
+          "col": 11
+        }
+      }
+    },
+    {
+      "id": "Box.area",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "method",
+      "name": "area",
+      "at": {
+        "line": 9,
+        "col": 13
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 9,
+          "col": 2
+        },
+        "end": {
+          "line": 11,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Box.mul",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "method",
+      "name": "mul",
+      "at": {
+        "line": 13,
+        "col": 6
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 13,
+          "col": 2
+        },
+        "end": {
+          "line": 15,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Box.size.method",
+      "path": "p/Box.java",
+      "owner": "Box",
+      "role": "method",
+      "name": "size",
+      "at": {
+        "line": 17,
+        "col": 6
+      },
+      "spanRule": "java-method-declaration",
+      "span": {
+        "start": {
+          "line": 17,
+          "col": 2
+        },
+        "end": {
+          "line": 19,
+          "col": 3
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Box.area",
+      "kind": "calls",
+      "target": "Box.mul",
+      "path": "p/Box.java",
+      "site": {
+        "line": 10,
+        "col": 11
+      }
+    }
+  ],
+  "sources": [
+    "p/Box.java",
+    "p/Shape.java"
+  ],
+  "exception": {
+    "issue": "#239",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "missing-declaration p/Box.java/Box/field/NAME@6:22",
+      "missing-declaration p/Box.java/Box/field/height@5:13",
+      "missing-declaration p/Box.java/Box/field/size@7:6",
+      "missing-declaration p/Box.java/Box/field/width@5:6",
+      "missing-declaration p/Shape.java/Shape/field/SIDES@4:6"
+    ]
+  }
+}

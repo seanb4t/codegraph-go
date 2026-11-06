@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "python/malformed-input",
+  "language": "python",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "sampled",
+  "dimension": "source-boundaries",
+  "construct": "a file that does not parse",
+  "status": "supported",
+  "parseFailures": [
+    "broken.py"
+  ],
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "reviewed source",
+  "reviewedOnly": "CPython rejects this source, so the bridge cannot read it",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": []
+  },
+  "declarations": [
+    {
+      "id": "before",
+      "path": "broken.py",
+      "owner": "",
+      "role": "function",
+      "name": "before",
+      "at": {
+        "line": 1,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 1,
+          "col": 0
+        },
+        "end": {
+          "line": 2,
+          "col": 12
+        }
+      },
+      "evidence": "reviewed"
+    }
+  ],
+  "relationships": [],
+  "sources": [
+    "broken.py"
+  ]
+}

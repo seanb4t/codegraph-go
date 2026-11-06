@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "id": "typescript/class-hierarchy",
+  "language": "typescript",
+  "partition": "acceptance",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "resolution",
+  "construct": "inherited methods, instance receivers, repeated names",
+  "status": "supported",
+  "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
+  "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "Base",
+      "path": "shapes.ts",
+      "owner": "",
+      "role": "type",
+      "name": "Base",
+      "at": {
+        "line": 1,
+        "col": 13
+      },
+      "spanRule": "ts-class-declaration",
+      "span": {
+        "start": {
+          "line": 1,
+          "col": 7
+        },
+        "end": {
+          "line": 5,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Base.name",
+      "path": "shapes.ts",
+      "owner": "Base",
+      "role": "method",
+      "name": "name",
+      "at": {
+        "line": 2,
+        "col": 2
+      },
+      "spanRule": "ts-method-definition",
+      "span": {
+        "start": {
+          "line": 2,
+          "col": 2
+        },
+        "end": {
+          "line": 4,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Square",
+      "path": "shapes.ts",
+      "owner": "",
+      "role": "type",
+      "name": "Square",
+      "at": {
+        "line": 6,
+        "col": 13
+      },
+      "spanRule": "ts-class-declaration",
+      "span": {
+        "start": {
+          "line": 6,
+          "col": 7
+        },
+        "end": {
+          "line": 10,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Square.describe",
+      "path": "shapes.ts",
+      "owner": "Square",
+      "role": "method",
+      "name": "describe",
+      "at": {
+        "line": 7,
+        "col": 2
+      },
+      "spanRule": "ts-method-definition",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 2
+        },
+        "end": {
+          "line": 9,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Other",
+      "path": "shapes.ts",
+      "owner": "",
+      "role": "type",
+      "name": "Other",
+      "at": {
+        "line": 11,
+        "col": 13
+      },
+      "spanRule": "ts-class-declaration",
+      "span": {
+        "start": {
+          "line": 11,
+          "col": 7
+        },
+        "end": {
+          "line": 15,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Other.name",
+      "path": "shapes.ts",
+      "owner": "Other",
+      "role": "method",
+      "name": "name",
+      "at": {
+        "line": 12,
+        "col": 2
+      },
+      "spanRule": "ts-method-definition",
+      "span": {
+        "start": {
+          "line": 12,
+          "col": 2
+        },
+        "end": {
+          "line": 14,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "use",
+      "path": "shapes.ts",
+      "owner": "",
+      "role": "function",
+      "name": "use",
+      "at": {
+        "line": 16,
+        "col": 16
+      },
+      "spanRule": "ts-function-declaration",
+      "span": {
+        "start": {
+          "line": 16,
+          "col": 7
+        },
+        "end": {
+          "line": 19,
+          "col": 1
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Square.describe",
+      "kind": "calls",
+      "target": "Base.name",
+      "path": "shapes.ts",
+      "site": {
+        "line": 8,
+        "col": 16
+      }
+    },
+    {
+      "source": "use",
+      "kind": "calls",
+      "target": "Square.describe",
+      "path": "shapes.ts",
+      "site": {
+        "line": 18,
+        "col": 11
+      }
+    }
+  ],
+  "sources": [
+    "shapes.ts"
+  ],
+  "forbidden": [
+    {
+      "source": "Square.describe",
+      "kind": "calls",
+      "target": "Other.name"
+    }
+  ]
+}

@@ -1,0 +1,333 @@
+{
+  "schemaVersion": 1,
+  "id": "python/module-and-class-attributes",
+  "language": "python",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "declarations",
+  "construct": "module bindings, class attributes, receiver attributes",
+  "status": "known-gap",
+  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "evidence": "CPython ast and symtable; reviewed dynamic annotations",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls"
+    ]
+  },
+  "declarations": [
+    {
+      "id": "LIMIT",
+      "path": "models.py",
+      "owner": "",
+      "role": "variable",
+      "name": "LIMIT",
+      "at": {
+        "line": 2,
+        "col": 0
+      },
+      "spanRule": "py-assignment",
+      "span": {
+        "start": {
+          "line": 2,
+          "col": 0
+        },
+        "end": {
+          "line": 2,
+          "col": 19
+        }
+      }
+    },
+    {
+      "id": "OTHER",
+      "path": "models.py",
+      "owner": "",
+      "role": "variable",
+      "name": "OTHER",
+      "at": {
+        "line": 2,
+        "col": 7
+      },
+      "spanRule": "py-assignment",
+      "span": {
+        "start": {
+          "line": 2,
+          "col": 0
+        },
+        "end": {
+          "line": 2,
+          "col": 19
+        }
+      }
+    },
+    {
+      "id": "value",
+      "path": "models.py",
+      "owner": "",
+      "role": "variable",
+      "name": "value",
+      "at": {
+        "line": 3,
+        "col": 0
+      },
+      "spanRule": "py-assignment",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 3,
+          "col": 10
+        }
+      }
+    },
+    {
+      "id": "helper",
+      "path": "models.py",
+      "owner": "",
+      "role": "function",
+      "name": "helper",
+      "at": {
+        "line": 6,
+        "col": 4
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 6,
+          "col": 0
+        },
+        "end": {
+          "line": 7,
+          "col": 16
+        }
+      }
+    },
+    {
+      "id": "Base",
+      "path": "models.py",
+      "owner": "",
+      "role": "type",
+      "name": "Base",
+      "at": {
+        "line": 10,
+        "col": 6
+      },
+      "spanRule": "py-class-definition",
+      "span": {
+        "start": {
+          "line": 10,
+          "col": 0
+        },
+        "end": {
+          "line": 17,
+          "col": 24
+        }
+      }
+    },
+    {
+      "id": "Base.kind",
+      "path": "models.py",
+      "owner": "Base",
+      "role": "field",
+      "name": "kind",
+      "at": {
+        "line": 11,
+        "col": 4
+      },
+      "spanRule": "py-assignment",
+      "span": {
+        "start": {
+          "line": 11,
+          "col": 4
+        },
+        "end": {
+          "line": 11,
+          "col": 17
+        }
+      }
+    },
+    {
+      "id": "Base.__init__",
+      "path": "models.py",
+      "owner": "Base",
+      "role": "method",
+      "name": "__init__",
+      "at": {
+        "line": 13,
+        "col": 8
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 13,
+          "col": 4
+        },
+        "end": {
+          "line": 14,
+          "col": 28
+        }
+      }
+    },
+    {
+      "id": "Base.name",
+      "path": "models.py",
+      "owner": "Base",
+      "role": "field",
+      "name": "name",
+      "at": {
+        "line": 14,
+        "col": 13
+      },
+      "spanRule": "py-receiver-assignment",
+      "span": {
+        "start": {
+          "line": 14,
+          "col": 8
+        },
+        "end": {
+          "line": 14,
+          "col": 28
+        }
+      }
+    },
+    {
+      "id": "Base.rename",
+      "path": "models.py",
+      "owner": "Base",
+      "role": "method",
+      "name": "rename",
+      "at": {
+        "line": 16,
+        "col": 8
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 16,
+          "col": 4
+        },
+        "end": {
+          "line": 17,
+          "col": 24
+        }
+      }
+    },
+    {
+      "id": "Child",
+      "path": "models.py",
+      "owner": "",
+      "role": "type",
+      "name": "Child",
+      "at": {
+        "line": 20,
+        "col": 6
+      },
+      "spanRule": "py-class-definition",
+      "span": {
+        "start": {
+          "line": 20,
+          "col": 0
+        },
+        "end": {
+          "line": 22,
+          "col": 29
+        }
+      }
+    },
+    {
+      "id": "Child.__init__",
+      "path": "models.py",
+      "owner": "Child",
+      "role": "method",
+      "name": "__init__",
+      "at": {
+        "line": 21,
+        "col": 8
+      },
+      "spanRule": "py-function-definition",
+      "span": {
+        "start": {
+          "line": 21,
+          "col": 4
+        },
+        "end": {
+          "line": 22,
+          "col": 29
+        }
+      }
+    },
+    {
+      "id": "Child.value",
+      "path": "models.py",
+      "owner": "Child",
+      "role": "field",
+      "name": "value",
+      "at": {
+        "line": 22,
+        "col": 13
+      },
+      "spanRule": "py-receiver-assignment",
+      "span": {
+        "start": {
+          "line": 22,
+          "col": 8
+        },
+        "end": {
+          "line": 22,
+          "col": 29
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Base.__init__",
+      "kind": "calls",
+      "target": "helper",
+      "path": "models.py",
+      "site": {
+        "line": 14,
+        "col": 20
+      }
+    },
+    {
+      "source": "Child.__init__",
+      "kind": "calls",
+      "target": "helper",
+      "path": "models.py",
+      "site": {
+        "line": 22,
+        "col": 21
+      }
+    }
+  ],
+  "sources": [
+    "models.py"
+  ],
+  "exception": {
+    "issue": "#239",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "missing-declaration models.py//variable/LIMIT@2:0",
+      "missing-declaration models.py//variable/OTHER@2:7",
+      "missing-declaration models.py//variable/value@3:0",
+      "missing-declaration models.py/Base/field/kind@11:4",
+      "missing-declaration models.py/Base/field/name@14:13",
+      "missing-declaration models.py/Child/field/value@22:13"
+    ]
+  }
+}
