@@ -11,6 +11,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/parser/cgo"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -282,19 +283,13 @@ func TestResolveOverrides_OverloadedMethodsBothSynthesized(t *testing.T) {
 		{Source: derivedType, Target: derivedFoo1, Kind: "contains"},
 		{Source: derivedType, Target: baseType, Kind: goextract.EdgeKindExtends},
 	}
-	nodeKindByID := map[string]string{
-		baseFoo1: goextract.KindMethod, baseFoo2: goextract.KindMethod,
-		derivedFoo1: goextract.KindMethod, derivedFoo2: goextract.KindMethod,
+	b := symbols.NewBuilder()
+	for id, arity := range map[string]int32{baseFoo1: 1, baseFoo2: 2, derivedFoo1: 1, derivedFoo2: 2} {
+		b.AddNode(&schema.Node{Id: id, Kind: goextract.KindMethod, Name: "Foo"})
+		b.SetArity(id, arity)
 	}
-	nodeNameByID := map[string]string{
-		baseFoo1: "Foo", baseFoo2: "Foo", derivedFoo1: "Foo", derivedFoo2: "Foo",
-	}
-	methodArity := map[string]int32{
-		baseFoo1: 1, baseFoo2: 2, derivedFoo1: 1, derivedFoo2: 2,
-	}
-	nodeStartLineByID := map[string]int32{}
 
-	synthesized := synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nil, nodeStartLineByID)
+	synthesized := synthesizeOverrides(b.Freeze(), edges, nil)
 
 	if e := findEdgeFull(synthesized, derivedFoo1, goextract.EdgeKindOverrides, baseFoo1); e == nil {
 		t.Errorf("expected overrides edge %s -> %s (arity-1 overload), got %+v", derivedFoo1, baseFoo1, synthesized)

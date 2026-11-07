@@ -8,6 +8,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -38,7 +39,7 @@ func TestSameFileMatchesFreshResolver(t *testing.T) {
 			}
 		}
 
-		shared := newResolver(newEmptySymbolIndex(), nil, nil, nil, nil)
+		shared := newTestResolver(symbols.NewBuilder())
 		prev := -1
 		for range rapid.IntRange(1, 30).Draw(t, "lookups") {
 			i := rapid.IntRange(0, len(files)-1).Draw(t, "file")
@@ -46,7 +47,7 @@ func TestSameFileMatchesFreshResolver(t *testing.T) {
 			line := rapid.Int32Range(1, 25).Draw(t, "line")
 
 			got := candidateIDs(shared.sameFile(files[i], name, line, 0, callableKind))
-			fresh := newResolver(newEmptySymbolIndex(), nil, nil, nil, nil)
+			fresh := newTestResolver(symbols.NewBuilder())
 			want := candidateIDs(fresh.sameFile(files[i], name, line, 0, callableKind))
 			if !slices.Equal(got, want) {
 				t.Fatalf("lookup of %q at line %d in %s = %v, a fresh resolver gives %v", name, line, files[i].RelPath, got, want)
@@ -65,10 +66,10 @@ func TestSameFileMatchesFreshResolver(t *testing.T) {
 	}
 }
 
-func candidateIDs(cands []symbolCandidate) []string {
+func candidateIDs(cands []symbols.Candidate) []string {
 	ids := make([]string, len(cands))
 	for i, c := range cands {
-		ids[i] = c.id
+		ids[i] = c.ID
 	}
 	return ids
 }

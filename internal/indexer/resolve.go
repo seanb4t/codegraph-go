@@ -8,7 +8,6 @@ package indexer
 
 import (
 	"cmp"
-	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -42,60 +42,24 @@ const kindPackage = "package"
 // classify an "imports" ref's target as intra-module (gets a package
 // pseudo-node + edge) vs. external/stdlib (no node, no edge).
 func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
-	return resolveRefsWithIndex(results, modulePath, newSymbolIndex(results), nil)
+	b := symbols.NewBuilder()
+	b.AddResults(results)
+	return resolveRefsWithIndex(results, modulePath, b.Freeze())
 }
 
 // resolveRefsWithIndex is resolveRefs' implementation, parameterized on
-// the symbol index (Phase 4 D-01/RESEARCH Pattern 1 step 11): resolveRefs
-// keeps building its own from-scratch newSymbolIndex(results) unconditio-
-// nally; Sync() instead injects a store-seeded index overlaid with the
-// reparse batch (loadStoreView's symbols + symbolIndex.overlay), so an
-// unqualified/qualified reference into an UNCHANGED file still resolves
-// (RESEARCH Pitfall 1). Sync also passes view, what the files it does not
-// reparse declare, so the kind lookups and the implements, override and
+// the frozen view of the declarations (Phase 4 D-01/RESEARCH Pattern 1
+// step 11): resolveRefs builds one from results alone, and Sync from
+// results over what loadStoreView read from the files it does not
+// reparse, so a reference into an unchanged file still resolves (RESEARCH
+// Pitfall 1), and the kind lookups and the implements, override and
 // conformance-retry passes below see the whole graph as a fresh index
-// does; Run passes nil. Every other line here is reused verbatim by both
-// callers.
-func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx *symbolIndex, view *storeView) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
+// does. Every other line here is reused verbatim by both callers.
+func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, view symbols.View) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
 	packageNodeIDs := make(map[string]struct{})
 
-	// nodeKindByID/nodeNameByID are GLOBAL (cross-file) node-id lookups,
-	// built BEFORE any ref is resolved (Phase 5 RES-02 Pattern 2/3): the
-	// RefKindEmbeds branch below needs a resolved target's Kind, and
-	// that target may be declared in a different file than the one being
-	// resolved. nodeByID gives the resolver the declarations themselves:
-	// their parameters and return types (design D3, D17).
-	nodeKindByID := make(map[string]string)
-	nodeNameByID := make(map[string]string)
-	nodeStartLineByID := make(map[string]int32)
-	nodeByID := make(map[string]*schema.Node)
-	methodArity := make(map[string]int32)
-	interfaceMethods := make(dispatch.InterfaceSpecs)
-	var viewEdges []*schema.Edge
-	if view != nil {
-		maps.Copy(nodeKindByID, view.kinds)
-		maps.Copy(nodeNameByID, view.names)
-		maps.Copy(nodeStartLineByID, view.startLines)
-		maps.Copy(nodeByID, view.nodes)
-		maps.Copy(methodArity, view.arity)
-		maps.Copy(interfaceMethods, view.interfaceMethods)
-		viewEdges = view.edges
-	}
-	for _, r := range results {
-		for _, en := range r.Nodes {
-			nodeKindByID[en.Node.Id] = en.Node.Kind
-			nodeNameByID[en.Node.Id] = en.Node.Name
-			nodeStartLineByID[en.Node.Id] = en.Node.StartLine
-			nodeByID[en.Node.Id] = en.Node
-		}
-		for id, arity := range r.MethodArity {
-			methodArity[id] = arity
-		}
-		for ifaceID, specs := range r.InterfaceMethods {
-			interfaceMethods[ifaceID] = append(interfaceMethods[ifaceID], specs...)
-		}
-	}
 	withViewEdges := func(es []*schema.Edge) []*schema.Edge {
+		viewEdges := view.StoredEdges()
 		if len(viewEdges) == 0 {
 			return es
 		}
@@ -103,17 +67,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 	}
 
 	states := make([]*fileState, 0, len(results))
-
-	var storedSets map[string]storedSet
-	moduleOfFile := make(map[string]string, len(results))
-	if view != nil {
-		storedSets = view.storedSets
-		maps.Copy(moduleOfFile, view.moduleOf)
-	}
-	for _, r := range results {
-		moduleOfFile[r.RelPath] = r.ImportPath
-	}
-	rs := newResolver(idx, nodeKindByID, nodeByID, storedSets, moduleOfFile)
+	rs := &resolver{view: view, callTargets: make(map[callPos]string)}
 
 	// Phase 1: nodes, intra-file edges, and every reference that is not a
 	// call. The types, the type memberships and the supertype edges are
@@ -180,11 +134,11 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				provenance := "ast"
 				var metadata map[string]string
 				switch {
-				case nodeKindByID[targetID] == goextract.KindInterface && nodeKindByID[ref.FromID] != goextract.KindInterface:
+				case view.Kind(targetID) == goextract.KindInterface && view.Kind(ref.FromID) != goextract.KindInterface:
 					kind = goextract.EdgeKindImplements
 					provenance = "heuristic"
 					metadata = map[string]string{"synthesizedBy": "declared-implements"}
-				case nodeKindByID[targetID] != goextract.KindInterface:
+				case view.Kind(targetID) != goextract.KindInterface:
 					kind = goextract.EdgeKindExtends
 					provenance = "heuristic"
 					metadata = map[string]string{"synthesizedBy": "declared-extends"}
@@ -265,7 +219,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 				// absence, not a silent drop of ground truth Pass 1 never
 				// claimed in the first place.
 				targetID, ok := rs.resolveRef(r, ref, true)
-				if !ok || nodeKindByID[targetID] != goextract.KindStruct {
+				if !ok || view.Kind(targetID) != goextract.KindStruct {
 					unresolvedCount++
 					wait(ref.PkgAlias, ref.Name)
 					continue
@@ -301,8 +255,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 	// Phase 2: calls, against candidate sets (design D3). The calls with
 	// a deferred type go last, once the calls they depend on are resolved
 	// (D17). An undecidable call reaches its overload set (D14).
-	rs.learnEdges(withViewEdges(edges))
-	rs.declareSets()
+	rs.h = symbols.NewHierarchy(view, edges)
 	var pending []pendingCall
 	type fileWait struct {
 		st  *fileState
@@ -319,8 +272,8 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 			rs.recordTarget(st.r.RelPath, ref, out.target)
 			st.resolvedForFile++
 		case out.set != nil:
-			edges = append(edges, callEdge(ref, out.set.node.Id, true))
-			rs.recordTarget(st.r.RelPath, ref, out.set.node.Id)
+			edges = append(edges, callEdge(ref, out.set.Node().Id, true))
+			rs.recordTarget(st.r.RelPath, ref, out.set.Node().Id)
 			st.resolvedForFile++
 		default:
 			// Deferred, not counted as unresolved yet (Pitfall 3): the
@@ -356,7 +309,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		resolveOne(d.st, d.ref, true)
 	}
 
-	nodes = append(nodes, rs.setNodes()...)
+	nodes = append(nodes, rs.h.SetNodes()...)
 
 	for _, st := range states {
 		r := st.r
@@ -387,22 +340,22 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		}
 	}
 
-	edges = append(edges, synthesizeGoImplements(interfaceMethods, methodArity, withViewEdges(edges), nodeKindByID, nodeNameByID, nodeStartLineByID)...)
+	edges = append(edges, synthesizeGoImplements(view, withViewEdges(edges))...)
 
-	methodKey := make(map[string]string, len(nodeByID))
-	for id, n := range nodeByID {
+	methodKey := make(map[string]string)
+	for n := range view.Nodes() {
 		if k := goextract.SignatureKeyOfNode(n); k != "" {
-			methodKey[id] = k
+			methodKey[n.Id] = k
 		}
 	}
-	edges = append(edges, synthesizeOverrides(withViewEdges(edges), nodeKindByID, nodeNameByID, methodArity, methodKey, nodeStartLineByID)...)
+	edges = append(edges, synthesizeOverrides(view, withViewEdges(edges), methodKey)...)
 
-	edges = append(edges, retryConformanceCalls(pending, withViewEdges(edges), nodeNameByID, &unresolvedCount)...)
+	edges = append(edges, retryConformanceCalls(pending, withViewEdges(edges), view, &unresolvedCount)...)
 
 	// The overrides, implements and conformance synthesis above read a
 	// contains edge as type to member in one hop, so the set edges are
 	// made only now, after them.
-	edges = rs.rewireSetEdges(edges)
+	edges = rewireSetEdges(view, rs.h, edges)
 
 	for _, f := range files {
 		f.UnresolvedNames = sortedUniqueNames(f.UnresolvedNames)
@@ -497,7 +450,7 @@ type fileState struct {
 // that case. unresolvedCount is incremented for exactly those refs that
 // fail BOTH passes — never double-counted (pass 1 no longer increments
 // it for a deferred call).
-func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeNameByID map[string]string, unresolvedCount *int) []*schema.Edge {
+func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, view symbols.View, unresolvedCount *int) []*schema.Edge {
 	typeMethods := make(map[string]map[string]string) // typeID -> methodName -> methodID
 	methodOwner := make(map[string]string)            // methodID -> typeID
 	typeSupertypes := make(map[string][]string)       // typeID -> []supertypeID
@@ -510,7 +463,7 @@ func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeName
 				methods = make(map[string]string)
 				typeMethods[e.Source] = methods
 			}
-			methods[nodeNameByID[e.Target]] = e.Target
+			methods[view.Name(e.Target)] = e.Target
 			methodOwner[e.Target] = e.Source
 		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
 			// D-09: a class/struct-extends-class/struct RefKindEmbeds ref
@@ -546,41 +499,14 @@ func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeName
 	return resolved
 }
 
-// walkSupertypes performs a visited-set-guarded BFS from typeID's OWN
-// supertypes (never typeID itself), invoking visit on each reachable
-// supertype id in discovery order and stopping as soon as visit returns
-// true. Bounded by the number of distinct types reachable through the
-// supertype graph — cycle-safe regardless of malformed/cyclic
-// embeds/extends/implements data. This is the shared BFS primitive both
-// walkSupertypesForMethod (calls edge resolution, Pitfall 3) and
-// synthesizeOverrides (D-09's overrides synthesis) build on, rather than
-// each writing its own traversal.
-func walkSupertypes(typeID string, typeSupertypes map[string][]string, visit func(supertypeID string) bool) bool {
-	visited := map[string]bool{typeID: true}
-	queue := append([]string(nil), typeSupertypes[typeID]...)
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		if visited[cur] {
-			continue
-		}
-		visited[cur] = true
-		if visit(cur) {
-			return true
-		}
-		queue = append(queue, typeSupertypes[cur]...)
-	}
-	return false
-}
-
 // walkSupertypesForMethod looks for methodName in typeMethods among
 // typeID's own supertypes (never typeID itself: the resolver already
 // tried the calling type's own method set),
-// returning the first match's node id. See walkSupertypes for the
+// returning the first match's node id. See symbols.WalkSupertypes for the
 // underlying BFS.
 func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]map[string]string, typeSupertypes map[string][]string) (string, bool) {
 	var found string
-	ok := walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
+	ok := symbols.WalkSupertypes(typeID, typeSupertypes, func(cur string) bool {
 		if id, exists := typeMethods[cur][methodName]; exists {
 			found = id
 			return true
@@ -616,7 +542,7 @@ func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]m
 // method with the same name and arity pairs only when it is the one
 // such method, so two same-arity overloads never cross-link. methodKey
 // holds the signature key of each function or method node.
-func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, methodArity map[string]int32, methodKey map[string]string, nodeStartLineByID map[string]int32) []*schema.Edge {
+func synthesizeOverrides(view symbols.View, edges []*schema.Edge, methodKey map[string]string) []*schema.Edge {
 	// typeMethods is typeID -> methodName -> ALL methodIDs sharing that
 	// name (CR-01 fix): a bare map[string]string here would collapse
 	// same-name/different-arity overloads — legal and common in Java/C#
@@ -633,7 +559,7 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 	for _, e := range edges {
 		switch e.Kind {
 		case "contains":
-			if nodeKindByID[e.Target] != goextract.KindMethod {
+			if view.Kind(e.Target) != goextract.KindMethod {
 				continue
 			}
 			methods := typeMethods[e.Source]
@@ -641,7 +567,7 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 				methods = make(map[string][]string)
 				typeMethods[e.Source] = methods
 			}
-			name := nodeNameByID[e.Target]
+			name := view.Name(e.Target)
 			methods[name] = append(methods[name], e.Target)
 		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
 			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
@@ -672,18 +598,18 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 
 		for _, name := range names {
 			for _, methodID := range typeMethods[typeID][name] {
-				arity := methodArity[methodID]
+				arity := view.Arity(methodID)
 				key := methodKey[methodID]
 
 				var superMethodID string
-				walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
+				symbols.WalkSupertypes(typeID, typeSupertypes, func(cur string) bool {
 					var byArity []string
 					for _, candidateID := range typeMethods[cur][name] {
 						if key != "" && methodKey[candidateID] == key {
 							superMethodID = candidateID
 							return true
 						}
-						if methodArity[candidateID] == arity {
+						if view.Arity(candidateID) == arity {
 							byArity = append(byArity, candidateID)
 						}
 					}
@@ -698,7 +624,7 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 				}
 				synthesized = append(synthesized, &schema.Edge{
 					Source: methodID, Target: superMethodID, Kind: goextract.EdgeKindOverrides,
-					Provenance: "heuristic", Line: nodeStartLineByID[methodID],
+					Provenance: "heuristic", Line: view.StartLine(methodID),
 					Metadata: map[string]string{"synthesizedBy": "structural-override"},
 				})
 			}
@@ -720,27 +646,27 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 // SAME edges slice this function already builds, so they flow through
 // collapseEdges exactly like every other edge (D-06/D-07: no parallel
 // dedup path, additive within SchemaVersion 1).
-func synthesizeGoImplements(interfaceMethods dispatch.InterfaceSpecs, methodArity map[string]int32, edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, nodeStartLineByID map[string]int32) []*schema.Edge {
+func synthesizeGoImplements(view symbols.View, edges []*schema.Edge) []*schema.Edge {
 	structMethods := make(dispatch.TypeMethods)
 	interfaceEmbeds := make(map[string][]string)
 	for _, e := range edges {
 		switch e.Kind {
 		case "contains":
-			if nodeKindByID[e.Source] != goextract.KindStruct || nodeKindByID[e.Target] != goextract.KindMethod {
+			if view.Kind(e.Source) != goextract.KindStruct || view.Kind(e.Target) != goextract.KindMethod {
 				continue
 			}
 			structMethods[e.Source] = append(structMethods[e.Source], goextract.MethodSpec{
-				Name:  nodeNameByID[e.Target],
-				Arity: methodArity[e.Target],
+				Name:  view.Name(e.Target),
+				Arity: view.Arity(e.Target),
 			})
 		case "embeds":
-			if nodeKindByID[e.Source] == goextract.KindInterface && nodeKindByID[e.Target] == goextract.KindInterface {
+			if view.Kind(e.Source) == goextract.KindInterface && view.Kind(e.Target) == goextract.KindInterface {
 				interfaceEmbeds[e.Source] = append(interfaceEmbeds[e.Source], e.Target)
 			}
 		}
 	}
 
-	synthesized := dispatch.SynthesizeImplements(structMethods, interfaceMethods, interfaceEmbeds)
+	synthesized := dispatch.SynthesizeImplements(structMethods, view.InterfaceMethods(), interfaceEmbeds)
 	// dispatch.SynthesizeImplements has no source-location data of its
 	// own (it operates purely on name/arity sets) — anchor each
 	// synthesized edge's Line at the implementing struct's OWN
@@ -749,7 +675,7 @@ func synthesizeGoImplements(interfaceMethods dispatch.InterfaceSpecs, methodArit
 	// satisfaction has no single syntactic reference site, so the
 	// struct's own declaration is the closest meaningful anchor).
 	for _, e := range synthesized {
-		e.Line = nodeStartLineByID[e.Source]
+		e.Line = view.StartLine(e.Source)
 	}
 	return synthesized
 }

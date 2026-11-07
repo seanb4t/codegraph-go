@@ -15,6 +15,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -423,14 +424,16 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		excludePaths[p] = true
 	}
 
-	view, err := loadStoreView(r0, discovered, excludePaths)
+	builder := symbols.NewBuilder()
+	stored, err := loadStoreView(r0, discovered, excludePaths, builder)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
 	}
-	view.symbols.overlay(results)
+	builder.AddResults(results)
+	view := builder.Freeze()
 
-	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, view.symbols, view)
+	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, view)
 
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
@@ -440,11 +443,11 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// An overload set whose members span files has no file of its own,
 	// so no prune reaches it. A stored set that this resolve does not
 	// declare is deleted here (design D14).
-	for id := range view.storedSets {
+	for _, id := range view.StoredSetIDs() {
 		if _, live := nodeFilePath[id]; live {
 			continue
 		}
-		if n, ok := view.nodes[id]; ok && n.FilePath == "" {
+		if n := view.Node(id); n != nil && n.FilePath == "" {
 			if err := w.DeleteNode(id); err != nil {
 				w.Close()
 				return Stats{}, err
@@ -462,18 +465,18 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	writes := make([]*schema.Edge, 0, len(collapsedEdges))
 	for _, e := range collapsedEdges {
 		k := edgeTriple{e.Source, e.Kind, e.Target}
-		if _, stored := view.synthesized[k]; stored && isSynthesizedEdge(e) {
+		if _, stored := stored.synthesized[k]; stored && isSynthesizedEdge(e) {
 			kept[k] = true
 			continue
 		}
 		writes = append(writes, e)
 	}
 	collapsedEdges = writes
-	for _, k := range sortedTriples(view.synthesized) {
+	for _, k := range sortedTriples(stored.synthesized) {
 		if kept[k] {
 			continue
 		}
-		if err := deleteOwnedEdge(w, view.synthesized[k], k); err != nil {
+		if err := deleteOwnedEdge(w, stored.synthesized[k], k); err != nil {
 			w.Close()
 			return Stats{}, err
 		}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -33,18 +34,15 @@ func TestResolutionIgnoresInsertionOrder(t *testing.T) {
 	var permute func(order []*schema.Node, rest []*schema.Node)
 	permute = func(order, rest []*schema.Node) {
 		if len(rest) == 0 {
-			idx := newEmptySymbolIndex()
-			nodeByID := map[string]*schema.Node{owner.Id: owner}
-			kinds := map[string]string{owner.Id: owner.Kind}
-			idx.add(file.ImportPath, owner)
+			b := symbols.NewBuilder()
+			b.AddNode(owner)
+			b.Add(file.ImportPath, owner)
 			for _, n := range order {
-				idx.add(file.ImportPath, n)
-				idx.addMember(owner.Id, n)
-				nodeByID[n.Id] = n
-				kinds[n.Id] = n.Kind
+				b.Add(file.ImportPath, n)
+				b.AddMember(owner.Id, n)
+				b.AddNode(n)
 			}
-			rs := newResolver(idx, kinds, nodeByID, nil, nil)
-			rs.declareSets()
+			rs := newTestResolver(b)
 			out := rs.resolveCall(file, call, false)
 			if out.target != "method:add:String" {
 				t.Errorf("order %v: resolved to %q (set %v), want method:add:String", ids(order), out.target, out.set != nil)
@@ -413,18 +411,15 @@ func TestLibrarySupertypeNeverRejectsAnArgument(t *testing.T) {
 			Signature: "(CharSequence cs)", Params: []*schema.Param{param("cs", "CharSequence")}},
 	}
 	file := goextract.FileResult{RelPath: "Use.java", ImportPath: "com.example", Language: "java"}
-	idx := newEmptySymbolIndex()
-	nodeByID := map[string]*schema.Node{owner.Id: owner}
-	kinds := map[string]string{owner.Id: owner.Kind}
-	idx.add(file.ImportPath, owner)
+	b := symbols.NewBuilder()
+	b.AddNode(owner)
+	b.Add(file.ImportPath, owner)
 	for _, n := range overloads {
-		idx.add(file.ImportPath, n)
-		idx.addMember(owner.Id, n)
-		nodeByID[n.Id] = n
-		kinds[n.Id] = n.Kind
+		b.Add(file.ImportPath, n)
+		b.AddMember(owner.Id, n)
+		b.AddNode(n)
 	}
-	rs := newResolver(idx, kinds, nodeByID, nil, nil)
-	rs.declareSets()
+	rs := newTestResolver(b)
 	call := goextract.UnresolvedRef{
 		Kind: goextract.RefKindCalls, Name: "take", FromID: "method:use",
 		ReceiverType: "Sink", ArgCount: 1, ArgTypes: []string{"String"},

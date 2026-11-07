@@ -9,8 +9,8 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 2. The symbol layer
 
-- [ ] 2.1 Add `internal/indexer/symbols` with `Builder`, `Builder.Freeze() View` and the lookups of today's `symbolIndex` on `View` (design.md D3). `Builder` takes declarations from pass 1 and from the stored graph through the same add methods (D7). `View` has no exported field and no method that writes. Move `symbolindex_test.go` with it. Add the `rapid` property `TestFreezeIgnoresInsertionOrder`: two builders fed one set of declarations in two generated orders answer every `candidatesIn`, `typeIn` and `members` lookup the same. Verify that `task test` passes.
-- [ ] 2.2 Add `symbols.NewHierarchy(view, typeEdges) Hierarchy` with the work of today's `learnEdges` and `declareSets`: supertypes, member owners and the declared overload sets (D3). `Hierarchy` has no method that writes. Verify that `TestOverloadsResolveAsTheLanguageDoes` and the overload-set tests pass unchanged.
+- [x] 2.1 Add `internal/indexer/symbols` with `Builder`, `Builder.Freeze() View` and the lookups of today's `symbolIndex` on `View` (design.md D3). `Builder` takes declarations from pass 1 and from the stored graph through the same add methods (D7). `View` has no exported field and no method that writes. Move `symbolindex_test.go` with it. Add the `rapid` property `TestFreezeIgnoresInsertionOrder`: two builders fed one set of declarations in two generated orders answer every `candidatesIn`, `typeIn` and `members` lookup the same. Verify that `task test` passes.
+- [x] 2.2 Add `symbols.NewHierarchy(view, typeEdges) Hierarchy` with the work of today's `learnEdges` and `declareSets`: supertypes, member owners and the declared overload sets (D3). `Hierarchy` has no method that writes. Verify that `TestOverloadsResolveAsTheLanguageDoes` and the overload-set tests pass unchanged.
 
 ## 3. The resolution layer
 
@@ -21,7 +21,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 ## 4. The sink and the store reads of a sync
 
 - [ ] 4.1 Declare `Sink` in `internal/indexer` with the `graphstore.Writer` methods that staging calls (design.md D5). Add `stage(sink, graph, ownerPath)`, which sorts and puts nodes, files and edges. Make `writeGraph` and the tail of `Sync` call it. Add `TestStagePutsRecordsInKeyOrder`: a recording `Sink` receives nodes by id, files by path and edges by source, kind and target, and it receives more than zero of each. Verify that `task test` passes.
-- [ ] 4.2 Make `loadStoreView` feed a `symbols.Builder` in place of building a `symbolIndex` (D7). Verify that `TestSyncEqualsReindex` and the sync property tests pass.
+- [x] 4.2 Make `loadStoreView` feed a `symbols.Builder` in place of building a `symbolIndex` (D7). Verify that `TestSyncEqualsReindex` and the sync property tests pass.
 
 ## 5. Orchestration tests and the layer gate
 
