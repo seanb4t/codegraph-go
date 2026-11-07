@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"time"
 
@@ -493,15 +494,6 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// falls back to r0 — the pre-Sync snapshot, unaffected by this cycle's
 	// staged-but-uncommitted writes — for exactly that case.
 
-	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
-	allNodes = append(allNodes, nodes...)
-	allNodes = append(allNodes, packageNodes...)
-	sort.Slice(allNodes, func(i, j int) bool { return allNodes[i].Id < allNodes[j].Id })
-
-	sortedFiles := make([]*schema.File, len(fileRecords))
-	copy(sortedFiles, fileRecords)
-	sort.Slice(sortedFiles, func(i, j int) bool { return sortedFiles[i].Path < sortedFiles[j].Path })
-
 	// nodesAdded counts only node ids that are GENUINELY new to the
 	// committed graph after this Sync: either they were just pruned above
 	// (goneIDs — a node id is stable across a content-unrelated edit
@@ -514,13 +506,14 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// existed and was NOT pruned — that case must NOT be double-counted
 	// as an addition).
 	//
-	// allNodes is sorted by id, and an id that appears twice is stored
-	// once, so it is counted once.
+	// An id that appears twice is stored once, so it is counted once.
 	nodesAdded := 0
-	for i, n := range allNodes {
-		if i > 0 && allNodes[i-1].Id == n.Id {
+	counted := make(map[string]struct{}, len(nodes)+len(packageNodes))
+	for _, n := range slices.Concat(nodes, packageNodes) {
+		if _, seen := counted[n.Id]; seen {
 			continue
 		}
+		counted[n.Id] = struct{}{}
 		if _, gone := goneIDs[n.Id]; gone {
 			nodesAdded++
 			continue
@@ -534,30 +527,17 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 
-	for _, n := range allNodes {
-		if err := w.PutNode(n); err != nil {
-			w.Close()
-			return Stats{}, err
-		}
-	}
-	for _, f := range sortedFiles {
-		if err := w.PutFile(f); err != nil {
-			w.Close()
-			return Stats{}, err
-		}
+	staged := resolve.Graph{Nodes: nodes, PackageNodes: packageNodes, Files: fileRecords, Edges: collapsedEdges}
+	if _, err := stage(w, staged, func(e *schema.Edge) string { return ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) }); err != nil {
+		w.Close()
+		return Stats{}, err
 	}
 	// WR-03: also persist the mtime/size-only refresh for any file whose
 	// stat metadata was stale but content hash matched — these files are
-	// not part of sortedFiles (they were never reparsed), so they need
+	// not part of fileRecords (they were never reparsed), so they need
 	// their own PutFile pass here.
 	for _, f := range mtimeRefresh {
 		if err := w.PutFile(f); err != nil {
-			w.Close()
-			return Stats{}, err
-		}
-	}
-	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0)); err != nil {
 			w.Close()
 			return Stats{}, err
 		}

@@ -101,19 +101,6 @@ func stampCapabilities(meta *schema.Meta) {
 	meta.HasUniqueDeclIds = true
 }
 
-// distinctNodeIDs counts the distinct ids in nodes, which are sorted by
-// id. PutNode writes an id once, so this is the number of stored nodes
-// even when two extracted nodes share an id.
-func distinctNodeIDs(nodes []*schema.Node) int {
-	n := 0
-	for i, node := range nodes {
-		if i == 0 || nodes[i-1].Id != node.Id {
-			n++
-		}
-	}
-	return n
-}
-
 // writeGraph collapses edges deterministically and stages the whole
 // resolved graph — package pseudo-nodes and symbol nodes (sorted by id),
 // then files (sorted by path), then collapsed edges (sorted by
@@ -132,15 +119,6 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	for _, n := range nodes {
 		nodeFilePath[n.Id] = n.FilePath
 	}
-
-	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
-	allNodes = append(allNodes, nodes...)
-	allNodes = append(allNodes, packageNodes...)
-	sort.Slice(allNodes, func(i, j int) bool { return allNodes[i].Id < allNodes[j].Id })
-
-	sortedFiles := make([]*schema.File, len(files))
-	copy(sortedFiles, files)
-	sort.Slice(sortedFiles, func(i, j int) bool { return sortedFiles[i].Path < sortedFiles[j].Path })
 
 	collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)
 
@@ -167,10 +145,13 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	}
 
 	var size graphstore.BatchSize
-	for _, n := range allNodes {
+	for _, n := range nodes {
 		size.Node(n)
 	}
-	for _, f := range sortedFiles {
+	for _, n := range packageNodes {
+		size.Node(n)
+	}
+	for _, f := range files {
 		size.File(f)
 	}
 	for _, e := range collapsedEdges {
@@ -194,34 +175,13 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		return err
 	}
 
-	for _, n := range allNodes {
-		if err := w.PutNode(n); err != nil {
-			w.Close()
-			return err
-		}
-	}
-	for _, f := range sortedFiles {
-		if err := w.PutFile(f); err != nil {
-			w.Close()
-			return err
-		}
-	}
-	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, nodeFilePath[resolve.EdgeOwnerID(e)]); err != nil {
-			w.Close()
-			return err
-		}
+	staged := resolve.Graph{Nodes: nodes, PackageNodes: packageNodes, Files: files, Edges: collapsedEdges}
+	nodeCount, err := stage(w, staged, func(e *schema.Edge) string { return nodeFilePath[resolve.EdgeOwnerID(e)] })
+	if err != nil {
+		w.Close()
+		return err
 	}
 
-	// Phase 10 D-07: clear the WHOLE c/ namespace before rewriting it.
-	// run() is also Sync's D-02b backfill path against an EXISTING store
-	// (sync.go's needsFileIndexBackfill branch), so a from-scratch
-	// rewrite must range-delete stale c/ records rather than layer on
-	// top of them. On the from-scratch `codegraph index` path
-	// (internal/cli/index.go's RemoveAll) the range is already empty and
-	// this delete is a no-op. Staged on this SAME Writer, before any
-	// PutExcludedFile below, so a rewrite over an existing store never
-	// observes a mixed stale+fresh set even transiently.
 	if err := w.DeleteAllExcludedFiles(); err != nil {
 		w.Close()
 		return err
@@ -242,7 +202,7 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	}
 
 	meta := schema.NewMeta()
-	meta.NodeCount = int64(distinctNodeIDs(allNodes))
+	meta.NodeCount = int64(nodeCount)
 	meta.EdgeCount = int64(len(collapsedEdges))
 	stampCapabilities(meta)
 	// Phase 10 D-07: every from-scratch writeGraph run (Run's own path,

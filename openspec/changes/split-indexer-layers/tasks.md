@@ -20,7 +20,7 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 4. The sink and the store reads of a sync
 
-- [ ] 4.1 Declare `Sink` in `internal/indexer` with the `graphstore.Writer` methods that staging calls (design.md D5). Add `stage(sink, graph, ownerPath)`, which sorts and puts nodes, files and edges. Make `writeGraph` and the tail of `Sync` call it. Add `TestStagePutsRecordsInKeyOrder`: a recording `Sink` receives nodes by id, files by path and edges by source, kind and target, and it receives more than zero of each. Verify that `task test` passes.
+- [x] 4.1 Declare `Sink` in `internal/indexer` with the `graphstore.Writer` methods that staging calls (design.md D5). Add `stage(sink, graph, ownerPath)`, which sorts and puts nodes, files and edges. Make `writeGraph` and the tail of `Sync` call it. Add `TestStagePutsRecordsInKeyOrder`: a recording `Sink` receives nodes by id, files by path and edges by source, kind and target, and it receives more than zero of each. Verify that `task test` passes.
 - [x] 4.2 Make `loadStoreView` feed a `symbols.Builder` in place of building a `symbolIndex` (D7). Verify that `TestSyncEqualsReindex` and the sync property tests pass.
 
 ## 5. Orchestration tests and the layer gate
