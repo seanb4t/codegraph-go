@@ -25,6 +25,12 @@ type GraphStore interface {
 	// for one engine write per symbol (D-04).
 	NewWriter() (Writer, error)
 
+	// NewWriterSized returns a Writer like NewWriter whose batch reserves
+	// sizeHint bytes up front, so a write that stages at most that much
+	// never copies its batch into a larger buffer. BatchSize computes
+	// the hint for a full graph write.
+	NewWriterSized(sizeHint int) (Writer, error)
+
 	// Export streams every record (meta, nodes, edges, files, excluded
 	// files) in schema-versioned form from a consistent snapshot
 	// (ARCH-01).

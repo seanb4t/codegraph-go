@@ -118,8 +118,9 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 	// Phase 1: nodes, intra-file edges, and every reference that is not a
 	// call. The types, the type memberships and the supertype edges are
 	// then complete, so phase 2 can resolve calls against them.
-	for _, r := range results {
-		st := &fileState{r: r}
+	for i := range results {
+		r := results[i]
+		st := &fileState{r: &results[i]}
 		states = append(states, st)
 		for _, en := range r.Nodes {
 			en.Node.InterfaceMethods = schemaMethodSpecs(r.InterfaceMethods[en.Node.Id])
@@ -138,7 +139,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		for _, ref := range r.Unresolved {
 			switch ref.Kind {
 			case goextract.RefKindCalls:
-				st.calls = append(st.calls, ref)
+				// Phase 2 resolves calls from st.r.Unresolved.
 
 			case goextract.RefKindEmbeds:
 				targetID, ok := rs.resolveRef(r, ref, true)
@@ -309,7 +310,7 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 	}
 	var deferredCalls []fileWait
 	resolveOne := func(st *fileState, ref goextract.UnresolvedRef, allowDeferred bool) {
-		out := rs.resolveCall(st.r, ref, allowDeferred)
+		out := rs.resolveCall(*st.r, ref, allowDeferred)
 		switch {
 		case out.deferred:
 			deferredCalls = append(deferredCalls, fileWait{st, ref})
@@ -332,8 +333,10 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		}
 	}
 	for _, st := range states {
-		for _, ref := range st.calls {
-			resolveOne(st, ref, false)
+		for _, ref := range st.r.Unresolved {
+			if ref.Kind == goextract.RefKindCalls {
+				resolveOne(st, ref, false)
+			}
 		}
 	}
 	// A call that ends earlier never waits on one that ends later: the
@@ -477,10 +480,9 @@ type pendingCall struct {
 
 // fileState is one file's bookkeeping across the two resolution phases.
 type fileState struct {
-	r               goextract.FileResult
+	r               *goextract.FileResult
 	resolvedForFile int
 	waiting         []*schema.UnresolvedName
-	calls           []goextract.UnresolvedRef
 }
 
 // retryConformanceCalls implements Pitfall 3's two-pass conformance
@@ -959,7 +961,20 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		priorGeneration = priorMeta.GetCoverageGeneration()
 	}
 
-	w, err := store.NewWriter()
+	var size graphstore.BatchSize
+	for _, n := range allNodes {
+		size.Node(n)
+	}
+	for _, f := range sortedFiles {
+		size.File(f)
+	}
+	for _, e := range collapsedEdges {
+		size.Edge(e, nodeFilePath[edgeOwnerID(e)])
+	}
+	for _, x := range excluded {
+		size.ExcludedFile(x)
+	}
+	w, err := store.NewWriterSized(size.Bytes())
 	if err != nil {
 		return err
 	}

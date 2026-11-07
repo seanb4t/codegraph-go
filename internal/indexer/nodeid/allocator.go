@@ -170,47 +170,49 @@ func (a *Allocator) Finalize(result IDFields) error {
 		return id
 	})
 
-	if path, ok := findString(reflect.ValueOf(result), "result", a.seen); ok {
-		return fmt.Errorf("nodeid: %s still holds a provisional id after Finalize", path)
+	if path, ok := findString(reflect.ValueOf(result), a.seen); ok {
+		return fmt.Errorf("nodeid: result%s still holds a provisional id after Finalize", path)
 	}
 	return nil
 }
 
 // findString walks the exported fields, elements, map keys and map values
-// reachable from v and reports the path of the first string in want.
-func findString(v reflect.Value, path string, want map[string]bool) (string, bool) {
+// reachable from v and reports the first string in want, with its path
+// relative to v. The path is built only on the way back from a match, so
+// a walk that finds nothing builds no text.
+func findString(v reflect.Value, want map[string]bool) (string, bool) {
 	switch v.Kind() {
 	case reflect.Pointer, reflect.Interface:
 		if v.IsNil() {
 			return "", false
 		}
-		return findString(v.Elem(), path, want)
+		return findString(v.Elem(), want)
 	case reflect.String:
-		return path, want[v.String()]
+		return "", want[v.String()]
 	case reflect.Struct:
 		t := v.Type()
-		for i := 0; i < v.NumField(); i++ {
+		for i := range v.NumField() {
 			if !t.Field(i).IsExported() {
 				continue
 			}
-			if p, ok := findString(v.Field(i), path+"."+t.Field(i).Name, want); ok {
-				return p, true
+			if p, ok := findString(v.Field(i), want); ok {
+				return "." + t.Field(i).Name + p, true
 			}
 		}
 	case reflect.Slice, reflect.Array:
-		for i := 0; i < v.Len(); i++ {
-			if p, ok := findString(v.Index(i), fmt.Sprintf("%s[%d]", path, i), want); ok {
-				return p, true
+		for i := range v.Len() {
+			if p, ok := findString(v.Index(i), want); ok {
+				return "[" + strconv.Itoa(i) + "]" + p, true
 			}
 		}
 	case reflect.Map:
 		it := v.MapRange()
 		for it.Next() {
-			if p, ok := findString(it.Key(), path+" key", want); ok {
-				return p, true
+			if p, ok := findString(it.Key(), want); ok {
+				return " key" + p, true
 			}
-			if p, ok := findString(it.Value(), fmt.Sprintf("%s[%v]", path, it.Key()), want); ok {
-				return p, true
+			if p, ok := findString(it.Value(), want); ok {
+				return fmt.Sprintf("[%v]", it.Key()) + p, true
 			}
 		}
 	}

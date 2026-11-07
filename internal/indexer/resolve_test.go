@@ -1120,9 +1120,10 @@ func (s *stubStore) Snapshot() (graphstore.Reader, error) {
 	}
 	return &stubReader{err: graphstore.ErrNotFound}, nil
 }
-func (s *stubStore) NewWriter() (graphstore.Writer, error) { return s.writer, nil }
-func (s *stubStore) Export(w io.Writer) error              { return nil }
-func (s *stubStore) Close() error                          { return nil }
+func (s *stubStore) NewWriter() (graphstore.Writer, error)         { return s.writer, nil }
+func (s *stubStore) NewWriterSized(int) (graphstore.Writer, error) { return s.writer, nil }
+func (s *stubStore) Export(w io.Writer) error                      { return nil }
+func (s *stubStore) Close() error                                  { return nil }
 
 // stubReader is a graphstore.Reader stand-in used ONLY for writeGraph's
 // prior-Meta read (Snapshot().GetMeta()). Every other method panics if
