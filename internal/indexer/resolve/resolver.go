@@ -1,4 +1,4 @@
-package indexer
+package resolve
 
 import (
 	"strconv"
@@ -822,4 +822,9 @@ func rewireSetEdges(view symbols.View, h symbols.Hierarchy, edges []*schema.Edge
 		}
 	}
 	return out
+}
+
+// newResolver returns a resolver for one file over view and h.
+func newResolver(view symbols.View, h symbols.Hierarchy) *resolver {
+	return &resolver{view: view, h: h, callTargets: make(map[callPos]string)}
 }

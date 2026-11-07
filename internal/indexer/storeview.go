@@ -5,6 +5,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -16,7 +17,7 @@ type storeView struct {
 	// set edge an unchanged file owns to that file. The sync synthesizes
 	// these again over the whole graph and keeps, adds or deletes each
 	// one.
-	synthesized map[edgeTriple]string
+	synthesized map[resolve.EdgeTriple]string
 }
 
 // loadStoreView reads r's files, nodes and edges once each, skipping what
@@ -34,7 +35,7 @@ type storeView struct {
 // declaration and an overload set stay out, and collisions route
 // through the same symbols.Pick tie-break (WR-01).
 func loadStoreView(r graphstore.Reader, discovered map[string]discover.DiscoveredFile, exclude map[string]bool, b *symbols.Builder) (*storeView, error) {
-	v := &storeView{synthesized: make(map[edgeTriple]string)}
+	v := &storeView{synthesized: make(map[resolve.EdgeTriple]string)}
 
 	declared := make(map[string]string)
 	fit, err := r.IterateFiles()
@@ -63,7 +64,7 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 	for nit.Next() {
 		n := nit.Node()
 		fileOf[n.Id] = n.FilePath
-		if exclude[n.FilePath] || n.Kind == kindPackage {
+		if exclude[n.FilePath] || n.Kind == resolve.KindPackage {
 			continue
 		}
 		b.AddNode(n)
@@ -108,11 +109,11 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 	defer eit.Close()
 	for eit.Next() {
 		e := eit.Edge()
-		owner, ok := fileOf[edgeOwnerID(e)]
+		owner, ok := fileOf[resolve.EdgeOwnerID(e)]
 		if !ok || exclude[owner] {
 			continue
 		}
-		k := edgeTriple{e.Source, e.Kind, e.Target}
+		k := resolve.EdgeTriple{Source: e.Source, Kind: e.Kind, Target: e.Target}
 		switch {
 		case isSynthesizedEdge(e):
 			v.synthesized[k] = owner
@@ -169,7 +170,7 @@ func isSynthesizedEdge(e *schema.Edge) bool {
 	case goextract.EdgeKindImplements:
 		return e.Metadata["synthesizedBy"] == dispatch.SynthesizedBy
 	case goextract.RefKindContains:
-		return e.Metadata["synthesizedBy"] == SynthesizedBySet
+		return e.Metadata["synthesizedBy"] == resolve.SynthesizedBySet
 	}
 	return false
 }

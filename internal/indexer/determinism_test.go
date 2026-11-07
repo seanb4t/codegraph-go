@@ -13,6 +13,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -173,7 +174,7 @@ var expectedNodeKinds = []string{
 	goextract.KindTypeAlias,
 	goextract.KindConstant,
 	goextract.KindVariable,
-	kindPackage,
+	resolve.KindPackage,
 }
 
 // TestRealRepoStructure indexes the shared multi-package fixture once and
@@ -229,7 +230,7 @@ func TestRealRepoStructure(t *testing.T) {
 	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "pkga/embed.go")
 	pkgbFileID := nodeid.NodeID(goextract.KindFile, "pkgb/pkgb.go", "pkgb/pkgb.go")
 	importPath := "example.com/gofixture/pkga"
-	pkgID := nodeid.NodeID(kindPackage, importPath, importPath)
+	pkgID := nodeid.NodeID(resolve.KindPackage, importPath, importPath)
 
 	for _, want := range []struct{ src, kind, dst, label string }{
 		{runID, "calls", alphaID, "pkgb.Run -calls-> pkga.Alpha"},

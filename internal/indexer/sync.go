@@ -15,6 +15,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -433,7 +434,8 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	builder.AddResults(results)
 	view := builder.Freeze()
 
-	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, view)
+	g := resolveGraph(results, modulePath, view)
+	nodes, packageNodes, edges, fileRecords, unresolvedCount := g.Nodes, g.PackageNodes, g.Edges, g.Files, g.Unresolved
 
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
@@ -455,16 +457,16 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			nodesRemoved++
 		}
 	}
-	collapsedEdges := collapseEdges(edges, nodeFilePath)
+	collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)
 
 	// The resolve above synthesized implements and overrides over the
 	// whole graph. A synthesized edge an unchanged file already stores is
 	// skipped, and a stored one the synthesis did not produce is deleted,
 	// so Meta.EdgeCount counts each change once.
-	kept := make(map[edgeTriple]bool)
+	kept := make(map[resolve.EdgeTriple]bool)
 	writes := make([]*schema.Edge, 0, len(collapsedEdges))
 	for _, e := range collapsedEdges {
-		k := edgeTriple{e.Source, e.Kind, e.Target}
+		k := resolve.EdgeTriple{Source: e.Source, Kind: e.Kind, Target: e.Target}
 		if _, stored := stored.synthesized[k]; stored && isSynthesizedEdge(e) {
 			kept[k] = true
 			continue
@@ -555,7 +557,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, ownerPathFor(edgeOwnerID(e), nodeFilePath, r0)); err != nil {
+		if err := w.PutEdge(e, ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0)); err != nil {
 			w.Close()
 			return Stats{}, err
 		}
@@ -729,28 +731,28 @@ func sortedKeys(m map[string]struct{}) []string {
 
 // deleteOwnedEdge stages the delete of edge k and of owner's file-index
 // entry for it.
-func deleteOwnedEdge(w graphstore.Writer, owner string, k edgeTriple) error {
-	if err := w.DeleteEdge(k.source, k.kind, k.target); err != nil {
+func deleteOwnedEdge(w graphstore.Writer, owner string, k resolve.EdgeTriple) error {
+	if err := w.DeleteEdge(k.Source, k.Kind, k.Target); err != nil {
 		return err
 	}
-	return w.DeleteFileIndexEdge(owner, k.source, k.kind, k.target)
+	return w.DeleteFileIndexEdge(owner, k.Source, k.Kind, k.Target)
 }
 
 // sortedTriples returns m's keys sorted by (source, kind, target).
-func sortedTriples(m map[edgeTriple]string) []edgeTriple {
-	keys := make([]edgeTriple, 0, len(m))
+func sortedTriples(m map[resolve.EdgeTriple]string) []resolve.EdgeTriple {
+	keys := make([]resolve.EdgeTriple, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		a, b := keys[i], keys[j]
-		if a.source != b.source {
-			return a.source < b.source
+		if a.Source != b.Source {
+			return a.Source < b.Source
 		}
-		if a.kind != b.kind {
-			return a.kind < b.kind
+		if a.Kind != b.Kind {
+			return a.Kind < b.Kind
 		}
-		return a.target < b.target
+		return a.Target < b.Target
 	})
 	return keys
 }
@@ -839,7 +841,7 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 			setsByName[n.Name] = append(setsByName[n.Name], n.Id)
 			continue
 		}
-		if n.Kind == goextract.KindFile || n.Kind == kindPackage {
+		if n.Kind == goextract.KindFile || n.Kind == resolve.KindPackage {
 			continue
 		}
 		moduleKey, ok := declared[n.FilePath]
@@ -914,7 +916,7 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 		if _, ok := targets[resolved]; !ok {
 			continue
 		}
-		path := fileOf[edgeOwnerID(e)]
+		path := fileOf[resolve.EdgeOwnerID(e)]
 		if e.Kind == goextract.RefKindContains && path == fileOf[resolved] {
 			// The extractor makes a same-file contains edge itself, from
 			// the declaration, so no other file can outbid it. Every
