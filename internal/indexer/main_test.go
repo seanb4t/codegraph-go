@@ -2,8 +2,9 @@ package indexer
 
 import (
 	"flag"
-	"os"
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 // TestMain lowers the rapid check count of this package's property tests
@@ -11,6 +12,8 @@ import (
 // runs real syncs on disk and the default of one hundred costs about
 // ninety seconds on every push (design D7). A -rapid.checks flag on the command line wins: task
 // test:properties and the weekly fuzz workflow pass the deep count.
+// After every test, goleak fails the run if a goroutine started by the
+// package is still alive.
 func TestMain(m *testing.M) {
 	flag.Parse()
 	given := false
@@ -24,5 +27,5 @@ func TestMain(m *testing.M) {
 			panic(err)
 		}
 	}
-	os.Exit(m.Run())
+	goleak.VerifyTestMain(m)
 }

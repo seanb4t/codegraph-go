@@ -27,6 +27,7 @@ import (
 const (
 	frameKindMeta uint8 = 1
 	frameKindNode uint8 = 2
+	frameKindEdge uint8 = 3
 )
 
 // exportFrame is one decoded [kind][data] record from an Export() stream.
@@ -85,9 +86,15 @@ func encodeExportFrames(frames []exportFrame) []byte {
 // across independently-built stores (RESEARCH §Pitfall 2).
 func indexAndExport(t *testing.T, repoRoot string) []byte {
 	t.Helper()
+	return indexAndExportWith(t, repoRoot, Options{})
+}
+
+// indexAndExportWith is indexAndExport with the given Options.
+func indexAndExportWith(t *testing.T, repoRoot string, opts Options) []byte {
+	t.Helper()
 
 	storeDir := t.TempDir()
-	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+	if _, err := Run(repoRoot, storeDir, opts); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -138,6 +145,32 @@ func TestDeterministicRebuild(t *testing.T) {
 
 	if !bytes.Equal(first, second) {
 		reportFirstDiff(t, first, second)
+	}
+}
+
+// TestRebuildIgnoresWorkerCount indexes the shared fixture with one
+// extraction worker and with eight, and requires the two normalized
+// Export() streams to be byte-identical.
+func TestRebuildIgnoresWorkerCount(t *testing.T) {
+	one := indexAndExportWith(t, fixtureRoot, Options{Workers: 1})
+	eight := indexAndExportWith(t, fixtureRoot, Options{Workers: 8})
+
+	for name, stream := range map[string][]byte{"Workers: 1": one, "Workers: 8": eight} {
+		var nodes, edges int
+		for _, f := range decodeExportFrames(t, stream) {
+			switch f.kind {
+			case frameKindNode:
+				nodes++
+			case frameKindEdge:
+				edges++
+			}
+		}
+		if nodes == 0 || edges == 0 {
+			t.Fatalf("%s: export holds %d nodes and %d edges, want more than zero of each", name, nodes, edges)
+		}
+	}
+	if !bytes.Equal(one, eight) {
+		reportFirstDiff(t, one, eight)
 	}
 }
 

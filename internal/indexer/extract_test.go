@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
@@ -257,4 +258,42 @@ func TestExtractPool_OversizedFileContained(t *testing.T) {
 			t.Errorf("results[%d] (%s) unexpected Err after oversized file: %v", i, all[i].RelPath, results[i].Err)
 		}
 	}
+}
+
+// TestExtractStopsEveryWorkerOnError gives the pool a parser factory whose
+// third call fails. With one worker per file, that call is the first file
+// of the third worker. Extract must return that error, and the synctest
+// bubble must hold no live goroutine once it returns.
+func TestExtractStopsEveryWorkerOnError(t *testing.T) {
+	files, _, err := discover.Discover(fixtureRoot)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	const limit = 4
+	if len(files) < limit {
+		t.Fatalf("fixture has only %d files, need at least %d", len(files), limit)
+	}
+	errThird := errors.New("third parser fails")
+
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int64
+		factory := func(languageID string) (parser.Parser, error) {
+			if calls.Add(1) == 3 {
+				return nil, errThird
+			}
+			return defaultParserFactory(languageID)
+		}
+
+		results, err := extractWithFactory(files, limit, factory)
+		if !errors.Is(err, errThird) {
+			t.Fatalf("extractWithFactory error = %v, want %v", err, errThird)
+		}
+		if results != nil {
+			t.Fatalf("extractWithFactory returned %d results with its error, want none", len(results))
+		}
+		if got := calls.Load(); got < 3 {
+			t.Fatalf("factory ran %d times, want at least 3", got)
+		}
+		synctest.Wait()
+	})
 }

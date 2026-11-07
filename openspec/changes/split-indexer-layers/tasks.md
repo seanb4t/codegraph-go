@@ -25,9 +25,9 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 5. Orchestration tests and the layer gate
 
-- [ ] 5.1 Add `TestRebuildIgnoresWorkerCount` for the `graph-index` scenario "A different worker count". It indexes the shared fixture with `Workers: 1` and with `Workers: 8`, and compares the two `Export()` streams with the normalization of `TestDeterministicRebuild`. It asserts that each stream holds more than zero nodes and edges. Verify that it passes on `main` before the split and after group 3.
-- [ ] 5.2 Add `goleak.VerifyTestMain` to the `TestMain` of `internal/indexer`, after its `rapid.checks` default. Add `TestExtractStopsEveryWorkerOnError` under `testing/synctest`: a parser factory that fails on the third file ends `Extract` with that error, and no worker goroutine remains. Verify that both pass.
-- [ ] 5.3 Add `TestIndexerLayers` to `internal/depclosure` (design.md D1). Positive assertion: the `go list -deps` output lists each of the four layer packages. Also, the closure of `resolve` holds `symbols`, and the closure of `discover` holds `extract`. Negative assertion: no layer below `internal/indexer` has `internal/graphstore` or `internal/indexer` itself in its closure. Verify that it fails with a temporary `graphstore` import in `resolve`, then remove that import.
+- [x] 5.1 Add `TestRebuildIgnoresWorkerCount` for the `graph-index` scenario "A different worker count". It indexes the shared fixture with `Workers: 1` and with `Workers: 8`, and compares the two `Export()` streams with the normalization of `TestDeterministicRebuild`. It asserts that each stream holds more than zero nodes and edges. Verify that it passes on `main` before the split and after group 3.
+- [x] 5.2 Add `goleak.VerifyTestMain` to the `TestMain` of `internal/indexer`, after its `rapid.checks` default. Add `TestExtractStopsEveryWorkerOnError` under `testing/synctest`: a parser factory that fails on the third file ends `Extract` with that error, and no worker goroutine remains. Verify that both pass.
+- [x] 5.3 Add `TestIndexerLayers` to `internal/depclosure` (design.md D1). Positive assertion: the `go list -deps` output lists each of the four layer packages. Also, the closure of `resolve` holds `symbols`, and the closure of `discover` holds `extract`. Negative assertion: no layer below `internal/indexer` has `internal/graphstore` or `internal/indexer` itself in its closure. Verify that it fails with a temporary `graphstore` import in `resolve`, then remove that import.
 
 ## 6. Equality and documentation
 
