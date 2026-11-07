@@ -1,8 +1,8 @@
 package indexer
 
 import (
-	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
@@ -30,7 +30,7 @@ type resolver struct {
 
 	// callTargets maps a file and a call position to the node the call
 	// resolved to, for the deferred types of D17.
-	callTargets map[string]map[string]string
+	callTargets map[callPos]string
 
 	// sets holds every overload set by id.
 	sets map[string]*overloadSet
@@ -50,9 +50,17 @@ type resolver struct {
 	// written in the callee's file, so it resolves in that module first.
 	moduleOfFile map[string]string
 
-	// fileNodes indexes the declarations of each file of this pass by
-	// name, for the same-file lookup by lexical scope (D15).
-	fileNodes map[string]map[string][]goextract.ExtractedNode
+	// fileNodes indexes the declarations of the file fileNodesPath by
+	// name, for the same-file lookup by lexical scope (D15). It holds one
+	// file at a time: a lookup in another file replaces it.
+	fileNodes     map[string][]goextract.ExtractedNode
+	fileNodesPath string
+}
+
+// callPos is the file and end position of a call.
+type callPos struct {
+	file      string
+	line, col int32
 }
 
 // storedSet is an overload set as the store holds it: the ids of its
@@ -108,13 +116,12 @@ func newResolver(idx *symbolIndex, nodeKindByID map[string]string, nodeByID map[
 		nodeByID:       nodeByID,
 		typeSupertypes: make(map[string][]string),
 		ownerOf:        make(map[string]string),
-		callTargets:    make(map[string]map[string]string),
+		callTargets:    make(map[callPos]string),
 		sets:           make(map[string]*overloadSet),
 		storedSets:     storedSets,
 		typeNames:      make(map[string]bool),
 		typesByName:    make(map[string][]string),
 		moduleOfFile:   moduleOfFile,
-		fileNodes:      make(map[string]map[string][]goextract.ExtractedNode),
 	}
 	for id, n := range nodeByID {
 		if isTypeKind(n.Kind) {
@@ -185,17 +192,32 @@ func (rs *resolver) subtypeOf(arg, param string) bool {
 // recordTarget remembers where a call resolved, for deferred types. The
 // key is the call's end position, which is unique per link of a chain.
 func (rs *resolver) recordTarget(file string, ref goextract.UnresolvedRef, target string) {
-	byPos := rs.callTargets[file]
-	if byPos == nil {
-		byPos = make(map[string]string)
-		rs.callTargets[file] = byPos
-	}
 	if ref.EndLine == 0 {
 		// A reference with no end, such as a route handler, is never
 		// the operand of another call.
 		return
 	}
-	byPos[fmt.Sprintf("%d:%d", ref.EndLine, ref.EndCol)] = target
+	rs.callTargets[callPos{file: file, line: ref.EndLine, col: ref.EndCol}] = target
+}
+
+// parseDeferredPosition reads the "line:col" of a deferred type, as
+// goextract.DeferredType writes it. Text that DeferredType does not
+// write, such as a sign or a leading zero, does not parse.
+func parseDeferredPosition(typ string) (line, col int32, ok bool) {
+	pos, ok := strings.CutPrefix(typ, goextract.DeferredTypePrefix)
+	if !ok {
+		return 0, 0, false
+	}
+	lineText, colText, ok := strings.Cut(pos, ":")
+	if !ok {
+		return 0, 0, false
+	}
+	l, lineErr := strconv.ParseInt(lineText, 10, 32)
+	c, colErr := strconv.ParseInt(colText, 10, 32)
+	if lineErr != nil || colErr != nil || l < 0 || c < 0 || strconv.FormatInt(l, 10) != lineText || strconv.FormatInt(c, 10) != colText {
+		return 0, 0, false
+	}
+	return int32(l), int32(c), true
 }
 
 // isDeferred reports whether typ is a deferred type (D17).
@@ -228,7 +250,11 @@ func (rs *resolver) fillDeferred(file, typ string) (filled, module string, ok bo
 	if !isDeferred(typ) {
 		return typ, "", true
 	}
-	target, ok := rs.callTargets[file][strings.TrimPrefix(typ, goextract.DeferredTypePrefix)]
+	line, col, ok := parseDeferredPosition(typ)
+	if !ok {
+		return "", "", false
+	}
+	target, ok := rs.callTargets[callPos{file: file, line: line, col: col}]
 	if !ok {
 		return "", "", false
 	}
@@ -341,16 +367,16 @@ func (rs *resolver) findType(r goextract.FileResult, alias, typ, writtenIn strin
 // file's module-level declarations of that name. Only kinds that want
 // accepts count.
 func (rs *resolver) sameFile(r goextract.FileResult, name string, line, col int32, want func(kind string) bool) []symbolCandidate {
-	byName, ok := rs.fileNodes[r.RelPath]
-	if !ok {
-		byName = make(map[string][]goextract.ExtractedNode)
+	if rs.fileNodes == nil || rs.fileNodesPath != r.RelPath {
+		rs.fileNodesPath = r.RelPath
+		rs.fileNodes = make(map[string][]goextract.ExtractedNode, len(r.Nodes))
 		for _, en := range r.Nodes {
 			if en.Node.Kind != goextract.KindFile {
-				byName[en.Node.Name] = append(byName[en.Node.Name], en)
+				rs.fileNodes[en.Node.Name] = append(rs.fileNodes[en.Node.Name], en)
 			}
 		}
-		rs.fileNodes[r.RelPath] = byName
 	}
+	byName := rs.fileNodes
 	var innermost []symbolCandidate
 	var scope goextract.Range
 	var moduleLevel []symbolCandidate

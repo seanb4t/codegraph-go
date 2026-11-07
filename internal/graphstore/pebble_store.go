@@ -208,6 +208,17 @@ func (s *pebbleStore) NewWriter() (Writer, error) {
 	return &pebbleWriter{batch: s.db.NewBatch()}, nil
 }
 
+// NewWriterSized returns a Writer like NewWriter whose batch reserves
+// sizeHint bytes.
+func (s *pebbleStore) NewWriterSized(sizeHint int) (Writer, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed.Load() {
+		return nil, ErrClosed
+	}
+	return &pebbleWriter{batch: s.db.NewBatchWithSize(sizeHint)}, nil
+}
+
 // Close releases the underlying Pebble handle. Safe to call more than
 // once: the first call marks the store closed (so subsequent
 // Snapshot/NewWriter/Export calls observe ErrClosed) and delegates to
