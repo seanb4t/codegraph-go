@@ -214,7 +214,7 @@ func parseDeferredPosition(typ string) (line, col int32, ok bool) {
 	}
 	l, lineErr := strconv.ParseInt(lineText, 10, 32)
 	c, colErr := strconv.ParseInt(colText, 10, 32)
-	if lineErr != nil || colErr != nil || strconv.FormatInt(l, 10) != lineText || strconv.FormatInt(c, 10) != colText {
+	if lineErr != nil || colErr != nil || l < 0 || c < 0 || strconv.FormatInt(l, 10) != lineText || strconv.FormatInt(c, 10) != colText {
 		return 0, 0, false
 	}
 	return int32(l), int32(c), true
