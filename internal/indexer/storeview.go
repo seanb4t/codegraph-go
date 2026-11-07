@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -17,7 +18,7 @@ type storeView struct {
 	// the key overlay would give it: the module its file declares
 	// (File.declared_module_key) when it declares one, and otherwise the
 	// file's ImportPath in discovered, which its language's
-	// LanguageSpec.ModuleKey computed on this run. It holds the nodes
+	// extract.LanguageSpec.ModuleKey computed on this run. It holds the nodes
 	// that reachable admits, as overlay does, so a nested declaration, an
 	// unexported TypeScript declaration and an overload set stay out, and
 	// collisions route through the same pickSymbol tie-break (WR-01).
@@ -53,7 +54,7 @@ type storeView struct {
 // loadStoreView reads r's files, nodes and edges once each, skipping what
 // files in exclude own: the files the sync reparses or deleted, whose
 // symbols the batch supersedes or removes.
-func loadStoreView(r graphstore.Reader, discovered map[string]DiscoveredFile, exclude map[string]bool) (*storeView, error) {
+func loadStoreView(r graphstore.Reader, discovered map[string]discover.DiscoveredFile, exclude map[string]bool) (*storeView, error) {
 	v := &storeView{
 		symbols:          newEmptySymbolIndex(),
 		kinds:            make(map[string]string),

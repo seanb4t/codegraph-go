@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ func readCProjectDescriptor(root string) (cProjectDescriptor, error) {
 // header ambiguity — cextract's own package doc comment and the D-11
 // matrix); languages_cpp.go claims only unambiguously-C++ extensions.
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "c",
 		Extensions: []string{".c", ".h"},
 		NewParser: func() (parser.Parser, error) {

@@ -1,6 +1,7 @@
-package indexer
+package extract
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -70,27 +71,27 @@ var (
 
 // registerLanguage indexes spec by its ID and by each of its Extensions.
 // Called from each language's own init() (see languages_go.go).
-func registerLanguage(spec LanguageSpec) {
+func Register(spec LanguageSpec) {
 	registry[spec.ID] = spec
 	for _, ext := range spec.Extensions {
 		extToLang[ext] = spec.ID
 	}
 }
 
-// lookupLanguageByID returns the registered LanguageSpec for id, if any.
-func lookupLanguageByID(id string) (LanguageSpec, bool) {
+// ByID returns the registered LanguageSpec for id, if any.
+func ByID(id string) (LanguageSpec, bool) {
 	spec, ok := registry[id]
 	return spec, ok
 }
 
-// lookupLanguageByExt returns the registered LanguageSpec whose Extensions
+// ByExt returns the registered LanguageSpec whose Extensions
 // includes ext (including the leading "."), if any.
-func lookupLanguageByExt(ext string) (LanguageSpec, bool) {
+func ByExt(ext string) (LanguageSpec, bool) {
 	id, ok := extToLang[ext]
 	if !ok {
 		return LanguageSpec{}, false
 	}
-	return lookupLanguageByID(id)
+	return ByID(id)
 }
 
 // RegisteredLanguageIDs returns every language ID currently registered in
@@ -124,4 +125,15 @@ func RegisteredLanguageExtensions() map[string]string {
 		out[ext] = id
 	}
 	return out
+}
+
+// File extracts one file's source with spec and the parser p. moduleKey is
+// the file's cross-file symbol-index key. A per-file problem is recorded on
+// the result's Err, and a non-nil error means the batch cannot go on.
+func File(spec LanguageSpec, p parser.Parser, moduleKey, relPath string, src []byte) (goextract.FileResult, error) {
+	r, err := spec.Extract(p, moduleKey, relPath, src)
+	if err != nil {
+		return goextract.FileResult{}, fmt.Errorf("indexer: extracting %s: %w", relPath, err)
+	}
+	return r, nil
 }

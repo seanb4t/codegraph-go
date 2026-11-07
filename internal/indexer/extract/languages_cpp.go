@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/mainstream/cextract"
@@ -13,7 +13,7 @@ import (
 // extensions (".hpp"/".hh", not the shared ".h" — the documented C/C++
 // header-ambiguity disposition).
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "cpp",
 		Extensions: []string{".cpp", ".cc", ".cxx", ".hpp", ".hh"},
 		NewParser: func() (parser.Parser, error) {

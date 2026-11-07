@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -87,19 +88,19 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// Phase 10 D-07: DiscoverAll's exclusion-reason list (discovery.Excluded)
 	// feeds the c/ namespace diff below (loadStoredExclusions +
 	// diffExclusions), the same walk result Files/ModulePath come from.
-	discovery, err := DiscoverAll(repoRoot)
+	discovery, err := discover.DiscoverAll(repoRoot)
 	if err != nil {
 		return Stats{}, err
 	}
 	files, modulePath := discovery.Files, discovery.ModulePath
 
-	discovered := make(map[string]DiscoveredFile, len(files))
+	discovered := make(map[string]discover.DiscoveredFile, len(files))
 	for _, f := range files {
 		discovered[f.RelPath] = f
 	}
 
 	// Stat pre-filter -> content-hash confirm (D-01a).
-	var added, modified []DiscoveredFile
+	var added, modified []discover.DiscoveredFile
 	// mtimeRefresh (WR-03) collects files whose stat metadata (mtime/size)
 	// differs from the stored File record but whose recomputed content
 	// hash still matches — a touch, a git checkout with no real content
@@ -345,7 +346,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	// Extract batch = added ∪ modified ∪ dependent.
-	batchFiles := make([]DiscoveredFile, 0, len(added)+len(modified)+len(dependentPaths))
+	batchFiles := make([]discover.DiscoveredFile, 0, len(added)+len(modified)+len(dependentPaths))
 	batchFiles = append(batchFiles, added...)
 	batchFiles = append(batchFiles, modified...)
 	for path := range dependentPaths {
@@ -389,7 +390,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	waiting = mergeSortedPaths(waiting, outbid)
 	if len(waiting) > 0 {
-		waitingFiles := make([]DiscoveredFile, 0, len(waiting))
+		waitingFiles := make([]discover.DiscoveredFile, 0, len(waiting))
 		for _, path := range waiting {
 			if err := pruneOwnedEdgesOnly(r0, w, path, &edgesRemoved); err != nil {
 				w.Close()
@@ -794,7 +795,7 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 // waiting on a new name. The set lookup is by bare name, so a set of the
 // same name under another owner is reparsed too. A same-file contains edge is made by the extractor and is
 // left out. The sync's own batch and dependents are left out as well.
-func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
+func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]discover.DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
 	declared := make(map[string]string)
 	fit, err := r0.IterateFiles()
 	if err != nil {

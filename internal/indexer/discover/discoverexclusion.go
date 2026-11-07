@@ -1,4 +1,4 @@
-package indexer
+package discover
 
 import (
 	"go/build"
@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -185,7 +186,7 @@ func DiscoverAll(root string) (Discovery, error) {
 
 		// Decision point 2.
 		ext := strings.ToLower(filepath.Ext(d.Name()))
-		spec, ok := lookupLanguageByExt(ext)
+		spec, ok := extract.ByExt(ext)
 		if !ok {
 			excluded = append(excluded, newExcludedFile(relPath, schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION, unsupportedExtensionDetail(ext), info.Size()))
 			return nil
@@ -238,12 +239,12 @@ func DiscoverAll(root string) (Discovery, error) {
 	// simply has no entry in descriptors; ModuleKey is called with nil in
 	// that case and is contractually required to fall back to a
 	// path-based identity rather than dropping the file.
-	descriptors := make(map[string]ProjectDescriptor)
+	descriptors := make(map[string]extract.ProjectDescriptor)
 	descriptorAttempted := make(map[string]bool)
 
 	files := make([]DiscoveredFile, 0, len(pending))
 	for _, pf := range pending {
-		spec, ok := lookupLanguageByID(pf.language)
+		spec, ok := extract.ByID(pf.language)
 		if !ok {
 			// A file was matched by extension during the walk but its
 			// language was deregistered before this second pass ran —

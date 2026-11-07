@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"encoding/json"
@@ -106,7 +106,7 @@ func phpNamespaceFor(psr4 map[string]string, relPath string) (string, bool) {
 // for a file with no namespace declaration at all (mirrors
 // languages_csharp.go's identical parse-time-override rationale).
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "php",
 		Extensions: []string{".php"},
 		NewParser: func() (parser.Parser, error) {

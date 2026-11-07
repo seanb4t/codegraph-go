@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"fmt"
@@ -87,7 +87,7 @@ func rustModulePath(rel string) string {
 
 // init registers Rust as a LanguageSpec (LANG-06, mainstream tier).
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "rust",
 		Extensions: []string{".rs"},
 		NewParser: func() (parser.Parser, error) {

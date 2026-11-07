@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsevents"
-
-	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 )
 
 // streamLatency is how long FSEvents gathers events before it delivers a
@@ -96,7 +95,7 @@ func batchPaths(root string, batch []fsevents.Event) []string {
 }
 
 // relevant reports whether path is root or lies under it with no directory
-// on the way that indexer.ShouldSkipDir excludes, the same rule the indexer
+// on the way that discover.ShouldSkipDir excludes, the same rule the indexer
 // and the fsnotify backend apply. When isDir is true, path's own name is
 // checked too. The prefix comparison ignores case because APFS volumes are
 // case-insensitive by default and FSEvents reports the on-disk case.
@@ -116,7 +115,7 @@ func relevant(root, path string, isDir bool) bool {
 		names = names[:len(names)-1]
 	}
 	for _, name := range names {
-		if indexer.ShouldSkipDir(name) {
+		if discover.ShouldSkipDir(name) {
 			return false
 		}
 	}

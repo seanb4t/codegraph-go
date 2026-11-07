@@ -8,6 +8,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 )
@@ -19,11 +21,11 @@ import (
 // defaultParserFactory, which routes through the languages.go registry.
 type parserFactory func(languageID string) (parser.Parser, error)
 
-// defaultParserFactory looks up languageID in the LanguageSpec registry and
+// defaultParserFactory looks up languageID in the extract.LanguageSpec registry and
 // constructs a parser via its NewParser — the single dispatch point every
 // worker's per-language parser cache (below) consults.
 func defaultParserFactory(languageID string) (parser.Parser, error) {
-	spec, ok := lookupLanguageByID(languageID)
+	spec, ok := extract.ByID(languageID)
 	if !ok {
 		return nil, fmt.Errorf("indexer: no registered language %q", languageID)
 	}
@@ -55,7 +57,7 @@ func defaultParserFactory(languageID string) (parser.Parser, error) {
 // a non-nil error only for a condition that makes the whole batch
 // meaningless, such as a worker failing to construct a language's parser,
 // an unregistered language, or an unreadable file.
-func Extract(files []DiscoveredFile, limit int) ([]goextract.FileResult, error) {
+func Extract(files []discover.DiscoveredFile, limit int) ([]goextract.FileResult, error) {
 	return extractWithFactory(files, limit, defaultParserFactory)
 }
 
@@ -73,7 +75,7 @@ func Extract(files []DiscoveredFile, limit int) ([]goextract.FileResult, error) 
 // persistent worker goroutines are started up front, each owning its own
 // language-keyed parser cache and pulling file indices from a shared
 // atomic counter until none remain.
-func extractWithFactory(files []DiscoveredFile, limit int, newParser parserFactory) ([]goextract.FileResult, error) {
+func extractWithFactory(files []discover.DiscoveredFile, limit int, newParser parserFactory) ([]goextract.FileResult, error) {
 	if limit <= 0 {
 		limit = runtime.NumCPU()
 	}
@@ -130,7 +132,7 @@ func extractWithFactory(files []DiscoveredFile, limit int, newParser parserFacto
 					continue
 				}
 
-				spec, ok := lookupLanguageByID(f.Language)
+				spec, ok := extract.ByID(f.Language)
 				if !ok {
 					// An unrecognized language is a batch-fatal
 					// condition — Discover only ever emits files whose
@@ -150,15 +152,9 @@ func extractWithFactory(files []DiscoveredFile, limit int, newParser parserFacto
 					parsers[f.Language] = p
 				}
 
-				r, err := spec.Extract(p, f.ImportPath, f.RelPath, src)
+				r, err := extract.File(spec, p, f.ImportPath, f.RelPath, src)
 				if err != nil {
-					// spec.Extract's own contract (mirroring
-					// goextract.Extract) is to never return a non-nil
-					// error for a per-file problem — it records Err on
-					// the result instead. Reaching here means something
-					// outside that contract broke (e.g. a parser factory
-					// bug), which IS fatal to the batch.
-					return fmt.Errorf("indexer: extracting %s: %w", f.RelPath, err)
+					return err
 				}
 				// Phase 4 D-01a: stamp the on-disk stat info Discover
 				// already captured onto the result, so Pass 2 can carry

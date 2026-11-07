@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"encoding/json"
@@ -126,7 +126,7 @@ func tsDescriptor(root string) (ProjectDescriptor, error) {
 // from its own relPath extension (tsextract.go's languageForPath), so the
 // three registrations differ only in ID/Extensions/NewParser.
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "typescript",
 		Extensions: []string{".ts"},
 		NewParser: func() (parser.Parser, error) {
@@ -136,7 +136,7 @@ func init() {
 		ModuleKey:  tsModuleKey,
 		Descriptor: tsDescriptor,
 	})
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "tsx",
 		Extensions: []string{".tsx"},
 		NewParser: func() (parser.Parser, error) {
@@ -146,7 +146,7 @@ func init() {
 		ModuleKey:  tsModuleKey,
 		Descriptor: tsDescriptor,
 	})
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "javascript",
 		Extensions: []string{".js", ".jsx", ".mjs", ".cjs"},
 		NewParser: func() (parser.Parser, error) {

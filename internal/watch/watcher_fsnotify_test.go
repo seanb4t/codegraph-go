@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 )
 
 // waitFlush blocks until a flush arrives on ch or timeout elapses, failing
@@ -48,7 +48,7 @@ func TestAddCreatedDirSkipsExcludedDirs(t *testing.T) {
 	}
 
 	for _, d := range []string{filepath.Join(root, ".venv"), filepath.Join(root, "pkg")} {
-		if err := addCreatedDir(w, d, indexer.ShouldSkipDir); err != nil {
+		if err := addCreatedDir(w, d, discover.ShouldSkipDir); err != nil {
 			t.Fatalf("addCreatedDir %s: %v", d, err)
 		}
 	}
@@ -139,7 +139,7 @@ func TestRemoveMovedDropsTheSubtree(t *testing.T) {
 	}
 	removeMoved(w, filepath.Join(root, "unrelated.txt"))
 	removeMoved(w, old)
-	if err := addCreatedDir(w, moved, indexer.ShouldSkipDir); err != nil {
+	if err := addCreatedDir(w, moved, discover.ShouldSkipDir); err != nil {
 		t.Fatalf("addCreatedDir: %v", err)
 	}
 

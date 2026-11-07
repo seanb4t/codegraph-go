@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/parser/cgo"
@@ -34,14 +36,14 @@ func (c *countingParser) Close() error { return c.inner.Close() }
 // Language field", which "go-dup" exercises identically to a real second
 // language.
 func init() {
-	registerLanguage(LanguageSpec{
+	extract.Register(extract.LanguageSpec{
 		ID:         "go-dup",
 		Extensions: []string{".godup"},
 		NewParser: func() (parser.Parser, error) {
 			return cgo.NewGoParser()
 		},
 		Extract: goextract.Extract,
-		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
+		ModuleKey: func(descriptor extract.ProjectDescriptor, relPath string) string {
 			return relPath
 		},
 	})
@@ -51,7 +53,7 @@ func init() {
 // the returned slice is always in the same order as the input files,
 // independent of goroutine scheduling (D-01a determinism, D-04).
 func TestExtractPool_OrderStable(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestExtractPool_OrderStable(t *testing.T) {
 // injecting a counting parser factory (RESEARCH Pitfall 3 / acceptance
 // criteria).
 func TestExtractPool_BoundedNotPerFile(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -118,7 +120,7 @@ func TestExtractPool_BoundedNotPerFile(t *testing.T) {
 // survive (a worker claiming a "go" file then a "go-dup" file had no way
 // to swap grammars/extractors).
 func TestExtractPool_MultiLanguage(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -126,7 +128,7 @@ func TestExtractPool_MultiLanguage(t *testing.T) {
 		t.Fatalf("fixture has only %d files, need at least 2", len(files))
 	}
 
-	batch := make([]DiscoveredFile, 0, len(files)*2)
+	batch := make([]discover.DiscoveredFile, 0, len(files)*2)
 	batch = append(batch, files...)
 	for _, f := range files {
 		dup := f
@@ -162,7 +164,7 @@ func TestExtractPool_MultiLanguage(t *testing.T) {
 // workers * distinct-languages, never one-per-file (RESEARCH Open
 // Question 1's recommended per-worker language-keyed cache bound).
 func TestExtractPool_MultiLanguage_ParserCountBounded(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -170,7 +172,7 @@ func TestExtractPool_MultiLanguage_ParserCountBounded(t *testing.T) {
 		t.Fatalf("fixture has only %d files, need at least 3", len(files))
 	}
 
-	batch := make([]DiscoveredFile, 0, len(files)*2)
+	batch := make([]discover.DiscoveredFile, 0, len(files)*2)
 	batch = append(batch, files...)
 	for _, f := range files {
 		dup := f
@@ -212,7 +214,7 @@ func TestExtractPool_MultiLanguage_ParserCountBounded(t *testing.T) {
 // is recorded on its own FileResult.Err and does not abort extraction of
 // the rest of the batch (RESEARCH Pitfall 4, threat T-02-03).
 func TestExtractPool_OversizedFileContained(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -225,7 +227,7 @@ func TestExtractPool_OversizedFileContained(t *testing.T) {
 	}
 	mustWrite(t, bigPath, string(big))
 
-	all := append([]DiscoveredFile{{
+	all := append([]discover.DiscoveredFile{{
 		AbsPath:    bigPath,
 		RelPath:    "big.go",
 		ImportPath: "example.com/big",

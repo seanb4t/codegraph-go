@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -20,7 +20,7 @@ func (d goProjectDescriptor) ModulePath() string { return d.modulePath }
 // seam end-to-end against an existing, working extractor (goextract.Extract)
 // before any new language is added.
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "go",
 		Extensions: []string{".go"},
 		NewParser: func() (parser.Parser, error) {

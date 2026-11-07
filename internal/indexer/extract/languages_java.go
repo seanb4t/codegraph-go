@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"encoding/xml"
@@ -83,7 +83,7 @@ func readJavaDescriptor(root string) (string, error) {
 // once parsing has actually happened; this ModuleKey is only ever
 // load-bearing for a file with no package declaration at all.
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "java",
 		Extensions: []string{".java"},
 		NewParser: func() (parser.Parser, error) {

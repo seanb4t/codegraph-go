@@ -11,6 +11,8 @@ import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/seanb4t/codegraph-go/internal/corpora"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 )
@@ -394,11 +396,11 @@ type declarationReport struct {
 // declarations with the table, and compares the two.
 func checkDeclarations(t *testing.T, root string) declarationReport {
 	t.Helper()
-	discovery, err := DiscoverAll(root)
+	discovery, err := discover.DiscoverAll(root)
 	if err != nil {
-		t.Fatalf("DiscoverAll(%s): %v", root, err)
+		t.Fatalf("discover.DiscoverAll(%s): %v", root, err)
 	}
-	var files []DiscoveredFile
+	var files []discover.DiscoveredFile
 	for _, f := range discovery.Files {
 		if declWalkers[f.Language] != nil {
 			files = append(files, f)
@@ -425,7 +427,7 @@ func checkDeclarations(t *testing.T, root string) declarationReport {
 		}
 		p, ok := parsers[f.Language]
 		if !ok {
-			spec, _ := lookupLanguageByID(f.Language)
+			spec, _ := extract.ByID(f.Language)
 			if p, err = spec.NewParser(); err != nil {
 				t.Fatalf("NewParser(%s): %v", f.Language, err)
 			}

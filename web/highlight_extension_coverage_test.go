@@ -13,7 +13,7 @@
 // highlight_coverage_test.go closes it for registered LANGUAGE IDs: by
 // parsing the TS declaration as text (Go cannot import TypeScript) and
 // asserting set equality — key AND value — against
-// indexer.RegisteredLanguageExtensions(), the disk-backed source of truth.
+// extract.RegisteredLanguageExtensions(), the disk-backed source of truth.
 //
 // Sited in web_test for the same reason highlight_coverage_test.go is
 // (see that file's header): package web stays free of an internal/indexer
@@ -28,7 +28,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 )
 
 var extensionMapRE = regexp.MustCompile(`(?s)EXTENSION_LANGUAGE:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}`)
@@ -85,7 +85,7 @@ func compareExtensionSets(registered, tsSide map[string]string) (missing, extra,
 
 // TestExtensionLanguageCoversRegisteredExtensions is the primary guard:
 // EXTENSION_LANGUAGE's declared population must be set-equal, key and
-// value, to indexer.RegisteredLanguageExtensions() — no missing, no extra,
+// value, to extract.RegisteredLanguageExtensions() — no missing, no extra,
 // no mismatched mapping.
 func TestExtensionLanguageCoversRegisteredExtensions(t *testing.T) {
 	path := highlightSourcePath(t)
@@ -99,7 +99,7 @@ func TestExtensionLanguageCoversRegisteredExtensions(t *testing.T) {
 		t.Fatalf("parse %s: %v", path, err)
 	}
 
-	registered := indexer.RegisteredLanguageExtensions()
+	registered := extract.RegisteredLanguageExtensions()
 
 	t.Logf("observed: %d indexer-registered extensions %v", len(registered), registered)
 	t.Logf("observed: %d EXTENSION_LANGUAGE entries %v", len(tsSide), tsSide)
@@ -164,7 +164,7 @@ func TestExtensionLanguageComparisonDiscriminates(t *testing.T) {
 		t.Fatalf("parse fixture: %v", err)
 	}
 
-	registered := indexer.RegisteredLanguageExtensions()
+	registered := extract.RegisteredLanguageExtensions()
 	missing, extra, mismatched := compareExtensionSets(registered, tsSide)
 
 	t.Logf("observed against planted fixture: missing=%v extra=%v mismatched=%v", missing, extra, mismatched)

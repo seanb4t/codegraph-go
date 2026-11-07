@@ -6,7 +6,7 @@
 // events is coalesced by a Debouncer (see debounce.go) into one flush call
 // over the union of changed paths.
 //
-// internal/watch depends only on internal/indexer's exported ShouldSkipDir
+// internal/watch depends only on internal/indexer/discover's exported ShouldSkipDir
 // predicate — never on internal/graphstore or pebble directly (D-04a
 // boundary; this package has no storage concerns of its own).
 package watch

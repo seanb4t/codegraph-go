@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"fmt"
@@ -66,7 +66,7 @@ func readPythonDescriptor(root string) (string, error) {
 // itself (cgo.NewPythonParser) already existed from Phase 1 — this plan
 // adds only the extractor + resolver wiring.
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "python",
 		Extensions: []string{".py"},
 		NewParser: func() (parser.Parser, error) {

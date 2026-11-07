@@ -1,4 +1,4 @@
-package indexer
+package discover
 
 import (
 	"os"
@@ -12,8 +12,8 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-const fixtureRoot = "testdata/gofixture"
-const mixedLangFixtureRoot = "testdata/mixedlangfixture"
+const fixtureRoot = "../testdata/gofixture"
+const mixedLangFixtureRoot = "../testdata/mixedlangfixture"
 
 // A matching "java" test-only spec, and later a "python" test-only spec,
 // previously lived here (05-02) to prove Discover's extension->language-

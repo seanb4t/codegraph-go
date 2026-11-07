@@ -1,4 +1,4 @@
-package indexer
+package discover
 
 import (
 	"go/build"

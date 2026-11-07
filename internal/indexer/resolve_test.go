@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/parser"
@@ -34,7 +35,7 @@ func newTestParser(t *testing.T) parser.Parser {
 // tests exercise.
 func fixtureResults(t *testing.T) ([]goextract.FileResult, string) {
 	t.Helper()
-	files, modulePath, err := Discover(fixtureRoot)
+	files, modulePath, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}

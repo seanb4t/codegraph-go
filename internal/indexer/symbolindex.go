@@ -12,7 +12,7 @@ import (
 // a per-language cross-file symbol-index key (Phase 5 D-04/Pitfall 2): Go's
 // import path is the first instance of this concept (still carried on
 // goextract.FileResult.ImportPath — the field name is unchanged, only its
-// semantic source generalizes per language via LanguageSpec.ModuleKey).
+// semantic source generalizes per language via extract.LanguageSpec.ModuleKey).
 type symbolIndex struct {
 	// byModuleKeyAndName is keyed moduleKey -> declaredName -> nodeID.
 	// declaredName is a node's bare Name field: for functions, types,

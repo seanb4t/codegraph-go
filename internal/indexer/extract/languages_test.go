@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"testing"
@@ -11,9 +11,9 @@ import (
 // subsequent wave (discovery, extract, resolve, per-language extractors,
 // dispatch, routing) depends on (D-01).
 func TestLanguageRegistry(t *testing.T) {
-	spec, ok := lookupLanguageByID("go")
+	spec, ok := ByID("go")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"go\") to return ok=true")
+		t.Fatal("expected ByID(\"go\") to return ok=true")
 	}
 
 	foundExt := false
@@ -27,9 +27,9 @@ func TestLanguageRegistry(t *testing.T) {
 		t.Fatalf("expected go spec Extensions to contain \".go\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".go")
+	byExt, ok := ByExt(".go")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".go\") to return ok=true")
+		t.Fatal("expected ByExt(\".go\") to return ok=true")
 	}
 	if byExt.ID != "go" {
 		t.Fatalf("expected .go to resolve to the go spec, got ID=%q", byExt.ID)
@@ -57,9 +57,9 @@ func TestLanguageRegistry(t *testing.T) {
 // ModuleKey degrades to path-based identity absent a resolvable descriptor
 // (D-03) — mirroring TestLanguageRegistry's shape for Go (LANG-02).
 func TestLanguageRegistry_Java(t *testing.T) {
-	spec, ok := lookupLanguageByID("java")
+	spec, ok := ByID("java")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"java\") to return ok=true")
+		t.Fatal("expected ByID(\"java\") to return ok=true")
 	}
 
 	foundExt := false
@@ -73,9 +73,9 @@ func TestLanguageRegistry_Java(t *testing.T) {
 		t.Fatalf("expected java spec Extensions to contain \".java\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".java")
+	byExt, ok := ByExt(".java")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".java\") to return ok=true")
+		t.Fatal("expected ByExt(\".java\") to return ok=true")
 	}
 	if byExt.ID != "java" {
 		t.Fatalf("expected .java to resolve to the java spec, got ID=%q", byExt.ID)
@@ -110,9 +110,9 @@ func TestLanguageRegistry_Java(t *testing.T) {
 // ModuleKey degrades to path-based identity absent a resolvable descriptor
 // (D-03) — mirroring TestLanguageRegistry_Java's shape (LANG-03).
 func TestLanguageRegistry_CSharp(t *testing.T) {
-	spec, ok := lookupLanguageByID("csharp")
+	spec, ok := ByID("csharp")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"csharp\") to return ok=true")
+		t.Fatal("expected ByID(\"csharp\") to return ok=true")
 	}
 
 	foundExt := false
@@ -126,9 +126,9 @@ func TestLanguageRegistry_CSharp(t *testing.T) {
 		t.Fatalf("expected csharp spec Extensions to contain \".cs\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".cs")
+	byExt, ok := ByExt(".cs")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".cs\") to return ok=true")
+		t.Fatal("expected ByExt(\".cs\") to return ok=true")
 	}
 	if byExt.ID != "csharp" {
 		t.Fatalf("expected .cs to resolve to the csharp spec, got ID=%q", byExt.ID)
@@ -164,9 +164,9 @@ func TestLanguageRegistry_CSharp(t *testing.T) {
 // descriptor (D-03) — mirroring TestLanguageRegistry_Java/_CSharp's shape
 // (LANG-04).
 func TestLanguageRegistry_Python(t *testing.T) {
-	spec, ok := lookupLanguageByID("python")
+	spec, ok := ByID("python")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"python\") to return ok=true")
+		t.Fatal("expected ByID(\"python\") to return ok=true")
 	}
 
 	foundExt := false
@@ -180,9 +180,9 @@ func TestLanguageRegistry_Python(t *testing.T) {
 		t.Fatalf("expected python spec Extensions to contain \".py\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".py")
+	byExt, ok := ByExt(".py")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".py\") to return ok=true")
+		t.Fatal("expected ByExt(\".py\") to return ok=true")
 	}
 	if byExt.ID != "python" {
 		t.Fatalf("expected .py to resolve to the python spec, got ID=%q", byExt.ID)
@@ -258,15 +258,15 @@ func TestLanguageRegistry_TypeScript(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.id, func(t *testing.T) {
-			spec, ok := lookupLanguageByID(c.id)
+			spec, ok := ByID(c.id)
 			if !ok {
-				t.Fatalf("expected lookupLanguageByID(%q) to return ok=true", c.id)
+				t.Fatalf("expected ByID(%q) to return ok=true", c.id)
 			}
 
 			for _, ext := range c.exts {
-				byExt, ok := lookupLanguageByExt(ext)
+				byExt, ok := ByExt(ext)
 				if !ok {
-					t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+					t.Fatalf("expected ByExt(%q) to return ok=true", ext)
 				}
 				if byExt.ID != c.id {
 					t.Fatalf("expected %s to resolve to the %s spec, got ID=%q", ext, c.id, byExt.ID)
@@ -305,9 +305,9 @@ func TestLanguageRegistry_TypeScript(t *testing.T) {
 // (D-03) — mirroring TestLanguageRegistry_Python's shape (LANG-06,
 // mainstream tier).
 func TestLanguageRegistry_Rust(t *testing.T) {
-	spec, ok := lookupLanguageByID("rust")
+	spec, ok := ByID("rust")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"rust\") to return ok=true")
+		t.Fatal("expected ByID(\"rust\") to return ok=true")
 	}
 
 	foundExt := false
@@ -321,9 +321,9 @@ func TestLanguageRegistry_Rust(t *testing.T) {
 		t.Fatalf("expected rust spec Extensions to contain \".rs\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".rs")
+	byExt, ok := ByExt(".rs")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".rs\") to return ok=true")
+		t.Fatal("expected ByExt(\".rs\") to return ok=true")
 	}
 	if byExt.ID != "rust" {
 		t.Fatalf("expected .rs to resolve to the rust spec, got ID=%q", byExt.ID)
@@ -359,9 +359,9 @@ func TestLanguageRegistry_Rust(t *testing.T) {
 // TestLanguageRegistry_TypeScript's own descriptor-independent pattern
 // (LANG-06, mainstream tier).
 func TestLanguageRegistry_Ruby(t *testing.T) {
-	spec, ok := lookupLanguageByID("ruby")
+	spec, ok := ByID("ruby")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"ruby\") to return ok=true")
+		t.Fatal("expected ByID(\"ruby\") to return ok=true")
 	}
 
 	foundExt := false
@@ -375,9 +375,9 @@ func TestLanguageRegistry_Ruby(t *testing.T) {
 		t.Fatalf("expected ruby spec Extensions to contain \".rb\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".rb")
+	byExt, ok := ByExt(".rb")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".rb\") to return ok=true")
+		t.Fatal("expected ByExt(\".rb\") to return ok=true")
 	}
 	if byExt.ID != "ruby" {
 		t.Fatalf("expected .rb to resolve to the ruby spec, got ID=%q", byExt.ID)
@@ -413,9 +413,9 @@ func TestLanguageRegistry_Ruby(t *testing.T) {
 // (D-03) — mirroring TestLanguageRegistry_CSharp's parse-time-override
 // rationale (LANG-06, mainstream tier).
 func TestLanguageRegistry_PHP(t *testing.T) {
-	spec, ok := lookupLanguageByID("php")
+	spec, ok := ByID("php")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"php\") to return ok=true")
+		t.Fatal("expected ByID(\"php\") to return ok=true")
 	}
 
 	foundExt := false
@@ -429,9 +429,9 @@ func TestLanguageRegistry_PHP(t *testing.T) {
 		t.Fatalf("expected php spec Extensions to contain \".php\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".php")
+	byExt, ok := ByExt(".php")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".php\") to return ok=true")
+		t.Fatal("expected ByExt(\".php\") to return ok=true")
 	}
 	if byExt.ID != "php" {
 		t.Fatalf("expected .php to resolve to the php spec, got ID=%q", byExt.ID)
@@ -496,9 +496,9 @@ func TestPHPNamespaceFor(t *testing.T) {
 // path-based relPath — mirroring TestLanguageRegistry_Ruby's own
 // descriptor-independent pattern (LANG-06, mainstream tier).
 func TestLanguageRegistry_C(t *testing.T) {
-	spec, ok := lookupLanguageByID("c")
+	spec, ok := ByID("c")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"c\") to return ok=true")
+		t.Fatal("expected ByID(\"c\") to return ok=true")
 	}
 
 	for _, ext := range []string{".c", ".h"} {
@@ -512,9 +512,9 @@ func TestLanguageRegistry_C(t *testing.T) {
 		if !found {
 			t.Fatalf("expected c spec Extensions to contain %q, got %v", ext, spec.Extensions)
 		}
-		byExt, ok := lookupLanguageByExt(ext)
+		byExt, ok := ByExt(ext)
 		if !ok {
-			t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+			t.Fatalf("expected ByExt(%q) to return ok=true", ext)
 		}
 		if byExt.ID != "c" {
 			t.Fatalf("expected %q to resolve to the c spec, got ID=%q", ext, byExt.ID)
@@ -550,9 +550,9 @@ func TestLanguageRegistry_C(t *testing.T) {
 // (cextract.Extract), and that C++'s ModuleKey is UNCONDITIONALLY the
 // path-based relPath (LANG-06, mainstream tier).
 func TestLanguageRegistry_Cpp(t *testing.T) {
-	spec, ok := lookupLanguageByID("cpp")
+	spec, ok := ByID("cpp")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"cpp\") to return ok=true")
+		t.Fatal("expected ByID(\"cpp\") to return ok=true")
 	}
 
 	for _, ext := range []string{".cpp", ".cc", ".cxx", ".hpp", ".hh"} {
@@ -566,9 +566,9 @@ func TestLanguageRegistry_Cpp(t *testing.T) {
 		if !found {
 			t.Fatalf("expected cpp spec Extensions to contain %q, got %v", ext, spec.Extensions)
 		}
-		byExt, ok := lookupLanguageByExt(ext)
+		byExt, ok := ByExt(ext)
 		if !ok {
-			t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+			t.Fatalf("expected ByExt(%q) to return ok=true", ext)
 		}
 		if byExt.ID != "cpp" {
 			t.Fatalf("expected %q to resolve to the cpp spec, got ID=%q", ext, byExt.ID)
@@ -577,7 +577,7 @@ func TestLanguageRegistry_Cpp(t *testing.T) {
 
 	// ".h" is NOT claimed by cpp -- it resolves to c (the documented
 	// header-ambiguity disposition).
-	byExt, ok := lookupLanguageByExt(".h")
+	byExt, ok := ByExt(".h")
 	if !ok || byExt.ID != "c" {
 		t.Fatalf("expected \".h\" to resolve to the c spec, got ID=%q ok=%v", byExt.ID, ok)
 	}
@@ -612,9 +612,9 @@ func TestLanguageRegistry_Cpp(t *testing.T) {
 // a path-identity fallback (LANG-06, mainstream tier — gated on 05-08's
 // human-verify approval of the [SUS] alex-pinkus/tree-sitter-swift pin).
 func TestLanguageRegistry_Swift(t *testing.T) {
-	spec, ok := lookupLanguageByID("swift")
+	spec, ok := ByID("swift")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"swift\") to return ok=true")
+		t.Fatal("expected ByID(\"swift\") to return ok=true")
 	}
 
 	foundExt := false
@@ -628,9 +628,9 @@ func TestLanguageRegistry_Swift(t *testing.T) {
 		t.Fatalf("expected swift spec Extensions to contain \".swift\", got %v", spec.Extensions)
 	}
 
-	byExt, ok := lookupLanguageByExt(".swift")
+	byExt, ok := ByExt(".swift")
 	if !ok {
-		t.Fatal("expected lookupLanguageByExt(\".swift\") to return ok=true")
+		t.Fatal("expected ByExt(\".swift\") to return ok=true")
 	}
 	if byExt.ID != "swift" {
 		t.Fatalf("expected .swift to resolve to the swift spec, got ID=%q", byExt.ID)
@@ -669,9 +669,9 @@ func TestLanguageRegistry_Swift(t *testing.T) {
 // (LANG-06, mainstream tier — gated on 05-08's human-verify approval of the
 // [SUS] tree-sitter-grammars/tree-sitter-kotlin pin).
 func TestLanguageRegistry_Kotlin(t *testing.T) {
-	spec, ok := lookupLanguageByID("kotlin")
+	spec, ok := ByID("kotlin")
 	if !ok {
-		t.Fatal("expected lookupLanguageByID(\"kotlin\") to return ok=true")
+		t.Fatal("expected ByID(\"kotlin\") to return ok=true")
 	}
 
 	for _, ext := range []string{".kt", ".kts"} {
@@ -685,9 +685,9 @@ func TestLanguageRegistry_Kotlin(t *testing.T) {
 		if !found {
 			t.Fatalf("expected kotlin spec Extensions to contain %q, got %v", ext, spec.Extensions)
 		}
-		byExt, ok := lookupLanguageByExt(ext)
+		byExt, ok := ByExt(ext)
 		if !ok {
-			t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+			t.Fatalf("expected ByExt(%q) to return ok=true", ext)
 		}
 		if byExt.ID != "kotlin" {
 			t.Fatalf("expected %q to resolve to the kotlin spec, got ID=%q", ext, byExt.ID)

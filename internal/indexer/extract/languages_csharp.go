@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"encoding/xml"
@@ -81,7 +81,7 @@ func readCSharpDescriptor(root string) (string, error) {
 // actually happened; this ModuleKey is only ever load-bearing for a file
 // with no namespace declaration at all.
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "csharp",
 		Extensions: []string{".cs"},
 		NewParser: func() (parser.Parser, error) {

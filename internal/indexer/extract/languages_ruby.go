@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"fmt"
@@ -47,7 +47,7 @@ func rubyModuleKey(relPath string) string {
 
 // init registers Ruby as a LanguageSpec (LANG-06, mainstream tier).
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "ruby",
 		Extensions: []string{".rb"},
 		NewParser: func() (parser.Parser, error) {

@@ -4,8 +4,8 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 1. Discovery and extraction
 
-- [ ] 1.1 Move `discover.go`, `discoverexclusion.go` and their tests to `internal/indexer/discover`. Export `Discover`, `DiscoverAll`, `DiscoveredFile`, `Discovery` and `ShouldSkipDir`. Change the `ShouldSkipDir` callers in `internal/watch`, `internal/daemon` and `internal/query` to the new import path. Verify that `go build ./...` and `task test` pass.
-- [ ] 1.2 Move `languages.go`, `languages_*.go` and `languages_test.go` to `internal/indexer/extract`, with `LanguageSpec` and the registry. Add `extract.File(spec, parser, moduleKey, relPath, src)`, the per-file step of today's worker loop, without the file read. The worker pool stays in `internal/indexer` and calls `extract.File`. Move the per-file cases of `extract_test.go` with it. Verify that `task test` passes and that `extract` imports no package that starts a goroutine or opens the store.
+- [x] 1.1 Move `discover.go`, `discoverexclusion.go` and their tests to `internal/indexer/discover`. Export `Discover`, `DiscoverAll`, `DiscoveredFile`, `Discovery` and `ShouldSkipDir`. Change the `ShouldSkipDir` callers in `internal/watch`, `internal/daemon` and `internal/query` to the new import path. Verify that `go build ./...` and `task test` pass.
+- [x] 1.2 Move `languages.go`, `languages_*.go` and `languages_test.go` to `internal/indexer/extract`, with `LanguageSpec` and the registry. Add `extract.File(spec, parser, moduleKey, relPath, src)`, the per-file step of today's worker loop, without the file read. The worker pool stays in `internal/indexer` and calls `extract.File`. Move the per-file cases of `extract_test.go` with it. Verify that `task test` passes and that `extract` imports no package that starts a goroutine or opens the store.
 
 ## 2. The symbol layer
 

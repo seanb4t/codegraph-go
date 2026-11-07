@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"fmt"
@@ -56,7 +56,7 @@ func swiftModuleKey(relPath string) string {
 // alex-pinkus/tree-sitter-swift grammar pin — this registration exists at
 // all only because that checkpoint was approved (05-08-SUMMARY.md).
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "swift",
 		Extensions: []string{".swift"},
 		NewParser: func() (parser.Parser, error) {

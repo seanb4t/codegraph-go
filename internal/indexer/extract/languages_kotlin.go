@@ -1,4 +1,4 @@
-package indexer
+package extract
 
 import (
 	"fmt"
@@ -43,7 +43,7 @@ func readKotlinDescriptor(root string) (kotlinProjectDescriptor, error) {
 // exists at all only because that checkpoint was approved
 // (05-08-SUMMARY.md).
 func init() {
-	registerLanguage(LanguageSpec{
+	Register(LanguageSpec{
 		ID:         "kotlin",
 		Extensions: []string{".kt", ".kts"},
 		NewParser: func() (parser.Parser, error) {

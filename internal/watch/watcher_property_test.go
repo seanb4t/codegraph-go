@@ -10,13 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"pgregory.net/rapid"
-
-	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
 // dirNames are the names the generator gives directories. ".venv" is
-// excluded by indexer.ShouldSkipDir, so the property also covers a tree
+// excluded by discover.ShouldSkipDir, so the property also covers a tree
 // with excluded parts.
 var dirNames = []string{"a", "b", "c", ".venv"}
 
@@ -86,10 +85,10 @@ func (h *watchHarness) probe(t *rapid.T, dirs []string) []string {
 }
 
 // covered reports whether no directory on the way from the root to rel is
-// one that indexer.ShouldSkipDir excludes.
+// one that discover.ShouldSkipDir excludes.
 func covered(rel string) bool {
 	for _, name := range strings.Split(rel, string(filepath.Separator)) {
-		if indexer.ShouldSkipDir(name) {
+		if discover.ShouldSkipDir(name) {
 			return false
 		}
 	}
