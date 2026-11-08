@@ -1,4 +1,4 @@
-schema: spec-driven
+schema: spec-driven-reviewed
 
 context: |
   codegraph-go is a pre-indexed code knowledge graph for coding agents: one Go binary
@@ -34,3 +34,11 @@ rules:
     - Each task that changes behavior names the test that covers it.
     - A task that adds a test names the property, fuzz target or scenario-shaped test that covers the behavior.
     - A task that adds a gate states the positive assertion the gate makes, so the gate fails when it inspected nothing.
+
+operations:
+  apply:
+    guidance:
+      - Before the final task group, run /sb:openspec-review <change> implementation and treat changes-requested as a blocker
+  archive:
+    guidance:
+      - Archive only with an implementation-phase review.md whose verdict is not changes-requested; the sb plugin's gate refuses otherwise
