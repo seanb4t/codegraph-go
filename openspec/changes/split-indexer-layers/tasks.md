@@ -31,10 +31,10 @@ Run every target as `mise exec -- task <target>` in a shell without `mise activa
 
 ## 6. Equality and documentation
 
-- [ ] 6.1 Build `main` and the branch. Run `codegraph index --force` with each on the synthetic corpus, this repository and Pebble. Hash the node and edge records of each store in key order, without `Meta`, with a throwaway program in the scratch directory. Record the counts and hashes in the PR body, as #268 did. Verify that every pair of hashes is equal.
+- [x] 6.1 Build `main` and the branch. Run `codegraph index --force` with each on the synthetic corpus, this repository and Pebble. Hash the node and edge records of each store in key order, without `Meta`, with a throwaway program in the scratch directory. Record the counts and hashes in the PR body, as #268 did. Verify that every pair of hashes is equal.
 - [x] 6.2 Rewrite the package comment in `doc.go` of `internal/indexer` and add one to each new package. Each states the job of its layer and what it does not import. Verify that `go doc ./internal/indexer/...` prints each one.
 - [x] 6.3 Draw an Archify architecture diagram of the indexer layers from the code after the split, at `docs/architecture/indexer-layers.html`. It shows the five layers, the two freeze barriers, `Link` and the `Sink`. Verify that the page opens and that each package it names exists.
-- [ ] 6.4 Record `<!-- changelog-exempt: internal refactor, the stored graph and every output stay the same -->` in the PR body.
+- [x] 6.4 Record `<!-- changelog-exempt: internal refactor, the stored graph and every output stay the same -->` in the PR body.
 
 ## Workflow follow-up
 
