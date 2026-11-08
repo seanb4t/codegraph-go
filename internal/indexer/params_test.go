@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -56,7 +57,7 @@ var paramCases = []paramCase{
 func TestParamsAreRecordedPerLanguage(t *testing.T) {
 	for _, c := range paramCases {
 		t.Run(c.language, func(t *testing.T) {
-			spec, ok := lookupLanguageByID(c.language)
+			spec, ok := extract.ByID(c.language)
 			if !ok {
 				t.Fatalf("no language %s", c.language)
 			}

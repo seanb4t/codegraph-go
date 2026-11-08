@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/parser/cgo"
@@ -34,14 +37,14 @@ func (c *countingParser) Close() error { return c.inner.Close() }
 // Language field", which "go-dup" exercises identically to a real second
 // language.
 func init() {
-	registerLanguage(LanguageSpec{
+	extract.Register(extract.LanguageSpec{
 		ID:         "go-dup",
 		Extensions: []string{".godup"},
 		NewParser: func() (parser.Parser, error) {
 			return cgo.NewGoParser()
 		},
 		Extract: goextract.Extract,
-		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
+		ModuleKey: func(descriptor extract.ProjectDescriptor, relPath string) string {
 			return relPath
 		},
 	})
@@ -51,7 +54,7 @@ func init() {
 // the returned slice is always in the same order as the input files,
 // independent of goroutine scheduling (D-01a determinism, D-04).
 func TestExtractPool_OrderStable(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -80,7 +83,7 @@ func TestExtractPool_OrderStable(t *testing.T) {
 // injecting a counting parser factory (RESEARCH Pitfall 3 / acceptance
 // criteria).
 func TestExtractPool_BoundedNotPerFile(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -118,7 +121,7 @@ func TestExtractPool_BoundedNotPerFile(t *testing.T) {
 // survive (a worker claiming a "go" file then a "go-dup" file had no way
 // to swap grammars/extractors).
 func TestExtractPool_MultiLanguage(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -126,7 +129,7 @@ func TestExtractPool_MultiLanguage(t *testing.T) {
 		t.Fatalf("fixture has only %d files, need at least 2", len(files))
 	}
 
-	batch := make([]DiscoveredFile, 0, len(files)*2)
+	batch := make([]discover.DiscoveredFile, 0, len(files)*2)
 	batch = append(batch, files...)
 	for _, f := range files {
 		dup := f
@@ -162,7 +165,7 @@ func TestExtractPool_MultiLanguage(t *testing.T) {
 // workers * distinct-languages, never one-per-file (RESEARCH Open
 // Question 1's recommended per-worker language-keyed cache bound).
 func TestExtractPool_MultiLanguage_ParserCountBounded(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -170,7 +173,7 @@ func TestExtractPool_MultiLanguage_ParserCountBounded(t *testing.T) {
 		t.Fatalf("fixture has only %d files, need at least 3", len(files))
 	}
 
-	batch := make([]DiscoveredFile, 0, len(files)*2)
+	batch := make([]discover.DiscoveredFile, 0, len(files)*2)
 	batch = append(batch, files...)
 	for _, f := range files {
 		dup := f
@@ -212,7 +215,7 @@ func TestExtractPool_MultiLanguage_ParserCountBounded(t *testing.T) {
 // is recorded on its own FileResult.Err and does not abort extraction of
 // the rest of the batch (RESEARCH Pitfall 4, threat T-02-03).
 func TestExtractPool_OversizedFileContained(t *testing.T) {
-	files, _, err := Discover(fixtureRoot)
+	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -225,7 +228,7 @@ func TestExtractPool_OversizedFileContained(t *testing.T) {
 	}
 	mustWrite(t, bigPath, string(big))
 
-	all := append([]DiscoveredFile{{
+	all := append([]discover.DiscoveredFile{{
 		AbsPath:    bigPath,
 		RelPath:    "big.go",
 		ImportPath: "example.com/big",
@@ -255,4 +258,49 @@ func TestExtractPool_OversizedFileContained(t *testing.T) {
 			t.Errorf("results[%d] (%s) unexpected Err after oversized file: %v", i, all[i].RelPath, results[i].Err)
 		}
 	}
+}
+
+// TestExtractStopsEveryWorkerOnError gives the pool a parser factory whose
+// third call fails. The fixture is one language, so each call is the first
+// file of a different worker. The first two calls wait for the third, so
+// two workers are still running when it fails. Extract must return that
+// error, and the synctest bubble must hold no live goroutine once it
+// returns.
+func TestExtractStopsEveryWorkerOnError(t *testing.T) {
+	files, _, err := discover.Discover(fixtureRoot)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	const limit = 4
+	if len(files) < limit {
+		t.Fatalf("fixture has only %d files, need at least %d", len(files), limit)
+	}
+	errThird := errors.New("third parser fails")
+
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int64
+		third := make(chan struct{})
+		factory := func(languageID string) (parser.Parser, error) {
+			switch n := calls.Add(1); {
+			case n < 3:
+				<-third
+			case n == 3:
+				close(third)
+				return nil, errThird
+			}
+			return defaultParserFactory(languageID)
+		}
+
+		results, err := extractWithFactory(files, limit, factory)
+		if !errors.Is(err, errThird) {
+			t.Fatalf("extractWithFactory error = %v, want %v", err, errThird)
+		}
+		if results != nil {
+			t.Fatalf("extractWithFactory returned %d results with its error, want none", len(results))
+		}
+		if got := calls.Load(); got < 3 {
+			t.Fatalf("factory ran %d times, want at least 3", got)
+		}
+		synctest.Wait()
+	})
 }

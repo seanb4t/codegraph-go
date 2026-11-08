@@ -1,0 +1,71 @@
+package discover
+
+import (
+	"strings"
+)
+
+// DiscoveredFile is one discovered source file of any registered language,
+// the shape Pass 1 (extract) and Pass 2 (resolve) consume.
+type DiscoveredFile struct {
+	// AbsPath is the absolute path on disk, for reading bytes.
+	AbsPath string
+	// RelPath is the slash-normalized path relative to the repo root, the
+	// file_path stored on Node/File records.
+	RelPath string
+	// ImportPath is this file's cross-file symbol-index key, computed by
+	// its language's LanguageSpec.ModuleKey (D-03/Pitfall 2). For Go this
+	// is the module path joined with the file's relative directory (""
+	// relative directory means the module root package) — byte-identical
+	// to the pre-Phase-5 behavior. A file whose language has no resolvable
+	// project descriptor still gets a value here (its LanguageSpec's
+	// path-based fallback), never a dropped file.
+	ImportPath string
+	// Language is the registered LanguageSpec.ID this file's extension
+	// resolved to ("go", "java", "python", ...) — the key extract.go's
+	// worker pool uses to select the correct parser + extractor per file
+	// (Pitfall 1).
+	Language string
+
+	// MtimeUnixNs and SizeBytes are the file's on-disk stat info at
+	// discovery time (Phase 4 D-01a) — carried through Extract into the
+	// committed File record so Sync's stat pre-filter has something cheap
+	// to compare against on the next invocation, without hashing every
+	// file every sync.
+	MtimeUnixNs int64
+	SizeBytes   int64
+}
+
+// ShouldSkipDir reports whether a directory named name should be excluded
+// from traversal — Discover's own WalkDir callback and, per Phase 4 D-04,
+// the native filesystem watcher's recursive-add loop both call this exact
+// predicate so the two never silently diverge on which paths they cover.
+// vendor/ and any dot-prefixed directory (.git, .codegraph, etc.) are
+// excluded.
+func ShouldSkipDir(name string) bool {
+	return name == "vendor" || strings.HasPrefix(name, ".")
+}
+
+// pendingFile is Discover's own walk-time intermediate, before each
+// language's ModuleKey has been computed (that requires the language's
+// repo-root descriptor to be resolved first, which happens once per
+// language AFTER the walk completes, not per file during it).
+type pendingFile struct {
+	abs, relPath, language string
+	mtimeUnixNs, sizeBytes int64
+}
+
+// Discover returns the extraction-bound subset of DiscoverAll's result:
+// every file whose extension is claimed by a registered LanguageSpec
+// (D-03), sorted by RelPath in ascending byte order, and the resolved
+// module path — never the exclusion-reason list. It is a thin wrapper
+// around DiscoverAll (Phase 10 D-01, discoverexclusion.go) for the many
+// existing callers that only ever consumed the discovered-file list and
+// module path — see DiscoverAll's own doc comment for the full walk
+// contract, including all four exclusion decision points.
+func Discover(root string) ([]DiscoveredFile, string, error) {
+	d, err := DiscoverAll(root)
+	if err != nil {
+		return nil, "", err
+	}
+	return d.Files, d.ModulePath, nil
+}

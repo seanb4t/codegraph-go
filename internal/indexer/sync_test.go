@@ -16,6 +16,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -514,7 +515,7 @@ func crossFileEdgeCount(t *testing.T, storeDir string) int {
 			continue
 		}
 		dst, err := r.GetNode(e.Target)
-		if err != nil || dst.Kind == kindPackage {
+		if err != nil || dst.Kind == resolve.KindPackage {
 			continue
 		}
 		if src.FilePath != dst.FilePath {

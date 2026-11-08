@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 )
 
 // repoRoot locates the repository root from this test file's own package
@@ -34,7 +34,7 @@ func repoRoot(t *testing.T) string {
 // overclaim nothing about it), no extra (a matrix entry for an
 // unregistered language would be describing something that doesn't exist).
 func TestMatrix_CoversRegisteredLanguages(t *testing.T) {
-	registered := indexer.RegisteredLanguageIDs()
+	registered := extract.RegisteredLanguageIDs()
 
 	descriptorIDs := make([]string, 0, len(matrix))
 	for id := range matrix {

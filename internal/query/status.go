@@ -91,7 +91,7 @@ type IndexHealth struct {
 // commit, which removes it.
 const staleSidecarName = ".sync-pending"
 
-// shouldSkipStaleDir mirrors internal/indexer.ShouldSkipDir's directory
+// shouldSkipStaleDir mirrors internal/indexer/discover.ShouldSkipDir's directory
 // exclusions (vendor/ and any dot-prefixed directory), duplicated here
 // rather than imported to avoid an internal/query -> internal/indexer
 // dependency edge — the same package-local-duplication precedent Plan

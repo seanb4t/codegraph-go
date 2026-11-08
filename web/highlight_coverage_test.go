@@ -15,7 +15,7 @@
 //     internal/indexer/extract_test.go registers a synthetic "go-dup"
 //     language in an init() (verified this session: exactly one such
 //     registration, confined to that file). Inside THAT package's test
-//     binary, indexer.RegisteredLanguageIDs() returns 15, not 14 — a
+//     binary, extract.RegisteredLanguageIDs() returns 15, not 14 — a
 //     future "simplification" moving this guard there would see 15,
 //     go red, and the cheapest-looking repair (adding "go-dup" to the
 //     expected set) would admit a TEST FIXTURE language into the set
@@ -60,7 +60,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 )
 
 var (
@@ -187,7 +187,7 @@ func TestHighlightRegistrationCoversRegisteredLanguages(t *testing.T) {
 		t.Fatalf("parse %s: %v", path, err)
 	}
 
-	registered := indexer.RegisteredLanguageIDs()
+	registered := extract.RegisteredLanguageIDs()
 
 	t.Logf("observed: %d indexed language IDs %v", len(registered), registered)
 	t.Logf("observed: %d HIGHLIGHT_COVERAGE entries %v", len(parsed.coverage), parsed.coverage)
@@ -310,7 +310,7 @@ func TestHighlightCoverageComparisonDiscriminates(t *testing.T) {
 		t.Fatalf("parse fixture: %v", err)
 	}
 
-	registered := indexer.RegisteredLanguageIDs()
+	registered := extract.RegisteredLanguageIDs()
 	missing, extra := compareSets(registered, parsed.coverage)
 
 	t.Logf("observed against planted fixture: missing=%v extra=%v", missing, extra)

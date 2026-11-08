@@ -13,6 +13,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -26,6 +27,7 @@ import (
 const (
 	frameKindMeta uint8 = 1
 	frameKindNode uint8 = 2
+	frameKindEdge uint8 = 3
 )
 
 // exportFrame is one decoded [kind][data] record from an Export() stream.
@@ -84,9 +86,15 @@ func encodeExportFrames(frames []exportFrame) []byte {
 // across independently-built stores (RESEARCH §Pitfall 2).
 func indexAndExport(t *testing.T, repoRoot string) []byte {
 	t.Helper()
+	return indexAndExportWith(t, repoRoot, Options{})
+}
+
+// indexAndExportWith is indexAndExport with the given Options.
+func indexAndExportWith(t *testing.T, repoRoot string, opts Options) []byte {
+	t.Helper()
 
 	storeDir := t.TempDir()
-	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+	if _, err := Run(repoRoot, storeDir, opts); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -140,6 +148,32 @@ func TestDeterministicRebuild(t *testing.T) {
 	}
 }
 
+// TestRebuildIgnoresWorkerCount indexes the shared fixture with one
+// extraction worker and with eight, and requires the two normalized
+// Export() streams to be byte-identical.
+func TestRebuildIgnoresWorkerCount(t *testing.T) {
+	one := indexAndExportWith(t, fixtureRoot, Options{Workers: 1})
+	eight := indexAndExportWith(t, fixtureRoot, Options{Workers: 8})
+
+	for name, stream := range map[string][]byte{"Workers: 1": one, "Workers: 8": eight} {
+		var nodes, edges int
+		for _, f := range decodeExportFrames(t, stream) {
+			switch f.kind {
+			case frameKindNode:
+				nodes++
+			case frameKindEdge:
+				edges++
+			}
+		}
+		if nodes == 0 || edges == 0 {
+			t.Fatalf("%s: export holds %d nodes and %d edges, want more than zero of each", name, nodes, edges)
+		}
+	}
+	if !bytes.Equal(one, eight) {
+		reportFirstDiff(t, one, eight)
+	}
+}
+
 // reportFirstDiff decodes both frame streams and fails on the first
 // differing record, so a determinism regression is debuggable rather than
 // a bare "bytes.Equal was false".
@@ -173,7 +207,7 @@ var expectedNodeKinds = []string{
 	goextract.KindTypeAlias,
 	goextract.KindConstant,
 	goextract.KindVariable,
-	kindPackage,
+	resolve.KindPackage,
 }
 
 // TestRealRepoStructure indexes the shared multi-package fixture once and
@@ -229,7 +263,7 @@ func TestRealRepoStructure(t *testing.T) {
 	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "pkga/embed.go")
 	pkgbFileID := nodeid.NodeID(goextract.KindFile, "pkgb/pkgb.go", "pkgb/pkgb.go")
 	importPath := "example.com/gofixture/pkga"
-	pkgID := nodeid.NodeID(kindPackage, importPath, importPath)
+	pkgID := nodeid.NodeID(resolve.KindPackage, importPath, importPath)
 
 	for _, want := range []struct{ src, kind, dst, label string }{
 		{runID, "calls", alphaID, "pkgb.Run -calls-> pkga.Alpha"},

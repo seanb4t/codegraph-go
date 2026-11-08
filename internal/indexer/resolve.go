@@ -1,776 +1,47 @@
-// Package indexer's resolve.go implements Pass 2 of the two-pass indexing
-// pipeline (D-04): build a global symbol index over every Pass-1 result,
-// resolve calls/imports/embeds/contains references into ground-truth
-// edges, deterministically collapse duplicate edges (D-05), and commit the
-// whole resolved graph through exactly one batched GraphStore.Writer
-// (D-04a).
+// resolve.go runs pass 2 of the two-pass indexing pipeline (D-04)
+// through the symbols and resolve layers, and commits the whole resolved
+// graph through exactly one batched GraphStore.Writer (D-04a).
 package indexer
 
 import (
-	"cmp"
-	"maps"
-	"slices"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
-	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
-	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// kindPackage is the synthetic node kind for an intra-module import target
-// (RQ-1 recommendation (a)) — not one of goextract's declared node kinds,
-// since no source declaration produces it; it exists purely so an
-// `imports` edge has something in-repo to target.
-const kindPackage = "package"
-
-// resolveRefs builds the global symbol index over results and settles
-// every file's Unresolved references into ground-truth edges. It returns:
-//   - nodes: every symbol/file node Pass 1 already extracted, unchanged
-//   - packageNodes: the synthetic "package" pseudo-nodes minted for
-//     intra-module imports (RQ-1), deduplicated by id
-//   - edges: every intra-file edge Pass 1 already extracted, PLUS every
-//     successfully resolved calls/imports/embeds/contains edge
-//   - files: one schema.File per Pass-1 result
-//   - unresolvedCount: how many Unresolved refs could NOT be resolved
-//     (never silently dropped — D-06a; surfaced later via --verbose)
-//
-// modulePath is the repo's own module path (from Discover), used to
-// classify an "imports" ref's target as intra-module (gets a package
-// pseudo-node + edge) vs. external/stdlib (no node, no edge).
-func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
-	return resolveRefsWithIndex(results, modulePath, newSymbolIndex(results), nil)
-}
-
-// resolveRefsWithIndex is resolveRefs' implementation, parameterized on
-// the symbol index (Phase 4 D-01/RESEARCH Pattern 1 step 11): resolveRefs
-// keeps building its own from-scratch newSymbolIndex(results) unconditio-
-// nally; Sync() instead injects a store-seeded index overlaid with the
-// reparse batch (loadStoreView's symbols + symbolIndex.overlay), so an
-// unqualified/qualified reference into an UNCHANGED file still resolves
-// (RESEARCH Pitfall 1). Sync also passes view, what the files it does not
-// reparse declare, so the kind lookups and the implements, override and
-// conformance-retry passes below see the whole graph as a fresh index
-// does; Run passes nil. Every other line here is reused verbatim by both
-// callers.
-func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx *symbolIndex, view *storeView) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
-	packageNodeIDs := make(map[string]struct{})
-
-	// nodeKindByID/nodeNameByID are GLOBAL (cross-file) node-id lookups,
-	// built BEFORE any ref is resolved (Phase 5 RES-02 Pattern 2/3): the
-	// RefKindEmbeds branch below needs a resolved target's Kind, and
-	// that target may be declared in a different file than the one being
-	// resolved. nodeByID gives the resolver the declarations themselves:
-	// their parameters and return types (design D3, D17).
-	nodeKindByID := make(map[string]string)
-	nodeNameByID := make(map[string]string)
-	nodeStartLineByID := make(map[string]int32)
-	nodeByID := make(map[string]*schema.Node)
-	methodArity := make(map[string]int32)
-	interfaceMethods := make(dispatch.InterfaceSpecs)
-	var viewEdges []*schema.Edge
-	if view != nil {
-		maps.Copy(nodeKindByID, view.kinds)
-		maps.Copy(nodeNameByID, view.names)
-		maps.Copy(nodeStartLineByID, view.startLines)
-		maps.Copy(nodeByID, view.nodes)
-		maps.Copy(methodArity, view.arity)
-		maps.Copy(interfaceMethods, view.interfaceMethods)
-		viewEdges = view.edges
-	}
-	for _, r := range results {
-		for _, en := range r.Nodes {
-			nodeKindByID[en.Node.Id] = en.Node.Kind
-			nodeNameByID[en.Node.Id] = en.Node.Name
-			nodeStartLineByID[en.Node.Id] = en.Node.StartLine
-			nodeByID[en.Node.Id] = en.Node
-		}
-		for id, arity := range r.MethodArity {
-			methodArity[id] = arity
-		}
-		for ifaceID, specs := range r.InterfaceMethods {
-			interfaceMethods[ifaceID] = append(interfaceMethods[ifaceID], specs...)
-		}
-	}
-	withViewEdges := func(es []*schema.Edge) []*schema.Edge {
-		if len(viewEdges) == 0 {
-			return es
-		}
-		return append(slices.Clip(es), viewEdges...)
-	}
-
-	states := make([]*fileState, 0, len(results))
-
-	var storedSets map[string]storedSet
-	moduleOfFile := make(map[string]string, len(results))
-	if view != nil {
-		storedSets = view.storedSets
-		maps.Copy(moduleOfFile, view.moduleOf)
-	}
-	for _, r := range results {
-		moduleOfFile[r.RelPath] = r.ImportPath
-	}
-	rs := newResolver(idx, nodeKindByID, nodeByID, storedSets, moduleOfFile)
-
-	// Phase 1: nodes, intra-file edges, and every reference that is not a
-	// call. The types, the type memberships and the supertype edges are
-	// then complete, so phase 2 can resolve calls against them.
+// resolveGraph resolves results against view: the type-level references
+// of every file, then the hierarchy those make, then the calls of every
+// file, then the whole-graph passes of resolve.Link. Run passes a view
+// of results alone, and Sync a view of results over what loadStoreView
+// read from the files it does not reparse, so a reference into an
+// unchanged file still resolves (RESEARCH Pitfall 1), and the kind
+// lookups and the implements, override and conformance-retry passes see
+// the whole graph as a fresh index does.
+func resolveGraph(results []goextract.FileResult, modulePath string, view symbols.View) resolve.Graph {
+	types := make([]resolve.TypeOutput, len(results))
+	var typeEdges []*schema.Edge
 	for i := range results {
-		r := results[i]
-		st := &fileState{r: &results[i]}
-		states = append(states, st)
-		for _, en := range r.Nodes {
-			en.Node.InterfaceMethods = schemaMethodSpecs(r.InterfaceMethods[en.Node.Id])
-			nodes = append(nodes, en.Node)
-		}
-		for _, ie := range r.IntraEdges {
-			edges = append(edges, ie.Edge)
-		}
-
-		wait := func(pkgAlias, name string) {
-			if u := unresolvedName(r, pkgAlias, name); u != nil {
-				st.waiting = append(st.waiting, u)
-			}
-		}
-		resolvedForFile := 0
-		for _, ref := range r.Unresolved {
-			switch ref.Kind {
-			case goextract.RefKindCalls:
-				// Phase 2 resolves calls from st.r.Unresolved.
-
-			case goextract.RefKindEmbeds:
-				targetID, ok := rs.resolveRef(r, ref, true)
-				if !ok {
-					unresolvedCount++
-					wait(ref.PkgAlias, ref.Name)
-					continue
-				}
-				// Pattern 2 (RES-02) + D-09 split (01-RESEARCH.md §B): a
-				// class/struct extends/implements reference is
-				// syntactically undistinguished at extraction time
-				// (Java's implements/extends, C#'s comma-separated
-				// base_list, Go's struct/interface embedding all emit
-				// the same RefKindEmbeds shape). Now that the target is
-				// resolved, this splits three ways:
-				//   1. target is an interface AND source is NOT itself
-				//      an interface -> promote to "implements"
-				//      (unchanged from pre-D-09 behavior). A Go struct
-				//      embedding an interface value
-				//      (`type W struct { io.Reader }`) genuinely does
-				//      promote that interface's methods onto the struct
-				//      too (real Go semantics), so this rule applies
-				//      uniformly across every language, not just Go.
-				//   2. target is NOT an interface (a class/struct target
-				//      — D-09's new case) -> "extends", distinct from
-				//      the bare "embeds" string this branch used to fall
-				//      through to unconditionally. This is the D-09
-				//      addendum's answer to Open Question A2: Go's
-				//      structural composition is the closest analog TS's
-				//      `extends` RANK_EDGES kind has in Go, so a
-				//      class/struct-extends-class/struct reference is
-				//      reclassified rather than left as "embeds".
-				//   3. target IS an interface but source is ALSO an
-				//      interface (interface-embeds-interface) -> stays
-				//      the plain "embeds" edge, unchanged — neither new
-				//      branch's condition matches this case.
-				kind := "embeds"
-				provenance := "ast"
-				var metadata map[string]string
-				switch {
-				case nodeKindByID[targetID] == goextract.KindInterface && nodeKindByID[ref.FromID] != goextract.KindInterface:
-					kind = goextract.EdgeKindImplements
-					provenance = "heuristic"
-					metadata = map[string]string{"synthesizedBy": "declared-implements"}
-				case nodeKindByID[targetID] != goextract.KindInterface:
-					kind = goextract.EdgeKindExtends
-					provenance = "heuristic"
-					metadata = map[string]string{"synthesizedBy": "declared-extends"}
-				}
-				edges = append(edges, &schema.Edge{
-					Source: ref.FromID, Target: targetID, Kind: kind,
-					Line: ref.Line, Col: ref.Col, Provenance: provenance,
-					Metadata: metadata,
-				})
-				resolvedForFile++
-
-			case goextract.RefKindContains:
-				// A method whose receiver type lives in a different file
-				// (02-03's 4th UnresolvedRef kind). The receiver type is
-				// always declared in the method's own package in valid
-				// Go, so this is always an unqualified lookup.
-				typeID, ok := rs.resolveRef(r, ref, true)
-				if !ok {
-					unresolvedCount++
-					wait("", ref.Name)
-					continue
-				}
-				edges = append(edges, &schema.Edge{
-					Source: typeID, Target: ref.FromID, Kind: "contains",
-					Provenance: "ast",
-				})
-				resolvedForFile++
-
-			case goextract.RefKindImports:
-				if !isIntraModule(modulePath, ref.Name) {
-					// External/stdlib import: no in-repo node to target,
-					// and D-03a forbids inventing edges beyond ground
-					// truth — no node, no edge (RQ-1 recommendation (a)).
-					continue
-				}
-				pkgID := nodeid.NodeID(kindPackage, ref.Name, ref.Name)
-				if _, seen := packageNodeIDs[pkgID]; !seen {
-					packageNodeIDs[pkgID] = struct{}{}
-					packageNodes = append(packageNodes, &schema.Node{
-						Id:            pkgID,
-						Kind:          kindPackage,
-						Name:          lastPathSegment(ref.Name),
-						QualifiedName: ref.Name,
-					})
-				}
-				edges = append(edges, &schema.Edge{
-					Source: ref.FromID, Target: pkgID, Kind: "imports",
-					Line: ref.Line, Col: ref.Col, Provenance: "ast",
-				})
-				resolvedForFile++
-
-			case goextract.RefKindReferences:
-				// D-09 (01-RESEARCH.md §B): mirrors RefKindCalls' resolve
-				// shape exactly — no Kind-check disambiguation on the
-				// target (any resolvable symbol is a valid references
-				// target, unlike instantiates/type_of/returns below).
-				targetID, ok := rs.resolveRef(r, ref, false)
-				if !ok {
-					unresolvedCount++
-					wait(ref.PkgAlias, ref.Name)
-					continue
-				}
-				edges = append(edges, &schema.Edge{
-					Source: ref.FromID, Target: targetID, Kind: goextract.RefKindReferences,
-					Line: ref.Line, Col: ref.Col, Provenance: "ast",
-				})
-				resolvedForFile++
-
-			case goextract.RefKindInstantiates:
-				// D-09 Kind-check disambiguation (RESEARCH §B): the
-				// resolved target must actually be a type-Kind node a Go
-				// composite literal can instantiate — a struct. (Go has
-				// no "class" kind; an interface can never be
-				// instantiated, and a type_alias's underlying type is not
-				// resolved here, so it is intentionally excluded rather
-				// than guessed at.) A resolved-but-wrong-Kind target
-				// counts as unresolved — this is a real, deliberate
-				// absence, not a silent drop of ground truth Pass 1 never
-				// claimed in the first place.
-				targetID, ok := rs.resolveRef(r, ref, true)
-				if !ok || nodeKindByID[targetID] != goextract.KindStruct {
-					unresolvedCount++
-					wait(ref.PkgAlias, ref.Name)
-					continue
-				}
-				edges = append(edges, &schema.Edge{
-					Source: ref.FromID, Target: targetID, Kind: goextract.RefKindInstantiates,
-					Line: ref.Line, Col: ref.Col, Provenance: "ast",
-				})
-				resolvedForFile++
-
-			case goextract.RefKindReturns, goextract.RefKindTypeOf:
-				// D-09 (RESEARCH §B): both mirror RefKindCalls' resolve
-				// shape (a declared type name resolved to its node), no
-				// Kind-check disambiguation beyond "resolves to any
-				// in-repo symbol at all" — a returns/type_of target may
-				// legitimately be a struct, interface, or type_alias.
-				targetID, ok := rs.resolveRef(r, ref, true)
-				if !ok {
-					unresolvedCount++
-					wait(ref.PkgAlias, ref.Name)
-					continue
-				}
-				edges = append(edges, &schema.Edge{
-					Source: ref.FromID, Target: targetID, Kind: ref.Kind,
-					Line: ref.Line, Col: ref.Col, Provenance: "ast",
-				})
-				resolvedForFile++
-			}
-		}
-		st.resolvedForFile += resolvedForFile
+		types[i] = resolve.Types(view, modulePath, results[i])
+		typeEdges = append(typeEdges, types[i].Edges()...)
 	}
-
-	// Phase 2: calls, against candidate sets (design D3). The calls with
-	// a deferred type go last, once the calls they depend on are resolved
-	// (D17). An undecidable call reaches its overload set (D14).
-	rs.learnEdges(withViewEdges(edges))
-	rs.declareSets()
-	var pending []pendingCall
-	type fileWait struct {
-		st  *fileState
-		ref goextract.UnresolvedRef
+	h := symbols.NewHierarchy(view, typeEdges)
+	calls := make([]resolve.CallOutput, len(results))
+	for i := range results {
+		calls[i] = resolve.Calls(view, h, results[i])
 	}
-	var deferredCalls []fileWait
-	resolveOne := func(st *fileState, ref goextract.UnresolvedRef, allowDeferred bool) {
-		out := rs.resolveCall(*st.r, ref, allowDeferred)
-		switch {
-		case out.deferred:
-			deferredCalls = append(deferredCalls, fileWait{st, ref})
-		case out.target != "":
-			edges = append(edges, callEdge(ref, out.target, false))
-			rs.recordTarget(st.r.RelPath, ref, out.target)
-			st.resolvedForFile++
-		case out.set != nil:
-			edges = append(edges, callEdge(ref, out.set.node.Id, true))
-			rs.recordTarget(st.r.RelPath, ref, out.set.node.Id)
-			st.resolvedForFile++
-		default:
-			// Deferred, not counted as unresolved yet (Pitfall 3): the
-			// call may still resolve through the conformance retry.
-			var w *schema.UnresolvedName
-			if out.waitName != "" {
-				w = &schema.UnresolvedName{ModuleKey: out.waitModule, Name: out.waitName}
-			}
-			pending = append(pending, pendingCall{ref: ref, st: st, wait: w})
-		}
-	}
-	for _, st := range states {
-		for _, ref := range st.r.Unresolved {
-			if ref.Kind == goextract.RefKindCalls {
-				resolveOne(st, ref, false)
-			}
-		}
-	}
-	// A call that ends earlier never waits on one that ends later: the
-	// inner link of a chain, or the call that initializes a local, ends
-	// before the call that reads its type.
-	sort.SliceStable(deferredCalls, func(i, j int) bool {
-		a, b := deferredCalls[i], deferredCalls[j]
-		if a.st.r.RelPath != b.st.r.RelPath {
-			return a.st.r.RelPath < b.st.r.RelPath
-		}
-		if a.ref.EndLine != b.ref.EndLine {
-			return a.ref.EndLine < b.ref.EndLine
-		}
-		return a.ref.EndCol < b.ref.EndCol
-	})
-	for _, d := range deferredCalls {
-		resolveOne(d.st, d.ref, true)
-	}
-
-	nodes = append(nodes, rs.setNodes()...)
-
-	for _, st := range states {
-		r := st.r
-		if r.RelPath == "" {
-			continue
-		}
-		f := &schema.File{
-			Path:            r.RelPath,
-			ContentHash:     r.ContentHash,
-			Language:        r.Language,
-			NodeCount:       int64(len(r.Nodes)),
-			EdgeCount:       int64(len(r.IntraEdges) + st.resolvedForFile),
-			MtimeUnixNs:     r.MtimeUnixNs,
-			SizeBytes:       r.SizeBytes,
-			UnresolvedNames: st.waiting,
-		}
-		if r.ModuleKeyDeclared {
-			f.DeclaredModuleKey = r.ImportPath
-		}
-		if r.Err != nil {
-			f.Errors = []string{r.Err.Error()}
-		}
-		files = append(files, f)
-		for i := range pending {
-			if pending[i].st == st {
-				pending[i].file = f
-			}
-		}
-	}
-
-	edges = append(edges, synthesizeGoImplements(interfaceMethods, methodArity, withViewEdges(edges), nodeKindByID, nodeNameByID, nodeStartLineByID)...)
-
-	methodKey := make(map[string]string, len(nodeByID))
-	for id, n := range nodeByID {
-		if k := goextract.SignatureKeyOfNode(n); k != "" {
-			methodKey[id] = k
-		}
-	}
-	edges = append(edges, synthesizeOverrides(withViewEdges(edges), nodeKindByID, nodeNameByID, methodArity, methodKey, nodeStartLineByID)...)
-
-	edges = append(edges, retryConformanceCalls(pending, withViewEdges(edges), nodeNameByID, &unresolvedCount)...)
-
-	// The overrides, implements and conformance synthesis above read a
-	// contains edge as type to member in one hop, so the set edges are
-	// made only now, after them.
-	edges = rs.rewireSetEdges(edges)
-
-	for _, f := range files {
-		f.UnresolvedNames = sortedUniqueNames(f.UnresolvedNames)
-	}
-
-	return nodes, packageNodes, edges, files, unresolvedCount
+	return resolve.Link(view, h, types, calls)
 }
 
-// callEdge is the calls edge of ref to target, with the call-site data
-// the resolver decided from (D13). An ambiguous call is marked.
-func callEdge(ref goextract.UnresolvedRef, target string, ambiguous bool) *schema.Edge {
-	e := &schema.Edge{
-		Source: ref.FromID, Target: target, Kind: goextract.RefKindCalls,
-		Line: ref.Line, Col: ref.Col, Provenance: "ast",
-		ReceiverType: ref.ReceiverType, ArgCount: ref.ArgCount, HasSpread: ref.HasSpread,
-		ArgTypes: ref.ArgTypes, ArgLabels: ref.ArgLabels,
-	}
-	if ambiguous {
-		e.Metadata = map[string]string{"ambiguous": "true"}
-	}
-	return e
-}
-
-func unresolvedName(r goextract.FileResult, pkgAlias, name string) *schema.UnresolvedName {
-	if pkgAlias == "" {
-		return &schema.UnresolvedName{ModuleKey: r.ImportPath, Name: name}
-	}
-	moduleKey, ok := r.Imports[pkgAlias]
-	if !ok {
-		return nil
-	}
-	return &schema.UnresolvedName{ModuleKey: moduleKey, Name: name}
-}
-
-// schemaMethodSpecs converts an interface's extracted method specs to
-// their stored form, or nil when there are none.
-func schemaMethodSpecs(specs []goextract.MethodSpec) []*schema.MethodSpec {
-	if len(specs) == 0 {
-		return nil
-	}
-	out := make([]*schema.MethodSpec, len(specs))
-	for i, s := range specs {
-		out[i] = &schema.MethodSpec{Name: s.Name, Arity: s.Arity}
-	}
-	return out
-}
-
-// sortedUniqueNames sorts names by (module key, name) and drops repeats,
-// so a File record's bytes do not depend on reference order.
-func sortedUniqueNames(names []*schema.UnresolvedName) []*schema.UnresolvedName {
-	if len(names) == 0 {
-		return nil
-	}
-	compare := func(a, b *schema.UnresolvedName) int {
-		return cmp.Or(cmp.Compare(a.ModuleKey, b.ModuleKey), cmp.Compare(a.Name, b.Name))
-	}
-	slices.SortFunc(names, compare)
-	return slices.CompactFunc(names, func(a, b *schema.UnresolvedName) bool { return compare(a, b) == 0 })
-}
-
-// pendingCall is a RefKindCalls ref that failed pass-1 resolution,
-// deferred to the conformance retry (Pitfall 3), paired with the
-// *schema.File its resolvedForFile/EdgeCount bookkeeping belongs to — a
-// retry success increments file.EdgeCount exactly like a pass-1
-// resolution would have.
-type pendingCall struct {
-	ref  goextract.UnresolvedRef
-	file *schema.File
-	// st is the file's bookkeeping while the File record does not exist
-	// yet; file is set once it does.
-	st *fileState
-	// wait is the name file waits on if the retry fails too, or nil.
-	wait *schema.UnresolvedName
-}
-
-// fileState is one file's bookkeeping across the two resolution phases.
-type fileState struct {
-	r               *goextract.FileResult
-	resolvedForFile int
-	waiting         []*schema.UnresolvedName
-}
-
-// retryConformanceCalls implements Pitfall 3's two-pass conformance
-// retry: for each pending call, find the calling method's OWN enclosing
-// type (via a "contains" edge, type->method) and walk that type's
-// supertype chain (via "embeds"/"implements" edges, bounded by a
-// visited-set-guarded BFS — cycle-safe, independent of graph width)
-// looking for a method sharing the call's bare name. A call whose
-// FromID has no enclosing type at all (e.g. a plain function, not a
-// method — TestResolve_UnresolvedMethodCall's local-variable-receiver
-// case) never resolves here, exactly matching pass 1's own behavior for
-// that case. unresolvedCount is incremented for exactly those refs that
-// fail BOTH passes — never double-counted (pass 1 no longer increments
-// it for a deferred call).
-func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeNameByID map[string]string, unresolvedCount *int) []*schema.Edge {
-	typeMethods := make(map[string]map[string]string) // typeID -> methodName -> methodID
-	methodOwner := make(map[string]string)            // methodID -> typeID
-	typeSupertypes := make(map[string][]string)       // typeID -> []supertypeID
-
-	for _, e := range edges {
-		switch e.Kind {
-		case "contains":
-			methods := typeMethods[e.Source]
-			if methods == nil {
-				methods = make(map[string]string)
-				typeMethods[e.Source] = methods
-			}
-			methods[nodeNameByID[e.Target]] = e.Target
-			methodOwner[e.Target] = e.Source
-		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
-			// D-09: a class/struct-extends-class/struct RefKindEmbeds ref
-			// now resolves to "extends" (not "embeds" — see the
-			// RefKindEmbeds case above), so the conformance retry's
-			// supertype walk must recognize "extends" as a type->
-			// supertype edge too, or an inherited call through an
-			// extends chain would silently stop resolving.
-			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
-		}
-	}
-
-	var resolved []*schema.Edge
-	for _, pc := range pending {
-		ownerType, ok := methodOwner[pc.ref.FromID]
-		var targetID string
-		if ok {
-			targetID, ok = walkSupertypesForMethod(ownerType, pc.ref.Name, typeMethods, typeSupertypes)
-		}
-		if !ok {
-			*unresolvedCount++
-			if pc.wait != nil {
-				pc.file.UnresolvedNames = append(pc.file.UnresolvedNames, pc.wait)
-			}
-			continue
-		}
-		resolved = append(resolved, &schema.Edge{
-			Source: pc.ref.FromID, Target: targetID, Kind: "calls",
-			Line: pc.ref.Line, Col: pc.ref.Col, Provenance: "ast",
-		})
-		pc.file.EdgeCount++
-	}
-	return resolved
-}
-
-// walkSupertypes performs a visited-set-guarded BFS from typeID's OWN
-// supertypes (never typeID itself), invoking visit on each reachable
-// supertype id in discovery order and stopping as soon as visit returns
-// true. Bounded by the number of distinct types reachable through the
-// supertype graph — cycle-safe regardless of malformed/cyclic
-// embeds/extends/implements data. This is the shared BFS primitive both
-// walkSupertypesForMethod (calls edge resolution, Pitfall 3) and
-// synthesizeOverrides (D-09's overrides synthesis) build on, rather than
-// each writing its own traversal.
-func walkSupertypes(typeID string, typeSupertypes map[string][]string, visit func(supertypeID string) bool) bool {
-	visited := map[string]bool{typeID: true}
-	queue := append([]string(nil), typeSupertypes[typeID]...)
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		if visited[cur] {
-			continue
-		}
-		visited[cur] = true
-		if visit(cur) {
-			return true
-		}
-		queue = append(queue, typeSupertypes[cur]...)
-	}
-	return false
-}
-
-// walkSupertypesForMethod looks for methodName in typeMethods among
-// typeID's own supertypes (never typeID itself: the resolver already
-// tried the calling type's own method set),
-// returning the first match's node id. See walkSupertypes for the
-// underlying BFS.
-func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]map[string]string, typeSupertypes map[string][]string) (string, bool) {
-	var found string
-	ok := walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
-		if id, exists := typeMethods[cur][methodName]; exists {
-			found = id
-			return true
-		}
-		return false
-	})
-	return found, ok
-}
-
-// synthesizeOverrides implements D-09's overrides Pass-2 synthesis
-// (01-RESEARCH.md §B): for every type with a supertype (via "embeds",
-// EdgeKindImplements, or EdgeKindExtends — every kind resolve.go already
-// treats as a type->supertype relationship), find each of the type's OWN
-// methods (via the already-built "contains" type->method edges) that
-// shares a name+arity with a method declared directly on one of its
-// supertypes (walked transitively via walkSupertypes, mirroring
-// retryConformanceCalls' supertype-walk shape rather than writing a new
-// BFS), and emit an EdgeKindOverrides edge method -> supertype-method.
-//
-// Go has no `override` keyword: this is structural (name+arity) matching
-// — a documented precision note per RESEARCH §B, not a drop. A Go method
-// that happens to share a supertype method's name+arity is treated as an
-// override even without an explicit language marker, exactly like Go's
-// implicit interface satisfaction (dispatch.SynthesizeImplements) already
-// works. In practice this only ever matches through "embeds"/"extends"
-// supertype edges: an interface's own method signatures never get a real
-// "contains" (type->method) edge (collectInterfaceMethods only records
-// them as MethodSpecs for structural implements matching), so
-// typeMethods[interfaceID] is always empty and an implements-only
-// supertype chain never yields an override match.
-//
-// Overloads pair by signature key (parameter types) first; a supertype
-// method with the same name and arity pairs only when it is the one
-// such method, so two same-arity overloads never cross-link. methodKey
-// holds the signature key of each function or method node.
-func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, methodArity map[string]int32, methodKey map[string]string, nodeStartLineByID map[string]int32) []*schema.Edge {
-	// typeMethods is typeID -> methodName -> ALL methodIDs sharing that
-	// name (CR-01 fix): a bare map[string]string here would collapse
-	// same-name/different-arity overloads — legal and common in Java/C#
-	// (impossible in Go, hence this can't be exercised through the Go
-	// extractor; see TestResolveOverrides_OverloadedMethodsBothSynthesized
-	// in resolve_test.go, which drives this function directly) — to a
-	// single arbitrary candidate on BOTH the self side (line ~503 below)
-	// and the supertype side (the walkSupertypes closure), silently
-	// dropping or misattributing overrides edges for the discarded
-	// overload(s).
-	typeMethods := make(map[string]map[string][]string) // typeID -> methodName -> []methodID (all overloads)
-	typeSupertypes := make(map[string][]string)         // typeID -> []supertypeID
-
-	for _, e := range edges {
-		switch e.Kind {
-		case "contains":
-			if nodeKindByID[e.Target] != goextract.KindMethod {
-				continue
-			}
-			methods := typeMethods[e.Source]
-			if methods == nil {
-				methods = make(map[string][]string)
-				typeMethods[e.Source] = methods
-			}
-			name := nodeNameByID[e.Target]
-			methods[name] = append(methods[name], e.Target)
-		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
-			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
-		}
-	}
-
-	// Deterministic iteration (D-05/D-09): map order is randomized, so
-	// sort the type ids, each type's own method names, AND (CR-01) each
-	// name's own overload-id slice before walking, ensuring the emitted
-	// edge slice's order never depends on Go's map iteration order or
-	// edges' append order.
-	typeIDs := make([]string, 0, len(typeMethods))
-	for typeID := range typeMethods {
-		typeIDs = append(typeIDs, typeID)
-		for _, ids := range typeMethods[typeID] {
-			sort.Strings(ids)
-		}
-	}
-	sort.Strings(typeIDs)
-
-	var synthesized []*schema.Edge
-	for _, typeID := range typeIDs {
-		names := make([]string, 0, len(typeMethods[typeID]))
-		for name := range typeMethods[typeID] {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		for _, name := range names {
-			for _, methodID := range typeMethods[typeID][name] {
-				arity := methodArity[methodID]
-				key := methodKey[methodID]
-
-				var superMethodID string
-				walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
-					var byArity []string
-					for _, candidateID := range typeMethods[cur][name] {
-						if key != "" && methodKey[candidateID] == key {
-							superMethodID = candidateID
-							return true
-						}
-						if methodArity[candidateID] == arity {
-							byArity = append(byArity, candidateID)
-						}
-					}
-					if len(byArity) == 1 {
-						superMethodID = byArity[0]
-						return true
-					}
-					return false
-				})
-				if superMethodID == "" {
-					continue
-				}
-				synthesized = append(synthesized, &schema.Edge{
-					Source: methodID, Target: superMethodID, Kind: goextract.EdgeKindOverrides,
-					Provenance: "heuristic", Line: nodeStartLineByID[methodID],
-					Metadata: map[string]string{"synthesizedBy": "structural-override"},
-				})
-			}
-		}
-	}
-	return synthesized
-}
-
-// synthesizeGoImplements wires dispatch.SynthesizeImplements (RES-02
-// Pattern 3, Go's structural method-set match) into Pass 2: it composes a
-// struct node id -> method-spec-set map from the fully-resolved "contains"
-// edges (a struct's method set may span multiple files, exactly like
-// TestResolve_CrossFileMethodContainment) and takes interfaceMethods, the
-// interface node id -> method-spec-set map the caller built from every
-// FileResult's own InterfaceMethods (and, in a sync, the store), then
-// hands both — plus an interface-embeds-interface
-// adjacency derived from the already-resolved "embeds" edges — to
-// dispatch.SynthesizeImplements. The returned edges are appended to the
-// SAME edges slice this function already builds, so they flow through
-// collapseEdges exactly like every other edge (D-06/D-07: no parallel
-// dedup path, additive within SchemaVersion 1).
-func synthesizeGoImplements(interfaceMethods dispatch.InterfaceSpecs, methodArity map[string]int32, edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, nodeStartLineByID map[string]int32) []*schema.Edge {
-	structMethods := make(dispatch.TypeMethods)
-	interfaceEmbeds := make(map[string][]string)
-	for _, e := range edges {
-		switch e.Kind {
-		case "contains":
-			if nodeKindByID[e.Source] != goextract.KindStruct || nodeKindByID[e.Target] != goextract.KindMethod {
-				continue
-			}
-			structMethods[e.Source] = append(structMethods[e.Source], goextract.MethodSpec{
-				Name:  nodeNameByID[e.Target],
-				Arity: methodArity[e.Target],
-			})
-		case "embeds":
-			if nodeKindByID[e.Source] == goextract.KindInterface && nodeKindByID[e.Target] == goextract.KindInterface {
-				interfaceEmbeds[e.Source] = append(interfaceEmbeds[e.Source], e.Target)
-			}
-		}
-	}
-
-	synthesized := dispatch.SynthesizeImplements(structMethods, interfaceMethods, interfaceEmbeds)
-	// dispatch.SynthesizeImplements has no source-location data of its
-	// own (it operates purely on name/arity sets) — anchor each
-	// synthesized edge's Line at the implementing struct's OWN
-	// declaration line (RES-03's "where a source location exists"
-	// qualifier: unlike a declared `implements X` clause, Go's implicit
-	// satisfaction has no single syntactic reference site, so the
-	// struct's own declaration is the closest meaningful anchor).
-	for _, e := range synthesized {
-		e.Line = nodeStartLineByID[e.Source]
-	}
-	return synthesized
-}
-
-// isIntraModule reports whether importPath belongs to the same module as
-// modulePath (either the module root itself or a subpackage of it).
-func isIntraModule(modulePath, importPath string) bool {
-	if importPath == modulePath {
-		return true
-	}
-	return strings.HasPrefix(importPath, modulePath+"/")
-}
-
-// lastPathSegment returns the final "/"-delimited segment of importPath,
-// the conventional default package name for the synthetic package
-// pseudo-node (RQ-1).
-func lastPathSegment(importPath string) string {
-	if i := strings.LastIndexByte(importPath, '/'); i >= 0 {
-		return importPath[i+1:]
-	}
-	return importPath
+// resolveRefs resolves results alone, as a full index does.
+func resolveRefs(results []goextract.FileResult, modulePath string) resolve.Graph {
+	b := symbols.NewBuilder()
+	b.AddResults(results)
+	return resolveGraph(results, modulePath, b.Freeze())
 }
 
 // Resolve runs the whole of Pass 2: builds the global symbol index,
@@ -798,77 +69,11 @@ func lastPathSegment(importPath string) string {
 // doc comment (pipeline.go) for why a caller that wipes storeDir before
 // calling Run needs this lower bound.
 func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error) {
-	nodes, packageNodes, edges, files, unresolvedCount := resolveRefs(results, modulePath)
-	if err := writeGraph(store, nodes, packageNodes, edges, files, commitSHA, excluded, coverageGenerationFloor); err != nil {
-		return unresolvedCount, err
+	g := resolveRefs(results, modulePath)
+	if err := writeGraph(store, g.Nodes, g.PackageNodes, g.Edges, g.Files, commitSHA, excluded, coverageGenerationFloor); err != nil {
+		return g.Unresolved, err
 	}
-	return unresolvedCount, nil
-}
-
-// edgeTriple is the (source, kind, target) identity a duplicate edge
-// collapses on (D-05) — mirrors graphstore/keys.go's edgeKey shape exactly,
-// without needing to import that package's unexported key-building code.
-type edgeTriple struct {
-	source, kind, target string
-}
-
-// edgeOwnerID returns the node whose file owns e in the x/ file index:
-// the method for a contains edge, since resolving the method's file makes
-// the edge even when its type is declared in another file, and the source
-// for every other edge.
-func edgeOwnerID(e *schema.Edge) string {
-	if e.Kind == "contains" {
-		return e.Target
-	}
-	return e.Source
-}
-
-// collapseEdges aggregates every candidate edge sharing a (source, kind,
-// target) triple, chooses ONE representative by sorting the candidates by
-// a TOTAL ORDER — (filePath, line, col), via nodeFilePath[candidate.Source]
-// — and takes the first (RESEARCH Pitfall 1). This is never "whichever
-// candidate was appended first/last" (processing order); the same input
-// set, in any order, always yields the same representative. The returned
-// slice is itself in sorted triple order, so staging it via PutEdge is
-// also deterministic.
-func collapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*schema.Edge {
-	groups := make(map[edgeTriple][]*schema.Edge, len(edges))
-	for _, e := range edges {
-		k := edgeTriple{e.Source, e.Kind, e.Target}
-		groups[k] = append(groups[k], e)
-	}
-
-	keys := make([]edgeTriple, 0, len(groups))
-	for k := range groups {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].source != keys[j].source {
-			return keys[i].source < keys[j].source
-		}
-		if keys[i].kind != keys[j].kind {
-			return keys[i].kind < keys[j].kind
-		}
-		return keys[i].target < keys[j].target
-	})
-
-	collapsed := make([]*schema.Edge, 0, len(keys))
-	for _, k := range keys {
-		candidates := groups[k]
-		sort.Slice(candidates, func(i, j int) bool {
-			ci, cj := candidates[i], candidates[j]
-			fi, fj := nodeFilePath[ci.Source], nodeFilePath[cj.Source]
-			if fi != fj {
-				return fi < fj
-			}
-			if ci.Line != cj.Line {
-				return ci.Line < cj.Line
-			}
-			return ci.Col < cj.Col
-		})
-		collapsed = append(collapsed, candidates[0])
-	}
-	return collapsed
+	return g.Unresolved, nil
 }
 
 // stampCapabilities sets every Meta flag whose absence makes
@@ -896,19 +101,6 @@ func stampCapabilities(meta *schema.Meta) {
 	meta.HasUniqueDeclIds = true
 }
 
-// distinctNodeIDs counts the distinct ids in nodes, which are sorted by
-// id. PutNode writes an id once, so this is the number of stored nodes
-// even when two extracted nodes share an id.
-func distinctNodeIDs(nodes []*schema.Node) int {
-	n := 0
-	for i, node := range nodes {
-		if i == 0 || nodes[i-1].Id != node.Id {
-			n++
-		}
-	}
-	return n
-}
-
 // writeGraph collapses edges deterministically and stages the whole
 // resolved graph — package pseudo-nodes and symbol nodes (sorted by id),
 // then files (sorted by path), then collapsed edges (sorted by
@@ -928,16 +120,7 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		nodeFilePath[n.Id] = n.FilePath
 	}
 
-	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
-	allNodes = append(allNodes, nodes...)
-	allNodes = append(allNodes, packageNodes...)
-	sort.Slice(allNodes, func(i, j int) bool { return allNodes[i].Id < allNodes[j].Id })
-
-	sortedFiles := make([]*schema.File, len(files))
-	copy(sortedFiles, files)
-	sort.Slice(sortedFiles, func(i, j int) bool { return sortedFiles[i].Path < sortedFiles[j].Path })
-
-	collapsedEdges := collapseEdges(edges, nodeFilePath)
+	collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)
 
 	// WR-01 (iteration 2): read-modify-write the prior CoverageGeneration
 	// via a snapshot Reader — never a second Writer — so a from-scratch
@@ -962,14 +145,17 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	}
 
 	var size graphstore.BatchSize
-	for _, n := range allNodes {
+	for _, n := range nodes {
 		size.Node(n)
 	}
-	for _, f := range sortedFiles {
+	for _, n := range packageNodes {
+		size.Node(n)
+	}
+	for _, f := range files {
 		size.File(f)
 	}
 	for _, e := range collapsedEdges {
-		size.Edge(e, nodeFilePath[edgeOwnerID(e)])
+		size.Edge(e, nodeFilePath[resolve.EdgeOwnerID(e)])
 	}
 	for _, x := range excluded {
 		size.ExcludedFile(x)
@@ -989,34 +175,13 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		return err
 	}
 
-	for _, n := range allNodes {
-		if err := w.PutNode(n); err != nil {
-			w.Close()
-			return err
-		}
-	}
-	for _, f := range sortedFiles {
-		if err := w.PutFile(f); err != nil {
-			w.Close()
-			return err
-		}
-	}
-	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, nodeFilePath[edgeOwnerID(e)]); err != nil {
-			w.Close()
-			return err
-		}
+	staged := resolve.Graph{Nodes: nodes, PackageNodes: packageNodes, Files: files, Edges: collapsedEdges}
+	nodeCount, err := stage(w, staged, func(e *schema.Edge) string { return nodeFilePath[resolve.EdgeOwnerID(e)] })
+	if err != nil {
+		w.Close()
+		return err
 	}
 
-	// Phase 10 D-07: clear the WHOLE c/ namespace before rewriting it.
-	// run() is also Sync's D-02b backfill path against an EXISTING store
-	// (sync.go's needsFileIndexBackfill branch), so a from-scratch
-	// rewrite must range-delete stale c/ records rather than layer on
-	// top of them. On the from-scratch `codegraph index` path
-	// (internal/cli/index.go's RemoveAll) the range is already empty and
-	// this delete is a no-op. Staged on this SAME Writer, before any
-	// PutExcludedFile below, so a rewrite over an existing store never
-	// observes a mixed stale+fresh set even transiently.
 	if err := w.DeleteAllExcludedFiles(); err != nil {
 		w.Close()
 		return err
@@ -1037,7 +202,7 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	}
 
 	meta := schema.NewMeta()
-	meta.NodeCount = int64(distinctNodeIDs(allNodes))
+	meta.NodeCount = int64(nodeCount)
 	meta.EdgeCount = int64(len(collapsedEdges))
 	stampCapabilities(meta)
 	// Phase 10 D-07: every from-scratch writeGraph run (Run's own path,

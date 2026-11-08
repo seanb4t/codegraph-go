@@ -18,8 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/fsnotify/fsnotify"
-
-	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 )
 
 // Watcher wraps a *fsnotify.Watcher covering a repo root recursively. It
@@ -35,7 +34,7 @@ type Watcher struct {
 }
 
 // Open opens a native fsnotify watcher rooted at root and walks the tree,
-// adding every directory not excluded by indexer.ShouldSkipDir to the
+// adding every directory not excluded by discover.ShouldSkipDir to the
 // watch set (so .codegraph/, vendor/, and other dot-prefixed directories
 // are never watched — the same exclusion discover.go applies, per D-04's
 // "watcher and indexer agree on the file set").
@@ -45,7 +44,7 @@ func Open(root string) (*Watcher, error) {
 		return nil, fmt.Errorf("watch: creating fsnotify watcher: %w", err)
 	}
 	w := &Watcher{fsw: fsw, dirs: make(map[string]bool)}
-	if err := addRecursive(w, root, indexer.ShouldSkipDir); err != nil {
+	if err := addRecursive(w, root, discover.ShouldSkipDir); err != nil {
 		_ = fsw.Close()
 		return nil, fmt.Errorf("watch: walking %s: %w", root, err)
 	}
@@ -157,7 +156,7 @@ func watchLoop(ctx context.Context, w *Watcher, deb *Debouncer) {
 				// A directory that is not watched yet: created, moved in,
 				// or seen through another event when its create event was
 				// not delivered. A file or a gone path costs one stat.
-				if err := addCreatedDir(w, ev.Name, indexer.ShouldSkipDir); err != nil {
+				if err := addCreatedDir(w, ev.Name, discover.ShouldSkipDir); err != nil {
 					log.Printf("watch: adding new directory %s: %v", ev.Name, err)
 				}
 			}

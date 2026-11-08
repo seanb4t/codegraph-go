@@ -7,13 +7,17 @@ import (
 	"maps"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -87,19 +91,19 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// Phase 10 D-07: DiscoverAll's exclusion-reason list (discovery.Excluded)
 	// feeds the c/ namespace diff below (loadStoredExclusions +
 	// diffExclusions), the same walk result Files/ModulePath come from.
-	discovery, err := DiscoverAll(repoRoot)
+	discovery, err := discover.DiscoverAll(repoRoot)
 	if err != nil {
 		return Stats{}, err
 	}
 	files, modulePath := discovery.Files, discovery.ModulePath
 
-	discovered := make(map[string]DiscoveredFile, len(files))
+	discovered := make(map[string]discover.DiscoveredFile, len(files))
 	for _, f := range files {
 		discovered[f.RelPath] = f
 	}
 
 	// Stat pre-filter -> content-hash confirm (D-01a).
-	var added, modified []DiscoveredFile
+	var added, modified []discover.DiscoveredFile
 	// mtimeRefresh (WR-03) collects files whose stat metadata (mtime/size)
 	// differs from the stored File record but whose recomputed content
 	// hash still matches — a touch, a git checkout with no real content
@@ -345,7 +349,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	// Extract batch = added ∪ modified ∪ dependent.
-	batchFiles := make([]DiscoveredFile, 0, len(added)+len(modified)+len(dependentPaths))
+	batchFiles := make([]discover.DiscoveredFile, 0, len(added)+len(modified)+len(dependentPaths))
 	batchFiles = append(batchFiles, added...)
 	batchFiles = append(batchFiles, modified...)
 	for path := range dependentPaths {
@@ -389,7 +393,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	waiting = mergeSortedPaths(waiting, outbid)
 	if len(waiting) > 0 {
-		waitingFiles := make([]DiscoveredFile, 0, len(waiting))
+		waitingFiles := make([]discover.DiscoveredFile, 0, len(waiting))
 		for _, path := range waiting {
 			if err := pruneOwnedEdgesOnly(r0, w, path, &edgesRemoved); err != nil {
 				w.Close()
@@ -422,14 +426,17 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		excludePaths[p] = true
 	}
 
-	view, err := loadStoreView(r0, discovered, excludePaths)
+	builder := symbols.NewBuilder()
+	stored, err := loadStoreView(r0, discovered, excludePaths, builder)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
 	}
-	view.symbols.overlay(results)
+	builder.AddResults(results)
+	view := builder.Freeze()
 
-	nodes, packageNodes, edges, fileRecords, unresolvedCount := resolveRefsWithIndex(results, modulePath, view.symbols, view)
+	g := resolveGraph(results, modulePath, view)
+	nodes, packageNodes, edges, fileRecords, unresolvedCount := g.Nodes, g.PackageNodes, g.Edges, g.Files, g.Unresolved
 
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
@@ -439,11 +446,11 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// An overload set whose members span files has no file of its own,
 	// so no prune reaches it. A stored set that this resolve does not
 	// declare is deleted here (design D14).
-	for id := range view.storedSets {
+	for _, id := range view.StoredSetIDs() {
 		if _, live := nodeFilePath[id]; live {
 			continue
 		}
-		if n, ok := view.nodes[id]; ok && n.FilePath == "" {
+		if n := view.Node(id); n != nil && n.FilePath == "" {
 			if err := w.DeleteNode(id); err != nil {
 				w.Close()
 				return Stats{}, err
@@ -451,28 +458,28 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			nodesRemoved++
 		}
 	}
-	collapsedEdges := collapseEdges(edges, nodeFilePath)
+	collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)
 
 	// The resolve above synthesized implements and overrides over the
 	// whole graph. A synthesized edge an unchanged file already stores is
 	// skipped, and a stored one the synthesis did not produce is deleted,
 	// so Meta.EdgeCount counts each change once.
-	kept := make(map[edgeTriple]bool)
+	kept := make(map[resolve.EdgeTriple]bool)
 	writes := make([]*schema.Edge, 0, len(collapsedEdges))
 	for _, e := range collapsedEdges {
-		k := edgeTriple{e.Source, e.Kind, e.Target}
-		if _, stored := view.synthesized[k]; stored && isSynthesizedEdge(e) {
+		k := resolve.EdgeTriple{Source: e.Source, Kind: e.Kind, Target: e.Target}
+		if _, stored := stored.synthesized[k]; stored && isSynthesizedEdge(e) {
 			kept[k] = true
 			continue
 		}
 		writes = append(writes, e)
 	}
 	collapsedEdges = writes
-	for _, k := range sortedTriples(view.synthesized) {
+	for _, k := range sortedTriples(stored.synthesized) {
 		if kept[k] {
 			continue
 		}
-		if err := deleteOwnedEdge(w, view.synthesized[k], k); err != nil {
+		if err := deleteOwnedEdge(w, stored.synthesized[k], k); err != nil {
 			w.Close()
 			return Stats{}, err
 		}
@@ -487,15 +494,6 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// falls back to r0 — the pre-Sync snapshot, unaffected by this cycle's
 	// staged-but-uncommitted writes — for exactly that case.
 
-	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
-	allNodes = append(allNodes, nodes...)
-	allNodes = append(allNodes, packageNodes...)
-	sort.Slice(allNodes, func(i, j int) bool { return allNodes[i].Id < allNodes[j].Id })
-
-	sortedFiles := make([]*schema.File, len(fileRecords))
-	copy(sortedFiles, fileRecords)
-	sort.Slice(sortedFiles, func(i, j int) bool { return sortedFiles[i].Path < sortedFiles[j].Path })
-
 	// nodesAdded counts only node ids that are GENUINELY new to the
 	// committed graph after this Sync: either they were just pruned above
 	// (goneIDs — a node id is stable across a content-unrelated edit
@@ -508,13 +506,14 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// existed and was NOT pruned — that case must NOT be double-counted
 	// as an addition).
 	//
-	// allNodes is sorted by id, and an id that appears twice is stored
-	// once, so it is counted once.
+	// An id that appears twice is stored once, so it is counted once.
 	nodesAdded := 0
-	for i, n := range allNodes {
-		if i > 0 && allNodes[i-1].Id == n.Id {
+	counted := make(map[string]struct{}, len(nodes)+len(packageNodes))
+	for _, n := range slices.Concat(nodes, packageNodes) {
+		if _, seen := counted[n.Id]; seen {
 			continue
 		}
+		counted[n.Id] = struct{}{}
 		if _, gone := goneIDs[n.Id]; gone {
 			nodesAdded++
 			continue
@@ -528,30 +527,17 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 
-	for _, n := range allNodes {
-		if err := w.PutNode(n); err != nil {
-			w.Close()
-			return Stats{}, err
-		}
-	}
-	for _, f := range sortedFiles {
-		if err := w.PutFile(f); err != nil {
-			w.Close()
-			return Stats{}, err
-		}
+	staged := resolve.Graph{Nodes: nodes, PackageNodes: packageNodes, Files: fileRecords, Edges: collapsedEdges}
+	if _, err := stage(w, staged, func(e *schema.Edge) string { return ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) }); err != nil {
+		w.Close()
+		return Stats{}, err
 	}
 	// WR-03: also persist the mtime/size-only refresh for any file whose
 	// stat metadata was stale but content hash matched — these files are
-	// not part of sortedFiles (they were never reparsed), so they need
+	// not part of fileRecords (they were never reparsed), so they need
 	// their own PutFile pass here.
 	for _, f := range mtimeRefresh {
 		if err := w.PutFile(f); err != nil {
-			w.Close()
-			return Stats{}, err
-		}
-	}
-	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, ownerPathFor(edgeOwnerID(e), nodeFilePath, r0)); err != nil {
 			w.Close()
 			return Stats{}, err
 		}
@@ -725,28 +711,28 @@ func sortedKeys(m map[string]struct{}) []string {
 
 // deleteOwnedEdge stages the delete of edge k and of owner's file-index
 // entry for it.
-func deleteOwnedEdge(w graphstore.Writer, owner string, k edgeTriple) error {
-	if err := w.DeleteEdge(k.source, k.kind, k.target); err != nil {
+func deleteOwnedEdge(w graphstore.Writer, owner string, k resolve.EdgeTriple) error {
+	if err := w.DeleteEdge(k.Source, k.Kind, k.Target); err != nil {
 		return err
 	}
-	return w.DeleteFileIndexEdge(owner, k.source, k.kind, k.target)
+	return w.DeleteFileIndexEdge(owner, k.Source, k.Kind, k.Target)
 }
 
 // sortedTriples returns m's keys sorted by (source, kind, target).
-func sortedTriples(m map[edgeTriple]string) []edgeTriple {
-	keys := make([]edgeTriple, 0, len(m))
+func sortedTriples(m map[resolve.EdgeTriple]string) []resolve.EdgeTriple {
+	keys := make([]resolve.EdgeTriple, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		a, b := keys[i], keys[j]
-		if a.source != b.source {
-			return a.source < b.source
+		if a.Source != b.Source {
+			return a.Source < b.Source
 		}
-		if a.kind != b.kind {
-			return a.kind < b.kind
+		if a.Kind != b.Kind {
+			return a.Kind < b.Kind
 		}
-		return a.target < b.target
+		return a.Target < b.Target
 	})
 	return keys
 }
@@ -794,7 +780,7 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 // waiting on a new name. The set lookup is by bare name, so a set of the
 // same name under another owner is reparsed too. A same-file contains edge is made by the extractor and is
 // left out. The sync's own batch and dependents are left out as well.
-func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
+func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]discover.DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
 	declared := make(map[string]string)
 	fit, err := r0.IterateFiles()
 	if err != nil {
@@ -835,7 +821,7 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]Dis
 			setsByName[n.Name] = append(setsByName[n.Name], n.Id)
 			continue
 		}
-		if n.Kind == goextract.KindFile || n.Kind == kindPackage {
+		if n.Kind == goextract.KindFile || n.Kind == resolve.KindPackage {
 			continue
 		}
 		moduleKey, ok := declared[n.FilePath]
@@ -910,7 +896,7 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]Dis
 		if _, ok := targets[resolved]; !ok {
 			continue
 		}
-		path := fileOf[edgeOwnerID(e)]
+		path := fileOf[resolve.EdgeOwnerID(e)]
 		if e.Kind == goextract.RefKindContains && path == fileOf[resolved] {
 			// The extractor makes a same-file contains edge itself, from
 			// the declaration, so no other file can outbid it. Every

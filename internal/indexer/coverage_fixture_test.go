@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -71,12 +72,12 @@ func TestDanglingSymlinkIsDiscoveredAndFailsExtraction(t *testing.T) {
 	writeFixtureFile(t, root, "main.go", "package tmp\n\nfunc Main() {}\n")
 	writeDanglingSymlink(t, root, "broken.py")
 
-	d, err := DiscoverAll(root)
+	d, err := discover.DiscoverAll(root)
 	if err != nil {
 		t.Fatalf("DiscoverAll: %v", err)
 	}
 
-	var found *DiscoveredFile
+	var found *discover.DiscoveredFile
 	for i := range d.Files {
 		if d.Files[i].RelPath == "broken.py" {
 			found = &d.Files[i]
@@ -197,7 +198,7 @@ func TestCoverageFixtureCountsAndReasons(t *testing.T) {
 		"go.mod":    {path: "go.mod", reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION, detail: ".mod"},
 		"huge.go":   {path: "huge.go", reason: schema.ExclusionReason_EXCLUSION_REASON_SIZE_LIMIT, detail: wantSizeDetail},
 		"notes.md":  {path: "notes.md", reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION, detail: ".md"},
-		"tagged.go": {path: "tagged.go", reason: schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG, detail: buildTagDetail(build.Default)},
+		"tagged.go": {path: "tagged.go", reason: schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG, detail: build.Default.GOOS + "/" + build.Default.GOARCH},
 		"vendor":    {path: "vendor", reason: schema.ExclusionReason_EXCLUSION_REASON_DIR_VENDOR, detail: "vendor"},
 	}
 	seen := make(map[string]bool, len(rows))
@@ -354,7 +355,7 @@ func TestCoverageReasonsSurviveDiskMutationWithoutReindex(t *testing.T) {
 	// The explicit contrast: a FRESH walk of the mutated disk now
 	// disagrees with the stored (stale) reasons above — proving the
 	// store is not silently re-deriving them at read time.
-	fresh, err := DiscoverAll(dir)
+	fresh, err := discover.DiscoverAll(dir)
 	if err != nil {
 		t.Fatalf("DiscoverAll (fresh, post-mutation): %v", err)
 	}

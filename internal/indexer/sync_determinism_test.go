@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -72,7 +73,7 @@ func exportNormalized(t *testing.T, storeDir string) []byte {
 // confirm step (D-01a) and Sync would see it as unchanged.
 func touchEveryFile(t *testing.T, root string) {
 	t.Helper()
-	files, _, err := Discover(root)
+	files, _, err := discover.Discover(root)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestSyncEqualsReindex(t *testing.T) {
 
 	touchEveryFile(t, repoRoot)
 
-	files, _, err := Discover(repoRoot)
+	files, _, err := discover.Discover(repoRoot)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}

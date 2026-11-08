@@ -23,7 +23,7 @@ import (
 // cli is the outermost layer that will depend on daemon (Plan 04-08's
 // `codegraph daemon` command), not the other way around. This is the same
 // cross-package-duplication precedent internal/query set for its own
-// codegraphDirName (Phase 3) and internal/indexer.ShouldSkipDir.
+// codegraphDirName (Phase 3) and internal/indexer/discover.ShouldSkipDir.
 const (
 	codegraphDirName = ".codegraph"
 	storeDirName     = "store"

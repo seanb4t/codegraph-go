@@ -8,6 +8,8 @@ import (
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/routes"
@@ -29,7 +31,7 @@ import (
 // accumulation (mirroring synthesizeGoImplements' append-after-the-main-
 // loop shape in resolve.go) rather than minting a spurious, path-less
 // schema.File record the way appending a fake FileResult would.
-func detectRoutes(repoRoot string, files []DiscoveredFile, results []goextract.FileResult) ([]*schema.Node, []*schema.Edge, error) {
+func detectRoutes(repoRoot string, files []discover.DiscoveredFile, results []goextract.FileResult) ([]*schema.Node, []*schema.Edge, error) {
 	detectors := routes.Registered()
 	if len(detectors) == 0 {
 		return nil, nil, nil
@@ -77,7 +79,7 @@ func detectRoutes(repoRoot string, files []DiscoveredFile, results []goextract.F
 		if len(dets) == 0 {
 			continue
 		}
-		spec, ok := lookupLanguageByID(f.Language)
+		spec, ok := extract.ByID(f.Language)
 		if !ok || spec.NewParser == nil {
 			continue
 		}
@@ -109,13 +111,13 @@ func detectRoutes(repoRoot string, files []DiscoveredFile, results []goextract.F
 	return nodes, edges, nil
 }
 
-// detectRoutesInFile re-parses one file (via its own LanguageSpec's
+// detectRoutesInFile re-parses one file (via its own extract.LanguageSpec's
 // NewParser — the SAME grammar Pass 1 already used, Pitfall 1's per-
 // language selection discipline) and runs every already-fired detector
 // for that language's Walk over the resulting root node exactly once,
 // converting each resolved routes.Route into a schema.Node/schema.Edge
 // pair.
-func detectRoutesInFile(spec LanguageSpec, f DiscoveredFile, src []byte, res *goextract.FileResult, globalIndex map[string]string, dets []routes.Detector) ([]*schema.Node, []*schema.Edge, error) {
+func detectRoutesInFile(spec extract.LanguageSpec, f discover.DiscoveredFile, src []byte, res *goextract.FileResult, globalIndex map[string]string, dets []routes.Detector) ([]*schema.Node, []*schema.Edge, error) {
 	p, err := spec.NewParser()
 	if err != nil {
 		return nil, nil, err
@@ -329,7 +331,7 @@ func csprojManifestText(root string) string {
 			return nil //nolint:nilerr // best-effort manifest scan, never fails the caller
 		}
 		if d.IsDir() {
-			if p != root && ShouldSkipDir(d.Name()) {
+			if p != root && discover.ShouldSkipDir(d.Name()) {
 				return fs.SkipDir
 			}
 			return nil
