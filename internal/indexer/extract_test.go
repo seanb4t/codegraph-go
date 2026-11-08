@@ -261,9 +261,11 @@ func TestExtractPool_OversizedFileContained(t *testing.T) {
 }
 
 // TestExtractStopsEveryWorkerOnError gives the pool a parser factory whose
-// third call fails. With one worker per file, that call is the first file
-// of the third worker. Extract must return that error, and the synctest
-// bubble must hold no live goroutine once it returns.
+// third call fails. The fixture is one language, so each call is the first
+// file of a different worker. The first two calls wait for the third, so
+// two workers are still running when it fails. Extract must return that
+// error, and the synctest bubble must hold no live goroutine once it
+// returns.
 func TestExtractStopsEveryWorkerOnError(t *testing.T) {
 	files, _, err := discover.Discover(fixtureRoot)
 	if err != nil {
@@ -277,8 +279,13 @@ func TestExtractStopsEveryWorkerOnError(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int64
+		third := make(chan struct{})
 		factory := func(languageID string) (parser.Parser, error) {
-			if calls.Add(1) == 3 {
+			switch n := calls.Add(1); {
+			case n < 3:
+				<-third
+			case n == 3:
+				close(third)
 				return nil, errThird
 			}
 			return defaultParserFactory(languageID)
