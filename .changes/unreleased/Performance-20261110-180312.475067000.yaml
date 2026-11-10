@@ -1,0 +1,3 @@
+kind: Performance
+body: A full index now holds the working state of at most one file per worker, writes in bounded batches, and replaces the store only when it succeeds.
+time: 2026-11-10T18:03:12.475067-05:00

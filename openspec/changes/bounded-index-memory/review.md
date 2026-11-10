@@ -1,19 +1,188 @@
 ---
 verdict: approve-with-notes
-phase: plan
-reviewed_at: 2026-11-10T13:03:26+00:00
-head: b7cc138c98df58d9755e7a7bfa27a599687dee68
+phase: implementation
+reviewed_at: 2026-11-10T23:03:02+00:00
+head: e6536a09c1b747032ff814bd6dc4c35b376b524b
 lenses:
-  spec-lint: ok
-  approach: ok
+  spec-lint: not-applicable
+  approach: partial
   fit: ok
-  test-coverage: ok
-  test-honesty: not-applicable
-  invariants: ok
+  test-coverage: partial
+  test-honesty: partial
+  invariants: partial
 ---
 # Review
 
+## Incomplete lenses
+
+- approach: partial, gaps: 2
+- test-coverage: partial, gaps: 1
+- test-honesty: partial, gaps: 2
+- invariants: partial, gaps: 2
+
+The verdict covers only what the lenses checked.
+
 ## Findings
+
+| id | lens | severity | claim | evidence | action |
+|---|---|---|---|---|---|
+| app-1 | approach | should-fix | D7 puts the passes and the writer in one errgroup. In the code, run starts the writer only at pass 3, and pass 1, route detection and pass 2 each run earlier in their own forEachFile errgroup. design.md records no deviation. | design.md > D7. Cancellation and goroutine lifetime — "The passes and the writer run in one `errgroup.WithContext`. The first error cancels the context." | Either record in D7 that passes 1, route detection and 2 run in sequence, each in its own forEachFile errgroup, with only pass 3 and the writer sharing one errgroup, or change run to match D7. The doc comment of buildStore makes the same claim and needs the same fix. |
+| app-2 | approach | should-fix | D11 says loadStoreView skips the stored edges whose source is a shared id. The code skips every edge whose owner id is a shared id, so it also drops the contains edges from a file node into that id. design.md records no deviation. | design.md > D11. A node id that several files emit becomes one merged node — "It also skips the stored edges whose owner path is "" and whose source is such an id." | Make D11 say that loadStoreView skips both groups of no-file-unit edges: the base edges from the shared id and the contains edges into it. These are the same two groups that the delete step names. Otherwise, narrow the check to edges whose source is the shared id. |
+| app-3 | approach | should-fix | D8 names exactly two seam variables for graphstore, and the proposal says Checkpoint changes only by the swap lock. The code adds a third seam, checkpointHook, inside Checkpoint, and design.md does not record it. | design.md > D8. One claim loop and its test hooks — "Its two seam variables are `openLockRetrySleep` and `exchangeDirs` (D6)." | Add checkpointHook to the seam list of D8, saying that TestReplaceStoreWaitsForCheckpoint uses it to hold the source handle open, and update the Checkpoint line of the proposal Impact. Otherwise, rewrite that test without a seam. |
+| ctl-lens | approach | should-fix | lens approach reported partial, gaps: 2 | review > lens-status — "partial" | rerun the lens or accept the gap in the review |
+| fit-1 | fit | should-fix | Sync collapses the edges of resolve.Link a second time, though Link now returns edges already collapsed in each unit and stage sorts them by triple itself. | internal/indexer/sync.go:577 — "collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)" | Drop the CollapseEdges call in Sync and use g.Edges as the collapsed edges. Then no production caller passes a nodeFilePath map, so remove that parameter of CollapseEdges as well. |
+| fit-2 | fit | should-fix | Two mechanisms compute the owner path of an edge in one sync: Global.OwnerPath (view plus hierarchy sets) picks the unit inside Link, and ownerPathFor (nodeFilePath plus an r0 fallback) picks the x/ entry and the keep check. | internal/indexer/resolve/units.go:210 — "func (g *Global) OwnerPath(e *schema.Edge) string {" | Have Link return the owner-path function of its Global (for example as a field of resolve.Graph), and pass it to stage and the keep check in Sync, as the full index passes global.OwnerPath. Or name in D3 why the sync keeps ownerPathFor. |
+| fit-3 | fit | should-fix | The phpextract test keeps its own copy of the export normalization of exportNormalized. The design's reason (no test-only production helper) does not hold, because the change itself adds test-only exports to recordio. | internal/indexer/mainstream/phpextract/resolution_test.go:85 — "frames, err := recordio.ReadAll(bytes.NewReader(buf.Bytes()), 0)" | Move the export-and-normalize helper into one importable package (a small test-helper package under internal/indexer, or beside ReadAll and AppendFrames) and call it from both tests. Or record the reason for the copy against recordio's test-only exports in D8. |
+| fit-4 | fit | should-fix | The spill writer hard-codes 11 as the frame header length, a second name for recordio's unexported maxHeaderLen. | internal/indexer/spill/file.go:48 — "frame := recordio.AppendFrame(make([]byte, 0, len(payload)+11), frameKind, payload)" | Export the constant from recordio (MaxHeaderLen) and use it in spill.File.appendPayload. |
+| ctl-lens | invariants | should-fix | lens invariants reported partial, gaps: 2 | review > lens-status — "partial" | rerun the lens or accept the gap in the review |
+| inv-1 | invariants | should-fix | PendingPrefix documents that a pending name never starts with the final prefix, but nothing enforces the trailing dash it relies on. A probe shows that the prefixes "foo" and "" break the rule, and Sweep(parent, "") would treat every unlocked directory in parent as its own. | internal/scratchdir/scratchdir.go:40 — "// finish yet. It never has prefix itself as a prefix, so a pending" | Make New and Sweep return an error (or panic) for a prefix that is empty or does not end in "-", or build the pending name so that it cannot share the final prefix. Add a TestSweep row or a small table test for such a prefix. |
+| inv-2 | invariants | should-fix | D3 states that in a full index every unit has a result, so the whole-graph edges of a unit without a result come to nothing. buildStore never calls Global.Rest and checks nothing, so an edge of such a unit would be dropped without an error. | design.md > D3. The global passes run once, and each edge has one unit — "In a full index every unit has a result, so this step emits nothing." | After pass 3 in buildStore (or in stageTail), call global.Rest with the paths of the records and return an error that wraps goextract.ErrInternal if it is not empty. Add a resolve test in which Rest over a unit with no result is non-empty and the full-index check rejects it. |
+| inv-3 | invariants | should-fix | D3 says that no unit other than the route unit makes a triple with a route source. Assemble checks only the route-unit side. A file-unit edge whose source is a route node passes when its owner path is the registering file, and it would be collapsed apart from the route unit. | design.md > D3. The global passes run once, and each edge has one unit — "Each of them has a route node as its source, so no other unit makes the same triple." | In the file-unit branch of Assemble, return goextract.ErrInternal for an edge whose source is of kind route. Add a row to TestAssemblyRejectsForeignEdge with a file-unit edge from a route node. |
+| ctl-lens | test-coverage | should-fix | lens test-coverage reported partial, gaps: 1 | review > lens-status — "partial" | rerun the lens or accept the gap in the review |
+| ctl-lens | test-honesty | should-fix | lens test-honesty reported partial, gaps: 2 | review > lens-status — "partial" | rerun the lens or accept the gap in the review |
+| fit-5 | fit | note | The sync's buildReverseAdjacency stays a variant of query.BuildReverseAdjacency, now with an edge-kind parameter. The design names it, and issue #274 tracks the collapse. | internal/indexer/sync.go:763 — "binary (D-02a). Issue #274 tracks one shared builder for this map and" | None in this change. Keep the citation of #274 in the comment. |
+
+## Coverage matrix
+
+| scenario | covered by | status | verified |
+|---|---|---|---|
+| Two fresh indexes | internal/indexer/determinism_test.go: TestDeterministicRebuild | covered | pass |
+| A different worker count | internal/indexer/schedule_test.go: TestIndexScheduleIndependence | covered | pass |
+| A different claim order | internal/indexer/schedule_test.go: TestClaimOrderReverse | covered | pass |
+| Duplicate edges at one position | internal/indexer/fullindex_test.go: TestDuplicateEdgesCollapse | covered | pass |
+| A public part and a part with no modifier | internal/indexer/fullindex_test.go: TestMergedPartialTypeStored | covered | pass |
+| Every part has the default visibility | internal/indexer/fullindex_test.go: TestMergedPartialTypeStored | covered | pass |
+| A route that one file registers twice | internal/indexer/fullindex_test.go: TestDuplicateRouteStored | covered | pass |
+| A sync of one part | internal/indexer/sync_partial_test.go: TestSyncPartialTypeMatchesIndex/a part drops its public modifier | covered | pass |
+| A sync adds a part to an indexed type | internal/indexer/sync_partial_test.go: TestSyncPartialTypeMatchesIndex/a part is added | covered | pass |
+| A sync after one part leaves the type | internal/indexer/sync_partial_test.go: TestSyncPartialTypeMatchesIndex/a part leaves the type | covered | pass |
+| A sync deletes the only part | internal/indexer/sync_partial_test.go: TestSyncPartialTypeMatchesIndex/the only part is deleted | covered | pass |
+| A sync deletes the only part of a type that another file names | internal/indexer/sync_partial_test.go: TestSyncPartialTypeMatchesIndex/the only part is deleted, and another file names the type | covered | pass |
+| A sync after one part is deleted | internal/indexer/sync_partial_test.go: TestSyncPartialTypeMatchesIndex/a part is deleted | covered | pass |
+| Where working state ends in each pass | internal/indexer/fullindex_test.go: TestWorkInFlightBound | covered | pass |
+| Two workers over many files | internal/indexer/fullindex_test.go: TestWorkInFlightBound | covered | pass |
+| Default worker count follows the CPU limit | internal/indexer/claim_test.go: TestDefaultWorkersFollowsGOMAXPROCS | covered | pass |
+| One worker | internal/indexer/claim_test.go: TestDefaultWorkersFollowsGOMAXPROCS | covered | pass |
+| More workers than files | internal/indexer/claim_test.go: TestDefaultWorkersFollowsGOMAXPROCS | covered | pass |
+| A large graph spans several batches | internal/indexer/fullindex_test.go: TestWriteBatchBound | covered | pass |
+| A small graph still commits | internal/indexer/fullindex_test.go: TestSmallGraphStillCommits | covered | pass |
+| An empty tree | internal/indexer/fullindex_test.go: TestEmptyTreeCommitsMetadataOnly | covered | pass |
+| A large export | internal/graphstore/bounded_test.go: TestImportCommitsInBatches | covered | pass |
+| An empty export | internal/graphstore/bounded_test.go: TestImportEdgeStreams | covered | pass |
+| A commit error halfway through | internal/indexer/fullindex_fail_test.go: TestFailedIndexKeepsStore | covered | pass |
+| The exchange cannot take the live store | internal/indexer/fullindex_fail_test.go: TestExchangeFailureKeepsStore | covered | pass |
+| The process is killed before the exchange | internal/indexer/fullindex_fail_test.go: TestKilledIndexKeepsStore | covered | pass |
+| The process is killed after the exchange | internal/indexer/fullindex_fail_test.go: TestKilledAfterExchange | covered | pass |
+| A first index fails | internal/indexer/fullindex_fail_test.go: TestFirstIndexFailureLeavesNoGraph | covered | pass |
+| A reader opens the store during a first index | internal/indexer/fullindex_fail_test.go: TestFirstIndexWithConcurrentOpen | covered | pass |
+| A full index succeeds | internal/indexer/fullindex_fail_test.go: TestSuccessfulIndexDropsOldRecords | covered | pass |
+| A sync during a full index | internal/indexer/claim_test.go: TestSyncDuringFullIndexFails | covered | pass |
+| A read during a full index | internal/indexer/claim_test.go: TestReadDuringFullIndexSeesOldGraph | covered | pass |
+| After a commit error | internal/indexer/fullindex_fail_test.go: TestIndexLeavesNoScratch | covered | pass |
+| After a success | internal/indexer/fullindex_fail_test.go: TestIndexLeavesNoScratch | covered | pass |
+| After a killed run | internal/indexer/fullindex_fail_test.go: TestKilledIndexKeepsStore | covered | pass |
+| A run killed while it created its scratch directory | internal/indexer/fullindex_fail_test.go: TestIndexSweepsScratch | covered | pass |
+| A scratch directory that another process holds | internal/indexer/fullindex_fail_test.go: TestIndexSweepsScratch | covered | pass |
+| A writer error | internal/indexer/fullindex_stop_test.go: TestWriterErrorStopsRun | covered | pass |
+| A worker error | internal/indexer/fullindex_stop_test.go: TestWorkerErrorStopsRun | covered | pass |
+| A cancel while workers wait | internal/indexer/fullindex_stop_test.go: TestCancelStopsBlockedWorkers | covered | pass |
+
+### Not run
+
+None.
+
+## Verification runs
+
+- exit 0: `go test -count=1 -v -run '^TestDeterministicRebuild$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestIndexScheduleIndependence$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestClaimOrderReverse$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestDuplicateEdgesCollapse$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestMergedPartialTypeStored$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestDuplicateRouteStored$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncPartialTypeMatchesIndex$/^a_part_drops_its_public_modifier$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncPartialTypeMatchesIndex$/^a_part_is_added$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncPartialTypeMatchesIndex$/^a_part_leaves_the_type$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncPartialTypeMatchesIndex$/^the_only_part_is_deleted$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncPartialTypeMatchesIndex$/^the_only_part_is_deleted,_and_another_file_names_the_type$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncPartialTypeMatchesIndex$/^a_part_is_deleted$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestWorkInFlightBound$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestDefaultWorkersFollowsGOMAXPROCS$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestWriteBatchBound$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSmallGraphStillCommits$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestEmptyTreeCommitsMetadataOnly$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestImportCommitsInBatches$' ./internal/graphstore`
+- exit 0: `go test -count=1 -v -run '^TestImportEdgeStreams$' ./internal/graphstore`
+- exit 0: `go test -count=1 -v -run '^TestFailedIndexKeepsStore$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestExchangeFailureKeepsStore$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestKilledIndexKeepsStore$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestKilledAfterExchange$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestFirstIndexFailureLeavesNoGraph$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestFirstIndexWithConcurrentOpen$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSuccessfulIndexDropsOldRecords$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestSyncDuringFullIndexFails$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestReadDuringFullIndexSeesOldGraph$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestIndexLeavesNoScratch$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestIndexSweepsScratch$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestWriterErrorStopsRun$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestWorkerErrorStopsRun$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run '^TestCancelStopsBlockedWorkers$' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run 'TestSyncPartialTypeMatchesIndex/a part drops its public modifier' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run 'TestSyncPartialTypeMatchesIndex/a part is added' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run 'TestSyncPartialTypeMatchesIndex/a part leaves the type' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run 'TestSyncPartialTypeMatchesIndex/the only part is deleted' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run 'TestSyncPartialTypeMatchesIndex/the only part is deleted, and another file names the type' ./internal/indexer`
+- exit 0: `go test -count=1 -v -run 'TestSyncPartialTypeMatchesIndex/a part is deleted' ./internal/indexer`
+
+## Dropped
+
+None.
+
+## Lens notes
+
+- approach: Read against the code with no deviation found: D1 (passes, route result as one more record), D4 (bounded writer, Count guard, Sync mode, node count), D6 (writer lock, swap lock, OpenExisting, OpenStaging, ReplaceStore, ExchangeDirs, RenameDir, scratchdir), D9 (Import keeps metadata last), D10 (DefaultWorkers, addWorkersFlag), the claim loop and hooks of D8, and the sync steps of D11 (shared ids, emitters, deletes, RelPath sort).
+- approach: The cited names hold at head: gitExecLookPath, addColorFlag, -update-plain-goldens, sameDevice, requireInvariants, exportNormalized, indexAndExportWith, query.BuildReverseAdjacency, BuildImplementsIndex, buildContainsIndex, View.StoredEdges, hierarchy setOf, maxFlushLockRequeues = 5, internal/corpora and tools/corpora, gencorpus.ProductionFileCount.
+- approach: tasks.md leaves 1.3 and 4.4 unchecked, although fsatomic.ExchangeDirs, RenameDir and graphstore.ReplaceStore exist at head. That is outside this lens.
+- approach: The doc comment of resolveGraph in internal/indexer/resolve.go still says that Run passes it a view, but run no longer calls it. This is a stale code comment, not a design citation.
+- fit: The prompt names no path for repository library-preference rows, so only the generic rows of the rulebook apply.
+- fit: The shared helpers fit the patterns the design names: internal/flock is the only flock caller, retryLocked takes one classifier per lock, recordio is the only frame codec, forEachFile is the only semaphore and errgroup claim loop, addWorkersFlag is the only --workers registration, and DefaultWorkers is the only GOMAXPROCS default.
+- fit: Outside this change: graphstore.importRecord keys the x/ owner of every edge on its source (nodeFilePath[e.GetSource()], export.go:232), while resolve.EdgeOwnerID gives the target for a contains edge. That is a third owner-path rule beside the two in fit-2. The change moved Import onto the bounded writer but did not write this line.
+- fit: The full index and Sync each build a fresh Meta with stampCapabilities and HasCoverage (fullindex.go:551, sync.go:226, sync.go:708). The comment at sync.go:232 says each meta-write site stamps HasCoverage on purpose, and the full-index copy replaces the one in the removed writeGraph, so the count of copies does not change.
+- invariants: I1: At most W files hold working state in each step \| enforced at internal/indexer/claim.go:101 semaphore.NewWeighted, with the pass 3 release in writeUnits at fullindex.go:512 \| boundary test TestDefaultWorkersFollowsGOMAXPROCS rows -1, 0, 1 and 1<<40 over 3 files, TestForEachFileProperty W -1..64 and n 0..200
+- invariants: I2: A pass 3 send never waits once the worker holds a token \| enforced at fullindex.go:298 channel capacity min(workers, records) \| boundary test TestSinkBackpressure
+- invariants: I3: A batch exceeds the cap by at most its last record \| enforced at internal/graphstore/bounded.go:94 \| boundary test TestBatchWriterCapEdges rows cap-1, exactly the cap, cap 0, and TestBatchWriterCapProperty weighted on 0, 11, 12, 13
+- invariants: I4: No committed batch is empty \| enforced at internal/graphstore/bounded.go:94 and :135 Count checks \| boundary test TestBatchWriterCapEdges rows for no record and cap 0, TestImportEdgeStreams empty stream
+- invariants: I5: The metadata record is in the last batch, and the last commit is the only Sync one on a store with a WAL \| enforced at fullindex.go stageTail PutMeta last, export.go importWith meta held aside, bounded.go:141 \| boundary test TestBatchWriterSyncLast, TestImportCommitsInBatches
+- invariants: I6: A frame above the ceiling is refused \| enforced at internal/recordio/recordio.go:124 \| boundary test TestFrameReaderCeiling at the ceiling and at ceiling+1; TestFrameRoundTripProperty weights 0, 127, 128, 16383, 16384
+- invariants: I7: A pending scratch directory with no lock file stays until PendingMaxAge \| enforced at internal/scratchdir/scratchdir.go:139 \| boundary test TestSweep rows PendingMaxAge-1s and PendingMaxAge+1s
+- invariants: I8: OpenExisting creates nothing for a missing or empty directory \| enforced at internal/graphstore/pebble_store.go:261 \| boundary test TestOpenExistingMissingStore
+- invariants: I9: ReplaceStore exchanges whenever the live path exists, and renames otherwise \| enforced at internal/graphstore/locks.go:83 \| boundary test TestReplaceStoreExchanges rows real store, empty directory, LOCK-only directory; TestReplaceStoreRenamesFirstStore
+- invariants: I10: An unsupported exchange leaves both directories unchanged \| enforced at internal/fsatomic/dirs.go:42 \| boundary test TestExchangeDirsUnsupported rows EINVAL and ENOTSUP
+- invariants: I11: The lock retry classifies only its own lock errors \| enforced at pebble_store.go:210 retryLocked and :235 classifyFlockError \| boundary test TestLockRetryClassifies with EACCES rows and a held-once row
+- invariants: I12: A file-unit edge has the file or an empty owner path, and a route-unit edge has a route source \| enforced at internal/indexer/resolve/units.go:344 and :350 \| boundary test TestAssemblyRejectsForeignEdge; the converse of the route rule is unenforced (inv-3)
+- invariants: I13: The collapse of each unit equals one global collapse \| enforced at none (a property of the unit choice) \| boundary test TestCollapseByUnitProperty, which draws no route unit
+- invariants: I14: The merged node takes the first non-default visibility and is exported if any copy is, and merging a copy twice changes nothing \| enforced at internal/indexer/symbols/declarations.go:71 mergeCopy \| boundary test TestBuilderMergesSharedID, TestBuilderMergeProperty
+- invariants: I15: The store of a full index does not depend on W, the claim order or the batch cap \| enforced at none (follows from I3, I12 and the merge) \| boundary test TestIndexScheduleIndependence and TestClaimOrderReverse; they compare exports, which carry no x/ entries, and TestLinkUnitsMatchGolden covers x/ on fixtures
+- invariants: I16: The spill round-trips each FileResult, including the ErrInternal flag \| enforced at internal/indexer/spill/codec.go:92 and :166 \| boundary test TestSpillRoundTripProperty, TestSpillReadsLargeRecord at 64 MiB + 1
+- invariants: I17: A run removes its scratch directory on every return path, before it releases the writer lock \| enforced at fullindex.go:152 deferred scratch.Remove, registered after the writerLock defer at :126 \| boundary test TestIndexLeavesNoScratch, TestWorkerErrorStopsRun, TestExchangeFailureKeepsStore
+- invariants: I18: PendingPrefix never starts with the final prefix \| enforced at none \| boundary test none; the probe in probe-pending/main.go of the handoff directory shows that it fails for the prefixes foo and empty (inv-1)
+- invariants: Tasks 1.3 and 4.4 are unchecked in tasks.md, but their tests (TestExchangeDirs*, TestRenameDir, TestReplaceStore*, TestOpenWaitsForSwapLock) exist at head.
+- test-coverage: No uncovered or weak scenario found in the rows whose bodies were read.
+- test-coverage: Tasks 1.3, 4.4 and 8.1 to 8.4 are unchecked in tasks.md although tests for 1.3 and 4.4 exist; not a coverage finding.
+- test-honesty: Read in full: fullindex_test.go (merge, work-in-flight, batch bound, empty tree, duplicate edges), fullindex_fail_test.go (failure, kill, exchange, sweep) and fullindex_stop_test.go (backpressure, cancel, writer and worker errors). Each asserts the spec THEN with positive guards, so I report no finding for them.
+- test-honesty: internal/gencorpus/gen_test.go TestFileCountExceeds100k skips the 120k materialization under -short. It is a conditional skip behind a planned-count assertion, so I did not report it as a new disabled test.
+- approach gap: The body of resolve.Global.Assemble and the per-unit edge order of D3 (internal/indexer/resolve/units.go) are not read line by line against the order of split-indexer-layers D6.
+- approach gap: internal/recordio (D2 frame reader ceiling, exported framing) is not read.
+- invariants gap: D11 sync path: filesResolvingToChangedSets and the shared-id wave scheduling in internal/indexer/sync.go are not read line by line.
+- invariants gap: The bodies of TestSyncPartialTypeMatchesIndex, TestLinkUnitsMatchGolden and the fullindex_fail_test.go tests are not read; only their names and the scenarios in tasks.md are.
+- test-coverage gap: Test bodies not read for every row; rows other than TestSyncPartialTypeMatchesIndex, TestWorkInFlightBound, TestWriteBatchBound and the stop tests are graded from names and task text.
+- test-honesty gap: Not read: tests in internal/graphstore, flock, fsatomic, recordio, scratchdir, wtindex, spill, resolve, symbols, sync_* tests, cli tests, tools/bench runner test, golden files.
+- test-honesty gap: Taskfile.yml and ci.yml diff hunks not inspected; only a grep for continue-on-error and \|\| true, whose hits look pre-existing.
+
+## Plan review (2026-11-10)
+
+Verdict approve-with-notes at head b7cc138c98df58d9755e7a7bfa27a599687dee68.
+
+### Findings
 
 | id | lens | severity | claim | evidence | action |
 |---|---|---|---|---|---|
@@ -27,7 +196,7 @@ lenses:
 | inv-3 | invariants | should-fix | The design still requires that a failed run releases its open batch. The writer goroutine of run and importWith each defer Close. But task 5.3 deletes TestSingleWriter_CloseOnStagingError, the only test that passes a staging error mid-batch and asserts one Close and no Commit. The row of TestBatchWriterCapEdges that calls Close without Commit tests what Close does. It does not test that run or importWith calls Close after an error. So no remaining test passes the error edge. | internal/indexer/resolve_test.go:425 — "t.Errorf("closeCalls = %d, want 1 (must release the abandoned batch)", w.closeCalls)" | Keep a stub-based version of the deleted test. Give the writer-goroutine body, or importWith, a graphstore.GraphStore parameter, so that the stubStore of resolve_test.go can drive it with a stubWriter that fails on PutEdge. Assert one Close, no Commit after the failure, and that the error is returned. Or add the same assertion as an importWith row in graphstore, with a stub store whose writer fails on its second add. |
 | fit-3 | fit | note | After the change, the Sync backfill path reads the live store's Meta twice, through two open functions. needsFileIndexBackfill uses graphstore.Open, which creates a missing store, and maps ErrNotFound to a full index. Step 2 of run uses the new OpenExisting and maps ErrNotFound to generation 0. Both open the store by themselves, take a snapshot, call GetMeta, treat ErrNotFound as never indexed and close the store. They differ on purpose only in the open function and in what they derive from Meta. D6 says that only step 2 uses OpenExisting. | internal/indexer/sync.go:642 — "store, err := graphstore.Open(storeDir)" | Parameter: what the caller derives from Meta. One option is an unexported helper in package indexer that opens the store with OpenExisting and returns its Meta or ErrNotFound. needsFileIndexBackfill and step 2 of run would both call it, so a backfill check no longer creates an empty store. Otherwise, add a sentence to D6 that says why needsFileIndexBackfill keeps graphstore.Open. |
 
-## Coverage matrix
+### Coverage matrix
 
 | scenario | covered by | status | verified |
 |---|---|---|---|
@@ -75,72 +244,3 @@ lenses:
 ### Not run
 
 Plan phase: no verification runs.
-
-## Verification runs
-
-None.
-
-## Dropped
-
-None.
-
-## Lens notes
-
-- approach: Every index-build and graph-index requirement maps to a decision: the work bound (D4, D8, D10), batches (D4), import (D4, D9), the failed index (D6), the only writer (D6), scratch (D6), the first error (D7), INDX-02 claim order (D8), and the merged node with its sync scenarios (D11).
-- approach: These cited facts check out at head: writeGraph, Resolve, resolveFunc, NewWriterSized, BatchSize, DeleteGraph; the three NumCPU defaults; the --workers flags in index, init, sync and daemon; the CoverageGenerationFloor flow; the seeddir lockFile and sweep gaps; detectRoutesInFile making a parser per file; the route node id; setOf with FilePath empty; the methodOwner last-wins rule; rewireSetEdges' stored-set contains edges; buildReverseAdjacency filtering to calls; filesResolvingToChangedSets skipping FilePath-empty nodes; maxFlushLockRequeues=5 with a 2000 ms debounce; Batch.Len counting a 12-byte header; 'pebble: WAL disabled'; LockDirectory and pebble's in-process lock registry; renameat2 RENAME_EXCHANGE and RenamexNp RENAME_SWAP in x/sys v0.48.0; go 1.26; the two export frame decoder copies; the four writeGraph single-batch tests; gitExecLookPath; and -update-plain-goldens.
-- approach: Not filed: D3 says that each edge's unit follows the owner path, but a route edge's owner, the route node, has the registering file as its FilePath (routes_detect.go:167). The route unit therefore follows from the route result, not from the owner-path rule. The design stays coherent because pass 3 handles the route result as its own record.
-- fit: Every fit finding of the prior round is resolved at this head. Old fit-1: D4 now gives the memory reason against several writers. Old fit-2: D4 and task 5.3 remove DeleteGraph and rewrite the DeleteAllExcludedFiles doc. Old fit-3: task 1.1 moves the phpextract frame codec onto recordio and deletes its comment. Old fit-4: D3 names the supertype map of Hierarchy and says why its kinded table stays separate.
-- fit: For the controller, outside the fit categories. tools/bench/cpudiag/main.go:7-8 still says the worker pool defaults to runtime.NumCPU() in extract.go, pipeline.go and sync.go. D10 replaces exactly those three defaults, and no task updates that comment.
-- fit: For the controller, outside the fit categories. internal/graphstore/testdata/rapid/TestBatchSizeCoversStagedRecords/ still holds a rapid failure file, and task 4.1 deletes batchsize_test.go without removing it.
-- fit: For the controller, outside the fit categories. The only caller of indexer.resolveRefs (internal/indexer/resolve.go:41) is Resolve (resolve.go:72), which task 5.3 removes. The design does not list resolveRefs among the removals, and its doc says 'as a full index does', which the new passes make false. resolveGraph stays for Sync (sync.go:438).
-- fit: For the controller, outside the fit categories. D8 says that graphstore has no hook variables. But openLockRetrySleep (pebble_store.go:91) is one, and D6 keeps it as the seam of the retry helper. The sentence should say no new hook variables.
-- fit: For the controller, an artifact inconsistency that is still open from the prior round. Proposal Impact says that scratchdir moves out so that graphstore can use it too. D6 says that graphstore does not depend on scratchdir, and run in internal/indexer is the code that creates the store scratch directory.
-- fit: Checked and consistent. forEachFile keeps the persistent workers and atomic counter that extract.go:68-77 documents. Hooks are unexported indexer variables, in the style of gitExecLookPath. The test flag -update-link-goldens follows -update-plain-goldens (internal/cli/plain_golden_test.go:26). importWith follows extractWithFactory. addWorkersFlag follows addColorFlag (internal/cli/colorflag.go:52) and replaces the four flag lines (init.go:94, daemon.go:254, sync.go:64, index.go:170). DefaultWorkers replaces the only three NumCPU defaults (extract.go:80, pipeline.go:160, sync.go:88). recordio collects the only non-test deterministic marshal (graphstore/batch.go:35) and the uvarint frame copies (export.go, determinism_test.go, phpextract resolution_test.go).
-- fit: Checked and not filed. protodelim in google.golang.org/protobuf provides uvarint-delimited proto framing, but the export frame starts with a kind byte and the spill payload is gob, so it cannot replace recordio. golang.org/x/sync/semaphore, errgroup, goleak, rapid and go-cmp are already in go.mod. x/sys/unix provides both Renameat2 and RenamexNp.
-- fit: Checked and not filed. A third copy of the export normalization stays in phpextract indexAndExport, and D8 gives the reason. The change does not add a copy there, and the other two copies merge into exportNormalized. writeGitignoreHint (internal/cli/init.go:135) and the seed .gitignore that moves into scratchdir are two one-line writes. They predate this change, which moves one of them and adds none.
-- invariants: I1: At most W files hold a token at once in each step; W is --workers above zero, else GOMAXPROCS \| enforced at the weighted semaphore of forEachFile (task 5.1) \| boundary test the 5.8 table (-1, 0, 1, 2^40), TestForEachFileProperty (n from 0, failing bodies), TestWorkInFlightBound
-- invariants: I2: release acts once, and a failed body leaks no token \| enforced at the release guard of D8 \| boundary test TestForEachFileReleaseOnce and the failing-index draws of TestForEachFileProperty
-- invariants: I3: A send to the writer never waits once a worker holds its token \| enforced at the writer channel of size min(W, n) (D4) \| boundary test none that tells a token wait from a send wait (inv-4)
-- invariants: I4: A batch exceeds the cap by at most its last record \| enforced at the Batch.Len check before each add (task 4.1) \| boundary test TestBatchWriterCapEdges (above the cap, exactly the cap, cap plus one, cap 0) and TestBatchWriterCapProperty (caps 0, 11, 12, 13)
-- invariants: I5: No batch is empty, the last record is in the last batch, and no record means no commit \| enforced at the Count() > 0 guard at both commit sites \| boundary test the no-record row, the empty-stream row and TestEmptyTreeCommitsMetadataOnly. Probe: an empty Pebble batch has Len 12 and Count 0, and Pebble commits it with no error, so the guard is the one enforcement point, as D4 says
-- invariants: I6: Staging commits use NoSync, and the last commit on a store with the WAL on uses Sync \| enforced at the writer's commit mode \| boundary test TestOpenStaging, TestBatchWriterSyncLast and TestImportCommitsInBatches. Probe: a Sync commit on a store opened with DisableWAL returns 'pebble: WAL disabled', and a NoSync commit succeeds
-- invariants: I7: A staging store keeps its committed records after Close \| enforced at the flush in the Close of OpenStaging \| boundary test the positive assertion of TestOpenStaging. Probe: with the WAL off, a Close without a flush loses a NoSync commit (a reopen gets 'pebble: not found'), so the flush is required
-- invariants: I8: A frame longer than the ceiling is refused, and zero means no ceiling \| enforced at the recordio reader \| boundary test TestFrameReaderCeiling (1 KiB and 1 KiB plus one) and TestSpillReadsLargeRecord (64 MiB plus one)
-- invariants: I9: A frame round-trips in every length class of the uvarint prefix \| enforced at the recordio writer and reader \| boundary test TestFrameRoundTripProperty (0, 127, 128, 16383, 16384)
-- invariants: I10: Decoding an encoded spill record gives the same result, up to empty versus nil, and ErrInternal survives \| enforced at the spill codec \| boundary test TestSpillRoundTrip and TestSpillRoundTripProperty
-- invariants: I11: Concurrent spill appends get distinct offsets and contiguous records \| enforced at the spill mutex \| boundary test TestSpillConcurrentAppends, empty frame included
-- invariants: I12: Every candidate of one triple is in one unit, so a collapse per unit equals one global collapse \| enforced at EdgeOwnerID, which reads only kind, source and target (collapse.go lines 20 to 25), and at CollapseEdges, which builds each group in input order and sorts it apart from the other groups (collapse.go lines 34 to 68). So a unit's group equals the global group, unstable sort or not. The ErrInternal unit checks add to this \| boundary test TestAssemblyRejectsForeignEdge, TestCollapseByUnitProperty and TestLinkUnitsMatchGolden
-- invariants: I13: Meta.NodeCount is view nodes plus package nodes plus set nodes, with no overlap \| enforced by construction \| boundary test requireInvariants in TestMergedPartialTypeStored and overload_test.go. The sync count (sync.go lines 510 to 528) counts a shared id that r0 already stores as not added
-- invariants: I14: A merged node takes the first non-default visibility, is exported if any copy is, and takes its other fields from the first copy \| enforced at the builder merge (D11) \| boundary test TestBuilderMergesSharedID and TestBuilderMergeProperty (a copy added twice changes nothing). C# passes the default internal for every type, nested types included (csharpextract.go line 232)
-- invariants: I15: No shared id carries InterfaceMethods \| enforced by construction: goextract.go line 298 is the only writer of FileResult.InterfaceMethods, and a Go interface lives in one file \| boundary test none needed
-- invariants: I16: The stored records do not depend on W, the claim order or the batch cap \| enforced at the file-order slots, the merge and the per-unit collapse \| boundary test TestIndexScheduleIndependence and TestClaimOrderReverse
-- invariants: I17: Only one writer commits to a store at a time \| enforced at LockWriter in run and Sync \| boundary test TestLockWriterExcludesSecondWriter and TestSyncDuringFullIndexFails
-- invariants: I18: No open of this release creates the live store between the look and the exchange \| enforced at the shared swap lock that open takes before pebble.Open \| boundary test TestOpenWaitsForSwapLock
-- invariants: I19: ReplaceStore releases the swap lock and the Pebble lock on every return path \| enforced at D6 step 7 \| boundary test TestReplaceStoreReleasesLocksOnFailure and TestReplaceStoreWaitsForOpenHandle. Probe: pebble.LockDirectory creates LOCK in an empty directory, and a second lock in the same process returns 'lock held by current process'
-- invariants: I20: An exchange or a rename that returned is durable \| enforced at a fsync of 'the parent directory' \| boundary test none (inv-1). Probe: on APFS, renamex_np(RENAME_SWAP) swaps <scratch>/store with .codegraph/graph across two parents, including an empty live directory, and a missing target gives ENOENT. A directory Sync returns nil on APFS
-- invariants: I21: A run leaves no scratch directory on any return path \| enforced at the cleanup of run \| boundary test TestIndexLeavesNoScratch, the rows of TestWorkerErrorStopsRun and TestExchangeFailureKeepsStore
-- invariants: I22: The sweep never removes a held directory, never creates a lock file, and keeps a pending directory younger than PendingMaxAge \| enforced at the scratchdir sweep \| boundary test TestSweep (PendingMaxAge plus and minus one second, both with and without a temporary lock file) and TestIndexSweepsScratch
-- invariants: I23: The coverage generation is the prior generation plus one, and a missing or unreadable record gives one \| enforced at step 2 of run \| boundary test the moved subtests of task 5.5 and TestSyncDuringFullIndexFails
-- invariants: I24: The first error stops the run, and no goroutine remains \| enforced at the errgroup \| boundary test TestWriterErrorStopsRun, TestWorkerErrorStopsRun (four steps) and TestCancelStopsBlockedWorkers
-- invariants: I25: A failed run or import releases its open batch \| enforced at the deferred Close in the writer goroutine and in importWith \| boundary test none after task 5.3 deletes TestSingleWriter_CloseOnStagingError (inv-3)
-- invariants: I26: Each reader of the sync reverse adjacency keeps only its own edge kind \| enforced at the per-reader filter (D11) \| boundary test none (inv-2)
-- invariants: I27: A sync gives the same merged node and the same no-file edges as a full index \| enforced at the shared-id step, the skip in loadStoreView and the delete step \| boundary test the rows of TestSyncPartialTypeMatchesIndex and the sync property with a C# partial type
-- invariants: I28: The sync merges in the same path order as a full index \| enforced at the sort by RelPath, the same comparator as DiscoverAll (discoverexclusion.go line 282) \| boundary test the sync property
-- invariants: Property candidates: every invariant over an unbounded domain already has a rapid property in the plan (frames, spill codec, cap, collapse by unit, forEachFile, merge, conformance index, schedule independence, sync). No property-candidate finding.
-- spec-lint: Checked scenario shape: every requirement in specs/index-build/spec.md and specs/graph-index/spec.md has at least one scenario; every scenario has WHEN or GIVEN and THEN.
-- spec-lint: Checked requirement-to-task coverage for all index-build and graph-index requirements; each subject has a matching task line with two or more distinctive words.
-- spec-lint: Checked BREAKING markers: none in proposal.md or either delta spec, so no mismatch.
-- spec-lint: Checked build targets named in tasks.md: task test:golden, golden:regen, test:race, test and changie exist in Taskfile.yml.
-- spec-lint: Checked design.md: Open Questions states None, so no assumed-answer finding.
-- spec-lint: THEN and WHEN steps of the delta scenarios name observables or concrete inputs; no finding raised.
-- test-coverage: No BREAKING marker in any artifact, so no breaking-unproven finding.
-- test-coverage: Tasks name tests and say 'make sure the tests pass' but give no literal go test command; I graded a named test with a positive assertion as the verification.
-- test-coverage: Worker-count scenarios are written as CLI commands (--workers -1, 0) but task 5.8 drives Options.Workers; only 1.5 checks flag help text. No CLI-level parse test of negative values.
-- fit gap: openspec/config.yaml context holds no library-preference rows, so only the generic rows of the rulebook applied.
-- fit gap: The proposal names #269 and #274 as later work. I could not read issue #274, because this lens has no gh or Bash. I relied on the D11 text, which says the kind parameter of the widened buildReverseAdjacency serves that collapse.
-- fit gap: I read the design of symbol-and-reference-completeness. Its competing-write rule for callable bindings and its binding dependencies need run-wide state across files before Calls runs. symbols.Declarations (D1) is the natural place to extend for that. I filed nothing, because the proposal does not name that change as the next one. I did not read the design of shell-language-support in full.
-- fit gap: generated_at is the date of the run at 00:00:00Z, because this lens had no clock read.
-- invariants gap: Plan phase: no enforcement point is written yet, so no enforcement script could be run. Probes under the handoff directory (inv-probe, inv-probe-swap, inv-probe-dirsync) ran library and syscall behaviour on edge inputs instead.
-- invariants gap: Not probed: whether Pebble behaves inside a testing/synctest bubble, which TestSinkBackpressure and TestCancelStopsBlockedWorkers need. Background goroutines, global state created in a bubble, and goleak.IgnoreCurrent on the first Pebble use are all open. A probe needs a test command, and this lens may not run one. internal/graphstore/store_test.go lines 20 to 25 already avoid synctest with Pebble.
-- invariants gap: Not probed: Linux renameat2(RENAME_EXCHANGE). The host is macOS, so only renamex_np(RENAME_SWAP) was probed.
-- spec-lint gap: Repository code paths named in tasks (tools/bench/gencorpus, internal/corpora) were not checked for existence; only Taskfile targets were checked.
