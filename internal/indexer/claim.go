@@ -126,10 +126,13 @@ func forEachFile[W any](
 				var once sync.Once
 				release := func() {
 					once.Do(func() {
-						tokens.Release(1)
+						// The hook runs before the token goes back, so a
+						// test that counts the files in flight never sees
+						// the next claim before this release.
 						if onRelease != nil {
 							onRelease(loop.step, file, loop.state)
 						}
+						tokens.Release(1)
 					})
 				}
 				if onClaim != nil {
