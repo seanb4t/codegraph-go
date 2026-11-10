@@ -150,6 +150,67 @@ func TestLinkUnitsMatchGolden(t *testing.T) {
 	}
 }
 
+// TestLinkGoldensCoverEveryUnit is the positive assertion of the goldens:
+// they hold at least one edge of each kind that the units must place. A
+// golden set without one of them proves nothing about that kind.
+func TestLinkGoldensCoverEveryUnit(t *testing.T) {
+	var lines []string
+	for _, fx := range linkGoldenFixtures {
+		data, err := os.ReadFile(filepath.Join("testdata", "link", fx.name+".golden"))
+		if err != nil {
+			t.Fatalf("read the golden of %s: %v", fx.name, err)
+		}
+		lines = append(lines, strings.Split(string(data), "\n")...)
+	}
+	// indexed holds the triple of each edge that has a file-index entry.
+	indexed := make(map[string]bool)
+	for _, l := range lines {
+		if f := strings.Fields(l); len(f) == 6 && f[0] == "index" && f[2] == "edge" {
+			indexed[f[3]+" "+f[4]+" "+f[5]] = true
+		}
+	}
+	found := make(map[string]bool)
+	for _, l := range lines {
+		if f := strings.Fields(l); len(f) == 6 && f[0] == "index" && f[2] == "edge" &&
+			strings.HasPrefix(f[3], "struct:") && f[4] == "contains" && strings.HasPrefix(f[5], "overload_set:") {
+			found["a type-to-set file-index entry"] = true
+		}
+		rest, ok := strings.CutPrefix(l, "edge ")
+		if !ok {
+			continue
+		}
+		var e schema.Edge
+		if err := protojson.Unmarshal([]byte(rest), &e); err != nil {
+			t.Fatalf("unmarshal the golden line %q: %v", l, err)
+		}
+		switch {
+		case e.Kind == "implements" && e.Metadata["synthesizedBy"] == "go-structural-methodset":
+			found["a synthesized implements edge"] = true
+		case e.Kind == "overrides":
+			found["an override edge"] = true
+		case e.Metadata["synthesizedBy"] == "overload-set":
+			found["an overload set edge"] = true
+		case strings.HasPrefix(e.Source, "route:"):
+			found["a route edge"] = true
+		// The call of Check in the split-method fixture, which only the
+		// conformance retry resolves (run.go line 13).
+		case e.Kind == "calls" && e.Line == 13 && e.Col == 8 && e.Provenance == "ast" && strings.HasPrefix(e.Target, "method:"):
+			found["a retried call"] = true
+		}
+		if !indexed[e.Source+" "+e.Kind+" "+e.Target] {
+			found["a no-file edge"] = true
+		}
+	}
+	for _, want := range []string{
+		"a synthesized implements edge", "an override edge", "a retried call", "an overload set edge",
+		"a no-file edge", "a route edge", "a type-to-set file-index entry",
+	} {
+		if !found[want] {
+			t.Errorf("the link goldens hold no %s", want[strings.Index(want, " ")+1:])
+		}
+	}
+}
+
 // lineDiff lists the lines that only one of the two texts holds.
 func lineDiff(want, got string) string {
 	count := make(map[string]int)
