@@ -1,10 +1,7 @@
 package indexer
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/binary"
-	"io"
 	"runtime"
 	"testing"
 
@@ -14,67 +11,18 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
+	"github.com/seanb4t/codegraph-go/internal/recordio"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// Export frame-kind tags, mirroring graphstore/export.go's own (unexported)
-// exportKindMeta/Node/Edge/File constants — the documented wire contract is
-// [kind byte][uvarint length][protobuf bytes], kind 1=Meta 2=Node 3=Edge
-// 4=File. Duplicated here (rather than exported from graphstore) because
-// this test only needs to decode far enough to normalize one volatile
-// field and enumerate node kinds; that doesn't warrant a new cross-package
-// dependency on graphstore's internal framing constants.
-const (
-	frameKindMeta uint8 = 1
-	frameKindNode uint8 = 2
-	frameKindEdge uint8 = 3
-)
-
-// exportFrame is one decoded [kind][data] record from an Export() stream.
-type exportFrame struct {
-	kind uint8
-	data []byte
-}
-
-// decodeExportFrames parses raw Export() output into its constituent
-// frames without interpreting anything beyond the kind tag.
-func decodeExportFrames(t *testing.T, raw []byte) []exportFrame {
+// decodeExportFrames parses raw Export() output into its frames.
+func decodeExportFrames(t *testing.T, raw []byte) []recordio.Frame {
 	t.Helper()
-	var frames []exportFrame
-	br := bufio.NewReader(bytes.NewReader(raw))
-	for {
-		kind, err := br.ReadByte()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("decodeExportFrames: read kind: %v", err)
-		}
-		length, err := binary.ReadUvarint(br)
-		if err != nil {
-			t.Fatalf("decodeExportFrames: read length: %v", err)
-		}
-		data := make([]byte, length)
-		if _, err := io.ReadFull(br, data); err != nil {
-			t.Fatalf("decodeExportFrames: read data: %v", err)
-		}
-		frames = append(frames, exportFrame{kind: kind, data: data})
+	frames, err := recordio.ReadAll(bytes.NewReader(raw), 0)
+	if err != nil {
+		t.Fatalf("decodeExportFrames: %v", err)
 	}
 	return frames
-}
-
-// encodeExportFrames re-serializes frames back into the same
-// [kind][uvarint length][data] wire format Export() itself uses.
-func encodeExportFrames(frames []exportFrame) []byte {
-	var buf bytes.Buffer
-	var lenBuf [binary.MaxVarintLen64]byte
-	for _, f := range frames {
-		buf.WriteByte(f.kind)
-		n := binary.PutUvarint(lenBuf[:], uint64(len(f.data)))
-		buf.Write(lenBuf[:n])
-		buf.Write(f.data)
-	}
-	return buf.Bytes()
 }
 
 // indexAndExport runs the full from-scratch pipeline against repoRoot into
@@ -111,11 +59,11 @@ func indexAndExportWith(t *testing.T, repoRoot string, opts Options) []byte {
 
 	frames := decodeExportFrames(t, buf.Bytes())
 	for i, f := range frames {
-		if f.kind != frameKindMeta {
+		if f.Kind != graphstore.ExportKindMeta {
 			continue
 		}
 		var m schema.Meta
-		if err := proto.Unmarshal(f.data, &m); err != nil {
+		if err := proto.Unmarshal(f.Payload, &m); err != nil {
 			t.Fatalf("unmarshal meta frame: %v", err)
 		}
 		m.LastSyncUnixMs = 0
@@ -123,10 +71,10 @@ func indexAndExportWith(t *testing.T, repoRoot string, opts Options) []byte {
 		if err != nil {
 			t.Fatalf("marshal normalized meta frame: %v", err)
 		}
-		frames[i].data = normalized
+		frames[i].Payload = normalized
 	}
 
-	return encodeExportFrames(frames)
+	return recordio.AppendFrames(nil, frames)
 }
 
 // TestDeterministicRebuild proves indexing the shared multi-package
@@ -158,10 +106,10 @@ func TestRebuildIgnoresWorkerCount(t *testing.T) {
 	for name, stream := range map[string][]byte{"Workers: 1": one, "Workers: 8": eight} {
 		var nodes, edges int
 		for _, f := range decodeExportFrames(t, stream) {
-			switch f.kind {
-			case frameKindNode:
+			switch f.Kind {
+			case graphstore.ExportKindNode:
 				nodes++
-			case frameKindEdge:
+			case graphstore.ExportKindEdge:
 				edges++
 			}
 		}
@@ -186,9 +134,9 @@ func reportFirstDiff(t *testing.T, first, second []byte) {
 		t.Fatalf("determinism gate: frame count differs: first=%d second=%d", len(ff), len(sf))
 	}
 	for i := range ff {
-		if ff[i].kind != sf[i].kind || !bytes.Equal(ff[i].data, sf[i].data) {
+		if ff[i].Kind != sf[i].Kind || !bytes.Equal(ff[i].Payload, sf[i].Payload) {
 			t.Fatalf("determinism gate: frame %d differs: kind first=%d second=%d\nfirst data:  %x\nsecond data: %x",
-				i, ff[i].kind, sf[i].kind, ff[i].data, sf[i].data)
+				i, ff[i].Kind, sf[i].Kind, ff[i].Payload, sf[i].Payload)
 		}
 	}
 	t.Fatalf("determinism gate: byte streams differ but no single differing frame was found (unexpected)")
@@ -234,11 +182,11 @@ func TestRealRepoStructure(t *testing.T) {
 
 	seenKinds := make(map[string]struct{})
 	for _, f := range decodeExportFrames(t, buf.Bytes()) {
-		if f.kind != frameKindNode {
+		if f.Kind != graphstore.ExportKindNode {
 			continue
 		}
 		var n schema.Node
-		if err := proto.Unmarshal(f.data, &n); err != nil {
+		if err := proto.Unmarshal(f.Payload, &n); err != nil {
 			t.Fatalf("unmarshal node frame: %v", err)
 		}
 		seenKinds[n.Kind] = struct{}{}

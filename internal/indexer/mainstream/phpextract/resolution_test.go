@@ -7,10 +7,7 @@
 package phpextract_test
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/binary"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,6 +16,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/recordio"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -60,54 +58,6 @@ var selfConsistencyFixture = []phpFixtureFile{
 	{relPath: "src/Widget.php", src: "<?php\nnamespace App;\n\nuse App\\Contracts\\Shape;\n\nclass Widget implements Shape {\n    public function area(): float {\n        return 0.0;\n    }\n\n    public function describe(): string {\n        return helper();\n    }\n}\n\nfunction helper(): string {\n    return \"widget\";\n}\n"},
 }
 
-// exportFrame mirrors internal/indexer's own (unexported) determinism_test.go
-// decode/encode shape — duplicated here (a small, self-contained subset)
-// because this test lives in an external test package and only needs to
-// normalize one volatile Meta field before comparing two Export() streams.
-type exportFrame struct {
-	kind uint8
-	data []byte
-}
-
-const frameKindMeta uint8 = 1
-
-func decodeExportFrames(t *testing.T, raw []byte) []exportFrame {
-	t.Helper()
-	var frames []exportFrame
-	br := bufio.NewReader(bytes.NewReader(raw))
-	for {
-		kind, err := br.ReadByte()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("decodeExportFrames: read kind: %v", err)
-		}
-		length, err := binary.ReadUvarint(br)
-		if err != nil {
-			t.Fatalf("decodeExportFrames: read length: %v", err)
-		}
-		data := make([]byte, length)
-		if _, err := io.ReadFull(br, data); err != nil {
-			t.Fatalf("decodeExportFrames: read data: %v", err)
-		}
-		frames = append(frames, exportFrame{kind: kind, data: data})
-	}
-	return frames
-}
-
-func encodeExportFrames(frames []exportFrame) []byte {
-	var buf bytes.Buffer
-	var lenBuf [binary.MaxVarintLen64]byte
-	for _, f := range frames {
-		buf.WriteByte(f.kind)
-		n := binary.PutUvarint(lenBuf[:], uint64(len(f.data)))
-		buf.Write(lenBuf[:n])
-		buf.Write(f.data)
-	}
-	return buf.Bytes()
-}
-
 // indexAndExport runs the full from-scratch indexer.Run pipeline against
 // root into a fresh temp store, exports it, and returns the stream with
 // Meta.last_sync_unix_ms normalized to zero — the one genuinely volatile
@@ -132,13 +82,16 @@ func indexAndExport(t *testing.T, root string) []byte {
 		t.Fatalf("Export: %v", err)
 	}
 
-	frames := decodeExportFrames(t, buf.Bytes())
+	frames, err := recordio.ReadAll(bytes.NewReader(buf.Bytes()), 0)
+	if err != nil {
+		t.Fatalf("read export frames: %v", err)
+	}
 	for i, f := range frames {
-		if f.kind != frameKindMeta {
+		if f.Kind != graphstore.ExportKindMeta {
 			continue
 		}
 		var m schema.Meta
-		if err := proto.Unmarshal(f.data, &m); err != nil {
+		if err := proto.Unmarshal(f.Payload, &m); err != nil {
 			t.Fatalf("unmarshal meta frame: %v", err)
 		}
 		m.LastSyncUnixMs = 0
@@ -146,10 +99,10 @@ func indexAndExport(t *testing.T, root string) []byte {
 		if err != nil {
 			t.Fatalf("marshal normalized meta frame: %v", err)
 		}
-		frames[i].data = normalized
+		frames[i].Payload = normalized
 	}
 
-	return encodeExportFrames(frames)
+	return recordio.AppendFrames(nil, frames)
 }
 
 // TestSelfConsistency_DeterministicRebuild proves indexing the same PHP
@@ -195,14 +148,17 @@ func TestSelfConsistency_ExpectedStructure(t *testing.T) {
 		t.Fatalf("Export: %v", err)
 	}
 
-	const frameKindNode uint8 = 2
+	frames, err := recordio.ReadAll(bytes.NewReader(buf.Bytes()), 0)
+	if err != nil {
+		t.Fatalf("read export frames: %v", err)
+	}
 	seenKinds := make(map[string]struct{})
-	for _, f := range decodeExportFrames(t, buf.Bytes()) {
-		if f.kind != frameKindNode {
+	for _, f := range frames {
+		if f.Kind != graphstore.ExportKindNode {
 			continue
 		}
 		var n schema.Node
-		if err := proto.Unmarshal(f.data, &n); err != nil {
+		if err := proto.Unmarshal(f.Payload, &n); err != nil {
 			t.Fatalf("unmarshal node frame: %v", err)
 		}
 		seenKinds[n.Kind] = struct{}{}

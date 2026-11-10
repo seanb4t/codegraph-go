@@ -10,6 +10,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
+	"github.com/seanb4t/codegraph-go/internal/recordio"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -44,11 +45,11 @@ func exportNormalized(t *testing.T, storeDir string) []byte {
 
 	frames := decodeExportFrames(t, buf.Bytes())
 	for i, f := range frames {
-		if f.kind != frameKindMeta {
+		if f.Kind != graphstore.ExportKindMeta {
 			continue
 		}
 		var m schema.Meta
-		if err := proto.Unmarshal(f.data, &m); err != nil {
+		if err := proto.Unmarshal(f.Payload, &m); err != nil {
 			t.Fatalf("unmarshal meta frame: %v", err)
 		}
 		m.LastSyncUnixMs = 0
@@ -57,9 +58,9 @@ func exportNormalized(t *testing.T, storeDir string) []byte {
 		if err != nil {
 			t.Fatalf("marshal normalized meta frame: %v", err)
 		}
-		frames[i].data = normalized
+		frames[i].Payload = normalized
 	}
-	return encodeExportFrames(frames)
+	return recordio.AppendFrames(nil, frames)
 }
 
 // touchEveryFile appends a no-op trailing comment to every discovered .go
