@@ -114,8 +114,8 @@
 
 ## 7. Same store as before
 
-- [ ] 7.1 Add the property `TestIndexScheduleIndependence` with `rapid`. It draws a fixture tree, W from 1 to 8 and a permutation for `claimOrder`. It also draws a batch cap from 4 KiB to 1 MiB. The fixture trees include an Express file that registers `GET /x` twice. It builds a reference store with W=1, path order and the default cap. The export of each drawn run must equal the reference, byte for byte, except the last-sync time. Add `TestClaimOrderReverse` for the claim-order scenario of INDX-02: path order and reverse path order with 4 workers.
-- [ ] 7.2 Run `task test:golden` and `TestDeterministicRebuild`. If a golden file changes, make sure that each change is a merged node of design D11. Then regenerate it with `task golden:regen` and list each change in the PR body.
+- [x] 7.1 Add the property `TestIndexScheduleIndependence` with `rapid`. It draws a fixture tree, W from 1 to 8 and a permutation for `claimOrder`. It also draws a batch cap from 4 KiB to 1 MiB. The fixture trees include an Express file that registers `GET /x` twice. It builds a reference store with W=1, path order and the default cap. The export of each drawn run must equal the reference, byte for byte, except the last-sync time. Add `TestClaimOrderReverse` for the claim-order scenario of INDX-02: path order and reverse path order with 4 workers.
+- [x] 7.2 Run `task test:golden` and `TestDeterministicRebuild`. If a golden file changes, make sure that each change is a merged node of design D11. Then regenerate it with `task golden:regen` and list each change in the PR body.
 
 ## 8. Integration
 
