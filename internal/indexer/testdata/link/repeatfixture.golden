@@ -1,0 +1,85 @@
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:952222b934f171d0192f3501c3301be4","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:f300c249b20eac1f575795aedaa90238","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"variable:0d5f29a7d7a376299b5d4209c14bf478","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"variable:5d9249d233a054bd01b502a0e7dd4401","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"variable:a306f9e3fc90e924e99cd4dae7bbc5b5","kind":"contains","provenance":"ast"}
+edge {"source":"file:9e6f8d9027b897cc9b998309f3ab81f2","target":"struct:6eddee5432746528522c94fc3e0a24f6","kind":"contains","provenance":"ast"}
+edge {"source":"file:adfdf309f5a4f287d737c3c7f0a8b2af","target":"function:f6627bf2bb798297b6d96992a08bcacc","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"struct:86415a1da04b3f55a760efd02e92e947","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"struct:dacbe090c2fd69b74e1f72cc0a21316f","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:47694a720b23425a104157ed89b43e5e","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:737759251622093123171089b152a40b","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:7ca69f0217ed136deda5368788bc977d","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:8cd510e088665e2f577d6df13fdf33f0","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:aa386c81437e01089fa85408bbac171d","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:c0afe06a4ae79dab5a01d83a7fc3054b","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:c12c63f380d8862301a949d7570c967f","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:eb9d821564e399f7bef5edbb7b3319f6","kind":"contains","provenance":"ast"}
+edge {"source":"file:ddc0331cc62f85c825669bb1779cc525","target":"function:f07cd597a126dd7eb5486cdfb1e901fa","kind":"contains","provenance":"ast"}
+edge {"source":"struct:6eddee5432746528522c94fc3e0a24f6","target":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"struct:86415a1da04b3f55a760efd02e92e947","target":"method:2c682066b6fcd92fa18f4698f8df70d1","kind":"contains","provenance":"ast"}
+edge {"source":"struct:dacbe090c2fd69b74e1f72cc0a21316f","target":"method:4197302c446db45de0b4da42e346a136","kind":"contains","provenance":"ast"}
+edge {"source":"function:952222b934f171d0192f3501c3301be4","target":"variable:5d9249d233a054bd01b502a0e7dd4401","kind":"references","line":10,"col":22,"provenance":"ast"}
+edge {"source":"function:c12c63f380d8862301a949d7570c967f","target":"function:f07cd597a126dd7eb5486cdfb1e901fa","kind":"calls","line":34,"col":13,"provenance":"ast"}
+edge {"source":"function:eb9d821564e399f7bef5edbb7b3319f6","target":"function:aa386c81437e01089fa85408bbac171d","kind":"calls","line":17,"col":13,"provenance":"ast","argCount":1,"argTypes":["number"]}
+edge {"source":"function:f6627bf2bb798297b6d96992a08bcacc","target":"function:737759251622093123171089b152a40b","kind":"calls","line":4,"col":9,"provenance":"ast"}
+edge {"source":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","target":"method:0d3857c9bb91aa740b61bbc063790052","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","target":"method:40d0ae26e5d7cfac88207d66e222a44f","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+file {"path":"a.ts","contentHash":"f3f20f06b22f5146df8f1ee2abe250400716f89ee5059fd39f8790201b2ddb67","language":"typescript","nodeCount":"14","edgeCount":"15","sizeBytes":"996","unresolvedNames":[{"moduleKey":"a","name":"n"}]}
+file {"path":"b.ts","contentHash":"9ffee1deb75bbb8bb7c90327c700c764d002b64e9234d862e52ff57140258366","language":"typescript","nodeCount":"2","edgeCount":"2","sizeBytes":"67"}
+file {"path":"main.go","contentHash":"243471c41a352f4fbfb1d47becfccc103cb0d88b0f611a6fb57569fd85ef6afe","language":"go","nodeCount":"6","edgeCount":"6","sizeBytes":"117"}
+file {"path":"shape.go","contentHash":"34c4f2af0d0f842641623fdabf23699fe56c973b89b975d4ee2cda73dfac971d","language":"go","nodeCount":"4","edgeCount":"3","sizeBytes":"310"}
+index a.ts node file:ddc0331cc62f85c825669bb1779cc525
+index a.ts node method:2c682066b6fcd92fa18f4698f8df70d1
+index a.ts node method:4197302c446db45de0b4da42e346a136
+index a.ts node struct:86415a1da04b3f55a760efd02e92e947
+index a.ts node struct:dacbe090c2fd69b74e1f72cc0a21316f
+index a.ts node function:47694a720b23425a104157ed89b43e5e
+index a.ts node function:737759251622093123171089b152a40b
+index a.ts node function:7ca69f0217ed136deda5368788bc977d
+index a.ts node function:8cd510e088665e2f577d6df13fdf33f0
+index a.ts node function:aa386c81437e01089fa85408bbac171d
+index a.ts node function:c0afe06a4ae79dab5a01d83a7fc3054b
+index a.ts node function:c12c63f380d8862301a949d7570c967f
+index a.ts node function:eb9d821564e399f7bef5edbb7b3319f6
+index a.ts node function:f07cd597a126dd7eb5486cdfb1e901fa
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains struct:86415a1da04b3f55a760efd02e92e947
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains struct:dacbe090c2fd69b74e1f72cc0a21316f
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:47694a720b23425a104157ed89b43e5e
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:737759251622093123171089b152a40b
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:7ca69f0217ed136deda5368788bc977d
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:8cd510e088665e2f577d6df13fdf33f0
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:aa386c81437e01089fa85408bbac171d
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:c0afe06a4ae79dab5a01d83a7fc3054b
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:c12c63f380d8862301a949d7570c967f
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:eb9d821564e399f7bef5edbb7b3319f6
+index a.ts edge file:ddc0331cc62f85c825669bb1779cc525 contains function:f07cd597a126dd7eb5486cdfb1e901fa
+index a.ts edge struct:86415a1da04b3f55a760efd02e92e947 contains method:2c682066b6fcd92fa18f4698f8df70d1
+index a.ts edge struct:dacbe090c2fd69b74e1f72cc0a21316f contains method:4197302c446db45de0b4da42e346a136
+index a.ts edge function:c12c63f380d8862301a949d7570c967f calls function:f07cd597a126dd7eb5486cdfb1e901fa
+index a.ts edge function:eb9d821564e399f7bef5edbb7b3319f6 calls function:aa386c81437e01089fa85408bbac171d
+index b.ts node file:adfdf309f5a4f287d737c3c7f0a8b2af
+index b.ts node function:f6627bf2bb798297b6d96992a08bcacc
+index b.ts edge file:adfdf309f5a4f287d737c3c7f0a8b2af contains function:f6627bf2bb798297b6d96992a08bcacc
+index b.ts edge function:f6627bf2bb798297b6d96992a08bcacc calls function:737759251622093123171089b152a40b
+index main.go node file:4ef5c88464ea2408a807b6f557c13bb8
+index main.go node function:952222b934f171d0192f3501c3301be4
+index main.go node function:f300c249b20eac1f575795aedaa90238
+index main.go node variable:0d5f29a7d7a376299b5d4209c14bf478
+index main.go node variable:5d9249d233a054bd01b502a0e7dd4401
+index main.go node variable:a306f9e3fc90e924e99cd4dae7bbc5b5
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:952222b934f171d0192f3501c3301be4
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:f300c249b20eac1f575795aedaa90238
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains variable:0d5f29a7d7a376299b5d4209c14bf478
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains variable:5d9249d233a054bd01b502a0e7dd4401
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains variable:a306f9e3fc90e924e99cd4dae7bbc5b5
+index main.go edge function:952222b934f171d0192f3501c3301be4 references variable:5d9249d233a054bd01b502a0e7dd4401
+index shape.go node file:9e6f8d9027b897cc9b998309f3ab81f2
+index shape.go node method:0d3857c9bb91aa740b61bbc063790052
+index shape.go node method:40d0ae26e5d7cfac88207d66e222a44f
+index shape.go node struct:6eddee5432746528522c94fc3e0a24f6
+index shape.go node overload_set:c5cd404e357d8341a5bdb0e9e6edadf9
+index shape.go edge file:9e6f8d9027b897cc9b998309f3ab81f2 contains struct:6eddee5432746528522c94fc3e0a24f6
+index shape.go edge struct:6eddee5432746528522c94fc3e0a24f6 contains overload_set:c5cd404e357d8341a5bdb0e9e6edadf9
+index shape.go edge overload_set:c5cd404e357d8341a5bdb0e9e6edadf9 contains method:0d3857c9bb91aa740b61bbc063790052
+index shape.go edge overload_set:c5cd404e357d8341a5bdb0e9e6edadf9 contains method:40d0ae26e5d7cfac88207d66e222a44f

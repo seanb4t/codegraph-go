@@ -1,0 +1,68 @@
+edge {"source":"file:3a6c09fc4c6e9c7df8c3190bd48a6bd6","target":"package:d57c410888ca28e1cd1f0ccd817028f5","kind":"imports","line":4,"col":7,"provenance":"ast"}
+edge {"source":"file:3a6c09fc4c6e9c7df8c3190bd48a6bd6","target":"function:29be8ebf3ef41ff6e22cbf73b41a4891","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"package:52449ca289bccf5bbd2af2c7e1610672","kind":"imports","line":4,"col":7,"provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:fb80c63753a22c25348cc4917cb6fed8","kind":"contains","provenance":"ast"}
+edge {"source":"file:b9952bf7a8024a7ed9e456acf6fa939e","target":"struct:00114f364c25d1a8b4270b2abe5b631a","kind":"contains","provenance":"ast"}
+edge {"source":"file:b9952bf7a8024a7ed9e456acf6fa939e","target":"struct:15623085aa6f28b31411bef4e3f2a756","kind":"contains","provenance":"ast"}
+edge {"source":"file:b9952bf7a8024a7ed9e456acf6fa939e","target":"interface:350e46ecc8bc131c6e77e1f0fd54e2b0","kind":"contains","provenance":"ast"}
+edge {"source":"file:b9952bf7a8024a7ed9e456acf6fa939e","target":"interface:8a9692c92da6c6c4961a221225aef13c","kind":"contains","provenance":"ast"}
+edge {"source":"file:b9952bf7a8024a7ed9e456acf6fa939e","target":"type_alias:2ab6d1858225bf365b57588b0d63a67d","kind":"contains","provenance":"ast"}
+edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"struct:33e2a1222b69bc6ed1221d8771f09e8c","kind":"contains","provenance":"ast"}
+edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"constant:b632e4db69e1d6f210c269212fae526c","kind":"contains","provenance":"ast"}
+edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"function:1af4d8da486b9eae78633df0b727a4cb","kind":"contains","provenance":"ast"}
+edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"function:2e8a75b4179d71a8cd296c2efaf13bac","kind":"contains","provenance":"ast"}
+edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"variable:637f980d55fb71074b3d4f0444f07a86","kind":"contains","provenance":"ast"}
+edge {"source":"struct:00114f364c25d1a8b4270b2abe5b631a","target":"struct:15623085aa6f28b31411bef4e3f2a756","kind":"extends","line":10,"col":1,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-extends"}}
+edge {"source":"struct:33e2a1222b69bc6ed1221d8771f09e8c","target":"method:521f5f70dd1874c9b10b22d4cf9cc92c","kind":"contains","provenance":"ast"}
+edge {"source":"struct:33e2a1222b69bc6ed1221d8771f09e8c","target":"method:c99691e068475be5252086dca803bb92","kind":"contains","provenance":"ast"}
+edge {"source":"function:29be8ebf3ef41ff6e22cbf73b41a4891","target":"method:c99691e068475be5252086dca803bb92","kind":"calls","line":11,"col":5,"provenance":"ast","receiverType":"pkga.Widget"}
+edge {"source":"function:29be8ebf3ef41ff6e22cbf73b41a4891","target":"function:2e8a75b4179d71a8cd296c2efaf13bac","kind":"calls","line":9,"col":5,"provenance":"ast","receiverType":"pkga"}
+edge {"source":"function:29be8ebf3ef41ff6e22cbf73b41a4891","target":"struct:33e2a1222b69bc6ed1221d8771f09e8c","kind":"instantiates","line":10,"col":6,"provenance":"ast"}
+edge {"source":"function:2e8a75b4179d71a8cd296c2efaf13bac","target":"function:1af4d8da486b9eae78633df0b727a4cb","kind":"calls","line":14,"col":8,"provenance":"ast"}
+edge {"source":"function:fb80c63753a22c25348cc4917cb6fed8","target":"function:29be8ebf3ef41ff6e22cbf73b41a4891","kind":"calls","line":7,"col":1,"provenance":"ast","receiverType":"pkgb"}
+edge {"source":"interface:350e46ecc8bc131c6e77e1f0fd54e2b0","target":"interface:8a9692c92da6c6c4961a221225aef13c","kind":"embeds","line":21,"col":1,"provenance":"ast"}
+file {"path":"main.go","contentHash":"06ce91393b8889225547d10cb1cc41657b7324090bf6ccdab8f35713c3c0c940","language":"go","nodeCount":"2","edgeCount":"3","sizeBytes":"150"}
+file {"path":"pkga/pkga.go","contentHash":"c3718e8e3ed8ef1b8f3f15c2c1818006de775cd9fef544fbf3649a60d2bae815","language":"go","nodeCount":"8","edgeCount":"8","sizeBytes":"901","unresolvedNames":[{"moduleKey":"example.com/gofixture/pkga","name":"n"}]}
+file {"path":"pkgb/pkgb.go","contentHash":"e6fa0a21885fa6e75d9d4ea40ac5ca4a83224bdbc8742f3570957c5770098c73","language":"go","nodeCount":"2","edgeCount":"5","sizeBytes":"327"}
+file {"path":"pkga/embed.go","contentHash":"fffc62a2a58d5c7bb74eeeddca5be020b78debec52cab645b0788897c075982d","language":"go","nodeCount":"6","edgeCount":"7","sizeBytes":"587"}
+index main.go node file:4ef5c88464ea2408a807b6f557c13bb8
+index main.go node function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 imports package:52449ca289bccf5bbd2af2c7e1610672
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge function:fb80c63753a22c25348cc4917cb6fed8 calls function:29be8ebf3ef41ff6e22cbf73b41a4891
+index pkga/embed.go node file:b9952bf7a8024a7ed9e456acf6fa939e
+index pkga/embed.go node struct:00114f364c25d1a8b4270b2abe5b631a
+index pkga/embed.go node struct:15623085aa6f28b31411bef4e3f2a756
+index pkga/embed.go node interface:350e46ecc8bc131c6e77e1f0fd54e2b0
+index pkga/embed.go node interface:8a9692c92da6c6c4961a221225aef13c
+index pkga/embed.go node type_alias:2ab6d1858225bf365b57588b0d63a67d
+index pkga/embed.go edge file:b9952bf7a8024a7ed9e456acf6fa939e contains struct:00114f364c25d1a8b4270b2abe5b631a
+index pkga/embed.go edge file:b9952bf7a8024a7ed9e456acf6fa939e contains struct:15623085aa6f28b31411bef4e3f2a756
+index pkga/embed.go edge file:b9952bf7a8024a7ed9e456acf6fa939e contains interface:350e46ecc8bc131c6e77e1f0fd54e2b0
+index pkga/embed.go edge file:b9952bf7a8024a7ed9e456acf6fa939e contains interface:8a9692c92da6c6c4961a221225aef13c
+index pkga/embed.go edge file:b9952bf7a8024a7ed9e456acf6fa939e contains type_alias:2ab6d1858225bf365b57588b0d63a67d
+index pkga/embed.go edge struct:00114f364c25d1a8b4270b2abe5b631a extends struct:15623085aa6f28b31411bef4e3f2a756
+index pkga/embed.go edge interface:350e46ecc8bc131c6e77e1f0fd54e2b0 embeds interface:8a9692c92da6c6c4961a221225aef13c
+index pkga/pkga.go node file:d0e5a2f297f37bb5e906990645e01c3c
+index pkga/pkga.go node method:521f5f70dd1874c9b10b22d4cf9cc92c
+index pkga/pkga.go node method:c99691e068475be5252086dca803bb92
+index pkga/pkga.go node struct:33e2a1222b69bc6ed1221d8771f09e8c
+index pkga/pkga.go node constant:b632e4db69e1d6f210c269212fae526c
+index pkga/pkga.go node function:1af4d8da486b9eae78633df0b727a4cb
+index pkga/pkga.go node function:2e8a75b4179d71a8cd296c2efaf13bac
+index pkga/pkga.go node variable:637f980d55fb71074b3d4f0444f07a86
+index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains struct:33e2a1222b69bc6ed1221d8771f09e8c
+index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains constant:b632e4db69e1d6f210c269212fae526c
+index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains function:1af4d8da486b9eae78633df0b727a4cb
+index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains function:2e8a75b4179d71a8cd296c2efaf13bac
+index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains variable:637f980d55fb71074b3d4f0444f07a86
+index pkga/pkga.go edge struct:33e2a1222b69bc6ed1221d8771f09e8c contains method:521f5f70dd1874c9b10b22d4cf9cc92c
+index pkga/pkga.go edge struct:33e2a1222b69bc6ed1221d8771f09e8c contains method:c99691e068475be5252086dca803bb92
+index pkga/pkga.go edge function:2e8a75b4179d71a8cd296c2efaf13bac calls function:1af4d8da486b9eae78633df0b727a4cb
+index pkgb/pkgb.go node file:3a6c09fc4c6e9c7df8c3190bd48a6bd6
+index pkgb/pkgb.go node function:29be8ebf3ef41ff6e22cbf73b41a4891
+index pkgb/pkgb.go edge file:3a6c09fc4c6e9c7df8c3190bd48a6bd6 imports package:d57c410888ca28e1cd1f0ccd817028f5
+index pkgb/pkgb.go edge file:3a6c09fc4c6e9c7df8c3190bd48a6bd6 contains function:29be8ebf3ef41ff6e22cbf73b41a4891
+index pkgb/pkgb.go edge function:29be8ebf3ef41ff6e22cbf73b41a4891 calls method:c99691e068475be5252086dca803bb92
+index pkgb/pkgb.go edge function:29be8ebf3ef41ff6e22cbf73b41a4891 calls function:2e8a75b4179d71a8cd296c2efaf13bac
+index pkgb/pkgb.go edge function:29be8ebf3ef41ff6e22cbf73b41a4891 instantiates struct:33e2a1222b69bc6ed1221d8771f09e8c

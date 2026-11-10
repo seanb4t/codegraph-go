@@ -1,0 +1,25 @@
+edge {"source":"file:5826aa4b170586035716a249e8efd9e2","target":"struct:157ef89967e98129b26482fb982214b6","kind":"contains","provenance":"ast"}
+edge {"source":"file:5a49da1aaecff4e59f4b3bbcfdedf6ee","target":"struct:58327db789bf8bb28d42663b366374bc","kind":"contains","provenance":"ast"}
+edge {"source":"file:f36ea871037ea6e1616b8cff7d6714dd","target":"struct:58327db789bf8bb28d42663b366374bc","kind":"contains","provenance":"ast"}
+edge {"source":"method:704bc5f1d939d26bcb4cb630238b7e11","target":"method:e6eb28f7551e5b711819f07a589505f3","kind":"calls","line":7,"col":15,"provenance":"ast"}
+edge {"source":"method:e6eb28f7551e5b711819f07a589505f3","target":"method:ae1dc850498b758600a52c3d770733dd","kind":"calls","line":7,"col":15,"provenance":"ast"}
+edge {"source":"struct:157ef89967e98129b26482fb982214b6","target":"method:ae1dc850498b758600a52c3d770733dd","kind":"contains","provenance":"ast"}
+edge {"source":"struct:58327db789bf8bb28d42663b366374bc","target":"struct:157ef89967e98129b26482fb982214b6","kind":"extends","line":3,"col":29,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-extends"}}
+edge {"source":"struct:58327db789bf8bb28d42663b366374bc","target":"method:704bc5f1d939d26bcb4cb630238b7e11","kind":"contains","provenance":"ast"}
+edge {"source":"struct:58327db789bf8bb28d42663b366374bc","target":"method:e6eb28f7551e5b711819f07a589505f3","kind":"contains","provenance":"ast"}
+file {"path":"Entity.cs","contentHash":"7fcd371b6f105090ec740e95b11877e1ed0602ba24a43ea0ca6e40a53022d09f","language":"csharp","nodeCount":"3","edgeCount":"2","sizeBytes":"91","declaredModuleKey":"Shop"}
+file {"path":"OrderA.cs","contentHash":"542b1efd296581351b1819ed5d617d98074b9eff6f96cefbd66f092caf86fd66","language":"csharp","nodeCount":"3","edgeCount":"4","sizeBytes":"113","declaredModuleKey":"Shop"}
+file {"path":"OrderB.cs","contentHash":"f02782de10333fdcdc036de080250bcb7542470af76e83205f15627d2d6e5c2b","language":"csharp","nodeCount":"3","edgeCount":"4","sizeBytes":"116","declaredModuleKey":"Shop"}
+index Entity.cs node file:5826aa4b170586035716a249e8efd9e2
+index Entity.cs node method:ae1dc850498b758600a52c3d770733dd
+index Entity.cs node struct:157ef89967e98129b26482fb982214b6
+index Entity.cs edge file:5826aa4b170586035716a249e8efd9e2 contains struct:157ef89967e98129b26482fb982214b6
+index Entity.cs edge struct:157ef89967e98129b26482fb982214b6 contains method:ae1dc850498b758600a52c3d770733dd
+index OrderA.cs node file:f36ea871037ea6e1616b8cff7d6714dd
+index OrderA.cs node method:e6eb28f7551e5b711819f07a589505f3
+index OrderA.cs edge method:e6eb28f7551e5b711819f07a589505f3 calls method:ae1dc850498b758600a52c3d770733dd
+index OrderA.cs edge struct:58327db789bf8bb28d42663b366374bc contains method:e6eb28f7551e5b711819f07a589505f3
+index OrderB.cs node file:5a49da1aaecff4e59f4b3bbcfdedf6ee
+index OrderB.cs node method:704bc5f1d939d26bcb4cb630238b7e11
+index OrderB.cs edge method:704bc5f1d939d26bcb4cb630238b7e11 calls method:e6eb28f7551e5b711819f07a589505f3
+index OrderB.cs edge struct:58327db789bf8bb28d42663b366374bc contains method:704bc5f1d939d26bcb4cb630238b7e11

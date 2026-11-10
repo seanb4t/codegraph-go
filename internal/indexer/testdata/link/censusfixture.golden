@@ -1,0 +1,160 @@
+edge {"source":"file:2e73f82b2c9d308bd4f382c85899bd62","target":"struct:37020abeb7964cc92d9223ebe7a5d235","kind":"contains","provenance":"ast"}
+edge {"source":"file:2e73f82b2c9d308bd4f382c85899bd62","target":"struct:4ee076af36b30ff2e82e75c5e120b00c","kind":"contains","provenance":"ast"}
+edge {"source":"file:2e73f82b2c9d308bd4f382c85899bd62","target":"function:571026caea3915678cdf83c45bd33297","kind":"contains","provenance":"ast"}
+edge {"source":"file:2e73f82b2c9d308bd4f382c85899bd62","target":"interface:79cfacb8bda03ed20b62a1bda737db39","kind":"contains","provenance":"ast"}
+edge {"source":"file:4b17a774441e50c779311dfd28d7e845","target":"struct:091dd33d2735895b48e87897ae8fe440","kind":"contains","provenance":"ast"}
+edge {"source":"file:4b17a774441e50c779311dfd28d7e845","target":"function:6c5d0c550110c118963a2db9b3d89010","kind":"contains","provenance":"ast"}
+edge {"source":"file:4b17a774441e50c779311dfd28d7e845","target":"interface:6ab7fc6533414a426929b2f23832a7d5","kind":"contains","provenance":"ast"}
+edge {"source":"file:a24192d37cc9e64c1013bbc9265fef35","target":"struct:e7d88d75d39aab7a2af6cf7cefa8b0f2","kind":"contains","provenance":"ast"}
+edge {"source":"file:a24192d37cc9e64c1013bbc9265fef35","target":"function:6bdaf8e73ec6a1aaacaad31764c29bb7","kind":"contains","provenance":"ast"}
+edge {"source":"file:a24192d37cc9e64c1013bbc9265fef35","target":"function:e26a2943062eaa4b56684d501143e699","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"struct:bc99c6d6631c9da323f311ed7c859804","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"function:5ae5b3e78c6def87a5a67b52cf82ee02","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"function:abfc249deb433c65f1276078ada93a23","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"function:e3a16174ea1383051fa897464bb9b529","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"type_alias:424819e80015f67a407642b3453a1a00","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"overload_set:bae3c6143d0a33d4480482db20185353","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"file:cbd1ae58946f21cadcb08b040f25fd79","target":"struct:3c6faa30cdcc0b6c6bf8dcf8bf66a0f2","kind":"contains","provenance":"ast"}
+edge {"source":"file:cbd1ae58946f21cadcb08b040f25fd79","target":"struct:f8be2c65759b97978385848ff19f6ec5","kind":"contains","provenance":"ast"}
+edge {"source":"file:cbd1ae58946f21cadcb08b040f25fd79","target":"function:ba6e49a7deb60ab5b60a5d6cd8a394ef","kind":"contains","provenance":"ast"}
+edge {"source":"file:cbd1ae58946f21cadcb08b040f25fd79","target":"function:d0908ffcec092d5dae05accea6739193","kind":"contains","provenance":"ast"}
+edge {"source":"file:cbd1ae58946f21cadcb08b040f25fd79","target":"interface:98c4db7eb78266c0aa14d19d2b8cfdd8","kind":"contains","provenance":"ast"}
+edge {"source":"file:f04766a2dfa8aa3e427d452cb3bd87b0","target":"struct:1f5dbd5b45f3ba6a9b60823e2cc55fd8","kind":"contains","provenance":"ast"}
+edge {"source":"file:f04766a2dfa8aa3e427d452cb3bd87b0","target":"struct:6351e4cec6c70c566f7d131d95526872","kind":"contains","provenance":"ast"}
+edge {"source":"file:f04766a2dfa8aa3e427d452cb3bd87b0","target":"function:930102bb448d91bd0857eec4a137138f","kind":"contains","provenance":"ast"}
+edge {"source":"file:f04766a2dfa8aa3e427d452cb3bd87b0","target":"interface:c642387f1dd60c1d0f56581aa142bd1e","kind":"contains","provenance":"ast"}
+edge {"source":"file:f5d192343a1afc8eec7b6a2f6f053e9c","target":"struct:40a26d7c1e8d98e606253efad71c208e","kind":"contains","provenance":"ast"}
+edge {"source":"file:f5d192343a1afc8eec7b6a2f6f053e9c","target":"struct:e86622acfe791ebb0414412c6f591e4b","kind":"contains","provenance":"ast"}
+edge {"source":"file:f5d192343a1afc8eec7b6a2f6f053e9c","target":"function:70367b7546ff9f0c1d1cd63155fda396","kind":"contains","provenance":"ast"}
+edge {"source":"method:1211abd741d08b9845511be472bed757","target":"method:1829003d984a3d66312f188415ad2464","kind":"overrides","line":8,"provenance":"heuristic","metadata":{"synthesizedBy":"structural-override"}}
+edge {"source":"method:72e8e6bf6a3fed638be14db1162faeb0","target":"method:6bad32492ad5415a8c7e96263b5e6022","kind":"overrides","line":9,"provenance":"heuristic","metadata":{"synthesizedBy":"structural-override"}}
+edge {"source":"struct:091dd33d2735895b48e87897ae8fe440","target":"method:4440fb0bf50b2ec8c1aee65e4f3927b6","kind":"contains","provenance":"ast"}
+edge {"source":"struct:091dd33d2735895b48e87897ae8fe440","target":"interface:6ab7fc6533414a426929b2f23832a7d5","kind":"implements","line":5,"col":15,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-implements"}}
+edge {"source":"struct:37020abeb7964cc92d9223ebe7a5d235","target":"method:1211abd741d08b9845511be472bed757","kind":"contains","provenance":"ast"}
+edge {"source":"struct:37020abeb7964cc92d9223ebe7a5d235","target":"interface:79cfacb8bda03ed20b62a1bda737db39","kind":"implements","line":7,"col":27,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-implements"}}
+edge {"source":"struct:3c6faa30cdcc0b6c6bf8dcf8bf66a0f2","target":"method:d5131b1faa0fc0b77e72eb9b3532fb51","kind":"contains","provenance":"ast"}
+edge {"source":"struct:40a26d7c1e8d98e606253efad71c208e","target":"method:3106bbddece467ec8249079501de71e6","kind":"contains","provenance":"ast"}
+edge {"source":"struct:6351e4cec6c70c566f7d131d95526872","target":"method:4c9bdda9c8f577cb8ed1863642bba41f","kind":"contains","provenance":"ast"}
+edge {"source":"struct:6351e4cec6c70c566f7d131d95526872","target":"method:e0d4e377fceaf681c7e6403bce027498","kind":"contains","provenance":"ast"}
+edge {"source":"struct:6351e4cec6c70c566f7d131d95526872","target":"interface:c642387f1dd60c1d0f56581aa142bd1e","kind":"implements","line":16,"col":5,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-implements"}}
+edge {"source":"struct:e86622acfe791ebb0414412c6f591e4b","target":"method:485e95b0fa0904c537d05daafdb58065","kind":"contains","provenance":"ast"}
+edge {"source":"struct:e86622acfe791ebb0414412c6f591e4b","target":"method:99c5ba4f0ac22435cc3ceb5d41ef3f0b","kind":"contains","provenance":"ast"}
+edge {"source":"struct:e86622acfe791ebb0414412c6f591e4b","target":"method:c10d8db6168843b329709b3e877c89b0","kind":"contains","provenance":"ast"}
+edge {"source":"struct:f8be2c65759b97978385848ff19f6ec5","target":"method:72e8e6bf6a3fed638be14db1162faeb0","kind":"contains","provenance":"ast"}
+edge {"source":"struct:f8be2c65759b97978385848ff19f6ec5","target":"interface:98c4db7eb78266c0aa14d19d2b8cfdd8","kind":"implements","line":8,"col":24,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-implements"}}
+edge {"source":"function:5ae5b3e78c6def87a5a67b52cf82ee02","target":"function:abfc249deb433c65f1276078ada93a23","kind":"calls","line":15,"col":36,"provenance":"ast","argCount":1,"argTypes":[""]}
+edge {"source":"function:70367b7546ff9f0c1d1cd63155fda396","target":"method:99c5ba4f0ac22435cc3ceb5d41ef3f0b","kind":"calls","line":24,"col":2,"provenance":"ast","receiverType":"Circle"}
+edge {"source":"function:e3a16174ea1383051fa897464bb9b529","target":"function:5ae5b3e78c6def87a5a67b52cf82ee02","kind":"calls","line":23,"col":43,"provenance":"ast","argCount":1,"argTypes":["const point_t"]}
+edge {"source":"function:e3a16174ea1383051fa897464bb9b529","target":"overload_set:bae3c6143d0a33d4480482db20185353","kind":"calls","line":23,"col":37,"provenance":"ast","metadata":{"ambiguous":"true"},"argCount":1,"argTypes":["@call 23:50"]}
+edge {"source":"interface:79cfacb8bda03ed20b62a1bda737db39","target":"method:1829003d984a3d66312f188415ad2464","kind":"contains","provenance":"ast"}
+edge {"source":"interface:98c4db7eb78266c0aa14d19d2b8cfdd8","target":"method:6bad32492ad5415a8c7e96263b5e6022","kind":"contains","provenance":"ast"}
+edge {"source":"overload_set:bae3c6143d0a33d4480482db20185353","target":"function:568c8e4c7e3e3ed6a7b174380224b6a7","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:bae3c6143d0a33d4480482db20185353","target":"function:ebf877f25b8de95408b5bae5794cc15e","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+file {"path":"kt/shapes.kt","contentHash":"03f43c8b03c5af603a3829d29c00a3e9f69dea788e192dbfaefb984ec517e5d8","language":"kotlin","nodeCount":"7","edgeCount":"7","sizeBytes":"438","unresolvedNames":[{"moduleKey":"shapes","name":"local"}],"declaredModuleKey":"shapes"}
+file {"path":"src/shapes.c","contentHash":"e3abdbb9500a09bb7524f16a8ba5c66f456e506665abb76e695d5d53b389e5da","language":"c","nodeCount":"8","edgeCount":"11","sizeBytes":"444","unresolvedNames":[{"moduleKey":"src/shapes.c","name":"unused_decl"}]}
+file {"path":"src/shapes.h","contentHash":"d7a199c3dae4fba9e5b89df2631eb015beae80504e55109ab4adca15349f74e7","language":"c","nodeCount":"4","edgeCount":"3","sizeBytes":"115"}
+file {"path":"lib/shapes.rb","contentHash":"4cbd84faa0a8ee2713a5731be999c9e06eec00c93e21917c5ec9c5f677116d62","language":"ruby","nodeCount":"8","edgeCount":"8","sizeBytes":"285"}
+file {"path":"php/shapes.php","contentHash":"46d52a1077444a708dbc79ca399370e1f1188b2efc7616fe0946332b5f7fd718","language":"php","nodeCount":"9","edgeCount":"9","sizeBytes":"561","unresolvedNames":[{"moduleKey":"Shapes","name":"nested"}],"declaredModuleKey":"Shapes"}
+file {"path":"rust/src/shapes.rs","contentHash":"7bfa5184761dd0b3b0415778ce1b2906069a276fc429df463e4ff6a0903ab14d","language":"rust","nodeCount":"7","edgeCount":"7","sizeBytes":"493","unresolvedNames":[{"moduleKey":"rust/src/shapes.rs","name":"local"}]}
+file {"path":"swift/Shapes.swift","contentHash":"a2fc2459044643af6c87763594eb9c9e35c0f949a44a1a54c40b84e37422431e","language":"swift","nodeCount":"5","edgeCount":"5","sizeBytes":"418","unresolvedNames":[{"moduleKey":"swift/Shapes.swift","name":"local"}]}
+index kt/shapes.kt node file:2e73f82b2c9d308bd4f382c85899bd62
+index kt/shapes.kt node method:1211abd741d08b9845511be472bed757
+index kt/shapes.kt node method:1829003d984a3d66312f188415ad2464
+index kt/shapes.kt node struct:37020abeb7964cc92d9223ebe7a5d235
+index kt/shapes.kt node struct:4ee076af36b30ff2e82e75c5e120b00c
+index kt/shapes.kt node function:571026caea3915678cdf83c45bd33297
+index kt/shapes.kt node interface:79cfacb8bda03ed20b62a1bda737db39
+index kt/shapes.kt edge file:2e73f82b2c9d308bd4f382c85899bd62 contains struct:37020abeb7964cc92d9223ebe7a5d235
+index kt/shapes.kt edge file:2e73f82b2c9d308bd4f382c85899bd62 contains struct:4ee076af36b30ff2e82e75c5e120b00c
+index kt/shapes.kt edge file:2e73f82b2c9d308bd4f382c85899bd62 contains function:571026caea3915678cdf83c45bd33297
+index kt/shapes.kt edge file:2e73f82b2c9d308bd4f382c85899bd62 contains interface:79cfacb8bda03ed20b62a1bda737db39
+index kt/shapes.kt edge method:1211abd741d08b9845511be472bed757 overrides method:1829003d984a3d66312f188415ad2464
+index kt/shapes.kt edge struct:37020abeb7964cc92d9223ebe7a5d235 contains method:1211abd741d08b9845511be472bed757
+index kt/shapes.kt edge struct:37020abeb7964cc92d9223ebe7a5d235 implements interface:79cfacb8bda03ed20b62a1bda737db39
+index kt/shapes.kt edge interface:79cfacb8bda03ed20b62a1bda737db39 contains method:1829003d984a3d66312f188415ad2464
+index lib/shapes.rb node file:f5d192343a1afc8eec7b6a2f6f053e9c
+index lib/shapes.rb node method:3106bbddece467ec8249079501de71e6
+index lib/shapes.rb node method:485e95b0fa0904c537d05daafdb58065
+index lib/shapes.rb node method:99c5ba4f0ac22435cc3ceb5d41ef3f0b
+index lib/shapes.rb node method:c10d8db6168843b329709b3e877c89b0
+index lib/shapes.rb node struct:40a26d7c1e8d98e606253efad71c208e
+index lib/shapes.rb node struct:e86622acfe791ebb0414412c6f591e4b
+index lib/shapes.rb node function:70367b7546ff9f0c1d1cd63155fda396
+index lib/shapes.rb edge file:f5d192343a1afc8eec7b6a2f6f053e9c contains struct:40a26d7c1e8d98e606253efad71c208e
+index lib/shapes.rb edge file:f5d192343a1afc8eec7b6a2f6f053e9c contains struct:e86622acfe791ebb0414412c6f591e4b
+index lib/shapes.rb edge file:f5d192343a1afc8eec7b6a2f6f053e9c contains function:70367b7546ff9f0c1d1cd63155fda396
+index lib/shapes.rb edge struct:40a26d7c1e8d98e606253efad71c208e contains method:3106bbddece467ec8249079501de71e6
+index lib/shapes.rb edge struct:e86622acfe791ebb0414412c6f591e4b contains method:485e95b0fa0904c537d05daafdb58065
+index lib/shapes.rb edge struct:e86622acfe791ebb0414412c6f591e4b contains method:99c5ba4f0ac22435cc3ceb5d41ef3f0b
+index lib/shapes.rb edge struct:e86622acfe791ebb0414412c6f591e4b contains method:c10d8db6168843b329709b3e877c89b0
+index lib/shapes.rb edge function:70367b7546ff9f0c1d1cd63155fda396 calls method:99c5ba4f0ac22435cc3ceb5d41ef3f0b
+index php/shapes.php node file:cbd1ae58946f21cadcb08b040f25fd79
+index php/shapes.php node method:6bad32492ad5415a8c7e96263b5e6022
+index php/shapes.php node method:72e8e6bf6a3fed638be14db1162faeb0
+index php/shapes.php node method:d5131b1faa0fc0b77e72eb9b3532fb51
+index php/shapes.php node struct:3c6faa30cdcc0b6c6bf8dcf8bf66a0f2
+index php/shapes.php node struct:f8be2c65759b97978385848ff19f6ec5
+index php/shapes.php node function:ba6e49a7deb60ab5b60a5d6cd8a394ef
+index php/shapes.php node function:d0908ffcec092d5dae05accea6739193
+index php/shapes.php node interface:98c4db7eb78266c0aa14d19d2b8cfdd8
+index php/shapes.php edge file:cbd1ae58946f21cadcb08b040f25fd79 contains struct:3c6faa30cdcc0b6c6bf8dcf8bf66a0f2
+index php/shapes.php edge file:cbd1ae58946f21cadcb08b040f25fd79 contains struct:f8be2c65759b97978385848ff19f6ec5
+index php/shapes.php edge file:cbd1ae58946f21cadcb08b040f25fd79 contains function:ba6e49a7deb60ab5b60a5d6cd8a394ef
+index php/shapes.php edge file:cbd1ae58946f21cadcb08b040f25fd79 contains function:d0908ffcec092d5dae05accea6739193
+index php/shapes.php edge file:cbd1ae58946f21cadcb08b040f25fd79 contains interface:98c4db7eb78266c0aa14d19d2b8cfdd8
+index php/shapes.php edge method:72e8e6bf6a3fed638be14db1162faeb0 overrides method:6bad32492ad5415a8c7e96263b5e6022
+index php/shapes.php edge struct:3c6faa30cdcc0b6c6bf8dcf8bf66a0f2 contains method:d5131b1faa0fc0b77e72eb9b3532fb51
+index php/shapes.php edge struct:f8be2c65759b97978385848ff19f6ec5 contains method:72e8e6bf6a3fed638be14db1162faeb0
+index php/shapes.php edge struct:f8be2c65759b97978385848ff19f6ec5 implements interface:98c4db7eb78266c0aa14d19d2b8cfdd8
+index php/shapes.php edge interface:98c4db7eb78266c0aa14d19d2b8cfdd8 contains method:6bad32492ad5415a8c7e96263b5e6022
+index rust/src/shapes.rs node file:f04766a2dfa8aa3e427d452cb3bd87b0
+index rust/src/shapes.rs node method:4c9bdda9c8f577cb8ed1863642bba41f
+index rust/src/shapes.rs node method:e0d4e377fceaf681c7e6403bce027498
+index rust/src/shapes.rs node struct:1f5dbd5b45f3ba6a9b60823e2cc55fd8
+index rust/src/shapes.rs node struct:6351e4cec6c70c566f7d131d95526872
+index rust/src/shapes.rs node function:930102bb448d91bd0857eec4a137138f
+index rust/src/shapes.rs node interface:c642387f1dd60c1d0f56581aa142bd1e
+index rust/src/shapes.rs edge file:f04766a2dfa8aa3e427d452cb3bd87b0 contains struct:1f5dbd5b45f3ba6a9b60823e2cc55fd8
+index rust/src/shapes.rs edge file:f04766a2dfa8aa3e427d452cb3bd87b0 contains struct:6351e4cec6c70c566f7d131d95526872
+index rust/src/shapes.rs edge file:f04766a2dfa8aa3e427d452cb3bd87b0 contains function:930102bb448d91bd0857eec4a137138f
+index rust/src/shapes.rs edge file:f04766a2dfa8aa3e427d452cb3bd87b0 contains interface:c642387f1dd60c1d0f56581aa142bd1e
+index rust/src/shapes.rs edge struct:6351e4cec6c70c566f7d131d95526872 contains method:4c9bdda9c8f577cb8ed1863642bba41f
+index rust/src/shapes.rs edge struct:6351e4cec6c70c566f7d131d95526872 contains method:e0d4e377fceaf681c7e6403bce027498
+index rust/src/shapes.rs edge struct:6351e4cec6c70c566f7d131d95526872 implements interface:c642387f1dd60c1d0f56581aa142bd1e
+index src/shapes.c node file:b4b77abd4ea010299beed6983ccf6937
+index src/shapes.c node struct:bc99c6d6631c9da323f311ed7c859804
+index src/shapes.c node function:568c8e4c7e3e3ed6a7b174380224b6a7
+index src/shapes.c node function:5ae5b3e78c6def87a5a67b52cf82ee02
+index src/shapes.c node function:abfc249deb433c65f1276078ada93a23
+index src/shapes.c node function:e3a16174ea1383051fa897464bb9b529
+index src/shapes.c node function:ebf877f25b8de95408b5bae5794cc15e
+index src/shapes.c node type_alias:424819e80015f67a407642b3453a1a00
+index src/shapes.c node overload_set:bae3c6143d0a33d4480482db20185353
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains struct:bc99c6d6631c9da323f311ed7c859804
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains function:5ae5b3e78c6def87a5a67b52cf82ee02
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains function:abfc249deb433c65f1276078ada93a23
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains function:e3a16174ea1383051fa897464bb9b529
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains type_alias:424819e80015f67a407642b3453a1a00
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains overload_set:bae3c6143d0a33d4480482db20185353
+index src/shapes.c edge function:5ae5b3e78c6def87a5a67b52cf82ee02 calls function:abfc249deb433c65f1276078ada93a23
+index src/shapes.c edge function:e3a16174ea1383051fa897464bb9b529 calls function:5ae5b3e78c6def87a5a67b52cf82ee02
+index src/shapes.c edge function:e3a16174ea1383051fa897464bb9b529 calls overload_set:bae3c6143d0a33d4480482db20185353
+index src/shapes.c edge overload_set:bae3c6143d0a33d4480482db20185353 contains function:568c8e4c7e3e3ed6a7b174380224b6a7
+index src/shapes.c edge overload_set:bae3c6143d0a33d4480482db20185353 contains function:ebf877f25b8de95408b5bae5794cc15e
+index src/shapes.h node file:a24192d37cc9e64c1013bbc9265fef35
+index src/shapes.h node struct:e7d88d75d39aab7a2af6cf7cefa8b0f2
+index src/shapes.h node function:6bdaf8e73ec6a1aaacaad31764c29bb7
+index src/shapes.h node function:e26a2943062eaa4b56684d501143e699
+index src/shapes.h edge file:a24192d37cc9e64c1013bbc9265fef35 contains struct:e7d88d75d39aab7a2af6cf7cefa8b0f2
+index src/shapes.h edge file:a24192d37cc9e64c1013bbc9265fef35 contains function:6bdaf8e73ec6a1aaacaad31764c29bb7
+index src/shapes.h edge file:a24192d37cc9e64c1013bbc9265fef35 contains function:e26a2943062eaa4b56684d501143e699
+index swift/Shapes.swift node file:4b17a774441e50c779311dfd28d7e845
+index swift/Shapes.swift node method:4440fb0bf50b2ec8c1aee65e4f3927b6
+index swift/Shapes.swift node struct:091dd33d2735895b48e87897ae8fe440
+index swift/Shapes.swift node function:6c5d0c550110c118963a2db9b3d89010
+index swift/Shapes.swift node interface:6ab7fc6533414a426929b2f23832a7d5
+index swift/Shapes.swift edge file:4b17a774441e50c779311dfd28d7e845 contains struct:091dd33d2735895b48e87897ae8fe440
+index swift/Shapes.swift edge file:4b17a774441e50c779311dfd28d7e845 contains function:6c5d0c550110c118963a2db9b3d89010
+index swift/Shapes.swift edge file:4b17a774441e50c779311dfd28d7e845 contains interface:6ab7fc6533414a426929b2f23832a7d5
+index swift/Shapes.swift edge struct:091dd33d2735895b48e87897ae8fe440 contains method:4440fb0bf50b2ec8c1aee65e4f3927b6
+index swift/Shapes.swift edge struct:091dd33d2735895b48e87897ae8fe440 implements interface:6ab7fc6533414a426929b2f23832a7d5

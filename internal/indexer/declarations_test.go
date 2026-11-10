@@ -529,8 +529,10 @@ func fixtureTrees(t *testing.T) []fixtureTree {
 	}
 	var trees []fixtureTree
 	for _, e := range entries {
-		// testdata/rapid holds the failure files of rapid, not a fixture.
-		if e.IsDir() && e.Name() != "rapid" {
+		// testdata/rapid holds the failure files of rapid, and
+		// testdata/link the golden files of TestLinkUnitsMatchGolden.
+		// Neither is a fixture.
+		if e.IsDir() && e.Name() != "rapid" && e.Name() != "link" {
 			trees = append(trees, fixtureTree{e.Name(), filepath.Join("testdata", e.Name())})
 		}
 	}
