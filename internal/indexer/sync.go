@@ -48,7 +48,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	if backfill {
 		// D-02b: a pre-Phase-4 graph (or a brand-new store) has no x/
 		// index yet. Delegate to the exact from-scratch code path Run
-		// uses — writeGraph unconditionally stamps Meta.HasFileIndex=true
+		// uses — a full index always stamps Meta.HasFileIndex=true
 		// (every PutNode/PutEdge it stages already populates the x/
 		// namespace, 04-01) — so every subsequent Sync is incremental.
 		stats, err := run(context.Background(), repoRoot, storeDir, opts)

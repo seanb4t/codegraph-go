@@ -19,9 +19,9 @@ import (
 // Put* method its failOn field names.
 var errStubWrite = errors.New("stub write error")
 
-// stubWriter is an in-memory graphstore.Writer stand-in so writeGraph's
-// single-writer/batched-commit contract can be tested without a real
-// Pebble-backed store. failOn, when non-empty, names the Put* method that
+// stubWriter is an in-memory graphstore.Writer stand-in, so the writer
+// goroutine of a full index can be tested without a real Pebble-backed
+// store. failOn, when non-empty, names the Put* method that
 // should fail (simulating a mid-write staging error).
 type stubWriter struct {
 	nodes    []*schema.Node
@@ -119,10 +119,9 @@ func (w *stubWriter) Close() error {
 
 // stubStore is a graphstore.GraphStore stand-in whose NewWriter always
 // returns the same injected stubWriter, so a test can inspect it after
-// writeGraph returns.
+// the code under test returns.
 //
-// snapshotMeta/snapshotErr configure what Snapshot().GetMeta() reports to
-// writeGraph's WR-01 (iteration 2) read-modify-write of CoverageGeneration.
+// snapshotMeta/snapshotErr configure what Snapshot().GetMeta() reports.
 // The zero value (both nil) mimics a genuinely fresh store — GetMeta
 // returns graphstore.ErrNotFound, exactly as pebbleReader.GetMeta does for
 // a store with no Meta record yet — so every pre-existing test in this
@@ -151,10 +150,9 @@ func (s *stubStore) NewBoundedWriter(int, func(graphstore.Commit) error) (graphs
 func (s *stubStore) Export(w io.Writer) error { return nil }
 func (s *stubStore) Close() error             { return nil }
 
-// stubReader is a graphstore.Reader stand-in used ONLY for writeGraph's
-// prior-Meta read (Snapshot().GetMeta()). Every other method panics if
-// called — writeGraph never calls them, and a future caller that starts
-// doing so should fail loudly rather than silently return a zero value.
+// stubReader is a graphstore.Reader stand-in that serves only GetMeta.
+// Every other method panics if called: a caller that starts to use one
+// should fail loudly rather than silently get a zero value.
 type stubReader struct {
 	meta *schema.Meta
 	err  error

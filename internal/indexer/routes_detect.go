@@ -89,12 +89,11 @@ func detectRoutesInFile(p parser.Parser, f discover.DiscoveredFile, src []byte, 
 }
 
 // routeResultFrom wraps detectRoutes' plain node/edge slices into a
-// single synthetic goextract.FileResult with RelPath left empty —
-// resolveRefsWithIndex (resolve.go) special-cases RelPath=="" to skip
-// minting a schema.File record for it while still folding its
-// Nodes/IntraEdges into the SAME nodes/edges accumulation (and therefore
-// the same collapseEdges/writeGraph commit) every other result flows
-// through.
+// single synthetic goextract.FileResult with RelPath left empty.
+// resolve.Types makes no schema.File record for a result without a path,
+// and resolve.Global.Assemble treats its edges as the route unit. Its
+// nodes and edges go through the same passes, the same collapse and the
+// same writer as those of every other result.
 func routeResultFrom(nodes []*schema.Node, edges []*schema.Edge) goextract.FileResult {
 	extractedNodes := make([]goextract.ExtractedNode, len(nodes))
 	for i, n := range nodes {

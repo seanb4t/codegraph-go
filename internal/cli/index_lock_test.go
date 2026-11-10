@@ -235,3 +235,42 @@ func TestIndexForceWarnsAndRebuildsOnUnreadableStore(t *testing.T) {
 		t.Fatalf("coverage generation after rebuild = %d; want > 0", gen)
 	}
 }
+
+// TestIndexReportsHeldWriterLock checks that `codegraph index` refuses
+// while another writer holds the writer lock of the store, with the text
+// that names the two remedies. The run of the indexer takes that lock
+// itself, so the command has no lock check of its own.
+func TestIndexReportsHeldWriterLock(t *testing.T) {
+	dir := copyFixture(t)
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	storeDir := filepath.Join(dir, codegraphDirName, storeDirName)
+	nodesBefore, edgesBefore := readGraphCounts(t, filepath.Join(dir, codegraphDirName))
+
+	lock, err := graphstore.LockWriter(storeDir)
+	if err != nil {
+		t.Fatalf("LockWriter: %v", err)
+	}
+	_, _, err = execCmd("index", "--force", dir)
+	if closeErr := lock.Close(); closeErr != nil {
+		t.Fatalf("release the writer lock: %v", closeErr)
+	}
+
+	if !errors.Is(err, graphstore.ErrStoreLocked) {
+		t.Fatalf("index --force under a held writer lock: %v; want errors.Is(err, graphstore.ErrStoreLocked)", err)
+	}
+	for _, remedy := range []string{"codegraph daemon stop", "codegraph daemon unlock"} {
+		if !strings.Contains(err.Error(), remedy) {
+			t.Errorf("index --force error = %q; want it to name `%s`", err.Error(), remedy)
+		}
+	}
+	if nodes, edges := readGraphCounts(t, filepath.Join(dir, codegraphDirName)); nodes != nodesBefore || edges != edgesBefore {
+		t.Errorf("the store changed in an index that could not take the writer lock: %d nodes and %d edges, before %d and %d", nodes, edges, nodesBefore, edgesBefore)
+	}
+
+	// Positive assertion: the same command works once the lock is free.
+	if _, _, err := execCmd("index", "--force", dir); err != nil {
+		t.Fatalf("index --force after the writer lock is free: %v", err)
+	}
+}
