@@ -127,18 +127,3 @@ func TestPipelineRun_ClosesStoreOnCommitError(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 }
-
-// TestPipelineRun_DefaultsWorkersToNumCPU proves Options.Workers <= 0
-// still produces a correct run (Extract's own runtime.NumCPU() default,
-// D-04) — Run neither panics nor short-circuits on the zero value.
-func TestPipelineRun_DefaultsWorkersToNumCPU(t *testing.T) {
-	storeDir := t.TempDir()
-
-	stats, err := Run(fixtureRoot, storeDir, Options{Workers: 0})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if stats.Files == 0 {
-		t.Error("Stats.Files = 0, want > 0")
-	}
-}

@@ -36,10 +36,10 @@ type Dir struct {
 	lock *os.File
 }
 
-// pendingPrefix is the prefix of a directory that New did not finish yet.
-// It never has prefix itself as a prefix, so a pending directory does not
-// look like a finished one.
-func pendingPrefix(prefix string) string {
+// PendingPrefix is the prefix of a directory of prefix that New did not
+// finish yet. It never has prefix itself as a prefix, so a pending
+// directory does not look like a finished one.
+func PendingPrefix(prefix string) string {
 	return strings.TrimSuffix(prefix, "-") + ".pending-"
 }
 
@@ -53,7 +53,7 @@ func pendingPrefix(prefix string) string {
 // the lock of a directory that New still builds. The directory gets its
 // final name last.
 func New(parent, prefix string, gitignore bool) (*Dir, error) {
-	pending, err := os.MkdirTemp(parent, pendingPrefix(prefix)+"*")
+	pending, err := os.MkdirTemp(parent, PendingPrefix(prefix)+"*")
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func New(parent, prefix string, gitignore bool) (*Dir, error) {
 		lock.Close()
 		return fail(err)
 	}
-	suffix := strings.TrimPrefix(filepath.Base(pending), pendingPrefix(prefix))
+	suffix := strings.TrimPrefix(filepath.Base(pending), PendingPrefix(prefix))
 	path := filepath.Join(parent, prefix+suffix)
 	if err := fsatomic.RenameDir(pending, path); err != nil {
 		lock.Close()
@@ -120,7 +120,7 @@ func Sweep(parent, prefix string) {
 	if err != nil {
 		return
 	}
-	pendingPfx := pendingPrefix(prefix)
+	pendingPfx := PendingPrefix(prefix)
 	for _, e := range entries {
 		pending := strings.HasPrefix(e.Name(), pendingPfx)
 		if !e.IsDir() || (!pending && !strings.HasPrefix(e.Name(), prefix)) {

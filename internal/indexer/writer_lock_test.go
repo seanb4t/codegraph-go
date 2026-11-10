@@ -19,7 +19,7 @@ func TestSyncNeedsWriterLock(t *testing.T) {
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	before := exportNormalized(t, storeDir)
+	before := exportNormalized(t, storeDir, true)
 
 	lock, err := graphstore.LockWriter(storeDir)
 	if err != nil {
@@ -30,7 +30,7 @@ func TestSyncNeedsWriterLock(t *testing.T) {
 		lock.Close()
 		t.Fatalf("Sync under a held writer lock: %v, want ErrStoreLocked", err)
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir), before) {
+	if !bytes.Equal(exportNormalized(t, storeDir, true), before) {
 		t.Errorf("the store changed in a Sync that could not take the writer lock")
 	}
 

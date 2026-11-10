@@ -68,7 +68,7 @@ func TestSweep(t *testing.T) {
 			parent := t.TempDir()
 			name := testPrefix + "x"
 			if tc.pending {
-				name = pendingPrefix(testPrefix) + "x"
+				name = PendingPrefix(testPrefix) + "x"
 			}
 			dir := filepath.Join(parent, name)
 			other := filepath.Join(parent, "store.scratchy")

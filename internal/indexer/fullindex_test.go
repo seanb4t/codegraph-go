@@ -402,7 +402,7 @@ func TestDuplicateEdgesCollapse(t *testing.T) {
 		if calls != 1 {
 			t.Fatalf("the store holds %d calls edges from caller to target, want the one collapsed edge", calls)
 		}
-		return exportNormalized(t, storeDir)
+		return exportNormalized(t, storeDir, true)
 	}
 	if first, second := export(), export(); string(first) != string(second) {
 		t.Errorf("two fresh indexes of one tree store different records")

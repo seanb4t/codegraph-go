@@ -369,7 +369,9 @@ tasks:
 
   test:race:
     desc: >-
-      internal/cli, internal/mcp and internal/watch under the race detector.
+      internal/cli, internal/mcp and internal/watch under the race detector,
+      with the packages of the full-index pipeline: internal/indexer,
+      internal/indexer/spill, internal/graphstore and internal/scratchdir.
       The packages run in parallel, and the test cache skips an unchanged
       package. internal/daemon runs alone in test:race:daemon.
     cmds:
@@ -381,10 +383,14 @@ tasks:
       # test (TestSessionLineSurvivesConcurrentAndRepeatedInitialize) fails
       # deterministically without -race; this entry is the fallback net for
       # the races it cannot model.
+      #
+      # The four pipeline packages: a full index runs W workers and one
+      # writer over shared run state, a spill file with concurrent appends,
+      # and store and scratch locks that several handles take.
       - |
         set -euo pipefail
         {{.GOTESTSUM_LIB}}
-        run_gotestsum race -race ./internal/watch/... ./internal/cli/... ./internal/mcp/...
+        run_gotestsum race -race ./internal/watch/... ./internal/cli/... ./internal/mcp/... ./internal/indexer ./internal/indexer/spill ./internal/graphstore ./internal/scratchdir
 
   test:race:daemon:
     desc: >-

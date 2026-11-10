@@ -489,7 +489,7 @@ func requireSyncEqualsRun(t *testing.T, repoRoot, storeDir string) string {
 	if _, err := Run(repoRoot, freshDir, Options{}); err != nil {
 		t.Fatalf("Run (fresh): %v", err)
 	}
-	synced, fresh := exportNormalized(t, storeDir), exportNormalized(t, freshDir)
+	synced, fresh := exportNormalized(t, storeDir, true), exportNormalized(t, freshDir, true)
 	if !bytes.Equal(synced, fresh) {
 		reportFirstDiff(t, synced, fresh)
 	}
