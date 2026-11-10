@@ -147,10 +147,16 @@ func writeExportRecord(w io.Writer, kind uint8, msg proto.Message) error {
 }
 
 // Import reconstructs a graph exported by Export into dst — typically a
-// fresh, empty GraphStore. It applies every record through dst's batched
-// Writer and commits once, so the whole import is atomic (D-04). This is
-// the counterpart the ARCH-01 round-trip test drives: Export followed by
-// Import into a fresh store must reproduce an identical graph.
+// fresh, empty GraphStore. Export followed by Import into a fresh store
+// reproduces an identical graph (ARCH-01).
+//
+// Import writes through a bounded Writer with DefaultBatchCap, so it
+// commits in batches and no batch holds the whole graph. The store is not
+// complete until Import returns nil: a reader of dst before that sees a
+// part of the graph. An export holds its Meta frame first, and Import
+// keeps that frame aside and writes it as the last record. So the
+// metadata is in the last batch, which is the one durable commit, and a
+// store without metadata is one that Import did not finish.
 //
 // nodeFilePath tracks each imported node's id -> FilePath as node records
 // stream past, so a later edge record can supply PutEdge's ownerPath
@@ -159,12 +165,21 @@ func writeExportRecord(w io.Writer, kind uint8, msg proto.Message) error {
 // every edge's source node has already been seen by the time the edge
 // arrives.
 func Import(dst GraphStore, r io.Reader) error {
-	w, err := dst.NewWriter()
+	return importWith(dst, r, DefaultBatchCap, nil)
+}
+
+// importWith is Import with the batch cap and the commit callback of the
+// bounded Writer as parameters, so a test can pass a low cap and watch the
+// commits.
+func importWith(dst GraphStore, r io.Reader, cap int, onCommit func(Commit) error) error {
+	w, err := dst.NewBoundedWriter(cap, onCommit)
 	if err != nil {
 		return err
 	}
+	defer w.Close()
 
 	nodeFilePath := make(map[string]string)
+	var meta []byte
 	fr := recordio.NewReader(r, maxImportRecordBytes)
 	for {
 		kind, data, err := fr.Next()
@@ -174,12 +189,19 @@ func Import(dst GraphStore, r io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("import: %w", err)
 		}
-
+		if kind == ExportKindMeta {
+			meta = data
+			continue
+		}
 		if err := importRecord(w, kind, data, nodeFilePath); err != nil {
 			return err
 		}
 	}
-
+	if meta != nil {
+		if err := importRecord(w, ExportKindMeta, meta, nodeFilePath); err != nil {
+			return err
+		}
+	}
 	return w.Commit()
 }
 

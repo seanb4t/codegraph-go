@@ -66,6 +66,10 @@ type pebbleStore struct {
 	db     *pebble.DB
 	mu     sync.RWMutex
 	closed atomic.Bool
+
+	// staging marks a store from OpenStaging: it has no write-ahead log,
+	// so its commits never sync, and Close flushes its memtables.
+	staging bool
 }
 
 // openLockRetryAttempts / openLockRetryBackoff bound Open's retry loop on a
@@ -147,21 +151,37 @@ func classifyOpenError(err error) error {
 // the final attempt surfaces wrapped in ErrStoreLocked (errors.Is-able) —
 // classification happens in retryLocked, on the error of pebble.Open.
 func Open(dir string) (GraphStore, error) {
-	s, err := open(dir)
+	s, err := open(dir, false)
 	if err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func open(dir string) (*pebbleStore, error) {
+// OpenStaging opens (creating if necessary) a store that a full index
+// builds and then places with ReplaceStore. It opens with the write-ahead
+// log off: a crash discards a staging store anyway, so the log buys
+// nothing and costs a second write of every record. The Close of a staging
+// store flushes its memtables first, because without the log the
+// unflushed data is otherwise lost.
+func OpenStaging(dir string) (GraphStore, error) {
+	s, err := open(dir, true)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// open is the one place that calls pebble.Open. staging opens with the
+// write-ahead log off (OpenStaging).
+func open(dir string, staging bool) (*pebbleStore, error) {
 	db, err := retryLocked(func() (*pebble.DB, error) {
-		return pebble.Open(dir, &pebble.Options{Logger: quietLogger{}})
+		return pebble.Open(dir, &pebble.Options{Logger: quietLogger{}, DisableWAL: staging})
 	}, classifyOpenError)
 	if err != nil {
 		return nil, err
 	}
-	return &pebbleStore{db: db}, nil
+	return &pebbleStore{db: db, staging: staging}, nil
 }
 
 // retryLocked calls attempt until it succeeds, on the bounded backoff of
@@ -237,7 +257,7 @@ func openExisting(dir string) (*pebbleStore, error) {
 	}) {
 		return nil, ErrNotFound
 	}
-	return open(dir)
+	return open(dir, false)
 }
 
 // Checkpoint copies the store at srcDir into destDir, using hard links
@@ -249,7 +269,7 @@ func Checkpoint(srcDir, destDir string) (err error) {
 	if _, err := os.Stat(srcDir); err != nil {
 		return err
 	}
-	src, err := open(srcDir)
+	src, err := open(srcDir, false)
 	if err != nil {
 		return err
 	}
@@ -283,17 +303,6 @@ func (s *pebbleStore) NewWriter() (Writer, error) {
 	return &pebbleWriter{batch: s.db.NewBatch()}, nil
 }
 
-// NewWriterSized returns a Writer like NewWriter whose batch reserves
-// sizeHint bytes.
-func (s *pebbleStore) NewWriterSized(sizeHint int) (Writer, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.closed.Load() {
-		return nil, ErrClosed
-	}
-	return &pebbleWriter{batch: s.db.NewBatchWithSize(sizeHint)}, nil
-}
-
 // Close releases the underlying Pebble handle. Safe to call more than
 // once: the first call marks the store closed (so subsequent
 // Snapshot/NewWriter/Export calls observe ErrClosed) and delegates to
@@ -306,6 +315,11 @@ func (s *pebbleStore) Close() error {
 	defer s.mu.Unlock()
 	if s.closed.Swap(true) {
 		return nil
+	}
+	if s.staging {
+		if err := s.db.Flush(); err != nil {
+			return errors.Join(err, s.db.Close())
+		}
 	}
 	return s.db.Close()
 }

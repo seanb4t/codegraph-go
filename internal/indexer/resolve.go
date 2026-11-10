@@ -159,23 +159,7 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		priorGeneration = priorMeta.GetCoverageGeneration()
 	}
 
-	var size graphstore.BatchSize
-	for _, n := range nodes {
-		size.Node(n)
-	}
-	for _, n := range packageNodes {
-		size.Node(n)
-	}
-	for _, f := range files {
-		size.File(f)
-	}
-	for _, e := range collapsedEdges {
-		size.Edge(e, nodeFilePath[resolve.EdgeOwnerID(e)])
-	}
-	for _, x := range excluded {
-		size.ExcludedFile(x)
-	}
-	w, err := store.NewWriterSized(size.Bytes())
+	w, err := store.NewWriter()
 	if err != nil {
 		return err
 	}
