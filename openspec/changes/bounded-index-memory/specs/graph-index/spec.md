@@ -51,9 +51,18 @@ Two or more files can emit a node with one id, for example the parts of a C# par
 - **WHEN** `A.cs` declares `public partial class Order`, the tree is indexed, `B.cs` is added with `partial class Order` and no modifier, and `codegraph sync` runs
 - **THEN** the store holds the same records as `codegraph index --force` over the changed tree, and the `Order` node has visibility `public`
 
+#### Scenario: A sync after one part leaves the type
+- **WHEN** `A.cs` declares `partial class Order : IA` and `B.cs` declares `public partial class Order : IB`, the tree is indexed, `B.cs` changes its declaration to `public class Invoice : IB`, and `codegraph sync` runs
+- **THEN** the store holds the same records as `codegraph index --force` over the changed tree
+- **AND** the `Order` node has visibility `internal`, and no edge from `Order` to `IB` remains
+
 #### Scenario: A sync deletes the only part
 - **WHEN** `A.cs` declares `partial class Order : IA` as the only part, the tree is indexed, `A.cs` is deleted, and `codegraph sync` runs
 - **THEN** the store holds the same records as `codegraph index --force` over the changed tree, and no `Order` node and no edge from `Order` remains
+
+#### Scenario: A sync deletes the only part of a type that another file names
+- **WHEN** `A.cs` declares `partial class Order` as the only part, `C.cs` declares `class Sub : Order`, the tree is indexed, `A.cs` is deleted, and `codegraph sync` runs
+- **THEN** the store holds the same records as `codegraph index --force` over the changed tree, and no edge from `Sub` to `Order` remains
 
 #### Scenario: A sync after one part is deleted
 - **WHEN** `A.cs` declares `partial class Order : IA` and `B.cs` declares `partial class Order : IB`, the tree is indexed, `B.cs` is deleted, and `codegraph sync` runs

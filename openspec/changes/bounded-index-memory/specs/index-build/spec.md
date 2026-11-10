@@ -67,12 +67,20 @@ A full index SHALL write the graph in batches under a fixed cap. Before it adds 
 A full index SHALL build the new store apart from the live store and SHALL replace the live store in one atomic step. A run that fails, is cancelled or stops halfway SHALL leave the previous store readable, with the same records it held before the run.
 
 #### Scenario: A commit error halfway through
-- **WHEN** a full index runs over an indexed tree, and the third batch commit of the run returns an error
+- **WHEN** a full index of an indexed tree of 500 Go source files runs with a batch cap of 64 KiB
+- **AND** its third batch commit returns an error
 - **THEN** the run returns that error
 - **AND** the store holds the same records as before the run, its metadata record included
 
+#### Scenario: The exchange cannot take the live store
+- **WHEN** a full index of an indexed tree runs
+- **AND** another handle holds the store open from the start of the resolve pass until the run returns
+- **THEN** the run returns the store-locked error
+- **AND** the store holds the same records as before the run, and the `.codegraph` directory holds no scratch directory of that run
+
 #### Scenario: The process is killed before the exchange
-- **WHEN** the process of a full index gets `SIGKILL` after its second batch commit
+- **WHEN** a full index of an indexed tree of 500 Go source files runs with a batch cap of 64 KiB
+- **AND** its process gets `SIGKILL` after its second batch commit
 - **THEN** the next command that opens the store reads the records that the store held before the run
 
 #### Scenario: The process is killed after the exchange
@@ -80,7 +88,8 @@ A full index SHALL build the new store apart from the live store and SHALL repla
 - **THEN** the next command that opens the store reads the new graph
 
 #### Scenario: A first index fails
-- **WHEN** a full index runs over a tree that has a `.codegraph` directory and no indexed graph, and the third batch commit returns an error
+- **WHEN** a tree of 500 Go source files has a `.codegraph` directory and no indexed graph
+- **AND** a full index of that tree runs with a batch cap of 64 KiB, and its third batch commit returns an error
 - **THEN** the run returns that error, and the store holds no node, edge, file record or metadata record
 
 #### Scenario: A reader opens the store during a first index
@@ -107,7 +116,8 @@ While a full index runs, no other writer SHALL commit to its store. A sync that 
 After a full index ends, with success or with an error, no scratch directory or spill file of that run SHALL remain. A run creates its scratch directory under a pending name, and renames it after it holds the lock of that directory. The next full index SHALL remove the scratch directories that a killed run left. A full index SHALL NOT remove a scratch directory whose lock another process holds.
 
 #### Scenario: After a commit error
-- **WHEN** the third batch commit of a full index returns an error
+- **WHEN** a full index of a tree of 500 Go source files runs with a batch cap of 64 KiB
+- **AND** its third batch commit returns an error
 - **THEN** the `.codegraph` directory holds no scratch directory of that run
 
 #### Scenario: After a success
@@ -115,7 +125,8 @@ After a full index ends, with success or with an error, no scratch directory or 
 - **THEN** the `.codegraph` directory holds no scratch directory, and the store directory holds no spill file
 
 #### Scenario: After a killed run
-- **WHEN** a full index got `SIGKILL` after its second batch commit, and the next full index runs to its end
+- **WHEN** a full index of a tree of 500 Go source files runs with a batch cap of 64 KiB
+- **AND** its process gets `SIGKILL` after its second batch commit, and the next full index runs to its end
 - **THEN** the scratch directory of the killed run does not exist, and the store holds the records of a fresh index
 
 #### Scenario: A run killed while it created its scratch directory
@@ -130,9 +141,16 @@ After a full index ends, with success or with an error, no scratch directory or 
 When any worker or the writer of a full index fails, the run SHALL stop every pass and SHALL return that first error. After the run returns, no goroutine of the run SHALL remain.
 
 #### Scenario: A writer error
-- **WHEN** the second batch commit of a full index returns an error while workers still resolve files
+- **WHEN** a full index of a tree of 500 Go source files runs with a batch cap of 64 KiB
+- **AND** its second batch commit returns an error while workers still resolve files
 - **THEN** the run returns that commit error
 - **AND** after it returns, no goroutine of the run remains
+
+#### Scenario: A worker error
+- **WHEN** a full index runs, and one worker returns an internal error for one file
+- **AND** the step of that worker is the extract pass, route detection, the structure pass or the resolve pass
+- **THEN** the run returns that error
+- **AND** after it returns, no goroutine of the run remains, and the `.codegraph` directory holds no scratch directory of that run
 
 #### Scenario: A cancel while workers wait
 - **WHEN** the writer stops reading, every worker waits for a token, and the context of the run is cancelled
