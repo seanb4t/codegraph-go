@@ -54,6 +54,18 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		return stats, err
 	}
 
+	// A sync is a writer of the store, so it holds the writer lock from
+	// here to its end. A full index holds the same lock for its whole
+	// run, so a sync during a full index returns ErrStoreLocked, which
+	// the callers of Sync already handle. The lock comes after the
+	// backfill check, because the backfill is a full index and takes the
+	// lock itself.
+	writerLock, err := graphstore.LockWriter(storeDir)
+	if err != nil {
+		return Stats{}, err
+	}
+	defer writerLock.Close()
+
 	// ENG-04/D-05: resolve HEAD exactly once for this Sync invocation,
 	// before either of the two write sites below construct Meta. HEAD can
 	// move mid-run (a rebase, a checkout, a concurrent commit), and this

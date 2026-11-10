@@ -70,6 +70,10 @@ type pebbleStore struct {
 	// staging marks a store from OpenStaging: it has no write-ahead log,
 	// so its commits never sync, and Close flushes its memtables.
 	staging bool
+
+	// swap is the shared swap lock of the store, held for the life of the
+	// handle (locks.go).
+	swap *os.File
 }
 
 // openLockRetryAttempts / openLockRetryBackoff bound Open's retry loop on a
@@ -174,14 +178,24 @@ func OpenStaging(dir string) (GraphStore, error) {
 
 // open is the one place that calls pebble.Open. staging opens with the
 // write-ahead log off (OpenStaging).
+//
+// open takes the shared swap lock first, before pebble.Open and before it
+// creates any directory: ReplaceStore looks for the store under the
+// exclusive swap lock, and that look is only right if no open can create
+// the store meanwhile. The handle holds the lock until Close.
 func open(dir string, staging bool) (*pebbleStore, error) {
+	swap, err := lockBeside(dir, swapLockSuffix, flock.Shared)
+	if err != nil {
+		return nil, err
+	}
 	db, err := retryLocked(func() (*pebble.DB, error) {
 		return pebble.Open(dir, &pebble.Options{Logger: quietLogger{}, DisableWAL: staging})
 	}, classifyOpenError)
 	if err != nil {
+		swap.Close()
 		return nil, err
 	}
-	return &pebbleStore{db: db, staging: staging}, nil
+	return &pebbleStore{db: db, staging: staging, swap: swap}, nil
 }
 
 // retryLocked calls attempt until it succeeds, on the bounded backoff of
@@ -260,6 +274,10 @@ func openExisting(dir string) (*pebbleStore, error) {
 	return open(dir, false)
 }
 
+// checkpointHook, if not nil, runs while Checkpoint has its source open. A
+// test sets it to hold that handle open.
+var checkpointHook func()
+
 // Checkpoint copies the store at srcDir into destDir, using hard links
 // where the filesystem allows. destDir must not exist. The source is opened
 // with Open, so a source that another process holds fails with
@@ -274,6 +292,9 @@ func Checkpoint(srcDir, destDir string) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, src.Close()) }()
+	if checkpointHook != nil {
+		checkpointHook()
+	}
 	return src.db.Checkpoint(destDir)
 }
 
@@ -316,12 +337,11 @@ func (s *pebbleStore) Close() error {
 	if s.closed.Swap(true) {
 		return nil
 	}
+	var flushErr error
 	if s.staging {
-		if err := s.db.Flush(); err != nil {
-			return errors.Join(err, s.db.Close())
-		}
+		flushErr = s.db.Flush()
 	}
-	return s.db.Close()
+	return errors.Join(flushErr, s.db.Close(), s.swap.Close())
 }
 
 // getter is satisfied by both *pebble.DB and *pebble.Snapshot; it is the
