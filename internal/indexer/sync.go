@@ -17,6 +17,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -308,15 +309,38 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		changedSet[p] = struct{}{}
 	}
 
+	// The reverse adjacency of the stored graph is one scan of every
+	// edge, so the sync builds it once, at the first of the moments that
+	// need it: the dependents of a pruned node, here, or the files that
+	// emit a shared node, below. A sync with neither builds none. It
+	// holds the calls edges and the contains edges, and each reader keeps
+	// to its own kind.
+	var revCache map[string][]*schema.Edge
+	reverse := func() (map[string][]*schema.Edge, error) {
+		if revCache == nil {
+			rev, err := buildReverseAdjacency(r0, goextract.RefKindCalls, goextract.RefKindContains)
+			if err != nil {
+				return nil, err
+			}
+			revCache = rev
+		}
+		return revCache, nil
+	}
+
 	dependentPaths := make(map[string]struct{})
 	if len(goneIDs) > 0 {
-		rev, err := buildReverseAdjacency(r0)
+		rev, err := reverse()
 		if err != nil {
 			w.Close()
 			return Stats{}, err
 		}
 		for id := range goneIDs {
 			for _, edge := range rev[id] {
+				// Only a caller depends on a pruned node. A contains edge
+				// into a pruned method adds no dependent.
+				if edge.Kind != goextract.RefKindCalls {
+					continue
+				}
 				srcNode, err := r0.GetNode(edge.Source)
 				if err != nil {
 					if err == graphstore.ErrNotFound {
@@ -381,6 +405,51 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		return Stats{}, err
 	}
 
+	// A node id that several files emit, such as a C# partial type, is a
+	// shared id: its node has no file. The sync merges the copies of a
+	// shared id as a full index does, so it must reparse every file that
+	// emits one that it touches (design D11). The shared ids of the cycle
+	// come from the results of the reparse, and from the store for a part
+	// that left its type or was deleted.
+	prunedParts := make([]string, 0, len(prunePaths))
+	prunedParts = append(prunedParts, prunePaths...)
+	shared, err := sharedIDsOfCycle(r0, results, prunedParts)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	// emitters returns the files that emit a shared id of the cycle and
+	// are not in the reparse yet.
+	inBatch := make(map[string]bool, len(batchFiles))
+	for _, f := range batchFiles {
+		inBatch[f.RelPath] = true
+	}
+	emittersOf := make(map[string][]string)
+	emitters := func() ([]string, error) {
+		if len(shared) == 0 {
+			return nil, nil
+		}
+		rev, err := reverse()
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, id := range sortedBoolKeys(shared) {
+			paths, err := sharedIDEmitters(r0, rev, id)
+			if err != nil {
+				return nil, err
+			}
+			emittersOf[id] = paths
+			for _, p := range paths {
+				if _, ok := discovered[p]; ok && !inBatch[p] {
+					out = append(out, p)
+				}
+			}
+		}
+		sort.Strings(out)
+		return slices.Compact(out), nil
+	}
+
 	// A file whose reference did not resolve when it was last indexed is
 	// re-extracted when this sync adds a symbol it names, so the
 	// reference resolves now. Its owned edges are pruned like a
@@ -395,19 +464,30 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	// A sync can also change a candidate set that already resolves: a
-	// new overload can fit a call better, or the old winner can be gone.
-	// The files that own an edge into a changed set are reparsed the same
-	// way, so their references resolve as in a fresh index (design D11).
-	outbid, err := filesResolvingToChangedSets(r0, discovered, results, changedSet, dependentPaths)
+	more, err := emitters()
 	if err != nil {
 		w.Close()
 		return Stats{}, err
 	}
-	waiting = mergeSortedPaths(waiting, outbid)
-	if len(waiting) > 0 {
+	// A sync can also change a candidate set that already resolves: a
+	// new overload can fit a call better, or the old winner can be gone.
+	// The files that own an edge into a changed set are reparsed the same
+	// way, so their references resolve as in a fresh index (design D11).
+	outbid, err := filesResolvingToChangedSets(r0, discovered, results, changedSet, dependentPaths, emittersOf)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting = mergeSortedPaths(mergeSortedPaths(waiting, outbid), more)
+	// The later waves. A file of a wave can emit a shared id that the
+	// cycle did not hold yet, and the other files that emit that id then
+	// form the next wave. The loop ends when a wave adds no file.
+	for len(waiting) > 0 {
 		waitingFiles := make([]discover.DiscoveredFile, 0, len(waiting))
 		for _, path := range waiting {
+			if inBatch[path] {
+				continue
+			}
 			if err := pruneOwnedEdgesOnly(r0, w, path, &edgesRemoved); err != nil {
 				w.Close()
 				return Stats{}, err
@@ -415,16 +495,35 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			dependentPaths[path] = struct{}{}
 			if f, ok := discovered[path]; ok {
 				waitingFiles = append(waitingFiles, f)
+				inBatch[path] = true
 			}
 		}
-		more, err := Extract(waitingFiles, workers)
+		wave, err := Extract(waitingFiles, workers)
+		if err == nil {
+			err = internalError(wave)
+		}
 		if err != nil {
 			w.Close()
 			return Stats{}, err
 		}
 		batchFiles = append(batchFiles, waitingFiles...)
-		results = append(results, more...)
+		results = append(results, wave...)
+
+		before := len(shared)
+		for _, r := range wave {
+			addSharedIDs(shared, r)
+		}
+		if len(shared) == before {
+			break
+		}
+		if waiting, err = emitters(); err != nil {
+			w.Close()
+			return Stats{}, err
+		}
 	}
+	// A later wave appends its files out of path order, and the merge of
+	// a shared node takes its copies in the order of the declarations.
+	sort.SliceStable(results, func(i, j int) bool { return results[i].RelPath < results[j].RelPath })
 
 	// The store-seeded index must exclude every path whose symbol
 	// identity is being superseded or removed: the reparse batch (about
@@ -440,7 +539,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	builder := symbols.NewBuilder()
-	stored, err := loadStoreView(r0, discovered, excludePaths, builder)
+	stored, err := loadStoreView(r0, discovered, excludePaths, shared, builder)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
@@ -477,6 +576,40 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)
 
+	// The edges of a shared id that have no owner file have no entry in
+	// the file index, so no prune above removed them. The sync deletes
+	// them here for each shared id of the cycle, and the merged reparse
+	// stages the ones that still hold. A shared node that no file emits
+	// any more goes too, after its edges.
+	if len(shared) > 0 {
+		rev, err := reverse()
+		if err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+		for _, id := range sortedBoolKeys(shared) {
+			removed, err := deleteNoFileEdges(r0, w, rev, id)
+			if err != nil {
+				w.Close()
+				return Stats{}, err
+			}
+			edgesRemoved += removed
+			if _, emitted := nodeFilePath[id]; emitted {
+				continue
+			}
+			if _, err := r0.GetNode(id); err == nil {
+				if err := w.DeleteNode(id); err != nil {
+					w.Close()
+					return Stats{}, err
+				}
+				nodesRemoved++
+			} else if err != graphstore.ErrNotFound {
+				w.Close()
+				return Stats{}, err
+			}
+		}
+	}
+
 	// The resolve above synthesized implements and overrides over the
 	// whole graph. A synthesized edge an unchanged file already stores is
 	// skipped, and a stored one the synthesis did not produce is deleted,
@@ -485,9 +618,16 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	writes := make([]*schema.Edge, 0, len(collapsedEdges))
 	for _, e := range collapsedEdges {
 		k := resolve.EdgeTriple{Source: e.Source, Kind: e.Kind, Target: e.Target}
-		if _, stored := stored.synthesized[k]; stored && isSynthesizedEdge(e) {
-			kept[k] = true
-			continue
+		if storedOwner, ok := stored.synthesized[k]; ok && isSynthesizedEdge(e) {
+			// The stored edge stays only if its owner file is the same.
+			// The owner of a set edge changes when an overload set that
+			// spanned files comes to live in one file, or the reverse.
+			// The edge is then deleted with the entry of its old owner
+			// below, and written again with the entry of its new one.
+			if storedOwner == ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) {
+				kept[k] = true
+				continue
+			}
 		}
 		writes = append(writes, e)
 	}
@@ -613,22 +753,19 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}, nil
 }
 
-// buildReverseAdjacency builds an in-memory reverse-adjacency map keyed by
-// edge.Target, filtered to goextract.RefKindCalls only — a package-local
-// duplicate of internal/query.BuildReverseAdjacency's exact algorithm
-// (D-02a), not a design preference: internal/query's own white-box test
-// files (engine_test.go et al.) import internal/indexer to seed real
-// fixtures via indexer.Run, so internal/indexer importing internal/query
-// directly creates a real, Go-toolchain-enforced "import cycle not
-// allowed in test" for internal/query's own test binary (verified via `go
-// vet ./...`) — contradicting 04-RESEARCH.md/04-02-SUMMARY.md's claim of
-// a safe, non-circular indexer->query edge, which checked query's
-// PRODUCTION imports of indexer/goextract but not query's TEST files'
-// import of indexer itself. query.BuildReverseAdjacency remains exported
-// and is still the implementation internal/query's own Callers/Impact/
-// Affected use; this is Sync's own copy, built fresh per invocation
-// (never cached), matching that function's same discipline.
-func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+// buildReverseAdjacency builds an in-memory reverse-adjacency map of the
+// stored graph, keyed by edge.Target, over the edges of the given kinds.
+// It is a variant of internal/query.BuildReverseAdjacency that takes the
+// edge kinds: query keeps its own, which holds the calls edges only. This
+// package cannot call that one, because the white-box tests of
+// internal/query import internal/indexer to build their fixtures, and an
+// import of internal/query here is then an import cycle for that test
+// binary (D-02a). Issue #274 tracks one shared builder for this map and
+// for the other full-scan edge indexes of internal/query.
+//
+// A sync builds the map at most once, and each reader of it keeps to the
+// edge kind that it needs.
+func buildReverseAdjacency(r graphstore.Reader, kinds ...string) (map[string][]*schema.Edge, error) {
 	it, err := r.IterateEdges("")
 	if err != nil {
 		return nil, err
@@ -638,7 +775,7 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 	rev := make(map[string][]*schema.Edge)
 	for it.Next() {
 		e := it.Edge()
-		if e.Kind != goextract.RefKindCalls {
+		if !slices.Contains(kinds, e.Kind) {
 			continue
 		}
 		rev[e.Target] = append(rev[e.Target], e)
@@ -647,6 +784,132 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 		return nil, err
 	}
 	return rev, nil
+}
+
+// addSharedIDs adds to shared each node id of r that has no file: an id
+// that several files can emit.
+func addSharedIDs(shared map[string]bool, r goextract.FileResult) {
+	for _, en := range r.Nodes {
+		if en.Node.FilePath == "" && en.Node.Kind != goextract.KindFile {
+			shared[en.Node.Id] = true
+		}
+	}
+}
+
+// sharedIDsOfCycle returns the shared ids that a sync touches at its
+// start. The first source is the results of its reparse. The second is the
+// store: a shared node that a stored contains edge from the file node of a
+// pruned file targets. A pruned file counts, modified or deleted, because
+// a part can leave its type: it drops `partial`, takes another name or
+// moves to another namespace, and then only the store names the id.
+func sharedIDsOfCycle(r0 graphstore.Reader, results []goextract.FileResult, pruned []string) (map[string]bool, error) {
+	shared := make(map[string]bool)
+	for _, r := range results {
+		addSharedIDs(shared, r)
+	}
+	for _, path := range pruned {
+		fileID := nodeid.NodeID(goextract.KindFile, path, path)
+		it, err := r0.IterateEdges(fileID)
+		if err != nil {
+			return nil, err
+		}
+		var targets []string
+		for it.Next() {
+			if e := it.Edge(); e.Source == fileID && e.Kind == goextract.RefKindContains {
+				targets = append(targets, e.Target)
+			}
+		}
+		err = it.Err()
+		it.Close()
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range targets {
+			n, err := r0.GetNode(id)
+			if err == graphstore.ErrNotFound {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if n.FilePath == "" && n.Kind != goextract.KindOverloadSet {
+				shared[id] = true
+			}
+		}
+	}
+	return shared, nil
+}
+
+// sharedIDEmitters returns the paths of the files that emit the shared id,
+// by the store: the files whose file node has a contains edge to it. It
+// reads only the contains entries of rev. A calls edge into the id comes
+// from a file that names the id, not from one that emits it.
+func sharedIDEmitters(r0 graphstore.Reader, rev map[string][]*schema.Edge, id string) ([]string, error) {
+	var paths []string
+	for _, e := range rev[id] {
+		if e.Kind != goextract.RefKindContains {
+			continue
+		}
+		src, err := r0.GetNode(e.Source)
+		if err == graphstore.ErrNotFound {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if src.Kind == goextract.KindFile {
+			paths = append(paths, src.FilePath)
+		}
+	}
+	sort.Strings(paths)
+	return slices.Compact(paths), nil
+}
+
+// deleteNoFileEdges stages the delete of each stored edge that the shared
+// id owns, and returns their number. A shared node has no file, so these
+// edges have no entry in the file index. There are two groups. The first
+// is the edges from id of every kind but contains: its base edges. The
+// second is the contains edges into id, such as the one from the file node
+// of each part, because the owner of a contains edge is its target. A
+// contains edge from id belongs to its target, a member or an overload
+// set, and stays with that owner.
+func deleteNoFileEdges(r0 graphstore.Reader, w graphstore.Writer, rev map[string][]*schema.Edge, id string) (int, error) {
+	var owned []*schema.Edge
+	it, err := r0.IterateEdges(id)
+	if err != nil {
+		return 0, err
+	}
+	for it.Next() {
+		if e := it.Edge(); e.Source == id && e.Kind != goextract.RefKindContains {
+			owned = append(owned, e)
+		}
+	}
+	err = it.Err()
+	it.Close()
+	if err != nil {
+		return 0, err
+	}
+	for _, e := range rev[id] {
+		if e.Kind == goextract.RefKindContains {
+			owned = append(owned, e)
+		}
+	}
+	for _, e := range owned {
+		if err := w.DeleteEdge(e.Source, e.Kind, e.Target); err != nil {
+			return 0, err
+		}
+	}
+	return len(owned), nil
+}
+
+// sortedBoolKeys returns the keys of m in order.
+func sortedBoolKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // needsFileIndexBackfill reports whether the store at storeDir has no
@@ -786,7 +1049,7 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 // waiting on a new name. The set lookup is by bare name, so a set of the
 // same name under another owner is reparsed too. A same-file contains edge is made by the extractor and is
 // left out. The sync's own batch and dependents are left out as well.
-func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]discover.DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}) ([]string, error) {
+func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]discover.DiscoveredFile, results []goextract.FileResult, changed, dependents map[string]struct{}, emittersOf map[string][]string) ([]string, error) {
 	declared := make(map[string]string)
 	fit, err := r0.IterateFiles()
 	if err != nil {
@@ -830,13 +1093,39 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 		if n.Kind == goextract.KindFile || n.Kind == resolve.KindPackage {
 			continue
 		}
-		moduleKey, ok := declared[n.FilePath]
-		if !ok {
-			f, found := discovered[n.FilePath]
-			if !found {
-				continue
+		moduleKeyOf := func(path string) (string, bool) {
+			if key, ok := declared[path]; ok {
+				return key, true
 			}
-			moduleKey = f.ImportPath
+			f, found := discovered[path]
+			return f.ImportPath, found
+		}
+		if n.FilePath == "" {
+			// A shared node has no file, so its module and its changed
+			// state come from the files that emit it. It stays a
+			// candidate after the sync only while a file that the sync
+			// does not change still emits it: a shared node that loses
+			// its last part changes its candidate set.
+			for _, path := range emittersOf[n.Id] {
+				// A deleted file is not discovered, and its module key is
+				// then the one that its stored File record declares.
+				moduleKey, ok := moduleKeyOf(path)
+				if !ok {
+					continue
+				}
+				key := unresolvedKey{moduleKey: moduleKey, name: n.Name}
+				record(before, key, n.Id)
+				if _, ok := changed[path]; ok {
+					touched[key] = struct{}{}
+				} else {
+					record(after, key, n.Id)
+				}
+			}
+			continue
+		}
+		moduleKey, ok := moduleKeyOf(n.FilePath)
+		if !ok {
+			continue
 		}
 		key := unresolvedKey{moduleKey: moduleKey, name: n.Name}
 		record(before, key, n.Id)

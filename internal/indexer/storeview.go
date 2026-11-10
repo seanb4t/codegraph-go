@@ -22,7 +22,9 @@ type storeView struct {
 
 // loadStoreView reads r's files, nodes and edges once each, skipping what
 // files in exclude own: the files the sync reparses or deleted, whose
-// symbols the batch supersedes or removes. It adds what the other files
+// symbols the batch supersedes or removes. It also skips each node in
+// shared, the shared ids of the cycle, and their edges without an owner
+// file: every file that emits one of them is in the reparse. It adds what the other files
 // declare to b, so that kind checks and implements, override and
 // conformance-retry matching see the whole graph as a fresh index does.
 //
@@ -34,7 +36,7 @@ type storeView struct {
 // AddResults, so a nested declaration, an unexported TypeScript
 // declaration and an overload set stay out, and collisions route
 // through the same symbols.Pick tie-break (WR-01).
-func loadStoreView(r graphstore.Reader, discovered map[string]discover.DiscoveredFile, exclude map[string]bool, b *symbols.Builder) (*storeView, error) {
+func loadStoreView(r graphstore.Reader, discovered map[string]discover.DiscoveredFile, exclude map[string]bool, shared map[string]bool, b *symbols.Builder) (*storeView, error) {
 	v := &storeView{synthesized: make(map[resolve.EdgeTriple]string)}
 
 	declared := make(map[string]string)
@@ -65,6 +67,10 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 		n := nit.Node()
 		fileOf[n.Id] = n.FilePath
 		if exclude[n.FilePath] || n.Kind == resolve.KindPackage {
+			continue
+		}
+		if shared[n.Id] {
+			// The merged node of the reparse replaces the stored one.
 			continue
 		}
 		b.AddNode(n)
@@ -108,6 +114,15 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 		e := eit.Edge()
 		owner, ok := fileOf[resolve.EdgeOwnerID(e)]
 		if !ok || exclude[owner] {
+			continue
+		}
+		if shared[resolve.EdgeOwnerID(e)] {
+			// An edge that a shared id of the cycle owns: a base edge
+			// from it, or a contains edge into it. The sync deletes it
+			// and stages the ones that still hold. A stale one must not
+			// reach the hierarchy or the whole-graph passes: the base
+			// edge of a part that is gone would make an override that a
+			// full index does not have.
 			continue
 		}
 		k := resolve.EdgeTriple{Source: e.Source, Kind: e.Kind, Target: e.Target}

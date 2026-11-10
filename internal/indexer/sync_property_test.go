@@ -48,8 +48,8 @@ type propModel struct {
 }
 
 var (
-	propPaths = []string{"a.go", "b.go", "sub/c.go", "x.ts", "y.ts", "sub/z.ts", "App.java", "Util.java", "sub/Deep.java"}
-	propExts  = []string{".go", ".ts", ".java"}
+	propPaths = []string{"a.go", "b.go", "sub/c.go", "x.ts", "y.ts", "sub/z.ts", "App.java", "Util.java", "sub/Deep.java", "PartA.cs", "PartB.cs", "sub/PartC.cs"}
+	propExts  = []string{".go", ".ts", ".java", ".cs"}
 	propNames = []string{"alpha", "beta", "gamma"}
 )
 
@@ -156,8 +156,35 @@ func renderTS(decls []propDecl) string {
 	return b.String()
 }
 
+// renderCS renders one part of the C# partial type Shared, which every
+// .cs file of the model declares. Several files then emit one node id, so
+// the property reaches the merge of a shared node. Each part names its own
+// base interface, and it is public or not by the number of its
+// declarations, so the base edges and the merged visibility change as the
+// edits go.
+func renderCS(path string, decls []propDecl) string {
+	base := "I" + strings.TrimSuffix(filepath.Base(path), ".cs")
+	modifier := ""
+	if len(decls)%2 == 0 {
+		modifier = "public "
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "namespace Prop;\n\npublic interface %s\n{\n}\n\n%spartial class Shared : %s\n{\n", base, modifier, base)
+	for _, d := range decls {
+		params := ""
+		if d.Overload {
+			params = "string s"
+		}
+		fmt.Fprintf(&b, "    public void %s(%s)\n    {\n    }\n", d.Name, params)
+	}
+	b.WriteString("}\n")
+	return b.String()
+}
+
 func (m *propModel) render(path string) string {
 	switch filepath.Ext(path) {
+	case ".cs":
+		return renderCS(path, m.files[path])
 	case ".go":
 		return renderGo(m.files[path])
 	case ".java":
@@ -415,6 +442,13 @@ func TestSyncEqualsFreshIndex(t *testing.T) {
 			"a.go": {{Name: "alpha"}},
 			"x.ts": {{Name: "alpha"}},
 		}}
+		// In half of the draws the tree starts with two parts of one C#
+		// partial type, so the edits below reach a node that two files
+		// emit.
+		if rapid.Bool().Draw(t, "partialType") {
+			m.files["PartA.cs"] = []propDecl{{Name: "alpha"}}
+			m.files["PartB.cs"] = []propDecl{{Name: "beta"}, {Name: "gamma"}}
+		}
 		written := make(map[string]string)
 		writeModel(t, root, m, written)
 		// The worker count is drawn, so the parallel extraction path runs
