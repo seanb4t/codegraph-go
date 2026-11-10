@@ -431,7 +431,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	builder.AddResults(results)
+	builder.AddResults(declarationsOf(results))
 	view := builder.Freeze()
 
 	g := resolveGraph(results, modulePath, view)

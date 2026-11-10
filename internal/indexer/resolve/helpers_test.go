@@ -8,6 +8,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
+	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -18,7 +19,7 @@ const fixtureRoot = "../testdata/gofixture"
 // and Link, as a full index does.
 func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolved int) {
 	b := symbols.NewBuilder()
-	b.AddResults(results)
+	b.AddResults(declarationsOf(results))
 	view := b.Freeze()
 	types := make([]TypeOutput, len(results))
 	var typeEdges []*schema.Edge
@@ -33,6 +34,39 @@ func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, pack
 	}
 	g := Link(view, h, types, calls)
 	return g.Nodes, g.PackageNodes, g.Edges, g.Files, g.Unresolved
+}
+
+// declarationsOf returns the declarations of each result, with the default
+// visibility of its language, as package indexer builds them.
+func declarationsOf(results []goextract.FileResult) []symbols.Declarations {
+	decls := make([]symbols.Declarations, len(results))
+	for i, r := range results {
+		spec, _ := extract.ByID(r.Language)
+		decls[i] = symbols.DeclarationsOf(r, spec.DefaultVisibility)
+	}
+	return decls
+}
+
+// extractGo extracts one Go source file under the module example.com/p
+// through extract.File, the path of a full index, so its nodes carry what
+// that function stamps on them.
+func extractGo(t testing.TB, p parser.Parser, relPath, src string) goextract.FileResult {
+	t.Helper()
+	return extractGoIn(t, p, "example.com/p", relPath, src)
+}
+
+// extractGoIn is extractGo under the module key moduleKey.
+func extractGoIn(t testing.TB, p parser.Parser, moduleKey, relPath, src string) goextract.FileResult {
+	t.Helper()
+	spec, ok := extract.ByID("go")
+	if !ok {
+		t.Fatal("no registered language go")
+	}
+	r, err := extract.File(spec, p, moduleKey, relPath, []byte(src))
+	if err != nil {
+		t.Fatalf("extract.File(%s): %v", relPath, err)
+	}
+	return r
 }
 
 // fixtureResults returns pass 1's results and module path for the shared

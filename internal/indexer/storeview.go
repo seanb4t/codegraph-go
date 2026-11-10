@@ -75,9 +75,6 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 		if n.IsExported {
 			fileExports[n.FilePath] = true
 		}
-		for _, m := range n.InterfaceMethods {
-			b.AddInterfaceMethods(n.Id, goextract.MethodSpec{Name: m.Name, Arity: m.Arity})
-		}
 		moduleKey, ok := declared[n.FilePath]
 		if !ok {
 			moduleKey = discovered[n.FilePath].ImportPath

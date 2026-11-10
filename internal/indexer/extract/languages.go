@@ -6,6 +6,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // ProjectDescriptor resolves a repo's per-language module/namespace
@@ -58,6 +59,12 @@ type LanguageSpec struct {
 	// *.csproj, pyproject.toml, package.json+tsconfig.json, ...) once per
 	// repo root to resolve module/namespace identity for the whole repo.
 	Descriptor func(root string) (ProjectDescriptor, error)
+
+	// DefaultVisibility is the visibility that the language gives a type
+	// with no access modifier, or "" for a language without such a rule.
+	// When several files emit one node id, the merged node takes the first
+	// visibility that differs from it (symbols.Declarations).
+	DefaultVisibility string
 }
 
 // registry and extToLang are package-level, looked up by a stable string
@@ -135,5 +142,21 @@ func File(spec LanguageSpec, p parser.Parser, moduleKey, relPath string, src []b
 	if err != nil {
 		return goextract.FileResult{}, fmt.Errorf("indexer: extracting %s: %w", relPath, err)
 	}
+	for _, en := range r.Nodes {
+		en.Node.InterfaceMethods = schemaMethodSpecs(r.InterfaceMethods[en.Node.Id])
+	}
 	return r, nil
+}
+
+// schemaMethodSpecs converts an interface's extracted method specs to
+// their stored form, or nil when there are none.
+func schemaMethodSpecs(specs []goextract.MethodSpec) []*schema.MethodSpec {
+	if len(specs) == 0 {
+		return nil
+	}
+	out := make([]*schema.MethodSpec, len(specs))
+	for i, s := range specs {
+		out[i] = &schema.MethodSpec{Name: s.Name, Arity: s.Arity}
+	}
+	return out
 }

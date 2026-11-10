@@ -38,19 +38,6 @@ func unresolvedName(r goextract.FileResult, pkgAlias, name string) *schema.Unres
 	return &schema.UnresolvedName{ModuleKey: moduleKey, Name: name}
 }
 
-// schemaMethodSpecs converts an interface's extracted method specs to
-// their stored form, or nil when there are none.
-func schemaMethodSpecs(specs []goextract.MethodSpec) []*schema.MethodSpec {
-	if len(specs) == 0 {
-		return nil
-	}
-	out := make([]*schema.MethodSpec, len(specs))
-	for i, s := range specs {
-		out[i] = &schema.MethodSpec{Name: s.Name, Arity: s.Arity}
-	}
-	return out
-}
-
 // sortedUniqueNames sorts names by (module key, name) and drops repeats,
 // so a File record's bytes do not depend on reference order.
 func sortedUniqueNames(names []*schema.UnresolvedName) []*schema.UnresolvedName {

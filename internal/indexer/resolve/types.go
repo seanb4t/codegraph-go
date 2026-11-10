@@ -34,15 +34,21 @@ func (o TypeOutput) Edges() []*schema.Edge { return o.edges }
 // type-of. modulePath is the repo's own module path (from Discover); it
 // classifies an imports target as intra-module, which gets a package
 // node and an edge, or external, which gets neither. Types depends only
-// on r and view, and it starts no goroutine.
+// on r and view, it changes neither, and it starts no goroutine. So
+// several goroutines can call it at once over one view.
 func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOutput {
 	rs := newResolver(view, symbols.Hierarchy{})
 	var out TypeOutput
 	var waiting []*schema.UnresolvedName
 	packageNodeIDs := make(map[string]struct{})
 	for _, en := range r.Nodes {
-		en.Node.InterfaceMethods = schemaMethodSpecs(r.InterfaceMethods[en.Node.Id])
-		out.nodes = append(out.nodes, en.Node)
+		// The view holds the node that merges every copy of this id, so
+		// the output carries that node and not the copy of this file.
+		n := view.Node(en.Node.Id)
+		if n == nil {
+			n = en.Node
+		}
+		out.nodes = append(out.nodes, n)
 	}
 	for _, ie := range r.IntraEdges {
 		out.edges = append(out.edges, ie.Edge)

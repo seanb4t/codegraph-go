@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
@@ -37,10 +38,21 @@ func resolveGraph(results []goextract.FileResult, modulePath string, view symbol
 	return resolve.Link(view, h, types, calls)
 }
 
+// declarationsOf returns the declarations of each result, with the default
+// visibility of its language.
+func declarationsOf(results []goextract.FileResult) []symbols.Declarations {
+	decls := make([]symbols.Declarations, len(results))
+	for i, r := range results {
+		spec, _ := extract.ByID(r.Language)
+		decls[i] = symbols.DeclarationsOf(r, spec.DefaultVisibility)
+	}
+	return decls
+}
+
 // resolveRefs resolves results alone, as a full index does.
 func resolveRefs(results []goextract.FileResult, modulePath string) resolve.Graph {
 	b := symbols.NewBuilder()
-	b.AddResults(results)
+	b.AddResults(declarationsOf(results))
 	return resolveGraph(results, modulePath, b.Freeze())
 }
 

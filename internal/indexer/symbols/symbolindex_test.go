@@ -94,7 +94,7 @@ func TestSymbolIndex_NoCollisionForDistinctNames(t *testing.T) {
 func TestSymbolIndex_ReOverlaySameIDNotACollision(t *testing.T) {
 	a := fooDeclResult("pkg/a.go")
 	idx := newSymbolIndex([]goextract.FileResult{a})
-	idx.AddResults([]goextract.FileResult{a})
+	idx.AddResults(declsOf([]goextract.FileResult{a}))
 
 	if idx.Collisions() != 0 {
 		t.Errorf("Collisions = %d, want 0 for re-overlay of identical id", idx.Collisions())
@@ -105,8 +105,18 @@ func TestSymbolIndex_ReOverlaySameIDNotACollision(t *testing.T) {
 // results, in the order given.
 func newSymbolIndex(results []goextract.FileResult) *Builder {
 	b := NewBuilder()
-	b.AddResults(results)
+	b.AddResults(declsOf(results))
 	return b
+}
+
+// declsOf returns the declarations of each result, with no default
+// visibility.
+func declsOf(results []goextract.FileResult) []Declarations {
+	decls := make([]Declarations, len(results))
+	for i, r := range results {
+		decls[i] = DeclarationsOf(r, "")
+	}
+	return decls
 }
 
 // winnerOf returns the id that name resolves to in module, as Pick

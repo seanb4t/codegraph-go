@@ -117,10 +117,7 @@ type Wrapper struct {
 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -175,10 +172,7 @@ type B struct {
 func (b B) Greet() string { return "hello" }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -216,10 +210,7 @@ type B struct {
 func (b B) Greet(name string) string { return "hello " + name }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -325,10 +316,7 @@ type File struct{}
 func (f File) Read() int { return 0 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -363,15 +351,21 @@ type Reader interface {
 type Empty struct{}
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
 	emptyID := nodeid.NodeID(goextract.KindStruct, "Empty", "p.go")
 	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "p.go")
+
+	// Positive control: the view holds the method specs of Reader, so the
+	// absence of the edge below comes from Empty having no Read method and
+	// not from an interface that looks empty.
+	b := symbols.NewBuilder()
+	b.AddResults(declarationsOf([]goextract.FileResult{result}))
+	if specs := b.Freeze().InterfaceMethods()[readerID]; len(specs) != 1 || specs[0].Name != "Read" {
+		t.Fatalf("the view holds the method specs %+v for Reader, want [Read]", specs)
+	}
 
 	if e := findEdgeFull(edges, emptyID, "implements", readerID); e != nil {
 		t.Fatalf("expected no implements edge for Empty (no Read method), got %+v", e)
@@ -566,10 +560,7 @@ func F() {
 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, packageNodes, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -599,10 +590,7 @@ func Run() {
 func Consume(x int) {}
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -631,10 +619,7 @@ func Run() {
 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -690,10 +675,7 @@ type Widget struct{}
 var W Widget
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -717,10 +699,7 @@ type Widget struct{}
 func MakeWidget() Widget { return Widget{} }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -748,10 +727,7 @@ func F() {
 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, unresolved := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -788,10 +764,7 @@ func Run() {
 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, unresolved := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -822,10 +795,7 @@ func outer(x int) int { return x }
 func inner() int { return 1 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGo(t, p, "p.go", src)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
 
@@ -856,14 +826,8 @@ type Widget struct{}
 func (w Widget) Describe() string { return "" }
 `
 	p := newTestParser(t)
-	typeResult, err := goextract.Extract(p, "example.com/p", "type.go", []byte(typeSrc))
-	if err != nil {
-		t.Fatalf("Extract(type.go): %v", err)
-	}
-	methodResult, err := goextract.Extract(p, "example.com/p", "method.go", []byte(methodSrc))
-	if err != nil {
-		t.Fatalf("Extract(method.go): %v", err)
-	}
+	typeResult := extractGo(t, p, "type.go", typeSrc)
+	methodResult := extractGo(t, p, "method.go", methodSrc)
 
 	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{typeResult, methodResult}, "example.com/p")
 
@@ -988,10 +952,7 @@ func G() q.Thing {
 }
 `
 	p := newTestParser(t)
-	result, err := goextract.Extract(p, "example.com/m/p", "p/p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
+	result := extractGoIn(t, p, "example.com/m/p", "p/p.go", src)
 
 	_, _, _, files, _ := resolveRefs([]goextract.FileResult{result}, "example.com/m")
 	if len(files) != 1 {
