@@ -32,7 +32,10 @@ func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, pack
 	for i := range results {
 		calls[i] = Calls(view, h, results[i])
 	}
-	g := Link(view, h, types, calls)
+	g, err := Link(view, h, types, calls)
+	if err != nil {
+		panic(err)
+	}
 	return g.Nodes, g.PackageNodes, g.Edges, g.Files, g.Unresolved
 }
 

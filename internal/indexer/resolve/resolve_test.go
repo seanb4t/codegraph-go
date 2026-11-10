@@ -260,7 +260,8 @@ func TestResolveOverrides_OverloadedMethodsBothSynthesized(t *testing.T) {
 		b.SetArity(id, arity)
 	}
 
-	synthesized := synthesizeOverrides(b.Freeze(), edges, nil)
+	tb, _ := newTables(edges, nil)
+	synthesized := synthesizeOverrides(b.Freeze(), tb, tb.supertypes(nil, nil), nil)
 
 	if e := findEdgeFull(synthesized, derivedFoo1, goextract.EdgeKindOverrides, baseFoo1); e == nil {
 		t.Errorf("expected overrides edge %s -> %s (arity-1 overload), got %+v", derivedFoo1, baseFoo1, synthesized)

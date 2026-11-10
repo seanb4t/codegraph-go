@@ -23,7 +23,7 @@ import (
 // unchanged file still resolves (RESEARCH Pitfall 1), and the kind
 // lookups and the implements, override and conformance-retry passes see
 // the whole graph as a fresh index does.
-func resolveGraph(results []goextract.FileResult, modulePath string, view symbols.View) resolve.Graph {
+func resolveGraph(results []goextract.FileResult, modulePath string, view symbols.View) (resolve.Graph, error) {
 	types := make([]resolve.TypeOutput, len(results))
 	var typeEdges []*schema.Edge
 	for i := range results {
@@ -50,7 +50,7 @@ func declarationsOf(results []goextract.FileResult) []symbols.Declarations {
 }
 
 // resolveRefs resolves results alone, as a full index does.
-func resolveRefs(results []goextract.FileResult, modulePath string) resolve.Graph {
+func resolveRefs(results []goextract.FileResult, modulePath string) (resolve.Graph, error) {
 	b := symbols.NewBuilder()
 	b.AddResults(declarationsOf(results))
 	return resolveGraph(results, modulePath, b.Freeze())
@@ -81,7 +81,10 @@ func resolveRefs(results []goextract.FileResult, modulePath string) resolve.Grap
 // doc comment (pipeline.go) for why a caller that wipes storeDir before
 // calling Run needs this lower bound.
 func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error) {
-	g := resolveRefs(results, modulePath)
+	g, err := resolveRefs(results, modulePath)
+	if err != nil {
+		return 0, err
+	}
 	if err := writeGraph(store, g.Nodes, g.PackageNodes, g.Edges, g.Files, commitSHA, excluded, coverageGenerationFloor); err != nil {
 		return g.Unresolved, err
 	}

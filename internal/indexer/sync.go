@@ -434,7 +434,11 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	builder.AddResults(declarationsOf(results))
 	view := builder.Freeze()
 
-	g := resolveGraph(results, modulePath, view)
+	g, err := resolveGraph(results, modulePath, view)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
 	nodes, packageNodes, edges, fileRecords, unresolvedCount := g.Nodes, g.PackageNodes, g.Edges, g.Files, g.Unresolved
 
 	nodeFilePath := make(map[string]string, len(nodes))
