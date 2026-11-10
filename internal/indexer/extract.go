@@ -43,7 +43,7 @@ func defaultParserFactory(languageID string) (parser.Parser, error) {
 // file.
 //
 // limit caps the number of workers (and therefore the parser-cache count);
-// limit <= 0 defaults to runtime.NumCPU().
+// limit <= 0 defaults to DefaultWorkers().
 //
 // Results are written to a pre-allocated slice at each file's own index —
 // never appended in completion order — so the returned slice is always in
@@ -75,9 +75,17 @@ func Extract(files []discover.DiscoveredFile, limit int) ([]goextract.FileResult
 // persistent worker goroutines are started up front, each owning its own
 // language-keyed parser cache and pulling file indices from a shared
 // atomic counter until none remain.
+// DefaultWorkers is the worker count of a run that names none: the value
+// of runtime.GOMAXPROCS(0). Unlike runtime.NumCPU(), it follows the CPU
+// limit of a container, so a run in a limited container does not start
+// more workers than the limit lets run at once.
+func DefaultWorkers() int {
+	return runtime.GOMAXPROCS(0)
+}
+
 func extractWithFactory(files []discover.DiscoveredFile, limit int, newParser parserFactory) ([]goextract.FileResult, error) {
 	if limit <= 0 {
-		limit = runtime.NumCPU()
+		limit = DefaultWorkers()
 	}
 
 	results := make([]goextract.FileResult, len(files))

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"runtime"
 	"slices"
 	"sort"
 	"time"
@@ -85,7 +84,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 
 	workers := opts.Workers
 	if workers <= 0 {
-		workers = runtime.NumCPU()
+		workers = DefaultWorkers()
 	}
 
 	// Phase 10 D-07: DiscoverAll's exclusion-reason list (discovery.Excluded)

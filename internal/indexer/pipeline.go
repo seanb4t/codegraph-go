@@ -3,7 +3,6 @@ package indexer
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -14,10 +13,8 @@ import (
 
 // Options configures one Run invocation.
 type Options struct {
-	// Workers bounds Pass 1's extraction worker pool. <= 0 defaults to
-	// runtime.NumCPU() — Extract's own default (D-04), applied here too so
-	// callers observe the same behavior whether they pass Options{} or
-	// Options{Workers: runtime.NumCPU()} explicitly.
+	// Workers bounds the worker pool of every indexing pass. A value of 0
+	// or below means DefaultWorkers().
 	Workers int
 
 	// Verbose and Quiet are carried through for the CLI's summary output
@@ -157,7 +154,7 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 
 	workers := opts.Workers
 	if workers <= 0 {
-		workers = runtime.NumCPU()
+		workers = DefaultWorkers()
 	}
 	results, err := Extract(files, workers)
 	if err != nil {

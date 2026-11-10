@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/cockroachdb/pebble/v2"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -95,11 +98,13 @@ var openLockRetrySleep = time.Sleep
 // daemon's flush requeue, serve's startup-reconcile downgrade) branch on
 // with errors.Is (03-REVIEW-2.md CR-01/WR-01).
 //
-// Classification happens exactly once, inside Open's retry loop — the only
-// seam where the error's provenance (pebble.Open) is unambiguous — so raw
-// string/errno sniffing never runs against arbitrary error chains: an
-// EACCES propagated up an indexer.Sync chain (unreadable source file,
-// WalkDir failure) structurally cannot match this sentinel. The
+// Classification happens inside retryLocked and nowhere else. Each
+// classifier runs only on the errors of its own attempt — classifyOpenError
+// on an error from pebble.Open or pebble.LockDirectory, classifyFlockError
+// on an error from internal/flock — the seams where the error's provenance
+// is unambiguous. So raw string/errno sniffing never runs against arbitrary
+// error chains: an EACCES propagated up an indexer.Sync chain (unreadable
+// source file, WalkDir failure) structurally cannot match this sentinel. The
 // platform-specific raw matching lives in isLockHeldOS (locked_unix.go /
 // locked_windows.go), build-tagged because pebble's two vfs lock
 // implementations fail in entirely different shapes (fcntl EAGAIN + an
@@ -110,13 +115,15 @@ var openLockRetrySleep = time.Sleep
 // package may reach for pebble's error shapes directly.
 var ErrStoreLocked = errors.New("graphstore: store lock held")
 
-// classifyOpenError wraps a pebble.Open failure in ErrStoreLocked when it
-// matches the running platform's lock-held shape (isLockHeldOS) and
-// returns every other error unchanged. Only Open may call this: the
-// classification is valid solely for errors whose provenance is
-// pebble.Open — applied to an arbitrary chain (e.g. indexer.Sync's), the
-// raw errno matching would misroute filesystem errors into the lock
-// degrade/requeue paths (03-REVIEW-2.md WR-01).
+// classifyOpenError wraps a failure to take Pebble's directory lock in
+// ErrStoreLocked when it matches the running platform's lock-held shape
+// (isLockHeldOS) and returns every other error unchanged. It is a
+// classifier for retryLocked, with an attempt of pebble.Open or of
+// pebble.LockDirectory, which take the same lock and fail in the same
+// shapes. The classification is valid solely for errors of those two calls
+// — applied to an arbitrary chain (e.g. indexer.Sync's), the raw errno
+// matching would misroute filesystem errors into the lock degrade/requeue
+// paths (03-REVIEW-2.md WR-01).
 func classifyOpenError(err error) error {
 	if err == nil {
 		return nil
@@ -138,7 +145,7 @@ func classifyOpenError(err error) error {
 // read snapshot) into success instead of an agent-visible error. Any
 // non-lock error returns immediately and unchanged; a lock still held after
 // the final attempt surfaces wrapped in ErrStoreLocked (errors.Is-able) —
-// classification happens here, at the pebble.Open seam, and nowhere else.
+// classification happens in retryLocked, on the error of pebble.Open.
 func Open(dir string) (GraphStore, error) {
 	s, err := open(dir)
 	if err != nil {
@@ -148,21 +155,89 @@ func Open(dir string) (GraphStore, error) {
 }
 
 func open(dir string) (*pebbleStore, error) {
-	var lastErr error
-	for attempt := 0; attempt < openLockRetryAttempts; attempt++ {
-		if attempt > 0 {
+	db, err := retryLocked(func() (*pebble.DB, error) {
+		return pebble.Open(dir, &pebble.Options{Logger: quietLogger{}})
+	}, classifyOpenError)
+	if err != nil {
+		return nil, err
+	}
+	return &pebbleStore{db: db}, nil
+}
+
+// retryLocked calls attempt until it succeeds, on the bounded backoff of
+// openLockRetryAttempts and openLockRetryBackoff. classify turns a
+// lock-held error of that attempt into ErrStoreLocked. retryLocked tries
+// again while classify returns ErrStoreLocked, and returns every other
+// error at once. When the attempts run out, it returns the last classified
+// error.
+//
+// Each caller passes the classifier of its own lock: classifyOpenError for
+// Pebble's directory lock, classifyFlockError for an flock.
+func retryLocked[T any](attempt func() (T, error), classify func(error) error) (T, error) {
+	var (
+		zero    T
+		lastErr error
+	)
+	for n := 0; n < openLockRetryAttempts; n++ {
+		if n > 0 {
 			openLockRetrySleep(openLockRetryBackoff)
 		}
-		db, err := pebble.Open(dir, &pebble.Options{Logger: quietLogger{}})
+		v, err := attempt()
 		if err == nil {
-			return &pebbleStore{db: db}, nil
+			return v, nil
 		}
-		lastErr = classifyOpenError(err)
+		lastErr = classify(err)
 		if !errors.Is(lastErr, ErrStoreLocked) {
 			break
 		}
 	}
-	return nil, lastErr
+	return zero, lastErr
+}
+
+// classifyFlockError wraps a lock-held failure of internal/flock in
+// ErrStoreLocked and returns every other error unchanged. It is a
+// classifier for retryLocked, valid only for the errors of an flock
+// attempt.
+func classifyFlockError(err error) error {
+	if flock.IsHeld(err) {
+		return fmt.Errorf("%w: %v", ErrStoreLocked, err)
+	}
+	return err
+}
+
+// manifestMarkerPrefix is the prefix of the marker file that names the
+// current manifest of a Pebble store. A directory without one holds no
+// store.
+const manifestMarkerPrefix = "marker.manifest."
+
+// OpenExisting opens the store at dir like Open, but it never creates one.
+// If dir is missing or holds no store, it returns ErrNotFound and leaves
+// the filesystem as it was.
+func OpenExisting(dir string) (GraphStore, error) {
+	s, err := openExisting(dir)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// openExisting looks for the store before it calls open. Pebble's own
+// ErrorIfNotExists does not serve: it creates the directory and its LOCK
+// file before it fails.
+func openExisting(dir string) (*pebbleStore, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if !slices.ContainsFunc(entries, func(e os.DirEntry) bool {
+		return strings.HasPrefix(e.Name(), manifestMarkerPrefix)
+	}) {
+		return nil, ErrNotFound
+	}
+	return open(dir)
 }
 
 // Checkpoint copies the store at srcDir into destDir, using hard links

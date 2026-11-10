@@ -167,7 +167,7 @@ func newIndexCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "rebuild without prompting for confirmation")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "suppress progress and summary output")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "emit per-file/per-pass detail")
-	cmd.Flags().IntVar(&workers, "workers", 0, "bound the extraction worker pool (default: number of CPUs)")
+	addWorkersFlag(cmd, &workers)
 
 	return cmd
 }
