@@ -5,24 +5,7 @@ package wtindex
 import (
 	"os"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
-
-// lockFile opens path, creating it if needed, and takes an exclusive flock
-// on it without waiting. The kernel releases the lock when the process
-// exits.
-func lockFile(path string) (*os.File, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		f.Close()
-		return nil, err
-	}
-	return f, nil
-}
 
 // sameDevice reports whether paths a and b are on one filesystem, where a
 // checkpoint can hard-link instead of copying. A test can replace it.
