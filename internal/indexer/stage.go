@@ -20,10 +20,11 @@ type Sink interface {
 // files in path order, then its edges in (source, kind, target) order.
 // g.Edges are the edges to write, already collapsed. ownerPath names the
 // file that owns an edge in the x/ file index. stage sorts copies, so g
-// keeps its order. Two nodes with one id, or two files with one path,
-// keep the order sort.Slice gives them, and the store keeps the last. It
-// returns the number of distinct node ids it put.
-func stage(sink Sink, g resolve.Graph, ownerPath func(e *schema.Edge) string) (int, error) {
+// keeps its order. Two files with one path keep the order sort.Slice gives
+// them, and the store keeps the last. A node id that several files emit
+// reaches stage as one merged node (symbols.Builder), so every copy that
+// stage puts has the same bytes.
+func stage(sink Sink, g resolve.Graph, ownerPath func(e *schema.Edge) string) error {
 	nodes := make([]*schema.Node, 0, len(g.Nodes)+len(g.PackageNodes))
 	nodes = append(nodes, g.Nodes...)
 	nodes = append(nodes, g.PackageNodes...)
@@ -38,24 +39,20 @@ func stage(sink Sink, g resolve.Graph, ownerPath func(e *schema.Edge) string) (i
 		edges = slices.Clone(edges)
 		slices.SortStableFunc(edges, byTriple)
 	}
-	distinct := 0
-	for i, n := range nodes {
-		if i == 0 || nodes[i-1].Id != n.Id {
-			distinct++
-		}
+	for _, n := range nodes {
 		if err := sink.PutNode(n); err != nil {
-			return 0, err
+			return err
 		}
 	}
 	for _, f := range files {
 		if err := sink.PutFile(f); err != nil {
-			return 0, err
+			return err
 		}
 	}
 	for _, e := range edges {
 		if err := sink.PutEdge(e, ownerPath(e)); err != nil {
-			return 0, err
+			return err
 		}
 	}
-	return distinct, nil
+	return nil
 }

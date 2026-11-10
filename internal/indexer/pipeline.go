@@ -1,14 +1,12 @@
 package indexer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/seanb4t/codegraph-go/internal/graphstore"
-	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
-	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // Options configures one Run invocation.
@@ -22,24 +20,6 @@ type Options struct {
 	// these flags); Run itself does no logging.
 	Verbose bool
 	Quiet   bool
-
-	// CoverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is a lower
-	// bound writeGraph must respect when it stamps the from-scratch
-	// commit's Meta.CoverageGeneration. writeGraph already reads the
-	// TARGET store's own prior generation via a pre-commit Snapshot — but
-	// a caller that wiped storeDir (`codegraph index`'s
-	// RemoveAll+MkdirAll, internal/cli/index.go) makes that read see a
-	// genuinely empty store (ErrNotFound), which resets the counter to 0
-	// even though a deleted store may have carried it much higher — the
-	// exact value a live client's outstanding page token may still be
-	// pinned to. A caller that reads the PRIOR store's generation before
-	// wiping it can pass it here so writeGraph stamps
-	// max(priorGeneration, CoverageGenerationFloor)+1 instead, keeping
-	// the counter monotonic across the wipe. Zero (the default) is a
-	// no-op — writeGraph's own store-read generation is used unchanged,
-	// which is exactly right for a genuinely fresh store (`codegraph
-	// init`, no prior store to alias against).
-	CoverageGenerationFloor int64
 
 	// MaxChanged makes Sync return *ErrTooManyChanges, before it writes
 	// anything, when more files were added, modified or deleted than it
@@ -89,128 +69,21 @@ type Stats struct {
 	NodesRemoved         int
 	EdgesRemoved         int
 	DependentsRecomputed int
+
+	// PriorGenerationErr is the error of a full index that could not read
+	// the coverage generation of the store it replaces. The run went on
+	// and stamped generation 1. Nil means that the read worked, or that
+	// the store was never indexed.
+	PriorGenerationErr error
 }
 
-// resolveFunc is Pass 2's entry point, matching Resolve's signature. It is
-// injected as a parameter to run (never hard-coded to the package-level
-// Resolve) purely so a test can simulate a resolve-time failure and prove
-// the GraphStore is still Closed on that path — mirroring extract.go's
-// parserFactory testing seam; production code always goes through Run,
-// which binds it to the real Resolve.
-//
-// The commitSHA parameter (ENG-04/D-05) is HEAD's resolved value at the
-// top of this operation, threaded through rather than re-resolved inside
-// Resolve — see run's own doc comment on why resolution happens exactly
-// once per operation, here, before Resolve is ever called.
-//
-// excluded (Phase 10 D-01/D-07) is DiscoverAll's exclusion-reason list —
-// the same walk that produced results' files — threaded through
-// unchanged so writeGraph can stage it in the SAME commit batch as every
-// other record kind.
-// coverageGenerationFloor (CR-01, 10-REVIEW.md iteration 3) is threaded
-// down from Options.CoverageGenerationFloor — see that field's doc
-// comment for why writeGraph needs a floor independent of its own
-// store-read generation.
-type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error)
-
-// Run executes the full from-scratch indexing pipeline (D-04, D-01a):
-// Discover walks repoRoot for every source file whose extension is claimed
-// by a registered extract.LanguageSpec (Phase 5 D-03 — Go was the only such
-// language through Phase 4), Extract runs Pass 1 (parallel, bounded worker
-// pool, selecting a parser+extractor per file's own Language — Phase 5
-// Pitfall 1) over them, and Resolve runs Pass 2 (the single coordinated
-// writer) against the GraphStore at storeDir, committing the resolved
-// graph and stamping Meta.
-//
-// The store is opened exactly once and Closed on every return path —
-// success or failure — mirroring pebble_store.Open's Close-once lifecycle
-// discipline (T-02-11): a failure partway through Pass 2 never leaves an
-// open engine handle or lock behind.
+// Run is a full index of the repository at repoRoot into the store at
+// storeDir. It builds the new graph in a scratch directory beside the
+// store and puts it in the place of the store in one atomic step, so a
+// run that fails or stops halfway leaves the store as it was. See run for
+// the steps.
 func Run(repoRoot, storeDir string, opts Options) (Stats, error) {
-	return run(repoRoot, storeDir, opts, Resolve)
-}
-
-// run is Run's implementation, parameterized on the Pass-2 entry point so
-// tests can inject a failing resolveFunc without depending on a real
-// Resolve error condition.
-//
-// ENG-04/D-05: HEAD is resolved exactly ONCE here, at the top of the
-// operation, before Discover/Extract (which may take real time on a large
-// repo) and before resolve is ever invoked — never inside resolve or
-// writeGraph. HEAD can move mid-run (a rebase, a checkout, a concurrent
-// commit), and re-resolving it at the write site would risk this run's
-// single write recording a different commit than "the indexed commit"
-// actually means: HEAD as it stood when the run began.
-func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, error) {
-	start := time.Now()
-	headCommitSHA := resolveHeadCommitSHA(repoRoot)
-
-	discovery, err := discover.DiscoverAll(repoRoot)
-	if err != nil {
-		return Stats{}, err
-	}
-	files := discovery.Files
-	modulePath := discovery.ModulePath
-
-	workers := opts.Workers
-	if workers <= 0 {
-		workers = DefaultWorkers()
-	}
-	results, err := Extract(files, workers)
-	if err != nil {
-		return Stats{Files: len(files), Duration: time.Since(start)}, err
-	}
-
-	// LANG-07/D-08/D-09: opt-in, per-framework route detection runs once
-	// per from-scratch Run, after Pass 1 (route detectors re-parse only
-	// the files whose language has a FIRED detector — never a blanket
-	// AST re-walk) and before Pass 2, so its route nodes/heuristic calls
-	// edges flow through the SAME resolveRefsWithIndex/collapseEdges/
-	// writeGraph path every other edge already uses (D-06/D-07: no
-	// parallel commit). Wired into Run only, not Sync (incremental sync
-	// stays out of this plan's scope — see 05-12-SUMMARY.md).
-	if err := internalError(results); err != nil {
-		return Stats{Files: len(files), Duration: time.Since(start)}, err
-	}
-	routeNodes, routeEdges, err := detectRoutes(repoRoot, files, results)
-	if err != nil {
-		return Stats{Files: len(files), Duration: time.Since(start)}, err
-	}
-	if len(routeNodes) > 0 || len(routeEdges) > 0 {
-		results = append(results, routeResultFrom(routeNodes, routeEdges))
-	}
-
-	store, err := graphstore.Open(storeDir)
-	if err != nil {
-		return Stats{Files: len(files), Duration: time.Since(start)}, err
-	}
-	defer store.Close()
-
-	unresolved, err := resolve(store, results, modulePath, headCommitSHA, discovery.Excluded, opts.CoverageGenerationFloor)
-	if err != nil {
-		return Stats{Files: len(files), Unresolved: unresolved, Duration: time.Since(start)}, err
-	}
-
-	skipped := 0
-	for _, r := range results {
-		if r.Err != nil {
-			skipped++
-		}
-	}
-
-	nodes, edges, err := readGraphCounts(store)
-	if err != nil {
-		return Stats{}, err
-	}
-
-	return Stats{
-		Files:      len(files),
-		Nodes:      nodes,
-		Edges:      edges,
-		Unresolved: unresolved,
-		Skipped:    skipped,
-		Duration:   time.Since(start),
-	}, nil
+	return run(context.Background(), repoRoot, storeDir, opts)
 }
 
 // internalError returns the first extraction failure that is a defect of
@@ -225,22 +98,4 @@ func internalError(results []goextract.FileResult) error {
 		}
 	}
 	return nil
-}
-
-// readGraphCounts reads the just-committed Meta record's node/edge counts
-// back from store via a fresh Snapshot, so Stats always reflects exactly
-// what writeGraph stamped (never a separately re-derived count that could
-// drift from it).
-func readGraphCounts(store graphstore.GraphStore) (nodes, edges int, err error) {
-	r, err := store.Snapshot()
-	if err != nil {
-		return 0, 0, err
-	}
-	defer r.Close()
-
-	meta, err := r.GetMeta()
-	if err != nil {
-		return 0, 0, err
-	}
-	return int(meta.NodeCount), int(meta.EdgeCount), nil
 }

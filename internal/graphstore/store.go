@@ -247,21 +247,12 @@ type Writer interface {
 	DeleteExcludedFile(path string) error
 
 	// DeleteAllExcludedFiles stages a range-delete of the WHOLE c/
-	// namespace (Phase 10 D-07) — the "full index range-deletes the
-	// namespace then rewrites" primitive a from-scratch writeGraph run
-	// uses before staging the fresh set, so a rewrite over an EXISTING
-	// store (Sync's D-02b backfill path) never layers on top of stale
-	// records. Bounded by the prefixExcludedFile byte; cannot reach
-	// m/n/e/f/a/x.
+	// namespace (Phase 10 D-07): every excluded-file record. Bounded by
+	// the prefixExcludedFile byte; cannot reach m/n/e/f/a/x. No production
+	// path calls it: a full index writes its records into a new store
+	// that ReplaceStore puts in place, and a sync deletes records one by
+	// one. Tests use it to build a store without coverage records.
 	DeleteAllExcludedFiles() error
-
-	// DeleteGraph stages range-deletes of the whole n/, e/, f/ and x/
-	// namespaces: every node, edge, file record and file-index entry. A
-	// from-scratch rewrite over an existing store (Sync's backfill path)
-	// calls it first on the same Writer, so the old graph goes in the same
-	// commit that writes the new one, and nothing of the old graph
-	// survives. Meta and the c/ and a/ namespaces are left alone.
-	DeleteGraph() error
 
 	// DeleteNode stages a point-delete of the node record identified by
 	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after

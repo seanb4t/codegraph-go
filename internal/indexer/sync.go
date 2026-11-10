@@ -1,8 +1,10 @@
 package indexer
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -49,7 +51,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		// uses — writeGraph unconditionally stamps Meta.HasFileIndex=true
 		// (every PutNode/PutEdge it stages already populates the x/
 		// namespace, 04-01) — so every subsequent Sync is incremental.
-		stats, err := run(repoRoot, storeDir, opts, Resolve)
+		stats, err := run(context.Background(), repoRoot, storeDir, opts)
 		stats.FilesReparsed = stats.Files
 		return stats, err
 	}
@@ -543,7 +545,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	staged := resolve.Graph{Nodes: nodes, PackageNodes: packageNodes, Files: fileRecords, Edges: collapsedEdges}
-	if _, err := stage(w, staged, func(e *schema.Edge) string { return ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) }); err != nil {
+	if err := stage(w, staged, func(e *schema.Edge) string { return ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) }); err != nil {
 		w.Close()
 		return Stats{}, err
 	}
@@ -650,25 +652,14 @@ func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
 // has_unresolved_names, has_declared_module_keys, has_method_specs,
-// has_grouped_vars or has_unique_decl_ids flag is false (D-02b) — opening and closing the
-// store in isolation from Sync's own main open, so the two never race a
-// Pebble lock against each other.
+// has_grouped_vars or has_unique_decl_ids flag is false (D-02b). It reads
+// the metadata through readStoreMeta, which opens and closes the store on
+// its own and never creates one, so a check of a missing store leaves no
+// empty store behind.
 func needsFileIndexBackfill(storeDir string) (bool, error) {
-	store, err := graphstore.Open(storeDir)
+	meta, err := readStoreMeta(storeDir)
 	if err != nil {
-		return false, err
-	}
-	defer store.Close()
-
-	r, err := store.Snapshot()
-	if err != nil {
-		return false, err
-	}
-	defer r.Close()
-
-	meta, err := r.GetMeta()
-	if err != nil {
-		if err == graphstore.ErrNotFound {
+		if errors.Is(err, graphstore.ErrNotFound) {
 			return true, nil
 		}
 		return false, err

@@ -1,12 +1,10 @@
 package indexer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
-	"sync/atomic"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
@@ -61,20 +59,6 @@ func Extract(files []discover.DiscoveredFile, limit int) ([]goextract.FileResult
 	return extractWithFactory(files, limit, defaultParserFactory)
 }
 
-// extractWithFactory is Extract's implementation, parameterized on the
-// parser factory so tests can inject a counting stand-in without depending
-// on CGo parser internals.
-//
-// Design note (deviation from the naive `errgroup.Group.SetLimit` +
-// "create a parser inside each g.Go closure" idiom): that pattern spawns
-// one goroutine execution PER FILE (SetLimit only bounds how many run
-// CONCURRENTLY, it does not turn separate g.Go calls into a fixed set of
-// long-lived, file-reusing workers) — so it would construct one parser per
-// file whenever there are more files than the limit, violating "bounded
-// parser count, never per-file." Instead, exactly `min(limit, len(files))`
-// persistent worker goroutines are started up front, each owning its own
-// language-keyed parser cache and pulling file indices from a shared
-// atomic counter until none remain.
 // DefaultWorkers is the worker count of a run that names none: the value
 // of runtime.GOMAXPROCS(0). Unlike runtime.NumCPU(), it follows the CPU
 // limit of a container, so a run in a limited container does not start
@@ -83,103 +67,108 @@ func DefaultWorkers() int {
 	return runtime.GOMAXPROCS(0)
 }
 
+// parserCache holds the parsers of one worker, one for each language that
+// the worker met. A worker makes a parser the first time it sees a
+// language and uses it for every later file of that language, so a run
+// makes at most one parser for each worker and language, never one for
+// each file (Pitfall 1).
+type parserCache struct {
+	newParser parserFactory
+	parsers   map[string]parser.Parser
+}
+
+func newParserCache(newParser parserFactory) *parserCache {
+	return &parserCache{newParser: newParser, parsers: make(map[string]parser.Parser)}
+}
+
+// get returns the parser of language, and makes it on first use.
+func (c *parserCache) get(language string) (parser.Parser, error) {
+	if p, ok := c.parsers[language]; ok {
+		return p, nil
+	}
+	p, err := c.newParser(language)
+	if err != nil {
+		return nil, fmt.Errorf("indexer: creating %s parser: %w", language, err)
+	}
+	c.parsers[language] = p
+	return p, nil
+}
+
+func (c *parserCache) close() {
+	for _, p := range c.parsers {
+		p.Close()
+	}
+}
+
+// parserSetup returns the setup of a forEachFile loop whose workers need a
+// parser cache.
+func parserSetup(newParser parserFactory) func() (*parserCache, func(), error) {
+	return func() (*parserCache, func(), error) {
+		c := newParserCache(newParser)
+		return c, c.close, nil
+	}
+}
+
+// extractWithFactory is Extract's implementation, parameterized on the
+// parser factory so tests can inject a counting stand-in without depending
+// on CGo parser internals. Each result goes to the index of its file, so
+// the returned slice is in the order of files, whichever worker took
+// which file.
 func extractWithFactory(files []discover.DiscoveredFile, limit int, newParser parserFactory) ([]goextract.FileResult, error) {
-	if limit <= 0 {
-		limit = DefaultWorkers()
-	}
-
 	results := make([]goextract.FileResult, len(files))
-	if len(files) == 0 {
-		return results, nil
-	}
-	if limit > len(files) {
-		limit = len(files)
-	}
-
-	var next atomic.Int64
-
-	g := new(errgroup.Group)
-	for w := 0; w < limit; w++ {
-		g.Go(func() error {
-			// Per-worker language-keyed parser cache (Pitfall 1 fix):
-			// lazily constructed on first encounter of a language, reused
-			// for every subsequent file of that same language this worker
-			// claims, and closed for every cached entry at worker exit —
-			// never one parser per file, never one parser total per
-			// worker regardless of how many languages it sees.
-			parsers := make(map[string]parser.Parser)
-			defer func() {
-				for _, p := range parsers {
-					p.Close()
-				}
-			}()
-
-			for {
-				i := int(next.Add(1)) - 1
-				if i >= len(files) {
-					return nil
-				}
-				f := files[i]
-
-				src, err := os.ReadFile(f.AbsPath)
-				if err != nil {
-					// A read failure is per-file, not fatal to the
-					// batch — recorded the same way goextract.Extract
-					// records a parse failure (Pitfall 4). Language is
-					// stamped from the discovered file itself, not
-					// hardcoded, so a non-Go file's read failure is
-					// correctly attributed.
-					results[i] = goextract.FileResult{
-						ImportPath:  f.ImportPath,
-						RelPath:     f.RelPath,
-						Language:    f.Language,
-						MtimeUnixNs: f.MtimeUnixNs,
-						SizeBytes:   f.SizeBytes,
-						Err:         fmt.Errorf("indexer: reading %s: %w", f.AbsPath, err),
-					}
-					continue
-				}
-
-				spec, ok := extract.ByID(f.Language)
-				if !ok {
-					// An unrecognized language is a batch-fatal
-					// condition — Discover only ever emits files whose
-					// extension matched a registered language, so
-					// reaching here means the registry changed out from
-					// under a running batch, which is not a per-file
-					// problem to paper over.
-					return fmt.Errorf("indexer: no registered language %q for %s", f.Language, f.RelPath)
-				}
-
-				p, cached := parsers[f.Language]
-				if !cached {
-					p, err = newParser(f.Language)
-					if err != nil {
-						return fmt.Errorf("indexer: creating %s parser: %w", f.Language, err)
-					}
-					parsers[f.Language] = p
-				}
-
-				r, err := extract.File(spec, p, f.ImportPath, f.RelPath, src)
-				if err != nil {
-					return err
-				}
-				// Phase 4 D-01a: stamp the on-disk stat info Discover
-				// already captured onto the result, so Pass 2 can carry
-				// it onto the committed File record.
-				r.MtimeUnixNs = f.MtimeUnixNs
-				r.SizeBytes = f.SizeBytes
-				// Disjoint index, unique per file — safe under
-				// concurrent writes from other workers (each worker's
-				// `i` is obtained from a single atomic counter, so no
-				// two workers ever write the same index).
-				results[i] = r
+	err := forEachFile(context.Background(), claimLoop{step: stepExtract}, len(files), limit, parserSetup(newParser),
+		func(_ context.Context, parsers *parserCache, i int, release func()) error {
+			defer release()
+			r, err := extractOne(parsers, files[i])
+			if err != nil {
+				return err
 			}
+			results[i] = r
+			return nil
 		})
-	}
-
-	if err := g.Wait(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return results, nil
+}
+
+// extractOne is the per-file body that Extract and pass 1 of a full index
+// share. It reads the file, takes the parser of its language from the
+// cache of the worker, extracts the file, and stamps the stat data that
+// discovery captured (Phase 4 D-01a).
+//
+// A file that cannot be read gives a result with Err set and no error: the
+// failure is that of one file, not of the batch (Pitfall 4). An error
+// means that the whole batch is void: no registered language, a parser
+// that cannot be made, or an extractor that failed on the file.
+func extractOne(parsers *parserCache, f discover.DiscoveredFile) (goextract.FileResult, error) {
+	src, err := os.ReadFile(f.AbsPath)
+	if err != nil {
+		return goextract.FileResult{
+			ImportPath:  f.ImportPath,
+			RelPath:     f.RelPath,
+			Language:    f.Language,
+			MtimeUnixNs: f.MtimeUnixNs,
+			SizeBytes:   f.SizeBytes,
+			Err:         fmt.Errorf("indexer: reading %s: %w", f.AbsPath, err),
+		}, nil
+	}
+	// Discover only emits files whose extension matched a registered
+	// language, so a missing one means the registry changed under a
+	// running batch, which no single file can answer for.
+	spec, ok := extract.ByID(f.Language)
+	if !ok {
+		return goextract.FileResult{}, fmt.Errorf("indexer: no registered language %q for %s", f.Language, f.RelPath)
+	}
+	p, err := parsers.get(f.Language)
+	if err != nil {
+		return goextract.FileResult{}, err
+	}
+	r, err := extract.File(spec, p, f.ImportPath, f.RelPath, src)
+	if err != nil {
+		return goextract.FileResult{}, err
+	}
+	r.MtimeUnixNs = f.MtimeUnixNs
+	r.SizeBytes = f.SizeBytes
+	return r, nil
 }

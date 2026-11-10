@@ -12,58 +12,15 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
-// priorCoverageGeneration (CR-01, 10-REVIEW.md iteration 3; FIX-06/D-10/
-// D-11 in phase 01) reads Meta.CoverageGeneration from whatever store
-// currently lives at storeDir, BEFORE this command's own RemoveAll wipes
-// it — read-only, via graphstore's normal Open/Snapshot path (no Writer
-// is ever opened), and the store is fully Closed before returning,
-// releasing Pebble's lock file so the RemoveAll that follows never
-// contends with a lock this call is still holding (mirrors
-// needsFileIndexBackfill's own isolated open/close discipline,
-// internal/indexer/sync.go). As of FIX-06, this same read is ALSO the
-// store-liveness check: the caller uses the returned error to decide
-// whether RemoveAll may run at all, not merely what floor to stamp.
-//
-// The caller now distinguishes three outcomes by the returned error,
-// via graphstore's exported sentinels only (never a pebble import or
-// error-string match — D-04a):
-//   - errors.Is(err, graphstore.ErrNotFound): the store was never
-//     indexed, or exists with no Meta record yet. Silent, floor 0 — the
-//     ONLY outcome that preserves this function's pre-FIX-06 behavior.
-//   - errors.Is(err, graphstore.ErrStoreLocked): another process holds
-//     the store open. The caller REFUSES before RemoveAll runs (D-10) —
-//     this call must never be asked to paper over that by returning 0.
-//   - any other non-nil error: the store is corrupt or otherwise
-//     unreadable. The caller WARNS (naming the floor-0 consequence) and
-//     then rebuilds anyway — `--force` is the recovery path for exactly
-//     this case (D-11).
-func priorCoverageGeneration(storeDir string) (int64, error) {
-	store, err := graphstore.Open(storeDir)
-	if err != nil {
-		return 0, err
-	}
-	defer store.Close()
-
-	r, err := store.Snapshot()
-	if err != nil {
-		return 0, err
-	}
-	defer r.Close()
-
-	meta, err := r.GetMeta()
-	if err != nil {
-		return 0, err
-	}
-	return meta.GetCoverageGeneration(), nil
-}
-
 // newIndexCmd builds the `codegraph index` command: a deterministic
 // from-scratch rebuild against an already-initialized .codegraph/
 // (INDX-02). Requires .codegraph/ to already exist — ErrNotInitialized
 // otherwise, directing the user to `codegraph init` first (D-01a).
 // --force rebuilds without prompting; without --force the user must
 // confirm interactively, since a from-scratch rebuild replaces the
-// existing store outright rather than layering on top of it.
+// existing store outright rather than layering on top of it. The store
+// is replaced only when the rebuild succeeds: a rebuild that fails or
+// stops halfway leaves the previous graph in place.
 func newIndexCmd() *cobra.Command {
 	var force, quiet, verbose bool
 	var workers int
@@ -97,67 +54,36 @@ func newIndexCmd() *cobra.Command {
 			}
 
 			storeDir := filepath.Join(codegraphDir, storeDirName)
-			// CR-01 (10-REVIEW.md iteration 3): read the store's own
-			// prior CoverageGeneration BEFORE wiping it below, so it can
-			// float the rebuild's stamped generation at least that high
-			// (Options.CoverageGenerationFloor, internal/indexer's
-			// pipeline.go). Without this, the wiped store's first
-			// coverage commit reads back ErrNotFound from its own
-			// now-empty Meta and resets to generation 1 on every single
-			// `codegraph index` run, aliasing onto whatever generation a
-			// still-live client's outstanding page token already
-			// carries (10-REVIEW.md CR-01's concrete two-request
-			// reproduction). FIX-06/D-10/D-11: the same read is now ALSO
-			// the store-liveness check — a live holder must refuse this
-			// call before RemoveAll ever runs (WINDOWS #36 / T-10-16),
-			// so the three outcomes below are classified before the wipe
-			// proceeds, not folded into a single tolerant floor.
-			coverageGenerationFloor, priorErr := priorCoverageGeneration(storeDir)
-			switch {
-			case priorErr == nil:
-				// A real prior generation was read; float from it.
-			case errors.Is(priorErr, graphstore.ErrNotFound):
-				// Never indexed, or a store with no Meta record yet
-				// (D-11): silent, floor stays 0 — the only branch that
-				// preserves pre-FIX-06 behavior.
-			case errors.Is(priorErr, graphstore.ErrStoreLocked):
-				// Another process holds the store open (D-10): refuse
-				// BEFORE RemoveAll, naming the holder and the two live
-				// remedies. `codegraph daemon unlock` is the live verb
-				// (Phase 3 VERB-04, D-08).
-				return fmt.Errorf("%w: another process holds %s open — stop it first with `codegraph daemon stop`, or run `codegraph daemon unlock` once it has exited", priorErr, storeDir)
-			default:
-				// Corrupt or otherwise unreadable (D-11): warn that the
-				// prior coverage generation could not be read, so the
-				// floor is 0, then proceed — `--force` is the sanctioned
-				// recovery path for exactly this case.
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read prior coverage generation from %s (%v); rebuilding with floor 0\n", storeDir, priorErr)
-			}
-
-			// A from-scratch rebuild must be deterministic (D-01a): clear
-			// any prior store contents before re-running the pipeline
-			// rather than layering a new run on top of stale state, so
-			// the result never depends on what was there before.
-			if err := os.RemoveAll(storeDir); err != nil {
-				return err
-			}
-			if err := os.MkdirAll(storeDir, 0o755); err != nil {
-				return err
-			}
-
 			// TUI-05/D-07/D-08: same TTY-gated spinner as init.go, via the
 			// shared helper (WR-04 06-REVIEW.md, see progress_cli.go). Stop
 			// is deferred so teardown runs even on indexer.Run error.
 			defer startProgress(quiet, "indexing")()
 
+			// indexer.Run builds the new graph beside the store and puts
+			// it in the place of the store only when it succeeds, so this
+			// command no longer deletes the store first. Run also reads
+			// the prior coverage generation and takes the locks itself.
 			stats, err := indexer.Run(root, storeDir, indexer.Options{
-				Workers:                 workers,
-				Verbose:                 verbose,
-				Quiet:                   quiet,
-				CoverageGenerationFloor: coverageGenerationFloor,
+				Workers: workers,
+				Verbose: verbose,
+				Quiet:   quiet,
 			})
+			if errors.Is(err, graphstore.ErrStoreLocked) {
+				// Another process holds the store open or writes to it
+				// (D-10): name the holder and the two live remedies.
+				// `codegraph daemon unlock` is the live verb (Phase 3
+				// VERB-04, D-08). The store did not change.
+				return fmt.Errorf("%w: another process holds %s open — stop it first with `codegraph daemon stop`, or run `codegraph daemon unlock` once it has exited", err, storeDir)
+			}
 			if err != nil {
 				return err
+			}
+			if stats.PriorGenerationErr != nil {
+				// A store that is corrupt or cannot be read (D-11): the
+				// run could not read its prior coverage generation, so
+				// it started again from 0. `--force` is the sanctioned
+				// way to repair exactly this case.
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read prior coverage generation from %s (%v); rebuilding with floor 0\n", storeDir, stats.PriorGenerationErr)
 			}
 			printSummary(cmd, stats, quiet, verbose)
 			return nil

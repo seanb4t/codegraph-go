@@ -205,9 +205,8 @@ func (b *Build) build() error {
 		return err
 	}
 	b.rebuilt = true
-	if err := os.RemoveAll(store); err != nil {
-		return err
-	}
+	// A full index replaces the copied store in one step, so the copy
+	// needs no removal first.
 	_, err := indexer.Run(b.worktreeRoot, store, indexer.Options{Quiet: true})
 	return err
 }

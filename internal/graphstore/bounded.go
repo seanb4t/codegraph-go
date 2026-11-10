@@ -198,12 +198,6 @@ func (w *boundedWriter) DeleteFileSubgraph(path string) error {
 	return w.add(func() error { return w.inner.DeleteFileSubgraph(path) })
 }
 
-// DeleteGraph goes away with the Writer method, once a full index builds
-// its store apart and places it with ReplaceStore.
-func (w *boundedWriter) DeleteGraph() error {
-	return w.add(func() error { return w.inner.DeleteGraph() })
-}
-
 // syncOption returns the Pebble write option of a commit mode.
 func syncOption(sync bool) *pebble.WriteOptions {
 	if sync {

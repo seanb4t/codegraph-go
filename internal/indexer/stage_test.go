@@ -46,16 +46,12 @@ func TestStagePutsRecordsInKeyOrder(t *testing.T) {
 	nodesBefore := slices.Clone(g.Nodes)
 
 	var sink recordingSink
-	n, err := stage(&sink, g, func(e *schema.Edge) string { return e.Source + ".go" })
-	if err != nil {
+	if err := stage(&sink, g, func(e *schema.Edge) string { return e.Source + ".go" }); err != nil {
 		t.Fatal(err)
 	}
 
 	if want := []string{"0pkg", "a", "a", "b", "c"}; !slices.Equal(sink.nodes, want) {
 		t.Errorf("nodes = %v, want %v", sink.nodes, want)
-	}
-	if n != 4 {
-		t.Errorf("distinct node count = %d, want 4", n)
 	}
 	if want := []string{"a.go", "m.go", "z.go"}; !slices.Equal(sink.files, want) {
 		t.Errorf("files = %v, want %v", sink.files, want)

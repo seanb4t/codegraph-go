@@ -179,15 +179,15 @@ func NewGlobal(view symbols.View, h symbols.Hierarchy, structural []*schema.Edge
 	}
 
 	for _, e := range implements {
-		u := g.unit(g.ownerPath(e))
+		u := g.unit(g.OwnerPath(e))
 		u.implements = append(u.implements, e)
 	}
 	for _, e := range overrides {
-		u := g.unit(g.ownerPath(e))
+		u := g.unit(g.OwnerPath(e))
 		u.overrides = append(u.overrides, e)
 	}
 	for _, e := range g.setEdges() {
-		u := g.unit(g.ownerPath(e))
+		u := g.unit(g.OwnerPath(e))
 		u.sets = append(u.sets, e)
 	}
 	return g
@@ -202,10 +202,12 @@ func (g *Global) unit(path string) *globalUnit {
 	return u
 }
 
-// ownerPath returns the owner path of e: the FilePath of the node that
-// EdgeOwnerID names. The lookup covers the overload sets of the hierarchy
-// and the nodes of the view. A node that neither holds has the path "".
-func (g *Global) ownerPath(e *schema.Edge) string {
+// OwnerPath returns the owner path of e: the FilePath of the node that
+// EdgeOwnerID names. It decides the unit of e, and the file-index entry
+// that the store keeps for e. The lookup covers the overload sets of the
+// hierarchy and the nodes of the view. A node that neither holds has the
+// path "".
+func (g *Global) OwnerPath(e *schema.Edge) string {
 	id := EdgeOwnerID(e)
 	if set, ok := g.h.Set(id); ok {
 		return set.Node().FilePath
@@ -345,7 +347,7 @@ func (g *Global) Assemble(t TypeOutput, c CallOutput) (Unit, error) {
 				edges = append(edges, e)
 				continue
 			}
-			switch owner := g.ownerPath(e); owner {
+			switch owner := g.OwnerPath(e); owner {
 			case path:
 				edges = append(edges, e)
 			case "":
