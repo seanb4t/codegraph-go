@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -59,6 +61,7 @@ func TestSoak(t *testing.T) {
 
 	waitForLock(t, codegraphDir)
 	waitWatcherOpened(t, opened)
+	waitCatchUpSync(t, synced)
 
 	lastSymbol := ""
 	for i := 0; i < soakIterations; i++ {
@@ -110,7 +113,9 @@ func TestSoak(t *testing.T) {
 // warning): (a) while session A holds the daemon lock, session B's
 // RunWithRetry never becomes a second writer — at most one writer always;
 // (b) once A exits, B's RunWithRetry converges and becomes the sole
-// writer — exactly one writer eventually. Both sessions share one
+// writer — exactly one writer eventually. Session B's openWatcher writes
+// convB.go before it opens the watcher, so no event reports that file: the
+// catch-up sync of session B must find it. Both sessions share one
 // initFixture root and use an injected sub-second retry interval (D-14's
 // production ~30s cadence would make this soak impractically slow) plus a
 // Probe pinning IsWSL false so the soak never depends on the host's real
@@ -154,7 +159,15 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	onDeferredB := func() { atomic.AddInt32(&deferredBCount, 1) }
 
 	openedA := watcherOpened(dA)
-	openedB := watcherOpened(dB)
+	// The write must stay before openWatch: the file is then on disk before
+	// session B's watcher exists.
+	dB.openWatcher = func(root string) (watcher, error) {
+		src := "package main\n\nfunc ConvB() {}\n"
+		if err := os.WriteFile(filepath.Join(root, "convB.go"), []byte(src), 0o644); err != nil {
+			return nil, err
+		}
+		return openWatch(root)
+	}
 
 	ctxA, cancelA := context.WithCancel(context.Background())
 	ctxB, cancelB := context.WithCancel(context.Background())
@@ -173,6 +186,7 @@ func TestConvergenceTwoSessions(t *testing.T) {
 
 	waitForLock(t, codegraphDir)
 	waitWatcherOpened(t, openedA)
+	waitCatchUpSync(t, syncedA)
 
 	runErrB := make(chan error, 1)
 	wg.Add(1)
@@ -220,13 +234,8 @@ func TestConvergenceTwoSessions(t *testing.T) {
 		t.Fatal("session A did not shut down")
 	}
 
-	// Wait for B's watcher, not only B's lock, before writing: Run opens
-	// the watcher after it acquires the lock, and a file created between
-	// the two is never observed — a race distinct from the convergence
-	// property this test is proving.
-	waitWatcherOpened(t, openedB)
-
-	writeFixtureFile(t, root, "convB.go", "package main\n\nfunc convB() {}\n")
+	// The test writes nothing for B. B's first sync is its catch-up sync,
+	// which runs only after B took the lock and opened its watcher.
 	select {
 	case <-syncedB:
 	case <-time.After(testBudget(5 * time.Second)):
@@ -247,8 +256,8 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	}
 	wg.Wait()
 
-	if names := nodeNames(t, storeDir); !names["convA"] || !names["convB"] {
-		t.Fatalf("committed graph = %v, want it to contain both convA (session A) and convB (session B, post-convergence)", names)
+	if names := nodeNames(t, storeDir); !names["convA"] || !names["ConvB"] {
+		t.Fatalf("committed graph = %v, want it to contain both convA (session A) and ConvB (session B, written before its watcher opened)", names)
 	}
 
 	if _, ok, err := readLock(codegraphDir); err != nil || ok {

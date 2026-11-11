@@ -93,8 +93,8 @@ func startFakeRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, 
 }
 
 // TestRunUsesInjectedWatcher proves Run drives the watcher that openWatcher
-// opens: one event from it produces exactly one sync, and Run closes it on
-// shutdown.
+// opens: after the catch-up sync, one event from it produces exactly one
+// sync, and Run closes it on shutdown.
 func TestRunUsesInjectedWatcher(t *testing.T) {
 	root, _ := fakeFixture(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -111,6 +111,9 @@ func TestRunUsesInjectedWatcher(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		runErr := startFakeRun(t, ctx, cancel, d)
 
+		if err := waitCatchUpSync(t, synced); err != nil {
+			t.Fatalf("catch-up sync: %v", err)
+		}
 		fw.events <- "main.go"
 		select {
 		case err := <-synced:
@@ -135,8 +138,8 @@ func TestRunUsesInjectedWatcher(t *testing.T) {
 		case <-time.After(time.Minute):
 			t.Fatal("Run did not return after cancel")
 		}
-		if got := syncs.Load(); got != 1 {
-			t.Fatalf("syncFn ran %d times, want 1", got)
+		if got := syncs.Load(); got != 2 {
+			t.Fatalf("syncFn ran %d times, want 2: the catch-up sync and one for the event", got)
 		}
 		if !fw.closed.Load() {
 			t.Fatal("Run returned without closing the injected watcher")

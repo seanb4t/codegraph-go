@@ -67,7 +67,7 @@ func runWithin() {
 //	    Print the codegraph_explore text for query.
 //	mcpclient stderr text
 //	    Wait until the server's stderr contains text, then print that stderr.
-//	mcpclient live-edit -from dir -to dir -touch file -query q -want text
+//	mcpclient live-edit -from dir -to dir -query q -want text
 //	    Copy the files of -from into -to while the session is live, then
 //	    call codegraph_explore until its text contains -want, and print it.
 //	mcpclient raw tool
@@ -224,26 +224,25 @@ func mcpStderr(text string) error {
 	return nil
 }
 
-// mcpLiveEdit is WATCH-01's live-edit client. It calls codegraph_explore
-// until the payload contains -want or its 90s context ends. Between calls,
-// at most once each 500ms, it rewrites the anchor file named by -touch
-// with the same content: the watcher starts off the handshake path (D-06)
-// and can miss the first burst, and the rewrite interval is longer than
-// the debounce window the script sets, so the rewrites cannot hold off the
-// flush. Every explore in the loop must succeed: a store-lock collision
-// between an explore and the flush (CR-01) must never surface as an error.
+// mcpLiveEdit is WATCH-01's live-edit client. After the handshake it
+// copies the files of -from into -to one time, and then calls
+// codegraph_explore until the payload contains -want or its 90s context
+// ends. It writes nothing more: the watcher starts off the handshake path
+// (D-06) and can open after the copy, and the server must sync such an
+// edit without a second one. Every explore in the loop must succeed: a
+// sync of the server's own process that has the store open must never
+// surface as a tool error.
 func mcpLiveEdit(args []string) error {
 	fs := flag.NewFlagSet("live-edit", flag.ContinueOnError)
 	from := fs.String("from", "", "directory holding the new files")
 	to := fs.String("to", "", "directory to copy them into")
-	touch := fs.String("touch", "", "file of -from to rewrite until -want appears")
 	query := fs.String("query", "", "codegraph_explore query")
 	want := fs.String("want", "", "text the explore payload must contain")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *from == "" || *to == "" || *touch == "" || *query == "" || *want == "" {
-		return errors.New("live-edit needs -from, -to, -touch, -query and -want")
+	if *from == "" || *to == "" || *query == "" || *want == "" {
+		return errors.New("live-edit needs -from, -to, -query and -want")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -267,26 +266,13 @@ func mcpLiveEdit(args []string) error {
 			return err
 		}
 	}
-	anchor := filepath.Join(*to, *touch)
-	anchorData, err := os.ReadFile(anchor)
-	if err != nil {
-		return err
-	}
 
 	waitCtx, waitCancel := context.WithTimeout(ctx, 90*time.Second)
 	defer waitCancel()
-	rewrite := time.NewTicker(500 * time.Millisecond)
-	defer rewrite.Stop()
 	var payload string
 	for {
-		select {
-		case <-waitCtx.Done():
+		if waitCtx.Err() != nil {
 			return fmt.Errorf("codegraph_explore %q never contained %q within 90s; last payload:\n%s", *query, *want, payload)
-		case <-rewrite.C:
-			if err := os.WriteFile(anchor, anchorData, 0o644); err != nil {
-				return err
-			}
-		default:
 		}
 		if payload, err = explore(ctx, session, *query); err != nil {
 			return fmt.Errorf("during a live watch session: %w", err)
