@@ -1,13 +1,15 @@
 package indexer
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
-	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // TestPipelineRun proves Run orchestrates Discover -> Extract -> Resolve
@@ -82,46 +84,46 @@ func TestPipelineRun(t *testing.T) {
 	}
 }
 
-// errInjectedResolveFailure is the sentinel a stub resolveFunc returns to
-// simulate a Pass-2 failure without depending on a real Resolve error
-// condition.
-var errInjectedResolveFailure = errors.New("indexer: injected resolve failure for test")
+// errInjectedCommitFailure is the error that a test's onCommit hook
+// returns to fail a run at a batch commit.
+var errInjectedCommitFailure = errors.New("indexer: injected commit failure for test")
 
-// TestPipelineRun_ClosesStoreOnResolveError proves the GraphStore is
-// opened exactly once and Closed even when Pass 2 fails (T-02-11): if Run
-// leaked the open store, reopening the same directory afterward would fail
-// with a Pebble lock-contention error.
-func TestPipelineRun_ClosesStoreOnResolveError(t *testing.T) {
-	storeDir := t.TempDir()
-	failingResolve := func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string, excluded []*schema.ExcludedFile, coverageGenerationFloor int64) (int, error) {
-		return 0, errInjectedResolveFailure
+// setHook sets a hook variable of the package for the life of the test.
+func setHook[T any](t *testing.T, hook *T, value T) {
+	t.Helper()
+	orig := *hook
+	*hook = value
+	t.Cleanup(func() { *hook = orig })
+}
+
+// TestPipelineRun_ClosesStoreOnCommitError checks that a run that fails
+// at a commit closes what it opened and leaves no store behind
+// (T-02-11): a later open of the same path works at once.
+func TestPipelineRun_ClosesStoreOnCommitError(t *testing.T) {
+	storeDir := filepath.Join(t.TempDir(), "store")
+	commits := 0
+	setHook(t, &onCommit, func(graphstore.Commit) error {
+		commits++
+		return errInjectedCommitFailure
+	})
+
+	_, err := run(context.Background(), fixtureRoot, storeDir, Options{})
+	if !errors.Is(err, errInjectedCommitFailure) {
+		t.Fatalf("run error = %v, want %v", err, errInjectedCommitFailure)
 	}
-
-	_, err := run(fixtureRoot, storeDir, Options{}, failingResolve)
-	if !errors.Is(err, errInjectedResolveFailure) {
-		t.Fatalf("run error = %v, want %v", err, errInjectedResolveFailure)
+	// Positive assertion: the run reached a commit.
+	if commits == 0 {
+		t.Fatal("the run failed before any commit, so the hook did not cause the failure")
+	}
+	if _, err := os.Lstat(storeDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Lstat(%s) = %v; want no store after a first index that failed", storeDir, err)
 	}
 
 	store, err := graphstore.Open(storeDir)
 	if err != nil {
-		t.Fatalf("graphstore.Open after failed run: %v (store was not Closed)", err)
+		t.Fatalf("graphstore.Open after the failed run: %v (the run left a lock)", err)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
-	}
-}
-
-// TestPipelineRun_DefaultsWorkersToNumCPU proves Options.Workers <= 0
-// still produces a correct run (Extract's own runtime.NumCPU() default,
-// D-04) — Run neither panics nor short-circuits on the zero value.
-func TestPipelineRun_DefaultsWorkersToNumCPU(t *testing.T) {
-	storeDir := t.TempDir()
-
-	stats, err := Run(fixtureRoot, storeDir, Options{Workers: 0})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if stats.Files == 0 {
-		t.Error("Stats.Files = 0, want > 0")
 	}
 }

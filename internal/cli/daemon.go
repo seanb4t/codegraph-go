@@ -251,7 +251,7 @@ func newDaemonStartCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "suppress daemon-driven sync progress output")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "emit per-file/per-pass detail for daemon-driven syncs")
-	cmd.Flags().IntVar(&workers, "workers", 0, "bound the daemon's extraction worker pool (default: number of CPUs)")
+	addWorkersFlag(cmd, &workers)
 
 	return cmd
 }

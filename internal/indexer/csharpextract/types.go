@@ -95,8 +95,7 @@
 // deterministic tie-break by file path sort order" — but genuinely
 // resolving "which fragment sorts first" requires CROSS-FILE coordination
 // (comparing this file's path against every OTHER fragment's path), which
-// only resolve.go's writeGraph (which ranges every file's results in a
-// single pass) could do — and this plan's file scope is deliberately
+// only a pass over the results of every file could do — and this plan's file scope is deliberately
 // limited to csharpextract + languages_csharp.go, not resolve.go. Instead,
 // this extractor uses a DETERMINISTIC SENTINEL for a partial type's shared
 // node: FilePath="", StartLine=0, EndLine=0, StartCol=0, EndCol=0. Every

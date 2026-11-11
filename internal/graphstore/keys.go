@@ -192,7 +192,7 @@ func fileIndexEdgePrefix(path string) []byte {
 
 // fileIndexEdgeKey encodes a (path, src, kind, dst) file-index entry: path
 // owns the outgoing edge (src, kind, dst) — i.e. src is one of path's own
-// nodes (the edge's ownerPath, threaded from resolve.go's writeGraph).
+// nodes (the edge's ownerPath, which the indexer passes to PutEdge).
 func fileIndexEdgeKey(path, src, kind, dst string) []byte {
 	buf := fileIndexEdgePrefix(path)
 	buf = appendSegment(buf, src)

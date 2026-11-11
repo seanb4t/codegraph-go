@@ -198,7 +198,8 @@ jobs:
           if-no-files-found: warn
 
   # WR-03: internal/watch, internal/cli and internal/mcp under the race
-  # detector, in parallel. internal/daemon runs in the daemon leg.
+  # detector, in parallel, with the packages of the full-index pipeline
+  # (task test:race lists them). internal/daemon runs in the daemon leg.
   go-race:
     name: test (go-race)
     runs-on: namespace-profile-linux-amd64-4x8

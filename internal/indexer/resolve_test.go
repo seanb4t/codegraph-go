@@ -1,39 +1,27 @@
 package indexer
 
 import (
+	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
-	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
-
-// fixtureResults returns Pass 1's results and module path for the shared
-// multi-package testdata/gofixture tree, the same fixture 02-03's own
-// tests exercise.
-func fixtureResults(t *testing.T) ([]goextract.FileResult, string) {
-	t.Helper()
-	files, modulePath, err := discover.Discover(fixtureRoot)
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-	results, err := Extract(files, 0)
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-	return results, modulePath
-}
 
 // errStubWrite is the sentinel error stubWriter returns for whichever
 // Put* method its failOn field names.
 var errStubWrite = errors.New("stub write error")
 
-// stubWriter is an in-memory graphstore.Writer stand-in so writeGraph's
-// single-writer/batched-commit contract can be tested without a real
-// Pebble-backed store. failOn, when non-empty, names the Put* method that
+// stubWriter is an in-memory graphstore.Writer stand-in, so the writer
+// goroutine of a full index can be tested without a real Pebble-backed
+// store. failOn, when non-empty, names the Put* method that
 // should fail (simulating a mid-write staging error).
 type stubWriter struct {
 	nodes    []*schema.Node
@@ -102,14 +90,6 @@ func (w *stubWriter) DeleteExcludedFile(path string) error {
 	return nil
 }
 
-func (w *stubWriter) DeleteGraph() error {
-	if w.failOn == "DeleteGraph" {
-		return errStubWrite
-	}
-	w.order = append(w.order, "DeleteGraph")
-	return nil
-}
-
 func (w *stubWriter) DeleteAllExcludedFiles() error {
 	if w.failOn == "DeleteAllExcludedFiles" {
 		return errStubWrite
@@ -139,10 +119,9 @@ func (w *stubWriter) Close() error {
 
 // stubStore is a graphstore.GraphStore stand-in whose NewWriter always
 // returns the same injected stubWriter, so a test can inspect it after
-// writeGraph returns.
+// the code under test returns.
 //
-// snapshotMeta/snapshotErr configure what Snapshot().GetMeta() reports to
-// writeGraph's WR-01 (iteration 2) read-modify-write of CoverageGeneration.
+// snapshotMeta/snapshotErr configure what Snapshot().GetMeta() reports.
 // The zero value (both nil) mimics a genuinely fresh store — GetMeta
 // returns graphstore.ErrNotFound, exactly as pebbleReader.GetMeta does for
 // a store with no Meta record yet — so every pre-existing test in this
@@ -164,15 +143,16 @@ func (s *stubStore) Snapshot() (graphstore.Reader, error) {
 	}
 	return &stubReader{err: graphstore.ErrNotFound}, nil
 }
-func (s *stubStore) NewWriter() (graphstore.Writer, error)         { return s.writer, nil }
-func (s *stubStore) NewWriterSized(int) (graphstore.Writer, error) { return s.writer, nil }
-func (s *stubStore) Export(w io.Writer) error                      { return nil }
-func (s *stubStore) Close() error                                  { return nil }
+func (s *stubStore) NewWriter() (graphstore.Writer, error) { return s.writer, nil }
+func (s *stubStore) NewBoundedWriter(int, func(graphstore.Commit) error) (graphstore.Writer, error) {
+	return s.writer, nil
+}
+func (s *stubStore) Export(w io.Writer) error { return nil }
+func (s *stubStore) Close() error             { return nil }
 
-// stubReader is a graphstore.Reader stand-in used ONLY for writeGraph's
-// prior-Meta read (Snapshot().GetMeta()). Every other method panics if
-// called — writeGraph never calls them, and a future caller that starts
-// doing so should fail loudly rather than silently return a zero value.
+// stubReader is a graphstore.Reader stand-in that serves only GetMeta.
+// Every other method panics if called: a caller that starts to use one
+// should fail loudly rather than silently get a zero value.
 type stubReader struct {
 	meta *schema.Meta
 	err  error
@@ -207,260 +187,163 @@ func (r *stubReader) IterateExcludedFiles() (graphstore.ExcludedFileIterator, er
 }
 func (r *stubReader) Close() error { return nil }
 
-// TestSingleWriter_CommitsOnce proves the entire resolved graph is written
-// through exactly ONE GraphStore.Writer with a single Commit() — no
-// per-symbol commits (D-04a) — and that Meta is stamped with correct
-// node/edge counts and schema_version == 1.
-func TestSingleWriter_CommitsOnce(t *testing.T) {
-	w := &stubWriter{}
-	store := &stubStore{writer: w}
-
-	nodes := []*schema.Node{
-		{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"},
-		{Id: "fn:b", Kind: "function", Name: "b", FilePath: "pkg/a.go"},
+// readMeta returns the metadata record of the store at storeDir.
+func readMeta(t *testing.T, storeDir string) *schema.Meta {
+	t.Helper()
+	meta, err := readStoreMeta(storeDir)
+	if err != nil {
+		t.Fatalf("readStoreMeta(%s): %v", storeDir, err)
 	}
-	packageNodes := []*schema.Node{
-		{Id: "package:x", Kind: "package", Name: "x", QualifiedName: "example.com/x"},
-	}
-	edges := []*schema.Edge{
-		{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 30, Col: 1, Provenance: "ast"},
-		{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 12, Col: 1, Provenance: "ast"},
-	}
-	files := []*schema.File{
-		{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go", NodeCount: 2, EdgeCount: 1},
-	}
-
-	if err := writeGraph(store, nodes, packageNodes, edges, files, "", nil, 0); err != nil {
-		t.Fatalf("writeGraph returned error: %v", err)
-	}
-
-	if w.commitCalls != 1 {
-		t.Errorf("commitCalls = %d, want 1", w.commitCalls)
-	}
-	if w.closeCalls != 0 {
-		t.Errorf("closeCalls = %d, want 0 (Close is only for the error path)", w.closeCalls)
-	}
-	if len(w.nodes) != len(nodes)+len(packageNodes) {
-		t.Errorf("staged %d nodes, want %d (symbol + package pseudo-nodes)", len(w.nodes), len(nodes)+len(packageNodes))
-	}
-	if len(w.files) != len(files) {
-		t.Errorf("staged %d files, want %d", len(w.files), len(files))
-	}
-	if len(w.edges) != 1 {
-		t.Fatalf("staged %d edges, want 1 (the duplicate (fn:a,calls,fn:b) pair must collapse)", len(w.edges))
-	}
-	if w.edges[0].Line != 12 {
-		t.Errorf("collapsed edge Line = %d, want 12 (the (filePath,line,col)-sorted first candidate)", w.edges[0].Line)
-	}
-	if w.meta == nil {
-		t.Fatal("PutMeta was never called")
-	}
-	if w.meta.SchemaVersion != schema.SchemaVersion {
-		t.Errorf("Meta.SchemaVersion = %d, want %d", w.meta.SchemaVersion, schema.SchemaVersion)
-	}
-	if w.meta.NodeCount != int64(len(nodes)+len(packageNodes)) {
-		t.Errorf("Meta.NodeCount = %d, want %d", w.meta.NodeCount, len(nodes)+len(packageNodes))
-	}
-	if w.meta.EdgeCount != 1 {
-		t.Errorf("Meta.EdgeCount = %d, want 1", w.meta.EdgeCount)
-	}
+	return meta
 }
 
-// TestWriteGraphStagesExcludedFilesInTheSameBatch proves writeGraph stages
-// ExcludedFile records on the SAME Writer/Commit as every other record
-// kind (Phase 10 D-07/T-10-10) — never a second commit — and stamps
-// Meta.HasCoverage true.
-func TestWriteGraphStagesExcludedFilesInTheSameBatch(t *testing.T) {
-	w := &stubWriter{}
-	store := &stubStore{writer: w}
-
-	nodes := []*schema.Node{{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"}}
-	files := []*schema.File{{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go"}}
-	excluded := []*schema.ExcludedFile{
-		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION, Detail: ".md"},
-		{Path: "a/tagged.go", Reason: schema.ExclusionReason_EXCLUSION_REASON_BUILD_TAG, Detail: "linux/amd64"},
+// TestRunStampsMetadata checks the metadata record of a full index: the
+// schema version, and node and edge counts that equal the records the
+// store holds.
+func TestRunStampsMetadata(t *testing.T) {
+	storeDir := filepath.Join(t.TempDir(), "store")
+	stats, err := Run(fixtureRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
 	}
-
-	if err := writeGraph(store, nodes, nil, nil, files, "", excluded, 0); err != nil {
-		t.Fatalf("writeGraph returned error: %v", err)
+	meta := readMeta(t, storeDir)
+	if meta.SchemaVersion != schema.SchemaVersion {
+		t.Errorf("Meta.SchemaVersion = %d, want %d", meta.SchemaVersion, schema.SchemaVersion)
 	}
-
-	if w.commitCalls != 1 {
-		t.Errorf("commitCalls = %d, want 1", w.commitCalls)
-	}
-	if w.closeCalls != 0 {
-		t.Errorf("closeCalls = %d, want 0", w.closeCalls)
-	}
-	if len(w.excluded) != 2 {
-		t.Fatalf("staged %d excluded records, want 2", len(w.excluded))
-	}
-	if w.excluded[0].GetPath() != "a/tagged.go" || w.excluded[1].GetPath() != "b.md" {
-		t.Fatalf("excluded records not path-sorted: got [%q, %q], want [\"a/tagged.go\", \"b.md\"]", w.excluded[0].GetPath(), w.excluded[1].GetPath())
-	}
-	if w.meta == nil {
-		t.Fatal("PutMeta was never called")
-	}
-	if !w.meta.GetHasCoverage() {
+	if !meta.GetHasCoverage() {
 		t.Error("Meta.HasCoverage = false, want true")
 	}
+	// requireInvariants compares the counts of the metadata with the
+	// records of the store, and fails when either is zero.
+	counts := requireInvariants(t, storeDir)
+	if int(meta.NodeCount) != counts.Nodes || int(meta.EdgeCount) != counts.Edges {
+		t.Errorf("Meta counts %d nodes and %d edges, the store holds %d and %d", meta.NodeCount, meta.EdgeCount, counts.Nodes, counts.Edges)
+	}
+	if stats.Nodes != counts.Nodes || stats.Edges != counts.Edges {
+		t.Errorf("Stats counts %d nodes and %d edges, the store holds %d and %d", stats.Nodes, stats.Edges, counts.Nodes, counts.Edges)
+	}
 }
 
-// TestWriteGraphStampsMonotonicCoverageGeneration proves the WR-01
-// (iteration 2) fix: writeGraph read-modify-writes CoverageGeneration from
-// whatever the store's PRIOR Meta recorded, incrementing by exactly 1 —
-// never resetting to 1 unconditionally — so a from-scratch rewrite over an
-// EXISTING store (Sync's D-02b backfill path delegates to writeGraph too)
-// continues the same monotonic sequence a live CoverageRows page token may
-// already be pinned to.
-func TestWriteGraphStampsMonotonicCoverageGeneration(t *testing.T) {
+// TestRunStampsMonotonicCoverageGeneration checks that a full index reads
+// the coverage generation of the store it replaces and stamps one more, so
+// a page token of an earlier generation can tell that the data changed
+// (WR-01).
+func TestRunStampsMonotonicCoverageGeneration(t *testing.T) {
 	t.Run("fresh store (no prior Meta) starts at generation 1", func(t *testing.T) {
-		w := &stubWriter{}
-		store := &stubStore{writer: w} // zero value: Snapshot().GetMeta() -> ErrNotFound
-
-		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err != nil {
-			t.Fatalf("writeGraph returned error: %v", err)
+		storeDir := filepath.Join(t.TempDir(), "store")
+		stats, err := Run(fixtureRoot, storeDir, Options{})
+		if err != nil {
+			t.Fatalf("Run: %v", err)
 		}
-		if w.meta == nil {
-			t.Fatal("PutMeta was never called")
-		}
-		if got := w.meta.GetCoverageGeneration(); got != 1 {
+		if got := readMeta(t, storeDir).GetCoverageGeneration(); got != 1 {
 			t.Errorf("CoverageGeneration = %d, want 1 for a fresh store", got)
+		}
+		if stats.PriorGenerationErr != nil {
+			t.Errorf("Stats.PriorGenerationErr = %v, want nil for a store that was never indexed", stats.PriorGenerationErr)
 		}
 	})
 
 	t.Run("existing store continues from its prior generation", func(t *testing.T) {
-		w := &stubWriter{}
-		store := &stubStore{writer: w, snapshotMeta: &schema.Meta{CoverageGeneration: 41}}
+		storeDir := filepath.Join(t.TempDir(), "store")
+		store, err := graphstore.Open(storeDir)
+		if err != nil {
+			t.Fatalf("graphstore.Open: %v", err)
+		}
+		w, err := store.NewWriter()
+		if err != nil {
+			t.Fatalf("NewWriter: %v", err)
+		}
+		if err := w.PutMeta(&schema.Meta{CoverageGeneration: 41}); err != nil {
+			t.Fatalf("PutMeta: %v", err)
+		}
+		if err := w.Commit(); err != nil {
+			t.Fatalf("Commit: %v", err)
+		}
+		if err := store.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
 
-		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err != nil {
-			t.Fatalf("writeGraph returned error: %v", err)
+		if _, err := Run(fixtureRoot, storeDir, Options{}); err != nil {
+			t.Fatalf("Run: %v", err)
 		}
-		if w.meta == nil {
-			t.Fatal("PutMeta was never called")
-		}
-		if got := w.meta.GetCoverageGeneration(); got != 42 {
+		if got := readMeta(t, storeDir).GetCoverageGeneration(); got != 42 {
 			t.Errorf("CoverageGeneration = %d, want 42 (41 + 1)", got)
 		}
 	})
 
-	t.Run("a non-ErrNotFound Snapshot/GetMeta failure propagates", func(t *testing.T) {
-		w := &stubWriter{}
-		store := &stubStore{writer: w, snapshotErr: errStubWrite}
+	t.Run("an unreadable prior store is replaced, from generation 1", func(t *testing.T) {
+		storeDir := filepath.Join(t.TempDir(), "store")
+		if _, err := Run(fixtureRoot, storeDir, Options{}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		// Overwrite the manifest of the store, so that it opens with an
+		// error that is neither "locked" nor "not found".
+		manifests, err := filepath.Glob(filepath.Join(storeDir, "MANIFEST-*"))
+		if err != nil || len(manifests) != 1 {
+			t.Fatalf("found the MANIFEST files %v, %v; want exactly one", manifests, err)
+		}
+		if err := os.WriteFile(manifests[0], []byte("not a manifest\n"), 0o644); err != nil {
+			t.Fatalf("overwrite %s: %v", manifests[0], err)
+		}
+		if _, err := readStoreMeta(storeDir); err == nil || errors.Is(err, graphstore.ErrNotFound) || errors.Is(err, graphstore.ErrStoreLocked) {
+			t.Fatalf("readStoreMeta of the damaged store = %v; want an error that is neither not-found nor locked, so the test reaches the third outcome", err)
+		}
 
-		if err := writeGraph(store, nil, nil, nil, nil, "", nil, 0); err == nil {
-			t.Fatal("writeGraph returned nil error, want the propagated snapshot/GetMeta failure")
+		stats, err := Run(fixtureRoot, storeDir, Options{})
+		if err != nil {
+			t.Fatalf("Run over an unreadable store: %v, want the run to replace it", err)
 		}
-		if w.commitCalls != 0 {
-			t.Errorf("commitCalls = %d, want 0 — a prior-Meta read failure must abort before any Writer is opened", w.commitCalls)
+		if stats.PriorGenerationErr == nil {
+			t.Error("Stats.PriorGenerationErr = nil, want the error of the read")
 		}
+		if got := readMeta(t, storeDir).GetCoverageGeneration(); got != 1 {
+			t.Errorf("CoverageGeneration = %d, want 1", got)
+		}
+		requireInvariants(t, storeDir)
 	})
 }
 
-// TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting proves
-// writeGraph clears the whole c/ namespace via DeleteAllExcludedFiles
-// BEFORE staging any PutExcludedFile — the D-07 "range-delete then
-// rewrite" sequence a from-scratch rewrite over an EXISTING store (e.g.
-// Sync's D-02b backfill path) needs to avoid layering stale records on
-// top of a fresh set — all in the SAME single-commit batch.
-func TestWriteGraphRangeDeletesExcludedNamespaceBeforeRewriting(t *testing.T) {
-	w := &stubWriter{}
-	store := &stubStore{writer: w}
-
-	excluded := []*schema.ExcludedFile{
-		{Path: "a.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
-		{Path: "b.md", Reason: schema.ExclusionReason_EXCLUSION_REASON_UNSUPPORTED_EXTENSION},
-	}
-
-	if err := writeGraph(store, nil, nil, nil, nil, "", excluded, 0); err != nil {
-		t.Fatalf("writeGraph returned error: %v", err)
-	}
-
-	if w.deleteAllExcludedCalls != 1 {
-		t.Fatalf("deleteAllExcludedCalls = %d, want 1", w.deleteAllExcludedCalls)
-	}
-	if w.commitCalls != 1 {
-		t.Fatalf("commitCalls = %d, want 1", w.commitCalls)
-	}
-
-	firstPutIdx := -1
-	deleteAllIdx := -1
-	for i, op := range w.order {
-		if op == "DeleteAllExcludedFiles" && deleteAllIdx == -1 {
-			deleteAllIdx = i
-		}
-		if op == "PutExcludedFile" && firstPutIdx == -1 {
-			firstPutIdx = i
-		}
-	}
-	if deleteAllIdx == -1 {
-		t.Fatal("DeleteAllExcludedFiles was never recorded in call order")
-	}
-	if firstPutIdx == -1 {
-		t.Fatal("PutExcludedFile was never recorded in call order")
-	}
-	if deleteAllIdx >= firstPutIdx {
-		t.Fatalf("DeleteAllExcludedFiles (index %d) did not precede the first PutExcludedFile (index %d): order = %v", deleteAllIdx, firstPutIdx, w.order)
-	}
-}
-
-// TestSingleWriter_CloseOnStagingError proves a staging error mid-write
-// calls Writer.Close() (releasing the batch) instead of Commit(), and
-// writeGraph returns the error — never a partial commit.
-func TestSingleWriter_CloseOnStagingError(t *testing.T) {
+// TestWriterClosesBatchOnStageError checks the writer goroutine of a full
+// index against a stub store: an error while it stages a unit makes it
+// release its batch with Close, commit nothing, and return the error.
+func TestWriterClosesBatchOnStageError(t *testing.T) {
 	w := &stubWriter{failOn: "PutEdge"}
 	store := &stubStore{writer: w}
+	view := symbols.NewBuilder().Freeze()
+	global := resolve.NewGlobal(view, symbols.NewHierarchy(view, nil), nil)
 
-	nodes := []*schema.Node{{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"}}
-	edges := []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}}
-	files := []*schema.File{{Path: "pkg/a.go"}}
+	released := 0
+	units := make(chan stagedUnit, 1)
+	units <- stagedUnit{
+		unit: resolve.Unit{
+			Nodes: []*schema.Node{{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"}},
+			Edges: []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}},
+			File:  &schema.File{Path: "pkg/a.go"},
+		},
+		release: func() { released++ },
+	}
+	close(units)
 
-	err := writeGraph(store, nodes, nil, edges, files, "", nil, 0)
-	if err == nil {
-		t.Fatal("expected writeGraph to return the staging error, got nil")
+	tailCalled := false
+	_, err := writeUnits(context.Background(), store, units, global, func(graphstore.Writer, *stagedCounts) error {
+		tailCalled = true
+		return nil
+	})
+	if !errors.Is(err, errStubWrite) {
+		t.Fatalf("writeUnits error = %v, want the staging error", err)
+	}
+	// Positive assertion: the writer staged a record before the failure.
+	if len(w.nodes) != 1 {
+		t.Fatalf("the stub recorded %d node puts before the failure, want 1", len(w.nodes))
 	}
 	if w.commitCalls != 0 {
-		t.Errorf("commitCalls = %d, want 0 (must not commit after a staging error)", w.commitCalls)
+		t.Errorf("commitCalls = %d, want 0 (no commit after a staging error)", w.commitCalls)
 	}
 	if w.closeCalls != 1 {
-		t.Errorf("closeCalls = %d, want 1 (must release the abandoned batch)", w.closeCalls)
+		t.Errorf("closeCalls = %d, want 1 (the batch must be released)", w.closeCalls)
 	}
-}
-
-// TestResolve_EndToEnd proves the exported Resolve entry point runs the
-// full Pass 2 pipeline against a REAL GraphStore (not a stub), over the
-// shared multi-package fixture.
-func TestResolve_EndToEnd(t *testing.T) {
-	results, modulePath := fixtureResults(t)
-
-	store, err := graphstore.Open(t.TempDir())
-	if err != nil {
-		t.Fatalf("graphstore.Open: %v", err)
-	}
-	defer store.Close()
-
-	if _, err := Resolve(store, results, modulePath, "", nil, 0); err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-
-	meta, err := (func() (*schema.Meta, error) {
-		r, err := store.Snapshot()
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		return r.GetMeta()
-	})()
-	if err != nil {
-		t.Fatalf("GetMeta: %v", err)
-	}
-	if meta.SchemaVersion != schema.SchemaVersion {
-		t.Errorf("Meta.SchemaVersion = %d, want %d", meta.SchemaVersion, schema.SchemaVersion)
-	}
-	if meta.NodeCount == 0 {
-		t.Error("Meta.NodeCount = 0, want > 0")
-	}
-	if meta.EdgeCount == 0 {
-		t.Error("Meta.EdgeCount = 0, want > 0")
+	if tailCalled || released != 0 {
+		t.Errorf("tail called = %v, releases = %d; want the writer to stop at the failed unit", tailCalled, released)
 	}
 }
 

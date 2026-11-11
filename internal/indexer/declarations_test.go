@@ -515,6 +515,33 @@ func sortedOccurrences(a, b map[declOccurrence]int) []declOccurrence {
 	return keys
 }
 
+// fixtureTree is one source tree that a test indexes.
+type fixtureTree struct{ name, root string }
+
+// fixtureTrees lists the fixture trees under testdata. It is the one walk
+// of that directory, so every test that runs over "each fixture" sees the
+// same set.
+func fixtureTrees(t *testing.T) []fixtureTree {
+	t.Helper()
+	entries, err := os.ReadDir("testdata")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	var trees []fixtureTree
+	for _, e := range entries {
+		// testdata/rapid holds the failure files of rapid, and
+		// testdata/link the golden files of TestLinkUnitsMatchGolden.
+		// Neither is a fixture.
+		if e.IsDir() && e.Name() != "rapid" && e.Name() != "link" {
+			trees = append(trees, fixtureTree{e.Name(), filepath.Join("testdata", e.Name())})
+		}
+	}
+	if len(trees) == 0 {
+		t.Fatal("testdata holds no fixture tree")
+	}
+	return trees
+}
+
 // TestEveryDeclarationHasOneNode compares, file by file, the declarations
 // that a tree-sitter table lists with the nodes the extractors produce:
 // each declaration has exactly one node, matched by name, kind, start line
@@ -522,18 +549,7 @@ func sortedOccurrences(a, b map[declOccurrence]int) []declOccurrence {
 // in-repository fixtures, and over the pinned corpora when
 // CODEGRAPH_CORPUS_DIR is set.
 func TestEveryDeclarationHasOneNode(t *testing.T) {
-	type tree struct{ name, root string }
-	var trees []tree
-	fixtures, err := os.ReadDir("testdata")
-	if err != nil {
-		t.Fatalf("read testdata: %v", err)
-	}
-	for _, e := range fixtures {
-		// testdata/rapid holds the failure files of rapid, not a fixture.
-		if e.IsDir() && e.Name() != "rapid" {
-			trees = append(trees, tree{e.Name(), filepath.Join("testdata", e.Name())})
-		}
-	}
+	trees := fixtureTrees(t)
 	if os.Getenv("CODEGRAPH_CORPUS_DIR") != "" {
 		m, err := corpora.Load(filepath.Join("..", "..", "corpora", "manifest.json"))
 		if err != nil {
@@ -552,7 +568,7 @@ func TestEveryDeclarationHasOneNode(t *testing.T) {
 			if _, err := os.Stat(dir); err != nil {
 				t.Fatalf("corpus %s is not fetched at %s: %v", e.Repo, dir, err)
 			}
-			trees = append(trees, tree{e.Repo, dir})
+			trees = append(trees, fixtureTree{e.Repo, dir})
 		}
 	}
 

@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"github.com/cockroachdb/pebble/v2"
-	"google.golang.org/protobuf/proto"
 
+	"github.com/seanb4t/codegraph-go/internal/recordio"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -17,30 +17,12 @@ type pebbleWriter struct {
 	batch *pebble.Batch
 }
 
-// deterministicMarshal marshals msg with map-field key ordering forced
-// deterministic (Go's protobuf runtime otherwise iterates a Go map in its
-// own randomized order every call, which is invisible for a map-free
-// message but produces a genuinely different byte sequence run-to-run for
-// any message carrying a map field — schema.Edge.Metadata, Phase 5's
-// LANG-07/RES-03 addition, being the first field in this schema to ever
-// exercise that path). Every PutX call below routes through this helper,
-// not raw proto.Marshal, so a future map field on Node/File/Meta inherits
-// the same determinism guarantee without a second bug needing to be found
-// (05-12-PLAN.md's "route nodes/edges flow through collapseEdges
-// (deterministic)" acceptance criterion — the marshal step sits between
-// collapseEdges' own deterministic ordering and the bytes actually
-// persisted, so it must preserve that guarantee, not just the ordering
-// collapseEdges already establishes).
-func deterministicMarshal(msg proto.Message) ([]byte, error) {
-	return proto.MarshalOptions{Deterministic: true}.Marshal(msg)
-}
-
 // PutNode stages n's own n/ record, plus — when n has a FilePath (i.e. it
 // is not the kindPackage pseudo-node, which has no owning file) — its
 // x/<FilePath>/... file-index entry (Phase 4 D-02), so the owning file's
 // nodes are enumerable via IterateFileIndex.
 func (w *pebbleWriter) PutNode(n *schema.Node) error {
-	data, err := deterministicMarshal(n)
+	data, err := recordio.Marshal(n)
 	if err != nil {
 		return err
 	}
@@ -57,7 +39,7 @@ func (w *pebbleWriter) PutNode(n *schema.Node) error {
 // its x/<ownerPath>/... file-index entry (Phase 4 D-02), so the owning
 // file's outgoing edges are enumerable via IterateFileIndex.
 func (w *pebbleWriter) PutEdge(e *schema.Edge, ownerPath string) error {
-	data, err := deterministicMarshal(e)
+	data, err := recordio.Marshal(e)
 	if err != nil {
 		return err
 	}
@@ -95,7 +77,7 @@ func (w *pebbleWriter) DeleteFileIndexEdge(ownerPath, source, kind, target strin
 }
 
 func (w *pebbleWriter) PutFile(f *schema.File) error {
-	data, err := deterministicMarshal(f)
+	data, err := recordio.Marshal(f)
 	if err != nil {
 		return err
 	}
@@ -105,7 +87,7 @@ func (w *pebbleWriter) PutFile(f *schema.File) error {
 // PutExcludedFile stages x's c/ record (Phase 10 D-05), exactly as
 // PutFile stages a File record under f/.
 func (w *pebbleWriter) PutExcludedFile(x *schema.ExcludedFile) error {
-	data, err := deterministicMarshal(x)
+	data, err := recordio.Marshal(x)
 	if err != nil {
 		return err
 	}
@@ -125,21 +107,8 @@ func (w *pebbleWriter) DeleteAllExcludedFiles() error {
 	return w.batch.DeleteRange([]byte{prefixExcludedFile}, rangeUpperBound([]byte{prefixExcludedFile}), nil)
 }
 
-// DeleteGraph stages one range-delete per graph namespace (n/, e/, f/,
-// x/), each bounded by its prefix byte, so it cannot reach m/, c/ or a/.
-// Puts staged after it in the same batch survive: a later batch entry
-// has a higher sequence number than the range-delete.
-func (w *pebbleWriter) DeleteGraph() error {
-	for _, prefix := range []byte{prefixNode, prefixEdge, prefixFile, prefixFileIndex} {
-		if err := w.batch.DeleteRange([]byte{prefix}, rangeUpperBound([]byte{prefix}), nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (w *pebbleWriter) PutMeta(m *schema.Meta) error {
-	data, err := deterministicMarshal(m)
+	data, err := recordio.Marshal(m)
 	if err != nil {
 		return err
 	}

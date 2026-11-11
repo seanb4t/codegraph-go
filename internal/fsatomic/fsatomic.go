@@ -1,8 +1,13 @@
-// Package fsatomic provides a single crash-safe file-write primitive
-// shared by internal/agents (external agent configs) and internal/githooks
-// (git hook scripts).
+// Package fsatomic provides crash-safe filesystem primitives: an atomic
+// write of one file, an atomic exchange of two directories, and a durable
+// rename of a directory.
 //
-// D-09 narrowing: this package extracts ONLY the atomic-write mechanism
+// WriteFile serves internal/agents (external agent configs) and
+// internal/githooks (git hook scripts). ExchangeDirs and RenameDir (dirs.go)
+// serve the replacement of a graph store and the scratch directories of a
+// build. The package knows nothing of what a file or a directory holds.
+//
+// D-09 narrowing: WriteFile extracts ONLY the atomic-write mechanism
 // (temp file in the target directory followed by os.Rename) out of
 // internal/agents/shared.go's atomicWriteFile. The marker-splice helpers
 // (replaceOrAppendMarkedSection / removeMarkedSection) are deliberately

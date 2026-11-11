@@ -1,0 +1,221 @@
+edge {"source":"file:0e676f3b49ec893cd4919fd1c6c075ee","target":"struct:9fffb6b6470532474279ed99674d3bdc","kind":"contains","provenance":"ast"}
+edge {"source":"file:1b372164d839c3bb20a262f59ae6e0e7","target":"function:49fcac1de19a074e3947cc4219de2bb8","kind":"contains","provenance":"ast"}
+edge {"source":"file:46a3a145e8beb6b47dd58278799afdad","target":"struct:c20dd3fe394e68f598c5877688fbc14e","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"package:378504cf7d36a212c6ee75271fff4c1f","kind":"imports","line":3,"col":7,"provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"struct:8e827f6b463b94c8aadae6383badce0f","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:fb80c63753a22c25348cc4917cb6fed8","kind":"contains","provenance":"ast"}
+edge {"source":"file:8abcfc729ad1cd0eb809d49434585350","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"contains","provenance":"ast"}
+edge {"source":"file:8dd5fa279c4952b28ff93b372e4a54b2","target":"struct:20d24b1a0d3c9b5c6d58eec47bb92426","kind":"contains","provenance":"ast"}
+edge {"source":"file:bcf1735874fa02c7e10922a5a9da9227","target":"struct:4ee0acbff5d07297e21f6a9e7b5203d2","kind":"contains","provenance":"ast"}
+edge {"source":"file:be289e430796cec740797c1a8f883e3d","target":"struct:46bd63905fedf80cc56bab4ddc2fc69a","kind":"contains","provenance":"ast"}
+edge {"source":"file:e054a06915de10f9591cbf7bc698939c","target":"struct:4ee0acbff5d07297e21f6a9e7b5203d2","kind":"contains","provenance":"ast"}
+edge {"source":"file:e1ff74f9d03773f338ec5298f5245840","target":"struct:4ab095866882495929a28dce2f941742","kind":"contains","provenance":"ast"}
+edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"struct:bfe84dd918ee42851e0a0e1655e9d947","kind":"contains","provenance":"ast"}
+edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"struct:d86658e2cc661d957dbdf09002519d6a","kind":"contains","provenance":"ast"}
+edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"struct:ee16528519c6e9690aaf0c126ce557e0","kind":"contains","provenance":"ast"}
+edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"interface:9b2f7172655dce06d558e09ae93be6e4","kind":"contains","provenance":"ast"}
+edge {"source":"method:00a4bca1647e1df8f1f32c72d7df14e3","target":"struct:c20dd3fe394e68f598c5877688fbc14e","kind":"returns","line":4,"col":18,"provenance":"ast"}
+edge {"source":"method:00a4bca1647e1df8f1f32c72d7df14e3","target":"struct:c20dd3fe394e68f598c5877688fbc14e","kind":"instantiates","line":5,"col":15,"provenance":"ast"}
+edge {"source":"method:2016207e61f9fdc9de812c6fb47862d8","target":"method:a5f8ab4ee9ef29fd134a21001381eaa9","kind":"calls","line":31,"col":8,"provenance":"ast","receiverType":"Logger","argCount":1,"argTypes":["String"]}
+edge {"source":"method:37b1dac5bc3a5ab60100f4bcceafed39","target":"method:44101a5cd4de4902fde585933fec4791","kind":"calls","line":17,"col":8,"provenance":"ast","receiverType":"Logger","argCount":4,"argTypes":["String","int","int","int"]}
+edge {"source":"method:3a8a405bf321d7839df3a3f7a8e1333c","target":"method:3bacdd35a24c8aa58d4851966eb70aca","kind":"calls","line":40,"col":8,"provenance":"ast","receiverType":"Builder","argCount":1,"argTypes":["String"]}
+edge {"source":"method:3a8a405bf321d7839df3a3f7a8e1333c","target":"struct:c20dd3fe394e68f598c5877688fbc14e","kind":"instantiates","line":39,"col":16,"provenance":"ast"}
+edge {"source":"method:86337f1554efc44420c4e89b61fd506b","target":"overload_set:483be1df23a71af1ef89cc4aae959aec","kind":"calls","line":28,"col":8,"provenance":"ast","metadata":{"ambiguous":"true"},"argCount":1,"argTypes":["string"]}
+edge {"source":"method:88ba1cd8c8efae4d714e1d268b3260b1","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"type_of","line":26,"col":8,"provenance":"ast"}
+edge {"source":"method:88ba1cd8c8efae4d714e1d268b3260b1","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"instantiates","line":26,"col":20,"provenance":"ast"}
+edge {"source":"method:9b4ae1ea6faa2afcbe7e1ece929de82c","target":"method:5c18c4daeb7d19dc2f1d6889c2fa4b14","kind":"calls","line":11,"col":8,"provenance":"ast","argCount":1,"argTypes":["string"]}
+edge {"source":"method:a26b4bb45e68c7908ad9320775678e06","target":"method:c73e38ef6bd6c753ae53ecf0f348a8fa","kind":"calls","line":35,"col":8,"provenance":"ast","receiverType":"helper"}
+edge {"source":"method:a8404837847d4ddf5f71810a7234e229","target":"method:50ed74359aabc6d3e5c671495f26b092","kind":"calls","line":8,"col":8,"provenance":"ast","receiverType":"Logger","argCount":2,"argTypes":["String","Throwable"]}
+edge {"source":"method:bf0a77dc32af0c52aaab7ebe012be6b0","target":"method:00a4bca1647e1df8f1f32c72d7df14e3","kind":"calls","line":44,"col":16,"provenance":"ast","receiverType":"Factory"}
+edge {"source":"method:bf0a77dc32af0c52aaab7ebe012be6b0","target":"method:3bacdd35a24c8aa58d4851966eb70aca","kind":"calls","line":45,"col":8,"provenance":"ast","receiverType":"@call 44:30","argCount":1,"argTypes":["String"]}
+edge {"source":"method:d864fe49701ba19521208af26ddefbae","target":"method:84567d216deb3241e6f211b861f03e28","kind":"calls","line":36,"col":8,"provenance":"ast","receiverType":"ILogger","argCount":1,"argTypes":["LogEvent"]}
+edge {"source":"method:e682680395d60f277a451c65e2a404de","target":"overload_set:1fce26ffd1901b5db16d2cb8d68730b9","kind":"calls","line":22,"col":8,"provenance":"ast","metadata":{"ambiguous":"true"},"receiverType":"Sink","argCount":1,"argTypes":[""]}
+edge {"source":"method:e682680395d60f277a451c65e2a404de","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"type_of","line":21,"col":8,"provenance":"ast"}
+edge {"source":"method:e682680395d60f277a451c65e2a404de","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"instantiates","line":21,"col":20,"provenance":"ast"}
+edge {"source":"method:ec440bfc8eb56a43524ae8af900943f4","target":"method:9c19a7bd13011a2db948590a1fa0f07c","kind":"calls","line":13,"col":8,"provenance":"ast","receiverType":"Sink","argCount":1,"argTypes":["String"]}
+edge {"source":"method:ec440bfc8eb56a43524ae8af900943f4","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"type_of","line":12,"col":8,"provenance":"ast"}
+edge {"source":"method:ec440bfc8eb56a43524ae8af900943f4","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"instantiates","line":12,"col":20,"provenance":"ast"}
+edge {"source":"struct:20d24b1a0d3c9b5c6d58eec47bb92426","target":"method:c73e38ef6bd6c753ae53ecf0f348a8fa","kind":"contains","provenance":"ast"}
+edge {"source":"struct:46bd63905fedf80cc56bab4ddc2fc69a","target":"method:00a4bca1647e1df8f1f32c72d7df14e3","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"struct:20d24b1a0d3c9b5c6d58eec47bb92426","kind":"type_of","line":5,"col":12,"provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"struct:9fffb6b6470532474279ed99674d3bdc","kind":"type_of","line":4,"col":12,"provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:2016207e61f9fdc9de812c6fb47862d8","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:37b1dac5bc3a5ab60100f4bcceafed39","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:3a8a405bf321d7839df3a3f7a8e1333c","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:88ba1cd8c8efae4d714e1d268b3260b1","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:a26b4bb45e68c7908ad9320775678e06","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:a8404837847d4ddf5f71810a7234e229","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:bf0a77dc32af0c52aaab7ebe012be6b0","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:e64984fa3e7ea8acba47406bad83d622","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:e682680395d60f277a451c65e2a404de","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:ec440bfc8eb56a43524ae8af900943f4","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ee0acbff5d07297e21f6a9e7b5203d2","target":"method:9b4ae1ea6faa2afcbe7e1ece929de82c","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ee0acbff5d07297e21f6a9e7b5203d2","target":"method:c6e66cc5c14a4aea1851829e5bda937a","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ee0acbff5d07297e21f6a9e7b5203d2","target":"overload_set:974ab2b737b14e6009c0d2a926880f22","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"struct:7d2b45c494d45f78c3cf25bce58774ea","target":"overload_set:1fce26ffd1901b5db16d2cb8d68730b9","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"struct:8e827f6b463b94c8aadae6383badce0f","target":"method:b458636c6d883678b3fd230a00e3e2ac","kind":"contains","provenance":"ast"}
+edge {"source":"struct:9fffb6b6470532474279ed99674d3bdc","target":"method:44101a5cd4de4902fde585933fec4791","kind":"contains","provenance":"ast"}
+edge {"source":"struct:9fffb6b6470532474279ed99674d3bdc","target":"overload_set:1dc07d6f0529eb363586de73fcc64fdd","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"struct:c20dd3fe394e68f598c5877688fbc14e","target":"overload_set:40af96b7a8a0c192c8a010a0828605af","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"struct:d86658e2cc661d957dbdf09002519d6a","target":"method:86337f1554efc44420c4e89b61fd506b","kind":"contains","provenance":"ast"}
+edge {"source":"struct:d86658e2cc661d957dbdf09002519d6a","target":"overload_set:483be1df23a71af1ef89cc4aae959aec","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"struct:ee16528519c6e9690aaf0c126ce557e0","target":"method:d864fe49701ba19521208af26ddefbae","kind":"contains","provenance":"ast"}
+edge {"source":"function:fb80c63753a22c25348cc4917cb6fed8","target":"method:b458636c6d883678b3fd230a00e3e2ac","kind":"calls","line":12,"col":1,"provenance":"ast","receiverType":"parser"}
+edge {"source":"function:fb80c63753a22c25348cc4917cb6fed8","target":"function:49fcac1de19a074e3947cc4219de2bb8","kind":"calls","line":10,"col":1,"provenance":"ast","receiverType":"util","argCount":1,"argTypes":["string"]}
+edge {"source":"interface:9b2f7172655dce06d558e09ae93be6e4","target":"overload_set:76702468431d15d03e33b283ef1f78c3","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:1dc07d6f0529eb363586de73fcc64fdd","target":"method:50ed74359aabc6d3e5c671495f26b092","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:1dc07d6f0529eb363586de73fcc64fdd","target":"method:a5f8ab4ee9ef29fd134a21001381eaa9","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:1fce26ffd1901b5db16d2cb8d68730b9","target":"method:9c19a7bd13011a2db948590a1fa0f07c","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:1fce26ffd1901b5db16d2cb8d68730b9","target":"method:f6c1d7c7ce771fe5439e44aae9254051","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:40af96b7a8a0c192c8a010a0828605af","target":"method:3bacdd35a24c8aa58d4851966eb70aca","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:40af96b7a8a0c192c8a010a0828605af","target":"method:abebf642a6f72fe0ce48c804490813de","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:483be1df23a71af1ef89cc4aae959aec","target":"method:26289482ff94476f39c45cd53fd9107c","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:483be1df23a71af1ef89cc4aae959aec","target":"method:58fd8deffa24bf6d2ec3bba99e84a079","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:76702468431d15d03e33b283ef1f78c3","target":"method:7fa0a565a319c7437322d062ff113623","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:76702468431d15d03e33b283ef1f78c3","target":"method:84567d216deb3241e6f211b861f03e28","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:974ab2b737b14e6009c0d2a926880f22","target":"method:39118165877bd6b3e475d86d26125f23","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+edge {"source":"overload_set:974ab2b737b14e6009c0d2a926880f22","target":"method:5c18c4daeb7d19dc2f1d6889c2fa4b14","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
+file {"path":"main.go","contentHash":"d4706a839da1241ee2773e272c87b006312c225cab20c6dc2abc65c0906a8751","language":"go","nodeCount":"4","edgeCount":"6","sizeBytes":"159"}
+file {"path":"util/util.go","contentHash":"993edc3374640ecc1749701ece578d0093392394005c36c2535a93fa10969b99","language":"go","nodeCount":"2","edgeCount":"1","sizeBytes":"38"}
+file {"path":"csharp/StoreA.cs","contentHash":"719571baec8ab9f3f7bfe123b804d3e58b0e3d9273206011b00add1949c77383","language":"csharp","nodeCount":"4","edgeCount":"3","sizeBytes":"131","declaredModuleKey":"Logging"}
+file {"path":"csharp/StoreB.cs","contentHash":"d0e28dbde48ea2b3f7165a629cc55e6aa36460f9223845e24115223de9db6f34","language":"csharp","nodeCount":"4","edgeCount":"4","sizeBytes":"157","declaredModuleKey":"Logging"}
+file {"path":"csharp/Logging.cs","contentHash":"fa03f5839d912fb65fd0b53088f47de4734a22e9eaed95a1cf4e8423dd7f9f8c","language":"csharp","nodeCount":"11","edgeCount":"12","sizeBytes":"476","declaredModuleKey":"Logging"}
+file {"path":"java/com/example/App.java","contentHash":"9f9b0ac51b15f2a763bd8b545f5b84ced9b9b4255a17c1d9e9201ca4d25a11a5","language":"java","nodeCount":"12","edgeCount":"29","sizeBytes":"921","unresolvedNames":[{"moduleKey":"com.example","name":"add"},{"moduleKey":"com.example","name":"e"},{"moduleKey":"com.example","name":"lookup"},{"moduleKey":"com.example","name":"s"},{"moduleKey":"com.example","name":"var"}],"declaredModuleKey":"com.example"}
+file {"path":"java/com/example/Sink.java","contentHash":"ac31e5729c4b1e2ebbfd36b7c6828a58a2a9bc6415099768a3c44b739d825b19","language":"java","nodeCount":"4","edgeCount":"3","sizeBytes":"118","declaredModuleKey":"com.example"}
+file {"path":"java/com/example/Logger.java","contentHash":"d892d9dad0cdea00b4e8b9532d51f6a6a78a0be71c0ed1197702da042abe7bf1","language":"java","nodeCount":"5","edgeCount":"4","sizeBytes":"200","declaredModuleKey":"com.example"}
+file {"path":"java/com/example/helper.java","contentHash":"5a778a72f4a14a73d58e08984cc313ed579d57579262afcbf4688f894c564355","language":"java","nodeCount":"3","edgeCount":"2","sizeBytes":"145","declaredModuleKey":"com.example"}
+file {"path":"java/com/example/Builder.java","contentHash":"e9f07c33583f841994334d48b384b54e2dd6fec18691217bcd1598ba4abba3fa","language":"java","nodeCount":"4","edgeCount":"3","sizeBytes":"121","declaredModuleKey":"com.example"}
+file {"path":"java/com/example/Factory.java","contentHash":"b391845b31c747c079b36733c7ce280ae0fdcb0b3042ae2cf7689965718faae8","language":"java","nodeCount":"3","edgeCount":"4","sizeBytes":"118","declaredModuleKey":"com.example"}
+index csharp/Logging.cs node file:f8acf35755035606c84e889fcf319a46
+index csharp/Logging.cs node method:26289482ff94476f39c45cd53fd9107c
+index csharp/Logging.cs node method:58fd8deffa24bf6d2ec3bba99e84a079
+index csharp/Logging.cs node method:7fa0a565a319c7437322d062ff113623
+index csharp/Logging.cs node method:84567d216deb3241e6f211b861f03e28
+index csharp/Logging.cs node method:86337f1554efc44420c4e89b61fd506b
+index csharp/Logging.cs node method:d864fe49701ba19521208af26ddefbae
+index csharp/Logging.cs node struct:bfe84dd918ee42851e0a0e1655e9d947
+index csharp/Logging.cs node struct:d86658e2cc661d957dbdf09002519d6a
+index csharp/Logging.cs node struct:ee16528519c6e9690aaf0c126ce557e0
+index csharp/Logging.cs node interface:9b2f7172655dce06d558e09ae93be6e4
+index csharp/Logging.cs node overload_set:483be1df23a71af1ef89cc4aae959aec
+index csharp/Logging.cs node overload_set:76702468431d15d03e33b283ef1f78c3
+index csharp/Logging.cs edge file:f8acf35755035606c84e889fcf319a46 contains struct:bfe84dd918ee42851e0a0e1655e9d947
+index csharp/Logging.cs edge file:f8acf35755035606c84e889fcf319a46 contains struct:d86658e2cc661d957dbdf09002519d6a
+index csharp/Logging.cs edge file:f8acf35755035606c84e889fcf319a46 contains struct:ee16528519c6e9690aaf0c126ce557e0
+index csharp/Logging.cs edge file:f8acf35755035606c84e889fcf319a46 contains interface:9b2f7172655dce06d558e09ae93be6e4
+index csharp/Logging.cs edge method:86337f1554efc44420c4e89b61fd506b calls overload_set:483be1df23a71af1ef89cc4aae959aec
+index csharp/Logging.cs edge method:d864fe49701ba19521208af26ddefbae calls method:84567d216deb3241e6f211b861f03e28
+index csharp/Logging.cs edge struct:d86658e2cc661d957dbdf09002519d6a contains method:86337f1554efc44420c4e89b61fd506b
+index csharp/Logging.cs edge struct:d86658e2cc661d957dbdf09002519d6a contains overload_set:483be1df23a71af1ef89cc4aae959aec
+index csharp/Logging.cs edge struct:ee16528519c6e9690aaf0c126ce557e0 contains method:d864fe49701ba19521208af26ddefbae
+index csharp/Logging.cs edge interface:9b2f7172655dce06d558e09ae93be6e4 contains overload_set:76702468431d15d03e33b283ef1f78c3
+index csharp/Logging.cs edge overload_set:483be1df23a71af1ef89cc4aae959aec contains method:26289482ff94476f39c45cd53fd9107c
+index csharp/Logging.cs edge overload_set:483be1df23a71af1ef89cc4aae959aec contains method:58fd8deffa24bf6d2ec3bba99e84a079
+index csharp/Logging.cs edge overload_set:76702468431d15d03e33b283ef1f78c3 contains method:7fa0a565a319c7437322d062ff113623
+index csharp/Logging.cs edge overload_set:76702468431d15d03e33b283ef1f78c3 contains method:84567d216deb3241e6f211b861f03e28
+index csharp/StoreA.cs node file:e054a06915de10f9591cbf7bc698939c
+index csharp/StoreA.cs node method:39118165877bd6b3e475d86d26125f23
+index csharp/StoreA.cs node method:c6e66cc5c14a4aea1851829e5bda937a
+index csharp/StoreA.cs edge struct:4ee0acbff5d07297e21f6a9e7b5203d2 contains method:c6e66cc5c14a4aea1851829e5bda937a
+index csharp/StoreA.cs edge overload_set:974ab2b737b14e6009c0d2a926880f22 contains method:39118165877bd6b3e475d86d26125f23
+index csharp/StoreB.cs node file:bcf1735874fa02c7e10922a5a9da9227
+index csharp/StoreB.cs node method:5c18c4daeb7d19dc2f1d6889c2fa4b14
+index csharp/StoreB.cs node method:9b4ae1ea6faa2afcbe7e1ece929de82c
+index csharp/StoreB.cs edge method:9b4ae1ea6faa2afcbe7e1ece929de82c calls method:5c18c4daeb7d19dc2f1d6889c2fa4b14
+index csharp/StoreB.cs edge struct:4ee0acbff5d07297e21f6a9e7b5203d2 contains method:9b4ae1ea6faa2afcbe7e1ece929de82c
+index csharp/StoreB.cs edge overload_set:974ab2b737b14e6009c0d2a926880f22 contains method:5c18c4daeb7d19dc2f1d6889c2fa4b14
+index java/com/example/App.java node file:e1ff74f9d03773f338ec5298f5245840
+index java/com/example/App.java node method:2016207e61f9fdc9de812c6fb47862d8
+index java/com/example/App.java node method:37b1dac5bc3a5ab60100f4bcceafed39
+index java/com/example/App.java node method:3a8a405bf321d7839df3a3f7a8e1333c
+index java/com/example/App.java node method:88ba1cd8c8efae4d714e1d268b3260b1
+index java/com/example/App.java node method:a26b4bb45e68c7908ad9320775678e06
+index java/com/example/App.java node method:a8404837847d4ddf5f71810a7234e229
+index java/com/example/App.java node method:bf0a77dc32af0c52aaab7ebe012be6b0
+index java/com/example/App.java node method:e64984fa3e7ea8acba47406bad83d622
+index java/com/example/App.java node method:e682680395d60f277a451c65e2a404de
+index java/com/example/App.java node method:ec440bfc8eb56a43524ae8af900943f4
+index java/com/example/App.java node struct:4ab095866882495929a28dce2f941742
+index java/com/example/App.java edge file:e1ff74f9d03773f338ec5298f5245840 contains struct:4ab095866882495929a28dce2f941742
+index java/com/example/App.java edge method:2016207e61f9fdc9de812c6fb47862d8 calls method:a5f8ab4ee9ef29fd134a21001381eaa9
+index java/com/example/App.java edge method:37b1dac5bc3a5ab60100f4bcceafed39 calls method:44101a5cd4de4902fde585933fec4791
+index java/com/example/App.java edge method:3a8a405bf321d7839df3a3f7a8e1333c calls method:3bacdd35a24c8aa58d4851966eb70aca
+index java/com/example/App.java edge method:3a8a405bf321d7839df3a3f7a8e1333c instantiates struct:c20dd3fe394e68f598c5877688fbc14e
+index java/com/example/App.java edge method:88ba1cd8c8efae4d714e1d268b3260b1 type_of struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/App.java edge method:88ba1cd8c8efae4d714e1d268b3260b1 instantiates struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/App.java edge method:a26b4bb45e68c7908ad9320775678e06 calls method:c73e38ef6bd6c753ae53ecf0f348a8fa
+index java/com/example/App.java edge method:a8404837847d4ddf5f71810a7234e229 calls method:50ed74359aabc6d3e5c671495f26b092
+index java/com/example/App.java edge method:bf0a77dc32af0c52aaab7ebe012be6b0 calls method:00a4bca1647e1df8f1f32c72d7df14e3
+index java/com/example/App.java edge method:bf0a77dc32af0c52aaab7ebe012be6b0 calls method:3bacdd35a24c8aa58d4851966eb70aca
+index java/com/example/App.java edge method:e682680395d60f277a451c65e2a404de calls overload_set:1fce26ffd1901b5db16d2cb8d68730b9
+index java/com/example/App.java edge method:e682680395d60f277a451c65e2a404de type_of struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/App.java edge method:e682680395d60f277a451c65e2a404de instantiates struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/App.java edge method:ec440bfc8eb56a43524ae8af900943f4 calls method:9c19a7bd13011a2db948590a1fa0f07c
+index java/com/example/App.java edge method:ec440bfc8eb56a43524ae8af900943f4 type_of struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/App.java edge method:ec440bfc8eb56a43524ae8af900943f4 instantiates struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 type_of struct:20d24b1a0d3c9b5c6d58eec47bb92426
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 type_of struct:9fffb6b6470532474279ed99674d3bdc
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:2016207e61f9fdc9de812c6fb47862d8
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:37b1dac5bc3a5ab60100f4bcceafed39
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:3a8a405bf321d7839df3a3f7a8e1333c
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:88ba1cd8c8efae4d714e1d268b3260b1
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:a26b4bb45e68c7908ad9320775678e06
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:a8404837847d4ddf5f71810a7234e229
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:bf0a77dc32af0c52aaab7ebe012be6b0
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:e64984fa3e7ea8acba47406bad83d622
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:e682680395d60f277a451c65e2a404de
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:ec440bfc8eb56a43524ae8af900943f4
+index java/com/example/Builder.java node file:46a3a145e8beb6b47dd58278799afdad
+index java/com/example/Builder.java node method:3bacdd35a24c8aa58d4851966eb70aca
+index java/com/example/Builder.java node method:abebf642a6f72fe0ce48c804490813de
+index java/com/example/Builder.java node struct:c20dd3fe394e68f598c5877688fbc14e
+index java/com/example/Builder.java node overload_set:40af96b7a8a0c192c8a010a0828605af
+index java/com/example/Builder.java edge file:46a3a145e8beb6b47dd58278799afdad contains struct:c20dd3fe394e68f598c5877688fbc14e
+index java/com/example/Builder.java edge struct:c20dd3fe394e68f598c5877688fbc14e contains overload_set:40af96b7a8a0c192c8a010a0828605af
+index java/com/example/Builder.java edge overload_set:40af96b7a8a0c192c8a010a0828605af contains method:3bacdd35a24c8aa58d4851966eb70aca
+index java/com/example/Builder.java edge overload_set:40af96b7a8a0c192c8a010a0828605af contains method:abebf642a6f72fe0ce48c804490813de
+index java/com/example/Factory.java node file:be289e430796cec740797c1a8f883e3d
+index java/com/example/Factory.java node method:00a4bca1647e1df8f1f32c72d7df14e3
+index java/com/example/Factory.java node struct:46bd63905fedf80cc56bab4ddc2fc69a
+index java/com/example/Factory.java edge file:be289e430796cec740797c1a8f883e3d contains struct:46bd63905fedf80cc56bab4ddc2fc69a
+index java/com/example/Factory.java edge method:00a4bca1647e1df8f1f32c72d7df14e3 returns struct:c20dd3fe394e68f598c5877688fbc14e
+index java/com/example/Factory.java edge method:00a4bca1647e1df8f1f32c72d7df14e3 instantiates struct:c20dd3fe394e68f598c5877688fbc14e
+index java/com/example/Factory.java edge struct:46bd63905fedf80cc56bab4ddc2fc69a contains method:00a4bca1647e1df8f1f32c72d7df14e3
+index java/com/example/Logger.java node file:0e676f3b49ec893cd4919fd1c6c075ee
+index java/com/example/Logger.java node method:44101a5cd4de4902fde585933fec4791
+index java/com/example/Logger.java node method:50ed74359aabc6d3e5c671495f26b092
+index java/com/example/Logger.java node method:a5f8ab4ee9ef29fd134a21001381eaa9
+index java/com/example/Logger.java node struct:9fffb6b6470532474279ed99674d3bdc
+index java/com/example/Logger.java node overload_set:1dc07d6f0529eb363586de73fcc64fdd
+index java/com/example/Logger.java edge file:0e676f3b49ec893cd4919fd1c6c075ee contains struct:9fffb6b6470532474279ed99674d3bdc
+index java/com/example/Logger.java edge struct:9fffb6b6470532474279ed99674d3bdc contains method:44101a5cd4de4902fde585933fec4791
+index java/com/example/Logger.java edge struct:9fffb6b6470532474279ed99674d3bdc contains overload_set:1dc07d6f0529eb363586de73fcc64fdd
+index java/com/example/Logger.java edge overload_set:1dc07d6f0529eb363586de73fcc64fdd contains method:50ed74359aabc6d3e5c671495f26b092
+index java/com/example/Logger.java edge overload_set:1dc07d6f0529eb363586de73fcc64fdd contains method:a5f8ab4ee9ef29fd134a21001381eaa9
+index java/com/example/Sink.java node file:8abcfc729ad1cd0eb809d49434585350
+index java/com/example/Sink.java node method:9c19a7bd13011a2db948590a1fa0f07c
+index java/com/example/Sink.java node method:f6c1d7c7ce771fe5439e44aae9254051
+index java/com/example/Sink.java node struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/Sink.java node overload_set:1fce26ffd1901b5db16d2cb8d68730b9
+index java/com/example/Sink.java edge file:8abcfc729ad1cd0eb809d49434585350 contains struct:7d2b45c494d45f78c3cf25bce58774ea
+index java/com/example/Sink.java edge struct:7d2b45c494d45f78c3cf25bce58774ea contains overload_set:1fce26ffd1901b5db16d2cb8d68730b9
+index java/com/example/Sink.java edge overload_set:1fce26ffd1901b5db16d2cb8d68730b9 contains method:9c19a7bd13011a2db948590a1fa0f07c
+index java/com/example/Sink.java edge overload_set:1fce26ffd1901b5db16d2cb8d68730b9 contains method:f6c1d7c7ce771fe5439e44aae9254051
+index java/com/example/helper.java node file:8dd5fa279c4952b28ff93b372e4a54b2
+index java/com/example/helper.java node method:c73e38ef6bd6c753ae53ecf0f348a8fa
+index java/com/example/helper.java node struct:20d24b1a0d3c9b5c6d58eec47bb92426
+index java/com/example/helper.java edge file:8dd5fa279c4952b28ff93b372e4a54b2 contains struct:20d24b1a0d3c9b5c6d58eec47bb92426
+index java/com/example/helper.java edge struct:20d24b1a0d3c9b5c6d58eec47bb92426 contains method:c73e38ef6bd6c753ae53ecf0f348a8fa
+index main.go node file:4ef5c88464ea2408a807b6f557c13bb8
+index main.go node method:b458636c6d883678b3fd230a00e3e2ac
+index main.go node struct:8e827f6b463b94c8aadae6383badce0f
+index main.go node function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 imports package:378504cf7d36a212c6ee75271fff4c1f
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains struct:8e827f6b463b94c8aadae6383badce0f
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge struct:8e827f6b463b94c8aadae6383badce0f contains method:b458636c6d883678b3fd230a00e3e2ac
+index main.go edge function:fb80c63753a22c25348cc4917cb6fed8 calls method:b458636c6d883678b3fd230a00e3e2ac
+index main.go edge function:fb80c63753a22c25348cc4917cb6fed8 calls function:49fcac1de19a074e3947cc4219de2bb8
+index util/util.go node file:1b372164d839c3bb20a262f59ae6e0e7
+index util/util.go node function:49fcac1de19a074e3947cc4219de2bb8
+index util/util.go edge file:1b372164d839c3bb20a262f59ae6e0e7 contains function:49fcac1de19a074e3947cc4219de2bb8

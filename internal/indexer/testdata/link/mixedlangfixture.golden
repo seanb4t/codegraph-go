@@ -1,0 +1,18 @@
+edge {"source":"file:0bab242084c73dca2bfedc6f18c225de","target":"function:b0196211ba1e80bfff464c5b809248ba","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:fb80c63753a22c25348cc4917cb6fed8","kind":"contains","provenance":"ast"}
+edge {"source":"file:e68fa518b17d2c05f897df9ead88d6f8","target":"struct:962bb9756ea14493c990615907640d85","kind":"contains","provenance":"ast"}
+edge {"source":"struct:962bb9756ea14493c990615907640d85","target":"method:8f56c550e3fdad5c24c99a60664ebc5d","kind":"contains","provenance":"ast"}
+file {"path":"app.py","contentHash":"cde0429ba5478089419b8a36797f74089554914623c732054e04dd6eb2e49afd","language":"python","nodeCount":"2","edgeCount":"1","sizeBytes":"21"}
+file {"path":"main.go","contentHash":"55a60bb97151b2b4b680462447ce60ec34511b14fa10d77440c97b9777101566","language":"go","nodeCount":"2","edgeCount":"1","sizeBytes":"29"}
+file {"path":"sub/Greeter.java","contentHash":"33f4110268dc6ef92b9c86db45fa2c555b9870e0e088b568b64cb39586086d3d","language":"java","nodeCount":"3","edgeCount":"2","sizeBytes":"66","declaredModuleKey":"example.mixed.sub"}
+index app.py node file:0bab242084c73dca2bfedc6f18c225de
+index app.py node function:b0196211ba1e80bfff464c5b809248ba
+index app.py edge file:0bab242084c73dca2bfedc6f18c225de contains function:b0196211ba1e80bfff464c5b809248ba
+index main.go node file:4ef5c88464ea2408a807b6f557c13bb8
+index main.go node function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:fb80c63753a22c25348cc4917cb6fed8
+index sub/Greeter.java node file:e68fa518b17d2c05f897df9ead88d6f8
+index sub/Greeter.java node method:8f56c550e3fdad5c24c99a60664ebc5d
+index sub/Greeter.java node struct:962bb9756ea14493c990615907640d85
+index sub/Greeter.java edge file:e68fa518b17d2c05f897df9ead88d6f8 contains struct:962bb9756ea14493c990615907640d85
+index sub/Greeter.java edge struct:962bb9756ea14493c990615907640d85 contains method:8f56c550e3fdad5c24c99a60664ebc5d

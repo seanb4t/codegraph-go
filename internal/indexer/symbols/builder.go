@@ -36,7 +36,12 @@ type data struct {
 	kinds, names      map[string]string
 	startLines, arity map[string]int32
 	nodes             map[string]*schema.Node
-	interfaceMethods  map[string][]goextract.MethodSpec
+	// declared holds, per node id, the node that the first declaration
+	// with that id gave. A later copy merges into it.
+	declared map[string]*schema.Node
+	// interfaceMethods are the method specs of each interface. Freeze
+	// fills it from the nodes.
+	interfaceMethods map[string][]goextract.MethodSpec
 
 	// moduleOf maps each file to its module key. A deferred type is
 	// written in the callee's file, so it resolves in that module first.
@@ -73,6 +78,7 @@ func NewBuilder() *Builder {
 		startLines:       make(map[string]int32),
 		arity:            make(map[string]int32),
 		nodes:            make(map[string]*schema.Node),
+		declared:         make(map[string]*schema.Node),
 		interfaceMethods: make(map[string][]goextract.MethodSpec),
 		moduleOf:         make(map[string]string),
 		storedSets:       make(map[string]StoredSet),
@@ -140,12 +146,6 @@ func (b *Builder) SetArity(id string, arity int32) {
 	b.write().arity[id] = arity
 }
 
-// AddInterfaceMethods records methods that the interface id declares.
-func (b *Builder) AddInterfaceMethods(id string, methods ...goextract.MethodSpec) {
-	d := b.write()
-	d.interfaceMethods[id] = append(d.interfaceMethods[id], methods...)
-}
-
 // SetModule records the module key of file.
 func (b *Builder) SetModule(file, moduleKey string) {
 	b.write().moduleOf[file] = moduleKey
@@ -163,55 +163,67 @@ func (b *Builder) AddStoredEdge(e *schema.Edge) {
 	d.storedEdges = append(d.storedEdges, e)
 }
 
-// AddResults adds the declarations of results, in the order given: every
-// node to the node lookups, the reachable ones as symbols under their
-// file's module key, the members of each type from the file's contains
-// edges, the method arities and the interface method specs. A skipped
-// file (FileResult.Err != nil) declares no symbol.
-func (b *Builder) AddResults(results []goextract.FileResult) {
-	for _, r := range results {
-		for _, en := range r.Nodes {
-			b.AddNode(en.Node)
+// AddResults adds decls, the declarations of some files, in the order
+// given: every node to the node lookups, the reachable ones as symbols
+// under their file's module key, the members of each type from the file's
+// contains edges, and the method arities. A file with an error declares no
+// symbol.
+//
+// When several declarations hold a node with one id, the view gets one
+// node that merges them (mergeCopy). The merge runs over all of decls
+// before any symbol is added, so the symbols see the merged nodes. The
+// result depends on the order of decls, so a caller passes them in path
+// order.
+func (b *Builder) AddResults(decls []Declarations) {
+	d := b.write()
+	for _, decl := range decls {
+		for _, n := range decl.Nodes {
+			if first := d.declared[n.Id]; first != nil {
+				mergeCopy(first, n, decl.DefaultVisibility)
+				continue
+			}
+			d.declared[n.Id] = n
+			b.AddNode(n)
 		}
-		for id, arity := range r.MethodArity {
+		for id, arity := range decl.MethodArity {
 			b.SetArity(id, arity)
 		}
-		for ifaceID, specs := range r.InterfaceMethods {
-			b.AddInterfaceMethods(ifaceID, specs...)
+		b.SetModule(decl.RelPath, decl.ImportPath)
+	}
+	for _, decl := range decls {
+		if decl.Err == nil {
+			b.addSymbols(decl)
 		}
-		b.SetModule(r.RelPath, r.ImportPath)
-		if r.Err != nil {
-			continue
-		}
-		b.addSymbols(r)
 	}
 }
 
-func (b *Builder) addSymbols(r goextract.FileResult) {
-	byID := make(map[string]*schema.Node, len(r.Nodes))
+func (b *Builder) addSymbols(decl Declarations) {
+	nodes := b.d.nodes
 	fileExports := false
-	for _, en := range r.Nodes {
-		byID[en.Node.Id] = en.Node
-		fileExports = fileExports || en.Node.IsExported
+	inFile := make(map[string]bool, len(decl.Nodes))
+	for _, n := range decl.Nodes {
+		inFile[n.Id] = true
+		fileExports = fileExports || nodes[n.Id].IsExported
 	}
-	for _, en := range r.Nodes {
-		if en.Node.Kind == goextract.KindFile {
+	for _, n := range decl.Nodes {
+		n = nodes[n.Id]
+		if n.Kind == goextract.KindFile {
 			// A file node is never a callable or embeddable target, and
 			// its synthetic name, its RelPath, must not collide with a
 			// declared symbol of the module.
 			continue
 		}
-		if !Reachable(en.Node, fileExports) {
+		if !Reachable(n, fileExports) {
 			continue
 		}
-		b.Add(r.ImportPath, en.Node)
+		b.Add(decl.ImportPath, n)
 	}
-	for _, ie := range r.IntraEdges {
-		if ie.Edge.Kind != goextract.RefKindContains {
+	for _, e := range decl.Contains {
+		if !inFile[e.Source] || !inFile[e.Target] {
 			continue
 		}
-		owner, member := byID[ie.Edge.Source], byID[ie.Edge.Target]
-		if owner == nil || member == nil || owner.Kind == goextract.KindFile {
+		owner, member := nodes[e.Source], nodes[e.Target]
+		if owner.Kind == goextract.KindFile {
 			continue
 		}
 		b.AddMember(owner.Id, member)
@@ -229,13 +241,22 @@ func (b *Builder) Kind(id string) string { return b.d.kinds[id] }
 func (b *Builder) Collisions() int { return b.d.collisions }
 
 // Freeze ends the collection and returns the View over it. A write to b
-// after Freeze panics.
+// after Freeze panics. The method specs of each interface come from the
+// InterfaceMethods of its node, so the results of a full index and the
+// stored nodes of a sync feed them from one source.
 func (b *Builder) Freeze() View {
 	d := b.write()
 	b.frozen = true
 	d.typeNames = make(map[string]bool)
 	d.typesByName = make(map[string][]string)
 	for id, n := range d.nodes {
+		if len(n.InterfaceMethods) > 0 {
+			specs := make([]goextract.MethodSpec, len(n.InterfaceMethods))
+			for i, m := range n.InterfaceMethods {
+				specs[i] = goextract.MethodSpec{Name: m.Name, Arity: m.Arity}
+			}
+			d.interfaceMethods[id] = specs
+		}
 		if IsTypeKind(n.Kind) {
 			d.typeNames[n.Name] = true
 			d.typesByName[n.Name] = append(d.typesByName[n.Name], id)

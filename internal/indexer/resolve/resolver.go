@@ -766,64 +766,6 @@ func (rs *resolver) canJudge(lang, arg, param string) bool {
 // a sync keeps, adds or deletes each one.
 const SynthesizedBySet = "overload-set"
 
-// rewireSetEdges replaces, for every set, the contains edges from the
-// owner to each member with an edge from the owner to the set and one
-// from the set to each member. Other edges pass through. A stored set
-// that this pass does not declare is dissolved: each member that still
-// exists, under an owner that still exists, gets a contains edge from
-// that owner.
-func rewireSetEdges(view symbols.View, h symbols.Hierarchy, edges []*schema.Edge) []*schema.Edge {
-	setNodes := h.SetNodes()
-	setOfMember := make(map[string]*symbols.OverloadSet)
-	for _, n := range setNodes {
-		set, _ := h.Set(n.Id)
-		for _, m := range set.Members() {
-			setOfMember[set.OwnerID()+"|"+m.ID] = set
-		}
-	}
-	out := make([]*schema.Edge, 0, len(edges)+2*len(setNodes))
-	for _, e := range edges {
-		if e.Kind == goextract.RefKindContains {
-			if _, drop := setOfMember[e.Source+"|"+e.Target]; drop {
-				continue
-			}
-		}
-		out = append(out, e)
-	}
-	setEdge := func(source, target string) *schema.Edge {
-		return &schema.Edge{
-			Source: source, Target: target, Kind: goextract.RefKindContains, Provenance: "ast",
-			Metadata: map[string]string{"synthesizedBy": SynthesizedBySet},
-		}
-	}
-	for _, n := range setNodes {
-		set, _ := h.Set(n.Id)
-		out = append(out, setEdge(set.OwnerID(), n.Id))
-		for _, m := range set.Members() {
-			out = append(out, setEdge(n.Id, m.ID))
-		}
-	}
-	for _, id := range view.StoredSetIDs() {
-		if _, live := h.Set(id); live {
-			continue
-		}
-		stored, _ := view.StoredSet(id)
-		if view.Node(stored.Owner) == nil {
-			continue
-		}
-		for _, m := range stored.Members {
-			if view.Node(m) == nil {
-				continue
-			}
-			if _, inSet := setOfMember[stored.Owner+"|"+m]; inSet {
-				continue
-			}
-			out = append(out, &schema.Edge{Source: stored.Owner, Target: m, Kind: goextract.RefKindContains, Provenance: "ast"})
-		}
-	}
-	return out
-}
-
 // newResolver returns a resolver for one file over view and h.
 func newResolver(view symbols.View, h symbols.Hierarchy) *resolver {
 	return &resolver{view: view, h: h, callTargets: make(map[callPos]string)}

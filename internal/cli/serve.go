@@ -181,6 +181,9 @@ func serveWatchStart(
 				return
 			}
 			fmt.Fprintf(stderr, "codegraph serve: the index for the worktree %s is ready\n", pending.WorktreeRoot())
+			if pending.Warning != nil {
+				fmt.Fprintf(stderr, "codegraph serve: warning: the index for the worktree %s is in place, but a later step failed: %v\n", pending.WorktreeRoot(), pending.Warning)
+			}
 			repoPath = pending.WorktreeRoot()
 		}
 

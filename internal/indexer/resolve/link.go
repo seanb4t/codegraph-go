@@ -1,15 +1,11 @@
 package resolve
 
 import (
-	"slices"
-	"sort"
-
-	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// Graph is the resolved graph of one resolution, before edge collapse.
+// Graph is the resolved graph of one resolution.
 type Graph struct {
 	// Nodes are every node pass 1 extracted, then the overload set nodes.
 	Nodes []*schema.Node
@@ -17,22 +13,19 @@ type Graph struct {
 	// intra-module imports (RQ-1), one per id.
 	PackageNodes []*schema.Node
 	// Edges are every intra-file edge pass 1 extracted, plus every
-	// resolved and synthesized edge.
+	// resolved and synthesized edge, collapsed to one edge per triple.
 	Edges []*schema.Edge
 	// Files has one record per result with a path.
 	Files []*schema.File
 	// Unresolved counts the references that did not resolve (never
 	// silently dropped, D-06a; surfaced later through --verbose).
 	Unresolved int
-}
 
-// pendingCall is a call that failed to resolve in its file, paired with
-// the File record whose EdgeCount a retry success increments.
-type pendingCall struct {
-	ref  goextract.UnresolvedRef
-	file *schema.File
-	// wait is the name file waits on if the retry fails too, or nil.
-	wait *schema.UnresolvedName
+	// OwnerPath returns the owner path of an edge of the graph: the path
+	// under which the store files the edge in its file index. Link sets
+	// it to the function that chose the unit of each edge, so the unit and
+	// the file-index entry of an edge have one source.
+	OwnerPath func(e *schema.Edge) string
 }
 
 // Link assembles the outputs of Types and Calls, one pair per result in
@@ -40,88 +33,53 @@ type pendingCall struct {
 // structural implements and overrides edges, the conformance retry of
 // the calls that did not resolve, and the overload set edges.
 //
-// It assembles the edges in the order design D6 states, because
-// CollapseEdges keeps the first of two duplicates that tie on file, line
-// and column: the type-level edges of every file in result order, then
-// the calls without a deferred type in result order, then the deferred
-// calls of every file, with the files in path order. The pending calls of
-// the retry follow the same rule. So the graph does not depend on the
-// order of the results. Link does not open the store or start a
-// goroutine.
-func Link(view symbols.View, h symbols.Hierarchy, types []TypeOutput, calls []CallOutput) Graph {
+// It is a loop over Global.Assemble, the per-file assembly that a full
+// index runs in its last pass, so the edge order has one implementation.
+// After the loop come the whole-graph edges of each unit that has no
+// result among types, which only a sync has, and the no-file unit. The
+// edges of the returned graph are collapsed in each unit, and a triple
+// has all its candidates in one unit, so no triple repeats. The graph does
+// not depend on the order of the results. Link does not open the store or
+// start a goroutine.
+//
+// An error wraps goextract.ErrInternal: an edge in a unit that cannot hold
+// it, which is a defect of the resolver.
+func Link(view symbols.View, h symbols.Hierarchy, types []TypeOutput, calls []CallOutput) (Graph, error) {
 	if len(types) != len(calls) {
 		panic("resolve: Link needs one CallOutput per TypeOutput")
 	}
-	var g Graph
-	packageNodeIDs := make(map[string]struct{})
+	var structural []*schema.Edge
 	for _, t := range types {
-		g.Nodes = append(g.Nodes, t.nodes...)
-		for _, pn := range t.packageNodes {
+		structural = append(structural, StructuralEdges(t.edges)...)
+	}
+	global := NewGlobal(view, h, structural)
+
+	g := Graph{OwnerPath: global.OwnerPath}
+	packageNodeIDs := make(map[string]struct{})
+	hasResult := make(map[string]bool, len(types))
+	noFile := make([]NoFileEdges, 0, len(types))
+	for i := range types {
+		u, err := global.Assemble(types[i], calls[i])
+		if err != nil {
+			return Graph{}, err
+		}
+		g.Nodes = append(g.Nodes, u.Nodes...)
+		for _, pn := range u.PackageNodes {
 			if _, seen := packageNodeIDs[pn.Id]; !seen {
 				packageNodeIDs[pn.Id] = struct{}{}
 				g.PackageNodes = append(g.PackageNodes, pn)
 			}
 		}
-		g.Edges = append(g.Edges, t.edges...)
-		g.Unresolved += t.unresolved
-	}
-
-	var pending []pendingCall
-	for i, c := range calls {
-		g.Edges = append(g.Edges, c.edges...)
-		for _, p := range c.pending {
-			pending = append(pending, pendingCall{ref: p.ref, file: types[i].file, wait: p.wait})
+		g.Edges = append(g.Edges, u.Edges...)
+		g.Unresolved += u.Unresolved
+		if u.File != nil {
+			g.Files = append(g.Files, u.File)
+			hasResult[u.File.Path] = true
 		}
+		noFile = append(noFile, u.NoFile)
 	}
-	byPath := make([]int, len(calls))
-	for i := range byPath {
-		byPath[i] = i
-	}
-	sort.SliceStable(byPath, func(a, b int) bool { return calls[byPath[a]].relPath < calls[byPath[b]].relPath })
-	for _, i := range byPath {
-		g.Edges = append(g.Edges, calls[i].deferredEdges...)
-		for _, p := range calls[i].deferredPending {
-			pending = append(pending, pendingCall{ref: p.ref, file: types[i].file, wait: p.wait})
-		}
-	}
-
+	g.Edges = append(g.Edges, global.Rest(func(path string) bool { return hasResult[path] })...)
+	g.Edges = append(g.Edges, global.CollapseNoFile(noFile)...)
 	g.Nodes = append(g.Nodes, h.SetNodes()...)
-
-	for i, t := range types {
-		if t.file == nil {
-			continue
-		}
-		t.file.EdgeCount += int64(calls[i].resolved)
-		g.Files = append(g.Files, t.file)
-	}
-
-	withStoredEdges := func(es []*schema.Edge) []*schema.Edge {
-		stored := view.StoredEdges()
-		if len(stored) == 0 {
-			return es
-		}
-		return append(slices.Clip(es), stored...)
-	}
-
-	g.Edges = append(g.Edges, synthesizeGoImplements(view, withStoredEdges(g.Edges))...)
-
-	methodKey := make(map[string]string)
-	for n := range view.Nodes() {
-		if k := goextract.SignatureKeyOfNode(n); k != "" {
-			methodKey[n.Id] = k
-		}
-	}
-	g.Edges = append(g.Edges, synthesizeOverrides(view, withStoredEdges(g.Edges), methodKey)...)
-
-	g.Edges = append(g.Edges, retryConformanceCalls(pending, withStoredEdges(g.Edges), view, &g.Unresolved)...)
-
-	// The overrides, implements and conformance synthesis above read a
-	// contains edge as type to member in one hop, so the set edges are
-	// made only now, after them.
-	g.Edges = rewireSetEdges(view, h, g.Edges)
-
-	for _, f := range g.Files {
-		f.UnresolvedNames = sortedUniqueNames(f.UnresolvedNames)
-	}
-	return g
+	return g, nil
 }

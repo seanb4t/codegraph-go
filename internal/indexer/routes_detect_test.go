@@ -149,8 +149,8 @@ func TestGin_OptInNoDependencyNoRoutes(t *testing.T) {
 
 // TestRoute_DeterministicRebuild proves indexing the Gin route fixture
 // twice from scratch yields byte-identical Export() streams — route
-// nodes/edges flow through the SAME collapseEdges/writeGraph path as
-// every other edge, so this reuses determinism_test.go's own
+// nodes and edges form the route unit of pass 3, which the same writer
+// stages as every file unit, so this reuses determinism_test.go's own
 // indexAndExport helper unchanged (05-12-PLAN.md's determinism
 // acceptance criterion).
 func TestRoute_DeterministicRebuild(t *testing.T) {

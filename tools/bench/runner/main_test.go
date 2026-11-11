@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/bench"
+	"github.com/seanb4t/codegraph-go/internal/gencorpus"
 )
 
 // TestRegressionFailureSaysRerunFirst pins the shape of the gate's failure:
@@ -454,8 +455,8 @@ func TestParseFlags_Defaults(t *testing.T) {
 	if cfg.mode != "regression" {
 		t.Errorf("mode = %q, want regression", cfg.mode)
 	}
-	if cfg.count != regressionFileCount {
-		t.Errorf("count = %d, want %d", cfg.count, regressionFileCount)
+	if cfg.count != gencorpus.ProductionFileCount {
+		t.Errorf("count = %d, want %d", cfg.count, gencorpus.ProductionFileCount)
 	}
 	if cfg.ceilingBytes != defaultCeilingBytes {
 		t.Errorf("ceilingBytes = %d, want %d", cfg.ceilingBytes, defaultCeilingBytes)

@@ -1,9 +1,12 @@
 // Package daemon implements SYNC-04/SYNC-05/D-05: the long-lived local
 // process (or in-process fallback) that owns a repo's watcher plus the
 // single GraphStore.Writer so multiple agent sessions share one indexer.
-// A pid+start-timestamp lockfile in .codegraph/ guards the single-writer
-// invariant (INDX-05); Unlock clears ONLY a genuinely-stale lock, never a
-// live daemon's.
+// A pid+start-timestamp lockfile in .codegraph/, daemon.lock, keeps one
+// daemon process per repository; Unlock clears ONLY a genuinely-stale
+// lock, never a live daemon's. It does not keep writers apart. That is the
+// work of the writer lock of the store (graphstore.LockWriter), which
+// keeps one writer per store at a time (INDX-05): indexer.Sync and a full
+// index each hold it for their whole run, whichever process they run in.
 //
 // internal/daemon depends only on internal/indexer and internal/watch —
 // indexer.Sync owns its own GraphStore.Open/Close/Writer lifecycle

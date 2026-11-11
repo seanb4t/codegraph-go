@@ -393,7 +393,7 @@ codegraph daemon start [flags]
   -p, --path string   repo path (default: cwd)
   -q, --quiet         suppress daemon-driven sync progress output
   -v, --verbose       emit per-file/per-pass detail for daemon-driven syncs
-      --workers int   bound the daemon's extraction worker pool (default: number of CPUs)
+      --workers int   bound the worker pool of every indexing pass (default: GOMAXPROCS)
 ```
 
 ### Options inherited from parent commands
@@ -651,7 +651,7 @@ codegraph index [path] [flags]
   -h, --help          help for index
   -q, --quiet         suppress progress and summary output
   -v, --verbose       emit per-file/per-pass detail
-      --workers int   bound the extraction worker pool (default: number of CPUs)
+      --workers int   bound the worker pool of every indexing pass (default: GOMAXPROCS)
 ```
 
 ### Options inherited from parent commands
@@ -678,7 +678,7 @@ codegraph init [path] [flags]
   -h, --help          help for init
   -q, --quiet         suppress progress and summary output
   -v, --verbose       emit per-file/per-pass detail
-      --workers int   bound the extraction worker pool (default: number of CPUs)
+      --workers int   bound the worker pool of every indexing pass (default: GOMAXPROCS)
 ```
 
 ### Options inherited from parent commands
@@ -932,7 +932,7 @@ codegraph sync [path] [flags]
   -h, --help          help for sync
   -q, --quiet         suppress progress and summary output
   -v, --verbose       emit per-file/per-pass detail
-      --workers int   bound the extraction worker pool (default: number of CPUs)
+      --workers int   bound the worker pool of every indexing pass (default: GOMAXPROCS)
 ```
 
 ### Options inherited from parent commands

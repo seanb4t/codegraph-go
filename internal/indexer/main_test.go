@@ -27,5 +27,12 @@ func TestMain(m *testing.M) {
 			panic(err)
 		}
 	}
-	goleak.VerifyTestMain(m)
+	goleak.VerifyTestMain(m,
+		// Pebble leaves this one goroutine behind when an open fails on a
+		// damaged store, which TestRunStampsMonotonicCoverageGeneration
+		// does on purpose. A store that a test forgot to close still
+		// fails the run: it leaves more than twenty goroutines of other
+		// kinds, such as the cleanup manager of the store.
+		goleak.IgnoreTopFunction("github.com/cockroachdb/pebble/v2/vfs.(*diskHealthCheckingFS).startTickerLocked.func1"),
+	)
 }

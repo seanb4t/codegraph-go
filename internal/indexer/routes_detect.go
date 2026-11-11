@@ -9,107 +9,13 @@ import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
-	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/routes"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
+	"github.com/seanb4t/codegraph-go/internal/parser"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
-
-// detectRoutes runs LANG-07's opt-in, per-framework route-detector
-// registry (D-08/D-09) over repoRoot's already-discovered/-extracted
-// files: for every language actually present, each registered
-// routes.Detector's Signature is checked against that language's manifest
-// text (read exactly once per language, never per detector — D-09), and
-// only a language with at least one FIRED detector is re-parsed at all —
-// a repo using none of the five priority frameworks costs one manifest
-// read per present language and nothing else.
-//
-// Route nodes/edges are returned as plain slices, NOT wrapped in a
-// synthetic goextract.FileResult, specifically so pipeline.go's caller can
-// fold them directly into resolveRefsWithIndex's own nodes/edges
-// accumulation (mirroring synthesizeGoImplements' append-after-the-main-
-// loop shape in resolve.go) rather than minting a spurious, path-less
-// schema.File record the way appending a fake FileResult would.
-func detectRoutes(repoRoot string, files []discover.DiscoveredFile, results []goextract.FileResult) ([]*schema.Node, []*schema.Edge, error) {
-	detectors := routes.Registered()
-	if len(detectors) == 0 {
-		return nil, nil, nil
-	}
-
-	languagesPresent := make(map[string]bool)
-	for _, f := range files {
-		languagesPresent[f.Language] = true
-	}
-
-	manifestCache := make(map[string]string)
-	active := make(map[string][]routes.Detector)
-	for _, d := range detectors {
-		if !languagesPresent[d.Language] {
-			continue
-		}
-		text, cached := manifestCache[d.Language]
-		if !cached {
-			text = routeManifestText(d.Language, repoRoot)
-			manifestCache[d.Language] = text
-		}
-		if d.Signature(text) {
-			active[d.Language] = append(active[d.Language], d)
-		}
-	}
-	if len(active) == 0 {
-		return nil, nil, nil
-	}
-
-	resultByRelPath := make(map[string]*goextract.FileResult, len(results))
-	for i := range results {
-		resultByRelPath[results[i].RelPath] = &results[i]
-	}
-
-	globalByLang := make(map[string]map[string]string, len(active))
-	for lang := range active {
-		globalByLang[lang] = buildGlobalHandlerIndex(results, lang)
-	}
-
-	var nodes []*schema.Node
-	var edges []*schema.Edge
-
-	for _, f := range files {
-		dets := active[f.Language]
-		if len(dets) == 0 {
-			continue
-		}
-		spec, ok := extract.ByID(f.Language)
-		if !ok || spec.NewParser == nil {
-			continue
-		}
-		res := resultByRelPath[f.RelPath]
-		if res == nil || res.Err != nil {
-			// A file that failed Pass-1 extraction has no known
-			// function/method nodes to resolve a handler against — skip
-			// it rather than re-parsing for a route that could never
-			// resolve anyway (D-06a: never a dangling edge).
-			continue
-		}
-
-		src, err := os.ReadFile(f.AbsPath)
-		if err != nil {
-			// Matches every extractor's own per-file skip contract
-			// (05-PATTERNS.md): one unreadable file never aborts the
-			// whole detection pass.
-			continue
-		}
-
-		routeNodes, routeEdges, err := detectRoutesInFile(spec, f, src, res, globalByLang[f.Language], dets)
-		if err != nil {
-			return nil, nil, err
-		}
-		nodes = append(nodes, routeNodes...)
-		edges = append(edges, routeEdges...)
-	}
-
-	return nodes, edges, nil
-}
 
 // detectRoutesInFile re-parses one file (via its own extract.LanguageSpec's
 // NewParser — the SAME grammar Pass 1 already used, Pitfall 1's per-
@@ -117,13 +23,7 @@ func detectRoutes(repoRoot string, files []discover.DiscoveredFile, results []go
 // for that language's Walk over the resulting root node exactly once,
 // converting each resolved routes.Route into a schema.Node/schema.Edge
 // pair.
-func detectRoutesInFile(spec extract.LanguageSpec, f discover.DiscoveredFile, src []byte, res *goextract.FileResult, globalIndex map[string]string, dets []routes.Detector) ([]*schema.Node, []*schema.Edge, error) {
-	p, err := spec.NewParser()
-	if err != nil {
-		return nil, nil, err
-	}
-	defer p.Close()
-
+func detectRoutesInFile(p parser.Parser, f discover.DiscoveredFile, src []byte, res *goextract.FileResult, globalIndex map[string]string, dets []routes.Detector) ([]*schema.Node, []*schema.Edge, error) {
 	tree, err := p.Parse(src, nil)
 	if err != nil {
 		// A parse failure here mirrors every extractor's own skip
@@ -189,12 +89,11 @@ func detectRoutesInFile(spec extract.LanguageSpec, f discover.DiscoveredFile, sr
 }
 
 // routeResultFrom wraps detectRoutes' plain node/edge slices into a
-// single synthetic goextract.FileResult with RelPath left empty —
-// resolveRefsWithIndex (resolve.go) special-cases RelPath=="" to skip
-// minting a schema.File record for it while still folding its
-// Nodes/IntraEdges into the SAME nodes/edges accumulation (and therefore
-// the same collapseEdges/writeGraph commit) every other result flows
-// through.
+// single synthetic goextract.FileResult with RelPath left empty.
+// resolve.Types makes no schema.File record for a result without a path,
+// and resolve.Global.Assemble treats its edges as the route unit. Its
+// nodes and edges go through the same passes, the same collapse and the
+// same writer as those of every other result.
 func routeResultFrom(nodes []*schema.Node, edges []*schema.Edge) goextract.FileResult {
 	extractedNodes := make([]goextract.ExtractedNode, len(nodes))
 	for i, n := range nodes {
@@ -261,18 +160,18 @@ func (h *fileHandlerIndex) ResolveByLine(line int32) (string, bool) {
 // mirroring pickSymbol's own WR-01 tie-break — never last-write-wins, so
 // the resolved handler is stable across runs regardless of
 // file-processing order.
-func buildGlobalHandlerIndex(results []goextract.FileResult, language string) map[string]string {
+func buildGlobalHandlerIndex(decls []symbols.Declarations, language string) map[string]string {
 	out := make(map[string]string)
-	for _, r := range results {
-		if r.Err != nil || r.Language != language {
+	for _, d := range decls {
+		if d.Err != nil || d.Language != language {
 			continue
 		}
-		for _, en := range r.Nodes {
-			if en.Node.Kind != goextract.KindFunction && en.Node.Kind != goextract.KindMethod {
+		for _, n := range d.Nodes {
+			if n.Kind != goextract.KindFunction && n.Kind != goextract.KindMethod {
 				continue
 			}
-			if existing, ok := out[en.Node.Name]; !ok || en.Node.Id < existing {
-				out[en.Node.Name] = en.Node.Id
+			if existing, ok := out[n.Name]; !ok || n.Id < existing {
+				out[n.Name] = n.Id
 			}
 		}
 	}

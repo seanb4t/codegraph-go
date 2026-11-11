@@ -1,4 +1,4 @@
-// Command gencorpus is the CLI wrapper around Generate: it materializes a
+// Command gencorpus is the CLI wrapper around internal/gencorpus.Generate: it materializes a
 // deterministic, network-free synthetic source corpus for the PERF-02 CI
 // regression gate and the INDX-06 100k+ file / bounded-memory assertion.
 //
@@ -11,12 +11,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/seanb4t/codegraph-go/internal/gencorpus"
 )
 
 func main() {
 	seed := flag.Int64("seed", 42, "RNG seed; the same seed always produces the same output tree")
 	out := flag.String("out", "", "output directory to materialize the corpus into (required)")
-	count := flag.Int("count", ProductionFileCount, "total number of source files to generate")
+	count := flag.Int("count", gencorpus.ProductionFileCount, "total number of source files to generate")
 	flag.Parse()
 
 	if *out == "" {
@@ -24,7 +26,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	stats, err := Generate(Options{Seed: *seed, FileCount: *count, OutDir: *out})
+	stats, err := gencorpus.Generate(gencorpus.Options{Seed: *seed, FileCount: *count, OutDir: *out})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gencorpus: %v\n", err)
 		os.Exit(1)

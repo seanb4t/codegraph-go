@@ -76,6 +76,7 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			warnAfterReplace(cmd, storeDir, stats)
 			// D-11: resolve colour ONCE for this RunE and thread it through
 			// both print helpers below — printSummaryMode and
 			// printWatchFallbackAdvisory each used to call resolveColor
@@ -91,7 +92,7 @@ func newInitCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "suppress progress and summary output")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "emit per-file/per-pass detail")
-	cmd.Flags().IntVar(&workers, "workers", 0, "bound the extraction worker pool (default: number of CPUs)")
+	addWorkersFlag(cmd, &workers)
 
 	return cmd
 }

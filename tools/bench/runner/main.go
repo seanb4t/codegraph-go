@@ -50,6 +50,7 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/bench"
+	"github.com/seanb4t/codegraph-go/internal/gencorpus"
 	"github.com/seanb4t/codegraph-go/tools/bench/realcorpus"
 )
 
@@ -89,18 +90,10 @@ const defaultTrials = 3
 // numbers are known.
 const defaultCeilingBytes int64 = 4 * 1024 * 1024 * 1024 // 4 GiB
 
-// regressionFileCount is the default synthetic-corpus size regression
-// mode materializes when -count isn't overridden. This mirrors
-// tools/bench/gencorpus's own ProductionFileCount literal — duplicated
-// here (rather than imported) because gencorpus is a standalone
-// `package main` and cannot be imported by another Go package; see
-// buildGencorpus below, which shells out to it instead.
-const regressionFileCount = 120000
-
 // regressionQueryTerm is the fixed query-latency probe for regression
 // mode: gencorpus's Go population always writes this exact symbol as
 // its very first generated file (pkg0000/file0000.go), for any
-// FileCount >= 1 — see tools/bench/gencorpus/gen.go's generateGo.
+// FileCount >= 1 — see internal/gencorpus/gen.go's generateGo.
 const regressionQueryTerm = "Fn0000_0000"
 
 func main() {
@@ -163,7 +156,7 @@ func parseFlags(args []string) (config, error) {
 	fs.BoolVar(&cfg.rebless, "rebless", false, "regression mode only: overwrite -baseline with the freshly-measured metrics instead of gating against it — the ONLY path that writes baseline.json")
 	fs.StringVar(&cfg.scratchDir, "scratch-dir", "", "regression mode only: directory to materialize the synthetic corpus into (default: a fresh temp dir, cleaned up on exit)")
 	fs.Int64Var(&cfg.seed, "seed", 42, "regression mode only: gencorpus RNG seed (same seed -> byte-identical corpus)")
-	fs.IntVar(&cfg.count, "count", regressionFileCount, "regression mode only: number of synthetic files to generate")
+	fs.IntVar(&cfg.count, "count", gencorpus.ProductionFileCount, "regression mode only: number of synthetic files to generate")
 	fs.IntVar(&cfg.trials, "trials", defaultTrials, "regression mode only: number of independent measurement sessions to take each metric's median over; 1 means single-sample (not recommended for gating or -rebless)")
 	fs.StringVar(&cfg.runner, "runner", os.Getenv("CODEGRAPH_BENCH_RUNNER"), "runner identity label recorded alongside goos/goarch (e.g. a Namespace runs-on profile such as namespace-profile-linux-amd64-4x8); defaults to $CODEGRAPH_BENCH_RUNNER, and an explicit flag wins over the env var. Empty is fine outside CI — measurement never requires it")
 	fs.StringVar(&cfg.scratchFS, "scratch-fs", scratchFSDisk, "regression mode only: pin the scratch directory's filesystem class — \"disk\" (default: force disk-backed temp storage; the 10-04-PLAN control measurement found this beats tmpfs on every runner class tested), \"tmpfs\" (require /dev/shm, error loud if unavailable), or \"auto\" (prefer tmpfs, fall back to disk — kept for the deferred Namespace cache-volume follow-up, NOT the default). Ignored when -scratch-dir is set explicitly.")
@@ -824,8 +817,9 @@ func writeBaseline(path string, m bench.Metrics) error {
 
 // generateSyntheticCorpus materializes the deterministic, network-free
 // PERF-02/INDX-06 corpus by building and running tools/bench/gencorpus
-// as a subprocess (gencorpus is package main and cannot be imported
-// directly). No repo is cloned and no network is touched by this
+// as a subprocess. The runner does not call internal/gencorpus.Generate
+// itself, so that it and the task targets generate the corpus through one
+// command. No repo is cloned and no network is touched by this
 // function or by gencorpus itself (D-04).
 func generateSyntheticCorpus(seed int64, count int, outDir string) error {
 	root, err := repoRootDir()

@@ -584,7 +584,7 @@ committed it byte-for-byte (verified via SHA-256 before commit — no
 reformatting, no rounding, no key reordering).
 
 - **Seed/count:** `42` / `120000`, same as always — `repo:
-  "synthetic-seed42-count120000"`, `tools/bench/gencorpus.ProductionFileCount`.
+  "synthetic-seed42-count120000"`, `internal/gencorpus.ProductionFileCount`.
 - **Host:** `ubuntu-latest` (`linux`/`amd64`), `runner: "ubuntu-latest"`,
   `scratch_fs: "disk"` — both frame descriptors populated for the first
   time in a committed baseline. See "10-04-PLAN: the Namespace
@@ -622,7 +622,7 @@ go run ./tools/bench/runner -mode regression \
 
 - **Seed:** `42` (gencorpus's own default) — encoded in `baseline.json`'s
   `repo` field as `synthetic-seed42-count120000`.
-- **Count:** `120000` files — this IS `tools/bench/gencorpus.ProductionFileCount`,
+- **Count:** `120000` files — this IS `internal/gencorpus.ProductionFileCount`,
   the full INDX-06 100k+ production size. No smaller stand-in was needed:
   a full 120k-file from-scratch index completed in ~8s per run on the
   machine that captured this baseline (darwin/arm64), so the committed

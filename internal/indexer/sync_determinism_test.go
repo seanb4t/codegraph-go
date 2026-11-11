@@ -6,61 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"google.golang.org/protobuf/proto"
-
-	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
-	"github.com/seanb4t/codegraph-go/internal/schema"
 )
-
-// exportNormalized opens the store at storeDir, Exports it, and returns the
-// stream with Meta.last_sync_unix_ms zeroed in the leading Meta frame — the
-// same normalization determinism_test.go's indexAndExport applies (INDX-02),
-// factored out here since this test compares two ALREADY-BUILT stores
-// (one via Sync, one via a fresh Run) rather than building both itself.
-//
-// Meta.coverage_generation (WR-01, iteration 2) is normalized alongside it
-// for the same reason: it is a monotonic counter over each store's OWN
-// write history, not the graph's content, so storeDirA (seeded via one
-// Sync backfill, then advanced by a second incremental Sync — two
-// meta-write events) and storeDirB (built via a single from-scratch Run —
-// one meta-write event) legitimately land on different counter VALUES
-// even when their graph CONTENT is byte-identical. Comparing the counter
-// here would fail this determinism gate for a reason that has nothing to
-// do with determinism.
-func exportNormalized(t *testing.T, storeDir string) []byte {
-	t.Helper()
-
-	store, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("graphstore.Open: %v", err)
-	}
-	defer store.Close()
-
-	var buf bytes.Buffer
-	if err := store.Export(&buf); err != nil {
-		t.Fatalf("Export: %v", err)
-	}
-
-	frames := decodeExportFrames(t, buf.Bytes())
-	for i, f := range frames {
-		if f.kind != frameKindMeta {
-			continue
-		}
-		var m schema.Meta
-		if err := proto.Unmarshal(f.data, &m); err != nil {
-			t.Fatalf("unmarshal meta frame: %v", err)
-		}
-		m.LastSyncUnixMs = 0
-		m.CoverageGeneration = 0
-		normalized, err := proto.Marshal(&m)
-		if err != nil {
-			t.Fatalf("marshal normalized meta frame: %v", err)
-		}
-		frames[i].data = normalized
-	}
-	return encodeExportFrames(frames)
-}
 
 // touchEveryFile appends a no-op trailing comment to every discovered .go
 // file under root. This changes each file's content hash — forcing Sync's
@@ -119,13 +67,13 @@ func TestSyncEqualsReindex(t *testing.T) {
 		t.Fatalf("Stats.FilesReparsed = %d, want %d (every file touched)", statsTouch.FilesReparsed, len(files))
 	}
 
-	syncExport := exportNormalized(t, storeDirA)
+	syncExport := storetest.ExportNormalized(t, storeDirA, true)
 
 	storeDirB := t.TempDir()
 	if _, err := Run(repoRoot, storeDirB, Options{}); err != nil {
 		t.Fatalf("Run (from-scratch, final tree): %v", err)
 	}
-	reindexExport := exportNormalized(t, storeDirB)
+	reindexExport := storetest.ExportNormalized(t, storeDirB, true)
 
 	if !bytes.Equal(syncExport, reindexExport) {
 		reportFirstDiff(t, syncExport, reindexExport)

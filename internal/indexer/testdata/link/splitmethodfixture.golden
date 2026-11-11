@@ -1,0 +1,33 @@
+edge {"source":"file:a5c40b1a716463e7196f0730d9495628","target":"struct:7a227cf3b98198555ed2753ab80ede17","kind":"contains","provenance":"ast"}
+edge {"source":"file:a5c40b1a716463e7196f0730d9495628","target":"struct:954938560274a1718bb18315f5b1ab54","kind":"contains","provenance":"ast"}
+edge {"source":"file:a5c40b1a716463e7196f0730d9495628","target":"struct:a7a29d7963303dc1a721d8d2040866af","kind":"contains","provenance":"ast"}
+edge {"source":"file:a5c40b1a716463e7196f0730d9495628","target":"interface:a7441f065083532604af9a98c02f7d21","kind":"contains","provenance":"ast"}
+edge {"source":"method:6217467ff32350503d2322eb1403e599","target":"method:776fe9f11cce10e5ca0c8650364300f7","kind":"calls","line":5,"col":8,"provenance":"ast","receiverType":"Derived"}
+edge {"source":"method:cfa00222dc7102a65091f76534fd36f9","target":"method:776fe9f11cce10e5ca0c8650364300f7","kind":"calls","line":13,"col":8,"provenance":"ast"}
+edge {"source":"struct:954938560274a1718bb18315f5b1ab54","target":"method:776fe9f11cce10e5ca0c8650364300f7","kind":"contains","provenance":"ast"}
+edge {"source":"struct:954938560274a1718bb18315f5b1ab54","target":"interface:a7441f065083532604af9a98c02f7d21","kind":"implements","line":8,"provenance":"heuristic","metadata":{"synthesizedBy":"go-structural-methodset"}}
+edge {"source":"struct:a7a29d7963303dc1a721d8d2040866af","target":"struct:954938560274a1718bb18315f5b1ab54","kind":"extends","line":14,"col":1,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-extends"}}
+edge {"source":"struct:a7a29d7963303dc1a721d8d2040866af","target":"method:6217467ff32350503d2322eb1403e599","kind":"contains","provenance":"ast"}
+edge {"source":"struct:a7a29d7963303dc1a721d8d2040866af","target":"method:cfa00222dc7102a65091f76534fd36f9","kind":"contains","provenance":"ast"}
+file {"path":"run.go","contentHash":"4edfe9348842a784bab96f594a0fcc474b4da7a30de97feb70dc7468397e8cb6","language":"go","nodeCount":"3","edgeCount":"4","sizeBytes":"494"}
+file {"path":"types.go","contentHash":"fb455b1c92541ac9ddabbaea77ace5e70a9c3939c2e726c1f719693dd00a91de","language":"go","nodeCount":"6","edgeCount":"6","sizeBytes":"335"}
+index run.go node file:0f0c3513277c012e80a7879ec1e44ccf
+index run.go node method:6217467ff32350503d2322eb1403e599
+index run.go node method:cfa00222dc7102a65091f76534fd36f9
+index run.go edge method:6217467ff32350503d2322eb1403e599 calls method:776fe9f11cce10e5ca0c8650364300f7
+index run.go edge method:cfa00222dc7102a65091f76534fd36f9 calls method:776fe9f11cce10e5ca0c8650364300f7
+index run.go edge struct:a7a29d7963303dc1a721d8d2040866af contains method:6217467ff32350503d2322eb1403e599
+index run.go edge struct:a7a29d7963303dc1a721d8d2040866af contains method:cfa00222dc7102a65091f76534fd36f9
+index types.go node file:a5c40b1a716463e7196f0730d9495628
+index types.go node method:776fe9f11cce10e5ca0c8650364300f7
+index types.go node struct:7a227cf3b98198555ed2753ab80ede17
+index types.go node struct:954938560274a1718bb18315f5b1ab54
+index types.go node struct:a7a29d7963303dc1a721d8d2040866af
+index types.go node interface:a7441f065083532604af9a98c02f7d21
+index types.go edge file:a5c40b1a716463e7196f0730d9495628 contains struct:7a227cf3b98198555ed2753ab80ede17
+index types.go edge file:a5c40b1a716463e7196f0730d9495628 contains struct:954938560274a1718bb18315f5b1ab54
+index types.go edge file:a5c40b1a716463e7196f0730d9495628 contains struct:a7a29d7963303dc1a721d8d2040866af
+index types.go edge file:a5c40b1a716463e7196f0730d9495628 contains interface:a7441f065083532604af9a98c02f7d21
+index types.go edge struct:954938560274a1718bb18315f5b1ab54 contains method:776fe9f11cce10e5ca0c8650364300f7
+index types.go edge struct:954938560274a1718bb18315f5b1ab54 implements interface:a7441f065083532604af9a98c02f7d21
+index types.go edge struct:a7a29d7963303dc1a721d8d2040866af extends struct:954938560274a1718bb18315f5b1ab54

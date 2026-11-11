@@ -87,7 +87,8 @@ func init() {
 		NewParser: func() (parser.Parser, error) {
 			return cgo.NewCSharpParser()
 		},
-		Extract: csharpextract.Extract,
+		Extract:           csharpextract.Extract,
+		DefaultVisibility: csharpextract.DefaultTypeVisibility,
 		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
 			if descriptor == nil {
 				// D-03 path-identity fallback (mirrors Go/Java's own

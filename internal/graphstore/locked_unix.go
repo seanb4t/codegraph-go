@@ -31,7 +31,8 @@ import (
 // fatal, not degrade into the lock retry/requeue paths.
 //
 // Callers: classifyOpenError only — this matching is valid solely for
-// errors whose provenance is pebble.Open.
+// errors whose provenance is pebble.Open or pebble.LockDirectory, which
+// take the same directory lock.
 func isLockHeldOS(err error) bool {
 	if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
 		return true

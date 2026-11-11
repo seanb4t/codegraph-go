@@ -1,0 +1,10 @@
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:6a262f0d87864f74c554cf0a61b9e4c5","kind":"contains","provenance":"ast"}
+edge {"source":"file:4ef5c88464ea2408a807b6f557c13bb8","target":"function:fb80c63753a22c25348cc4917cb6fed8","kind":"contains","provenance":"ast"}
+edge {"source":"function:fb80c63753a22c25348cc4917cb6fed8","target":"function:6a262f0d87864f74c554cf0a61b9e4c5","kind":"calls","line":10,"col":9,"provenance":"ast"}
+file {"path":"main.go","contentHash":"551df53286662fe8cd738e882acdff3aefcdf6510033430925aba80fea0ce665","language":"go","nodeCount":"3","edgeCount":"3","sizeBytes":"229","unresolvedNames":[{"moduleKey":"example.com/coveragefixture","name":"println"}]}
+index main.go node file:4ef5c88464ea2408a807b6f557c13bb8
+index main.go node function:6a262f0d87864f74c554cf0a61b9e4c5
+index main.go node function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:6a262f0d87864f74c554cf0a61b9e4c5
+index main.go edge file:4ef5c88464ea2408a807b6f557c13bb8 contains function:fb80c63753a22c25348cc4917cb6fed8
+index main.go edge function:fb80c63753a22c25348cc4917cb6fed8 calls function:6a262f0d87864f74c554cf0a61b9e4c5

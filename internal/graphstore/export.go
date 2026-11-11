@@ -2,13 +2,13 @@ package graphstore
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
 	"io"
 
 	"github.com/cockroachdb/pebble/v2"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/seanb4t/codegraph-go/internal/recordio"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -16,20 +16,22 @@ import (
 // framed record is [kind byte][uvarint length][protobuf bytes] — the kind
 // byte is what makes the stream self-describing without a separate
 // side-channel schema, so an older/newer reader can always tell which
-// message type to unmarshal into.
+// message type to unmarshal into. The framing itself lives in
+// internal/recordio. The tags are exported so that a reader of an export
+// stream in another package names them instead of copying their values.
 const (
-	exportKindMeta uint8 = 1
-	exportKindNode uint8 = 2
-	exportKindEdge uint8 = 3
-	exportKindFile uint8 = 4
+	ExportKindMeta uint8 = 1
+	ExportKindNode uint8 = 2
+	ExportKindEdge uint8 = 3
+	ExportKindFile uint8 = 4
 
-	// exportKindExcludedFile is Phase 10's fifth record kind (the c/
+	// ExportKindExcludedFile is Phase 10's fifth record kind (the c/
 	// namespace, D-05). Unlike x/ (the file-owned secondary index,
 	// which every PutNode/PutEdge regenerates on import), nothing else
 	// regenerates a c/ record — it MUST be framed explicitly here
 	// (RESEARCH Pitfall 2), or an Export/Import round trip would
 	// silently lose every exclusion record.
-	exportKindExcludedFile uint8 = 5
+	ExportKindExcludedFile uint8 = 5
 )
 
 // maxImportRecordBytes bounds the per-record length prefix read by Import,
@@ -76,7 +78,7 @@ func (s *pebbleStore) Export(w io.Writer) error {
 	err := getProto(snap, metaKey(metaRecordName), &meta)
 	switch err {
 	case nil:
-		if err := writeExportRecord(bw, exportKindMeta, &meta); err != nil {
+		if err := writeExportRecord(bw, ExportKindMeta, &meta); err != nil {
 			return fmt.Errorf("export meta: %w", err)
 		}
 	case ErrNotFound:
@@ -86,16 +88,16 @@ func (s *pebbleStore) Export(w io.Writer) error {
 		return fmt.Errorf("export meta: %w", err)
 	}
 
-	if err := exportNamespace(bw, snap, prefixNode, exportKindNode, func() proto.Message { return &schema.Node{} }); err != nil {
+	if err := exportNamespace(bw, snap, prefixNode, ExportKindNode, func() proto.Message { return &schema.Node{} }); err != nil {
 		return fmt.Errorf("export nodes: %w", err)
 	}
-	if err := exportNamespace(bw, snap, prefixEdge, exportKindEdge, func() proto.Message { return &schema.Edge{} }); err != nil {
+	if err := exportNamespace(bw, snap, prefixEdge, ExportKindEdge, func() proto.Message { return &schema.Edge{} }); err != nil {
 		return fmt.Errorf("export edges: %w", err)
 	}
-	if err := exportNamespace(bw, snap, prefixFile, exportKindFile, func() proto.Message { return &schema.File{} }); err != nil {
+	if err := exportNamespace(bw, snap, prefixFile, ExportKindFile, func() proto.Message { return &schema.File{} }); err != nil {
 		return fmt.Errorf("export files: %w", err)
 	}
-	if err := exportNamespace(bw, snap, prefixExcludedFile, exportKindExcludedFile, func() proto.Message { return &schema.ExcludedFile{} }); err != nil {
+	if err := exportNamespace(bw, snap, prefixExcludedFile, ExportKindExcludedFile, func() proto.Message { return &schema.ExcludedFile{} }); err != nil {
 		return fmt.Errorf("export excluded files: %w", err)
 	}
 
@@ -127,34 +129,34 @@ func exportNamespace(bw *bufio.Writer, snap *pebble.Snapshot, ns byte, kind uint
 }
 
 // writeExportRecord frames one record as [kind][uvarint length][bytes].
-// Uses deterministicMarshal (batch.go), not raw proto.Marshal, for the
-// SAME reason PutX does: this re-marshals a message freshly unmarshaled
-// from the store (exportNamespace, above), and a map-valued field
-// (schema.Edge.Metadata) would otherwise re-randomize its key order on
-// every Export() call regardless of what was originally persisted —
-// exactly the byte-identical-rebuild guarantee determinism_test.go's
+// Uses recordio.Marshal, not raw proto.Marshal, for the SAME reason PutX
+// does: this re-marshals a message freshly unmarshaled from the store
+// (exportNamespace, above), and a map-valued field (schema.Edge.Metadata)
+// would otherwise re-randomize its key order on every Export() call
+// regardless of what was originally persisted — exactly the
+// byte-identical-rebuild guarantee determinism_test.go's
 // TestDeterministicRebuild (and Phase 5's route-specific
 // TestRoute_DeterministicRebuild) verify against this stream.
 func writeExportRecord(w io.Writer, kind uint8, msg proto.Message) error {
-	data, err := deterministicMarshal(msg)
+	data, err := recordio.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	header := make([]byte, 0, 1+binary.MaxVarintLen64)
-	header = append(header, kind)
-	header = binary.AppendUvarint(header, uint64(len(data)))
-	if _, err := w.Write(header); err != nil {
-		return err
-	}
-	_, err = w.Write(data)
+	_, err = recordio.WriteFrame(w, kind, data)
 	return err
 }
 
 // Import reconstructs a graph exported by Export into dst — typically a
-// fresh, empty GraphStore. It applies every record through dst's batched
-// Writer and commits once, so the whole import is atomic (D-04). This is
-// the counterpart the ARCH-01 round-trip test drives: Export followed by
-// Import into a fresh store must reproduce an identical graph.
+// fresh, empty GraphStore. Export followed by Import into a fresh store
+// reproduces an identical graph (ARCH-01).
+//
+// Import writes through a bounded Writer with DefaultBatchCap, so it
+// commits in batches and no batch holds the whole graph. The store is not
+// complete until Import returns nil: a reader of dst before that sees a
+// part of the graph. An export holds its Meta frame first, and Import
+// keeps that frame aside and writes it as the last record. So the
+// metadata is in the last batch, which is the one durable commit, and a
+// store without metadata is one that Import did not finish.
 //
 // nodeFilePath tracks each imported node's id -> FilePath as node records
 // stream past, so a later edge record can supply PutEdge's ownerPath
@@ -163,44 +165,49 @@ func writeExportRecord(w io.Writer, kind uint8, msg proto.Message) error {
 // every edge's source node has already been seen by the time the edge
 // arrives.
 func Import(dst GraphStore, r io.Reader) error {
-	w, err := dst.NewWriter()
+	return importWith(dst, r, DefaultBatchCap, nil)
+}
+
+// importWith is Import with the batch cap and the commit callback of the
+// bounded Writer as parameters, so a test can pass a low cap and watch the
+// commits.
+func importWith(dst GraphStore, r io.Reader, cap int, onCommit func(Commit) error) error {
+	w, err := dst.NewBoundedWriter(cap, onCommit)
 	if err != nil {
 		return err
 	}
+	defer w.Close()
 
 	nodeFilePath := make(map[string]string)
-	br := bufio.NewReader(r)
+	var meta []byte
+	fr := recordio.NewReader(r, maxImportRecordBytes)
 	for {
-		kind, err := br.ReadByte()
+		kind, data, err := fr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("import: read kind: %w", err)
+			return fmt.Errorf("import: %w", err)
 		}
-		length, err := binary.ReadUvarint(br)
-		if err != nil {
-			return fmt.Errorf("import: read length: %w", err)
+		if kind == ExportKindMeta {
+			meta = data
+			continue
 		}
-		if length > maxImportRecordBytes {
-			return fmt.Errorf("import: record length %d exceeds ceiling %d", length, uint64(maxImportRecordBytes))
-		}
-		data := make([]byte, length)
-		if _, err := io.ReadFull(br, data); err != nil {
-			return fmt.Errorf("import: read record: %w", err)
-		}
-
 		if err := importRecord(w, kind, data, nodeFilePath); err != nil {
 			return err
 		}
 	}
-
+	if meta != nil {
+		if err := importRecord(w, ExportKindMeta, meta, nodeFilePath); err != nil {
+			return err
+		}
+	}
 	return w.Commit()
 }
 
 func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]string) error {
 	switch kind {
-	case exportKindMeta:
+	case ExportKindMeta:
 		var m schema.Meta
 		if err := proto.Unmarshal(data, &m); err != nil {
 			return fmt.Errorf("import: unmarshal meta: %w", err)
@@ -208,7 +215,7 @@ func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]str
 		if err := w.PutMeta(&m); err != nil {
 			return fmt.Errorf("import: put meta: %w", err)
 		}
-	case exportKindNode:
+	case ExportKindNode:
 		var n schema.Node
 		if err := proto.Unmarshal(data, &n); err != nil {
 			return fmt.Errorf("import: unmarshal node: %w", err)
@@ -217,7 +224,7 @@ func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]str
 		if err := w.PutNode(&n); err != nil {
 			return fmt.Errorf("import: put node: %w", err)
 		}
-	case exportKindEdge:
+	case ExportKindEdge:
 		var e schema.Edge
 		if err := proto.Unmarshal(data, &e); err != nil {
 			return fmt.Errorf("import: unmarshal edge: %w", err)
@@ -225,7 +232,7 @@ func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]str
 		if err := w.PutEdge(&e, nodeFilePath[e.GetSource()]); err != nil {
 			return fmt.Errorf("import: put edge: %w", err)
 		}
-	case exportKindFile:
+	case ExportKindFile:
 		var f schema.File
 		if err := proto.Unmarshal(data, &f); err != nil {
 			return fmt.Errorf("import: unmarshal file: %w", err)
@@ -233,7 +240,7 @@ func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]str
 		if err := w.PutFile(&f); err != nil {
 			return fmt.Errorf("import: put file: %w", err)
 		}
-	case exportKindExcludedFile:
+	case ExportKindExcludedFile:
 		var x schema.ExcludedFile
 		if err := proto.Unmarshal(data, &x); err != nil {
 			return fmt.Errorf("import: unmarshal excluded file: %w", err)

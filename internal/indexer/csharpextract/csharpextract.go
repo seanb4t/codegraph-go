@@ -229,7 +229,7 @@ func (ex *extractor) emitTypeDecl(node *tree_sitter.Node, kind string) {
 		startCol, endCol = int32(start.Column), int32(end.Column)
 	}
 
-	vis := csharpVisibility(mods, "internal")
+	vis := csharpVisibility(mods, DefaultTypeVisibility)
 
 	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
 		Id:            id,
@@ -814,6 +814,12 @@ func containsMod(mods []string, want string) bool {
 	}
 	return false
 }
+
+// DefaultTypeVisibility is the visibility of a C# type that states no
+// access modifier. The extractor gives it to such a type, and the merge of
+// the parts of a partial type reads it (extract.LanguageSpec), so the
+// default has one place.
+const DefaultTypeVisibility = "internal"
 
 // csharpVisibility derives a declaration's access level from its scanned
 // modifier tokens, handling the two legal compound-access modifiers

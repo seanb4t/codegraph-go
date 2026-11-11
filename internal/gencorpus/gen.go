@@ -1,4 +1,4 @@
-// Command gencorpus generates a deterministic, network-free synthetic
+// Package gencorpus generates a deterministic, network-free synthetic
 // source-code corpus for the PERF-02 CI regression gate and the INDX-06
 // bounded-memory / peak-RSS assertion (see 08-RESEARCH.md Pattern 2).
 //
@@ -13,7 +13,10 @@
 // This is a CI-gate build/test-time tool only: it is never shipped in the
 // production binary, must never touch the network or clone a repo (D-04),
 // and must never panic — every failure path returns a wrapped error.
-package main
+//
+// It lives under internal/ so that a test can import it. The command
+// tools/bench/gencorpus is its CLI wrapper.
+package gencorpus
 
 import (
 	"fmt"

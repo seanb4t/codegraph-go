@@ -49,55 +49,19 @@ func TestSeedDirGitignoreFirst(t *testing.T) {
 			t.Errorf("remove the seed directory: %v", err)
 		}
 	}()
-	if err := os.WriteFile(filepath.Join(d.path, "probe"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(d.Path(), "probe"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}
 
-	if !strings.HasPrefix(filepath.Base(d.path), seedPrefix) || filepath.Dir(d.path) != root {
-		t.Fatalf("seed directory = %s; want %s/%s*", d.path, root, seedPrefix)
+	if !strings.HasPrefix(filepath.Base(d.Path()), seedPrefix) || filepath.Dir(d.Path()) != root {
+		t.Fatalf("seed directory = %s; want %s/%s*", d.Path(), root, seedPrefix)
 	}
-	got, err := os.ReadFile(filepath.Join(d.path, ".gitignore"))
+	got, err := os.ReadFile(filepath.Join(d.Path(), ".gitignore"))
 	if err != nil || string(got) != "*\n" {
 		t.Fatalf(".gitignore = %q, %v; want %q", got, err, "*\n")
 	}
 	if out := runGit(t, root, "status", "--porcelain", "--untracked-files=all"); out != "" {
 		t.Errorf("git status lists the seed directory:\n%s", out)
-	}
-	if lock, err := lockFile(filepath.Join(d.path, lockName)); err == nil {
-		lock.Close()
-		t.Errorf("took the seed directory's lock while newSeedDir's holder is open")
-	}
-}
-
-func TestSweepRemovesOnlyUnlockedLeftovers(t *testing.T) {
-	root := t.TempDir()
-	leftover := filepath.Join(root, seedPrefix+"crashed")
-	held := filepath.Join(root, seedPrefix+"building")
-	other := filepath.Join(root, "codegraph.seed-not-ours")
-	for _, dir := range []string{leftover, held, other} {
-		if err := os.MkdirAll(filepath.Join(dir, storeDirName), 0o755); err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(leftover, lockName), nil, 0o644); err != nil {
-		t.Fatalf("write lock: %v", err)
-	}
-	lock, err := lockFile(filepath.Join(held, lockName))
-	if err != nil {
-		t.Fatalf("lockFile: %v", err)
-	}
-	defer lock.Close()
-
-	sweep(root)
-
-	if exists(t, leftover) {
-		t.Errorf("sweep kept %s, whose lock no one holds", leftover)
-	}
-	if !exists(t, filepath.Join(held, storeDirName)) {
-		t.Errorf("sweep removed %s, whose lock a build holds", held)
-	}
-	if !exists(t, other) {
-		t.Errorf("sweep removed %s, which is not a seed directory", other)
 	}
 }
 
@@ -121,8 +85,8 @@ func TestPlaceMovesSeedIntoPlace(t *testing.T) {
 	if exists(t, filepath.Join(target, lockName)) {
 		t.Errorf("%s still holds the build's lock file", target)
 	}
-	if exists(t, d.path) {
-		t.Errorf("seed directory %s still exists", d.path)
+	if exists(t, d.Path()) {
+		t.Errorf("seed directory %s still exists", d.Path())
 	}
 }
 
@@ -165,8 +129,8 @@ func TestPlaceYieldsToExistingIndex(t *testing.T) {
 			if exists(t, filepath.Join(target, storeDirName)) {
 				t.Errorf("place moved the seed's store into the existing index")
 			}
-			if exists(t, d.path) {
-				t.Errorf("seed directory %s still exists", d.path)
+			if exists(t, d.Path()) {
+				t.Errorf("seed directory %s still exists", d.Path())
 			}
 		})
 	}
