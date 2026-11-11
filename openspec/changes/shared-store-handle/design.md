@@ -41,7 +41,7 @@ Two flock files beside the store stay as they are (`locks.go`). Each handle hold
 
 - `Open`, `OpenExisting` and `Checkpoint` look in the table first. For a ready entry, the caller gets a new `pebbleStore` that points at the entry, and the count goes up by one. With no entry, the caller opens Pebble with the present bounded retry and puts the entry in the table.
 - `Close` on a `pebbleStore` marks that one handle closed and lowers the count by one. At zero, it closes the Pebble handle and the swap lock and removes the entry.
-- One entry type owns the `*pebble.DB` and the swap lock for both kinds of handle. A staging entry (D4) never enters the table and has a count of one. `Close` then has one release path.
+- One entry type owns the `*pebble.DB` and the swap lock for both kinds of handle. A staging entry (D4) never enters the table and has no count: its one `Close` closes it. `Close` then has one release path, which skips the count for an entry outside the table.
 - Each caller keeps its own `pebbleStore` value. `ErrClosed` and the idempotent `Close` stay rules of one caller. A caller that closes its handle does not close the handle of another caller.
 
 Alternatives considered:
@@ -65,7 +65,7 @@ Each `Open`, `OpenExisting` and `Checkpoint` runs the table lookup as the attemp
 
 The last close uses the closing state. `Close` sets the state under the mutex, closes Pebble and the swap lock outside the mutex, and then removes the entry. The entry leaves the table on every return path of that close, also when Pebble returns an error. A Pebble close waits for its compactions, so an open does not wait for it without a limit. The spec names this moment as one of two that keep the bounded retry. The other is the exchange of a full index (D4).
 
-Two test seams run in the pattern of `checkpointHook`: `sharedOpenHook` while an entry is in the opening state, and `sharedCloseHook` between the state change and the Pebble close.
+Three test seams run in the pattern of `checkpointHook`: `sharedOpenHook` while an entry is in the opening state, `sharedCloseHook` between the state change and the Pebble close, and `sharedWaitHook` before and after the wait of a caller on an opening entry. `internal/indexer` has one more, `syncBeforeCommitHook`, which runs just before the one commit of a sync.
 
 Alternative considered: `golang.org/x/sync/singleflight`, which is already a dependency. `Do` gives each waiter the result of one call. It does not let a waiter take its count in the same step under the table mutex. An entry can then reach zero and close between `Do` and the count. `singleflight` also has no closing state. The entry with three states is one small type.
 
@@ -119,7 +119,7 @@ The catch-up flush has the requeue budget of every other flush. If another proce
 
 Sixteen tests use an in-process `Open` as the holder that stands for another process. After D1 that `Open` shares the handle, and the code under test no longer meets a lock.
 
-A new package, `internal/graphstore/locktest`, gets one helper, `HoldStoreLock(t, dir)`. It takes the Pebble directory lock with `pebble.LockDirectory` and fails the test if the lock is not free. Pebble keys its registry by the cleaned name, so the helper compares `filepath.Clean(dir)` with the path that has its symbolic links resolved. It locks the cleaned name, and it locks the resolved name too only when the two differ. On macOS a temporary directory has both spellings, and the code under test can use either one. It returns a release function and also releases in `t.Cleanup`. A `sync.Once` guards the release, because a second close of a Pebble lock panics.
+A new package, `internal/graphstore/locktest`, gets one helper, `HoldStoreLock(t, dir)`. It takes the Pebble directory lock with `pebble.LockDirectory` and fails the test if the lock is not free. Pebble keys its registry by the cleaned name that it was given, which is not made absolute. The helper therefore locks three names of `dir`, where they differ: the cleaned path, the absolute path, and the absolute path with its symbolic links resolved. On macOS a temporary directory has both spellings, and the code under test can use either one. It returns a release function and also releases in `t.Cleanup`. A `sync.Once` guards the release, because a second close of a Pebble lock panics.
 
 `locktest` imports Pebble, and it does not import `graphstore`. The tests of package `graphstore` can therefore import it with no cycle, and the tests of `internal/uiserver`, `internal/wtindex` and `internal/mcp` use the same helper. The lint rule `graphstore-owns-pebble` allows Pebble in the subpackages of `internal/graphstore`. `storetest` stays a package for tests that compare stores.
 

@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 )
@@ -30,9 +29,7 @@ func TestOpenConvergesWhenHolderCloses(t *testing.T) {
 
 	sleeps := make(chan struct{})
 	released := make(chan struct{})
-	orig := openLockRetrySleep
-	openLockRetrySleep = func(time.Duration) { sleeps <- struct{}{} }
-	t.Cleanup(func() { openLockRetrySleep = orig })
+	setRetrySleep(t, func() { sleeps <- struct{}{} })
 
 	go func() {
 		<-sleeps // attempt 2's sleep began: attempt 1 has failed lock-held
@@ -84,14 +81,12 @@ func TestOpenSucceedsOnTheFinalAttempt(t *testing.T) {
 
 	sleeps := make(chan int)
 	resume := make(chan struct{})
-	orig := openLockRetrySleep
 	ordinal := 0
-	openLockRetrySleep = func(time.Duration) {
+	setRetrySleep(t, func() {
 		ordinal++
 		sleeps <- ordinal
 		<-resume
-	}
-	t.Cleanup(func() { openLockRetrySleep = orig })
+	})
 
 	var observedOrdinal int
 	go func() {

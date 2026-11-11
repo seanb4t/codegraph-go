@@ -14,7 +14,6 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/query"
-	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // runCatchUpSync runs a Daemon on root until its catch-up sync returns, then
@@ -25,12 +24,8 @@ import (
 // store, and the caller must not be in a synctest bubble.
 func runCatchUpSync(t *testing.T, root string, beforeOpen func() error) indexer.Stats {
 	t.Helper()
-	d, err := New(root, indexer.Options{Quiet: true},
-		WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
 	fw := newFakeWatcher()
+	d := newFakeDaemon(t, root, fw)
 	d.openWatcher = func(string) (watcher, error) {
 		if err := beforeOpen(); err != nil {
 			return nil, err

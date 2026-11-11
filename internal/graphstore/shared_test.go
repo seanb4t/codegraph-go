@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"pgregory.net/rapid"
 
@@ -88,19 +87,18 @@ func setSharedOpenHook(t *testing.T, hook func()) {
 	t.Cleanup(func() { sharedOpenHook = nil })
 }
 
+// setSharedWaitHook sets sharedWaitHook for the test.
+func setSharedWaitHook(t *testing.T, hook func(woke bool)) {
+	t.Helper()
+	sharedWaitHook = hook
+	t.Cleanup(func() { sharedWaitHook = nil })
+}
+
 // setSharedCloseHook sets sharedCloseHook for the test.
 func setSharedCloseHook(t *testing.T, hook func()) {
 	t.Helper()
 	sharedCloseHook = hook
 	t.Cleanup(func() { sharedCloseHook = nil })
-}
-
-// setRetrySleep sets the backoff of retryLocked for the test.
-func setRetrySleep(t *testing.T, sleep func()) {
-	t.Helper()
-	orig := openLockRetrySleep
-	openLockRetrySleep = func(time.Duration) { sleep() }
-	t.Cleanup(func() { openLockRetrySleep = orig })
 }
 
 func TestOpenSecondOpenInProcessSharesHandle(t *testing.T) {
@@ -379,14 +377,18 @@ func TestSharedHandleWaitersShareOpen(t *testing.T) {
 		dir := t.TempDir()
 		inOpen, unblock := blockFirstOpen(t)
 
+		waiting := make(chan struct{})
+		setSharedWaitHook(t, func(woke bool) {
+			if !woke {
+				close(waiting)
+			}
+		})
+
 		first := openAsync(dir)
 		<-inOpen
 		second := openAsync(dir)
-		select {
-		case r := <-second:
-			t.Fatalf("the second Open returned (%v) while the first is still opening", r.err)
-		default:
-		}
+		// The second Open found the handle in the opening state and waits.
+		<-waiting
 		unblock()
 
 		a, b := <-first, <-second
@@ -442,6 +444,52 @@ func TestSharedHandleWaitersShareOpen(t *testing.T) {
 			t.Fatal(err)
 		}
 		mustClose(t, mustOpen(t, dir))
+	})
+
+	t.Run("the opener closes before the waiter looks again", func(t *testing.T) {
+		sleeps := countRetrySleeps(t)
+		dir := t.TempDir()
+		inOpen, unblock := blockFirstOpen(t)
+		waiting, openerClosed := make(chan struct{}), make(chan struct{})
+		setSharedWaitHook(t, func(woke bool) {
+			if !woke {
+				close(waiting)
+				return
+			}
+			<-openerClosed
+		})
+
+		first := openAsync(dir)
+		<-inOpen
+		second := openAsync(dir)
+		<-waiting
+		unblock()
+		a := <-first
+		if a.err != nil {
+			t.Fatalf("the first Open: %v", a.err)
+		}
+		openerHandle := a.s.handle
+		mustClose(t, a.s)
+		close(openerClosed)
+
+		// The waiter finds the handle of the opener closed. It must not
+		// take that handle: it retries one time and opens a new one.
+		b := <-second
+		if b.err != nil {
+			t.Fatalf("the second Open: %v", b.err)
+		}
+		if b.s.handle == openerHandle {
+			t.Fatalf("the waiter took the handle that its opener already closed")
+		}
+		if n := sleeps.Load(); n != 1 {
+			t.Fatalf("the waiter slept %d times, want 1", n)
+		}
+		commitNode(t, b.s, "n")
+		if !nodeVisible(t, b.s, "n") {
+			t.Fatalf("the waiter does not read through its new handle")
+		}
+		mustClose(t, b.s)
+		requireNoSharedHandle(t)
 	})
 }
 
@@ -571,4 +619,92 @@ func TestReplaceStoreWaitsForSharedHandle(t *testing.T) {
 	if !bytes.Equal(exportAt(t, live), newExport) {
 		t.Errorf("the live path does not hold the new store")
 	}
+}
+
+// TestStagingStoreHasOneOwner checks that a staging store never shares its
+// handle: a second open of its directory in this process is refused.
+func TestStagingStoreHasOneOwner(t *testing.T) {
+	sleeps := countRetrySleeps(t)
+	dir := t.TempDir()
+	staging, err := OpenStaging(dir)
+	if err != nil {
+		t.Fatalf("OpenStaging: %v", err)
+	}
+
+	if _, err := OpenStaging(dir); !errors.Is(err, ErrStoreLocked) {
+		t.Fatalf("a second OpenStaging: %v, want ErrStoreLocked", err)
+	}
+	if _, err := Open(dir); !errors.Is(err, ErrStoreLocked) {
+		t.Fatalf("Open of a staging store that is open: %v, want ErrStoreLocked", err)
+	}
+	if n, want := sleeps.Load(), int64(2*(openLockRetryAttempts-1)); n != want {
+		t.Fatalf("the two refused opens slept %d times, want %d", n, want)
+	}
+	requireNoSharedHandle(t)
+
+	// Positive assertion: the directory opens after the staging store closes.
+	mustClose(t, staging)
+	mustClose(t, mustOpen(t, dir))
+}
+
+// TestSharedHandleParallelOpenClose runs drawn scripts of opens and closes
+// of one store on several goroutines. An open that meets the last close of
+// another goroutine can use up its retry, so the property allows
+// ErrStoreLocked. Every open that succeeds reads, and the process holds no
+// handle after the last close.
+func TestSharedHandleParallelOpenClose(t *testing.T) {
+	noRetrySleep(t)
+	dir := t.TempDir()
+	readThenClose := func(s *pebbleStore) error {
+		r, err := s.Snapshot()
+		if err != nil {
+			return errors.Join(err, s.Close())
+		}
+		_, err = r.GetMeta()
+		if errors.Is(err, ErrNotFound) {
+			err = nil
+		}
+		return errors.Join(err, r.Close(), s.Close())
+	}
+
+	rapid.Check(t, func(rt *rapid.T) {
+		scripts := rapid.SliceOfN(rapid.IntRange(1, 6), 2, 6).Draw(rt, "cycles of each goroutine")
+		var (
+			wg     sync.WaitGroup
+			opened atomic.Int64
+			errs   = make([]error, len(scripts))
+		)
+		for g, cycles := range scripts {
+			wg.Go(func() {
+				for range cycles {
+					s, err := open(dir, false)
+					if errors.Is(err, ErrStoreLocked) {
+						continue
+					}
+					if err != nil {
+						errs[g] = err
+						return
+					}
+					opened.Add(1)
+					if err := readThenClose(s); err != nil {
+						errs[g] = err
+						return
+					}
+				}
+			})
+		}
+		wg.Wait()
+		for g, err := range errs {
+			if err != nil {
+				rt.Fatalf("goroutine %d: %v", g, err)
+			}
+		}
+		// Positive assertion: the first open of a run meets no handle, so
+		// some open of every run succeeds.
+		if opened.Load() == 0 {
+			rt.Fatalf("no open succeeded")
+		}
+		requireNoSharedHandle(rt)
+		locktest.HoldStoreLock(t, dir)()
+	})
 }

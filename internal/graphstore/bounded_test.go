@@ -30,16 +30,7 @@ func sizedNode(i, size int) *schema.Node {
 
 func hasNode(t fataler, s GraphStore, i int) bool {
 	t.Helper()
-	r, err := s.Snapshot()
-	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
-	}
-	defer r.Close()
-	_, err = r.GetNode(fmt.Sprintf("n%05d", i))
-	if err != nil && err != ErrNotFound {
-		t.Fatalf("GetNode: %v", err)
-	}
-	return err == nil
+	return nodeVisible(t, s, fmt.Sprintf("n%05d", i))
 }
 
 func hasMeta(t fataler, s GraphStore) bool {

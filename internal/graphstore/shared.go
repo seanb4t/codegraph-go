@@ -64,10 +64,14 @@ var sharedHandles struct {
 
 // sharedOpenHook, if not nil, runs while a handle is in the opening state.
 // sharedCloseHook, if not nil, runs while a handle is in the closing
-// state, before the Pebble close. A test sets them to hold that state.
+// state, before the Pebble close. sharedWaitHook, if not nil, runs two
+// times in a caller that waits for the open of another caller: with false
+// before the wait, and with true after that open ended and before the
+// caller looks at the handle again. A test sets them to hold that moment.
 var (
 	sharedOpenHook  func()
 	sharedCloseHook func()
+	sharedWaitHook  func(woke bool)
 )
 
 // errHandleClosing is the error of an attempt that meets a handle in the
@@ -127,7 +131,13 @@ func acquireShared(key, dir string) (*dbHandle, error) {
 
 	if h.state == handleOpening {
 		sharedHandles.mu.Unlock()
+		if sharedWaitHook != nil {
+			sharedWaitHook(false)
+		}
 		<-h.opened
+		if sharedWaitHook != nil {
+			sharedWaitHook(true)
+		}
 		sharedHandles.mu.Lock()
 	}
 	defer sharedHandles.mu.Unlock()
