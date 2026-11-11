@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -17,6 +18,17 @@ func noRetrySleep(t *testing.T) {
 	orig := openLockRetrySleep
 	openLockRetrySleep = func(time.Duration) {}
 	t.Cleanup(func() { openLockRetrySleep = orig })
+}
+
+// countRetrySleeps makes retryLocked's backoff return at once for the test,
+// like noRetrySleep, and returns the number of sleeps so far.
+func countRetrySleeps(t *testing.T) *atomic.Int64 {
+	t.Helper()
+	var sleeps atomic.Int64
+	orig := openLockRetrySleep
+	openLockRetrySleep = func(time.Duration) { sleeps.Add(1) }
+	t.Cleanup(func() { openLockRetrySleep = orig })
+	return &sleeps
 }
 
 // TestLockRetryClassifies checks that each classifier turns only the

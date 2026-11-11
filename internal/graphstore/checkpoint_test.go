@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -102,18 +102,11 @@ func TestCheckpointCopiesGraph(t *testing.T) {
 
 func TestCheckpointLockedSource(t *testing.T) {
 	src := t.TempDir()
-	holder, err := Open(src)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer holder.Close()
-
-	orig := openLockRetrySleep
-	openLockRetrySleep = func(time.Duration) {}
-	t.Cleanup(func() { openLockRetrySleep = orig })
+	locktest.HoldStoreLock(t, src)
+	noRetrySleep(t)
 
 	dest := filepath.Join(t.TempDir(), "store")
-	err = Checkpoint(src, dest)
+	err := Checkpoint(src, dest)
 	if !errors.Is(err, ErrStoreLocked) {
 		t.Fatalf("Checkpoint error = %v; want errors.Is(err, ErrStoreLocked)", err)
 	}
