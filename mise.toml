@@ -4,7 +4,7 @@
 # macos-x64 build) and commit mise.lock.
 [tools]
 # The `go` line of go.mod must not exceed this toolchain.
-go = "1.26.10"
+go = "1.26.11"
 node = "24.22.1"
 pnpm = "11.23.0"
 uv = "0.13.5"
