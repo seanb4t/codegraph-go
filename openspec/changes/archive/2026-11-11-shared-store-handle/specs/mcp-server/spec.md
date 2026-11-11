@@ -4,7 +4,7 @@
 
 ### Requirement: A briefly locked store does not fail or hang a call
 
-A tool call SHALL NOT fail or wait because the sync of its own server process has the graph store open. That call SHALL read the graph of one completed sync, never a part of a sync. Two moments keep the bounded retry of a store that another process holds: while a sync puts a rebuilt store of an earlier release in place, and while the server process closes its last handle of the store. When a tool call finds the graph store locked by another process, it SHALL retry for a bounded time. If the store is still locked after the last attempt, it SHALL return a result with `isError: true` instead of waiting indefinitely.
+A tool call SHALL NOT fail or wait because the sync of its own server process has the graph store open. That call SHALL read the graph of one completed sync, never a part of a sync. When another process holds the store, the call SHALL retry for a bounded time and then return a result with `isError: true`. The same bounded retry applies while a sync puts a rebuilt store of an earlier release in place, and while the server process closes its last handle of the store.
 
 #### Scenario: A short lock
 
