@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -130,6 +131,11 @@ func ReadFrameAt(r io.ReaderAt, off int64, ceiling uint64) (kind uint8, payload 
 }
 
 func checkCeiling(length, ceiling uint64) error {
+	// A length above the largest int cannot be a slice, whatever the
+	// ceiling is. Without this, a damaged prefix panics in make.
+	if length > math.MaxInt {
+		return fmt.Errorf("recordio: record length %d is not a valid length", length)
+	}
 	if ceiling != 0 && length > ceiling {
 		return fmt.Errorf("recordio: record length %d exceeds ceiling %d", length, ceiling)
 	}

@@ -143,3 +143,47 @@ func TestExchangeDirsUnsupported(t *testing.T) {
 		})
 	}
 }
+
+// TestSyncFailureIsNotDurable checks that a failed fsync of a parent gives
+// an error that wraps ErrNotDurable, and that the directories then hold
+// what the call put there.
+func TestSyncFailureIsNotDurable(t *testing.T) {
+	errSync := errors.New("injected fsync failure")
+	failSync := func(t *testing.T) {
+		orig := syncDir
+		syncDir = func(string) error { return errSync }
+		t.Cleanup(func() { syncDir = orig })
+	}
+	t.Run("ExchangeDirs", func(t *testing.T) {
+		a, b := twoDirs(t, false)
+		failSync(t)
+		err := ExchangeDirs(a, b)
+		if !errors.Is(err, ErrNotDurable) || !errors.Is(err, errSync) {
+			t.Fatalf("ExchangeDirs error = %v, want one that wraps ErrNotDurable and the fsync error", err)
+		}
+		if !holds(t, a, "b.txt") || !holds(t, b, "a.txt") {
+			t.Errorf("the directories did not swap before the fsync failed")
+		}
+	})
+	t.Run("RenameDir", func(t *testing.T) {
+		a, b := twoDirs(t, false)
+		if err := os.RemoveAll(b); err != nil {
+			t.Fatalf("RemoveAll: %v", err)
+		}
+		failSync(t)
+		err := RenameDir(a, b)
+		if !errors.Is(err, ErrNotDurable) || !errors.Is(err, errSync) {
+			t.Fatalf("RenameDir error = %v, want one that wraps ErrNotDurable and the fsync error", err)
+		}
+		if !holds(t, b, "a.txt") {
+			t.Errorf("the directory did not move before the fsync failed")
+		}
+	})
+	t.Run("a rename that fails is not ErrNotDurable", func(t *testing.T) {
+		a, _ := twoDirs(t, false)
+		err := RenameDir(filepath.Join(a, "missing"), filepath.Join(a, "target"))
+		if err == nil || errors.Is(err, ErrNotDurable) {
+			t.Fatalf("RenameDir of a missing directory: %v, want an error that does not wrap ErrNotDurable", err)
+		}
+	})
+}

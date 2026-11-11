@@ -85,6 +85,7 @@ func newIndexCmd() *cobra.Command {
 				// way to repair exactly this case.
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read prior coverage generation from %s (%v); rebuilding with floor 0\n", storeDir, stats.PriorGenerationErr)
 			}
+			warnAfterReplace(cmd, storeDir, stats)
 			printSummary(cmd, stats, quiet, verbose)
 			return nil
 		},
@@ -96,4 +97,13 @@ func newIndexCmd() *cobra.Command {
 	addWorkersFlag(cmd, &workers)
 
 	return cmd
+}
+
+// warnAfterReplace prints a warning for a full index that put its new
+// store in place and then met an error. The index succeeded, so the command
+// does too.
+func warnAfterReplace(cmd *cobra.Command, storeDir string, stats indexer.Stats) {
+	if stats.AfterReplaceErr != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: the new index is in place at %s, but a later step failed: %v\n", storeDir, stats.AfterReplaceErr)
+	}
 }

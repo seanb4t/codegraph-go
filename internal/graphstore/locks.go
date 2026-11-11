@@ -2,6 +2,7 @@ package graphstore
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -30,6 +31,10 @@ const (
 	swapLockSuffix   = ".swap"
 	writerLockSuffix = ".write"
 )
+
+// ErrAfterReplace reports that ReplaceStore put the new store in place and
+// then met an error. The store at live is the new one.
+var ErrAfterReplace = errors.New("graphstore: the store was replaced, but a later step failed")
 
 // exchangeDirs is the exchange that ReplaceStore calls. A test replaces it
 // to fail the exchange.
@@ -65,6 +70,10 @@ func LockWriter(dir string) (io.Closer, error) {
 // error that wraps fsatomic.ErrExchangeUnsupported, and live stays as it
 // was.
 //
+// An error that wraps ErrAfterReplace means that the new store is in place:
+// the fsync of a parent directory failed, or the release of a lock did.
+// Every other error means that live stays as it was.
+//
 // ReplaceStore takes the swap lock exclusive, and only then looks for
 // live, so no open can create live between the look and the exchange. It
 // also takes the Pebble lock of live, because a process of an earlier
@@ -74,6 +83,15 @@ func LockWriter(dir string) (io.Closer, error) {
 // locks in a registry of the process, and a lock that leaks there blocks
 // every later open of the store until the process ends.
 func ReplaceStore(staging, live string) (err error) {
+	// replaced turns true once staging is in the place of live. An error
+	// after that moment, also one of the deferred releases below, tells
+	// the caller so.
+	replaced := false
+	defer func() {
+		if replaced && err != nil {
+			err = fmt.Errorf("%w: %w", ErrAfterReplace, err)
+		}
+	}()
 	swap, err := lockBeside(live, swapLockSuffix, flock.Exclusive)
 	if err != nil {
 		return err
@@ -84,12 +102,16 @@ func ReplaceStore(staging, live string) (err error) {
 		if !errors.Is(statErr, os.ErrNotExist) {
 			return statErr
 		}
-		return fsatomic.RenameDir(staging, live)
+		err = fsatomic.RenameDir(staging, live)
+		replaced = err == nil || errors.Is(err, fsatomic.ErrNotDurable)
+		return err
 	}
 	lock, err := retryLocked(func() (*pebble.Lock, error) { return pebble.LockDirectory(live, vfs.Default) }, classifyOpenError)
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, lock.Close()) }()
-	return exchangeDirs(staging, live)
+	err = exchangeDirs(staging, live)
+	replaced = err == nil || errors.Is(err, fsatomic.ErrNotDurable)
+	return err
 }

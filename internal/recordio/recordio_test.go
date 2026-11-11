@@ -2,7 +2,9 @@ package recordio
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
+	"math"
 	"strings"
 	"testing"
 
@@ -132,4 +134,47 @@ func TestFrameRoundTripProperty(t *testing.T) {
 			t.Fatalf("after the last frame: err %v, want io.EOF", err)
 		}
 	})
+}
+
+// TestReadFrameAtAroundReadAhead reads frames whose whole length is just
+// below, at and just above the size of the first read, each followed by
+// another frame. So both sides of the choice between one read and two have
+// a test, and so does a first read that also holds bytes of the next frame.
+func TestReadFrameAtAroundReadAhead(t *testing.T) {
+	ran := 0
+	for payloadLen := readAhead - MaxHeaderLen - 2; payloadLen <= readAhead+2; payloadLen++ {
+		payload := make([]byte, payloadLen)
+		for i := range payload {
+			payload[i] = byte(i*7 + payloadLen)
+		}
+		stream := AppendFrame(nil, 3, payload)
+		frameLen := len(stream)
+		stream = AppendFrame(stream, 4, []byte("next"))
+
+		kind, got, n, err := ReadFrameAt(bytes.NewReader(stream), 0, 0)
+		if err != nil || kind != 3 || n != frameLen || !bytes.Equal(got, payload) {
+			t.Fatalf("payload of %d bytes: kind %d, frame length %d (want %d), equal %v, err %v", payloadLen, kind, n, frameLen, bytes.Equal(got, payload), err)
+		}
+		kind, got, _, err = ReadFrameAt(bytes.NewReader(stream), int64(n), 0)
+		if err != nil || kind != 4 || string(got) != "next" {
+			t.Fatalf("the frame after a payload of %d bytes: kind %d, %q, err %v", payloadLen, kind, got, err)
+		}
+		ran++
+	}
+	// Positive assertion: the loop crossed the size of the first read.
+	if ran < MaxHeaderLen+4 {
+		t.Fatalf("the loop ran %d times, so it did not cross readAhead", ran)
+	}
+}
+
+// TestFrameLengthAboveMaxInt checks that a length prefix above the largest
+// int gives an error with no ceiling set, in both readers.
+func TestFrameLengthAboveMaxInt(t *testing.T) {
+	stream := binary.AppendUvarint([]byte{1}, math.MaxUint64)
+	if _, _, _, err := ReadFrameAt(bytes.NewReader(stream), 0, 0); err == nil || !strings.Contains(err.Error(), "not a valid length") {
+		t.Errorf("ReadFrameAt error = %v, want one that names the length", err)
+	}
+	if _, _, err := NewReader(bytes.NewReader(stream), 0).Next(); err == nil || !strings.Contains(err.Error(), "not a valid length") {
+		t.Errorf("Next error = %v, want one that names the length", err)
+	}
 }

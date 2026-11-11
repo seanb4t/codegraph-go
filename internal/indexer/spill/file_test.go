@@ -2,6 +2,8 @@ package spill
 
 import (
 	"bytes"
+	"encoding/binary"
+	"math"
 	"math/rand/v2"
 	"path/filepath"
 	"sync"
@@ -120,5 +122,29 @@ func TestSpillReadsLargeRecord(t *testing.T) {
 	}
 	if len(got) != size || got[0] != 0xA5 || got[size-1] != 0x5A {
 		t.Fatalf("read %d bytes, want the %d bytes that were appended", len(got), size)
+	}
+}
+
+// TestSpillReadOfDamagedLength damages the length prefix of a record and
+// checks that the read gives an error. A frame cannot be longer than the
+// file, so the read does not try to allocate the length it finds.
+func TestSpillReadOfDamagedLength(t *testing.T) {
+	s := newFile(t)
+	off, err := s.appendPayload([]byte("record"))
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	// Positive assertion: the record reads back before the damage.
+	if got, err := s.readPayload(off); err != nil || string(got) != "record" {
+		t.Fatalf("read before the damage: %q, %v", got, err)
+	}
+	for _, length := range []uint64{1 << 40, math.MaxUint64} {
+		prefix := binary.AppendUvarint(nil, length)
+		if _, err := s.f.WriteAt(prefix, off+1); err != nil {
+			t.Fatalf("WriteAt: %v", err)
+		}
+		if got, err := s.readPayload(off); err == nil {
+			t.Errorf("read of a record with the length %d gave %d bytes and no error", length, len(got))
+		}
 	}
 }

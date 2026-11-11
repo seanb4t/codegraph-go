@@ -52,13 +52,13 @@ func stampCapabilities(meta *schema.Meta) {
 	// Phase 4 D-02b: every PutNode/PutEdge a Writer stages populates the
 	// x/ file-owned secondary index.
 	meta.HasFileIndex = true
-	// resolveRefsWithIndex fills every File record's unresolved_names.
+	// resolve.Types and resolve.Calls fill every File record's
+	// unresolved_names.
 	meta.HasUnresolvedNames = true
-	// resolveRefsWithIndex fills declared_module_key wherever a file
-	// declares its module.
+	// resolve.Types fills declared_module_key wherever a file declares its
+	// module.
 	meta.HasDeclaredModuleKeys = true
-	// resolveRefsWithIndex stamps arity and interface_methods on every
-	// node.
+	// extract.File stamps arity and interface_methods on every node.
 	meta.HasMethodSpecs = true
 	// The Go extractor emits a node for every variable of a grouped var
 	// block.

@@ -362,3 +362,53 @@ func TestIndexSweepsScratch(t *testing.T) {
 		}
 	})
 }
+
+// TestCleanupFailureAfterExchangeIsNotARunFailure makes the removal of the
+// scratch directory fail after the exchange. The new store is then in
+// place, so the run succeeds and reports the error in its stats.
+func TestCleanupFailureAfterExchangeIsNotARunFailure(t *testing.T) {
+	root, storeDir := indexedTree(t)
+	writeFile(t, filepath.Join(root, "pkg", "added.go"), "package pkg\n\nfunc Added() {}\n")
+	parent := filepath.Dir(storeDir)
+	// A directory without the write bit keeps its entries, so the scratch
+	// directory cannot leave it.
+	// The hook acts in the first run only: the runs below it must clean up.
+	armed := true
+	setHook(t, &onExchange, func() {
+		if !armed {
+			return
+		}
+		armed = false
+		if err := os.Chmod(parent, 0o555); err != nil {
+			t.Errorf("Chmod: %v", err)
+		}
+	})
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	stats, err := run(context.Background(), root, storeDir, Options{})
+	if chmodErr := os.Chmod(parent, 0o755); chmodErr != nil {
+		t.Fatalf("Chmod: %v", chmodErr)
+	}
+	if err != nil {
+		t.Fatalf("run = %v, want no error: the new store is in place", err)
+	}
+	if stats.AfterReplaceErr == nil {
+		t.Fatalf("Stats.AfterReplaceErr = nil, so the removal of the scratch directory did not fail and the test proved nothing")
+	}
+	if left := scratchDirs(t, storeDir); len(left) != 1 {
+		t.Errorf("scratch directories after the failed removal: %v, want the one that could not go", left)
+	}
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), freshExport(t, root)) {
+		t.Errorf("the store does not hold the new graph")
+	}
+
+	// Positive assertion: the next full index sweeps the leftover and has
+	// nothing to report.
+	stats, err = run(context.Background(), root, storeDir, Options{})
+	if err != nil || stats.AfterReplaceErr != nil {
+		t.Fatalf("the next run: err %v, AfterReplaceErr %v", err, stats.AfterReplaceErr)
+	}
+	if left := scratchDirs(t, storeDir); len(left) != 0 {
+		t.Errorf("the next run left the scratch directories %v", left)
+	}
+}

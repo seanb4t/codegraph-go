@@ -75,6 +75,14 @@ type Stats struct {
 	// and stamped generation 1. Nil means that the read worked, or that
 	// the store was never indexed.
 	PriorGenerationErr error
+
+	// AfterReplaceErr is the error of a step of a full index that came
+	// after the new store took the place of the old one: the fsync of a
+	// parent directory, the release of a lock, or the removal of the
+	// scratch directory. The run succeeded and the store holds the new
+	// graph, so this error does not fail the run. Nil means that every
+	// such step worked.
+	AfterReplaceErr error
 }
 
 // Run is a full index of the repository at repoRoot into the store at

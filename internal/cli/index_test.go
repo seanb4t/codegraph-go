@@ -35,21 +35,18 @@ func readCoverageGeneration(t *testing.T, codegraphDir string) int64 {
 	return meta.GetCoverageGeneration()
 }
 
-// TestIndexForceRebuildBumpsCoverageGeneration pins CR-01's fix
-// (10-REVIEW.md iteration 3): `codegraph index`'s from-scratch rebuild
-// wipes storeDir (RemoveAll + MkdirAll) before calling indexer.Run, which
-// previously made writeGraph's own prior-generation read see a genuinely
-// empty store and reset Meta.CoverageGeneration to 1 on EVERY rebuild —
-// aliasing onto whatever generation a still-live client's page token
-// already carried.
+// TestIndexForceRebuildBumpsCoverageGeneration checks that a full index
+// over an indexed store raises Meta.CoverageGeneration (CR-01 of
+// 10-REVIEW.md, iteration 3). A full index builds a new store and puts it
+// in the place of the old one, so the new store does not hold the old
+// generation by itself: the run reads it from the old store first. If it
+// started again at 1, the generation would match the one in a page token
+// that a client still holds.
 //
-// This drives that exact sequence through the real CLI command (not two
-// writeGraph calls against a store that was never wiped): `init`, mint a
-// real page token against the resulting store, `index --force` (the
-// actual RemoveAll+MkdirAll+indexer.Run path), then assert (a) the
-// generation strictly increased across the wipe and (b) the pre-wipe
-// token is rejected against the rebuilt store with query.ErrAborted
-// rather than silently accepted.
+// The test drives the real CLI command: `init`, a page token against the
+// resulting store, then `index --force`. It asserts that (a) the
+// generation rose and (b) the store refuses the old token with
+// query.ErrAborted.
 func TestIndexForceRebuildBumpsCoverageGeneration(t *testing.T) {
 	dir := copyFixture(t)
 
@@ -92,8 +89,7 @@ func TestIndexForceRebuildBumpsCoverageGeneration(t *testing.T) {
 	}
 	staleToken := page1.NextPageToken
 
-	// Mirror `codegraph index`'s real RemoveAll + MkdirAll + indexer.Run
-	// sequence via the actual CLI command.
+	// A full index through the actual CLI command.
 	if _, _, err := execCmd("index", "--force", dir); err != nil {
 		t.Fatalf("index --force: %v", err)
 	}

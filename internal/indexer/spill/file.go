@@ -3,6 +3,7 @@ package spill
 import (
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/recordio"
@@ -23,6 +24,10 @@ type File struct {
 	// share an offset.
 	mu  sync.Mutex
 	off int64
+
+	// size is off, for a reader. Read takes it as the ceiling on the
+	// length of a frame, and it must not wait for a writer to do so.
+	size atomic.Int64
 }
 
 // Create creates the spill file at path, which must not exist.
@@ -53,6 +58,7 @@ func (s *File) appendPayload(payload []byte) (int64, error) {
 		return 0, err
 	}
 	s.off += int64(len(frame))
+	s.size.Store(s.off)
 	return off, nil
 }
 
@@ -65,10 +71,12 @@ func (s *File) Read(off int64) (goextract.FileResult, error) {
 	return Decode(data)
 }
 
-// readPayload reads one frame. It passes no ceiling on the length, because
-// the run wrote the file itself.
+// readPayload reads one frame. The run wrote the file itself, so it sets
+// no limit on how long a record can be. The only ceiling is the length of
+// the file: a frame cannot be longer than the file that holds it. So a
+// damaged length prefix gives an error, not an allocation of that length.
 func (s *File) readPayload(off int64) ([]byte, error) {
-	_, payload, _, err := recordio.ReadFrameAt(s.f, off, 0)
+	_, payload, _, err := recordio.ReadFrameAt(s.f, off, uint64(max(s.size.Load(), 1)))
 	return payload, err
 }
 

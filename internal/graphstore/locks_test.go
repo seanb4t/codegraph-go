@@ -3,6 +3,7 @@ package graphstore
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -208,6 +209,49 @@ func TestReplaceStoreWaitsForOpenHandle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReplaceStoreErrorAfterTheSwap checks that an error which comes after
+// the new store is in place wraps ErrAfterReplace, and that an error before
+// it does not.
+func TestReplaceStoreErrorAfterTheSwap(t *testing.T) {
+	errSync := errors.New("injected fsync failure")
+	setExchange := func(t *testing.T, f func(a, b string) error) {
+		orig := exchangeDirs
+		exchangeDirs = f
+		t.Cleanup(func() { exchangeDirs = orig })
+	}
+	t.Run("the fsync after the exchange fails", func(t *testing.T) {
+		staging, live := storePaths(t)
+		buildStore(t, live, "old")
+		newExport := buildStore(t, staging, "new")
+		setExchange(t, func(a, b string) error {
+			if err := fsatomic.ExchangeDirs(a, b); err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: %w", fsatomic.ErrNotDurable, errSync)
+		})
+		err := ReplaceStore(staging, live)
+		if !errors.Is(err, ErrAfterReplace) || !errors.Is(err, errSync) {
+			t.Fatalf("ReplaceStore error = %v, want one that wraps ErrAfterReplace and the fsync error", err)
+		}
+		if !bytes.Equal(exportAt(t, live), newExport) {
+			t.Errorf("the live path does not hold the new store")
+		}
+	})
+	t.Run("the exchange itself fails", func(t *testing.T) {
+		staging, live := storePaths(t)
+		oldExport := buildStore(t, live, "old")
+		buildStore(t, staging, "new")
+		setExchange(t, func(a, b string) error { return errSync })
+		err := ReplaceStore(staging, live)
+		if !errors.Is(err, errSync) || errors.Is(err, ErrAfterReplace) {
+			t.Fatalf("ReplaceStore error = %v, want the exchange error without ErrAfterReplace", err)
+		}
+		if !bytes.Equal(exportAt(t, live), oldExport) {
+			t.Errorf("the live store changed in a ReplaceStore that failed")
+		}
+	})
 }
 
 func TestReplaceStoreReleasesLocksOnFailure(t *testing.T) {

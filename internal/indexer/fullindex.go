@@ -148,8 +148,18 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 		return stats, err
 	}
 	// The scratch directory goes away on every return path. Before the
-	// exchange it holds the new store, and after it the old one.
-	defer func() { err = errors.Join(err, scratch.Remove()) }()
+	// exchange it holds the new store, and after it the old one. Once the
+	// new store is in place the run succeeded, so an error of the removal
+	// then goes into the stats and does not fail the run.
+	replaced := false
+	defer func() {
+		removeErr := scratch.Remove()
+		if replaced {
+			stats.AfterReplaceErr = errors.Join(stats.AfterReplaceErr, removeErr)
+			return
+		}
+		err = errors.Join(err, removeErr)
+	}()
 
 	spillFile, err := spill.Create(filepath.Join(scratch.Path(), spillName))
 	if err != nil {
@@ -172,8 +182,12 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 	stats.Unresolved, stats.Skipped = built.unresolved, built.skipped
 
 	if err := graphstore.ReplaceStore(stagingDir, storeDir); err != nil {
-		return stats, err
+		if !errors.Is(err, graphstore.ErrAfterReplace) {
+			return stats, err
+		}
+		stats.AfterReplaceErr = err
 	}
+	replaced = true
 	if onExchange != nil {
 		onExchange()
 	}
@@ -444,6 +458,9 @@ func detectRoutes(
 		nodes = append(nodes, st.routeNodes[i]...)
 		edges = append(edges, st.routeEdges[i]...)
 	}
+	// The route result below holds the nodes and edges now, so the lists
+	// by file have no reader left.
+	st.routeNodes, st.routeEdges = nil, nil
 	if len(nodes) == 0 && len(edges) == 0 {
 		return nil
 	}

@@ -76,6 +76,7 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			warnAfterReplace(cmd, storeDir, stats)
 			// D-11: resolve colour ONCE for this RunE and thread it through
 			// both print helpers below — printSummaryMode and
 			// printWatchFallbackAdvisory each used to call resolveColor
