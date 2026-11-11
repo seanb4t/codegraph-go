@@ -71,11 +71,6 @@ type pebbleStore struct {
 	mu     sync.RWMutex
 	closed atomic.Bool
 
-	// staging marks a store from OpenStaging: it has no write-ahead log,
-	// so its commits never sync, and the close of its handle flushes its
-	// memtables.
-	staging bool
-
 	// handle owns db and the shared swap lock of the store (locks.go).
 	// This pebbleStore is one user of it from open to Close.
 	handle *dbHandle
@@ -186,7 +181,9 @@ func Open(dir string) (GraphStore, error) {
 // unflushed data is otherwise lost.
 //
 // A staging store has one owner, so it never shares a handle: a second
-// open of dir in this process fails with ErrStoreLocked.
+// open of dir under the same spelling in this process fails with
+// ErrStoreLocked. Pebble keys its locks of one process by the path it was
+// given, so the caller must not open a staging store under two spellings.
 func OpenStaging(dir string) (GraphStore, error) {
 	s, err := open(dir, true)
 	if err != nil {
@@ -217,7 +214,7 @@ func open(dir string, staging bool) (*pebbleStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pebbleStore{db: h.db, staging: staging, handle: h}, nil
+	return &pebbleStore{db: h.db, handle: h}, nil
 }
 
 // retryLocked calls attempt until it succeeds, on the bounded backoff of

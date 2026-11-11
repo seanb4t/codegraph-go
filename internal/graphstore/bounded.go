@@ -138,7 +138,7 @@ func (w *boundedWriter) Commit() error {
 	}
 	// A staging store has no write-ahead log, and Pebble refuses a Sync
 	// commit on it. Its durability comes from the flush in its Close.
-	err := w.commit(!w.store.staging)
+	err := w.commit(!w.store.handle.staging)
 	w.done = true
 	return err
 }

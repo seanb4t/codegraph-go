@@ -82,9 +82,7 @@ func newFakeDaemon(t *testing.T, root string, fw *fakeWatcher) *Daemon {
 // waiting.
 func startFakeRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, d *Daemon) <-chan error {
 	t.Helper()
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 	synctest.Wait()
 	if _, ok, err := readLock(d.codegraphDir); err != nil || !ok {
 		t.Fatalf("Run does not hold the lock after it started (ok=%v err=%v)", ok, err)

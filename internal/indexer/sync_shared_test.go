@@ -2,8 +2,8 @@ package indexer
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"pgregory.net/rapid"
@@ -20,41 +20,31 @@ func setSyncBeforeCommitHook(t interface{ Cleanup(func()) }, hook func()) {
 
 // filesIn reports, for each path, whether a new snapshot of store holds
 // its file record.
-func filesIn(t *testing.T, store graphstore.GraphStore, paths ...string) []bool {
-	t.Helper()
+func filesIn(store graphstore.GraphStore, paths ...string) ([]bool, error) {
 	r, err := store.Snapshot()
 	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
+		return nil, err
 	}
 	defer r.Close()
 	held := make([]bool, len(paths))
 	for i, p := range paths {
 		_, err := r.GetFile(p)
 		if err != nil && !errors.Is(err, graphstore.ErrNotFound) {
-			t.Fatalf("GetFile(%s): %v", p, err)
+			return nil, err
 		}
 		held[i] = err == nil
 	}
-	return held
+	return held, nil
 }
 
 // TestSyncReaderSeesWholeSync checks that a reader of the same process
-// gets the store while a sync has it open, and that its snapshot holds
-// every file that the sync adds or none of them.
+// gets the store while a sync has it open, and that each of its snapshots
+// holds every file that the sync adds or none of them.
 func TestSyncReaderSeesWholeSync(t *testing.T) {
 	dir := t.TempDir()
 	root, storeDir := filepath.Join(dir, "repo"), filepath.Join(dir, "store")
-	write := func(name, content string) {
-		t.Helper()
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("go.mod", "module example.com/shared\n\ngo 1.26\n")
-	write("a.go", "package shared\n\nfunc Alpha() {}\n")
+	writeFixtureFile(t, root, "go.mod", "module example.com/shared\n\ngo 1.26\n")
+	writeFixtureFile(t, root, "a.go", "package shared\n\nfunc Alpha() {}\n")
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -65,39 +55,84 @@ func TestSyncReaderSeesWholeSync(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	defer reader.Close()
+	added := []string{"gen_a.go", "gen_b.go"}
+	writeFixtureFile(t, root, added[0], "package shared\n\nfunc GenA() {}\n")
+	writeFixtureFile(t, root, added[1], "package shared\n\nfunc GenB() {}\n")
 
-	write("gen_a.go", "package shared\n\nfunc GenA() {}\n")
-	write("gen_b.go", "package shared\n\nfunc GenB() {}\n")
+	// One goroutine takes snapshots through the reader from before the
+	// sync starts until after it returns.
+	var (
+		wg        sync.WaitGroup
+		stop      = make(chan struct{})
+		snapshots [][]bool
+		pollErr   error
+	)
+	wg.Go(func() {
+		for {
+			held, err := filesIn(reader, added...)
+			if err != nil {
+				pollErr = err
+				return
+			}
+			snapshots = append(snapshots, held)
+			select {
+			case <-stop:
+				return
+			default:
+			}
+		}
+	})
 
-	var duringSync [][]bool
+	// The hook runs while the sync has the store open, before its commit.
+	// It reads through the reader, and through an open made at that moment.
+	var beforeCommit [][]bool
 	setSyncBeforeCommitHook(t, func() {
-		// One snapshot through the reader that was open before the sync,
-		// and one through an open made while the sync has the store.
-		duringSync = append(duringSync, filesIn(t, reader, "gen_a.go", "gen_b.go"))
 		late, err := graphstore.Open(storeDir)
 		if err != nil {
 			t.Errorf("Open while the sync has the store open: %v", err)
 			return
 		}
 		defer late.Close()
-		duringSync = append(duringSync, filesIn(t, late, "gen_a.go", "gen_b.go"))
+		for _, s := range []graphstore.GraphStore{reader, late} {
+			held, err := filesIn(s, added...)
+			if err != nil {
+				t.Errorf("a read while the sync has the store open: %v", err)
+				return
+			}
+			beforeCommit = append(beforeCommit, held)
+		}
 	})
-	if _, err := Sync(root, storeDir, Options{}); err != nil {
-		t.Fatalf("Sync: %v", err)
+	_, syncErr := Sync(root, storeDir, Options{})
+	close(stop)
+	wg.Wait()
+	if syncErr != nil {
+		t.Fatalf("Sync: %v", syncErr)
+	}
+	if pollErr != nil {
+		t.Fatalf("a snapshot during the sync: %v", pollErr)
 	}
 
 	// Positive assertion: the hook ran, so two snapshots were taken while
 	// the sync had the store open and before its commit.
-	if len(duringSync) != 2 {
-		t.Fatalf("%d snapshots were taken during the sync, want 2", len(duringSync))
+	if len(beforeCommit) != 2 {
+		t.Fatalf("%d snapshots were taken before the commit, want 2", len(beforeCommit))
 	}
-	for i, held := range duringSync {
+	for i, held := range beforeCommit {
 		if held[0] || held[1] {
 			t.Errorf("snapshot %d, taken before the commit, holds gen_a.go=%v gen_b.go=%v; want neither", i, held[0], held[1])
 		}
 	}
-	if held := filesIn(t, reader, "gen_a.go", "gen_b.go"); !held[0] || !held[1] {
-		t.Errorf("after the sync, the reader holds gen_a.go=%v gen_b.go=%v; want both", held[0], held[1])
+	for i, held := range snapshots {
+		if held[0] != held[1] {
+			t.Errorf("snapshot %d of %d holds gen_a.go=%v gen_b.go=%v; want both or neither", i, len(snapshots), held[0], held[1])
+		}
+	}
+	after, err := filesIn(reader, added...)
+	if err != nil {
+		t.Fatalf("a snapshot after the sync: %v", err)
+	}
+	if !after[0] || !after[1] {
+		t.Errorf("after the sync, the reader holds gen_a.go=%v gen_b.go=%v; want both", after[0], after[1])
 	}
 }
 
@@ -116,22 +151,8 @@ func TestSyncSnapshotsAreWholeSyncs(t *testing.T) {
 		}
 	}()
 	rapid.Check(t, func(t *rapid.T) {
-		dir, err := os.MkdirTemp(base, "run")
-		if err != nil {
-			t.Fatalf("MkdirTemp: %v", err)
-		}
-		t.Cleanup(func() { os.RemoveAll(dir) })
-		root, storeDir := filepath.Join(dir, "repo"), filepath.Join(dir, "store")
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/prop\n\ngo 1.26\n"), 0o644); err != nil {
-			t.Fatalf("write go.mod: %v", err)
-		}
-		m := &propModel{files: map[string][]propDecl{
-			"a.go": {{Name: "alpha"}},
-			"x.ts": {{Name: "alpha"}},
-		}}
+		dir, root, m := newPropRun(t, base)
+		storeDir := filepath.Join(dir, "store")
 		written := make(map[string]string)
 		writeModel(t, root, m, written)
 		if _, err := Run(root, storeDir, Options{}); err != nil {

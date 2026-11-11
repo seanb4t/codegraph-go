@@ -32,8 +32,11 @@ const (
 // handles, and every open of the same store in this process uses it. A
 // handle from OpenStaging is outside the table and has one user.
 type dbHandle struct {
-	db      *pebble.DB
-	swap    *os.File
+	db   *pebble.DB
+	swap *os.File
+	// staging marks the handle of a store from OpenStaging: it has no
+	// write-ahead log, so its commits never sync, and its close flushes
+	// its memtables.
 	staging bool
 
 	// key is the key of the handle in the table. It is empty for a handle

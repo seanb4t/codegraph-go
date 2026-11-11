@@ -378,9 +378,11 @@ func TestSharedHandleWaitersShareOpen(t *testing.T) {
 		inOpen, unblock := blockFirstOpen(t)
 
 		waiting := make(chan struct{})
+		signalWaiting := sync.OnceFunc(func() { close(waiting) })
 		setSharedWaitHook(t, func(woke bool) {
+			// A caller can wait again on its next attempt.
 			if !woke {
-				close(waiting)
+				signalWaiting()
 			}
 		})
 
@@ -444,6 +446,49 @@ func TestSharedHandleWaitersShareOpen(t *testing.T) {
 			t.Fatal(err)
 		}
 		mustClose(t, mustOpen(t, dir))
+	})
+
+	t.Run("the open fails on a held lock", func(t *testing.T) {
+		dir := t.TempDir()
+		release := locktest.HoldStoreLock(t, dir)
+		inOpen, unblock := blockFirstOpen(t)
+		waiting := make(chan struct{})
+		signalWaiting := sync.OnceFunc(func() { close(waiting) })
+		setSharedWaitHook(t, func(woke bool) {
+			// A caller can wait again on its next attempt.
+			if !woke {
+				signalWaiting()
+			}
+		})
+		// The opener and the waiter each get the lock error of the one
+		// shared attempt, and each sleeps one time. The first of those
+		// sleeps frees the lock, so the next attempt of each succeeds.
+		var sleeps atomic.Int64
+		setRetrySleep(t, func() {
+			if sleeps.Add(1) == 1 {
+				release()
+			}
+		})
+
+		first := openAsync(dir)
+		<-inOpen
+		second := openAsync(dir)
+		<-waiting
+		unblock()
+
+		a, b := <-first, <-second
+		if a.err != nil || b.err != nil {
+			t.Fatalf("Open = %v and %v, want both to succeed after the release", a.err, b.err)
+		}
+		if a.s.handle != b.s.handle {
+			t.Fatalf("the two opens did not end on one handle")
+		}
+		if n := sleeps.Load(); n != 2 {
+			t.Fatalf("the opens slept %d times, want 2: one for each caller of the failed attempt", n)
+		}
+		mustClose(t, a.s)
+		mustClose(t, b.s)
+		requireNoSharedHandle(t)
 	})
 
 	t.Run("the opener closes before the waiter looks again", func(t *testing.T) {

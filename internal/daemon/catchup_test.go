@@ -43,21 +43,11 @@ func runCatchUpSync(t *testing.T, root string, beforeOpen func() error) indexer.
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	stats := waitCatchUpSync(t, synced)
 
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	stopRun(t, cancel, runErr)
 	if got := syncs.Load(); got != 1 {
 		t.Fatalf("%d syncs ran with no event, want 1: the catch-up sync", got)
 	}
@@ -180,15 +170,7 @@ func TestRunCatchUpSyncOnHeldStore(t *testing.T) {
 			case <-time.After(time.Second):
 			}
 
-			cancel()
-			select {
-			case err := <-runErr:
-				if err != nil {
-					t.Fatalf("Run: %v", err)
-				}
-			case <-time.After(10 * time.Second):
-				t.Fatal("Run did not return after cancel")
-			}
+			stopRun(t, cancel, runErr)
 		})
 	}
 

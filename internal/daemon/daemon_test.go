@@ -82,28 +82,17 @@ func watcherOpened(d *Daemon) <-chan struct{} {
 // waitWatcherOpened blocks until opened, from watcherOpened, receives.
 func waitWatcherOpened(t *testing.T, opened <-chan struct{}) {
 	t.Helper()
-	select {
-	case <-opened:
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("timed out waiting for Run to open its watcher")
-	}
+	receive(t, opened, "Run to open its watcher")
 }
 
 // waitCatchUpSync receives the result of the sync that each Run queues with
 // no event after its watch loop starts. synced is the channel that the
 // test's onSync sends on. A test that counts syncs calls it before its
 // first write or event, so that this sync is not counted as the answer to
-// that write. Inside a synctest bubble the deadline is fake time.
+// that write.
 func waitCatchUpSync[T any](t *testing.T, synced <-chan T) T {
 	t.Helper()
-	select {
-	case v := <-synced:
-		return v
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("timed out waiting for the catch-up sync that follows the watcher start")
-	}
-	var zero T
-	return zero
+	return receive(t, synced, "the catch-up sync that follows the watcher start")
 }
 
 // nodeNames returns the set of node names currently in storeDir's graph.
@@ -211,22 +200,12 @@ func TestRunRegistersRecordAfterAcquire(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
 
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	stopRun(t, cancel, runErr)
 }
 
 // TestRunRegistersRecordThatSurvivesPruning covers Run()'s Register() call the
@@ -247,9 +226,7 @@ func TestRunRegistersRecordThatSurvivesPruning(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 	rec := waitForRegistryRecord(t, os.Getpid(), root)
@@ -257,15 +234,7 @@ func TestRunRegistersRecordThatSurvivesPruning(t *testing.T) {
 		t.Fatalf("Run registered StartedAt=%v, want the OS-reported start %v exactly", rec.StartedAt, actualStart)
 	}
 
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	stopRun(t, cancel, runErr)
 }
 
 // TestRunDeregistersRecordOnCleanShutdown is D-06's other half: after a
@@ -283,22 +252,12 @@ func TestRunDeregistersRecordOnCleanShutdown(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
 
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	stopRun(t, cancel, runErr)
 
 	assertNoRegistryRecord(t, os.Getpid())
 }
@@ -366,9 +325,7 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
@@ -432,9 +389,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 	waitWatcherOpened(t, opened)
@@ -457,15 +412,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 		t.Fatal("timed out waiting for the daemon-driven sync triggered by the file edit")
 	}
 
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	stopRun(t, cancel, runErr)
 
 	if names := nodeNames(t, storeDir); !names["extra"] {
 		t.Fatalf("committed graph after daemon-driven sync = %v, want it to contain \"extra\"", names)
@@ -488,9 +435,7 @@ func TestDaemonCleanShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 
@@ -820,21 +765,11 @@ func TestRunHonorsDefaultProbeOnNonWSLHost(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx); close(runErr) }()
-	joinDaemonRun(t, cancel, runErr)
+	runErr := startRun(t, ctx, cancel, d)
 
 	waitForLock(t, codegraphDir)
 
-	cancel()
-	select {
-	case err := <-runErr:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(testBudget(5 * time.Second)):
-		t.Fatal("Run did not return after cancel")
-	}
+	stopRun(t, cancel, runErr)
 }
 
 // TestRunWithRetryReturnsNilOnCleanShutdown proves RunWithRetry returns nil

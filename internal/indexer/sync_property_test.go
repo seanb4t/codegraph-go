@@ -418,6 +418,29 @@ func checkStore(t *rapid.T, storeDir string, files int) {
 	}
 }
 
+// newPropRun makes the directory of one run of a property under base, and
+// in it a repository root that holds a go.mod. It returns both, and the
+// model of the tree that each property starts from. The run directory is
+// removed when the run ends.
+func newPropRun(t *rapid.T, base string) (dir, root string, m *propModel) {
+	dir, err := os.MkdirTemp(base, "run")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	root = filepath.Join(dir, "repo")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/prop\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	return dir, root, &propModel{files: map[string][]propDecl{
+		"a.go": {{Name: "alpha"}},
+		"x.ts": {{Name: "alpha"}},
+	}}
+}
+
 // TestSyncEqualsFreshIndex runs Sync after each step of a generated
 // sequence of file and declaration edits, checks the invariants after each
 // sync, and then checks that the store equals a fresh index of the final
@@ -425,23 +448,8 @@ func checkStore(t *rapid.T, storeDir string, files int) {
 func TestSyncEqualsFreshIndex(t *testing.T) {
 	base := t.TempDir()
 	rapid.Check(t, func(t *rapid.T) {
-		dir, err := os.MkdirTemp(base, "run")
-		if err != nil {
-			t.Fatalf("MkdirTemp: %v", err)
-		}
-		t.Cleanup(func() { os.RemoveAll(dir) })
-		root, storeDir, freshDir := filepath.Join(dir, "repo"), filepath.Join(dir, "store"), filepath.Join(dir, "fresh")
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/prop\n\ngo 1.26\n"), 0o644); err != nil {
-			t.Fatalf("write go.mod: %v", err)
-		}
-
-		m := &propModel{files: map[string][]propDecl{
-			"a.go": {{Name: "alpha"}},
-			"x.ts": {{Name: "alpha"}},
-		}}
+		dir, root, m := newPropRun(t, base)
+		storeDir, freshDir := filepath.Join(dir, "store"), filepath.Join(dir, "fresh")
 		// In half of the draws the tree starts with two parts of one C#
 		// partial type, so the edits below reach a node that two files
 		// emit.
