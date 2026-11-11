@@ -2,6 +2,7 @@ package wtindex
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -197,5 +198,35 @@ func TestFinishCancelled(t *testing.T) {
 	}
 	if dirs := seedDirs(t, wt); len(dirs) != 0 {
 		t.Errorf("seed directories left in the worktree: %v", dirs)
+	}
+}
+
+// TestFinishKeepsTheWarningOfItsIndex checks that the error of a step after
+// the full index of Finish put its store in place reaches Build.Warning,
+// and that Finish still succeeds.
+func TestFinishKeepsTheWarningOfItsIndex(t *testing.T) {
+	b, wt := pendingBuild(t)
+	// No changed fraction is small enough, so Finish indexes from scratch.
+	b.lim.SeededFraction = 0
+	errLate := errors.New("injected late error")
+	orig := fullIndex
+	fullIndex = func(repoRoot, storeDir string, opts indexer.Options) (indexer.Stats, error) {
+		stats, err := orig(repoRoot, storeDir, opts)
+		stats.AfterReplaceErr = errLate
+		return stats, err
+	}
+	t.Cleanup(func() { fullIndex = orig })
+
+	if err := b.Finish(context.Background()); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+	if !b.rebuilt {
+		t.Fatalf("Finish did not index from scratch, so the test did not reach the full index")
+	}
+	if !errors.Is(b.Warning, errLate) {
+		t.Errorf("Build.Warning = %v, want the late error of the full index", b.Warning)
+	}
+	if !b.Ready || !exists(t, filepath.Join(wt, indexDirName, storeDirName)) {
+		t.Errorf("Finish did not place the index: Ready %v", b.Ready)
 	}
 }

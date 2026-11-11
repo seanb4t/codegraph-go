@@ -54,6 +54,10 @@ type Build struct {
 	// and the worktree's files. Prepare sets them only when it stopped its
 	// sync because more than Limits.Foreground files changed.
 	Changed, Total int
+	// Warning is the error of a step that came after Finish put a new
+	// index in place (indexer.Stats.AfterReplaceErr). The index is good.
+	// Finish sets it, and a caller reads it after Finish returned nil.
+	Warning error
 
 	worktreeRoot string
 	lim          Limits
@@ -207,9 +211,14 @@ func (b *Build) build() error {
 	b.rebuilt = true
 	// A full index replaces the copied store in one step, so the copy
 	// needs no removal first.
-	_, err := indexer.Run(b.worktreeRoot, store, indexer.Options{Quiet: true})
+	stats, err := fullIndex(b.worktreeRoot, store, indexer.Options{Quiet: true})
+	b.Warning = stats.AfterReplaceErr
 	return err
 }
+
+// fullIndex is the full index that build runs. A test replaces it to give
+// the build a warning.
+var fullIndex = indexer.Run
 
 // place moves the build's directory into place, unless ctx has ended. An
 // index already at the worktree root counts as placed.
