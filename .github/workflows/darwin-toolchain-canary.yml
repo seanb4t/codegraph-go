@@ -36,6 +36,11 @@ on:
       - "mise.toml"
       - "mise.lock"
       - ".github/actions/setup-tools/**"
+      # The packages whose code differs by OS (see the last step).
+      - "internal/flock/**"
+      - "internal/fsatomic/**"
+      - "internal/scratchdir/**"
+      - "internal/graphstore/**"
 
 permissions:
   contents: read
@@ -55,6 +60,14 @@ jobs:
 
       - name: Prove the darwin toolchain
         run: task check:darwin-toolchain
+
+      # ci.yml runs the test suite on Linux only. These packages hold the
+      # code that differs by OS: the directory exchange of a full index is
+      # renamex_np(RENAME_SWAP) here and renameat2(RENAME_EXCHANGE) on
+      # Linux, and the file locks and the store replacement build on it. So
+      # this is the one place where CI runs the darwin half.
+      - name: Test the packages that differ by OS
+        run: go test -count=1 ./internal/flock/... ./internal/fsatomic/... ./internal/scratchdir/... ./internal/graphstore/...
 
       # REMOVED 2026-08-08 (phase 1, plan 01-02 fallout): a second step here used
       # to run `task check:darwin-release-build`, adding GoReleaser and
