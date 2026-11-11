@@ -13,6 +13,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 )
 
 // tokenPeak counts the positions that hold a token, over every step of a
@@ -263,7 +264,7 @@ func TestSyncDuringFullIndexFails(t *testing.T) {
 	if got := readMeta(t, storeDir).GetCoverageGeneration(); got != generation+1 {
 		t.Errorf("coverage generation = %d, want %d: one more than before the index", got, generation+1)
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir, true), freshExport(t, root)) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), freshExport(t, root)) {
 		t.Errorf("the store does not hold the graph of the full index")
 	}
 }
@@ -272,13 +273,13 @@ func TestSyncDuringFullIndexFails(t *testing.T) {
 // index reads the previous graph, whole.
 func TestReadDuringFullIndexSeesOldGraph(t *testing.T) {
 	root, storeDir := indexedTree(t)
-	before := exportNormalized(t, storeDir, false)
+	before := storetest.ExportNormalized(t, storeDir, false)
 	writeFile(t, filepath.Join(root, "pkg", "added.go"), "package pkg\n\nfunc Added() {}\n")
 
 	var during []byte
 	setHook(t, &onPass, func(step string, _ *runState) {
 		if step == stepResolve {
-			during = exportNormalized(t, storeDir, false)
+			during = storetest.ExportNormalized(t, storeDir, false)
 		}
 	})
 	if _, err := run(context.Background(), root, storeDir, Options{}); err != nil {
@@ -292,7 +293,7 @@ func TestReadDuringFullIndexSeesOldGraph(t *testing.T) {
 	}
 	onPass = nil
 	// Positive assertion: the index did change the graph.
-	if bytes.Equal(exportNormalized(t, storeDir, false), before) {
+	if bytes.Equal(storetest.ExportNormalized(t, storeDir, false), before) {
 		t.Errorf("the store is unchanged after the index, so the read above proves nothing")
 	}
 }

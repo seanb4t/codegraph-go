@@ -28,10 +28,6 @@ func marshal(t *rapid.T, m proto.Message) []byte {
 }
 
 func storedFormOf(t *rapid.T, g Graph) storedForm {
-	nodeFilePath := make(map[string]string, len(g.Nodes))
-	for _, n := range g.Nodes {
-		nodeFilePath[n.Id] = n.FilePath
-	}
 	var f storedForm
 	for _, n := range append(slices.Clip(g.Nodes), g.PackageNodes...) {
 		f.nodes = append(f.nodes, marshal(t, n))
@@ -39,7 +35,7 @@ func storedFormOf(t *rapid.T, g Graph) storedForm {
 	for _, file := range g.Files {
 		f.files = append(f.files, marshal(t, file))
 	}
-	for _, e := range CollapseEdges(g.Edges, nodeFilePath) {
+	for _, e := range CollapseEdges(g.Edges) {
 		f.edges = append(f.edges, marshal(t, e))
 	}
 	// Two nodes or files can share a key, so the comparison sorts the

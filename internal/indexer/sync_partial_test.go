@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/invariant"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -221,7 +222,7 @@ func TestSyncPartialTypeMatchesIndex(t *testing.T) {
 			r, closeFn := openSnapshot(t, storeDir)
 			tc.after(t, r)
 			closeFn()
-			synced := exportNormalized(t, storeDir, true)
+			synced := storetest.ExportNormalized(t, storeDir, true)
 			if fresh := freshExport(t, root); !bytes.Equal(synced, fresh) {
 				t.Errorf("the store after the sync differs from a full index of the changed tree:\n%s", exportDiff(t, fresh, synced))
 			}

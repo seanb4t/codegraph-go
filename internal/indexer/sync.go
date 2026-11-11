@@ -574,7 +574,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			nodesRemoved++
 		}
 	}
-	collapsedEdges := resolve.CollapseEdges(edges, nodeFilePath)
+	// Link collapsed the edges in each unit, and a triple has all its
+	// candidates in one unit, so no triple repeats here.
+	collapsedEdges := edges
 
 	// The edges of a shared id that have no owner file have no entry in
 	// the file index, so no prune above removed them. The sync deletes
@@ -624,7 +626,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			// spanned files comes to live in one file, or the reverse.
 			// The edge is then deleted with the entry of its old owner
 			// below, and written again with the entry of its new one.
-			if storedOwner == ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) {
+			if storedOwner == g.OwnerPath(e) {
 				kept[k] = true
 				continue
 			}
@@ -643,13 +645,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		edgesRemoved++
 	}
 
-	// CR-03: an edge's owner (edgeOwnerID) is not always in THIS cycle's
-	// reparse batch: a synthesized implements or override edge can start
-	// at a node in an unchanged file. nodeFilePath alone would miss it,
-	// silently writing the edge with ownerPath="" and permanently escaping
-	// the x/ index (never enumerable by a later prune). ownerPathFor below
-	// falls back to r0 — the pre-Sync snapshot, unaffected by this cycle's
-	// staged-but-uncommitted writes — for exactly that case.
+	// CR-03: the owner of an edge is not always in the files that this
+	// cycle reparses: a synthesized implements or override edge can start
+	// at a node in an unchanged file. The owner path below comes from
+	// g.OwnerPath, which reads the view. The view holds the stored nodes
+	// of the unchanged files too, so such an edge still gets its entry in
+	// the x/ index, and a later prune finds it.
 
 	// nodesAdded counts only node ids that are GENUINELY new to the
 	// committed graph after this Sync: either they were just pruned above
@@ -685,7 +686,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 
 	staged := resolve.Graph{Nodes: nodes, PackageNodes: packageNodes, Files: fileRecords, Edges: collapsedEdges}
-	if err := stage(w, staged, func(e *schema.Edge) string { return ownerPathFor(resolve.EdgeOwnerID(e), nodeFilePath, r0) }); err != nil {
+	if err := stage(w, staged, g.OwnerPath); err != nil {
 		w.Close()
 		return Stats{}, err
 	}
@@ -1333,29 +1334,6 @@ func pruneOwnedEdgesOnly(r0 graphstore.Reader, w graphstore.Writer, path string,
 		*edgesRemoved++
 	}
 	return it.Err()
-}
-
-// ownerPathFor resolves the file of id, an edge's owner (edgeOwnerID), for
-// CR-03: batch first (this cycle's freshly reparsed nodes — always
-// sufficient for an edge resolved from a reference, whose owner is in the
-// file being resolved), falling back to a lookup against r0 — the
-// pre-Sync snapshot — when id belongs to a node that was NOT reparsed
-// this cycle, which is the synthesized implements and override case. r0 is a
-// point-in-time snapshot unaffected by this Sync's own staged-but-
-// uncommitted writes, so this lookup cannot observe a partial commit; it
-// also cannot resolve to a node id that is itself being pruned/superseded
-// this cycle, since loadStoreView's excludePaths already keeps
-// idx from ever resolving a reference into the batch's own files or a
-// deleted file in the first place (RESEARCH Pitfall 1's exclusion set).
-func ownerPathFor(id string, batch map[string]string, r0 graphstore.Reader) string {
-	if p, ok := batch[id]; ok {
-		return p
-	}
-	n, err := r0.GetNode(id)
-	if err != nil {
-		return ""
-	}
-	return n.GetFilePath()
 }
 
 // contentHash returns hex(sha256(file contents)) for the file at absPath

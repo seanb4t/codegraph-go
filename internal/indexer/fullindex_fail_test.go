@@ -12,6 +12,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 	"github.com/seanb4t/codegraph-go/internal/scratchdir"
 )
 
@@ -103,7 +104,7 @@ func freshExport(t *testing.T, root string) []byte {
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	return exportNormalized(t, storeDir, true)
+	return storetest.ExportNormalized(t, storeDir, true)
 }
 
 // failAtCommit makes the nth commit of a run fail, under the low cap. It
@@ -123,7 +124,7 @@ func failAtCommit(t *testing.T, n int) *int {
 
 func TestFailedIndexKeepsStore(t *testing.T) {
 	root, storeDir := indexedTree(t)
-	before := exportNormalized(t, storeDir, false)
+	before := storetest.ExportNormalized(t, storeDir, false)
 	writeFile(t, filepath.Join(root, "pkg", "added.go"), "package pkg\n\nfunc Added() {}\n")
 	commits := failAtCommit(t, 3)
 
@@ -135,18 +136,18 @@ func TestFailedIndexKeepsStore(t *testing.T) {
 	if *commits != 3 {
 		t.Fatalf("%d commits ran, want 3", *commits)
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir, false), before) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, false), before) {
 		t.Errorf("the store changed in a full index that failed")
 	}
 }
 
 func TestKilledIndexKeepsStore(t *testing.T) {
 	root, storeDir := indexedTree(t)
-	before := exportNormalized(t, storeDir, false)
+	before := storetest.ExportNormalized(t, storeDir, false)
 	writeFile(t, filepath.Join(root, "pkg", "added.go"), "package pkg\n\nfunc Added() {}\n")
 
 	runKilledIndex(t, root, storeDir, killAtCommit)
-	if !bytes.Equal(exportNormalized(t, storeDir, false), before) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, false), before) {
 		t.Fatalf("the store changed in a full index that was killed")
 	}
 	if left := scratchDirs(t, storeDir); len(left) != 1 {
@@ -160,7 +161,7 @@ func TestKilledIndexKeepsStore(t *testing.T) {
 	if left := scratchDirs(t, storeDir); len(left) != 0 {
 		t.Errorf("the scratch directories %v are still there after the next full index", left)
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir, true), freshExport(t, root)) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), freshExport(t, root)) {
 		t.Errorf("the store after the second full index differs from a fresh index")
 	}
 }
@@ -170,7 +171,7 @@ func TestKilledAfterExchange(t *testing.T) {
 	writeFile(t, filepath.Join(root, "pkg", "added.go"), "package pkg\n\nfunc Added() {}\n")
 
 	runKilledIndex(t, root, storeDir, killAtExchange)
-	if !bytes.Equal(exportNormalized(t, storeDir, true), freshExport(t, root)) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), freshExport(t, root)) {
 		t.Errorf("the store does not hold the new graph after a kill that came after the exchange")
 	}
 }
@@ -193,7 +194,7 @@ func TestFirstIndexFailureLeavesNoGraph(t *testing.T) {
 		t.Fatalf("%d commits ran, want 3", *commits)
 	}
 	// An export holds every node, edge, file record and metadata record.
-	if export := exportNormalized(t, storeDir, false); len(export) != 0 {
+	if export := storetest.ExportNormalized(t, storeDir, false); len(export) != 0 {
 		t.Errorf("the store holds %d bytes of records after a first index that failed, want none", len(export))
 	}
 }
@@ -228,7 +229,7 @@ func TestFirstIndexWithConcurrentOpen(t *testing.T) {
 	if !opened {
 		t.Fatal("the hook did not open the store")
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir, true), fresh) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), fresh) {
 		t.Errorf("the store differs from a fresh index, the excluded-file records included")
 	}
 }
@@ -241,7 +242,7 @@ func TestSuccessfulIndexDropsOldRecords(t *testing.T) {
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir, true), freshExport(t, root)) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), freshExport(t, root)) {
 		t.Errorf("the store differs from a fresh index of the changed tree: old records stayed")
 	}
 }
@@ -277,7 +278,7 @@ func TestIndexLeavesNoScratch(t *testing.T) {
 
 func TestExchangeFailureKeepsStore(t *testing.T) {
 	root, storeDir := indexedTree(t)
-	before := exportNormalized(t, storeDir, false)
+	before := storetest.ExportNormalized(t, storeDir, false)
 	var held graphstore.GraphStore
 	setHook(t, &onPass, func(step string, _ *runState) {
 		if step != stepResolve {
@@ -306,7 +307,7 @@ func TestExchangeFailureKeepsStore(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 	onPass = nil
-	if !bytes.Equal(exportNormalized(t, storeDir, false), before) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, false), before) {
 		t.Errorf("the store changed in a full index whose exchange failed")
 	}
 

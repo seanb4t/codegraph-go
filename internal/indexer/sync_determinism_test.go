@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 )
 
@@ -66,13 +67,13 @@ func TestSyncEqualsReindex(t *testing.T) {
 		t.Fatalf("Stats.FilesReparsed = %d, want %d (every file touched)", statsTouch.FilesReparsed, len(files))
 	}
 
-	syncExport := exportNormalized(t, storeDirA, true)
+	syncExport := storetest.ExportNormalized(t, storeDirA, true)
 
 	storeDirB := t.TempDir()
 	if _, err := Run(repoRoot, storeDirB, Options{}); err != nil {
 		t.Fatalf("Run (from-scratch, final tree): %v", err)
 	}
-	reindexExport := exportNormalized(t, storeDirB, true)
+	reindexExport := storetest.ExportNormalized(t, storeDirB, true)
 
 	if !bytes.Equal(syncExport, reindexExport) {
 		reportFirstDiff(t, syncExport, reindexExport)

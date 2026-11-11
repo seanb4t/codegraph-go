@@ -413,6 +413,7 @@ func TestAssemblyRejectsForeignEdge(t *testing.T) {
 		{name: "an edge that another file owns", t: TypeOutput{file: file(), edges: []*schema.Edge{calls("B")}}, wantErr: true},
 		{name: "an edge with the owner path \"\"", t: TypeOutput{file: file(), edges: []*schema.Edge{calls("Shared")}}, wantNoFile: []string{"Shared -calls-> B"}},
 		{name: "an edge that the file owns", t: TypeOutput{file: file(), edges: []*schema.Edge{calls("A")}}, wantEdges: []string{"A -calls-> B"}},
+		{name: "a file-unit edge whose source is a route", t: TypeOutput{file: file(), edges: []*schema.Edge{calls("R")}}, wantErr: true},
 		{name: "a route-unit edge whose source is a function", t: TypeOutput{edges: []*schema.Edge{calls("A")}}, wantErr: true},
 		{name: "a route-unit edge whose source is a route", t: TypeOutput{edges: []*schema.Edge{calls("R")}}, wantEdges: []string{"R -calls-> B"}},
 	} {
@@ -473,10 +474,10 @@ func TestCollapseByUnitProperty(t *testing.T) {
 
 		var byUnit []*schema.Edge
 		for _, list := range units {
-			byUnit = append(byUnit, CollapseEdges(list, paths)...)
+			byUnit = append(byUnit, CollapseEdges(list)...)
 		}
 		sort.Slice(byUnit, func(i, j int) bool { return triple(byUnit[i]) < triple(byUnit[j]) })
-		whole := CollapseEdges(edges, paths)
+		whole := CollapseEdges(edges)
 		sort.Slice(whole, func(i, j int) bool { return triple(whole[i]) < triple(whole[j]) })
 
 		if diff := cmp.Diff(whole, byUnit, protocmp.Transform(), cmpopts.EquateEmpty()); diff != "" {

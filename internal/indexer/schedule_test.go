@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"pgregory.net/rapid"
+
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 )
 
 // scheduleTrees returns the trees of the schedule tests: fixtures with
@@ -39,7 +41,7 @@ func exportWith(t *testing.T, root string, workers int) []byte {
 	if _, err := run(context.Background(), root, storeDir, Options{Workers: workers}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	return exportNormalized(t, storeDir, false)
+	return storetest.ExportNormalized(t, storeDir, false)
 }
 
 // TestIndexScheduleIndependence checks that the store of a full index does

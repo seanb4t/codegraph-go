@@ -26,11 +26,12 @@ func EdgeOwnerID(e *schema.Edge) string {
 
 // CollapseEdges aggregates every candidate edge sharing a (source, kind,
 // target) triple and chooses ONE representative: the first candidate by
-// (filePath, line, col), via nodeFilePath[candidate.Source] (RESEARCH
-// Pitfall 1). Two candidates that tie on all three keep the one that
-// came first in edges, so the order of edges is part of the result. The returned slice is in sorted
-// triple order, so staging it via PutEdge is also deterministic.
-func CollapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*schema.Edge {
+// (line, col) (RESEARCH Pitfall 1). The candidates of one triple share
+// their source, and so its file, so the file is no part of the order. Two
+// candidates that tie on both keep the one that came first in edges, so
+// the order of edges is part of the result. The returned slice is in
+// sorted triple order, so staging it via PutEdge is also deterministic.
+func CollapseEdges(edges []*schema.Edge) []*schema.Edge {
 	groups := make(map[EdgeTriple][]*schema.Edge, len(edges))
 	for _, e := range edges {
 		k := EdgeTriple{e.Source, e.Kind, e.Target}
@@ -56,10 +57,6 @@ func CollapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*sche
 		candidates := groups[k]
 		sort.Slice(candidates, func(i, j int) bool {
 			ci, cj := candidates[i], candidates[j]
-			fi, fj := nodeFilePath[ci.Source], nodeFilePath[cj.Source]
-			if fi != fj {
-				return fi < fj
-			}
 			if ci.Line != cj.Line {
 				return ci.Line < cj.Line
 			}

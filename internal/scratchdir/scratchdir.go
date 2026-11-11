@@ -7,6 +7,7 @@ package scratchdir
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,9 +37,21 @@ type Dir struct {
 	lock *os.File
 }
 
+// checkPrefix returns an error for a prefix that New and Sweep cannot
+// work with. A prefix must end in "-": PendingPrefix replaces that dash,
+// so a pending name never starts with the prefix. An empty prefix would
+// also make Sweep take every directory of the parent for its own.
+func checkPrefix(prefix string) error {
+	if len(prefix) < 2 || !strings.HasSuffix(prefix, "-") {
+		return fmt.Errorf("scratchdir: the prefix %q must have a name and end in \"-\"", prefix)
+	}
+	return nil
+}
+
 // PendingPrefix is the prefix of a directory of prefix that New did not
 // finish yet. It never has prefix itself as a prefix, so a pending
-// directory does not look like a finished one.
+// directory does not look like a finished one. That holds because prefix
+// ends in "-", which New and Sweep check.
 func PendingPrefix(prefix string) string {
 	return strings.TrimSuffix(prefix, "-") + ".pending-"
 }
@@ -53,6 +66,9 @@ func PendingPrefix(prefix string) string {
 // the lock of a directory that New still builds. The directory gets its
 // final name last.
 func New(parent, prefix string, gitignore bool) (*Dir, error) {
+	if err := checkPrefix(prefix); err != nil {
+		return nil, err
+	}
 	pending, err := os.MkdirTemp(parent, PendingPrefix(prefix)+"*")
 	if err != nil {
 		return nil, err
@@ -116,6 +132,9 @@ func (d *Dir) Unlock() error {
 //     instants, or one that a kill stopped then. It goes away once it is
 //     older than PendingMaxAge.
 func Sweep(parent, prefix string) {
+	if checkPrefix(prefix) != nil {
+		return
+	}
 	entries, err := os.ReadDir(parent)
 	if err != nil {
 		return

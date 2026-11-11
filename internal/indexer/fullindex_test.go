@@ -2,14 +2,19 @@ package indexer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
+	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -402,9 +407,54 @@ func TestDuplicateEdgesCollapse(t *testing.T) {
 		if calls != 1 {
 			t.Fatalf("the store holds %d calls edges from caller to target, want the one collapsed edge", calls)
 		}
-		return exportNormalized(t, storeDir, true)
+		return storetest.ExportNormalized(t, storeDir, true)
 	}
 	if first, second := export(), export(); string(first) != string(second) {
 		t.Errorf("two fresh indexes of one tree store different records")
+	}
+}
+
+// TestUnitsWithoutRecordFailTheRun checks the guard of pass 3: a
+// whole-graph edge whose file has no record fails the run, because no unit
+// would write it.
+func TestUnitsWithoutRecordFailTheRun(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"shape.go":  "package m\n\ntype Shape interface{ Area() float64 }\n",
+		"square.go": "package m\n\ntype Square struct{}\n\nfunc (Square) Area() float64 { return 1 }\n",
+	})
+	discovery, err := discover.DiscoverAll(root)
+	if err != nil {
+		t.Fatalf("DiscoverAll: %v", err)
+	}
+	results, err := Extract(discovery.Files, 0)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	builder := symbols.NewBuilder()
+	builder.AddResults(declarationsOf(results))
+	view := builder.Freeze()
+	var structural []*schema.Edge
+	for _, r := range results {
+		structural = append(structural, resolve.StructuralEdges(resolve.Types(view, discovery.ModulePath, r).Edges())...)
+	}
+	global := resolve.NewGlobal(view, symbols.NewHierarchy(view, structural), structural)
+
+	// Positive assertion: with a record for every file, the guard passes.
+	if err := checkUnitsHaveRecords(global, discovery.Files); err != nil {
+		t.Fatalf("with every file: %v", err)
+	}
+	// Square implements Shape, and square.go owns that edge.
+	var withoutSquare []discover.DiscoveredFile
+	for _, f := range discovery.Files {
+		if f.RelPath != "square.go" {
+			withoutSquare = append(withoutSquare, f)
+		}
+	}
+	if len(withoutSquare) != len(discovery.Files)-1 {
+		t.Fatalf("discovery holds no square.go: %d files", len(discovery.Files))
+	}
+	err = checkUnitsHaveRecords(global, withoutSquare)
+	if !errors.Is(err, goextract.ErrInternal) || !strings.Contains(err.Error(), "implements") {
+		t.Fatalf("without the record of square.go: %v, want an error that wraps goextract.ErrInternal and names the implements edge", err)
 	}
 }

@@ -45,7 +45,7 @@ func (s *File) Append(r *goextract.FileResult) (int64, error) {
 
 // appendPayload writes one frame at the end of the file.
 func (s *File) appendPayload(payload []byte) (int64, error) {
-	frame := recordio.AppendFrame(make([]byte, 0, len(payload)+11), frameKind, payload)
+	frame := recordio.AppendFrame(make([]byte, 0, len(payload)+recordio.MaxHeaderLen), frameKind, payload)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	off := s.off

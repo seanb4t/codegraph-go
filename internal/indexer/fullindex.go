@@ -203,9 +203,11 @@ type built struct {
 }
 
 // buildStore runs the passes and the writer of a full index over the files
-// of discovery, and writes the graph into store. The passes and the writer
-// run in one errgroup: the first error cancels the others, and buildStore
-// returns once every goroutine ended.
+// of discovery, and writes the graph into store. Pass 1, route detection
+// and pass 2 run one after the other, each in the errgroup of its own
+// forEachFile call. Pass 3 and the writer share one more errgroup. In each
+// group the first error cancels the others, and buildStore returns once
+// every goroutine ended.
 func buildStore(
 	ctx context.Context, store graphstore.GraphStore, spillFile *spill.File,
 	repoRoot string, discovery discover.Discovery, workers int, commitSHA string, generation int64,
@@ -295,6 +297,9 @@ func buildStore(
 	st.structural = nil
 	h := symbols.NewHierarchy(view, structural)
 	global := resolve.NewGlobal(view, h, structural)
+	if err := checkUnitsHaveRecords(global, files); err != nil {
+		return out, err
+	}
 
 	// Pass 3, resolve and stage. The channel holds as many units as there
 	// are tokens, so a worker that has its token never waits on its send:
@@ -350,6 +355,25 @@ func buildStore(
 	out.nodes, out.edges = counts.nodes, counts.edges
 	out.unresolved = int(unresolved.Load())
 	return out, nil
+}
+
+// checkUnitsHaveRecords returns an error if a whole-graph pass made an
+// edge for a file that is not among files. Pass 3 writes the whole-graph
+// edges of a file with the unit of that file, so such an edge would never
+// reach the store. In a full index every file has a record, so this is a
+// defect of the resolver, and the error wraps goextract.ErrInternal.
+func checkUnitsHaveRecords(global *resolve.Global, files []discover.DiscoveredFile) error {
+	paths := make(map[string]bool, len(files))
+	for _, f := range files {
+		paths[f.RelPath] = true
+	}
+	rest := global.Rest(func(path string) bool { return paths[path] })
+	if len(rest) == 0 {
+		return nil
+	}
+	e := rest[0]
+	return fmt.Errorf("%w: %d edges belong to a file with no record; the first is %s -%s-> %s",
+		goextract.ErrInternal, len(rest), e.Source, e.Kind, e.Target)
 }
 
 // noSetup is the setup of a forEachFile loop whose workers need no state.

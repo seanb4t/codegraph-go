@@ -347,6 +347,9 @@ func (g *Global) Assemble(t TypeOutput, c CallOutput) (Unit, error) {
 				edges = append(edges, e)
 				continue
 			}
+			if g.view.Kind(e.Source) == goextract.KindRoute {
+				return fmt.Errorf("%w: the result of %s holds the edge %s -%s-> %s, whose source is a route", goextract.ErrInternal, path, e.Source, e.Kind, e.Target)
+			}
 			switch owner := g.OwnerPath(e); owner {
 			case path:
 				edges = append(edges, e)
@@ -413,7 +416,7 @@ func (g *Global) Assemble(t TypeOutput, c CallOutput) (Unit, error) {
 	if t.file != nil {
 		t.file.UnresolvedNames = sortedUniqueNames(t.file.UnresolvedNames)
 	}
-	u.Edges = CollapseEdges(edges, nil)
+	u.Edges = CollapseEdges(edges)
 	return u, nil
 }
 
@@ -435,7 +438,7 @@ func (g *Global) Rest(hasResult func(path string) bool) []*schema.Edge {
 	for _, path := range paths {
 		u := g.units[path]
 		edges := append(append(append([]*schema.Edge(nil), u.implements...), u.overrides...), u.sets...)
-		out = append(out, CollapseEdges(edges, nil)...)
+		out = append(out, CollapseEdges(edges)...)
 	}
 	return out
 }
@@ -476,7 +479,7 @@ func (g *Global) CollapseNoFile(parts []NoFileEdges) []*schema.Edge {
 		edges = append(edges, parts[i].retriedDeferred...)
 	}
 	edges = append(edges, global.sets...)
-	return CollapseEdges(edges, nil)
+	return CollapseEdges(edges)
 }
 
 // synthesizeOverrides implements D-09's overrides synthesis

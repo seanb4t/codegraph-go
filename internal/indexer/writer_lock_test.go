@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 )
 
 // TestSyncNeedsWriterLock checks that a sync is a writer of the store: it
@@ -19,7 +20,7 @@ func TestSyncNeedsWriterLock(t *testing.T) {
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	before := exportNormalized(t, storeDir, true)
+	before := storetest.ExportNormalized(t, storeDir, true)
 
 	lock, err := graphstore.LockWriter(storeDir)
 	if err != nil {
@@ -30,7 +31,7 @@ func TestSyncNeedsWriterLock(t *testing.T) {
 		lock.Close()
 		t.Fatalf("Sync under a held writer lock: %v, want ErrStoreLocked", err)
 	}
-	if !bytes.Equal(exportNormalized(t, storeDir, true), before) {
+	if !bytes.Equal(storetest.ExportNormalized(t, storeDir, true), before) {
 		t.Errorf("the store changed in a Sync that could not take the writer lock")
 	}
 

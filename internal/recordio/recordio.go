@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// maxHeaderLen is the longest frame header: one kind byte and a uvarint.
-const maxHeaderLen = 1 + binary.MaxVarintLen64
+// MaxHeaderLen is the longest frame header: one kind byte and a uvarint.
+const MaxHeaderLen = 1 + binary.MaxVarintLen64
 
 // Marshal marshals msg with the keys of every map field in a fixed order.
 // Go's protobuf runtime otherwise walks a map in a random order on each
@@ -38,7 +38,7 @@ func AppendFrame(dst []byte, kind uint8, payload []byte) []byte {
 
 // WriteFrame writes one frame to w and returns the number of bytes written.
 func WriteFrame(w io.Writer, kind uint8, payload []byte) (int, error) {
-	header := make([]byte, 0, maxHeaderLen)
+	header := make([]byte, 0, MaxHeaderLen)
 	header = append(header, kind)
 	header = binary.AppendUvarint(header, uint64(len(payload)))
 	n, err := w.Write(header)
@@ -109,7 +109,7 @@ func ReadFrameAt(r io.ReaderAt, off int64, ceiling uint64) (kind uint8, payload 
 		return 0, nil, 0, fmt.Errorf("recordio: read header at %d: %w", off, io.ErrUnexpectedEOF)
 	}
 	first = first[:got]
-	length, used := binary.Uvarint(first[1:min(got, maxHeaderLen)])
+	length, used := binary.Uvarint(first[1:min(got, MaxHeaderLen)])
 	if used <= 0 {
 		return 0, nil, 0, fmt.Errorf("recordio: bad length prefix at %d", off)
 	}

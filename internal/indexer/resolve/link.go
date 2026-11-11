@@ -20,6 +20,12 @@ type Graph struct {
 	// Unresolved counts the references that did not resolve (never
 	// silently dropped, D-06a; surfaced later through --verbose).
 	Unresolved int
+
+	// OwnerPath returns the owner path of an edge of the graph: the path
+	// under which the store files the edge in its file index. Link sets
+	// it to the function that chose the unit of each edge, so the unit and
+	// the file-index entry of an edge have one source.
+	OwnerPath func(e *schema.Edge) string
 }
 
 // Link assembles the outputs of Types and Calls, one pair per result in
@@ -48,7 +54,7 @@ func Link(view symbols.View, h symbols.Hierarchy, types []TypeOutput, calls []Ca
 	}
 	global := NewGlobal(view, h, structural)
 
-	var g Graph
+	g := Graph{OwnerPath: global.OwnerPath}
 	packageNodeIDs := make(map[string]struct{})
 	hasResult := make(map[string]bool, len(types))
 	noFile := make([]NoFileEdges, 0, len(types))

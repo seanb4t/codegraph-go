@@ -171,3 +171,40 @@ func TestNewLocksBeforeItNames(t *testing.T) {
 		}
 	}
 }
+
+// TestPrefixMustEndInDash checks that New refuses, and Sweep ignores, a
+// prefix that does not end in "-". With such a prefix a pending name would
+// start with the prefix, and Sweep with the prefix "" would take every
+// directory of the parent for its own.
+func TestPrefixMustEndInDash(t *testing.T) {
+	for _, prefix := range []string{"", "-", "store.scratch"} {
+		parent := t.TempDir()
+		bystander := filepath.Join(parent, prefix+"bystander")
+		if err := os.Mkdir(bystander, 0o755); err != nil {
+			t.Fatalf("Mkdir: %v", err)
+		}
+		if d, err := New(parent, prefix, false); err == nil {
+			_ = d.Remove()
+			t.Errorf("New with the prefix %q gave no error", prefix)
+		}
+		Sweep(parent, prefix)
+		if _, err := os.Stat(bystander); err != nil {
+			t.Errorf("Sweep with the prefix %q removed a directory: %v", prefix, err)
+		}
+	}
+
+	// Positive assertion: a prefix with the dash works, and Sweep removes
+	// an unlocked directory of it.
+	parent := t.TempDir()
+	d, err := New(parent, testPrefix, false)
+	if err != nil {
+		t.Fatalf("New with the prefix %q: %v", testPrefix, err)
+	}
+	if err := d.Unlock(); err != nil {
+		t.Fatalf("Unlock: %v", err)
+	}
+	Sweep(parent, testPrefix)
+	if _, err := os.Stat(d.Path()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Sweep left the unlocked directory %s: %v", d.Path(), err)
+	}
+}

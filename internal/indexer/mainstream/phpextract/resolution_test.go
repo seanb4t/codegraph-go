@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/storetest"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/recordio"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -58,11 +59,8 @@ var selfConsistencyFixture = []phpFixtureFile{
 	{relPath: "src/Widget.php", src: "<?php\nnamespace App;\n\nuse App\\Contracts\\Shape;\n\nclass Widget implements Shape {\n    public function area(): float {\n        return 0.0;\n    }\n\n    public function describe(): string {\n        return helper();\n    }\n}\n\nfunction helper(): string {\n    return \"widget\";\n}\n"},
 }
 
-// indexAndExport runs the full from-scratch indexer.Run pipeline against
-// root into a fresh temp store, exports it, and returns the stream with
-// Meta.last_sync_unix_ms normalized to zero — the one genuinely volatile
-// field a from-scratch run may stamp (mirrors internal/indexer's own
-// determinism_test.go#indexAndExport).
+// indexAndExport runs a full index of root into a new store and returns
+// its normalized export.
 func indexAndExport(t *testing.T, root string) []byte {
 	t.Helper()
 
@@ -70,39 +68,7 @@ func indexAndExport(t *testing.T, root string) []byte {
 	if _, err := indexer.Run(root, storeDir, indexer.Options{Quiet: true}); err != nil {
 		t.Fatalf("indexer.Run: %v", err)
 	}
-
-	store, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("graphstore.Open: %v", err)
-	}
-	defer store.Close()
-
-	var buf bytes.Buffer
-	if err := store.Export(&buf); err != nil {
-		t.Fatalf("Export: %v", err)
-	}
-
-	frames, err := recordio.ReadAll(bytes.NewReader(buf.Bytes()), 0)
-	if err != nil {
-		t.Fatalf("read export frames: %v", err)
-	}
-	for i, f := range frames {
-		if f.Kind != graphstore.ExportKindMeta {
-			continue
-		}
-		var m schema.Meta
-		if err := proto.Unmarshal(f.Payload, &m); err != nil {
-			t.Fatalf("unmarshal meta frame: %v", err)
-		}
-		m.LastSyncUnixMs = 0
-		normalized, err := proto.Marshal(&m)
-		if err != nil {
-			t.Fatalf("marshal normalized meta frame: %v", err)
-		}
-		frames[i].Payload = normalized
-	}
-
-	return recordio.AppendFrames(nil, frames)
+	return storetest.ExportNormalized(t, storeDir, false)
 }
 
 // TestSelfConsistency_DeterministicRebuild proves indexing the same PHP

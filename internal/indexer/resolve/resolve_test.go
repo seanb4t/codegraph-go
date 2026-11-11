@@ -856,21 +856,12 @@ func candidateEdges() []*schema.Edge {
 	}
 }
 
-func candidateNodeFilePath() map[string]string {
-	return map[string]string{
-		"fn:caller":    "pkg/caller.go",
-		"fn:other":     "pkg/caller.go",
-		"fn:callee":    "pkg/callee.go",
-		"fn:unrelated": "pkg/other.go",
-	}
-}
-
 // TestEdgeCollapse_Deterministic proves duplicate (source, kind, target)
 // candidates collapse to ONE edge whose representative line/col is chosen
-// by sorting candidates by (filePath, line, col) and taking the first —
+// by sorting candidates by (line, col) and taking the first —
 // never processing order (D-05, RESEARCH Pitfall 1).
 func TestEdgeCollapse_Deterministic(t *testing.T) {
-	collapsed := CollapseEdges(candidateEdges(), candidateNodeFilePath())
+	collapsed := CollapseEdges(candidateEdges())
 
 	var got *schema.Edge
 	for _, e := range collapsed {
@@ -901,14 +892,13 @@ func TestEdgeCollapse_Deterministic(t *testing.T) {
 // order never changes the chosen representative (order-independent total
 // order, not processing/goroutine/map order).
 func TestEdgeCollapse_OrderIndependent(t *testing.T) {
-	nodeFilePath := candidateNodeFilePath()
 	rng := rand.New(rand.NewSource(1))
 
 	for trial := 0; trial < 10; trial++ {
 		edges := candidateEdges()
 		rng.Shuffle(len(edges), func(i, j int) { edges[i], edges[j] = edges[j], edges[i] })
 
-		collapsed := CollapseEdges(edges, nodeFilePath)
+		collapsed := CollapseEdges(edges)
 		var got *schema.Edge
 		for _, e := range collapsed {
 			if e.Source == "fn:caller" && e.Kind == "calls" && e.Target == "fn:callee" {
