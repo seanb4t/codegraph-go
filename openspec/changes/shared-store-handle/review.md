@@ -1,19 +1,116 @@
 ---
 verdict: approve-with-notes
-phase: plan
-reviewed_at: 2026-11-11T15:26:42+00:00
-head: 1e016455708823caf88c64b9da858cfd40e19748
+phase: implementation
+reviewed_at: 2026-11-11T16:50:10+00:00
+head: ecc22e0725b1141c90741d90122b734ccf6d210e
 lenses:
-  spec-lint: ok
+  spec-lint: not-applicable
   approach: ok
   fit: ok
   test-coverage: ok
-  test-honesty: not-applicable
+  test-honesty: partial
   invariants: ok
 ---
 # Review
 
+## Incomplete lenses
+
+- test-honesty: partial, gaps: 1
+
+The verdict covers only what the lenses checked.
+
 ## Findings
+
+| id | lens | severity | claim | evidence | action |
+|---|---|---|---|---|---|
+| app-1 | approach | should-fix | D2 rejects singleflight because a waiter cannot take its count in the same step as the end of the open, so an entry can close between the open and the count. The chosen code has the same window. A waiter wakes on the opened channel outside the table mutex, locks again, and can find the entry of the opener already closing. The code handles that with errHandleClosing and one retry sleep, and a test pins that outcome. The first reason of the rejection is not a difference between the two designs. Only the second reason, the missing closing state, still holds. | design.md > D2: Each open is one `retryLocked` loop over the table — "It does not let a waiter take its count in the same step under the table mutex. An entry can then reach zero and close b" | Remove the first reason from the singleflight alternative of D2, or restate it. Base the rejection on the missing closing state, and say that both designs have the window between the end of the open and the count and handle it with a retry. |
+| app-2 | approach | should-fix | D2 says that a caller that waits on an opening entry either takes one count or returns the error of that open. The code has a third outcome. When the opener closes its handle before the waiter locks the table again, the waiter returns errHandleClosing and uses one retry sleep of its own budget. design.md does not record this outcome. | design.md > D2: Each open is one `retryLocked` loop over the table — "For an opening entry, it waits for that one `pebble.Open` call to end. It then takes one count, or it returns the error " | Add to the opening-entry case of D2 that a waiter that finds the handle closing after the wait returns ErrStoreLocked through the closing state and retries within its own attempts. |
+| fit-1 | fit | should-fix | setSyncBeforeCommitHook in package indexer re-does the generic setHook test helper that the same package already has in pipeline_test.go. | internal/indexer/sync_shared_test.go:16 — "func setSyncBeforeCommitHook(t interface{ Cleanup(func()) }, hook func()) {" | Widen the t parameter of setHook to an interface with Helper and Cleanup, so that *rapid.T fits, and call setHook(t, &syncBeforeCommitHook, ...) in place of setSyncBeforeCommitHook. |
+| fit-2 | fit | should-fix | The change adds three seam setters in shared_test.go that differ only in the variable they set, where the repository already uses one generic setHook for that job. | internal/graphstore/shared_test.go:84 — "func setSharedOpenHook(t *testing.T, hook func()) {" | Add one setHook[T any](t, hook *T, value T) to the graphstore tests, in the shape of the indexer helper, and call it for sharedOpenHook, sharedWaitHook and sharedCloseHook. |
+| fit-3 | fit | should-fix | runHeld in TestRunCatchUpSyncOnHeldStore repeats the awaitEpisode loop of TestDaemonFlushLockRequeueGivesUpPerEpisode: the injected ErrStoreLocked syncFn, the receive loop with a 10 s timer and the 1 s quiet gap. | internal/daemon/catchup_test.go:145 — "return indexer.Stats{}, fmt.Errorf("%w: injected contention", graphstore.ErrStoreLocked)" | Hoist one helper beside startFakeRun that receives want sync results, checks which are ErrStoreLocked, and then checks the quiet gap. Build its receive on the existing receive helper of testbudget_test.go. Call it from awaitEpisode and from runHeld. |
+| fit-4 | fit | should-fix | TestOpenOfSecondPathDoesNotWait copies the body of the blockFirstOpen closure inline, because that closure is local to TestSharedHandleWaitersShareOpen. | internal/graphstore/shared_test.go:349 — "blockFirstOpen := func(t *testing.T) (inOpen <-chan struct{}, unblock func()) {" | Move blockFirstOpen to file level in shared_test.go and call it from TestOpenOfSecondPathDoesNotWait. |
+| inv-1 | invariants | should-fix | The shared handle depends on each user closing its snapshots before its own Close, and nothing enforces it. A pebbleReader holds no tie to its pebbleStore, and a Close that is not the last returns nil, so a snapshot that one user leaks stays usable or breaks depending on whether another user is still open, and Pebble reports the leak on the Close of a different caller. | design.md > Risks / Trade-offs — "A tool call is short. A snapshot is released at `Close`." | Count open readers per pebbleStore (Snapshot adds one, pebbleReader.Close removes one) and make the Close of that pebbleStore report its own leaked reader, or state in D1 that a user closes its readers before Close. Add a test with two users in which one closes with an open snapshot and the error lands on that user, not on the last closer. |
+| tes-1 | test-coverage | should-fix | Scenario 'A short lock' is proven at graphstore.Open level only; no tool call is shown returning a result without isError after a mid-retry release. | tasks.md > 3. Readers and the sync of one process — "`TestOpenConvergesWhenHolderCloses` covers the spec scenario "A short lock": the holder releases between two attempts, a" | Add to internal/mcp/held_store_test.go a test that holds locktest.HoldStoreLock, releases it from the openLockRetrySleep seam (or a timer shorter than the retry window) during a codegraph_explore call, and asserts result.IsError is false and the text contains Alpha. If the seam is unexported from graphstore, use a short timer. |
+| ctl-lens | test-honesty | should-fix | lens test-honesty reported partial, gaps: 1 | review > lens-status — "partial" | rerun the lens or accept the gap in the review |
+
+## Coverage matrix
+
+| scenario | covered by | status | verified |
+|---|---|---|---|
+| A short lock | internal/graphstore/open_lock_test.go: TestOpenConvergesWhenHolderCloses | partial | pass |
+| A long lock | internal/mcp/held_store_test.go: TestToolCallOnHeldStore | covered | pass |
+| A sync of the same server longer than the retry window | internal/mcp/held_store_test.go: TestToolCallWhileProcessHasStoreOpen; internal/query/open_shared_test.go: TestOpenAtDuringSync | covered | pass |
+| A call during one sync | internal/indexer/sync_shared_test.go: TestSyncReaderSeesWholeSync | covered | pass |
+| Tool calls back to back during a live edit | test/integration/testdata/watch_live_sync.txtar via TestScripts (mcpclient live-edit) | covered | pass |
+| An edit right after the handshake | internal/daemon/catchup_test.go: TestRunSyncsEditMadeBeforeWatchOpen; test/integration/testdata/watch_live_sync.txtar | covered | pass |
+| An edit during a takeover | internal/daemon/soak_test.go: TestConvergenceTwoSessions | covered | pass |
+| Nothing changed while the watcher started | internal/daemon/catchup_test.go: TestRunCatchUpSyncWithNoChange | covered | pass |
+| Another process holds the store while the watcher starts | internal/daemon/catchup_test.go: TestRunCatchUpSyncOnHeldStore | covered | pass |
+
+### Not run
+
+None.
+
+## Verification runs
+
+- exit 0: `mise exec -- go test ./internal/graphstore -run '^TestOpenConvergesWhenHolderCloses$' -count=1 -v; # covers: internal/graphstore/open_lock_test.go: TestOpenConvergesWhenHolderCloses`
+- exit 0: `mise exec -- go test ./internal/mcp -run '^TestToolCallOnHeldStore$' -count=1 -v; # covers: internal/mcp/held_store_test.go: TestToolCallOnHeldStore`
+- exit 0: `mise exec -- go test ./internal/mcp -run '^TestToolCallWhileProcessHasStoreOpen$' -count=1 -v; mise exec -- go test ./internal/query -run '^TestOpenAtDuringSync$' -count=1 -v; # covers: internal/mcp/held_store_test.go: TestToolCallWhileProcessHasStoreOpen; internal/query/open_shared_test.go: TestOpenAtDuringSync`
+- exit 0: `mise exec -- go test ./internal/indexer -run '^TestSyncReaderSeesWholeSync$' -count=1 -v; # covers: internal/indexer/sync_shared_test.go: TestSyncReaderSeesWholeSync`
+- exit 0: `mise exec -- go test ./test/integration -run '^TestScripts/watch_live_sync$' -count=1 -v; # covers: test/integration/testdata/watch_live_sync.txtar via TestScripts (mcpclient live-edit)`
+- exit 0: `mise exec -- go test ./internal/daemon -run '^TestRunSyncsEditMadeBeforeWatchOpen$' -count=1 -v; mise exec -- go test ./test/integration -run '^TestScripts/watch_live_sync$' -count=1 -v; # covers: internal/daemon/catchup_test.go: TestRunSyncsEditMadeBeforeWatchOpen; test/integration/testdata/watch_live_sync.txtar`
+- exit 0: `mise exec -- go test ./internal/daemon -run '^TestConvergenceTwoSessions$' -count=1 -v; # covers: internal/daemon/soak_test.go: TestConvergenceTwoSessions`
+- exit 0: `mise exec -- go test ./internal/daemon -run '^TestRunCatchUpSyncWithNoChange$' -count=1 -v; # covers: internal/daemon/catchup_test.go: TestRunCatchUpSyncWithNoChange`
+- exit 0: `mise exec -- go test ./internal/daemon -run '^TestRunCatchUpSyncOnHeldStore$' -count=1 -v; # covers: internal/daemon/catchup_test.go: TestRunCatchUpSyncOnHeldStore`
+
+## Dropped
+
+None.
+
+## Lens notes
+
+- approach: Requirement 'A briefly locked store does not fail or hang a call' is produced by D1, D2 and D3: internal/graphstore/shared.go shares one handle for each filepath.Abs key, and indexer.Sync commits one batch on each path (sync.go lines 254-257 and 739-742).
+- approach: Requirement 'An edit made while the watcher starts reaches the graph' is produced by D6: daemon.go line 389 adds flushSentinelPath after the watch loop goroutine starts. watch.Open adds every directory (fsnotify) or starts the FSEvents stream before it returns.
+- approach: Requirement 'A watcher-start sync that cannot get the store leaves the graph marked stale' is produced by D6: flush writes .sync-pending before the sync and clears it only on success, the give-up branch never requeues, and query/status.go reports stale while the sidecar exists.
+- approach: Verified citations: retryLocked 5 attempts and 100 ms backoff (pebble_store.go 95-96); the Pebble lock registry keyed by the cleaned lock-file name and the message 'lock held by current process' (pebble v2.1.7 vfs/file_lock_unix.go 48-49, open.go 1174, vfs.go 347); Pebble Close waits for compactions (db.go 1713); internal/flock uses flock(2); golang.org/x/sync is a direct dependency; the depguard rule graphstore-owns-pebble excludes internal/graphstore/**.
+- approach: D4 verified: fullindex.go reads metadata with OpenExisting (line 201) before OpenStaging and ReplaceStore; ReplaceStore takes the swap lock exclusive with the bounded retry; TestIndexForceRefusesWhileStoreIsHeld keeps its in-process holder.
+- approach: D7 and D8 verified: mcpLiveEdit writes its files one time with no ticker; locktest.HoldStoreLock locks the cleaned, absolute and symlink-resolved names with sync.OnceFunc and t.Cleanup; the livepublish fixture opens once; every test that D8 lists exists and uses the helper.
+- approach: Every risk mitigation names a task or a test that exists at head: TestSyncReaderSeesWholeSync and TestSyncSnapshotsAreWholeSyncs in internal/indexer/sync_shared_test.go, and task 5.2 for the load test. The worktree background build runs on its own seed directory, as the last risk says.
+- approach: The migration plan has no deployed configuration to roll back; a revert is the rollback. design.md has no open questions.
+- fit: The prompt names no path for repository library rows, and openspec/config.yaml holds none, so only the generic rows of the rulebook apply.
+- fit: The production components fit their closest patterns: openShared runs as an attempt of the existing retryLocked with the alreadyClassified classifier, the three shared seams follow checkpointHook, and D2 names golang.org/x/sync/singleflight with a reason.
+- fit: D6 reuses the existing flush sentinel and the debouncer requeue path instead of a second sync path, and waitCatchUpSync is built on the existing receive helper.
+- fit: locktest is the one Pebble lock holder for tests: every remaining pebble.LockDirectory call outside graphstore production code is in internal/graphstore/locktest/locktest.go.
+- fit: The proposal names no next change, so no forward-misfit check applies. #197 is out of scope and touches the sync cost, not the handle table.
+- fit: Without git, the lens cannot tell new lines from old ones in a changed file. The inline time.After selects of TestRunUsesInjectedWatcher in fakewatcher_test.go may be older than this change, so they are not reported.
+- invariants: I1: One process has at most one table entry and one Pebble handle per absolute store path \| enforced at internal/graphstore/shared.go acquireShared under sharedHandles.mu, key from filepath.Abs in openShared \| boundary test TestOpenSecondOpenInProcessSharesHandle, TestOpenSpellingsShareHandle (relative, ./, a/.., doubled and trailing separator, absolute)
+- invariants: I2: users of a ready entry equals the count of open pebbleStore values on it, and a second Close of one pebbleStore never lowers it \| enforced at pebbleStore.Close closed.Swap and dbHandle.release \| boundary test TestSharedHandleClose (second Close returns nil, table still holds 1), TestSharedHandleConcurrentOpenClose, TestSharedHandleParallelOpenClose
+- invariants: I3: An entry leaves the table on every return path of the last close, also on a Pebble close error \| enforced at shared.go release deferred delete \| boundary test TestOpenDuringLastCloseRetries case 'the close returns an error' (leaked iterator, then zero retry sleeps)
+- invariants: I4: A closing entry takes no new user and gives ErrStoreLocked \| enforced at acquireShared errHandleClosing \| boundary test TestOpenDuringLastCloseRetries cases 1 and 2 (sleeps == openLockRetryAttempts-1)
+- invariants: I5: A waiter on an opening entry never takes a count on a failed open, and returns the error of that open \| enforced at acquireShared openErr check after <-h.opened \| boundary test TestSharedHandleWaitersShareOpen (non-lock error, held-lock error, opener closes before waiter looks)
+- invariants: I6: Each open has exactly openLockRetryAttempts attempts of its own, shared across swap lock, Pebble lock and closing state \| enforced at retryLocked with alreadyClassified over acquireShared \| boundary test TestSharedHandleWaiterKeepsOwnBudget, TestOpenDuringLastCloseRetries case 4, TestOpenSucceedsOnTheFinalAttempt (release before attempt 5, ordinal asserted)
+- invariants: I7: A staging handle never enters the table and has one owner \| enforced at open(dir, true) with key empty \| boundary test TestStagingStoreHasOneOwner
+- invariants: I8: ReplaceStore refuses while any shared user is open, inside one process \| enforced at locks.go ReplaceStore exclusive swap flock against the shared flock of the entry (internal/flock uses unix.Flock, per open file description) \| boundary test TestReplaceStoreWaitsForSharedHandle (one of two closed: refused; both closed: succeeds)
+- invariants: I9: An incremental Sync commits one batch on each path, so a snapshot sees the graph of one completed sync \| enforced at internal/indexer/sync.go by structure only (one NewWriter and one Commit per path, no bounded writer) \| boundary test TestSyncReaderSeesWholeSync (concurrent poll plus hook before commit), TestSyncSnapshotsAreWholeSyncs (rapid, hookRuns <= 1)
+- invariants: I10: One writer at a time per store, also inside one process \| enforced at graphstore.LockWriter flock before Open in Sync \| boundary test unchanged by this change (not re-examined)
+- invariants: I11: Each Run gives exactly one catch-up flush with no event, and it shares the requeue budget of maxFlushLockRequeues \| enforced at daemon.go deb.Add(flushSentinelPath) after the watch goroutine starts \| boundary test runCatchUpSync asserts one sync; TestRunCatchUpSyncOnHeldStore asserts maxFlushLockRequeues+1 locked syncs then none, and 1 locked then success
+- invariants: I12: flushSentinelPath never equals a watcher path \| enforced at the NUL byte in the constant, which no file path can hold \| boundary test none, none needed
+- invariants: I13: A store that another process holds still gives isError with the store-lock text \| enforced at retryLocked and classifyOpenError \| boundary test TestToolCallOnHeldStore (held, then released)
+- invariants: No enforcement point of this change is a script; all are Go code, so no probe ran.
+- invariants: No weakened check found: the same-process string arm of isLockHeldOS stays pinned, by TestHoldStoreLockExcludesOpen with noRetrySleep in place of the removed TestOpenSecondOpenInProcessReturnsErrStoreLocked.
+- invariants: Every production caller read (indexer.Sync, query.OpenAt engineCloser, wtindex seedUsable, readStoreMeta) closes its snapshot before its store today, so inv-1 is a latent invariant and not a present defect.
+- test-coverage: Task 6.1 (changelog fragment) is unchecked in tasks.md; outside scenario coverage.
+- test-coverage: The 0 of 72 load-test result in task 5.2 is a recorded run, not a repository test.
+- test-honesty: Read in full or in part and found honest: indexer/sync_shared_test.go, mcp/held_store_test.go, query/open_shared_test.go, daemon/catchup_test.go, graphstore/hold_lock_test.go, shared_test.go lines 1-345. Each has assertions that touch the spec THEN.
+- test-honesty: Grep of test files found no new Skip, disabled test or `\|\| true` in the change's diff files. The one Skip in a diff file, uiserver/filegraph_test.go:262, is an opt-in measurement gated on CODEGRAPH_GUAVA_STORE.
+- test-honesty: Minor, no finding: TestSharedHandleConcurrentOpenClose discards the result of nodeVisible and writes no record, so its 'each open user still reads' check only fails on a snapshot or read error. The check is a liveness probe, not a data check.
+- test-honesty gap: Not read: internal/uiserver tests, internal/wtindex/prepare_test.go, internal/cli/index_lock_test.go, remaining daemon tests (daemon_test, soak, testbudget, fakewatcher), integration test and txtar, graphstore tests other than shared_test.go and hold_lock_test.go, shared_test.go lines 345 onward, sync_property_test.go.
+
+## Plan review (2026-11-11)
+
+Verdict approve-with-notes at head 1e016455708823caf88c64b9da858cfd40e19748.
+
+### Findings
 
 | id | lens | severity | claim | evidence | action |
 |---|---|---|---|---|---|
@@ -25,7 +122,7 @@ lenses:
 | inv-3 | invariants | should-fix | A waiter on an opening entry must not take a count on an entry that has already moved to closing. The edge is an opener that returns and closes before the parked waiter wakes. No case reaches it: in 2.6 the waiter wakes while the opener still holds its count. Property 2.5 asserts only that each open succeeds, so it also passes when a waiter gets a handle on a closing DB. | design.md > D2: Each open is one `retryLocked` loop over the table — "For an opening entry, it waits for that one `pebble.Open` call to end. It then takes one count, or it returns the error " | In D2, state that a waiter re-checks the state under the mutex and returns ErrStoreLocked on closing. In 2.5, read a record through every handle before its close. In 2.6, add a case where the first opener closes while the waiter is still parked, and assert that the waiter's handle reads. |
 | fit-3 | fit | note | The new countRetrySleeps differs from the existing noRetrySleep only in that it counts. TestCheckpointLockedSource, which task 1.2 rewrites, also has an inline copy of noRetrySleep. | internal/graphstore/retry_test.go:15 — "func noRetrySleep(t *testing.T) {" | The parameter is whether the caller reads the count. Write countRetrySleeps once, let noRetrySleep call it and drop the result, and have the rewritten TestCheckpointLockedSource call one of the two instead of its inline swap. |
 
-## Coverage matrix
+### Coverage matrix
 
 | scenario | covered by | status | verified |
 |---|---|---|---|
@@ -42,53 +139,3 @@ lenses:
 ### Not run
 
 Plan phase: no verification runs.
-
-## Verification runs
-
-None.
-
-## Dropped
-
-None.
-
-## Lens notes
-
-- approach: Every requirement has a producing decision: the same-process case of 'A briefly locked store does not fail or hang a call' through D1 to D4, 'An edit made while the watcher starts reaches the graph' through D6 (each Run start, so a takeover too), and the stale requirement through D6's last paragraph and the .sync-pending marker that query/status.go reads.
-- approach: Verified at head: pebble v2.1.7 keys its in-process lock registry by the joined LOCK path and returns 'lock held by current process' (vfs/file_lock_unix.go:48-49). A second pebble.Lock Close panics (open.go:1220-1225). indexer.Sync commits one batch on each path (sync.go:249, sync.go:731). The debouncer fires only after Add. internal/flock uses flock(2). depguard graphstore-owns-pebble exempts internal/graphstore/**. golang.org/x/sync is in go.mod.
-- approach: isLockHeldOS still cites pebble v2.1.6 and the test that D8 replaces. Task 2.10 already updates that comment.
-- approach: The D1 rejected alternative (a serve-owned handle needs a parameter through four packages) is a claim about a design that does not exist. It was judged plausible from the open sites (query.OpenAt, indexer.Sync, wtindex), not traced.
-- fit: The context in openspec/config.yaml has no library-preference rows, so only the generic rows apply.
-- fit: D2 names golang.org/x/sync/singleflight as an alternative and gives a reason, so it is not a bespoke-over-library case. No other reference-counted registry exists in internal/ (searched for singleflight, refcount and sync.Map).
-- fit: D6 reuses the existing debouncer sentinel and requeue wrapper (daemon.go:64, daemon.go:354) and matches the established pattern.
-- fit: D8 puts locktest beside storetest and gives the reason: storetest imports graphstore, so in-package tests that imported it would form a cycle. The lint rule graphstore-owns-pebble already allows Pebble in subpackages (.golangci.yml:85).
-- fit: D2 says its hooks follow checkpointHook (pebble_store.go:279), and they do.
-- fit: D6 does not mention the synchronous startup reconcile in internal/cli/serve.go:315. It serves a different moment (before the first tool call), so it is not raised as a concept duplication.
-- fit: The repository has a re-exec helper-process pattern for holders in another process (internal/daemon/stop_test.go:36, internal/indexer/fullindex_fail_test.go:70). D8 does not name it. It is not raised, because the closest pattern for a store holder is the in-process Open, and the design gives its reason for leaving that.
-- invariants: I1: Two opens of one store path (same filepath.Abs) in one process share one *pebble.DB and the second does not retry \| enforced at none yet (planned table, task 2.1) \| boundary test TestOpenSecondOpenInProcessSharesHandle (2.1), TestOpenSpellingsShareHandle (2.2)
-- invariants: I2: The process releases the Pebble lock and the swap lock exactly when the user count reaches zero \| enforced at none yet (planned Close, task 2.3) \| boundary test TestSharedHandleClose (2.3), counts 2 to 1 to 0 and a double Close
-- invariants: I3: Close is idempotent for one caller and lowers the count once \| enforced at internal/graphstore/pebble_store.go:337 closed.Swap \| boundary test TestSharedHandleClose (2.3)
-- invariants: I4: Each caller has its own openLockRetryAttempts budget \| enforced at retryLocked internal/graphstore/pebble_store.go:215 \| boundary test TestSharedHandleWaiterKeepsOwnBudget (2.7), TestOpenDuringLastCloseRetries case 4 (2.4); swap-lock path untested (inv-2)
-- invariants: I5: A closing entry gives ErrStoreLocked and leaves the table on every return path of the close \| enforced at none yet (task 2.4) \| boundary test TestOpenDuringLastCloseRetries cases 1 to 3 (2.4). Pebble DB.Close releases its file lock before the leaked-iterator check (pebble db.go:1737), so case 3 is reachable
-- invariants: I6: A waiter on an opening entry returns the opener's non-lock error at once and retries a lock error on its own budget \| enforced at none yet (task 2.6) \| boundary test TestSharedHandleWaitersShareOpen case 2, TestSharedHandleWaiterKeepsOwnBudget
-- invariants: I7: No count is taken on a closing entry \| enforced at none stated \| boundary test none (inv-3)
-- invariants: I8: A reader snapshot sees the graph before or after one Sync commit, never a part \| enforced at internal/indexer/sync.go:249 and :731, one Commit on each path, and internal/query/engine.go:200, one Snapshot per OpenAt \| boundary test TestSyncReaderSeesWholeSync (3.1) with both sides of the commit, property TestSyncSnapshotsAreWholeSyncs (3.2)
-- invariants: I9: One writer at a time per store \| enforced at LockWriter internal/indexer/sync.go:66 and fullindex.go:122; the only production NewWriter calls on a live store are in sync.go \| boundary test existing TestDaemonSharedWriter
-- invariants: I10: ReplaceStore refuses while any in-process handle is open \| enforced at the shared swap flock internal/graphstore/locks.go:95 \| boundary test TestReplaceStoreWaitsForSharedHandle (2.9), with one of two handles closed and then both
-- invariants: I11: Each Daemon.Run start runs exactly one catch-up sync with no event \| enforced at none yet (task 4.1); flush ignores its path set (internal/daemon/daemon.go:490), so the sentinel gives a whole-tree sync \| boundary test TestRunSyncsEditMadeBeforeWatchOpen, TestRunCatchUpSyncWithNoChange
-- invariants: I12: A catch-up flush that loses the lock through every requeue leaves .sync-pending in place \| enforced at internal/daemon/daemon.go:507-511 and the give-up reset at :362 \| boundary test TestRunCatchUpSyncOnHeldStore (4.3)
-- invariants: I13: Lock-held errors of Pebble map to ErrStoreLocked \| enforced at isLockHeldOS internal/graphstore/locked_unix.go \| the replaced TestOpenSecondOpenInProcessReturnsErrStoreLocked pinned the real Pebble message; TestHoldStoreLockExcludesOpen (1.1) pins it again through pebble.LockDirectory, so the check is not weakened
-- invariants: Probe: a Go program under inv-probe/ in the handoff directory ran pebble.LockDirectory then pebble.Open on three spellings. Same absolute name: refused with lock held by current process. Hold ./store/, open absolute: open succeeded. Hold absolute, open relative: open succeeded.
-- invariants: I14: The catch-up sentinel merges with real events and never runs two syncs at once \| enforced at Debouncer.Add internal/watch/debounce.go:71 (one pending set, ctx gate) and d.syncMu in flush internal/daemon/daemon.go:503 \| boundary test TestRunSyncsEditMadeBeforeWatchOpen (4.1)
-- invariants: I15: codegraph_status reports stale while .sync-pending exists \| enforced at computeStale internal/query/status.go:143-148 \| boundary test existing TestStalenessSidecarPresent, and TestRunCatchUpSyncOnHeldStore (4.3) for both sides (marker kept after give-up, removed after one lock loss then success)
-- invariants: D2 says the closing entry leaves the table on every return path. A panic in pebble DB.Close (double close, or the metrics check of a race build at db.go:1788) is not a return path. A deferred removal would cover it. Recorded here as context, not as a finding.
-- invariants: The replaced TestOpenSecondOpenInProcessReturnsErrStoreLocked also asserted that the full retry budget elapsed. Case 2 of TestSharedHandleWaiterKeepsOwnBudget (2.7) asserts the same budget for an outside holder through countRetrySleeps, so no check is lost.
-- spec-lint: Checked all 3 requirements and their 9 scenarios in specs/mcp-server/spec.md: each has a WHEN or GIVEN line and a THEN line, and each THEN names a status, a payload, a count or a field.
-- spec-lint: Checked each tracked task in tasks.md (groups 1 to 6): each names a go test, rg, task lint, task test or task changie command, and the file or observable it checks.
-- spec-lint: Requirement subjects matched tasks 3.3, 3.4, 5.1, 4.1, 4.2, 4.3 and 4.4 with two distinctive words each.
-- spec-lint: No BREAKING word appears in proposal.md or spec.md, so the BREAKING check passes in both directions.
-- spec-lint: Build targets task lint, task test and task changie exist in Taskfile.yml. The file test/integration/testdata/watch_live_sync.txtar and the TestScripts entry exist.
-- spec-lint: design.md has no open-questions section, so the assumed-answer check had nothing to test.
-- spec-lint: The BREAKING grep also matched lines of review.md. I did not use them as evidence; the BREAKING result above rests on my own read of proposal.md and spec.md.
-- spec-lint: The run ended before the mid-run checkpoint of the turn budget because the artifact pass completed early.
-- test-coverage: No BREAKING requirement in the delta spec.
-- test-coverage: Every scenario has a task naming the behavior and a go test command; implementation-phase assertions still need checking.

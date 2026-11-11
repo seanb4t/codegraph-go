@@ -47,7 +47,7 @@ Run each `go test` command as `mise exec -- go test ...` from the repository roo
 
 ## 6. Changelog
 
-- [ ] 6.1 Add the fragment: `task changie -- new --interactive=false -k Fixes -b "A tool call no longer fails with a store lock error while the watcher of the same server syncs, and an edit made while the watcher starts is now synced."` Verify that one new file exists under `.changes/unreleased/`.
+- [x] 6.1 Add the fragment: `task changie -- new --interactive=false -k Fixes -b "A tool call no longer fails with a store lock error while the watcher of the same server syncs, and an edit made while the watcher starts is now synced."` Verify that one new file exists under `.changes/unreleased/`.
 
 ## Workflow follow-up
 

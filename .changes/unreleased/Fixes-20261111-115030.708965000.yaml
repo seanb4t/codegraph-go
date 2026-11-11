@@ -1,0 +1,3 @@
+kind: Fixes
+body: A tool call no longer fails with a store lock error while the watcher of the same server syncs, and an edit made while the watcher starts is now synced.
+time: 2026-11-11T11:50:30.708965-05:00
