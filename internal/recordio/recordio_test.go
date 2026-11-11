@@ -56,6 +56,25 @@ func TestFrameReaderTruncated(t *testing.T) {
 	}
 }
 
+// TestReadFrameAtTruncated cuts a stream inside a frame that one read
+// holds and inside a frame that needs a second read. Neither reads as a
+// frame.
+func TestReadFrameAtTruncated(t *testing.T) {
+	for _, size := range []int{7, 3 * readAhead} {
+		stream := AppendFrame(nil, 1, bytes.Repeat([]byte{0xAB}, size))
+		// Positive assertion: the whole stream reads as the frame.
+		if _, payload, n, err := ReadFrameAt(bytes.NewReader(stream), 0, 0); err != nil || len(payload) != size || n != len(stream) {
+			t.Fatalf("size %d: %d bytes, frame length %d, err %v", size, len(payload), n, err)
+		}
+		for _, cut := range []int{1, 2, len(stream) / 2, len(stream) - 1} {
+			_, _, _, err := ReadFrameAt(bytes.NewReader(stream[:cut]), 0, 0)
+			if err == nil || err == io.EOF {
+				t.Fatalf("size %d, cut at %d: error %v, want an error that is not io.EOF", size, cut, err)
+			}
+		}
+	}
+}
+
 // TestFrameRoundTripProperty writes frames of every length class of the
 // uvarint prefix, the empty frame included, and reads each one back both
 // in sequence and at its offset.

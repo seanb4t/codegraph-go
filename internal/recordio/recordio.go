@@ -91,19 +91,25 @@ func (r *Reader) Next() (kind uint8, payload []byte, err error) {
 	return kind, payload, nil
 }
 
+// readAhead is the size of the first read of ReadFrameAt.
+const readAhead = 4096
+
 // ReadFrameAt reads the one frame that starts at offset off of r. It
 // returns the frame and its whole length in bytes, header included.
 // ceiling has the meaning it has in NewReader.
 func ReadFrameAt(r io.ReaderAt, off int64, ceiling uint64) (kind uint8, payload []byte, n int, err error) {
-	var header [maxHeaderLen]byte
-	got, err := r.ReadAt(header[:], off)
+	// One read gets the header and, for a frame up to readAhead bytes, the
+	// whole payload. A longer frame costs a second read.
+	first := make([]byte, readAhead)
+	got, err := r.ReadAt(first, off)
 	if err != nil && err != io.EOF {
 		return 0, nil, 0, fmt.Errorf("recordio: read header at %d: %w", off, err)
 	}
 	if got == 0 {
 		return 0, nil, 0, fmt.Errorf("recordio: read header at %d: %w", off, io.ErrUnexpectedEOF)
 	}
-	length, used := binary.Uvarint(header[1:got])
+	first = first[:got]
+	length, used := binary.Uvarint(first[1:min(got, maxHeaderLen)])
 	if used <= 0 {
 		return 0, nil, 0, fmt.Errorf("recordio: bad length prefix at %d", off)
 	}
@@ -111,13 +117,16 @@ func ReadFrameAt(r io.ReaderAt, off int64, ceiling uint64) (kind uint8, payload 
 		return 0, nil, 0, err
 	}
 	headerLen := 1 + used
-	payload = make([]byte, length)
-	if length > 0 {
-		if _, err := r.ReadAt(payload, off+int64(headerLen)); err != nil {
-			return 0, nil, 0, fmt.Errorf("recordio: read payload at %d: %w", off, noEOF(err))
-		}
+	have := first[headerLen:]
+	if uint64(len(have)) >= length {
+		return first[0], have[:length:length], headerLen + int(length), nil
 	}
-	return header[0], payload, headerLen + int(length), nil
+	payload = make([]byte, length)
+	copy(payload, have)
+	if _, err := r.ReadAt(payload[len(have):], off+int64(got)); err != nil {
+		return 0, nil, 0, fmt.Errorf("recordio: read payload at %d: %w", off, noEOF(err))
+	}
+	return first[0], payload, headerLen + int(length), nil
 }
 
 func checkCeiling(length, ceiling uint64) error {

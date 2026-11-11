@@ -9,6 +9,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"sync"
 
 	"google.golang.org/protobuf/proto"
 
@@ -92,11 +93,109 @@ func Encode(r *goextract.FileResult) ([]byte, error) {
 		rec.ErrInternal = errors.Is(r.Err, goextract.ErrInternal)
 	}
 
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(&rec); err != nil {
-		return nil, fmt.Errorf("spill: encode %s: %w", r.RelPath, err)
+	return encodeRecord(&rec, r.RelPath)
+}
+
+// A gob stream sends the description of each type once, before the first
+// value of that type. A record must be readable on its own, at any offset
+// and in any order. A stream of its own for each record would repeat the
+// type descriptions in every record and compile a new decoder for every
+// read, and for a small file that costs far more than the record itself.
+//
+// So every record is one value message of a gob stream whose type
+// descriptions are known in advance. The first Encode of a gob.Encoder
+// sends the descriptions of every type that the static type of record can
+// reach, in an order that depends only on that type. So all encoders agree
+// on them after one value, and a decoder that read the output of any one
+// encoder for the zero record (prelude) can read a value message of every
+// other.
+
+// streamEncoder is a gob.Encoder that already sent its type descriptions.
+type streamEncoder struct {
+	buf bytes.Buffer
+	enc *gob.Encoder
+}
+
+// newStreamEncoder returns an encoder past its type descriptions, with the
+// bytes that it wrote for them and for the zero record.
+func newStreamEncoder() (*streamEncoder, []byte, error) {
+	e := &streamEncoder{}
+	e.enc = gob.NewEncoder(&e.buf)
+	if err := e.enc.Encode(&record{}); err != nil {
+		return nil, nil, err
 	}
-	return buf.Bytes(), nil
+	prelude := bytes.Clone(e.buf.Bytes())
+	e.buf.Reset()
+	return e, prelude, nil
+}
+
+// streamDecoder is a gob.Decoder that already read the prelude. src
+// implements io.ByteReader, so the decoder reads from it directly and
+// keeps no bytes of its own between two records.
+type streamDecoder struct {
+	src bytes.Reader
+	dec *gob.Decoder
+}
+
+func newStreamDecoder() (*streamDecoder, error) {
+	prelude, err := streamPrelude()
+	if err != nil {
+		return nil, err
+	}
+	d := &streamDecoder{}
+	d.src.Reset(prelude)
+	d.dec = gob.NewDecoder(&d.src)
+	if err := d.dec.Decode(&record{}); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+// streamPrelude returns the type descriptions that every streamDecoder
+// reads first.
+var streamPrelude = sync.OnceValues(func() ([]byte, error) {
+	_, prelude, err := newStreamEncoder()
+	return prelude, err
+})
+
+// encoders and decoders hold the idle stream codecs. A codec that returned
+// an error does not go back, because its stream state is then unknown.
+var encoders, decoders sync.Pool
+
+func encodeRecord(rec *record, relPath string) ([]byte, error) {
+	e, _ := encoders.Get().(*streamEncoder)
+	if e == nil {
+		var err error
+		if e, _, err = newStreamEncoder(); err != nil {
+			return nil, fmt.Errorf("spill: encode %s: %w", relPath, err)
+		}
+	}
+	if err := e.enc.Encode(rec); err != nil {
+		return nil, fmt.Errorf("spill: encode %s: %w", relPath, err)
+	}
+	data := bytes.Clone(e.buf.Bytes())
+	e.buf.Reset()
+	encoders.Put(e)
+	return data, nil
+}
+
+func decodeRecord(data []byte, rec *record) error {
+	d, _ := decoders.Get().(*streamDecoder)
+	if d == nil {
+		var err error
+		if d, err = newStreamDecoder(); err != nil {
+			return err
+		}
+	}
+	d.src.Reset(data)
+	if err := d.dec.Decode(rec); err != nil {
+		return err
+	}
+	if d.src.Len() != 0 {
+		return fmt.Errorf("%d bytes after the record", d.src.Len())
+	}
+	decoders.Put(d)
+	return nil
 }
 
 // marshalOptional returns the proto bytes of msg with one leading byte that
@@ -128,7 +227,7 @@ func unmarshalOptional(data []byte, msg proto.Message) (bool, error) {
 // the original comes back as nil, because gob does not send zero values.
 func Decode(data []byte) (goextract.FileResult, error) {
 	var rec record
-	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&rec); err != nil {
+	if err := decodeRecord(data, &rec); err != nil {
 		return goextract.FileResult{}, fmt.Errorf("spill: decode: %w", err)
 	}
 	r := rec.Result

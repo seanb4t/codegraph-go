@@ -266,6 +266,9 @@ func buildStore(
 	builder := symbols.NewBuilder()
 	builder.AddResults(st.decls)
 	view := builder.Freeze()
+	// The view holds the nodes now. The rest of the declarations, such as
+	// the contains edges and the arity maps, has no reader after this.
+	st.decls = nil
 
 	// Pass 2, structure.
 	pass(stepStructure)
@@ -289,6 +292,7 @@ func buildStore(
 	for _, edges := range st.structural {
 		structural = append(structural, edges...)
 	}
+	st.structural = nil
 	h := symbols.NewHierarchy(view, structural)
 	global := resolve.NewGlobal(view, h, structural)
 
