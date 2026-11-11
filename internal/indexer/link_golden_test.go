@@ -38,6 +38,13 @@ var linkGoldenFixtures = []struct{ name, root string }{
 	{"splitmethodfixture", "testdata/splitmethodfixture"},
 }
 
+// hostOnlyFile is the file of gofixture that only a Linux host indexes: the
+// discovery tests use it to prove the filter by build context. It holds a
+// package clause and nothing more, so it adds a file record and the
+// file-index entry of its file node, and no edge. The projection leaves
+// both out, so one golden holds for every host.
+const hostOnlyFile = "skip_linux.go"
+
 // jsonLine renders msg as one line of JSON. protojson does not promise
 // stable whitespace, so the line goes through json.Compact.
 func jsonLine(t *testing.T, msg proto.Message) string {
@@ -89,6 +96,9 @@ func linkProjection(t *testing.T, root string) string {
 			var file schema.File
 			if err := proto.Unmarshal(f.Payload, &file); err != nil {
 				t.Fatalf("unmarshal file: %v", err)
+			}
+			if filepath.Base(file.Path) == hostOnlyFile {
+				continue
 			}
 			// The modification time is that of the checkout, not of the graph.
 			file.MtimeUnixNs = 0
