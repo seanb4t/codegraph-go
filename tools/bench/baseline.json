@@ -5,10 +5,10 @@
   "goarch": "amd64",
   "runner": "ubuntu-latest",
   "scratch_fs": "disk",
-  "median_of_trials": 7,
-  "files_per_sec": 18545.796066253068,
-  "bytes_per_sec": 2809180.6489212695,
-  "query_latency_median_ms": 193.799,
-  "peak_rss_bytes": 875036672,
-  "cold_start_ms": 8.161
+  "median_of_trials": 3,
+  "files_per_sec": 13751.773390998624,
+  "bytes_per_sec": 2083017.3889725448,
+  "query_latency_median_ms": 213.861,
+  "peak_rss_bytes": 976666624,
+  "cold_start_ms": 8.408
 }
