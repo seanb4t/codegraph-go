@@ -38,24 +38,9 @@ func writeLiveMeta(t *testing.T, repoDir string, meta *schema.Meta) {
 		t.Fatalf("mkdir store dir: %v", err)
 	}
 
-	// Task 3's tests run a REAL live publisher concurrently checking this
-	// same store in the background — a transient ErrStoreLocked collision
-	// between the test's own write and the publisher's own debounced
-	// check is exactly the condition graphstore.Open's own bounded retry
-	// exists for (openLockRetryAttempts/openLockRetryBackoff), and under
-	// -race's instrumentation overhead that budget alone is sometimes not
-	// enough. Retry here too, at the fixture level, rather than treating
-	// an expected transient collision as a fixture failure.
-	var store graphstore.GraphStore
-	var err error
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		store, err = graphstore.Open(storeDir)
-		if err == nil || !errors.Is(err, graphstore.ErrStoreLocked) || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	// The live publisher of the test's own process can have this store
+	// open at the same moment. This open then takes the same handle.
+	store, err := graphstore.Open(storeDir)
 	if err != nil {
 		t.Fatalf("graphstore.Open: %v", err)
 	}

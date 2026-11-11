@@ -40,16 +40,27 @@ var ErrAfterReplace = errors.New("graphstore: the store was replaced, but a late
 // to fail the exchange.
 var exchangeDirs = fsatomic.ExchangeDirs
 
-// lockBeside takes the flock of the lock file beside dir, with the bounded
-// retry of retryLocked. A lock that another handle still holds after the
-// retries gives ErrStoreLocked. The lock file lives in the parent of dir,
-// and lockBeside creates that parent if it is missing.
-func lockBeside(dir, suffix string, mode flock.Mode) (*os.File, error) {
+// lockBesideOnce takes the flock of the lock file beside dir, in one
+// attempt. A lock that another handle holds gives ErrStoreLocked. The lock
+// file lives in the parent of dir, and lockBesideOnce creates that parent
+// if it is missing.
+func lockBesideOnce(dir, suffix string, mode flock.Mode) (*os.File, error) {
 	path := filepath.Clean(dir) + suffix
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	return retryLocked(func() (*os.File, error) { return flock.Open(path, mode) }, classifyFlockError)
+	f, err := flock.Open(path, mode)
+	if err != nil {
+		return nil, classifyFlockError(err)
+	}
+	return f, nil
+}
+
+// lockBeside is lockBesideOnce with the bounded retry of retryLocked. A
+// lock that another handle still holds after the retries gives
+// ErrStoreLocked.
+func lockBeside(dir, suffix string, mode flock.Mode) (*os.File, error) {
+	return retryLocked(func() (*os.File, error) { return lockBesideOnce(dir, suffix, mode) }, alreadyClassified)
 }
 
 // LockWriter takes the writer lock of the store at dir and returns its

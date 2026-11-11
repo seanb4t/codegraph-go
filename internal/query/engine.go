@@ -146,10 +146,9 @@ func (e *Engine) WorktreeMismatch(ctx context.Context) *gitmeta.Mismatch {
 //
 // This exists for exactly one reason: Engine.reader is unexported, so
 // graphstore.Reader.GetMeta is otherwise unreachable from a wire layer
-// like internal/uiserver, and a second graphstore.Open on the same
-// directory is lock-refused (SRV-04's per-call-store discipline already
-// closes that door) — so there is no alternative path to the metadata the
-// Engine already reads.
+// like internal/uiserver. A second graphstore.Open by the wire layer
+// would take a snapshot of its own, which can be newer than the snapshot
+// this Engine reads, so the metadata must come from the Engine.
 //
 // It is deliberately NOT a StatusResult field and does NOT live in
 // status.go: codegraph status's output bytes are unguarded by any golden

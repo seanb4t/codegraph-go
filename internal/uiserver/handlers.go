@@ -305,10 +305,8 @@ func nodeToProto(n *schema.Node) *uiv1.Node {
 
 // GetStatus answers the health/counts read plus, since ENG-04, the
 // indexed commit SHA (D-05/D-06). Both eng.Status and eng.IndexMeta run
-// against the SAME opened Engine — one open serves both reads, since
-// Engine.reader is unexported and a second graphstore.Open on the same
-// directory is lock-refused (see (*query.Engine).IndexMeta's doc
-// comment). See statusToProto's mapping table for field-by-field detail.
+// against the SAME opened Engine — one open serves both reads, so both
+// come from one snapshot (see (*query.Engine).IndexMeta's doc comment). See statusToProto's mapping table for field-by-field detail.
 //
 // GetStatus is the single, deliberate exception to the withEngine rule
 // (SRV-04, D-16, plan 01-11): it calls openEngine directly rather than

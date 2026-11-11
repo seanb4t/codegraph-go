@@ -127,7 +127,8 @@ func openEngine(argPath, defaultPath, repoPath string, detector *gitmeta.Caching
 //
 // One honest caveat, deliberately not treated as disqualifying:
 // graphstore.Open opens Pebble read-write, which takes the store's
-// exclusive directory lock and can write WAL/manifest bytes under
+// directory lock against every other process and can write WAL/manifest
+// bytes under
 // .codegraph/store/. That is storage-engine bookkeeping, invisible above
 // the Reader interface and incapable of changing a single node, edge, or
 // file record. readOnlyHint describes the tool's effect on its

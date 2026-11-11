@@ -23,6 +23,11 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
+// syncBeforeCommitHook, if not nil, runs in Sync just before its one
+// commit, while Sync has the store open. A test sets it to read the store
+// at that moment.
+var syncBeforeCommitHook func()
+
 // Sync performs an incremental update of the graph at storeDir against the
 // current on-disk state of repoRoot (INDX-03): only content-hash-changed
 // files, plus their direct call-graph dependents and the files waiting on
@@ -245,6 +250,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		if err := w.PutMeta(newMeta); err != nil {
 			w.Close()
 			return Stats{}, err
+		}
+		if syncBeforeCommitHook != nil {
+			syncBeforeCommitHook()
 		}
 		if err := w.Commit(); err != nil {
 			return Stats{}, err
@@ -728,6 +736,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		return Stats{}, err
 	}
 
+	if syncBeforeCommitHook != nil {
+		syncBeforeCommitHook()
+	}
 	if err := w.Commit(); err != nil {
 		return Stats{}, err
 	}
