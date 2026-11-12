@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
@@ -43,6 +44,21 @@ const (
 	releaseRepoSlug           = "seanb4t/codegraph-go"
 	releaseWorkflowRefPattern = `^https://github\.com/` + releaseRepoSlug + `/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^\s]*$`
 )
+
+// releaseTagRe is the tag half of releaseWorkflowRefPattern on its own.
+var releaseTagRe = regexp.MustCompile(`^v[0-9][^\s]*$`)
+
+// releaseIdentityPatternForTag narrows releaseWorkflowRefPattern to the
+// one tag an upgrade asked for. releaseWorkflowRefPattern alone accepts a
+// binary the release workflow signed at ANY version tag, so an older
+// signed build served in place of the requested one would pass. The tag
+// is quoted, so a regular expression character in it matches only itself.
+func releaseIdentityPatternForTag(tag string) (string, error) {
+	if !releaseTagRe.MatchString(tag) {
+		return "", fmt.Errorf("upgrade: %q is not a release tag", tag)
+	}
+	return `^https://github\.com/` + releaseRepoSlug + `/\.github/workflows/release\.ya?ml@refs/tags/` + regexp.QuoteMeta(tag) + `$`, nil
+}
 
 // loadBundle parses a downloaded release's sigstore signature bundle from
 // its raw JSON bytes. Never touches the network itself — the caller has
