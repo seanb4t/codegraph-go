@@ -3739,6 +3739,7 @@ tasks:
           NAMES="$(printf '%s' "${ASSETS_JSON}" | jq -r '.assets[].name')"
           MISSING=""
           printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_checksums.txt" || MISSING="${MISSING} checksums"
+          printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_THIRD_PARTY_NOTICES.txt" || MISSING="${MISSING} notices"
           for suf in ${REQUIRED_RAW_SUFFIXES}; do
             printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_${suf}" || MISSING="${MISSING} raw:${suf}"
             printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_${suf}.zip" || MISSING="${MISSING} zip:${suf}"
@@ -3763,8 +3764,10 @@ tasks:
 
         UNCLASSIFIED=""
         for name in ${NAMES}; do
+          # The license notices are a required asset since v0.17.0 (#289):
+          # the raw binaries ship with no file beside them.
           case "${name}" in
-            "codegraph_${TAG}_checksums.txt") continue ;;
+            "codegraph_${TAG}_checksums.txt"|"codegraph_${TAG}_THIRD_PARTY_NOTICES.txt") continue ;;
           esac
           IS_REQUIRED=0
           for suf in ${REQUIRED_RAW_SUFFIXES}; do
