@@ -68,16 +68,24 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	// inside the root. The repo root's own .codegraph is the one the
 	// server was started on and is not checked here.
 	for dir := pathAbs; dir != repoAbs && isWithin(repoAbs, dir); dir = filepath.Dir(dir) {
-		store := filepath.Join(dir, indexDirName, indexStoreSubdir)
-		real, err := filepath.EvalSymlinks(store)
+		// The resolver accepts a .codegraph that is a directory after
+		// symlinks, whether or not it holds a store yet, and the open
+		// then creates the store. Check the directory first, and then
+		// the store, which can be a symlink of its own.
+		index := filepath.Join(dir, indexDirName)
+		indexReal, err := filepath.EvalSymlinks(index)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return "", err
 		}
-		if !isWithin(repoReal, real) {
-			return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: the index at %q leads outside it", path, filepath.Join(dir, indexDirName))
+		storeReal, err := resolveExistingPrefix(filepath.Join(index, indexStoreSubdir))
+		if err != nil {
+			return "", err
+		}
+		if !isWithin(repoReal, indexReal) || !isWithin(repoReal, storeReal) {
+			return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: the index at %q leads outside it", path, index)
 		}
 	}
 	return pathAbs, nil

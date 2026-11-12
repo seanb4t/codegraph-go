@@ -387,6 +387,40 @@ func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
 	}
 }
 
+// TestOpenEngineIndexSymlinkToStorelessDirIsRejected covers a .codegraph
+// symlink that leads to an outside directory with no store in it. The
+// resolver accepts any .codegraph that is a directory, and the open would
+// then create a store in that outside directory.
+func TestOpenEngineIndexSymlinkToStorelessDirIsRejected(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(sub, ".codegraph")); err != nil {
+		t.Fatalf("symlink the index: %v", err)
+	}
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+	result := callTool(t, s, "codegraph_status", map[string]any{"path": sub})
+	if !result.IsError {
+		t.Fatal("codegraph_status through a .codegraph symlink to an outside directory: expected an error result, got success")
+	}
+	if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+		t.Fatalf("error = %q, want the outside-the-repo-root message", text)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatalf("read the outside directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("the call wrote %d entries into the outside directory, want none", len(entries))
+	}
+}
+
 // TestConfinementAnchoredOnRepoRootNotStartPath is WR-02's required test
 // (02-REVIEW-2.md): CR-01 split openEngine's single confinement parameter
 // into two adjacent, same-typed strings (defaultPath/startPath and
