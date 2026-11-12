@@ -1,3 +1,0 @@
-kind: Fixes
-body: The SBOM of each release binary names the license of every Go module instead of NOASSERTION.
-time: 2026-11-12T10:32:04.771765-05:00
