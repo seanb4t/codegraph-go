@@ -47,8 +47,29 @@ Build provenance is attested by GitHub's first-party attestor
 archive, published through GitHub's Attestations API, and is verifiable with
 `gh attestation verify <asset> -R seanb4t/codegraph-go`.
 
+The release job runs on a macOS runner that [Namespace](https://namespace.so)
+manages, not on a GitHub-hosted runner. The provenance therefore records
+`runnerEnvironment: self-hosted`, and `gh attestation verify` with
+`--deny-self-hosted-runners` rejects these artifacts. The darwin binaries must
+build on a macOS host, and that runner class supplies it.
+
 **If verification fails, do not run the binary.** Report it through the channel
 above — a signature that doesn't verify is itself a security report.
+
+## Repository controls
+
+These GitHub controls are on for this repository:
+
+- Private vulnerability reporting, which the report form above uses.
+- Secret scanning with push protection.
+- Dependabot alerts for the Go modules, the `web/` packages and the workflow
+  actions. Dependabot opens no pull requests here. The maintainer makes each
+  update through the issue and changelog process.
+- CodeQL code scanning in the default setup, for Go, TypeScript, Python and
+  the workflow files.
+
+Every workflow action is pinned to a commit SHA, and `zizmor` and `actionlint`
+gate each change to a workflow.
 
 ## Threat model
 
@@ -86,6 +107,10 @@ What it does **not** defend against, stated plainly:
 - **A compromised GitHub account or Actions environment.** Signing identity is
   derived from the workflow; an attacker with commit access to the release
   workflow could produce validly-signed artifacts.
+- **A compromised build runner.** The release job builds, signs and attests on
+  a runner that Namespace operates. Someone who controls that runner during a
+  release can change the binaries before they are signed. The reproducibility
+  check in CI and the post-release verification job do not close this gap.
 - **The graph as a confidentiality boundary.** `.codegraph/` contains source
   excerpts from the indexed repository, in plaintext. It inherits the
   filesystem's permissions and nothing more. Do not commit it, and do not treat
