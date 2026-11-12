@@ -60,8 +60,34 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	if !isWithin(repoReal, pathReal) {
 		return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root", path)
 	}
+
+	// query.OpenAt walks up from the path and opens the first .codegraph
+	// it meets, so the directory that is opened is not the path that was
+	// checked. A .codegraph below the repo root that is a symlink to
+	// another project's index would be opened from a path that is itself
+	// inside the root. The repo root's own .codegraph is the one the
+	// server was started on and is not checked here.
+	for dir := pathAbs; dir != repoAbs && isWithin(repoAbs, dir); dir = filepath.Dir(dir) {
+		store := filepath.Join(dir, indexDirName, indexStoreSubdir)
+		real, err := filepath.EvalSymlinks(store)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if !isWithin(repoReal, real) {
+			return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: the index at %q leads outside it", path, filepath.Join(dir, indexDirName))
+		}
+	}
 	return pathAbs, nil
 }
+
+// The index directory and its store, as internal/query lays them out.
+const (
+	indexDirName     = ".codegraph"
+	indexStoreSubdir = "store"
+)
 
 // isWithin reports whether path is root itself or a descendant of it. Both
 // must be absolute.

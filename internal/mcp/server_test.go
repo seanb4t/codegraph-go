@@ -344,6 +344,49 @@ func TestOpenEnginePathSymlinkCannotLeaveRepoRoot(t *testing.T) {
 	}
 }
 
+// TestOpenEngineIndexSymlinkCannotLeaveRepoRoot holds the second half of
+// the path confinement in issue #297: the path can be a real directory
+// inside the repo root while the .codegraph in it is a symlink to another
+// project's index, and that index is what the call would open. The
+// control is a .codegraph symlink that leads to an index inside the root.
+func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := copyFixture(t)
+	indexFixture(t, outside)
+
+	link := func(name, target string) string {
+		t.Helper()
+		sub := filepath.Join(dir, name)
+		if err := os.Mkdir(sub, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		if err := os.Symlink(filepath.Join(target, ".codegraph"), filepath.Join(sub, ".codegraph")); err != nil {
+			t.Fatalf("symlink the index of %s: %v", name, err)
+		}
+		return sub
+	}
+	borrowed := link("borrowed", outside)
+	own := link("own", dir)
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+
+	for _, path := range []string{borrowed, filepath.Join(borrowed, "deeper")} {
+		result := callTool(t, s, "codegraph_status", map[string]any{"path": path})
+		if !result.IsError {
+			t.Fatalf("codegraph_status with path %q, whose index is another project's: expected an error result, got success", path)
+		}
+		if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+			t.Fatalf("codegraph_status error for %q = %q, want the outside-the-repo-root message", path, text)
+		}
+	}
+
+	if result := callTool(t, s, "codegraph_status", map[string]any{"path": own}); result.IsError {
+		t.Fatalf("an index symlink that stays inside the repo root was rejected: %q", resultText(t, result))
+	}
+}
+
 // TestConfinementAnchoredOnRepoRootNotStartPath is WR-02's required test
 // (02-REVIEW-2.md): CR-01 split openEngine's single confinement parameter
 // into two adjacent, same-typed strings (defaultPath/startPath and
