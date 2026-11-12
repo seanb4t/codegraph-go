@@ -5,6 +5,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -491,6 +492,7 @@ type goreleaserSBOM struct {
 	Args      []string `yaml:"args"`
 	Documents []string `yaml:"documents"`
 	Artifacts string   `yaml:"artifacts"`
+	Env       []string `yaml:"env"`
 }
 
 type goreleaserSBOMsConfig struct {
@@ -950,6 +952,22 @@ func TestSbomsArePerBinaryWithSpdxNames(t *testing.T) {
 			t.Errorf("sboms[0].documents[0] resolved to a NON-DISTINCT name %q for %s/%s — this is HIGH-B's collision failure mode", got, p.goos, p.goarch)
 		}
 		seen[got] = true
+	}
+}
+
+// TestSbomsReadModuleLicenses holds issue #288: a Go binary records no
+// license for its modules, so syft writes NOASSERTION for every package
+// unless the sboms: entry tells it to read the module cache.
+func TestSbomsReadModuleLicenses(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	const want = "SYFT_GOLANG_SEARCH_LOCAL_MOD_CACHE_LICENSES=true"
+	for _, sb := range mustGoreleaserSBOMs(t, string(data)) {
+		if !slices.Contains(sb.Env, want) {
+			t.Errorf("sboms[id=%s].env = %v, want it to contain %q (without it every SBOM package has licenseConcluded NOASSERTION)", sb.ID, sb.Env, want)
+		}
 	}
 }
 
