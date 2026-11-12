@@ -366,6 +366,11 @@ sboms:
   - id: binary-sbom
     artifacts: binary
     cmd: syft
+    # A Go binary records module paths and versions but no license, so syft
+    # writes NOASSERTION for every package unless it reads each module's
+    # license file from the module cache that the build above filled.
+    env:
+      - SYFT_GOLANG_SEARCH_LOCAL_MOD_CACHE_LICENSES=true
     args:
       - "$artifact"
       - "--output"
