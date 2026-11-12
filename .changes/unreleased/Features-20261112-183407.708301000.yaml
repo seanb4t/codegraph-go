@@ -1,0 +1,3 @@
+kind: Features
+body: Each release binary now has a signed SBOM attestation, which `gh attestation verify --predicate-type https://spdx.dev/Document/v2.3` checks.
+time: 2026-11-12T18:34:07.708301-05:00

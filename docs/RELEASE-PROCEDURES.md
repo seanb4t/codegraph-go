@@ -147,12 +147,16 @@ The chain, end to end:
      `.changes/<tag>.md` is missing or empty (REL-12). The prerelease flag
      follows the tag (`prerelease: auto`).
    - **Attest** — `actions/attest-build-provenance` (GitHub's first-party
-     attestor) runs as the job's last step, over the SAME 8 payloads the
+     attestor) runs after the hash-recording step, over the SAME 8 payloads the
      checksums file covers, publishing through GitHub's Attestations API
      rather than as a release asset (D-09 — replaces the third-party SLSA
      generic generator entirely; see `docs/RELEASE.md` §1(b) for the
      `gh attestation verify` command that replaces `slsa-verifier
      verify-artifact` for releases cut by this pipeline).
+     The job's last steps then attest the SBOM of each binary with
+     `actions/attest`, one step per platform (`docs/RELEASE.md` §1(c)). A
+     failure in one of them leaves the release live and the run red, the
+     same as a failure of the hash-recording step.
 
 **The version is derived from the fragment kinds, not chosen.** changie
 computes it from the kinds of the unreleased fragments: Breaking and Features

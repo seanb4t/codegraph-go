@@ -231,3 +231,49 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: ./dist/codegraph_${{ github.ref_name }}_checksums.txt
+
+      # SBOM attestations (#294). Each SBOM describes one binary, so each
+      # step below binds one SBOM to one subject digest. Passing the
+      # checksums file as subject-checksums would bind every SBOM to all 8
+      # subjects, which is wrong. `task release:sbom-subjects` reads the
+      # four digests from GoReleaser's checksums file and fails when a
+      # digest or an SBOM is missing. Verify with `gh attestation verify
+      # <binary> -R seanb4t/codegraph-go --predicate-type
+      # https://spdx.dev/Document/v2.3` (docs/RELEASE.md § c).
+      #
+      # These steps run after publish, so the POST-PUBLISH FAILURE BRANCH
+      # above applies to them too: a failure leaves a live release with a
+      # red run, and post-release-verify.yml does not start by itself.
+      - name: Resolve SBOM attestation subjects
+        id: sbom-subjects
+        env:
+          TAG: ${{ github.ref_name }}
+        run: task release:sbom-subjects
+
+      - name: Attest SBOM (linux_amd64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: codegraph_${{ github.ref_name }}_linux_amd64
+          subject-digest: ${{ steps.sbom-subjects.outputs.linux_amd64 }}
+          sbom-path: ./dist/codegraph_${{ github.ref_name }}_linux_amd64.spdx.json
+
+      - name: Attest SBOM (linux_arm64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: codegraph_${{ github.ref_name }}_linux_arm64
+          subject-digest: ${{ steps.sbom-subjects.outputs.linux_arm64 }}
+          sbom-path: ./dist/codegraph_${{ github.ref_name }}_linux_arm64.spdx.json
+
+      - name: Attest SBOM (darwin_amd64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: codegraph_${{ github.ref_name }}_darwin_amd64
+          subject-digest: ${{ steps.sbom-subjects.outputs.darwin_amd64 }}
+          sbom-path: ./dist/codegraph_${{ github.ref_name }}_darwin_amd64.spdx.json
+
+      - name: Attest SBOM (darwin_arm64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: codegraph_${{ github.ref_name }}_darwin_arm64
+          subject-digest: ${{ steps.sbom-subjects.outputs.darwin_arm64 }}
+          sbom-path: ./dist/codegraph_${{ github.ref_name }}_darwin_arm64.spdx.json
