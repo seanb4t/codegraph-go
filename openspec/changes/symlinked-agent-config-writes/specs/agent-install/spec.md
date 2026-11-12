@@ -78,7 +78,7 @@ At local scope, the project is the directory the command runs in. The real locat
 
 ### Requirement: A local install refuses a file outside the project
 
-This requirement applies at local scope. If the real location of an agent file is outside the project, an install or a refresh SHALL report an error. The error SHALL name the configured path and the real location. The command SHALL write nothing for that file. The symlink and the outside file SHALL stay byte for byte as they were. The command SHALL continue with the other files and agents, and SHALL exit non-zero.
+At local scope, an install or a refresh SHALL refuse an agent file whose real location is outside the project. The error SHALL name the configured path and the real location. Nothing SHALL be written, and the symlink and the outside file SHALL stay byte for byte as they were. The command SHALL continue with the other files and agents. An install SHALL exit non-zero, and the refresh after an upgrade SHALL report a warning.
 
 #### Scenario: An instruction file linked outside the project
 
@@ -134,7 +134,7 @@ This requirement applies at local scope. If the real location of an agent file i
 
 ### Requirement: A symlink loop writes nothing
 
-If the symlink at an agent file is part of a loop, the command SHALL report an error that names the configured path. This applies to an install, a refresh and an uninstall. The same rule SHALL apply to a chain of symlinks that cannot be resolved. The command SHALL write nothing for that file and SHALL leave every link as it was. It SHALL continue with the other files and agents, and SHALL exit non-zero.
+If the symlink at an agent file is part of a loop or of a chain that cannot be resolved, an install, a refresh or an uninstall SHALL report an error that names the configured path. It SHALL write nothing for that file and SHALL leave every link as it was. It SHALL continue with the other files and agents. An install or an uninstall SHALL exit non-zero, and the refresh after an upgrade SHALL report a warning.
 
 #### Scenario: Two links that point at each other on install
 
@@ -150,7 +150,7 @@ If the symlink at an agent file is part of a loop, the command SHALL report an e
 
 ### Requirement: An MCP configuration file that does not parse is not written
 
-This requirement applies to a JSON or JSONC file that holds an agent's MCP server entries. If its content does not parse, an install or a refresh SHALL report an error that names the file. The file SHALL stay byte for byte as it was. The command SHALL continue with the other files and agents, and SHALL exit non-zero. A file that is missing or empty SHALL be written as a new file. The rule SHALL apply to the file that a symlink leads to.
+If a JSON or JSONC file that holds an agent's MCP server entries does not parse, an install or a refresh SHALL report an error that names the file. The file SHALL stay byte for byte as it was. The command SHALL continue with the other files and agents. An install SHALL exit non-zero, and the refresh after an upgrade SHALL report a warning. A missing or empty file SHALL be written as new. The rule SHALL apply to the file that a symlink leads to.
 
 #### Scenario: A file with a syntax error
 

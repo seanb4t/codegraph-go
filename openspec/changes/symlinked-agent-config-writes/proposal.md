@@ -16,7 +16,7 @@ Today's behavior has a second fault at local scope. The read follows the link an
 - At local scope, an install or a refresh refuses a file whose real location is outside the project. It reports an error that names the path and the location, writes nothing for that file and exits non-zero. An uninstall leaves such a file alone and adds a note.
 - An uninstall that empties a linked file deletes the file that the link leads to. The link stays.
 - A symlink loop is an error that names the path, for an install and for an uninstall. Nothing is written for that file.
-- An MCP configuration file that does not parse is not written. #292 added this rule in code for two writers. This change records it in the spec and extends it to a file behind a link.
+- An MCP configuration file that does not parse is not written. #303, the fix for #292, adds this rule in code for two writers. This change records it in the spec and extends it to a file behind a link.
 
 The refusal at local scope is a behavior change. A local install in a directory whose `AGENTS.md` or `.mcp.json` links to a parent directory succeeded before and now fails for that file. The error states three ways forward: run the install in the directory that holds the real file, use global scope, or replace the link with a regular file.
 
