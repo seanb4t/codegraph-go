@@ -138,13 +138,11 @@ func writeOpencodeEntry(path, execPath string) (FileResult, error) {
 
 	v, perr := hujson.Parse(raw)
 	if perr != nil {
-		// Malformed existing config — defensive empty-object fallback
-		// (V5), mirroring readJSONFile's empty-map fallback for the
-		// other JSON-shaped targets.
-		v, perr = hujson.Parse([]byte("{}"))
-		if perr != nil {
-			return FileResult{}, perr
-		}
+		// An existing file that does not parse is refused and left as it
+		// is (#292). An empty-object fallback here would make the write
+		// below replace the user's whole file with the one codegraph
+		// entry, as writeMcpEntry did for the other JSON-shaped targets.
+		return FileResult{}, fmt.Errorf("%s: existing file is not valid JSON — fix or remove it manually: %w", path, perr)
 	}
 
 	desiredEntry := opencodeMcpEntry(execPath)

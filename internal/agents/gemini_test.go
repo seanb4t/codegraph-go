@@ -48,6 +48,34 @@ func TestGemini_LocalInstall_InstructionsAtProjectRoot(t *testing.T) {
 	}
 }
 
+// TestGemini_Install_UnparseableSettingsReportsAnErrorAndKeepsTheFile is
+// issue #292 through a real target: install reports the file it could not
+// parse and leaves the user's other servers in place.
+func TestGemini_Install_UnparseableSettingsReportsAnErrorAndKeepsTheFile(t *testing.T) {
+	home := fakeHome(t)
+	configPath := filepath.Join(home, ".gemini", "settings.json")
+	content := `{"mcpServers": {"other-server": {"command": "other-binary"}},}`
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, configPath, content)
+
+	result := geminiTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	found := false
+	for _, err := range result.Errors {
+		if strings.Contains(err.Error(), configPath) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("install errors %v do not name %s", result.Errors, configPath)
+	}
+	if got := readFile(t, configPath); got != content {
+		t.Errorf("settings.json changed.\n got: %q\nwant: %q", got, content)
+	}
+}
+
 func TestGemini_GlobalInstall_InstructionsUnderGeminiDir(t *testing.T) {
 	home := fakeHome(t)
 	g := geminiTarget{}
