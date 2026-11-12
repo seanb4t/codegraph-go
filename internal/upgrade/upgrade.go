@@ -38,7 +38,7 @@ var downloadHTTPClient = &http.Client{Timeout: downloadHTTPTimeout}
 type (
 	resolveLatestFunc func(repoSlug string) (string, error)
 	downloadFunc      func(version string) (binary []byte, bundleJSON []byte, err error)
-	verifyFunc        func(binary, bundleJSON []byte) error
+	verifyFunc        func(target string, binary, bundleJSON []byte) error
 	swapFunc          func(targetPath string, newBinary []byte) error
 )
 
@@ -152,7 +152,7 @@ func Run(currentVersion, targetPath string, opts Options) error {
 	if verify == nil {
 		verify = defaultVerify
 	}
-	if err := verify(binary, bundleJSON); err != nil {
+	if err := verify(target, binary, bundleJSON); err != nil {
 		// Pitfall 7 / T-06-06-01/02: a verification error is fatal. Never
 		// fall through to swap — the original binary at targetPath is
 		// left completely untouched.
@@ -180,9 +180,13 @@ func defaultResolveLatest(repoSlug string) (string, error) {
 // defaultVerify is production's verifyFunc: hash the downloaded binary,
 // parse its accompanying bundle, fetch the live Sigstore trust root
 // (verify.go's one network call), and run the full D-12 policy check
-// pinned to this project's own release identity. releaseWorkflowRefPattern
-// is Phase-8-finalized (D-14) — see verify.go's doc comment.
-func defaultVerify(binary, bundleJSON []byte) error {
+// pinned to this project's own release identity at the target tag, so a
+// binary the release workflow signed for another version is rejected.
+func defaultVerify(target string, binary, bundleJSON []byte) error {
+	sanRegex, err := releaseIdentityPatternForTag(target)
+	if err != nil {
+		return err
+	}
 	b, err := loadBundle(bundleJSON)
 	if err != nil {
 		return err
@@ -192,7 +196,7 @@ func defaultVerify(binary, bundleJSON []byte) error {
 		return err
 	}
 	digest := sha256.Sum256(binary)
-	return verifyRelease(b, trustedMaterial, "sha256", digest[:], releaseWorkflowRefPattern)
+	return verifyRelease(b, trustedMaterial, "sha256", digest[:], sanRegex)
 }
 
 // defaultDownload is production's downloadFunc: fetch the current

@@ -180,4 +180,28 @@ func TestVerifyReleaseE2E(t *testing.T) {
 			t.Fatal("verifyRelease: expected a non-nil error for a wrong certificate identity, got nil")
 		}
 	})
+
+	// The version binding of an upgrade, against a real signature: the
+	// artifact passes under its own tag's pattern and fails under another
+	// tag's. CODEGRAPH_E2E_TAG names the tag the artifact was released at.
+	t.Run("binds the signature to its tag", func(t *testing.T) {
+		tag := os.Getenv("CODEGRAPH_E2E_TAG")
+		if tag == "" {
+			t.Skip("set CODEGRAPH_E2E_TAG to the release tag of the artifact")
+		}
+		own, err := releaseIdentityPatternForTag(tag)
+		if err != nil {
+			t.Fatalf("releaseIdentityPatternForTag(%s): %v", tag, err)
+		}
+		if err := verifyRelease(b, tr, "sha256", digest[:], own); err != nil {
+			t.Fatalf("verifyRelease under the artifact's own tag %s: %v", tag, err)
+		}
+		other, err := releaseIdentityPatternForTag(tag + "0")
+		if err != nil {
+			t.Fatalf("releaseIdentityPatternForTag(%s0): %v", tag, err)
+		}
+		if err := verifyRelease(b, tr, "sha256", digest[:], other); err == nil {
+			t.Fatalf("verifyRelease accepted an artifact signed at %s under the pattern of %s0", tag, tag)
+		}
+	})
 }

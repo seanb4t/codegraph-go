@@ -27,7 +27,7 @@ func TestUpgradeRun_CheckReportsAvailabilityWithoutDownloading(t *testing.T) {
 			downloadCalled = true
 			return nil, nil, nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			verifyCalled = true
 			return nil
 		},
@@ -65,7 +65,7 @@ func TestUpgradeRun_TamperedDownloadNeverSwaps(t *testing.T) {
 		download: func(v string) ([]byte, []byte, error) {
 			return []byte("tampered-bytes"), []byte("bundle"), nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			return errors.New("digest mismatch")
 		},
 		swap: func(targetPath string, newBinary []byte) error {
@@ -106,7 +106,7 @@ func TestUpgradeRun_ValidPathVerifiesBeforeSwap(t *testing.T) {
 			order = append(order, "download")
 			return []byte("new-binary"), []byte("bundle"), nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			order = append(order, "verify")
 			return nil
 		},
@@ -131,6 +131,53 @@ func TestUpgradeRun_ValidPathVerifiesBeforeSwap(t *testing.T) {
 	}
 }
 
+// TestUpgradeRun_VerifiesAgainstTheTargetTag asserts that Run hands verify
+// the same tag it downloaded, for the latest release and for a requested
+// version. verify binds the signature to that tag, so a signed binary of
+// another version cannot pass as the target.
+func TestUpgradeRun_VerifiesAgainstTheTargetTag(t *testing.T) {
+	for _, tc := range []struct{ name, version, want string }{
+		{name: "latest", version: "", want: "v1.2.3"},
+		{name: "requested version", version: "v1.1.0", want: "v1.1.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := filepath.Join(t.TempDir(), "codegraph")
+			if err := os.WriteFile(target, []byte("original-binary"), 0o755); err != nil {
+				t.Fatalf("seed target: %v", err)
+			}
+			var downloaded, verified string
+			opts := Options{
+				Version:       tc.version,
+				resolveLatest: func(repoSlug string) (string, error) { return "v1.2.3", nil },
+				download: func(v string) ([]byte, []byte, error) {
+					downloaded = v
+					return []byte("new-binary"), []byte("bundle"), nil
+				},
+				verify: func(tag string, binary, bundleJSON []byte) error {
+					verified = tag
+					return nil
+				},
+				swap: func(targetPath string, newBinary []byte) error { return nil },
+			}
+			if err := Run("v1.0.0", target, opts); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if downloaded != tc.want || verified != tc.want {
+				t.Fatalf("downloaded %q and verified against %q, want both %q", downloaded, verified, tc.want)
+			}
+		})
+	}
+}
+
+// TestDefaultVerify_RejectsNonTagTarget asserts that production's verify
+// refuses a target that is not a release tag before it reads the bundle or
+// touches the network.
+func TestDefaultVerify_RejectsNonTagTarget(t *testing.T) {
+	if err := defaultVerify("main", []byte("binary"), []byte("not a bundle")); err == nil || !strings.Contains(err.Error(), "not a release tag") {
+		t.Fatalf("defaultVerify(main) error = %v, want a not-a-release-tag error", err)
+	}
+}
+
 // TestUpgradeRun_SameVersionNoOpWithoutForce asserts the same-version guard
 // (T-08-03-01): when the resolved target equals currentVersion and Force is
 // false, Run prints an advisory and returns nil WITHOUT calling
@@ -148,7 +195,7 @@ func TestUpgradeRun_SameVersionNoOpWithoutForce(t *testing.T) {
 			downloadCalled = true
 			return nil, nil, nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			verifyCalled = true
 			return nil
 		},
@@ -189,7 +236,7 @@ func TestUpgradeRun_ForceReinstallsSameVersion(t *testing.T) {
 			order = append(order, "download")
 			return []byte("new-binary"), []byte("bundle"), nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			order = append(order, "verify")
 			return nil
 		},
@@ -234,7 +281,7 @@ func TestUpgradeRun_ForceStillVerifiesBeforeSwap(t *testing.T) {
 		download: func(v string) ([]byte, []byte, error) {
 			return []byte("tampered-bytes"), []byte("bundle"), nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			return errors.New("digest mismatch")
 		},
 		swap: func(targetPath string, newBinary []byte) error {
@@ -284,7 +331,7 @@ func TestUpgradeRun_RefusesNonWritableTargetBeforeDownloading(t *testing.T) {
 			downloadCalled = true
 			return []byte("new-binary"), []byte("bundle"), nil
 		},
-		verify: func(binary, bundleJSON []byte) error { return nil },
+		verify: func(_ string, binary, bundleJSON []byte) error { return nil },
 		swap:   func(targetPath string, newBinary []byte) error { return nil },
 	}
 
@@ -356,7 +403,7 @@ func TestUpgradeRun_RefusesBrewManagedCask(t *testing.T) {
 			downloadCalled = true
 			return nil, nil, nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			verifyCalled = true
 			return nil
 		},
@@ -456,7 +503,7 @@ func TestUpgradeRun_CheckBrewManagedStepsAside(t *testing.T) {
 			downloadCalled = true
 			return nil, nil, nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			verifyCalled = true
 			return nil
 		},
@@ -498,7 +545,7 @@ func TestUpgradeRun_ForceDoesNotOverrideBrewRefusal(t *testing.T) {
 			downloadCalled = true
 			return nil, nil, nil
 		},
-		verify: func(binary, bundleJSON []byte) error {
+		verify: func(_ string, binary, bundleJSON []byte) error {
 			return nil
 		},
 		swap: func(targetPath string, newBinary []byte) error {

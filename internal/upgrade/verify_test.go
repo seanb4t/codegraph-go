@@ -136,6 +136,45 @@ func TestReleaseWorkflowRefPattern_AcceptsReleaseWorkflowTagRef(t *testing.T) {
 	}
 }
 
+// TestReleaseIdentityPatternForTag holds the version binding of an
+// upgrade: the identity pattern for one tag accepts the release workflow
+// at that tag only. The general pattern accepts every version tag, so an
+// older signed build served in place of the requested one passed.
+func TestReleaseIdentityPatternForTag(t *testing.T) {
+	san := func(tag string) string {
+		return "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yml@refs/tags/" + tag
+	}
+	pattern, err := releaseIdentityPatternForTag("v0.16.5")
+	if err != nil {
+		t.Fatalf("releaseIdentityPatternForTag(v0.16.5): %v", err)
+	}
+	re := regexp.MustCompile(pattern)
+	if !re.MatchString(san("v0.16.5")) {
+		t.Errorf("pattern %q must accept the requested tag's identity %q", pattern, san("v0.16.5"))
+	}
+	for _, other := range []string{"v0.16.4", "v0.16.50", "v0.16.5-rc.1", "v0x16y5", "v1.0.0"} {
+		if re.MatchString(san(other)) {
+			t.Errorf("pattern %q for v0.16.5 must reject the identity of %s", pattern, other)
+		}
+		if !regexp.MustCompile(releaseWorkflowRefPattern).MatchString(san(other)) {
+			t.Errorf("releaseWorkflowRefPattern no longer accepts %s, so this case proves nothing", other)
+		}
+	}
+	if re.MatchString("https://github.com/" + releaseRepoSlug + "/.github/workflows/ci.yml@refs/tags/v0.16.5") {
+		t.Errorf("pattern %q must reject another workflow at the same tag", pattern)
+	}
+}
+
+// TestReleaseIdentityPatternForTag_RejectsNonTag proves a target that is
+// not a release tag never becomes an identity pattern.
+func TestReleaseIdentityPatternForTag_RejectsNonTag(t *testing.T) {
+	for _, tag := range []string{"", "0.16.5", "main", "v", "v0.16.5 x", ".*"} {
+		if pattern, err := releaseIdentityPatternForTag(tag); err == nil {
+			t.Errorf("releaseIdentityPatternForTag(%q) = %q, want an error", tag, pattern)
+		}
+	}
+}
+
 // TestVerifyGo_NoExecUsage is a belt-and-suspenders in-process guard
 // (mirrors the plan's own acceptance-criteria grep): verify.go must never
 // shell out to a cosign CLI or any external tool (D-12).
