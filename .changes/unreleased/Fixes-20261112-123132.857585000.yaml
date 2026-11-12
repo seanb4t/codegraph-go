@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph upgrade rejects a signed binary that the release workflow signed for a different version than the one it asked for.
-time: 2026-11-12T12:31:32.857585-05:00

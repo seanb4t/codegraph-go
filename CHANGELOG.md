@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.17.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.17.0) — 2026-11-12
+
+### Features
+
+- Each release ships THIRD_PARTY_NOTICES.txt, the license text of every bundled Go module and UI package, in the zip, as a release asset and in the graph UI at /THIRD_PARTY_NOTICES.txt.
+
+### Fixes
+
+- The SBOM of each release binary names the license of every Go module instead of NOASSERTION.
+- codegraph upgrade rejects a signed binary that the release workflow signed for a different version than the one it asked for.
+- The MCP path argument rejects a symlink inside the repository that leads to another indexed project.
+
 ## [v0.16.5](https://github.com/seanb4t/codegraph-go/releases/tag/v0.16.5) — 2026-11-12
 
 ### Fixes

@@ -1,3 +1,0 @@
-kind: Fixes
-body: The MCP path argument rejects a symlink inside the repository that leads to another indexed project.
-time: 2026-11-12T12:34:32.981116-05:00
