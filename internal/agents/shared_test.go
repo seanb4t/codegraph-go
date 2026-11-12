@@ -216,6 +216,56 @@ func TestRoundTrip_MarkerInsertThenRemoveOnMissingFileDeletesIt(t *testing.T) {
 
 // --- writeMcpEntry (Pattern 2) ---
 
+// TestMcpEntry_UnparseableFileIsRefusedAndLeftAlone holds issue #292: a
+// config that is not valid JSON read as an empty map, and the write then
+// replaced the whole file with the one codegraph entry.
+func TestMcpEntry_UnparseableFileIsRefusedAndLeftAlone(t *testing.T) {
+	for name, content := range map[string]string{
+		"trailing comma":  `{"mcpServers": {"other-server": {"command": "other-binary"}},}`,
+		"comment":         "{\n  // my servers\n  \"mcpServers\": {\"other-server\": {\"command\": \"other-binary\"}}\n}\n",
+		"byte order mark": "\ufeff" + `{"mcpServers": {"other-server": {"command": "other-binary"}}}`,
+		"not an object":   `["other-server"]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mcp.json")
+			writeFile(t, path, content)
+
+			_, err := writeMcpEntry(path, func() any { return map[string]any{"command": "codegraph"} })
+			if err == nil {
+				t.Fatal("writeMcpEntry: want an error for an existing file that is not valid JSON, got nil")
+			}
+			if !strings.Contains(err.Error(), path) {
+				t.Errorf("error %q does not name the file %s", err, path)
+			}
+			if got := readFile(t, path); got != content {
+				t.Errorf("the file changed.\n got: %q\nwant: %q", got, content)
+			}
+		})
+	}
+}
+
+// TestMcpEntry_EmptyFileIsWritten is the control for the refusal above: a
+// file with no content holds nothing to lose, so the entry is written.
+func TestMcpEntry_EmptyFileIsWritten(t *testing.T) {
+	for name, content := range map[string]string{"empty": "", "whitespace": " \n\t\n"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mcp.json")
+			writeFile(t, path, content)
+
+			result, err := writeMcpEntry(path, func() any { return map[string]any{"command": "codegraph"} })
+			if err != nil {
+				t.Fatalf("writeMcpEntry: %v", err)
+			}
+			if result.Action != ActionCreated {
+				t.Errorf("action = %s, want %s", result.Action, ActionCreated)
+			}
+			if !mcpEntryPresent(path) {
+				t.Errorf("the codegraph entry is missing from %s", path)
+			}
+		})
+	}
+}
+
 func TestMcpEntry_PreservesSiblingServerKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp.json")
