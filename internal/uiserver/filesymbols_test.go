@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
@@ -316,16 +317,12 @@ func TestFileSymbolsDoesNotDegrade(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
-	t.Cleanup(func() { holder.Close() })
+	locktest.HoldStoreLock(t, storeDir)
 
 	srv := startedServer(t, dir)
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
 
-	_, err = client.FileSymbols(context.Background(), connect.NewRequest(&uiv1.FileSymbolsRequest{Path: "pkga/pkga.go"}))
+	_, err := client.FileSymbols(context.Background(), connect.NewRequest(&uiv1.FileSymbolsRequest{Path: "pkga/pkga.go"}))
 	if err == nil {
 		t.Fatal("FileSymbols while the store is locked past the retry budget succeeded, want an error (FileSymbols must not degrade-and-answer)")
 	}

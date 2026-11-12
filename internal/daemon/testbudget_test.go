@@ -176,3 +176,44 @@ func joinDaemonRun(t *testing.T, cancel context.CancelFunc, runErr <-chan error)
 		}
 	})
 }
+
+// startRun starts d.Run on its own goroutine and returns the channel of its
+// result. It registers joinDaemonRun, so the test joins that goroutine when
+// it ends. The ordering contract of joinDaemonRun applies.
+func startRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, d *Daemon) <-chan error {
+	t.Helper()
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
+	return runErr
+}
+
+// stopRun cancels a Run from startRun and fails the test unless it returns
+// nil within the test budget.
+func stopRun(t *testing.T, cancel context.CancelFunc, runErr <-chan error) {
+	t.Helper()
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(testBudget(5 * time.Second)):
+		t.Fatal("Run did not return after cancel")
+	}
+}
+
+// receive returns the next value of ch, and fails the test with what if
+// none arrives within the test budget. Inside a synctest bubble the
+// deadline is fake time.
+func receive[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(testBudget(5 * time.Second)):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	var zero T
+	return zero
+}

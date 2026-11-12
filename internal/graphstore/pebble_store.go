@@ -37,56 +37,60 @@ var ErrClosed = errors.New("graphstore: store is closed")
 // store's Meta record (schema version, aggregate counts, health) lives.
 const metaRecordName = "schema"
 
-// pebbleStore is the sole holder of a *pebble.DB in the whole module
-// (D-04). Every other package reaches the graph exclusively through the
-// GraphStore/Reader/Writer/EdgeIterator interfaces declared in store.go —
-// the depguard rule graphstore-owns-pebble in .golangci.yml enforces this
-// (D-04a).
+// pebbleStore is one caller's handle on a store. It is the sole holder of
+// a *pebble.DB in the whole module (D-04). Every other package reaches the
+// graph exclusively through the GraphStore/Reader/Writer/EdgeIterator
+// interfaces declared in store.go — the depguard rule graphstore-owns-pebble
+// in .golangci.yml enforces this (D-04a).
+//
+// Several pebbleStore values of one process can point at one dbHandle
+// (shared.go): each open of a store that this process already has open
+// takes the handle of the first open. closed and mu belong to one
+// pebbleStore, so a caller that closes its store does not close the store
+// of another caller. The Pebble database closes when the last of them
+// closes.
 //
 // mu (WR-01) guards the closed-check-then-Pebble-call sequence in
 // Snapshot/NewWriter/Export as one atomic critical section against a
-// concurrent Close: Close takes mu's exclusive Lock, so it cannot mark the
-// store closed and call db.Close() while any of those three calls is
-// mid-flight holding RLock, and any call arriving after Close has released
-// the lock is guaranteed to observe closed==true and return ErrClosed
-// before ever touching db again — closing the plain atomic.Bool
-// check-then-act race this file's own comments used to flag as latent
+// concurrent Close of the same pebbleStore: Close takes mu's exclusive
+// Lock, so it cannot mark the store closed and release its handle while
+// any of those three calls is mid-flight holding RLock, and any call
+// arriving after Close has released the lock is guaranteed to observe
+// closed==true and return ErrClosed before ever touching db again
 // (pebble/v2 panics, rather than returning an error, once its *pebble.DB
-// is closed). Every current call site in this codebase opens/closes its
-// own pebbleStore without sharing it across goroutines, so this was not
-// exercised in practice, but the guard is cheap (RWMutex, uncontended in
-// the common single-goroutine case) and closes the gap before a future
-// long-lived shared store handle (e.g. an MCP-server-owned store) needs it.
+// is closed).
 //
 // Commit on a Writer already obtained via NewWriter remains outside mu's
 // protection — that race (a Writer whose Commit races a subsequent Close)
 // is a harder problem this fix does not attempt, consistent with
 // ErrClosed's existing doc.
 type pebbleStore struct {
+	// db is the database of handle. It is valid until the last user of
+	// handle closes.
 	db     *pebble.DB
 	mu     sync.RWMutex
 	closed atomic.Bool
 
-	// staging marks a store from OpenStaging: it has no write-ahead log,
-	// so its commits never sync, and Close flushes its memtables.
-	staging bool
-
-	// swap is the shared swap lock of the store, held for the life of the
-	// handle (locks.go).
-	swap *os.File
+	// handle owns db and the shared swap lock of the store (locks.go).
+	// This pebbleStore is one user of it from open to Close.
+	handle *dbHandle
 }
 
-// openLockRetryAttempts / openLockRetryBackoff bound Open's retry loop on a
-// lock-held failure (03-REVIEW.md CR-01): pebble.Open holds an EXCLUSIVE
-// directory LOCK for the store's whole open lifetime, and with the watcher
-// default-on in every `serve --mcp` session, transient collisions between a
-// debounced flush (indexer.Sync), a per-call query open (query.OpenAt), and
-// another session's startup reconcile are default-path behavior, not edge
-// cases. A short bounded wait (worst case ~400ms of sleeping across 5
-// attempts) rides out a typical incremental sync's open window; a genuinely
-// long-lived holder still surfaces the original lock error to the caller —
-// this is a retry, never an unbounded block (per the never-block philosophy:
-// the MCP handshake must not hang on a lock).
+// openLockRetryAttempts / openLockRetryBackoff bound the retry of an open
+// that meets a held lock (03-REVIEW.md CR-01). Pebble holds an EXCLUSIVE
+// directory LOCK for as long as a process has the store open, so an open
+// collides with another process that has the store open: a second
+// `serve --mcp` session, a `codegraph` command, or a full index in its
+// exchange. A short bounded wait (worst case ~400ms of sleeping across 5
+// attempts) rides out a typical incremental sync of that other process. A
+// holder that stays longer still surfaces the lock error to the caller —
+// this is a retry, never an unbounded block (per the never-block
+// philosophy: the MCP handshake must not hang on a lock).
+//
+// An open does not collide with another open of the same process: the two
+// share one handle (shared.go). The retry covers one moment inside a
+// process, the close of the last user of a handle, during which the
+// Pebble lock is still held.
 const (
 	openLockRetryAttempts = 5
 	openLockRetryBackoff  = 100 * time.Millisecond
@@ -101,18 +105,23 @@ const (
 // time.Sleep and has no exported setter.
 var openLockRetrySleep = time.Sleep
 
-// ErrStoreLocked is the exported sentinel for Pebble's "directory LOCK
-// already held" open failure — the CR-01 collision signature callers (the
-// daemon's flush requeue, serve's startup-reconcile downgrade) branch on
-// with errors.Is (03-REVIEW-2.md CR-01/WR-01).
+// ErrStoreLocked is the exported sentinel for a store that a lock keeps
+// out of reach after the bounded retry. The callers (the daemon's flush
+// requeue, serve's startup-reconcile downgrade) branch on it with
+// errors.Is (03-REVIEW-2.md CR-01/WR-01).
 //
-// Classification happens inside retryLocked and nowhere else. Each
-// classifier runs only on the errors of its own attempt — classifyOpenError
-// on an error from pebble.Open or pebble.LockDirectory, classifyFlockError
-// on an error from internal/flock — the seams where the error's provenance
-// is unambiguous. So raw string/errno sniffing never runs against arbitrary
-// error chains: an EACCES propagated up an indexer.Sync chain (unreadable
-// source file, WalkDir failure) structurally cannot match this sentinel. The
+// Three holders give it: another process that has the store open (the
+// Pebble directory lock), a holder of a flock beside the store (the swap
+// lock or the writer lock), and this process while it closes its last
+// handle of the store (errHandleClosing).
+//
+// Classification happens at the call that made the error and nowhere
+// else: classifyOpenError on an error from pebble.Open or
+// pebble.LockDirectory, classifyFlockError on an error from internal/flock
+// — the seams where the error's provenance is unambiguous. So raw
+// string/errno sniffing never runs against arbitrary error chains: an
+// EACCES propagated up an indexer.Sync chain (unreadable source file,
+// WalkDir failure) structurally cannot match this sentinel. The
 // platform-specific raw matching lives in isLockHeldOS (locked_unix.go /
 // locked_windows.go), build-tagged because pebble's two vfs lock
 // implementations fail in entirely different shapes (fcntl EAGAIN + an
@@ -144,16 +153,18 @@ func classifyOpenError(err error) error {
 
 // Open opens (creating if necessary) a pebble/v2-backed GraphStore at dir.
 //
-// CR-01 (03-REVIEW.md): a lock-held open failure is retried on a short
-// bounded backoff (openLockRetryAttempts × openLockRetryBackoff) before the
-// error is surfaced — every open site in the module (query.OpenAt per tool
-// call, indexer.Sync's write path, the startup reconcile) collides on
-// Pebble's exclusive directory LOCK by design, and a brief wait converts the
-// common transient collision (an in-flight incremental sync or a per-call
-// read snapshot) into success instead of an agent-visible error. Any
-// non-lock error returns immediately and unchanged; a lock still held after
-// the final attempt surfaces wrapped in ErrStoreLocked (errors.Is-able) —
-// classification happens in retryLocked, on the error of pebble.Open.
+// If this process already has the store at dir open, Open returns a store
+// on the same Pebble database at once. A reader that takes a snapshot
+// during a commit of another user sees the graph from before that commit
+// or from after it.
+//
+// CR-01 (03-REVIEW.md): if another process holds the store, Open retries
+// on a short bounded backoff (openLockRetryAttempts × openLockRetryBackoff)
+// before it surfaces the error. A brief wait converts the common transient
+// collision (an in-flight incremental sync of another session) into
+// success instead of an agent-visible error. Any non-lock error returns
+// immediately and unchanged; a lock still held after the final attempt
+// surfaces wrapped in ErrStoreLocked (errors.Is-able).
 func Open(dir string) (GraphStore, error) {
 	s, err := open(dir, false)
 	if err != nil {
@@ -168,6 +179,11 @@ func Open(dir string) (GraphStore, error) {
 // nothing and costs a second write of every record. The Close of a staging
 // store flushes its memtables first, because without the log the
 // unflushed data is otherwise lost.
+//
+// A staging store has one owner, so it never shares a handle: a second
+// open of dir under the same spelling in this process fails with
+// ErrStoreLocked. Pebble keys its locks of one process by the path it was
+// given, so the caller must not open a staging store under two spellings.
 func OpenStaging(dir string) (GraphStore, error) {
 	s, err := open(dir, true)
 	if err != nil {
@@ -176,26 +192,29 @@ func OpenStaging(dir string) (GraphStore, error) {
 	return s, nil
 }
 
-// open is the one place that calls pebble.Open. staging opens with the
-// write-ahead log off (OpenStaging).
-//
-// open takes the shared swap lock first, before pebble.Open and before it
-// creates any directory: ReplaceStore looks for the store under the
-// exclusive swap lock, and that look is only right if no open can create
-// the store meanwhile. The handle holds the lock until Close.
+// open returns a store on the handle of the store at dir. A staging open
+// makes a handle of its own with the write-ahead log off (OpenStaging).
+// Every other open uses the shared handle of dir (shared.go).
 func open(dir string, staging bool) (*pebbleStore, error) {
-	swap, err := lockBeside(dir, swapLockSuffix, flock.Shared)
+	var (
+		h   *dbHandle
+		err error
+	)
+	if staging {
+		h, err = retryLocked(func() (*dbHandle, error) {
+			h := &dbHandle{staging: true}
+			if err := h.open(dir); err != nil {
+				return nil, err
+			}
+			return h, nil
+		}, alreadyClassified)
+	} else {
+		h, err = openShared(dir)
+	}
 	if err != nil {
 		return nil, err
 	}
-	db, err := retryLocked(func() (*pebble.DB, error) {
-		return pebble.Open(dir, &pebble.Options{Logger: quietLogger{}, DisableWAL: staging})
-	}, classifyOpenError)
-	if err != nil {
-		swap.Close()
-		return nil, err
-	}
-	return &pebbleStore{db: db, staging: staging, swap: swap}, nil
+	return &pebbleStore{db: h.db, handle: h}, nil
 }
 
 // retryLocked calls attempt until it succeeds, on the bounded backoff of
@@ -206,7 +225,8 @@ func open(dir string, staging bool) (*pebbleStore, error) {
 // error.
 //
 // Each caller passes the classifier of its own lock: classifyOpenError for
-// Pebble's directory lock, classifyFlockError for an flock.
+// Pebble's directory lock, classifyFlockError for an flock, and
+// alreadyClassified for an attempt that classifies at its own calls.
 func retryLocked[T any](attempt func() (T, error), classify func(error) error) (T, error) {
 	var (
 		zero    T
@@ -324,24 +344,20 @@ func (s *pebbleStore) NewWriter() (Writer, error) {
 	return &pebbleWriter{batch: s.db.NewBatch()}, nil
 }
 
-// Close releases the underlying Pebble handle. Safe to call more than
-// once: the first call marks the store closed (so subsequent
-// Snapshot/NewWriter/Export calls observe ErrClosed) and delegates to
-// pebble; every call after that is a no-op, since pebble.DB.Close()
-// itself panics on a second invocation. Takes mu's exclusive Lock (WR-01)
-// so it cannot run concurrently with any in-flight Snapshot/NewWriter/
-// Export call.
+// Close ends this caller's use of the store. The Pebble database closes
+// when the last caller of its handle closes. Safe to call more than once:
+// the first call marks the store closed (so subsequent
+// Snapshot/NewWriter/Export calls observe ErrClosed) and releases the
+// handle one time; every call after that is a no-op. Takes mu's exclusive
+// Lock (WR-01) so it cannot run concurrently with any in-flight
+// Snapshot/NewWriter/Export call.
 func (s *pebbleStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed.Swap(true) {
 		return nil
 	}
-	var flushErr error
-	if s.staging {
-		flushErr = s.db.Flush()
-	}
-	return errors.Join(flushErr, s.db.Close(), s.swap.Close())
+	return s.handle.release()
 }
 
 // getter is satisfied by both *pebble.DB and *pebble.Snapshot; it is the

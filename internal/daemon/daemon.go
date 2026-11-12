@@ -51,17 +51,15 @@ var ErrNotInitialized = errors.New("daemon: not initialized")
 // logs it to stderr.
 var ErrWatcherClosed = errors.New("daemon: watcher event stream closed unexpectedly")
 
-// flushRetryPath is the sentinel path Run's requeue wrapper feeds back into
-// the Debouncer when a flush's indexer.Sync lost a Pebble LOCK race
-// (03-REVIEW.md CR-01 scenario 2: an in-flight codegraph_explore held the
-// store open when the debounce fired). indexer.Sync re-diffs the whole repo
-// regardless of the coalesced path set, so the sentinel's value is
-// irrelevant — it exists only to re-arm the timer, because the Debouncer
-// otherwise only fires on organic watcher events: without the requeue, a
-// failed flush after the edit burst ends would strand the .sync-pending
-// sidecar (staleness observable, content stale) until the next unrelated
-// event or the next session's reconcile.
-const flushRetryPath = "\x00codegraph-flush-lock-retry"
+// flushSentinelPath is a path that names no file. Adding it to the
+// Debouncer only arms the timer: indexer.Sync compares the whole repository
+// with the stored file records, so the paths of a flush carry no
+// information. Run adds it in two places. The first is the requeue of a
+// flush that found the store locked, which would otherwise leave the
+// .sync-pending sidecar in place until an unrelated event. The second is
+// the catch-up flush after the watcher opens. It must never equal a path
+// that a watcher can report.
+const flushSentinelPath = "\x00codegraph-flush-lock-retry"
 
 // maxFlushLockRequeues bounds consecutive lock-held flush requeues (CR-01 /
 // Phase-2 BL-01 lesson: bounded retries only, never an unbounded loop). The
@@ -239,7 +237,9 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // Run acquires the daemon lockfile (single-writer invariant, D-05), opens
 // a recursive watcher over repoRoot, and drives every debounced flush
 // through indexer.Sync — touching the .sync-pending sidecar on the first
-// pending event and removing it on a successful commit (D-04a). Run
+// pending event and removing it on a successful commit (D-04a). Once the
+// watch loop has started, Run queues one flush with no event, so an edit
+// made before the watcher opened is synced too. Run
 // blocks until ctx is cancelled; it releases the lock and returns only
 // after the watcher goroutine it spawned has joined (sync.WaitGroup, D-07)
 // AND any debounce flush already in flight — including its indexer.Sync
@@ -331,8 +331,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 
 	// CR-01 scenario 2 (03-REVIEW.md): the flush callback is wrapped so a
-	// Sync that lost a Pebble LOCK race (a concurrent explore/reconcile had
-	// the store open past graphstore.Open's own bounded in-call retries)
+	// Sync that lost a Pebble LOCK race (another process had the store
+	// open past graphstore.Open's own bounded in-call retries)
 	// re-arms the debouncer instead of being silently terminal. Bounded by
 	// maxFlushLockRequeues (BL-01 lesson: no unbounded loops); the ctx.Err()
 	// gate keeps a cancelled shutdown from scheduling one more timer that
@@ -341,7 +341,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// flush already leaves the .sync-pending sidecar in place on every
 	// failure path, so no verdict is ever persisted under a cancelled ctx.
 	// deb is captured by the closure before any timer can fire: the callback
-	// only runs after an Add, and Adds only start once w.Run is live below.
+	// only runs after an Add, and every Add comes after this assignment, from
+	// w.Run or from the catch-up Add below.
 	var deb *watch.Debouncer
 	var lockRequeues int32
 	deb = watch.NewDebouncer(ctx, watch.DebounceDuration(), func(paths map[string]struct{}) {
@@ -351,7 +352,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 			atomic.StoreInt32(&lockRequeues, 0)
 		case errors.Is(err, graphstore.ErrStoreLocked) && ctx.Err() == nil:
 			if n := atomic.AddInt32(&lockRequeues, 1); n <= maxFlushLockRequeues {
-				deb.Add(flushRetryPath)
+				deb.Add(flushSentinelPath)
 			} else {
 				// IN-03: n counts consecutive lock-lost syncs (1 organic +
 				// maxFlushLockRequeues requeued), and resetting here — not
@@ -378,6 +379,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 		defer close(loopExited)
 		w.Run(ctx, deb)
 	}()
+
+	// The catch-up flush: one sync with no event, which finds each edit made
+	// before the watcher opened. It goes through the debouncer, so it has
+	// the sidecar, the lock requeue and the shutdown join of every other
+	// flush. Keep this Add on Run's own goroutine and before the select
+	// below, so that it always comes before the deb.Stop() that follows
+	// wg.Wait(), even when the watch loop has already exited.
+	deb.Add(flushSentinelPath)
 
 	var runErr error
 	select {

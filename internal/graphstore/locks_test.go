@@ -9,12 +9,10 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
-
-	"github.com/cockroachdb/pebble/v2"
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -146,22 +144,18 @@ func TestReplaceStoreRenamesFirstStore(t *testing.T) {
 }
 
 // requireUsable is the positive assertion of the lock tests: after a
-// failed ReplaceStore, the live store opens on the first attempt, so no
-// lock of the failed call is left in this process.
+// failed ReplaceStore, the swap lock and the Pebble lock of the live store
+// are both free, so no lock of the failed call is left in this process.
 func requireUsable(t *testing.T, live string) {
 	t.Helper()
-	attempts := 0
-	orig := openLockRetrySleep
-	openLockRetrySleep = func(time.Duration) { attempts++ }
-	defer func() { openLockRetrySleep = orig }()
-	s, err := Open(live)
+	swap, err := flock.Open(filepath.Clean(live)+swapLockSuffix, flock.Exclusive)
 	if err != nil {
-		t.Fatalf("Open(%s) after the failed ReplaceStore: %v", live, err)
+		t.Fatalf("the swap lock of %s is not free after the failed ReplaceStore: %v", live, err)
 	}
-	s.Close()
-	if attempts != 0 {
-		t.Fatalf("Open(%s) needed %d retries, want it to succeed on its first attempt", live, attempts)
+	if err := swap.Close(); err != nil {
+		t.Fatalf("releasing the swap lock of %s: %v", live, err)
 	}
+	locktest.HoldStoreLock(t, live)()
 }
 
 func TestReplaceStoreWaitsForOpenHandle(t *testing.T) {
@@ -176,12 +170,8 @@ func TestReplaceStoreWaitsForOpenHandle(t *testing.T) {
 			}
 			return func() { s.Close() }
 		}},
-		{"a raw pebble.Open with no swap lock", func(t *testing.T, live string) func() {
-			db, err := pebble.Open(live, &pebble.Options{Logger: quietLogger{}})
-			if err != nil {
-				t.Fatalf("pebble.Open: %v", err)
-			}
-			return func() { db.Close() }
+		{"the Pebble lock with no swap lock", func(t *testing.T, live string) func() {
+			return locktest.HoldStoreLock(t, live)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

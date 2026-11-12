@@ -301,11 +301,8 @@ func TestWorktreeMismatchCachedPerEngine(t *testing.T) {
 // total — proven here by pointer identity of the returned *Mismatch
 // across two independently-constructed Engines (a private, per-Engine
 // detection would produce an equal-value but distinct-pointer *Mismatch).
-// eng1 is closed before eng2 opens — Pebble holds an exclusive lock per
-// store directory, so two Engines on the SAME store cannot be open
-// simultaneously; this also mirrors internal/mcp's openEngine, which
-// opens and closes a fresh Engine per call rather than holding two open
-// concurrently.
+// eng1 is closed before eng2 opens. This mirrors internal/mcp's
+// openEngine, which opens and closes a fresh Engine per call.
 func TestWorktreeMismatchSharedDetector(t *testing.T) {
 	wt, _ := worktreeMismatchFixture(t)
 

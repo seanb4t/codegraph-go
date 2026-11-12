@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
@@ -198,11 +199,7 @@ func TestPrepareTooManyChanges(t *testing.T) {
 func TestPrepareMainStoreLocked(t *testing.T) {
 	mainRoot, wt := worktreeFixture(t, map[string]string{"base.go": "package wt\n\nfunc Base() {}\n"})
 	writeFiles(t, wt, map[string]string{"only.go": "package wt\n\nfunc OnlyHere() {}\n"})
-	holder, err := graphstore.Open(filepath.Join(mainRoot, indexDirName, storeDirName))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer holder.Close()
+	locktest.HoldStoreLock(t, filepath.Join(mainRoot, indexDirName, storeDirName))
 
 	b, err := Prepare(context.Background(), wt, mainRoot, testLimits)
 	if err != nil {

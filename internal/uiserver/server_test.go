@@ -15,7 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
@@ -333,11 +333,9 @@ func TestUIServerHoldsNoStoreHandleBetweenCalls(t *testing.T) {
 	}
 
 	storeDir := filepath.Join(dir, ".codegraph", "store")
-	store, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("graphstore.Open after two RPC calls: %v — the server is holding a store handle open between calls (SRV-04 violation)", err)
-	}
-	store.Close()
+	// A handle that the server kept open between calls leaves the Pebble
+	// lock held, and the holder then fails the test.
+	locktest.HoldStoreLock(t, storeDir)
 }
 
 func TestUIServiceHoldsNoStoreTypedField(t *testing.T) {

@@ -9,15 +9,19 @@ import (
 )
 
 // isLockHeldOS reports whether err is one of pebble's unix "directory LOCK
-// already held" open-failure forms. Verified against the pinned
-// pebble/v2@v2.1.6 vfs/file_lock_unix.go:
+// already held" open-failure forms. Verified against the pebble/v2 version
+// of go.mod, in vfs/file_lock_unix.go:
 //
 //   - Same-process: pebble's vfs tracks in-process locks in a map and fails
 //     with the literal message "lock held by current process" before ever
 //     touching the filesystem. String-matched — pebble exports no sentinel
 //     for it, so a pebble version bump that rewords the message silently
-//     disables this arm; TestOpenSecondOpenInProcessReturnsErrStoreLocked
-//     (open_lock_test.go) pins it against exactly that.
+//     disables this arm; TestHoldStoreLockExcludesOpen (hold_lock_test.go)
+//     pins it against exactly that. An Open of a store that this process
+//     has open does not reach this arm, because it takes the shared handle
+//     (shared.go). The arm is reached by ReplaceStore under a handle of
+//     this process, by a second open of a staging store, and by an Open
+//     under a lock from pebble.LockDirectory.
 //   - Cross-process: the LOCK file is acquired via a non-blocking
 //     fcntl(F_SETLK); a conflicting holder in another process surfaces as
 //     EAGAIN (EWOULDBLOCK == EAGAIN on linux/darwin; matched separately for

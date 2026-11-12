@@ -51,10 +51,8 @@ func storeDirIdentity(t *testing.T, storeDir string) os.FileInfo {
 }
 
 // readGenerationThroughHandle reads Meta.CoverageGeneration through an
-// ALREADY-OPEN GraphStore handle, rather than opening a fresh one — a
-// second concurrent graphstore.Open against the same directory would
-// itself collide with the held lock this test relies on, so the read
-// must go through the handle the test is already holding.
+// ALREADY-OPEN GraphStore handle, rather than opening a fresh one: the
+// read then comes from the store that the test holds.
 func readGenerationThroughHandle(t *testing.T, store graphstore.GraphStore) int64 {
 	t.Helper()
 

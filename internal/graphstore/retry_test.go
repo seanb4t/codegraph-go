@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -11,12 +12,28 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
+// setRetrySleep replaces the backoff of retryLocked with sleep for the
+// test. It is the one place that swaps the openLockRetrySleep seam.
+func setRetrySleep(t *testing.T, sleep func()) {
+	t.Helper()
+	orig := openLockRetrySleep
+	openLockRetrySleep = func(time.Duration) { sleep() }
+	t.Cleanup(func() { openLockRetrySleep = orig })
+}
+
 // noRetrySleep makes retryLocked's backoff return at once for the test.
 func noRetrySleep(t *testing.T) {
 	t.Helper()
-	orig := openLockRetrySleep
-	openLockRetrySleep = func(time.Duration) {}
-	t.Cleanup(func() { openLockRetrySleep = orig })
+	setRetrySleep(t, func() {})
+}
+
+// countRetrySleeps makes retryLocked's backoff return at once for the test,
+// like noRetrySleep, and returns the number of sleeps so far.
+func countRetrySleeps(t *testing.T) *atomic.Int64 {
+	t.Helper()
+	var sleeps atomic.Int64
+	setRetrySleep(t, func() { sleeps.Add(1) })
+	return &sleeps
 }
 
 // TestLockRetryClassifies checks that each classifier turns only the

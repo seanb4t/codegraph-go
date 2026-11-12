@@ -34,6 +34,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
@@ -100,11 +101,7 @@ func TestStatusDegradesOnLock(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
-	t.Cleanup(func() { holder.Close() })
+	locktest.HoldStoreLock(t, storeDir)
 
 	srv := startedServer(t, dir)
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
@@ -283,10 +280,7 @@ func TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
+	releaseHolder := locktest.HoldStoreLock(t, storeDir)
 
 	release := make(chan struct{})
 	var once sync.Once
@@ -297,10 +291,11 @@ func TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget(t *testing.T) {
 	}
 	t.Cleanup(func() { openEngine = orig })
 
-	closeErr := make(chan error, 1)
+	released := make(chan struct{})
 	go func() {
 		<-release
-		closeErr <- holder.Close()
+		releaseHolder()
+		close(released)
 	}()
 
 	srv := startedServer(t, dir)
@@ -314,9 +309,7 @@ func TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget(t *testing.T) {
 		})
 	}
 
-	if err := <-closeErr; err != nil {
-		t.Fatalf("holder Close: %v", err)
-	}
+	<-released
 }
 
 // indexingInProgressDetail extracts and unmarshals the *uiv1.IndexingInProgress
@@ -355,11 +348,7 @@ func TestNonStatusRPCsDegradeWhenAHolderNeverReleases(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
-	t.Cleanup(func() { holder.Close() })
+	locktest.HoldStoreLock(t, storeDir)
 
 	srv := startedServer(t, dir)
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
@@ -393,11 +382,7 @@ func TestDegradedRPCOpensTheStoreExactlyOnce(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
-	t.Cleanup(func() { holder.Close() })
+	locktest.HoldStoreLock(t, storeDir)
 
 	// The counting wrapper is installed AFTER startedServer, not
 	// before: Listen (06-04) now ALSO opens the engine once, via the
@@ -420,7 +405,7 @@ func TestDegradedRPCOpensTheStoreExactlyOnce(t *testing.T) {
 
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
 
-	_, err = client.Search(context.Background(), connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))
+	_, err := client.Search(context.Background(), connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))
 	if err == nil {
 		t.Fatal("Search succeeded while the store was locked past the retry budget, want a degrade")
 	}
@@ -465,11 +450,7 @@ func TestDegradeIsIdempotent(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
-	t.Cleanup(func() { holder.Close() })
+	locktest.HoldStoreLock(t, storeDir)
 
 	srv := startedServer(t, dir)
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
@@ -517,12 +498,12 @@ func TestDegradeIsIdempotent(t *testing.T) {
 // and independent short-lived UI opens can legitimately reacquire
 // between a holder's own attempts.
 //
-// The one direct Open call below either succeeds immediately or reveals
-// a retained handle: a uiService caching a handle across calls would
-// leave the lock held even after every RPC has returned, and this Open
-// would then need retries or fail outright. No wall-clock assertion is
-// made anywhere in this test — the property is proven by the STRUCTURAL
-// absence of contention at the moment Open is attempted, not by timing
+// The one holder below either takes the Pebble lock immediately or
+// reveals a retained handle: a uiService caching a handle across calls
+// would leave the lock held even after every RPC has returned, and the
+// holder would then fail the test. No wall-clock assertion is made
+// anywhere in this test — the property is proven by the STRUCTURAL
+// absence of contention at the moment the lock is taken, not by timing
 // how fast it returns.
 func TestAHolderAcquiresTheStoreAfterConcurrentRPCsComplete(t *testing.T) {
 	dir := copyGofixture(t)
@@ -551,11 +532,9 @@ func TestAHolderAcquiresTheStoreAfterConcurrentRPCsComplete(t *testing.T) {
 		}
 	}
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("holder Open after every concurrent RPC completed: %v — a retained handle would leave the lock held here", err)
-	}
-	defer holder.Close()
+	// A handle that the server kept open leaves the Pebble lock held, and
+	// the holder then fails the test.
+	locktest.HoldStoreLock(t, storeDir)
 }
 
 // captureDiagWriter redirects this package's diagnostic sink into a

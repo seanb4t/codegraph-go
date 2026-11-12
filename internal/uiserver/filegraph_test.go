@@ -12,7 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
@@ -205,16 +205,12 @@ func TestFileGraphDoesNotDegrade(t *testing.T) {
 	indexGofixture(t, dir)
 	storeDir := filepath.Join(dir, ".codegraph", "store")
 
-	holder, err := graphstore.Open(storeDir)
-	if err != nil {
-		t.Fatalf("acquire holder graphstore.Open: %v", err)
-	}
-	t.Cleanup(func() { holder.Close() })
+	locktest.HoldStoreLock(t, storeDir)
 
 	srv := startedServer(t, dir)
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
 
-	_, err = client.FileGraph(context.Background(), connect.NewRequest(&uiv1.FileGraphRequest{}))
+	_, err := client.FileGraph(context.Background(), connect.NewRequest(&uiv1.FileGraphRequest{}))
 	if err == nil {
 		t.Fatal("FileGraph while the store is locked past the retry budget succeeded, want an error (FileGraph must not degrade-and-answer)")
 	}

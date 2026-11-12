@@ -1,20 +1,18 @@
 # WATCH-01: a file written while a `serve --mcp` session is live reaches
-# codegraph_explore with no manual sync, and no explore call fails during
-# the flush. This is also CR-01's regression anchor: the explores run
-# back to back, so their store opens collide with the flush's open on
-# Pebble's exclusive LOCK. The burst of 26 files keeps the sync holding
-# the LOCK long enough to collide. Without bounded lock retries in
-# graphstore.Open and the daemon's flush requeue, either an explore gets a
-# lock error or the flush loses the race and Zeta never appears.
-# CODEGRAPH_DEBOUNCE_MS=100 makes the flush fire within a CI-friendly time.
-# The files wait in $WORK/live, outside the watched tree, until mcpclient
-# copies them in after the handshake.
+# codegraph_explore with no manual sync and no second edit, and no explore
+# call fails while a sync of the server has the store open. The explores
+# run back to back, so their store opens overlap the sync. The burst of 26
+# files keeps the sync open long enough to overlap. The client writes the
+# files one time: the watcher can open after the copy, and the server must
+# still sync them. CODEGRAPH_DEBOUNCE_MS=100 makes the flush fire within a
+# CI-friendly time. The files wait in $WORK/live, outside the watched tree,
+# until mcpclient copies them in after the handshake.
 
 fixture repo
 exec codegraph init $WORK/repo
 cd repo
 env CODEGRAPH_DEBOUNCE_MS=100
-exec mcpclient live-edit -from $WORK/live -to $WORK/repo/pkga -touch zeta.go -query Zeta -want 'func Zeta'
+exec mcpclient live-edit -from $WORK/live -to $WORK/repo/pkga -query Zeta -want 'func Zeta'
 stdout 'func Zeta'
 
 -- live/zeta.go --
