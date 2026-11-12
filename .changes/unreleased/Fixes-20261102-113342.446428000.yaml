@@ -1,3 +1,0 @@
-kind: Fixes
-body: The file watcher adds a directory on any event that names it, because the create event of a directory moved into a watched one does not always arrive on an overlay filesystem.
-time: 2026-11-02T11:33:42.446428-05:00
