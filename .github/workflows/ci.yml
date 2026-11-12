@@ -186,6 +186,12 @@ jobs:
       - name: CLI reference drift guard (DOCS-05)
         run: task docs:cli:drift
 
+      # The committed THIRD_PARTY_NOTICES.txt still matches the Go modules
+      # in go.mod and the packages in web/build/, and go-licenses finds a
+      # license for every library.
+      - name: Third-party notices drift guard
+        run: task licenses:drift
+
       - name: Semantic accuracy evaluation
         run: task eval:semantic
 

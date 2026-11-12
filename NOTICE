@@ -28,6 +28,11 @@ Copyright (c) 2026 Colby Mchenry
 
 ## Third-party dependencies
 
+`THIRD_PARTY_NOTICES.txt` holds the license text of every Go module linked into
+the binary and of every package in the embedded graph UI. It ships in each
+release `.zip` and as the release asset
+`codegraph_<tag>_THIRD_PARTY_NOTICES.txt`. `task licenses:notices` writes it.
+
 Build-time and runtime dependencies are enumerated in `go.mod`, and a complete
 SBOM (SPDX) is published as a release asset for every platform binary. To
 inspect the exact dependency set compiled into a given release:

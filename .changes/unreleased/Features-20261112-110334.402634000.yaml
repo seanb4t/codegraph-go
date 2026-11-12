@@ -1,0 +1,3 @@
+kind: Features
+body: Each release ships THIRD_PARTY_NOTICES.txt, the license text of every bundled Go module and UI package, in the zip, as a release asset and in the graph UI at /THIRD_PARTY_NOTICES.txt.
+time: 2026-11-12T11:03:34.402634-05:00

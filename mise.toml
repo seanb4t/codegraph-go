@@ -12,6 +12,8 @@ task = "3.52.0"
 goreleaser = "2.17.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 changie = "1.26.0"
+# Collects the license text of every Go module in the binary for THIRD_PARTY_NOTICES.md.
+"go:github.com/google/go-licenses/v2" = "2.0.1"
 golangci-lint = "2.13.2"
 # Runs the Go tests with JUnit output and the slowest-test report; never with --rerun-fails.
 gotestsum = "1.13.0"

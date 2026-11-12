@@ -2,6 +2,8 @@
 import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { readFileSync } from 'node:fs';
+import license, { type Dependency } from 'rollup-plugin-license';
 import { defineConfig } from 'vite';
 
 // NOTE (deviation from 02-01-PLAN.md's file list, recorded in the plan's
@@ -12,6 +14,60 @@ import { defineConfig } from 'vite';
 // svelte.config.js to author; this file is both the Vite config and the
 // SvelteKit config (confirmed against sveltejs/kit's own current docs and
 // by this project's own `pnpm build`, verified below).
+// app.css imports these packages as CSS, so the bundler's module graph
+// (which rollup-plugin-license reads) never lists them, but their bytes
+// ship in the built stylesheet and font files.
+const cssOnlyPackages = ['@fontsource-variable/inter', 'tailwindcss', 'tw-animate-css'];
+
+type Notice = { name: string; version: string; license: string; source: string; text: string };
+
+function cssOnlyNotice(name: string): Notice {
+	const dir = new URL(`./node_modules/${name}/`, import.meta.url);
+	const pkg = JSON.parse(readFileSync(new URL('package.json', dir), 'utf8'));
+	const repo = typeof pkg.repository === 'string' ? pkg.repository : (pkg.repository?.url ?? '');
+	return {
+		name,
+		version: pkg.version,
+		license: pkg.license ?? '',
+		source: repo,
+		text: readFileSync(new URL('LICENSE', dir), 'utf8')
+	};
+}
+
+// Renders one sorted entry per package. A package with neither a license
+// identifier nor a license text fails the build: an entry that says
+// nothing is worse than no file.
+function thirdPartyNotices(dependencies: Dependency[]): string {
+	const notices: Notice[] = [
+		...dependencies.map((d) => ({
+			name: d.name ?? '',
+			version: d.version ?? '',
+			license: d.license ?? '',
+			source: (typeof d.repository === 'string' ? d.repository : d.repository?.url) ?? d.homepage ?? '',
+			text: d.licenseText ?? ''
+		})),
+		...cssOnlyPackages.map(cssOnlyNotice)
+	].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	for (const n of notices) {
+		if (!n.name || (!n.license && !n.text.trim())) {
+			throw new Error(`third-party notices: package "${n.name}" has no license identifier and no license text`);
+		}
+	}
+	return notices
+		.map((n) =>
+			[
+				`Name: ${n.name}`,
+				`Version: ${n.version}`,
+				`License: ${n.license || 'see the text below'}`,
+				`Source: ${n.source}`,
+				'',
+				n.text.trim() || `No license text ships in this package. See ${n.source}.`
+			].join('\n')
+		)
+		.join('\n\n----------------------------------------\n\n')
+		.concat('\n');
+}
+
 export default defineConfig({
 	plugins: [
 		// Tailwind v4 (D-17) wires in as a Vite plugin, not PostCSS — no
@@ -67,7 +123,23 @@ export default defineConfig({
 				precompress: false,
 				strict: false
 			})
-		})
+		}),
+		// Writes the license of every package in the client bundle into the
+		// client output, so adapter-static copies it into build/ and the
+		// binary embeds it beside the code it covers (#289). The server
+		// build is skipped: nothing from it ships.
+		{
+			...license({
+				thirdParty: {
+					includePrivate: false,
+					output: {
+						file: '.svelte-kit/output/client/THIRD_PARTY_NOTICES.txt',
+						template: thirdPartyNotices
+					}
+				}
+			}),
+			apply: (_config, env) => !env.isSsrBuild
+		}
 	],
 
 	// DEVIATION (03-01-PLAN.md Task 2 step (c), recorded in the SUMMARY):

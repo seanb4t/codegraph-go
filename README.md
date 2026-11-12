@@ -189,6 +189,9 @@ The reason this is one static binary rather than a bundled runtime:
   `actions/attest-build-provenance`, published through GitHub's Attestations
   API, verifiable with `gh attestation verify`.
 - **SBOM** — SPDX per platform, published as a release asset.
+- **License notices** — `THIRD_PARTY_NOTICES.txt` holds the license text of every
+  Go module and UI package in the binary. It ships in each `.zip` and as a
+  release asset, and CI fails when it is stale.
 - **Reproducible** — CI rebuilds every release binary and fails on a hash diff.
 - **Scanned** — `govulncheck` gates every merge.
 
