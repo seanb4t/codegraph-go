@@ -302,6 +302,48 @@ func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
 	}
 }
 
+// TestOpenEnginePathSymlinkCannotLeaveRepoRoot holds issue #297: a symlink
+// inside the repo root that points at another indexed project reads as a
+// path inside the root, so a comparison of path text accepts it and the
+// call opens the other project's index. The in-repo symlink case is the
+// control: resolving symlinks must not reject a link that stays inside.
+func TestOpenEnginePathSymlinkCannotLeaveRepoRoot(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := copyFixture(t)
+	indexFixture(t, outside)
+
+	escape := filepath.Join(dir, "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatalf("symlink to the other project: %v", err)
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	inside := filepath.Join(dir, "inside")
+	if err := os.Symlink(sub, inside); err != nil {
+		t.Fatalf("symlink inside the repo: %v", err)
+	}
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+
+	for _, path := range []string{escape, filepath.Join(escape, "not-there-yet")} {
+		result := callTool(t, s, "codegraph_status", map[string]any{"path": path})
+		if !result.IsError {
+			t.Fatalf("codegraph_status with path %q, which leads to another indexed project: expected an error result, got success", path)
+		}
+		if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+			t.Fatalf("codegraph_status error for %q = %q, want the outside-the-repo-root message", path, text)
+		}
+	}
+
+	if result := callTool(t, s, "codegraph_status", map[string]any{"path": inside}); result.IsError {
+		t.Fatalf("a symlink that stays inside the repo root was rejected: %q", resultText(t, result))
+	}
+}
+
 // TestConfinementAnchoredOnRepoRootNotStartPath is WR-02's required test
 // (02-REVIEW-2.md): CR-01 split openEngine's single confinement parameter
 // into two adjacent, same-typed strings (defaultPath/startPath and
