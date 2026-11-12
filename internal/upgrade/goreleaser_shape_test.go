@@ -1278,7 +1278,7 @@ func TestHomebrewCaskHooksHaveStructuralProperties(t *testing.T) {
 }
 
 // goreleaserArchivesRawTopLevel mirrors the top-level archives: sequence as
-// raw maps — used only by TestHomebrewCaskArchivesHaveNoFilesKey, which
+// raw maps — used only by TestZipArchiveFileSetIsExact, which
 // needs to detect the PRESENCE of a files: key; the typed goreleaserArchive
 // struct earlier in this file has no Files field and would silently drop
 // it on decode, making that presence check impossible.
@@ -1319,21 +1319,51 @@ func TestParseGoreleaserArchivesRaw_NoArchivesBlockIsError(t *testing.T) {
 	}
 }
 
-// TestHomebrewCaskArchivesHaveNoFilesKey holds D-16: no archives: entry
-// declares a files: key — a future attempt to ship completions or man
-// pages inside the zip (or raw) archive must turn this test red instead
-// of quietly creating a second, staler source alongside the install-time
-// generation this phase relies on.
-func TestHomebrewCaskArchivesHaveNoFilesKey(t *testing.T) {
+// TestZipArchiveFileSetIsExact holds D-16 and issue #289: the zip archive
+// ships exactly the license and documentation files named here beside the
+// binary, and the raw archive declares no files: key. A future attempt to
+// ship completions or man pages inside an archive must turn this test red
+// instead of quietly creating a second, staler source alongside the
+// install-time generation the Homebrew cask relies on. Dropping
+// THIRD_PARTY_NOTICES.txt or NOTICE must turn it red too, because the
+// licenses of the bundled dependencies require them beside the binary.
+func TestZipArchiveFileSetIsExact(t *testing.T) {
 	data, err := os.ReadFile(goreleaserConfigPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
 	}
-	archives := mustGoreleaserArchivesRaw(t, string(data))
-	for _, a := range archives {
+	want := []string{"CHANGELOG.md", "LICENSE", "NOTICE", "README.md", "THIRD_PARTY_NOTICES.txt"}
+	sawZip := false
+	for _, a := range mustGoreleaserArchivesRaw(t, string(data)) {
 		id, _ := a["id"].(string)
-		if _, ok := a["files"]; ok {
-			t.Errorf("archives[id=%s] declares a files: key — completions/man pages must be generated at install time (BREW-03/BREW-04), never shipped inside the archive", id)
+		files, hasFiles := a["files"]
+		if id != "zip" {
+			if hasFiles {
+				t.Errorf("archives[id=%s] declares a files: key — only the zip archive ships files beside the binary", id)
+			}
+			continue
 		}
+		sawZip = true
+		list, _ := files.([]any)
+		got := make([]string, 0, len(list))
+		for _, f := range list {
+			name, ok := f.(string)
+			if !ok {
+				t.Fatalf("archives[id=zip].files has a non-string entry %v — an object entry can rename or glob files past this assertion", f)
+			}
+			got = append(got, name)
+		}
+		sort.Strings(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("archives[id=zip].files = %v, want exactly %v", got, want)
+		}
+		for _, name := range want {
+			if _, err := os.Stat("../../" + name); err != nil {
+				t.Errorf("archives[id=zip].files names %s, which is not at the repository root: %v", name, err)
+			}
+		}
+	}
+	if !sawZip {
+		t.Fatalf("no archives: entry has id zip")
 	}
 }

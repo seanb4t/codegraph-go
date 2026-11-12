@@ -156,17 +156,22 @@ archives:
       - codegraph-darwin-amd64
       - codegraph-darwin-arm64
     formats: [zip]
-    # Same stem as the `raw` entry plus `.zip` (D-15). No `files:`
-    # override — relies on GoReleaser v2.17.1's actual default archive
-    # file set: the binary plus LICENSE*, README* AND CHANGELOG*
-    # (internal/pipe/archive/archive.go:83-91 in the pinned module; this
-    # repo has a real CHANGELOG.md at the root, so it is included). D-16's
-    # binding requirement is that shell completions and man pages stay
-    # OUT of this zip, because BREW-03/BREW-04 generate those from the
-    # binary at Homebrew cask-build time and shipping them here would
-    # create a second, staler source — NOT that the file set is limited
-    # to exactly "binary + LICENSE + README" (that description was
-    # incomplete; see cycle-3 review, Codex Plan-02 MEDIUM).
+    # Same stem as the `raw` entry plus `.zip` (D-15). `files:` names the
+    # whole file set beside the binary: the three files GoReleaser's
+    # default set already shipped (LICENSE, README.md, CHANGELOG.md), plus
+    # NOTICE and THIRD_PARTY_NOTICES.txt, which the licenses of the
+    # bundled dependencies require beside a binary (#289). D-16's binding
+    # requirement is that shell completions and man pages stay OUT of this
+    # zip, because BREW-03/BREW-04 generate those from the binary at
+    # Homebrew cask-build time and shipping them here would create a
+    # second, staler source. TestZipArchiveFileSetIsExact holds the exact
+    # set, so an addition is a deliberate decision.
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - NOTICE
+      - THIRD_PARTY_NOTICES.txt
     name_template: >-
       {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
 
@@ -406,6 +411,12 @@ release:
   # case: `auto` marks a release as a prerelease when the tag contains a
   # prerelease identifier, the same rule expressed declaratively.
   prerelease: auto
+  # The raw binaries ship with no file beside them, so the license notices
+  # are also a release asset of their own (#289). The checksum: pipe does
+  # not cover it: its ids: list names the eight payloads only.
+  extra_files:
+    - glob: ./THIRD_PARTY_NOTICES.txt
+      name_template: "{{ .ProjectName }}_{{ .Tag }}_THIRD_PARTY_NOTICES.txt"
   # No name_template/header/footer/draft/disable key: the changie chain
   # pushes the tag first (release-tag.yml); GoReleaser then creates the
   # GitHub Release, with .changes/${TAG}.md passed as its release notes

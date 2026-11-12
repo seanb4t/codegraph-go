@@ -1276,6 +1276,53 @@ tasks:
 
         echo "web:components:drift: PASS — all ${nfiles} vendored component files across ${ncomponents} components byte-identical to shadcn-svelte@1.5.1's regeneration (scratch tree only — source tree untouched)"
 
+  licenses:notices:
+    desc: >-
+      Writes THIRD_PARTY_NOTICES.txt, the license text of every Go module in
+      the binary and of every package in the embedded graph UI (#289).
+      go-licenses reports the Go libraries once per release platform, because
+      a platform can link a module that the others do not.
+      scripts/third_party_notices.py groups them by license text and appends
+      web/build/THIRD_PARTY_NOTICES.txt, which `task web:build` writes. Run
+      this after a change to go.mod or after `task web:build`, and commit the
+      result. The release zip and the release assets carry the committed file.
+    vars:
+      NOTICES_ARGS: '{{.NOTICES_ARGS | default ""}}'
+    preconditions:
+      - sh: command -v go-licenses && command -v uv
+        msg: "go-licenses or uv not on PATH — run `mise install`."
+      - sh: test -s web/build/THIRD_PARTY_NOTICES.txt
+        msg: "web/build/THIRD_PARTY_NOTICES.txt is missing or empty — run `task web:build`."
+    cmds:
+      - |
+        set -euo pipefail
+        tpl=$(mktemp)
+        rows=$(mktemp)
+        log=$(mktemp)
+        trap 'rm -f "${tpl}" "${rows}" "${log}"' EXIT
+        printf '{{"{{"}}range .{{"}}"}}{{"{{"}}.Name{{"}}"}}\t{{"{{"}}.Version{{"}}"}}\t{{"{{"}}.LicenseName{{"}}"}}\t{{"{{"}}.LicensePath{{"}}"}}\n{{"{{"}}end{{"}}"}}' > "${tpl}"
+        for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}" GOARCH="${pair#*/}" CGO_ENABLED=1 \
+            go-licenses report ./cmd/codegraph --template "${tpl}" 2>"${log}" >> "${rows}" || {
+              cat "${log}" >&2
+              echo "::error::licenses:notices: go-licenses failed for ${pair}"
+              exit 1
+            }
+        done
+        uv run --no-project python -I scripts/third_party_notices.py \
+          --web web/build/THIRD_PARTY_NOTICES.txt --out THIRD_PARTY_NOTICES.txt {{.NOTICES_ARGS}} < "${rows}"
+
+  licenses:drift:
+    desc: >-
+      Fails when the committed THIRD_PARTY_NOTICES.txt differs from what
+      `task licenses:notices` writes now, and prints how many Go libraries it
+      compared. It also fails when go-licenses finds a library with no
+      license. Writes nothing.
+    cmds:
+      - task: licenses:notices
+        vars:
+          NOTICES_ARGS: --check
+
   vuln:
     desc: >-
       ADVISORY (VULN-01/VULN-03): finds the mise-installed Go tool binaries
@@ -1522,9 +1569,10 @@ tasks:
 
   check:ci-scripts:
     desc: >-
-      Offline guard for the advisory vuln report loop and the PR-template
-      policy: runs tests/test_vuln_report.py and
-      tests/test_pr_template_policy.py (stdlib unittest over literal inputs,
+      Offline guard for the advisory vuln report loop, the PR-template
+      policy and the third-party notices writer: runs
+      tests/test_vuln_report.py, tests/test_pr_template_policy.py and
+      tests/test_third_party_notices.py (stdlib unittest over literal inputs,
       never gh, mise, go or a workflow). Each file passes only when unittest's
       executed count equals its number of `def test_` methods, that count
       meets the file's floor, and the result line is exactly OK (rule
@@ -1537,7 +1585,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        for spec in test_vuln_report.py:20 test_pr_template_policy.py:14; do
+        for spec in test_vuln_report.py:20 test_pr_template_policy.py:14 test_third_party_notices.py:8; do
           file="${spec%%:*}"
           floor="${spec##*:}"
           defined=$({ grep -oE '^    def test_[A-Za-z0-9_]+' "tests/${file}" || true; } | wc -l | tr -d ' ')
