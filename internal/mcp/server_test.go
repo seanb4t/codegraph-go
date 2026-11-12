@@ -302,6 +302,125 @@ func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
 	}
 }
 
+// TestOpenEnginePathSymlinkCannotLeaveRepoRoot holds issue #297: a symlink
+// inside the repo root that points at another indexed project reads as a
+// path inside the root, so a comparison of path text accepts it and the
+// call opens the other project's index. The in-repo symlink case is the
+// control: resolving symlinks must not reject a link that stays inside.
+func TestOpenEnginePathSymlinkCannotLeaveRepoRoot(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := copyFixture(t)
+	indexFixture(t, outside)
+
+	escape := filepath.Join(dir, "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatalf("symlink to the other project: %v", err)
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	inside := filepath.Join(dir, "inside")
+	if err := os.Symlink(sub, inside); err != nil {
+		t.Fatalf("symlink inside the repo: %v", err)
+	}
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+
+	for _, path := range []string{escape, filepath.Join(escape, "not-there-yet")} {
+		result := callTool(t, s, "codegraph_status", map[string]any{"path": path})
+		if !result.IsError {
+			t.Fatalf("codegraph_status with path %q, which leads to another indexed project: expected an error result, got success", path)
+		}
+		if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+			t.Fatalf("codegraph_status error for %q = %q, want the outside-the-repo-root message", path, text)
+		}
+	}
+
+	if result := callTool(t, s, "codegraph_status", map[string]any{"path": inside}); result.IsError {
+		t.Fatalf("a symlink that stays inside the repo root was rejected: %q", resultText(t, result))
+	}
+}
+
+// TestOpenEngineIndexSymlinkCannotLeaveRepoRoot holds the second half of
+// the path confinement in issue #297: the path can be a real directory
+// inside the repo root while the .codegraph in it is a symlink to another
+// project's index, and that index is what the call would open. The
+// control is a .codegraph symlink that leads to an index inside the root.
+func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := copyFixture(t)
+	indexFixture(t, outside)
+
+	link := func(name, target string) string {
+		t.Helper()
+		sub := filepath.Join(dir, name)
+		if err := os.Mkdir(sub, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		if err := os.Symlink(filepath.Join(target, ".codegraph"), filepath.Join(sub, ".codegraph")); err != nil {
+			t.Fatalf("symlink the index of %s: %v", name, err)
+		}
+		return sub
+	}
+	borrowed := link("borrowed", outside)
+	own := link("own", dir)
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+
+	for _, path := range []string{borrowed, filepath.Join(borrowed, "deeper")} {
+		result := callTool(t, s, "codegraph_status", map[string]any{"path": path})
+		if !result.IsError {
+			t.Fatalf("codegraph_status with path %q, whose index is another project's: expected an error result, got success", path)
+		}
+		if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+			t.Fatalf("codegraph_status error for %q = %q, want the outside-the-repo-root message", path, text)
+		}
+	}
+
+	if result := callTool(t, s, "codegraph_status", map[string]any{"path": own}); result.IsError {
+		t.Fatalf("an index symlink that stays inside the repo root was rejected: %q", resultText(t, result))
+	}
+}
+
+// TestOpenEngineIndexSymlinkToStorelessDirIsRejected covers a .codegraph
+// symlink that leads to an outside directory with no store in it. The
+// resolver accepts any .codegraph that is a directory, and the open would
+// then create a store in that outside directory.
+func TestOpenEngineIndexSymlinkToStorelessDirIsRejected(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(sub, ".codegraph")); err != nil {
+		t.Fatalf("symlink the index: %v", err)
+	}
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+	result := callTool(t, s, "codegraph_status", map[string]any{"path": sub})
+	if !result.IsError {
+		t.Fatal("codegraph_status through a .codegraph symlink to an outside directory: expected an error result, got success")
+	}
+	if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+		t.Fatalf("error = %q, want the outside-the-repo-root message", text)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatalf("read the outside directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("the call wrote %d entries into the outside directory, want none", len(entries))
+	}
+}
+
 // TestConfinementAnchoredOnRepoRootNotStartPath is WR-02's required test
 // (02-REVIEW-2.md): CR-01 split openEngine's single confinement parameter
 // into two adjacent, same-typed strings (defaultPath/startPath and

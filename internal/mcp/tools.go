@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -39,11 +41,90 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(repoAbs, pathAbs)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if !isWithin(repoAbs, pathAbs) {
 		return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root", path)
 	}
+
+	// The comparison above reads the path as text. A symlink inside the
+	// repo root that points at another indexed project passes it, and
+	// query.OpenAt would then open that project's index. Compare again
+	// where the two paths really are.
+	repoReal, err := resolveExistingPrefix(repoAbs)
+	if err != nil {
+		return "", err
+	}
+	pathReal, err := resolveExistingPrefix(pathAbs)
+	if err != nil {
+		return "", err
+	}
+	if !isWithin(repoReal, pathReal) {
+		return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root", path)
+	}
+
+	// query.OpenAt walks up from the path and opens the first .codegraph
+	// it meets, so the directory that is opened is not the path that was
+	// checked. A .codegraph below the repo root that is a symlink to
+	// another project's index would be opened from a path that is itself
+	// inside the root. The repo root's own .codegraph is the one the
+	// server was started on and is not checked here.
+	for dir := pathAbs; dir != repoAbs && isWithin(repoAbs, dir); dir = filepath.Dir(dir) {
+		// The resolver accepts a .codegraph that is a directory after
+		// symlinks, whether or not it holds a store yet, and the open
+		// then creates the store. Check the directory first, and then
+		// the store, which can be a symlink of its own.
+		index := filepath.Join(dir, indexDirName)
+		indexReal, err := filepath.EvalSymlinks(index)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		storeReal, err := resolveExistingPrefix(filepath.Join(index, indexStoreSubdir))
+		if err != nil {
+			return "", err
+		}
+		if !isWithin(repoReal, indexReal) || !isWithin(repoReal, storeReal) {
+			return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: the index at %q leads outside it", path, index)
+		}
+	}
 	return pathAbs, nil
+}
+
+// The index directory and its store, as internal/query lays them out.
+const (
+	indexDirName     = ".codegraph"
+	indexStoreSubdir = "store"
+)
+
+// isWithin reports whether path is root itself or a descendant of it. Both
+// must be absolute.
+func isWithin(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolveExistingPrefix resolves the symlinks of the longest part of abs
+// that exists and joins the rest back on. A path that does not exist yet
+// has no symlinks of its own to resolve, but a directory above it can be
+// one.
+func resolveExistingPrefix(abs string) (string, error) {
+	rest := ""
+	for p := abs; ; {
+		real, err := filepath.EvalSymlinks(p)
+		if err == nil {
+			return filepath.Join(real, rest), nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return abs, nil
+		}
+		rest = filepath.Join(filepath.Base(p), rest)
+		p = parent
+	}
 }
 
 // openEngine is every handler's single read seam: it resolves argPath
