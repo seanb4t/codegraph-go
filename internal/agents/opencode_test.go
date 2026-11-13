@@ -75,6 +75,28 @@ func TestOpencode_ConfigDirResolution_FallsBackToDotConfigWhenXDGUnset(t *testin
 	}
 }
 
+// TestOpencode_UnparseableConfigIsRefusedAndLeftAlone is issue #292 for
+// the one target that does not write through writeMcpEntry: a config that
+// hujson cannot parse fell back to an empty object, and the write then
+// replaced the user's whole file with the one codegraph entry. A comment
+// and a trailing comma are valid JSONC and are covered by the test below.
+func TestOpencode_UnparseableConfigIsRefusedAndLeftAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opencode.json")
+	content := `{"mcp": {"other-server": {"type": "local", "command": ["other"]}}`
+	writeFile(t, path, content)
+
+	_, err := writeOpencodeEntry(path, "/usr/local/bin/codegraph")
+	if err == nil {
+		t.Fatal("writeOpencodeEntry: want an error for an existing file that does not parse, got nil")
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("error %q does not name the file %s", err, path)
+	}
+	if got := readFile(t, path); got != content {
+		t.Errorf("the file changed.\n got: %q\nwant: %q", got, content)
+	}
+}
+
 func TestOpencode_GlobalInstall_PreservesComments_ThenIdempotentReRun(t *testing.T) {
 	home := fakeHome(t)
 	configPath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")

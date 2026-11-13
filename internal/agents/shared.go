@@ -44,10 +44,10 @@ func recordAction(result *WriteResult, path string, action FileAction, err error
 // than "file does not exist" (e.g. a permission failure) is surfaced to
 // the caller alongside the empty-map fallback.
 //
-// This permissive fallback remains the deliberate posture for every
-// caller except claudeSettingsPath's two AutoAllow steps: writeMcpEntry/
-// removeMcpEntry (operating on .mcp.json and ~/.claude.json), plus every
-// other agent target's config path across the other seven agents. Only
+// This permissive fallback is for callers that only read, and for
+// removeMcpEntry, which writes nothing when it finds no codegraph entry.
+// writeMcpEntry does not use it: a write that follows an empty-map
+// fallback replaces the user's file (#292). Of the AutoAllow steps, only
 // addClaudeAllowPermission and removeClaudeAllowPermission moved to
 // readJSONFileStrict (Plan 02 Task 3), because — and only because —
 // claudeSettingsPath(loc) is also where Plan 01's writeHookEntry/
@@ -170,6 +170,22 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 		out = map[string]any{}
 	}
 	return out, true, nil
+}
+
+// readJSONFileForWrite is the read half of a read-modify-write of a file
+// the user owns. A missing file and a file with no content both give an
+// empty map: nothing is lost when either is written. Any other content
+// that is not a JSON object is an error, so the caller writes nothing.
+func readJSONFileForWrite(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("could not read existing file: %w", err)
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return map[string]any{}, nil
+	}
+	existing, _, err := readJSONFileStrict(path)
+	return existing, err
 }
 
 // blockOwnsAnyCommand reports whether block's own hooks[] sub-array
@@ -595,8 +611,13 @@ func removeSkillDirIfEmpty(dir string) error {
 // differs from what's already there — every sibling key under both the
 // top level and mcpServers is preserved untouched (D-07). Reports
 // created/updated/unchanged accordingly.
+//
+// An existing file that is not valid JSON is refused and left as it is
+// (#292). readJSONFile would hand back an empty map for it, and the write
+// below would then replace the user's whole file with the one codegraph
+// entry.
 func writeMcpEntry(path string, buildEntry func() any) (FileResult, error) {
-	existing, err := readJSONFile(path)
+	existing, err := readJSONFileForWrite(path)
 	if err != nil {
 		return FileResult{}, err
 	}
