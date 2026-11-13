@@ -236,6 +236,68 @@ func TestSyncPartialTypeMatchesIndex(t *testing.T) {
 	}
 }
 
+// TestSyncCountsAnOverloadSetOnceWhenItsFileGoes pins the node count of a
+// sync that removes an overload set which changed from one file to
+// several. The set is stored first with the path of its one file, so that
+// file's index names it. A later sync stores it with no path, and the
+// entry in the file index stays. When the file goes, the prune of the file
+// and the removal of sets that no file declares both reach the set. The
+// sync must count the node once.
+func TestSyncCountsAnOverloadSetOnceWhenItsFileGoes(t *testing.T) {
+	part := func(iface string, methods ...string) string {
+		var b strings.Builder
+		fmt.Fprintf(&b, "namespace Prop;\n\npublic interface %s\n{\n}\n\npartial class Shared : %s\n{\n", iface, iface)
+		for _, m := range methods {
+			fmt.Fprintf(&b, "    public void %s()\n    {\n    }\n", m)
+		}
+		b.WriteString("}\n")
+		return b.String()
+	}
+	root := writeFixture(t, map[string]string{
+		"PartA.cs": part("IPartA", "alpha"),
+		"PartB.cs": part("IPartB", "beta", "gamma"),
+	})
+	storeDir := filepath.Join(t.TempDir(), "store")
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	sets := func() int {
+		r, closeFn := openSnapshot(t, storeDir)
+		defer closeFn()
+		return len(storeNodesIn(t, r, goextract.KindOverloadSet, "gamma"))
+	}
+	for _, step := range []struct {
+		name     string
+		change   func()
+		wantSets int
+	}{
+		{"the set is in one file", func() { writeFile(t, filepath.Join(root, "PartB.cs"), part("IPartB", "gamma", "gamma")) }, 1},
+		{"the set spans two files", func() { writeFile(t, filepath.Join(root, "PartA.cs"), part("IPartA", "alpha", "gamma")) }, 1},
+		{"the first file of the set is deleted", func() {
+			if err := os.Remove(filepath.Join(root, "PartB.cs")); err != nil {
+				t.Fatalf("remove PartB.cs: %v", err)
+			}
+		}, 0},
+	} {
+		step.change()
+		if _, err := Sync(root, storeDir, Options{}); err != nil {
+			t.Fatalf("%s: Sync: %v", step.name, err)
+		}
+		// Positive assertion: the set exists before the step that removes
+		// it, so the last step has a set to count.
+		if got := sets(); got != step.wantSets {
+			t.Fatalf("%s: the store holds %d overload sets named gamma, want %d", step.name, got, step.wantSets)
+		}
+		r, closeFn := openSnapshot(t, storeDir)
+		_, err := invariant.Check(r)
+		closeFn()
+		if err != nil {
+			t.Fatalf("%s: invariant.Check after the sync:\n%v", step.name, err)
+		}
+	}
+}
+
 // exportDiff lists the frames that only one of two exports holds.
 func exportDiff(t *testing.T, want, got []byte) string {
 	t.Helper()

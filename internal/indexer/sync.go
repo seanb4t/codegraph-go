@@ -574,6 +574,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		if _, live := nodeFilePath[id]; live {
 			continue
 		}
+		// A set that was stored with a file path keeps its entry in that
+		// file's index after a later sync stores it with no path. The
+		// prune of that file then deleted and counted it already.
+		if _, pruned := goneIDs[id]; pruned {
+			continue
+		}
 		if n := view.Node(id); n != nil && n.FilePath == "" {
 			if err := w.DeleteNode(id); err != nil {
 				w.Close()

@@ -1,0 +1,3 @@
+kind: Fixes
+body: A sync no longer counts a removed overload set twice, so the node count that `codegraph status` prints stays equal to the stored nodes.
+time: 2026-11-13T08:33:14.345865-05:00
