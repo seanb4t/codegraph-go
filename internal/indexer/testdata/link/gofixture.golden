@@ -12,7 +12,7 @@ edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"constant:b632e4
 edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"function:1af4d8da486b9eae78633df0b727a4cb","kind":"contains","provenance":"ast"}
 edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"function:2e8a75b4179d71a8cd296c2efaf13bac","kind":"contains","provenance":"ast"}
 edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"variable:637f980d55fb71074b3d4f0444f07a86","kind":"contains","provenance":"ast"}
-edge {"source":"method:521f5f70dd1874c9b10b22d4cf9cc92c","target":"field:d004675a73b172225c33c30ad09f90fb","kind":"references","line":35,"col":1,"provenance":"ast","metadata":{"access":"write"}}
+edge {"source":"method:521f5f70dd1874c9b10b22d4cf9cc92c","target":"field:d004675a73b172225c33c30ad09f90fb","kind":"references","line":35,"col":1,"provenance":"ast","metadata":{"access":"write","binds":"unknown"}}
 edge {"source":"struct:00114f364c25d1a8b4270b2abe5b631a","target":"struct:15623085aa6f28b31411bef4e3f2a756","kind":"extends","line":10,"col":1,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-extends"}}
 edge {"source":"struct:00114f364c25d1a8b4270b2abe5b631a","target":"field:eafb508b0e31856053e22242f255b30d","kind":"contains","provenance":"ast"}
 edge {"source":"struct:15623085aa6f28b31411bef4e3f2a756","target":"field:92ac661c01f35d545411cf851e8a2e5b","kind":"contains","provenance":"ast"}

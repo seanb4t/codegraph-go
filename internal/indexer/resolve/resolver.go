@@ -374,6 +374,34 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 	return symbols.Pick(ms), true
 }
 
+// dataRefMetadata returns the metadata of the references edge of ref:
+// its access role, BindingInit when ref is the whole initializer of its
+// source, and for a write the value it binds, or BindsUnknown.
+func (rs *resolver) dataRefMetadata(r goextract.FileResult, ref goextract.UnresolvedRef) map[string]string {
+	if ref.Access == "" && !ref.Binding {
+		return nil
+	}
+	md := map[string]string{}
+	if ref.Access != "" {
+		md[MetaAccess] = ref.Access
+	}
+	if ref.Binding {
+		md[MetaBinding] = BindingInit
+	}
+	if ref.Access == goextract.AccessWrite || ref.Access == goextract.AccessReadWrite {
+		md[MetaBinds] = BindsUnknown
+		if v := ref.Value; v != nil && ref.Access == goextract.AccessWrite {
+			if id, ok := rs.resolveDataRef(r, goextract.UnresolvedRef{
+				FromID: ref.FromID, Name: v.Name, PkgAlias: v.PkgAlias, ReceiverType: v.ReceiverType,
+				Kind: goextract.RefKindReferences, Line: ref.Line, Col: ref.Col,
+			}); ok {
+				md[MetaBinds] = id
+			}
+		}
+	}
+	return md
+}
+
 // membersOf returns the call candidates named name among the members of
 // the type ownerID, or of the nearest supertype that declares one. A
 // field is no call candidate, so a field never hides a method of the

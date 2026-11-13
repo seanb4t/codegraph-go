@@ -117,6 +117,12 @@ func TestSpillRoundTrip(t *testing.T) {
 	calls := t.TempDir()
 	writeFile(t, filepath.Join(calls, "calls.rb"), "def greet(name, punctuation:)\nend\n\ndef run(names)\n  greet(*names, punctuation: \"!\")\nend\n")
 	trees = append(trees, fixtureTree{"calls", calls})
+	// No fixture binds a variable to a function in its initializer or has
+	// a syntax error, so one small Go tree adds both.
+	bindings := t.TempDir()
+	writeFile(t, filepath.Join(bindings, "go.mod"), "module example.com/b\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(bindings, "b.go"), "package b\n\nfunc f() {}\n\nvar g = f\n\nfunc broken() {\n\tg = (\n}\n")
+	trees = append(trees, fixtureTree{"bindings", bindings})
 
 	set := make(map[string]bool)
 	results := 0

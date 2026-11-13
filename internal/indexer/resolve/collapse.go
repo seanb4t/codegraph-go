@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"maps"
 	"sort"
 
 	"google.golang.org/protobuf/proto"
@@ -71,23 +72,51 @@ func CollapseEdges(edges []*schema.Edge) []*schema.Edge {
 }
 
 // withMergedAccess returns the representative of candidates, the first,
-// carrying the access role of all of them: an edge that one candidate
-// reads through and another writes through is read_write. The
-// representative is copied when its role changes, so no candidate is
+// carrying the evidence of all of them. The access roles merge: an edge
+// that one candidate reads through and another writes through is
+// read_write. The values a write binds, the binding paths and the
+// contexts of a call merge as sets. A call that one candidate makes
+// directly and another through a data symbol is marked direct. The
+// representative is copied when its metadata changes, so no candidate is
 // modified.
 func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
 	rep := candidates[0]
-	access := rep.Metadata["access"]
-	for _, c := range candidates[1:] {
-		access = goextract.MergeAccess(access, c.Metadata["access"])
+	if len(candidates) == 1 {
+		return rep
 	}
-	if access == rep.Metadata["access"] {
+	md := maps.Clone(rep.Metadata)
+	if md == nil {
+		md = map[string]string{}
+	}
+	direct, derived := false, false
+	for i, c := range candidates {
+		if c.Metadata[MetaVia] == "" {
+			direct = true
+		} else {
+			derived = true
+		}
+		if c.Metadata[MetaDirect] == "true" {
+			direct = true
+		}
+		if i == 0 {
+			continue
+		}
+		if a := goextract.MergeAccess(md[MetaAccess], c.Metadata[MetaAccess]); a != "" {
+			md[MetaAccess] = a
+		}
+		for _, k := range []string{MetaBinds, MetaVia, MetaContext} {
+			if u := unionSet(md[k], c.Metadata[k]); u != "" {
+				md[k] = u
+			}
+		}
+	}
+	if rep.Kind == goextract.RefKindCalls && direct && derived {
+		md[MetaDirect] = "true"
+	}
+	if maps.Equal(md, rep.Metadata) || (len(md) == 0 && rep.Metadata == nil) {
 		return rep
 	}
 	merged := proto.Clone(rep).(*schema.Edge)
-	if merged.Metadata == nil {
-		merged.Metadata = map[string]string{}
-	}
-	merged.Metadata["access"] = access
+	merged.Metadata = md
 	return merged
 }

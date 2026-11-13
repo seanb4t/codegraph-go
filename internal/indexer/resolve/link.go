@@ -50,7 +50,7 @@ func Link(view symbols.View, h symbols.Hierarchy, types []TypeOutput, calls []Ca
 	}
 	var structural []*schema.Edge
 	for _, t := range types {
-		structural = append(structural, StructuralEdges(t.edges)...)
+		structural = append(structural, GlobalEdges(t.edges)...)
 	}
 	global := NewGlobal(view, h, structural)
 

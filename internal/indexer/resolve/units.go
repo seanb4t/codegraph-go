@@ -128,6 +128,10 @@ type Global struct {
 	lastByName map[string]map[string]string
 	owner      map[string]string
 	supertypes map[string][]string
+
+	// bindings holds the writes of every data symbol, for the calls
+	// through data symbols.
+	bindings bindings
 }
 
 // globalUnit holds the edges that the whole-graph passes made for one
@@ -157,6 +161,7 @@ func NewGlobal(view symbols.View, h symbols.Hierarchy, structural []*schema.Edge
 	}
 	t, storedSupers := newTables(structural, view.StoredEdges())
 	g.owner = t.owner
+	g.bindings = newBindings(view, structural, view.StoredEdges())
 
 	implements := synthesizeGoImplements(view, t, storedSupers)
 	g.supertypes = t.supertypes(implements, storedSupers)
@@ -382,6 +387,15 @@ func (g *Global) Assemble(t TypeOutput, c CallOutput) (Unit, error) {
 		}
 		return resolved
 	}
+	// bind turns the calls into data symbols into reads, plus the calls
+	// the bindings establish.
+	bind := func(list []*schema.Edge) []*schema.Edge {
+		out, added := g.bindings.throughBindings(list)
+		if t.file != nil {
+			t.file.EdgeCount += int64(added)
+		}
+		return out
+	}
 
 	if t.file != nil {
 		t.file.EdgeCount += int64(c.resolved)
@@ -395,12 +409,12 @@ func (g *Global) Assemble(t TypeOutput, c CallOutput) (Unit, error) {
 		noFile *[]*schema.Edge
 	}{
 		{t.edges, &u.NoFile.types},
-		{c.edges, &u.NoFile.calls},
-		{c.deferredEdges, &u.NoFile.deferred},
+		{bind(c.edges), &u.NoFile.calls},
+		{bind(c.deferredEdges), &u.NoFile.deferred},
 		{global.implements, nil},
 		{global.overrides, nil},
-		{retry(c.pending), &u.NoFile.retried},
-		{retry(c.deferredPending), &u.NoFile.retriedDeferred},
+		{bind(retry(c.pending)), &u.NoFile.retried},
+		{bind(retry(c.deferredPending)), &u.NoFile.retriedDeferred},
 		{global.sets, nil},
 	} {
 		if step.noFile == nil {

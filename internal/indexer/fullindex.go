@@ -296,7 +296,7 @@ func buildStore(
 			if err != nil {
 				return err
 			}
-			st.structural[i] = resolve.StructuralEdges(resolve.Types(view, discovery.ModulePath, r).Edges())
+			st.structural[i] = resolve.GlobalEdges(resolve.Types(view, discovery.ModulePath, r).Edges())
 			return nil
 		})
 	if err != nil {

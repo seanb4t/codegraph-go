@@ -20,10 +20,10 @@ edge {"source":"struct:6eddee5432746528522c94fc3e0a24f6","target":"overload_set:
 edge {"source":"struct:86415a1da04b3f55a760efd02e92e947","target":"method:2c682066b6fcd92fa18f4698f8df70d1","kind":"contains","provenance":"ast"}
 edge {"source":"struct:dacbe090c2fd69b74e1f72cc0a21316f","target":"method:4197302c446db45de0b4da42e346a136","kind":"contains","provenance":"ast"}
 edge {"source":"function:952222b934f171d0192f3501c3301be4","target":"variable:5d9249d233a054bd01b502a0e7dd4401","kind":"references","line":10,"col":22,"provenance":"ast","metadata":{"access":"read"}}
-edge {"source":"function:952222b934f171d0192f3501c3301be4","target":"variable:a306f9e3fc90e924e99cd4dae7bbc5b5","kind":"references","line":10,"col":14,"provenance":"ast","metadata":{"access":"read_write"}}
+edge {"source":"function:952222b934f171d0192f3501c3301be4","target":"variable:a306f9e3fc90e924e99cd4dae7bbc5b5","kind":"references","line":10,"col":14,"provenance":"ast","metadata":{"access":"read_write","binds":"unknown"}}
 edge {"source":"function:c12c63f380d8862301a949d7570c967f","target":"function:f07cd597a126dd7eb5486cdfb1e901fa","kind":"calls","line":34,"col":13,"provenance":"ast"}
 edge {"source":"function:eb9d821564e399f7bef5edbb7b3319f6","target":"function:aa386c81437e01089fa85408bbac171d","kind":"calls","line":17,"col":13,"provenance":"ast","argCount":1,"argTypes":["number"]}
-edge {"source":"function:f300c249b20eac1f575795aedaa90238","target":"variable:0d5f29a7d7a376299b5d4209c14bf478","kind":"references","line":8,"col":14,"provenance":"ast","metadata":{"access":"read_write"}}
+edge {"source":"function:f300c249b20eac1f575795aedaa90238","target":"variable:0d5f29a7d7a376299b5d4209c14bf478","kind":"references","line":8,"col":14,"provenance":"ast","metadata":{"access":"read_write","binds":"unknown"}}
 edge {"source":"function:f6627bf2bb798297b6d96992a08bcacc","target":"function:737759251622093123171089b152a40b","kind":"calls","line":4,"col":9,"provenance":"ast"}
 edge {"source":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","target":"method:0d3857c9bb91aa740b61bbc063790052","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
 edge {"source":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","target":"method:40d0ae26e5d7cfac88207d66e222a44f","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}

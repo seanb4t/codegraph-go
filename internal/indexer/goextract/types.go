@@ -217,9 +217,38 @@ type UnresolvedRef struct {
 	// for a ref whose extractor does not record the role. The resolver
 	// copies it to the edge's "access" metadata.
 	Access string
+
+	// Binding marks the references ref of a data symbol's initializer
+	// whose whole value is the referenced name, as `var f = pkg.F`: the
+	// symbol starts out bound to that name. The resolver records it as
+	// "binding": "init" on the edge.
+	Binding bool
+	// Value is the name a write assigns, when the assigned value is a
+	// name: a bare identifier or a selector. It is nil for a write whose
+	// value is anything else, such as a function literal or a call, and
+	// for a read. The resolver records what it resolves to as "binds" on
+	// the edge.
+	Value *ValueRef
+}
+
+// ValueRef is a name used as a value: Name, and PkgAlias and
+// ReceiverType as an UnresolvedRef records them.
+type ValueRef struct {
+	Name, PkgAlias, ReceiverType string
 }
 
 // The access roles of a references edge, in its "access" metadata.
+// The metadata keys of a write that an extractor builds as an intra-file
+// edge. The resolver writes the same keys.
+const (
+	// MetaAccess is the role of a references edge.
+	MetaAccess = "access"
+	// MetaBinds is on a write: the ids of the values it assigns, or
+	// BindsUnknown.
+	MetaBinds    = "binds"
+	BindsUnknown = "unknown"
+)
+
 const (
 	AccessRead      = "read"
 	AccessWrite     = "write"
@@ -320,6 +349,10 @@ type FileResult struct {
 	// Err is set instead of returning a non-nil error from Extract when
 	// this specific file could not be parsed/extracted.
 	Err error
+
+	// SyntaxErrors is true when the parser recovered from a syntax error:
+	// the result holds what the parser could read.
+	SyntaxErrors bool
 }
 
 // RewriteIDs replaces each node id r holds with rewrite(id): node ids,

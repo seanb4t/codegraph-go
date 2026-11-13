@@ -604,8 +604,13 @@ type File struct {
 	// the file's path or the project descriptor, which `sync` recomputes
 	// on every run.
 	DeclaredModuleKey string `protobuf:"bytes,10,opt,name=declared_module_key,json=declaredModuleKey,proto3" json:"declared_module_key,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// syntax_errors is true when the parser recovered from a syntax error in
+	// this file. Its declarations and references are indexed, but a write in
+	// the damaged region can be missing, so no call through a data symbol of
+	// its package is derived.
+	SyntaxErrors  bool `protobuf:"varint,11,opt,name=syntax_errors,json=syntaxErrors,proto3" json:"syntax_errors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *File) Reset() {
@@ -706,6 +711,13 @@ func (x *File) GetDeclaredModuleKey() string {
 		return x.DeclaredModuleKey
 	}
 	return ""
+}
+
+func (x *File) GetSyntaxErrors() bool {
+	if x != nil {
+		return x.SyntaxErrors
+	}
+	return false
 }
 
 // MethodSpec is one method an interface declares: its name and declared
@@ -1176,7 +1188,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"arg_labels\x18\f \x03(\tR\targLabels\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xeb\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\x90\x03\n" +
 	"\x04File\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12!\n" +
 	"\fcontent_hash\x18\x02 \x01(\tR\vcontentHash\x12\x1a\n" +
@@ -1191,7 +1203,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"size_bytes\x18\b \x01(\x03R\tsizeBytes\x12G\n" +
 	"\x10unresolved_names\x18\t \x03(\v2\x1c.codegraph.v1.UnresolvedNameR\x0funresolvedNames\x12.\n" +
 	"\x13declared_module_key\x18\n" +
-	" \x01(\tR\x11declaredModuleKey\"6\n" +
+	" \x01(\tR\x11declaredModuleKey\x12#\n" +
+	"\rsyntax_errors\x18\v \x01(\bR\fsyntaxErrors\"6\n" +
 	"\n" +
 	"MethodSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +

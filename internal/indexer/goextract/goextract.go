@@ -56,6 +56,7 @@ func Extract(p parser.Parser, importPath, relPath string, src []byte) (FileResul
 		result.Err = fmt.Errorf("goextract: parser returned an empty tree for %s", relPath)
 		return result, nil
 	}
+	result.SyntaxErrors = root.HasError()
 
 	fileID := nodeid.NodeID(KindFile, relPath, relPath)
 	result.Nodes = append(result.Nodes, ExtractedNode{Node: &schema.Node{
@@ -565,7 +566,24 @@ func (ex *extractor) emitConstVarSpec(kind string, spec *tree_sitter.Node) {
 // initializes. The body of a function literal does not run then, so its
 // calls are not the symbol's.
 func (ex *extractor) captureInitializer(fromID string, value *tree_sitter.Node) {
+	before := len(ex.result.Unresolved)
 	ex.captureExprRead(fromID, value)
+	switch {
+	case ex.valueRef(value) != nil:
+		if len(ex.result.Unresolved) > before {
+			// The whole value is one name, whose ref captureExprRead
+			// appended last: the symbol starts out bound to it.
+			ex.result.Unresolved[len(ex.result.Unresolved)-1].Binding = true
+		}
+	case mayHoldFunction(value):
+		// The package initialization writes a value that has no name,
+		// such as a function literal, so no later write is the symbol's
+		// only value.
+		ex.result.IntraEdges = append(ex.result.IntraEdges, IntraEdge{Edge: &schema.Edge{
+			Source: ex.fileID, Target: fromID, Kind: RefKindReferences, Provenance: "ast",
+			Metadata: map[string]string{MetaAccess: AccessWrite, MetaBinds: BindsUnknown},
+		}})
+	}
 	walkDescendants(value, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
 		case "func_literal":
@@ -1005,12 +1023,19 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 			if op := n.ChildByFieldName("operator"); op != nil && op.Utf8Text(ex.src) != "=" {
 				access = AccessReadWrite
 			}
-			if left := n.ChildByFieldName("left"); left != nil {
+			left, right := n.ChildByFieldName("left"), n.ChildByFieldName("right")
+			if left != nil {
 				for i := uint(0); i < left.NamedChildCount(); i++ {
-					ex.captureWrite(fromID, left.NamedChild(i), access)
+					// A plain `=` with one value per target assigns each
+					// target the value at its position.
+					var value *ValueRef
+					if access == AccessWrite && right != nil && right.NamedChildCount() == left.NamedChildCount() {
+						value = ex.valueRef(right.NamedChild(i))
+					}
+					ex.captureWrite(fromID, left.NamedChild(i), access, value)
 				}
 			}
-			if right := n.ChildByFieldName("right"); right != nil {
+			if right != nil {
 				for i := uint(0); i < right.NamedChildCount(); i++ {
 					ex.captureExprRead(fromID, right.NamedChild(i))
 				}
@@ -1018,7 +1043,7 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 			return false
 		case "inc_statement", "dec_statement":
 			if n.NamedChildCount() > 0 {
-				ex.captureWrite(fromID, n.NamedChild(0), AccessReadWrite)
+				ex.captureWrite(fromID, n.NamedChild(0), AccessReadWrite, nil)
 			}
 			return false
 		case "if_statement", "expression_switch_statement":
@@ -1037,10 +1062,47 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 	})
 }
 
+// mayHoldFunction reports whether the value of expr can be a function. A
+// literal, a composite literal and an arithmetic expression cannot.
+func mayHoldFunction(expr *tree_sitter.Node) bool {
+	switch expr.Kind() {
+	case "int_literal", "float_literal", "imaginary_literal", "rune_literal",
+		"interpreted_string_literal", "raw_string_literal", "composite_literal",
+		"binary_expression", "true", "false", "nil", "iota":
+		return false
+	}
+	return true
+}
+
+// valueRef returns the name that expr is, when expr is a bare identifier
+// or a selector, as a ValueRef, and nil for any other expression.
+func (ex *extractor) valueRef(expr *tree_sitter.Node) *ValueRef {
+	for expr != nil && expr.Kind() == "parenthesized_expression" {
+		expr = expr.NamedChild(0)
+	}
+	if expr == nil {
+		return nil
+	}
+	switch expr.Kind() {
+	case "identifier":
+		name := expr.Utf8Text(ex.src)
+		return &ValueRef{Name: name, PkgAlias: ShadowAlias(ex.env, name, uint32(expr.StartByte()))}
+	case "selector_expression":
+		operand, field := expr.ChildByFieldName("operand"), expr.ChildByFieldName("field")
+		if operand == nil || field == nil || operand.Kind() != "identifier" {
+			return nil
+		}
+		pkgAlias, receiverType := ex.receiver(ex.env, operand)
+		return &ValueRef{Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, ReceiverType: receiverType}
+	}
+	return nil
+}
+
 // captureWrite records the write target expr of an assignment with
-// access: a bare name, or a selector such as a field or a package
-// variable. An index or a pointer target reads the container it changes.
-func (ex *extractor) captureWrite(fromID string, expr *tree_sitter.Node, access string) {
+// access, and value, the name it assigns, or nil: a bare name, or a
+// selector such as a field or a package variable. An index or a pointer
+// target reads the container it changes.
+func (ex *extractor) captureWrite(fromID string, expr *tree_sitter.Node, access string, value *ValueRef) {
 	if expr == nil {
 		return
 	}
@@ -1053,13 +1115,16 @@ func (ex *extractor) captureWrite(fromID string, expr *tree_sitter.Node, access 
 		pos := expr.StartPosition()
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: ShadowAlias(ex.env, name, uint32(expr.StartByte())), Kind: RefKindReferences,
-			Line: int32(pos.Row) + 1, Col: int32(pos.Column), Access: access,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column), Access: access, Value: value,
 		})
 	case "selector_expression":
 		ex.captureSelector(fromID, expr, access)
+		if value != nil {
+			ex.result.Unresolved[len(ex.result.Unresolved)-1].Value = value
+		}
 	case "parenthesized_expression":
 		if expr.NamedChildCount() > 0 {
-			ex.captureWrite(fromID, expr.NamedChild(0), access)
+			ex.captureWrite(fromID, expr.NamedChild(0), access, value)
 		}
 	default:
 		ex.captureExprRead(fromID, expr)

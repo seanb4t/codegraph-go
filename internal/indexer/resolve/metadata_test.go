@@ -60,3 +60,42 @@ func TestDataReferenceMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestDataReferenceMetadata_CallEvidence covers the merge of calls edges
+// with one source and target: a direct call and a call through a data
+// symbol keep one edge marked direct, with every binding path and context
+// of the derived candidates, whatever their order.
+func TestDataReferenceMetadata_CallEvidence(t *testing.T) {
+	call := func(line int32, via, ctx string) *schema.Edge {
+		e := &schema.Edge{Source: "f", Target: "fn", Kind: goextract.RefKindCalls, Line: line}
+		if via != "" {
+			e.Metadata = map[string]string{MetaVia: via, MetaContext: ctx}
+		}
+		return e
+	}
+	cases := []struct {
+		name             string
+		edges            []*schema.Edge
+		via, ctx, direct string
+	}{
+		{"direct only", []*schema.Edge{call(1, "", ""), call(2, "", "")}, "", "", ""},
+		{"direct and derived", []*schema.Edge{call(1, "", ""), call(2, "v", ContextGoProduction)}, "v", ContextGoProduction, "true"},
+		{"two paths", []*schema.Edge{call(1, "w", ContextGoTest), call(2, "v", ContextGoProduction)}, "v,w", "go-production,go-test", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reversed := slices.Clone(tc.edges)
+			slices.Reverse(reversed)
+			for _, order := range [][]*schema.Edge{tc.edges, reversed} {
+				got := CollapseEdges(slices.Clone(order))
+				if len(got) != 1 {
+					t.Fatalf("CollapseEdges kept %d edges, want 1", len(got))
+				}
+				md := got[0].Metadata
+				if md[MetaVia] != tc.via || md[MetaContext] != tc.ctx || md[MetaDirect] != tc.direct {
+					t.Errorf("metadata = %v, want via %q, context %q, direct %q", md, tc.via, tc.ctx, tc.direct)
+				}
+			}
+		})
+	}
+}

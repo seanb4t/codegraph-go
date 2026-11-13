@@ -169,10 +169,7 @@ func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOut
 				wait(ref.PkgAlias, ref.Name)
 				continue
 			}
-			var metadata map[string]string
-			if ref.Access != "" {
-				metadata = map[string]string{"access": ref.Access}
-			}
+			metadata := rs.dataRefMetadata(r, ref)
 			out.edges = append(out.edges, &schema.Edge{
 				Source: ref.FromID, Target: targetID, Kind: goextract.RefKindReferences,
 				Line: ref.Line, Col: ref.Col, Provenance: "ast", Metadata: metadata,
@@ -231,6 +228,7 @@ func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOut
 			MtimeUnixNs:     r.MtimeUnixNs,
 			SizeBytes:       r.SizeBytes,
 			UnresolvedNames: waiting,
+			SyntaxErrors:    r.SyntaxErrors,
 		}
 		if r.ModuleKeyDeclared {
 			out.file.DeclaredModuleKey = r.ImportPath

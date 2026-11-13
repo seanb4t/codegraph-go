@@ -193,6 +193,12 @@ message File {
   // the file's path or the project descriptor, which `sync` recomputes
   // on every run.
   string declared_module_key = 10;
+
+  // syntax_errors is true when the parser recovered from a syntax error in
+  // this file. Its declarations and references are indexed, but a write in
+  // the damaged region can be missing, so no call through a data symbol of
+  // its package is derived.
+  bool syntax_errors = 11;
 }
 
 // MethodSpec is one method an interface declares: its name and declared

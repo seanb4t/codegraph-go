@@ -20,6 +20,10 @@ type Declarations struct {
 	// declares no symbol.
 	Err error
 
+	// SyntaxErrors is true when the parser recovered from a syntax error
+	// in the file.
+	SyntaxErrors bool
+
 	// Nodes are the nodes of the result, in the order the file emits them.
 	// The view holds these nodes, not copies.
 	Nodes []*schema.Node
@@ -43,6 +47,7 @@ func DeclarationsOf(r goextract.FileResult, defaultVisibility string) Declaratio
 		RelPath:           r.RelPath,
 		Language:          r.Language,
 		Err:               r.Err,
+		SyntaxErrors:      r.SyntaxErrors,
 		MethodArity:       r.MethodArity,
 		DefaultVisibility: defaultVisibility,
 	}
