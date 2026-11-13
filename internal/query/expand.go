@@ -271,7 +271,7 @@ func buildExpandAdjacency(r graphstore.Reader) (map[string][]string, []*schema.E
 	var edges []*schema.Edge
 	for it.Next() {
 		e := it.Edge()
-		if !RankEdges[e.Kind] {
+		if !isRankEdge(e) {
 			continue
 		}
 		if e.Source == e.Target {

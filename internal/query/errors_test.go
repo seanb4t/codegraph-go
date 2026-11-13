@@ -26,7 +26,7 @@ func TestClassifiedErrorsPreserveTheirMessages(t *testing.T) {
 		{"validateDepth negative", validateDepth(-1), "query: depth -1 must be non-negative"},
 		{"validateFilesDepth negative", validateFilesDepth(-1), "query: depth -1 must be non-negative"},
 		{"validateFilesDepth exceeds max", validateFilesDepth(MaxDepth + 1), "query: depth 51 exceeds maximum 50"},
-		{"ValidateKind unknown", ValidateKind("banana"), `query: unknown kind "banana" — allowed kinds: constant, file, function, interface, method, package, struct, type_alias, variable`},
+		{"ValidateKind unknown", ValidateKind("banana"), `query: unknown kind "banana" — allowed kinds: constant, field, file, function, interface, method, package, struct, type_alias, variable`},
 	}
 
 	callCases := []struct {
@@ -148,7 +148,7 @@ func TestEveryReachableErrorIsClassified(t *testing.T) {
 		{"Impact negative depth", impactErr(t, e, -1), ErrInvalidArgument, "query: depth -1 must be non-negative"},
 		{"Files bogus format", filesErr(t, e, FilesOptions{Format: "bogus"}), ErrInvalidArgument, `query: unknown files format "bogus" — allowed: flat, tree`},
 		{"Files negative depth", filesErr(t, e, FilesOptions{Depth: -1}), ErrInvalidArgument, "query: depth -1 must be non-negative"},
-		{"Query unknown kind", queryKindErr(t, e, "banana"), ErrInvalidArgument, `query: unknown kind "banana" — allowed kinds: constant, file, function, interface, method, package, struct, type_alias, variable`},
+		{"Query unknown kind", queryKindErr(t, e, "banana"), ErrInvalidArgument, `query: unknown kind "banana" — allowed kinds: constant, field, file, function, interface, method, package, struct, type_alias, variable`},
 	}
 
 	other := func(class error) error {

@@ -384,6 +384,12 @@ func gatherMerge(channelResults ...[]gatherCandidate) []gatherCandidate {
 	var order []string
 	for _, ch := range channelResults {
 		for _, c := range ch {
+			// A field shows inside the source of the type that holds it.
+			// Its qualified name repeats the type's name, so as its own
+			// candidate it would take the place of a callable.
+			if c.Node.Kind == goextract.KindField {
+				continue
+			}
 			id := c.Node.Id
 			existing, ok := merged[id]
 			if !ok {

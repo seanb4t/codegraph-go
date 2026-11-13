@@ -197,6 +197,7 @@ var knownKinds = map[string]bool{
 	goextract.KindTypeAlias: true,
 	goextract.KindConstant:  true,
 	goextract.KindVariable:  true,
+	goextract.KindField:     true,
 	"package":               true, // internal/indexer/resolve.go's kindPackage
 }
 
