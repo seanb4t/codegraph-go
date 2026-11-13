@@ -1,0 +1,3 @@
+kind: Fixes
+body: The worktree notice and the `status` worktree warning now advise `codegraph init`. They named `codegraph init -i`, which fails because `init` has no `-i` flag.
+time: 2026-11-13T08:50:46.734943-05:00

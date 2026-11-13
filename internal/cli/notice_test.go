@@ -270,3 +270,58 @@ func TestNoticeNotEmittedOnQueryFailure(t *testing.T) {
 		})
 	}
 }
+
+// advisedCommand returns the arguments of the command that a worktree
+// message tells the user to run: the words after "codegraph" inside the
+// quotes of `Run "codegraph ..."`.
+func advisedCommand(t *testing.T, message string) []string {
+	t.Helper()
+	const lead = "Run \"codegraph "
+	i := strings.Index(message, lead)
+	if i < 0 {
+		t.Fatalf("the message names no command to run: %q", message)
+	}
+	rest := message[i+len(lead):]
+	j := strings.Index(rest, "\"")
+	if j < 0 {
+		t.Fatalf("the command in the message has no closing quote: %q", message)
+	}
+	return strings.Fields(rest[:j])
+}
+
+// TestWorktreeAdviceRunsAndClearsTheMismatch pins issue #189: the two
+// worktree messages named `codegraph init -i`, and init has no -i flag.
+// The test runs the command that each message names, as written, in the
+// linked worktree. The command must succeed, and status must then show no
+// mismatch, so the advice does what the message promises.
+func TestWorktreeAdviceRunsAndClearsTheMismatch(t *testing.T) {
+	m := &gitmeta.Mismatch{WorktreeRoot: "/a", IndexRoot: "/b"}
+	for name, message := range map[string]string{"Warning": m.Warning(), "Notice": m.Notice()} {
+		t.Run(name, func(t *testing.T) {
+			wt, _ := statusWorktreeMismatchFixture(t)
+			const mismatch = "belongs to a different git working tree"
+
+			// Positive assertion: the mismatch exists before the advice runs.
+			before, _, err := execCmd("status", "-p", wt)
+			if err != nil {
+				t.Fatalf("status before the advice: %v", err)
+			}
+			if !strings.Contains(before, mismatch) {
+				t.Fatalf("status shows no worktree mismatch before the advice:\n%s", before)
+			}
+
+			args := append(advisedCommand(t, message), wt)
+			if _, _, err := execCmd(args...); err != nil {
+				t.Fatalf("the advised command %q failed: %v", strings.Join(args[:len(args)-1], " "), err)
+			}
+
+			after, _, err := execCmd("status", "-p", wt)
+			if err != nil {
+				t.Fatalf("status after the advice: %v", err)
+			}
+			if strings.Contains(after, mismatch) {
+				t.Fatalf("status still shows the worktree mismatch after the advised command:\n%s", after)
+			}
+		})
+	}
+}

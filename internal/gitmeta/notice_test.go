@@ -17,7 +17,7 @@ func TestMismatchWarningVerbatim(t *testing.T) {
 		"  Running in: /w\n" +
 		"  Index from: /i\n" +
 		"Results reflect that tree's code (often a different branch), not this worktree — " +
-		"symbols changed only here are missing. Run \"codegraph init -i\" in this worktree " +
+		"symbols changed only here are missing. Run \"codegraph init\" in this worktree " +
 		"for a worktree-local index."
 	if got := m.Warning(); got != want {
 		t.Fatalf("Warning() =\n%q\nwant\n%q", got, want)
@@ -28,7 +28,7 @@ func TestMismatchNoticeVerbatim(t *testing.T) {
 	m := &Mismatch{WorktreeRoot: "/w", IndexRoot: "/i"}
 	want := "⚠ CodeGraph results below come from a different git worktree (/i), " +
 		"not where you're working (/w) — they may reflect another branch, " +
-		"and symbols changed only here are missing. Run \"codegraph init -i\" here for a " +
+		"and symbols changed only here are missing. Run \"codegraph init\" here for a " +
 		"worktree-local index."
 	got := m.Notice()
 	if got != want {

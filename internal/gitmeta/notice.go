@@ -15,7 +15,7 @@ const warnGlyph = "⚠"
 // never need a nil guard — the same shape
 // internal/query/render_markdown.go's staleBanner uses. This is the
 // documented message text (D-01/D-11); do not paraphrase, including the
-// quoted "codegraph init -i" advice.
+// quoted "codegraph init" advice.
 func (m *Mismatch) Warning() string {
 	if m == nil {
 		return ""
@@ -24,7 +24,7 @@ func (m *Mismatch) Warning() string {
 		"  Running in: " + m.WorktreeRoot + "\n" +
 		"  Index from: " + m.IndexRoot + "\n" +
 		"Results reflect that tree's code (often a different branch), not this worktree — " +
-		"symbols changed only here are missing. Run \"codegraph init -i\" in this worktree " +
+		"symbols changed only here are missing. Run \"codegraph init\" in this worktree " +
 		"for a worktree-local index."
 }
 
@@ -38,6 +38,6 @@ func (m *Mismatch) Notice() string {
 	}
 	return warnGlyph + " CodeGraph results below come from a different git worktree (" + m.IndexRoot + "), " +
 		"not where you're working (" + m.WorktreeRoot + ") — they may reflect another branch, " +
-		"and symbols changed only here are missing. Run \"codegraph init -i\" here for a " +
+		"and symbols changed only here are missing. Run \"codegraph init\" here for a " +
 		"worktree-local index."
 }
