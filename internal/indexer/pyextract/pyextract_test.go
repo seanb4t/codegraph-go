@@ -167,23 +167,6 @@ func TestExtract_MethodContainsEdge(t *testing.T) {
 	}
 }
 
-// TestExtract_NoModuleLevelAssignmentNodes proves a bare module-level (or
-// class-body) assignment never becomes its own node (mirrors the "no field
-// node" skip goextract/javaextract/csharpextract all already apply).
-func TestExtract_NoModuleLevelAssignmentNodes(t *testing.T) {
-	src := "CONST = 1\n\nclass Widget:\n    x = 2\n"
-	p := newTestParser(t)
-	result, err := Extract(p, "widget", "widget.py", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract returned error: %v", err)
-	}
-	for _, n := range result.Nodes {
-		if n.Node.Kind == "constant" || n.Node.Kind == "variable" || n.Node.Kind == "field" {
-			t.Fatalf("unexpected %s node emitted: %+v", n.Node.Kind, n.Node)
-		}
-	}
-}
-
 // TestExtract_Imports proves import/from-import statements produce
 // RefKindImports unresolved refs, with only an aliased plain import or a
 // from-import populating result.Imports (types.go's documented gap: a

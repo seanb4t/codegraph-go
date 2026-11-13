@@ -73,8 +73,11 @@ func (ex *extractor) fieldsOf(class *tree_sitter.Node) *goextract.TypeEnv {
 	return env
 }
 
-// bodyEnv returns the environment of one function body: `self` or `cls`,
-// the parameters, and every name the body assigns.
+// bodyEnv returns the environment of one function body: the receiver,
+// the parameters, and every name the body assigns, less the names of its
+// global and nonlocal statements. The receiver is the first parameter of
+// a method that methodReceiver gives one, or a first parameter named self
+// or cls outside a static method.
 func (ex *extractor) bodyEnv(decl *tree_sitter.Node) *goextract.TypeEnv {
 	var fields *goextract.TypeEnv
 	className := ex.enclosingClass(decl)
@@ -88,8 +91,9 @@ func (ex *extractor) bodyEnv(decl *tree_sitter.Node) *goextract.TypeEnv {
 	}
 	env := goextract.NewTypeEnv(fields)
 	params, _ := collectParams(decl, ex.src)
+	kind, _ := ex.methodReceiver(decl)
 	for i, p := range params {
-		if i == 0 && className != "" && (p.Name == "self" || p.Name == "cls") && p.Type == "" {
+		if i == 0 && className != "" && p.Type == "" && (kind != noReceiver || ((p.Name == "self" || p.Name == "cls") && !ex.staticMethod(decl))) {
 			env.Declare(p.Name, className)
 			continue
 		}
@@ -99,13 +103,14 @@ func (ex *extractor) bodyEnv(decl *tree_sitter.Node) *goextract.TypeEnv {
 	if body == nil {
 		return env
 	}
+	outer := ex.globalNames(body)
 	walkDescendants(body, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
 		case "function_definition", "class_definition":
 			return false
 		case "assignment":
 			left := n.ChildByFieldName("left")
-			if left == nil || left.Kind() != "identifier" {
+			if left == nil || left.Kind() != "identifier" || outer[left.Utf8Text(ex.src)] {
 				return true
 			}
 			typ := ""

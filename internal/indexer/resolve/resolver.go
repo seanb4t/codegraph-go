@@ -353,25 +353,29 @@ func (rs *resolver) resolveRef(r goextract.FileResult, ref goextract.UnresolvedR
 // resolveDataRef resolves a references ref. A ref through a receiver of
 // known type, as `p.X`, names a member of that type: a field, or a method
 // used as a value. It never falls back to a module-level name, so `p.X`
-// cannot reach an unrelated declaration named X. Every other ref resolves
-// as resolveRef does.
+// cannot reach an unrelated declaration named X. A receiver that is both
+// an alias and a type name, as `Point.X` or `pkg.X`, names a member of
+// the type when one exists, and a module-level name of the module the
+// alias imports otherwise. Every other ref resolves as resolveRef does.
 func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.UnresolvedRef) (string, bool) {
 	recv := ref.ReceiverType
-	if recv == "" || (ref.PkgAlias != "" && ref.PkgAlias == recv) {
+	if recv == "" {
 		return rs.resolveRef(r, ref, false)
 	}
-	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
-	if !ok {
-		return "", false
+	moduleAlias := ref.PkgAlias != "" && ref.PkgAlias == recv
+	if owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col); ok {
+		switch ms := rs.ownMembers(r.Language, owner.ID, ref.Name); len(ms) {
+		case 0:
+		case 1:
+			return ms[0].ID, true
+		default:
+			return symbols.Pick(ms), true
+		}
 	}
-	ms := rs.ownMembers(r.Language, owner.ID, ref.Name)
-	if len(ms) == 0 {
-		return "", false
+	if moduleAlias {
+		return rs.resolveRef(r, ref, false)
 	}
-	if len(ms) == 1 {
-		return ms[0].ID, true
-	}
-	return symbols.Pick(ms), true
+	return "", false
 }
 
 // inheritedRef reports whether the references ref names a member of a
@@ -381,7 +385,7 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 // leaves it.
 func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.UnresolvedRef) bool {
 	recv := ref.ReceiverType
-	if ref.Kind != goextract.RefKindReferences || recv == "" || !inheritsMembers(r.Language) || (ref.PkgAlias != "" && ref.PkgAlias == recv) {
+	if ref.Kind != goextract.RefKindReferences || recv == "" || !inheritsMembers(r.Language) {
 		return false
 	}
 	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
@@ -454,7 +458,7 @@ func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
 	rs.h.WalkSupertypes(ownerID, func(sup string) bool {
 		declared := rs.view.Members(sup, name)
 		for _, m := range declared {
-			if m.Node.GetVisibility() != "private" {
+			if inheritable(lang, m.Node) {
 				ms = append(ms, m)
 			}
 		}
@@ -467,10 +471,22 @@ func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
 // the classes it extends.
 func inheritsMembers(lang string) bool {
 	switch lang {
-	case "typescript", "tsx", "javascript":
+	case "typescript", "tsx", "javascript", "python":
 		return true
 	}
 	return false
+}
+
+// inheritable reports whether a subclass written in lang reaches the
+// member n of a base class. A private member is out of reach, and in
+// Python a name with two leading underscores and no trailing pair is
+// mangled with its class name, so a subclass reaches another attribute.
+func inheritable(lang string, n *schema.Node) bool {
+	if lang == "python" {
+		name := n.GetName()
+		return !strings.HasPrefix(name, "__") || strings.HasSuffix(name, "__")
+	}
+	return n.GetVisibility() != "private"
 }
 
 // callMembers returns ms without its fields.
