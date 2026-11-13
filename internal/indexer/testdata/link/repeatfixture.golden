@@ -27,7 +27,7 @@ edge {"source":"function:f300c249b20eac1f575795aedaa90238","target":"variable:0d
 edge {"source":"function:f6627bf2bb798297b6d96992a08bcacc","target":"function:737759251622093123171089b152a40b","kind":"calls","line":4,"col":9,"provenance":"ast"}
 edge {"source":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","target":"method:0d3857c9bb91aa740b61bbc063790052","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
 edge {"source":"overload_set:c5cd404e357d8341a5bdb0e9e6edadf9","target":"method:40d0ae26e5d7cfac88207d66e222a44f","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
-file {"path":"a.ts","contentHash":"f3f20f06b22f5146df8f1ee2abe250400716f89ee5059fd39f8790201b2ddb67","language":"typescript","nodeCount":"14","edgeCount":"15","sizeBytes":"996","unresolvedNames":[{"moduleKey":"a","name":"n"}]}
+file {"path":"a.ts","contentHash":"f3f20f06b22f5146df8f1ee2abe250400716f89ee5059fd39f8790201b2ddb67","language":"typescript","nodeCount":"14","edgeCount":"15","sizeBytes":"996"}
 file {"path":"b.ts","contentHash":"9ffee1deb75bbb8bb7c90327c700c764d002b64e9234d862e52ff57140258366","language":"typescript","nodeCount":"2","edgeCount":"2","sizeBytes":"67"}
 file {"path":"main.go","contentHash":"243471c41a352f4fbfb1d47becfccc103cb0d88b0f611a6fb57569fd85ef6afe","language":"go","nodeCount":"6","edgeCount":"8","sizeBytes":"117"}
 file {"path":"shape.go","contentHash":"34c4f2af0d0f842641623fdabf23699fe56c973b89b975d4ee2cda73dfac971d","language":"go","nodeCount":"4","edgeCount":"3","sizeBytes":"310"}

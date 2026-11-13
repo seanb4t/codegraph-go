@@ -22,6 +22,10 @@ type CallOutput struct {
 	deferredEdges   []*schema.Edge
 	deferredPending []pendingRef
 	resolved        int
+	// unresolved counts the references through the class hierarchy that
+	// did not resolve, and waiting holds the names they wait on.
+	unresolved int
+	waiting    []*schema.UnresolvedName
 }
 
 // pendingRef is a call that did not resolve, kept for the conformance
@@ -67,8 +71,23 @@ func Calls(view symbols.View, h symbols.Hierarchy, r goextract.FileResult) CallO
 		}
 	}
 	for _, ref := range r.Unresolved {
-		if ref.Kind == goextract.RefKindCalls {
+		switch {
+		case ref.Kind == goextract.RefKindCalls:
 			resolveOne(ref, false, &out.edges, &out.pending)
+		case rs.inheritedRef(r, ref):
+			targetID, ok := rs.resolveDataRef(r, ref)
+			if !ok {
+				out.unresolved++
+				if u := unresolvedName(r, ref.PkgAlias, ref.Name); u != nil {
+					out.waiting = append(out.waiting, u)
+				}
+				continue
+			}
+			out.edges = append(out.edges, &schema.Edge{
+				Source: ref.FromID, Target: targetID, Kind: goextract.RefKindReferences,
+				Line: ref.Line, Col: ref.Col, Provenance: "ast", Metadata: rs.dataRefMetadata(r, ref),
+			})
+			out.resolved++
 		}
 	}
 	sort.SliceStable(deferred, func(i, j int) bool {

@@ -163,6 +163,9 @@ func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOut
 			// shape exactly — no Kind-check disambiguation on the
 			// target (any resolvable symbol is a valid references
 			// target, unlike instantiates/type_of/returns below).
+			if rs.inheritedRef(r, ref) {
+				continue
+			}
 			targetID, ok := rs.resolveDataRef(r, ref)
 			if !ok {
 				out.unresolved++

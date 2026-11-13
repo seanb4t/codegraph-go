@@ -98,13 +98,14 @@ type bindingWrite struct {
 // edges of every file.
 type bindings struct {
 	view   symbols.View
+	h      symbols.Hierarchy
 	writes map[string][]bindingWrite
 	// damaged holds the module keys of the files with syntax errors.
 	damaged map[string]bool
 }
 
-func newBindings(view symbols.View, lists ...[]*schema.Edge) bindings {
-	b := bindings{view: view, writes: make(map[string][]bindingWrite), damaged: view.SyntaxErrorModules()}
+func newBindings(view symbols.View, h symbols.Hierarchy, lists ...[]*schema.Edge) bindings {
+	b := bindings{view: view, h: h, writes: make(map[string][]bindingWrite), damaged: view.SyntaxErrorModules()}
 	for _, list := range lists {
 		for _, e := range list {
 			if !IsBindingEdge(e) {
@@ -132,15 +133,15 @@ func newBindings(view symbols.View, lists ...[]*schema.Edge) bindings {
 // every write the context counts assigns the same value, and that value
 // is a function or a data symbol that holds one. A write of an unknown
 // value, two values, no value, a cycle, a path longer than
-// maxBindingChain, or a data symbol in a package with a syntax error
-// establish no target.
+// maxBindingChain, a data symbol in a package with a syntax error, or
+// an open field establish no target.
 func (b bindings) target(id string, test bool) (string, []string, bool) {
 	var via []string
 	for len(via) < maxBindingChain {
 		if slices.Contains(via, id) {
 			return "", nil, false
 		}
-		if n := b.view.Node(id); n == nil || b.damaged[b.view.ModuleOf(n.FilePath)] {
+		if n := b.view.Node(id); n == nil || b.damaged[b.view.ModuleOf(n.FilePath)] || b.open(n) {
 			return "", nil, false
 		}
 		via = append(via, id)
@@ -169,6 +170,17 @@ func (b bindings) target(id string, test bool) (string, []string, bool) {
 		}
 	}
 	return "", nil, false
+}
+
+// open reports whether n is a field that a subclass can write. The
+// writes through a subclass resolve only after the bindings are read, so
+// the field's writes are not all known.
+func (b bindings) open(n *schema.Node) bool {
+	if n.Kind != goextract.KindField || !inheritsMembers(n.Language) {
+		return false
+	}
+	owner, ok := b.h.OwnerOf(n.Id)
+	return ok && b.h.HasSubtypes(owner)
 }
 
 // throughBindings replaces each calls edge of list into a data symbol

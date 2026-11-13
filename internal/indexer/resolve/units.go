@@ -161,7 +161,7 @@ func NewGlobal(view symbols.View, h symbols.Hierarchy, structural []*schema.Edge
 	}
 	t, storedSupers := newTables(structural, view.StoredEdges())
 	g.owner = t.owner
-	g.bindings = newBindings(view, structural, view.StoredEdges())
+	g.bindings = newBindings(view, h, structural, view.StoredEdges())
 
 	implements := synthesizeGoImplements(view, t, storedSupers)
 	g.supertypes = t.supertypes(implements, storedSupers)
@@ -332,7 +332,10 @@ type Unit struct {
 // have a route node as its source. Any other edge is a defect of the
 // resolver, and Assemble returns an error that wraps goextract.ErrInternal.
 func (g *Global) Assemble(t TypeOutput, c CallOutput) (Unit, error) {
-	u := Unit{Nodes: t.nodes, PackageNodes: t.packageNodes, File: t.file, Unresolved: t.unresolved}
+	u := Unit{Nodes: t.nodes, PackageNodes: t.packageNodes, File: t.file, Unresolved: t.unresolved + c.unresolved}
+	if t.file != nil {
+		t.file.UnresolvedNames = append(t.file.UnresolvedNames, c.waiting...)
+	}
 	u.NoFile.relPath = c.relPath
 	route := t.file == nil
 	path := c.relPath

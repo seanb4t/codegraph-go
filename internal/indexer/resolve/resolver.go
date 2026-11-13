@@ -364,7 +364,7 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 	if !ok {
 		return "", false
 	}
-	ms := rs.view.Members(owner.ID, ref.Name)
+	ms := rs.ownMembers(r.Language, owner.ID, ref.Name)
 	if len(ms) == 0 {
 		return "", false
 	}
@@ -372,6 +372,20 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 		return ms[0].ID, true
 	}
 	return symbols.Pick(ms), true
+}
+
+// inheritedRef reports whether the references ref names a member of a
+// receiver type that the type itself does not declare, in a language
+// whose classes have the members of the classes they extend. Such a ref
+// resolves through the class hierarchy, so Calls resolves it and Types
+// leaves it.
+func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.UnresolvedRef) bool {
+	recv := ref.ReceiverType
+	if ref.Kind != goextract.RefKindReferences || recv == "" || !inheritsMembers(r.Language) || (ref.PkgAlias != "" && ref.PkgAlias == recv) {
+		return false
+	}
+	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
+	return ok && len(rs.view.Members(owner.ID, ref.Name)) == 0
 }
 
 // dataRefMetadata returns the metadata of the references edge of ref:
@@ -404,9 +418,10 @@ func (rs *resolver) dataRefMetadata(r goextract.FileResult, ref goextract.Unreso
 
 // membersOf returns the call candidates named name among the members of
 // the type ownerID, or of the nearest supertype that declares one. A
-// field is no call candidate, so a field never hides a method of the
-// same name.
-func (rs *resolver) membersOf(ownerID, name string) []symbols.Candidate {
+// method wins over a field of the same name. With no method, the field
+// that ownMembers finds is the candidate, and a call through it becomes
+// a read of the field.
+func (rs *resolver) membersOf(lang, ownerID, name string) []symbols.Candidate {
 	if ms := callMembers(rs.view.Members(ownerID, name)); len(ms) > 0 {
 		return ms
 	}
@@ -415,7 +430,47 @@ func (rs *resolver) membersOf(ownerID, name string) []symbols.Candidate {
 		found = callMembers(rs.view.Members(sup, name))
 		return len(found) > 0
 	})
+	if len(found) > 0 {
+		return found
+	}
+	for _, m := range rs.ownMembers(lang, ownerID, name) {
+		if m.Kind == goextract.KindField {
+			found = append(found, m)
+		}
+	}
 	return found
+}
+
+// ownMembers returns the members named name of the type ownerID. In a
+// language with class inheritance, a type that declares none has the
+// members of the nearest supertype that declares the name, less the
+// private ones, which a subtype cannot reach. Go has no such step: an
+// embedded struct's fields are not the embedding type's members here.
+func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
+	ms := rs.view.Members(ownerID, name)
+	if len(ms) > 0 || !inheritsMembers(lang) {
+		return ms
+	}
+	rs.h.WalkSupertypes(ownerID, func(sup string) bool {
+		declared := rs.view.Members(sup, name)
+		for _, m := range declared {
+			if m.Node.GetVisibility() != "private" {
+				ms = append(ms, m)
+			}
+		}
+		return len(declared) > 0
+	})
+	return ms
+}
+
+// inheritsMembers reports whether a class of lang has the data members of
+// the classes it extends.
+func inheritsMembers(lang string) bool {
+	switch lang {
+	case "typescript", "tsx", "javascript":
+		return true
+	}
+	return false
 }
 
 // callMembers returns ms without its fields.
@@ -468,7 +523,7 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 	case recv != "":
 		owner, module, ok := rs.findType(r, ref.PkgAlias, recv, recvWrittenIn, ref.Line, ref.Col)
 		if ok {
-			cands := rs.membersOf(owner.ID, ref.Name)
+			cands := rs.membersOf(r.Language, owner.ID, ref.Name)
 			if len(cands) == 0 && ref.PkgAlias != "" && ref.PkgAlias == recv {
 				// The alias named a module after all: `util.Parse()`.
 				if mod, ok := r.Imports[ref.PkgAlias]; ok {
@@ -495,15 +550,17 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		// A bare name: the innermost same-file declaration in scope, the
 		// enclosing type's member, the file's module-level declaration,
 		// then the module's cross-file index (D15).
+		// A call through a data symbol is a read of it, which Assemble
+		// turns into the calls its bindings establish.
 		local := rs.sameFile(r, ref.Name, ref.Line, ref.Col, func(kind string) bool {
-			return callableKind(kind) || symbols.IsTypeKind(kind)
+			return callableKind(kind) || symbols.IsTypeKind(kind) || isDataKind(kind)
 		})
 		if len(local) > 0 && local[0].Node.Nested {
 			return rs.choose(r, ref, local, argTypes, r.ImportPath)
 		}
 		if implicitThis(r.Language) {
 			if owner, ok := rs.h.OwnerOf(ref.FromID); ok {
-				if cands := rs.membersOf(owner, ref.Name); len(cands) > 0 {
+				if cands := rs.membersOf(r.Language, owner, ref.Name); len(cands) > 0 {
 					return rs.choose(r, ref, cands, argTypes, r.ImportPath)
 				}
 			}
