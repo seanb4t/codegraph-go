@@ -124,17 +124,19 @@ func (t geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := geminiConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))
 	} else {
-		fr, err := writeMcpEntry(configPath, func() any {
-			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
+		_ = recordUserFile(&result, configPath, loc, opInstall, func(real string) (FileResult, error) {
+			return writeMcpEntry(real, func() any {
+				return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
+			})
 		})
-		recordFile(&result, configPath, fr, err)
 	}
 
 	if instrPath, err := geminiInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
 	} else {
-		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		recordFile(&result, instrPath, fr, err)
+		_ = recordUserFile(&result, instrPath, loc, opInstall, func(real string) (FileResult, error) {
+			return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+		})
 	}
 
 	installDeclaredSkill(&result, t, loc)
@@ -148,15 +150,13 @@ func (t geminiTarget) Uninstall(loc Location) WriteResult {
 	if configPath, err := geminiConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))
 	} else {
-		fr, err := removeMcpEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	if instrPath, err := geminiInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
 	} else {
-		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
-		recordAction(&result, instrPath, action, err)
+		removeSharedInstructions(&result, instrPath, loc, t.ID())
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)

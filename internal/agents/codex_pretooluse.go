@@ -190,8 +190,9 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, err))
 		return
 	}
-	fr, werr = writeHookEntry(hooksPath, "PreToolUse", blocks, ownCommands)
-	recordFile(result, hooksPath, fr, werr)
+	_ = recordUserFile(result, hooksPath, loc, opInstall, func(real string) (FileResult, error) {
+		return writeHookEntry(real, "PreToolUse", blocks, ownCommands)
+	})
 }
 
 // codexHooksExplicitlyDisabled reports whether the config.toml governing
@@ -312,6 +313,7 @@ func uninstallCodexPreToolNudge(result *WriteResult, loc Location) {
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, err))
 		return
 	}
-	fr, werr := removeHookEntry(hooksPath, "PreToolUse", ownCommands)
-	recordFile(result, hooksPath, fr, werr)
+	_ = recordUserFile(result, hooksPath, loc, opUninstall, func(real string) (FileResult, error) {
+		return removeHookEntry(real, "PreToolUse", ownCommands)
+	})
 }

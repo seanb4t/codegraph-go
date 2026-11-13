@@ -214,7 +214,7 @@ func globalOnlyPath(fn func() (string, error)) PathFunc {
 // justified only where Claude could have written that manifest: when dir
 // is the same physical directory as Claude's own skill directory — D-17's
 // `npx skills` layout, where `~/.claude/skills/codegraph` is a symlink onto
-// the shared `.agents/skills/codegraph`. The comparison is sameSkillDir
+// the shared `.agents/skills/codegraph`. The comparison is sameRealPath
 // against claudeSkillDirPath, the same D-17-aware check
 // installSkillPackageWithFallback uses for its advisory note. Comparing
 // against the shared path would always match for Cursor and opencode,
@@ -228,7 +228,7 @@ func declaredSkillFallback(dir string, loc Location, requester TargetID) ([]Targ
 	if err != nil {
 		return nil, err
 	}
-	same, err := sameSkillDir(dir, claudeDir)
+	same, err := sameRealPath(dir, claudeDir)
 	if err != nil {
 		return nil, err
 	}

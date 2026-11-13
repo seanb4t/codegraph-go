@@ -112,10 +112,11 @@ func (t cursorTarget) Install(loc Location, opts InstallOptions) WriteResult {
 
 	pathArg := "${workspaceFolder}"
 	if loc == LocationLocal {
-		if cwd, err := os.Getwd(); err == nil {
-			if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
-				cwd = resolved
-			}
+		// The value goes into a configuration entry and decides no write, so
+		// an unresolved working directory is good enough as a fallback.
+		if root, err := localProjectRoot(); err == nil {
+			pathArg = root
+		} else if cwd, err := os.Getwd(); err == nil {
 			pathArg = cwd
 		}
 	}
@@ -126,10 +127,11 @@ func (t cursorTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := cursorConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor config path: %w", err))
 	} else {
-		fr, err := writeMcpEntry(configPath, func() any {
-			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp", "--path", pathArg)
+		_ = recordUserFile(&result, configPath, loc, opInstall, func(real string) (FileResult, error) {
+			return writeMcpEntry(real, func() any {
+				return stdioMcpEntry(opts.ExecPath, "serve", "--mcp", "--path", pathArg)
+			})
 		})
-		recordFile(&result, configPath, fr, err)
 	}
 
 	installDeclaredSkill(&result, t, loc)
@@ -142,8 +144,7 @@ func (t cursorTarget) Uninstall(loc Location) WriteResult {
 	if configPath, err := cursorConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor config path: %w", err))
 	} else {
-		fr, err := removeMcpEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)

@@ -1275,3 +1275,76 @@ func TestInstall_PlainBranchPathsAreControlCharacterSanitized(t *testing.T) {
 		t.Errorf("expected the created config.toml path in the output, got: %q", out)
 	}
 }
+
+// projectWithOutsideLink makes a project directory with one symlink that
+// leads to a file outside it, makes the project the working directory, and
+// returns the outside file.
+func projectWithOutsideLink(t *testing.T, link, content string) string {
+	t.Helper()
+	fakeHome(t)
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := filepath.Join(base, "project")
+	target := filepath.Join(base, "outside.md")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(project, link)); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+	return target
+}
+
+// TestInstall_LocalSymlinkOutsideProjectExitsNonZero covers the spec
+// requirement "A local install refuses a file outside the project" at the
+// command: the exit is non-zero and one error line names the path, the
+// real location and a way forward.
+func TestInstall_LocalSymlinkOutsideProjectExitsNonZero(t *testing.T) {
+	const content = "export PATH=/bin\n"
+	target := projectWithOutsideLink(t, "AGENTS.md", content)
+
+	out, _, err := execCmd("install", "--target", "codex", "--location", "local")
+	if err == nil {
+		t.Fatalf("install exited zero for a file outside the project; output:\n%s", out)
+	}
+	found := false
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "error:") && strings.Contains(line, "AGENTS.md") &&
+			strings.Contains(line, target) && strings.Contains(line, "--location global") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no error line names AGENTS.md, %s and --location global:\n%s", target, out)
+	}
+	if got := readFileString(t, target); got != content {
+		t.Fatalf("the outside file changed: %q", got)
+	}
+}
+
+// TestUninstall_LocalSymlinkOutsideProjectExitsZeroWithANote covers the
+// spec requirement "A local uninstall leaves a file outside the project".
+func TestUninstall_LocalSymlinkOutsideProjectExitsZeroWithANote(t *testing.T) {
+	const content = "my notes\n"
+	target := projectWithOutsideLink(t, "AGENTS.md", content)
+
+	out, _, err := execCmd("uninstall", "--target", "codex", "--location", "local")
+	if err != nil {
+		t.Fatalf("uninstall: %v; output:\n%s", err, out)
+	}
+	if !strings.Contains(out, "  kept: AGENTS.md\n") {
+		t.Fatalf("output does not report AGENTS.md as kept:\n%s", out)
+	}
+	if !strings.Contains(out, "  note: AGENTS.md is left as it is") {
+		t.Fatalf("output has no note that names AGENTS.md:\n%s", out)
+	}
+	if got := readFileString(t, target); got != content {
+		t.Fatalf("the outside file changed: %q", got)
+	}
+}

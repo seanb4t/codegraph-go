@@ -371,25 +371,24 @@ func (hermesTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve hermes config path: %w", err))
 		return result
 	}
-	existed := fileExists(configPath)
-	existing := readFileOrEmpty(configPath)
+	_ = recordUserAction(&result, configPath, loc, opInstall, func(real string) (FileAction, error) {
+		existed := fileExists(real)
+		existing := readFileOrEmpty(real)
 
-	updated := hermesSpliceMcpServersBlock(existing, opts.ExecPath)
-	updated = hermesAppendCliToolset(updated)
+		updated := hermesSpliceMcpServersBlock(existing, opts.ExecPath)
+		updated = hermesAppendCliToolset(updated)
 
-	if updated == existing {
-		result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionUnchanged})
-		return result
-	}
-	if err := atomicWriteFile(configPath, updated); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
-		return result
-	}
-	action := ActionUpdated
-	if !existed {
-		action = ActionCreated
-	}
-	result.Files = append(result.Files, FileResult{Path: configPath, Action: action})
+		if updated == existing {
+			return ActionUnchanged, nil
+		}
+		if err := atomicWriteFile(real, updated); err != nil {
+			return "", err
+		}
+		if !existed {
+			return ActionCreated, nil
+		}
+		return ActionUpdated, nil
+	})
 	return result
 }
 
@@ -404,24 +403,24 @@ func (hermesTarget) Uninstall(loc Location) WriteResult {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve hermes config path: %w", err))
 		return result
 	}
-	if !fileExists(configPath) {
-		result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
-		return result
-	}
+	// The existence test runs on the real location, after the resolve, so
+	// a symlink loop is an error and not "no file".
+	_ = recordUserAction(&result, configPath, loc, opUninstall, func(real string) (FileAction, error) {
+		if !fileExists(real) {
+			return ActionNotFound, nil
+		}
+		existing := readFileOrEmpty(real)
+		updated := hermesStripMcpServersBlock(existing)
+		updated = hermesRemoveCliToolset(updated)
 
-	existing := readFileOrEmpty(configPath)
-	updated := hermesStripMcpServersBlock(existing)
-	updated = hermesRemoveCliToolset(updated)
-
-	if updated == existing {
-		result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
-		return result
-	}
-	if err := atomicWriteFile(configPath, updated); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
-		return result
-	}
-	result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionRemoved})
+		if updated == existing {
+			return ActionNotFound, nil
+		}
+		if err := atomicWriteFile(real, updated); err != nil {
+			return "", err
+		}
+		return ActionRemoved, nil
+	})
 	return result
 }
 

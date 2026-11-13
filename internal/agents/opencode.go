@@ -259,6 +259,12 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 	}
 	for _, name := range []string{"opencode.jsonc", "opencode.json"} {
 		stalePath := filepath.Join(appData, "opencode", name)
+		// The stale file is a user's file too: edit the file a link leads
+		// to, never the link. A path that does not resolve is skipped.
+		stalePath, err := resolveUserFile(stalePath, LocationGlobal)
+		if err != nil {
+			continue
+		}
 		if fileExists(stalePath) {
 			// IN-14: best-effort stale-file sweep — this is cleanup for a
 			// config directory the resolved (correct) path has already
@@ -302,15 +308,17 @@ func (t opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := opencodeConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode config path: %w", err))
 	} else {
-		fr, err := writeOpencodeEntry(configPath, opts.ExecPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opInstall, func(real string) (FileResult, error) {
+			return writeOpencodeEntry(real, opts.ExecPath)
+		})
 	}
 
 	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
 	} else {
-		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		recordFile(&result, instrPath, fr, err)
+		_ = recordUserFile(&result, instrPath, loc, opInstall, func(real string) (FileResult, error) {
+			return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+		})
 	}
 
 	installDeclaredSkill(&result, t, loc)
@@ -330,22 +338,16 @@ func (t opencodeTarget) Uninstall(loc Location) WriteResult {
 	if configPath, err := opencodeConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode config path: %w", err))
 	} else {
-		fr, err := removeOpencodeEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeOpencodeEntry)
 	}
 
 	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
-	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {
-		// D-11: the repo-root AGENTS.md is shared with codex at local
-		// scope — leave the marker block in place while another
-		// registered target still declares this same file and reports
-		// itself configured there.
-		result.Files = append(result.Files, FileResult{Path: instrPath, Action: ActionKept})
-		result.Notes = append(result.Notes, instructionsKeptNote(instrPath, others))
 	} else {
-		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
-		recordAction(&result, instrPath, action, err)
+		// D-11: the repo-root AGENTS.md is shared with codex at local
+		// scope. removeSharedInstructions leaves the marker block in place
+		// while another registered target still uses the same real file.
+		removeSharedInstructions(&result, instrPath, loc, t.ID())
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)

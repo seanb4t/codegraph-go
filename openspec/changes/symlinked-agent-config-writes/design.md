@@ -132,6 +132,15 @@ The steps that record directly today become `edit` functions that return a `File
 
 `recordKept` is the two lines that `codex.go:332` and `opencode.go:346` repeat. Both sites and D5 call it.
 
+The implementation settled four points that the plan review left open:
+
+- An `edit` function that returns a `FileResult` with no `Action` records nothing. The Claude legacy migration and the Claude PreToolUse removal use this for a step that changed nothing.
+- The Antigravity migration reports the configured legacy path, not the real location.
+- The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve.
+- The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too.
+
+The Cursor and Kiro legacy instruction files stay outside the funnel. `codegraph` wrote their whole content, and `os.Remove` on a link deletes the link and never its target.
+
 ### D5. A local file outside the project: refuse on install, keep on uninstall
 
 With `opInstall`, the funnel records the error. The message names the configured path and the real location, and ends with the three ways forward: run the install in the directory that holds the real file, use `--location global`, or replace the link with a regular file. The check runs before any read, so the unchanged short-circuit in the helpers cannot skip it, and no content of the outside file is copied.

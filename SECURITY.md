@@ -97,6 +97,14 @@ What this project defends against:
   `tool-vuln` job in `ci.yml`, which reports findings and never fails the
   build.
 
+- **A repository that links an agent file to a file outside the project.** A
+  repository can commit `AGENTS.md` or `.mcp.json` as a symlink to another
+  file of yours. `codegraph install --location local` resolves each agent
+  file that it edits. If the real location is outside the directory the
+  command runs in, the install refuses that file, names both paths, and
+  writes nothing to it. An uninstall leaves such a file as it is and adds a
+  note. A symlink loop is an error.
+
 What it does **not** defend against, stated plainly:
 
 - **Malicious source code in a repository you index.** `codegraph` parses code;
@@ -115,6 +123,16 @@ What it does **not** defend against, stated plainly:
   excerpts from the indexed repository, in plaintext. It inherits the
   filesystem's permissions and nothing more. Do not commit it, and do not treat
   it as safe to share when the source is not.
+- **Files that `codegraph` owns, under a linked project directory.** The rule
+  for a local install covers the agent files that `codegraph` edits in place
+  and shares with you. It does not cover the files whose whole content
+  `codegraph` writes: guard scripts, the skill package and the install
+  manifest. If a project directory such as `.claude` is a symlink to an
+  outside directory, a local install still writes those files there.
+- **A link that changes during the command.** The install resolves a path
+  and then writes. A process that replaces a link between those two steps
+  can move the write. That needs write access to your directory while the
+  command runs.
 - **MCP transport security.** `serve --mcp` speaks stdio to a local client and
   performs no authentication, by design. Do not expose it over a network.
 - **Registry-vendored UI component source bypassing `pnpm audit`.** Component
