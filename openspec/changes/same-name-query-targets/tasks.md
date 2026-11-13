@@ -16,7 +16,7 @@
 ## 3. Definition labels in the results
 
 - [x] 3.1 Add `Location.Definition`, the label function and the `Definitions` list of `CallersResult`, `CalleesResult` and `ImpactResult` (design D3). If `spans` is false, leave them empty. Verify with `TestCallerNamesTheDefinitionItCalls` and `TestImpactReachesOneSymbolFromTwoDefinitions`.
-- [x] 3.2 Add `TestSignatureThatMatchesInTwoFilesSpansDefinitions` and `TestAmbiguousCallerInASpanningQueryHasNoDefinition`. They cover the two scenarios of those names. Add `TestTwoOverloadSetsSpanDefinitions`: two classes each declare two overloads of `log`, and the result has four definitions and labeled rows. Verify that all three pass.
+- [x] 3.2 Add `TestSignatureThatMatchesInTwoFilesSpansDefinitions`, `TestAmbiguousCallerInASpanningQueryHasNoDefinition` and `TestAmbiguousCalleeInASpanningQueryNamesItsDefinition`. They cover the three scenarios of those names. Add `TestTwoOverloadSetsSpanDefinitions`: two classes each declare two overloads of `log`, and the result has four definitions and labeled rows. Verify that all three pass.
 - [x] 3.3 Add `TestAFunctionAndAPackageOfOneName` for the requirement "A definition is named by its file and line". It uses a node with an empty `FilePath` and asserts the label `package example.com/app/cache`. Verify that it passes.
 - [x] 3.4 Add `TestJSONOfANameWithTwoDefinitionsHasDefinitions`, `TestJSONOfANameWithOneDefinitionHasNoNewKeys` and `TestJSONOfOneOverloadSetHasNoDefinitionKeys`. They marshal the results and compare the exact key sets. They cover "JSON output over several definitions", "One definition in JSON" and "One overload set alone". Verify that all three pass.
 

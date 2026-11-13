@@ -69,7 +69,7 @@ Alternative: treat every multi-node query as `overloaded` and reuse the signatur
 - `<FilePath>:<StartLine>` for a node with a file.
 - `<Kind> <QualifiedName>` for a node with no file, for example `package example.com/app/cache`.
 
-A row that comes from the `overload_set` node is marked ambiguous and gets no label. It belongs to the set, and the set is not a definition.
+A row that comes from the `overload_set` node is marked ambiguous and gets no label. It belongs to the set, and the set is not a definition. A callee row that is itself a set is also marked ambiguous, but it comes from a definition, so it keeps the label of that definition, as it keeps the signature of an overload it is called from.
 
 The three result types gain `Definitions []Location` with the JSON name `definitions` and `omitempty`. Each entry carries its own label in `Definition`. The list is in the order of D1. It has no cap, so its length is the true count of the definitions. The text line of D5 has its own cap.
 
