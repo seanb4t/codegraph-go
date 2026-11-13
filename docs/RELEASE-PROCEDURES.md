@@ -233,7 +233,9 @@ cosign verify-blob \
 # b) build provenance — GitHub's first-party attestor (D-09), published
 #    through GitHub's Attestations API, over all 8 payloads (4 raw
 #    binaries + 4 .zip archives)
-gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go
+gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go \
+  --signer-workflow seanb4t/codegraph-go/.github/workflows/release.yml \
+  --source-ref refs/tags/<tag>
 ```
 
 > **(b) is for releases from the migrated pipeline onward only.** Releases

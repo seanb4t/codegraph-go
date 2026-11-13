@@ -45,7 +45,10 @@ including ones running against untrusted pull-request code.
 Build provenance is attested by GitHub's first-party attestor
 (`actions/attest-build-provenance`) over every published binary and `.zip`
 archive, published through GitHub's Attestations API, and is verifiable with
-`gh attestation verify <asset> -R seanb4t/codegraph-go`.
+`gh attestation verify <asset> -R seanb4t/codegraph-go`. Add
+`--signer-workflow seanb4t/codegraph-go/.github/workflows/release.yml` and
+`--source-ref refs/tags/<tag>` to pin the check to the release workflow and
+to one release. `docs/RELEASE.md` has the full commands.
 
 The release workflow also attests the SBOM of each binary with
 `actions/attest`. Releases after `v0.17.0` have this attestation. To verify
