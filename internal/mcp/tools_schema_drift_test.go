@@ -174,3 +174,29 @@ func parseQueryConstants(t *testing.T) map[string]int {
 	}
 	return out
 }
+
+// TestDefinitionToolsDeclareOptionalFile is the mcp-server scenario "The
+// input schema of the three tools": callers, callees and impact each
+// declare an optional string property file.
+func TestDefinitionToolsDeclareOptionalFile(t *testing.T) {
+	schemas := map[string]func() (*jsonschema.Schema, error){
+		"codegraph_callers": func() (*jsonschema.Schema, error) { return jsonschema.For[CallersArgs](nil) },
+		"codegraph_callees": func() (*jsonschema.Schema, error) { return jsonschema.For[CalleesArgs](nil) },
+		"codegraph_impact":  func() (*jsonschema.Schema, error) { return jsonschema.For[ImpactArgs](nil) },
+	}
+	for tool, build := range schemas {
+		s, err := build()
+		if err != nil {
+			t.Fatalf("%s: jsonschema.For: %v", tool, err)
+		}
+		prop, ok := s.Properties["file"]
+		if !ok || prop.Type != "string" {
+			t.Errorf("%s: file property = %+v, want a string", tool, prop)
+		}
+		for _, required := range s.Required {
+			if required == "file" {
+				t.Errorf("%s: file is required, want optional", tool)
+			}
+		}
+	}
+}

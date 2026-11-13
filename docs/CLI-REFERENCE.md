@@ -87,6 +87,7 @@ codegraph callees <symbol> [flags]
 ### Options
 
 ```
+  -f, --file string        file path — keeps the definitions of the symbol in the files whose path contains it
   -h, --help               help for callees
   -j, --json               emit JSON output
   -l, --limit int          cap on results returned
@@ -115,6 +116,7 @@ codegraph callers <symbol> [flags]
 ### Options
 
 ```
+  -f, --file string        file path — keeps the definitions of the symbol in the files whose path contains it
   -h, --help               help for callers
   -j, --json               emit JSON output
   -l, --limit int          cap on results returned
@@ -620,6 +622,7 @@ codegraph impact <symbol> [flags]
 
 ```
   -d, --depth int          BFS depth (default 2, max 50)
+  -f, --file string        file path — keeps the definitions of the symbol in the files whose path contains it
   -h, --help               help for impact
   -j, --json               emit JSON output
   -p, --path string        repo path (default: cwd)
