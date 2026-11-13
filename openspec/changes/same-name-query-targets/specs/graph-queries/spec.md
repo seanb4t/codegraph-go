@@ -13,8 +13,10 @@ A definition of a name is a node with that name that is not an `overload_set` no
 
 #### Scenario: A typing stub and the real function
 
-- **WHEN** a Python module declares `to_list` under `@overload` and then declares the real `to_list`, another module calls `to_list(x)`, and a user runs `codegraph callers to_list`
-- **THEN** the calling function is listed
+- **GIVEN** `lib.py` declares `to_list` under `@overload` and then declares the real `to_list`
+- **AND** the function `build` in `app.py` calls `to_list(x)`
+- **WHEN** a user runs `codegraph callers to_list`
+- **THEN** `build` is listed
 
 #### Scenario: A method and a test helper of one name
 
@@ -36,12 +38,18 @@ A definition of a name is a node with that name that is not an `overload_set` no
 
 ### Requirement: A result over several definitions lists them
 
-A query spans definitions when it reports across definitions that are not all members of one overload set. The output of such a query SHALL list the definitions, each with its file and line. The `--json` output SHALL carry the list in a `definitions` field. A query over one overload set alone SHALL NOT list definitions.
+If a query starts from definitions that are not all members of one overload set, it spans definitions. The output of such a query SHALL list the definitions. If the query finds no result, the output SHALL still list them. The `--json` output SHALL carry the list in a `definitions` field. A query over one overload set alone SHALL NOT list definitions.
 
 #### Scenario: The definitions are listed
 
 - **WHEN** `a.py:1` and `b.py:1` each declare `def run()`, `main` calls the one in `a.py`, and a user runs `codegraph callers run`
 - **THEN** the output states that `run` has 2 definitions and lists `a.py:1` and `b.py:1`
+
+#### Scenario: A query that spans definitions and finds no result
+
+- **WHEN** `a.py:1` and `b.py:1` each declare `def run()`, no function calls either, and a user runs `codegraph callers run`
+- **THEN** the output states that `run` has 0 callers
+- **AND** the output lists `a.py:1` and `b.py:1` as the 2 definitions of `run`
 
 #### Scenario: JSON output over several definitions
 
@@ -54,25 +62,56 @@ A query spans definitions when it reports across definitions that are not all me
 - **THEN** each entry of `callers` has its `signature` field
 - **AND** the JSON object has no `definitions` field, and no entry has a `definition` field
 
+### Requirement: A definition is named by its file and line
+
+Where the output names a definition, the name SHALL be the file and the line of the definition, as `<file>:<line>`. A package has no file, and a type whose parts are in several files has none. Such a definition SHALL be named by its kind and its qualified name.
+
+#### Scenario: A function and a package of one name
+
+- **WHEN** a Go module has the package `example.com/app/cache`, `main.go:3` declares `func cache()`, and a user runs `codegraph callers cache`
+- **THEN** the output lists the 2 definitions `main.go:3` and `package example.com/app/cache`
+
 ### Requirement: A row of a query that spans definitions names its definition
 
-When a query spans definitions, each result of `callers` and `callees` SHALL name the definition it belongs to by file and line. A result that belongs to two definitions SHALL appear once for each. In `impact`, each definition SHALL be a result that names itself, and a symbol that the walk reaches SHALL appear once and name no definition. The `--json` output SHALL carry the name in a `definition` field of the entry.
+When a query spans definitions, each result of `callers` and `callees` SHALL name the definition it belongs to. A result that belongs to two definitions SHALL appear once for each. A result marked ambiguous belongs to an overload set and SHALL name no definition. The `--json` output SHALL carry the name in a `definition` field of the entry.
 
 #### Scenario: A caller names the definition it calls
 
 - **WHEN** `a.py:1` and `b.py:1` each declare `def run()`, `main` calls the one in `a.py`, and a user runs `codegraph callers run --json`
 - **THEN** the entry for `main` has a `definition` field that holds `a.py:1`
 
-#### Scenario: One caller of two definitions
+#### Scenario: A signature that matches in two files
 
-- **WHEN** `a.go` and `b.go` in two packages each declare `func Reset()`, `main` calls both, and a user runs `codegraph callers Reset`
-- **THEN** `main` is listed twice, once with each definition
+- **GIVEN** `Logger.java:4` and `Audit.java:7` each declare `log(String)`
+- **AND** `Main.start` calls the one in `Logger.java`, and `Job.run` calls the one in `Audit.java`
+- **WHEN** a user runs `codegraph callers log --signature "String" --json`
+- **THEN** the entry for `Main.start` has the `definition` `Logger.java:4`, and the entry for `Job.run` has the `definition` `Audit.java:7`
+
+#### Scenario: An ambiguous caller in a query that spans definitions
+
+- **GIVEN** `Calc` declares `add(int)` and `add(String)`, and `Run.go` calls `add(null)`
+- **AND** another file declares an unrelated function `add()`
+- **WHEN** a user runs `codegraph callers add --json`
+- **THEN** the entry for `Run.go` is marked ambiguous and has no `definition` field
+
+### Requirement: Impact names each start definition
+
+When an `impact` query spans definitions, each definition SHALL be a result that names itself. A symbol that the walk reaches SHALL appear once and name no definition.
 
 #### Scenario: Impact reaches one symbol from two definitions
 
 - **WHEN** `a.go` and `b.go` in two packages each declare `func Reset()`, `main` calls both, and a user runs `codegraph impact Reset --json`
 - **THEN** `affected` holds both `Reset` definitions, each with its `definition` field
 - **AND** `affected` holds `main` once, with no `definition` field
+
+### Requirement: The order of the results does not depend on node ids
+
+The results of `callers`, `callees` and `impact` SHALL be ordered by file, then name, then line. Results that are equal in all three SHALL be ordered by the name of their definition, then by their signature. The list of definitions SHALL be ordered by file, then line, then kind and qualified name.
+
+#### Scenario: One caller of two definitions
+
+- **WHEN** `a.go:1` and `b.go:1` in two packages each declare `func Reset()`, `main` calls both, and a user runs `codegraph callers Reset`
+- **THEN** `main` is listed twice, first with the definition `a.go:1` and then with `b.go:1`
 
 ### Requirement: A name with one definition keeps its output
 
@@ -92,7 +131,7 @@ When a bare name has exactly one definition, `callers`, `callees` and `impact` S
 
 ### Requirement: A file selects the definitions in it
 
-`callers`, `callees` and `impact` SHALL accept `--file <path>`, a path from the repository root. With it, the query SHALL start only from the definitions of the name in that file. `--file` and `--signature` together SHALL select the definitions that match both. When the file holds no definition of the name, the command SHALL fail and list the files that hold one.
+`callers`, `callees` and `impact` SHALL accept `--file <path>`. With it, the query SHALL start only from the definitions whose file path contains the value. The comparison SHALL ignore letter case and SHALL treat `\` as `/`, as `node --file` does. `--file` and `--signature` together SHALL select the definitions that match both. When no definition matches, the command SHALL fail and list each file that holds a definition once.
 
 #### Scenario: Callees of the definition in one file
 
@@ -100,15 +139,23 @@ When a bare name has exactly one definition, `callers`, `callees` and `impact` S
 - **THEN** `load` is listed and `save` is not
 - **AND** the output has no line that lists definitions
 
+#### Scenario: A file named by the end of its path
+
+- **WHEN** `src/app/models.py` and `tests/conftest.py` each declare `prepare_url`, and a user runs `codegraph callees prepare_url --file models.py`
+- **THEN** only the callees of the definition in `src/app/models.py` are listed
+
 #### Scenario: A file with no definition of the name
 
-- **WHEN** `a.py` and `b.py` each declare `def run()`, and a user runs `codegraph callers run --file c.py`
-- **THEN** the command exits non-zero, says that `c.py` has no definition of `run`, and lists `a.py` and `b.py`
+- **WHEN** `a.py` declares `def run()` twice, `b.py` declares `def run()`, and a user runs `codegraph callers run --file c.py`
+- **THEN** the command exits non-zero and says that no definition of `run` is in a file that matches `c.py`
+- **AND** the message lists `a.py` once and `b.py` once
 
 #### Scenario: A file and a signature
 
-- **WHEN** `Logger.java` declares `log(String)` and `log(String, Throwable)`, `Audit.java` declares `log(String)`, and a user runs `codegraph callers log --file Logger.java --signature "String"`
-- **THEN** only the callers of `log(String)` in `Logger.java` are listed
+- **GIVEN** `Logger.java` declares `log(String)` and `log(String, Throwable)`, and `Audit.java` declares `log(String)`
+- **AND** `Main.start` calls `log("a")` of `Logger`, `Main.stop` calls `log("b", e)` of `Logger`, and `Job.run` calls `log("c")` of `Audit`
+- **WHEN** a user runs `codegraph callers log --file Logger.java --signature "String"`
+- **THEN** `Main.start` is listed, and `Main.stop` and `Job.run` are not
 
 ### Requirement: The MCP tools select by file
 
