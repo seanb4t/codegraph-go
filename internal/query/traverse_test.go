@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -359,6 +360,22 @@ func TestImpact_DispatchTraversal(t *testing.T) {
 	// Both definitions of Handle + Caller = 3 distinct visited nodes.
 	if got.NodeCount != 3 {
 		t.Errorf("NodeCount = %d, want 3 (A.Handle, B.Handle and Caller)", got.NodeCount)
+	}
+
+	// From A.Handle alone, only the dispatch composition reaches Caller:
+	// no edge points at A.Handle.
+	nodes["method:a-handle"].FilePath = "a.go"
+	nodes["method:b-handle"].FilePath = "b.go"
+	one, err := New(&traverseFakeReader{nodes: nodes, edges: edges}).ImpactSelected(Selector{Symbol: "Handle"}, "a.go", 1)
+	if err != nil {
+		t.Fatalf("ImpactSelected: unexpected error: %v", err)
+	}
+	var names []string
+	for _, loc := range one.Affected {
+		names = append(names, loc.Name)
+	}
+	if !slices.Contains(names, "Caller") || one.NodeCount != 2 {
+		t.Errorf("ImpactSelected(Handle, a.go, 1) = %v (NodeCount %d), want Handle and Caller", names, one.NodeCount)
 	}
 }
 
