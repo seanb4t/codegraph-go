@@ -29,6 +29,13 @@ type Location struct {
 	// both. Signature is rendered on one line.
 	Signature string `json:"signature,omitempty"`
 	Ambiguous bool   `json:"ambiguous,omitempty"`
+
+	// Definition is set when the query spans definitions of one name
+	// that are not all members of one overload set: the label
+	// (DefinitionLabel) of the definition the row belongs to. It is
+	// empty for a row that belongs to an overload set, and for a symbol
+	// an impact walk reached.
+	Definition string `json:"definition,omitempty"`
 }
 
 // lexicalTier ranks how a term matched a node's name/qualifiedName

@@ -1,0 +1,688 @@
+package query
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"pgregory.net/rapid"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/schema"
+)
+
+// defGraph builds a graph for the fake reader of traverse_test.go. A node
+// id is the key the test gives, so a test controls which id sorts first.
+type defGraph struct {
+	nodes map[string]*schema.Node
+	edges []*schema.Edge
+}
+
+func newDefGraph() *defGraph { return &defGraph{nodes: map[string]*schema.Node{}} }
+
+func (g *defGraph) node(id, kind, name, file string, line int32) *schema.Node {
+	n := &schema.Node{Id: id, Kind: kind, Name: name, QualifiedName: name, FilePath: file, StartLine: line}
+	g.nodes[id] = n
+	return n
+}
+
+func (g *defGraph) fn(id, name, file string, line int32) *schema.Node {
+	return g.node(id, goextract.KindFunction, name, file, line)
+}
+
+// set adds an overload_set node over the members, at the place of the
+// first member, as the indexer stores it.
+func (g *defGraph) set(id string, members ...*schema.Node) {
+	first := members[0]
+	g.node(id, goextract.KindOverloadSet, first.Name, first.FilePath, first.StartLine)
+	for _, m := range members {
+		g.edges = append(g.edges, &schema.Edge{Source: id, Target: m.Id, Kind: goextract.RefKindContains})
+	}
+}
+
+func (g *defGraph) call(src, dst string) {
+	g.edges = append(g.edges, &schema.Edge{Source: src, Target: dst, Kind: goextract.RefKindCalls})
+}
+
+func (g *defGraph) engine() *Engine {
+	return New(&traverseFakeReader{nodes: g.nodes, edges: g.edges})
+}
+
+func rowNames(locs []Location) []string {
+	var out []string
+	for _, l := range locs {
+		out = append(out, l.Name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func labels(locs []Location) []string {
+	var out []string
+	for _, l := range locs {
+		out = append(out, l.Definition)
+	}
+	return out
+}
+
+// twoRuns is two functions named run in two files. The one in a.py calls
+// load and is called by main. The one in b.py calls save. The ids put
+// b.py first, so a pick by lowest id answers for b.py.
+func twoRuns() *defGraph {
+	g := newDefGraph()
+	g.fn("z-run-a", "run", "a.py", 1)
+	g.fn("a-run-b", "run", "b.py", 1)
+	g.fn("load", "load", "a.py", 9)
+	g.fn("save", "save", "b.py", 9)
+	g.fn("main", "main", "m.py", 1)
+	g.call("z-run-a", "load")
+	g.call("a-run-b", "save")
+	g.call("main", "z-run-a")
+	return g
+}
+
+// TestCalleesOfANameWithTwoDefinitions is the scenario "Two functions of
+// one name in two files".
+func TestCalleesOfANameWithTwoDefinitions(t *testing.T) {
+	got, err := twoRuns().engine().Callees("run", 0)
+	if err != nil {
+		t.Fatalf("Callees: %v", err)
+	}
+	if diff := cmp.Diff([]string{"load", "save"}, rowNames(got.Callees)); diff != "" {
+		t.Errorf("callees of run (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"a.py:1", "b.py:1"}, labels(got.Definitions)); diff != "" {
+		t.Errorf("definitions of run (-want +got):\n%s", diff)
+	}
+}
+
+// pyEngine writes and indexes a Python tree.
+func pyEngine(t *testing.T, files map[string]string) *Engine {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	indexFixture(t, dir)
+	engine, closer, err := OpenAt(dir)
+	if err != nil {
+		t.Fatalf("OpenAt: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	return engine
+}
+
+// TestCallersOfAStubAndTheRealFunction is the scenario "A typing stub and
+// the real function", through the real indexer.
+func TestCallersOfAStubAndTheRealFunction(t *testing.T) {
+	engine := pyEngine(t, map[string]string{
+		"lib.py": "from typing import overload\n\n\n@overload\ndef to_list(value: None) -> None: ...\n@overload\ndef to_list(value: int) -> list: ...\ndef to_list(value):\n    return value\n",
+		"app.py": "from lib import to_list\n\n\ndef build(x):\n    return to_list(x)\n",
+	})
+	got, err := engine.Callers("to_list", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if diff := cmp.Diff([]string{"build"}, rowNames(got.Callers)); diff != "" {
+		t.Errorf("callers of to_list (-want +got):\n%s", diff)
+	}
+	if len(got.Definitions) != 3 {
+		t.Errorf("definitions of to_list = %v, want the two stubs and the real function", labels(got.Definitions))
+	}
+}
+
+// TestCalleesOfAMethodAndATestHelper is the scenario "A method and a test
+// helper of one name", through the real indexer.
+func TestCalleesOfAMethodAndATestHelper(t *testing.T) {
+	engine := pyEngine(t, map[string]string{
+		"src/models.py":     "def requote_uri(u):\n    return u\n\n\nclass Request:\n    def prepare_url(self, url):\n        return requote_uri(url)\n",
+		"tests/conftest.py": "def prepare_url(value):\n    return value\n",
+	})
+	got, err := engine.Callees("prepare_url", 0)
+	if err != nil {
+		t.Fatalf("Callees: %v", err)
+	}
+	if diff := cmp.Diff([]string{"requote_uri"}, rowNames(got.Callees)); diff != "" {
+		t.Errorf("callees of prepare_url (-want +got):\n%s", diff)
+	}
+}
+
+// twoResets is two functions named Reset in two packages. A calls the
+// first, B calls the second, and main calls both.
+func twoResets() *defGraph {
+	g := newDefGraph()
+	g.fn("z-reset-a", "Reset", "a.go", 1)
+	g.fn("a-reset-b", "Reset", "b.go", 1)
+	g.fn("A", "A", "a.go", 5)
+	g.fn("B", "B", "b.go", 5)
+	g.fn("main", "main", "main.go", 3)
+	g.call("A", "z-reset-a")
+	g.call("B", "a-reset-b")
+	g.call("main", "a-reset-b")
+	g.call("main", "z-reset-a")
+	return g
+}
+
+// TestImpactOverTwoDefinitions is the scenario "Impact over two
+// definitions".
+func TestImpactOverTwoDefinitions(t *testing.T) {
+	got, err := twoResets().engine().Impact("Reset", 1)
+	if err != nil {
+		t.Fatalf("Impact: %v", err)
+	}
+	if diff := cmp.Diff([]string{"A", "B", "Reset", "Reset", "main"}, rowNames(got.Affected)); diff != "" {
+		t.Errorf("affected by Reset (-want +got):\n%s", diff)
+	}
+}
+
+// TestImpactReachesOneSymbolFromTwoDefinitions is the scenario of that
+// name: each definition names itself, and main appears once with no
+// definition.
+func TestImpactReachesOneSymbolFromTwoDefinitions(t *testing.T) {
+	got, err := twoResets().engine().Impact("Reset", 1)
+	if err != nil {
+		t.Fatalf("Impact: %v", err)
+	}
+	seen := map[string][]string{}
+	for _, l := range got.Affected {
+		seen[l.Name] = append(seen[l.Name], l.Definition)
+	}
+	if diff := cmp.Diff([]string{"a.go:1", "b.go:1"}, seen["Reset"]); diff != "" {
+		t.Errorf("definition labels of the Reset rows (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{""}, seen["main"]); diff != "" {
+		t.Errorf("definition labels of the main rows (-want +got):\n%s", diff)
+	}
+}
+
+// TestOneCallerOfTwoDefinitionsIsOrderedByDefinition is the scenario "One
+// caller of two definitions". The two rows of main tie on file, name and
+// line, and the lower id belongs to b.go, so an order by id fails here.
+func TestOneCallerOfTwoDefinitionsIsOrderedByDefinition(t *testing.T) {
+	got, err := twoResets().engine().Callers("Reset", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	var mainRows []string
+	for _, l := range got.Callers {
+		if l.Name == "main" {
+			mainRows = append(mainRows, l.Definition)
+		}
+	}
+	if diff := cmp.Diff([]string{"a.go:1", "b.go:1"}, mainRows); diff != "" {
+		t.Errorf("definitions of the two main rows, in order (-want +got):\n%s", diff)
+	}
+}
+
+// TestCallerNamesTheDefinitionItCalls is the scenario of that name.
+func TestCallerNamesTheDefinitionItCalls(t *testing.T) {
+	got, err := twoRuns().engine().Callers("run", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if len(got.Callers) != 1 || got.Callers[0].Name != "main" || got.Callers[0].Definition != "a.py:1" {
+		t.Fatalf("callers of run = %+v, want main with the definition a.py:1", got.Callers)
+	}
+}
+
+// javaLogs is Logger.java with log(String) and log(String, Throwable) in
+// one set, and Audit.java with log(String) outside it. Main.start and
+// Main.stop call the Logger overloads, Job.run calls the Audit one, and
+// Amb.use calls the Logger set.
+func javaLogs() *defGraph {
+	g := newDefGraph()
+	a := g.node("m-log-1", goextract.KindMethod, "log", "Logger.java", 4)
+	a.Signature, a.QualifiedName = "(String msg)", "Logger.log"
+	b := g.node("m-log-2", goextract.KindMethod, "log", "Logger.java", 6)
+	b.Signature, b.QualifiedName = "(String msg, Throwable t)", "Logger.log"
+	c := g.node("a-log-audit", goextract.KindMethod, "log", "Audit.java", 7)
+	c.Signature, c.QualifiedName = "(String msg)", "Audit.log"
+	for _, n := range []*schema.Node{a, c} {
+		n.Params = []*schema.Param{{Name: "msg", Type: "String"}}
+	}
+	b.Params = []*schema.Param{{Name: "msg", Type: "String"}, {Name: "t", Type: "Throwable"}}
+	g.set("set-logger", a, b)
+	g.fn("start", "start", "Main.java", 3)
+	g.fn("stop", "stop", "Main.java", 8)
+	g.fn("run", "run", "Job.java", 3)
+	g.fn("use", "use", "Amb.java", 3)
+	g.call("start", "m-log-1")
+	g.call("stop", "m-log-2")
+	g.call("run", "a-log-audit")
+	g.call("use", "set-logger")
+	return g
+}
+
+// TestCallersOfASetAndADefinitionOutsideIt is the scenario "An overload
+// set and a definition outside it".
+func TestCallersOfASetAndADefinitionOutsideIt(t *testing.T) {
+	got, err := javaLogs().engine().Callers("log", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if diff := cmp.Diff([]string{"run", "start", "stop", "use"}, rowNames(got.Callers)); diff != "" {
+		t.Errorf("callers of log (-want +got):\n%s", diff)
+	}
+}
+
+// TestSignatureThatMatchesInTwoFilesSpansDefinitions is the scenario "A
+// signature that matches in two files".
+func TestSignatureThatMatchesInTwoFilesSpansDefinitions(t *testing.T) {
+	got, err := javaLogs().engine().CallersSelected(Selector{Symbol: "log", Signature: "String"}, "", 0)
+	if err != nil {
+		t.Fatalf("CallersSelected: %v", err)
+	}
+	byName := map[string]string{}
+	for _, l := range got.Callers {
+		if !l.Ambiguous {
+			byName[l.Name] = l.Definition
+		}
+	}
+	want := map[string]string{"start": "Logger.java:4", "run": "Audit.java:7"}
+	if diff := cmp.Diff(want, byName); diff != "" {
+		t.Errorf("definition of each caller (-want +got):\n%s", diff)
+	}
+}
+
+// TestAmbiguousCallerInASpanningQueryHasNoDefinition is the scenario "An
+// ambiguous caller in a query that spans definitions".
+func TestAmbiguousCallerInASpanningQueryHasNoDefinition(t *testing.T) {
+	got, err := javaLogs().engine().Callers("log", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	found := false
+	for _, l := range got.Callers {
+		if l.Name == "use" {
+			found = true
+			if !l.Ambiguous || l.Definition != "" {
+				t.Errorf("row of use = %+v, want ambiguous with no definition", l)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("callers of log = %+v, want a row for use", got.Callers)
+	}
+}
+
+// TestTwoOverloadSetsSpanDefinitions pins the third case of design D2:
+// two sets and no definition outside them.
+func TestTwoOverloadSetsSpanDefinitions(t *testing.T) {
+	g := newDefGraph()
+	var sets [][]*schema.Node
+	for i, file := range []string{"A.java", "B.java"} {
+		one := g.node(fmt.Sprintf("m%d-1", i), goextract.KindMethod, "log", file, 4)
+		one.Signature = "(String msg)"
+		two := g.node(fmt.Sprintf("m%d-2", i), goextract.KindMethod, "log", file, 6)
+		two.Signature = "(int n)"
+		g.set(fmt.Sprintf("set%d", i), one, two)
+		sets = append(sets, []*schema.Node{one, two})
+	}
+	g.fn("caller", "caller", "C.java", 2)
+	g.call("caller", sets[1][0].Id)
+	got, err := g.engine().Callers("log", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if diff := cmp.Diff([]string{"A.java:4", "A.java:6", "B.java:4", "B.java:6"}, labels(got.Definitions)); diff != "" {
+		t.Errorf("definitions of log (-want +got):\n%s", diff)
+	}
+	if len(got.Callers) != 1 || got.Callers[0].Definition != "B.java:4" || got.Callers[0].Signature != "(String msg)" {
+		t.Errorf("callers of log = %+v, want caller with the definition B.java:4 and its signature", got.Callers)
+	}
+}
+
+// TestCalleesOrderOfASetAndItsFirstMember pins the kind key of the row
+// order: a set node has the file, name and line of its first member, and
+// one function calls both. The set has the lower id.
+func TestCalleesOrderOfASetAndItsFirstMember(t *testing.T) {
+	g := newDefGraph()
+	one := g.node("z-member", goextract.KindMethod, "add", "Calc.java", 4)
+	two := g.node("y-member", goextract.KindMethod, "add", "Calc.java", 6)
+	g.set("a-set", one, two)
+	g.fn("use", "use", "Run.java", 2)
+	g.call("use", "a-set")
+	g.call("use", "z-member")
+	got, err := g.engine().Callees("use", 0)
+	if err != nil {
+		t.Fatalf("Callees: %v", err)
+	}
+	var kinds []string
+	for _, l := range got.Callees {
+		kinds = append(kinds, l.Kind)
+	}
+	if diff := cmp.Diff([]string{goextract.KindMethod, goextract.KindOverloadSet}, kinds); diff != "" {
+		t.Errorf("kinds of the two rows at Calc.java:4, in order (-want +got):\n%s", diff)
+	}
+}
+
+// TestAFunctionAndAPackageOfOneName is the scenario of that name: a
+// definition with no file is named by its kind and qualified name.
+func TestAFunctionAndAPackageOfOneName(t *testing.T) {
+	g := newDefGraph()
+	g.fn("f", "cache", "main.go", 3)
+	pkg := g.node("p", "package", "cache", "", 0)
+	pkg.QualifiedName = "example.com/app/cache"
+	got, err := g.engine().Callers("cache", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if diff := cmp.Diff([]string{"package example.com/app/cache", "main.go:3"}, labels(got.Definitions)); diff != "" {
+		t.Errorf("definitions of cache (-want +got):\n%s", diff)
+	}
+}
+
+func jsonKeys(t *testing.T, data []byte) []string {
+	t.Helper()
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal %s: %v", data, err)
+	}
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func callersJSON(t *testing.T, e *Engine, symbol string) (object []string, firstRow []string) {
+	t.Helper()
+	got, err := e.Callers(symbol, 0)
+	if err != nil {
+		t.Fatalf("Callers(%s): %v", symbol, err)
+	}
+	if len(got.Callers) == 0 {
+		t.Fatalf("Callers(%s) has no row, so the test has no entry to read", symbol)
+	}
+	data, err := MarshalCallersJSON(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := json.Marshal(got.Callers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return jsonKeys(t, data), jsonKeys(t, row)
+}
+
+// TestJSONOfANameWithTwoDefinitionsHasDefinitions is the scenario "JSON
+// output over several definitions".
+func TestJSONOfANameWithTwoDefinitionsHasDefinitions(t *testing.T) {
+	object, row := callersJSON(t, twoRuns().engine(), "run")
+	if diff := cmp.Diff([]string{"callers", "definitions", "symbol"}, object); diff != "" {
+		t.Errorf("keys of the object (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"definition", "filePath", "kind", "name", "startLine"}, row); diff != "" {
+		t.Errorf("keys of the entry (-want +got):\n%s", diff)
+	}
+}
+
+// TestJSONOfANameWithOneDefinitionHasNoNewKeys is the scenario "One
+// definition in JSON".
+func TestJSONOfANameWithOneDefinitionHasNoNewKeys(t *testing.T) {
+	g := newDefGraph()
+	g.fn("alpha", "Alpha", "a.go", 1)
+	g.fn("beta", "Beta", "b.go", 1)
+	g.call("beta", "alpha")
+	object, row := callersJSON(t, g.engine(), "Alpha")
+	if diff := cmp.Diff([]string{"callers", "symbol"}, object); diff != "" {
+		t.Errorf("keys of the object (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"filePath", "kind", "name", "startLine"}, row); diff != "" {
+		t.Errorf("keys of the entry (-want +got):\n%s", diff)
+	}
+}
+
+// TestJSONOfOneOverloadSetHasNoDefinitionKeys is the scenario "One
+// overload set alone", through the real indexer.
+func TestJSONOfOneOverloadSetHasNoDefinitionKeys(t *testing.T) {
+	object, row := callersJSON(t, overloadFixture(t), "log")
+	if diff := cmp.Diff([]string{"callers", "symbol"}, object); diff != "" {
+		t.Errorf("keys of the object (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"filePath", "kind", "name", "signature", "startLine"}, row); diff != "" {
+		t.Errorf("keys of the entry (-want +got):\n%s", diff)
+	}
+}
+
+// TestCalleesWithFileSelectsOneDefinition is the scenario "Callees of the
+// definition in one file".
+func TestCalleesWithFileSelectsOneDefinition(t *testing.T) {
+	got, err := twoRuns().engine().CalleesSelected(Selector{Symbol: "run"}, "a.py", 0)
+	if err != nil {
+		t.Fatalf("CalleesSelected: %v", err)
+	}
+	if diff := cmp.Diff([]string{"load"}, rowNames(got.Callees)); diff != "" {
+		t.Errorf("callees of run in a.py (-want +got):\n%s", diff)
+	}
+	if got.Definitions != nil || got.Callees[0].Definition != "" {
+		t.Errorf("a query over one definition carries definition fields: %+v", got)
+	}
+}
+
+// TestCalleesWithTheEndOfAFilePath is the scenario "A file named by the
+// end of its path". The value also differs in letter case.
+func TestCalleesWithTheEndOfAFilePath(t *testing.T) {
+	g := newDefGraph()
+	g.fn("z-m", "prepare_url", "src/app/models.py", 4)
+	g.fn("a-t", "prepare_url", "tests/conftest.py", 1)
+	g.fn("q", "requote_uri", "src/app/utils.py", 1)
+	g.fn("x", "noise", "tests/conftest.py", 9)
+	g.call("z-m", "q")
+	g.call("a-t", "x")
+	got, err := g.engine().CalleesSelected(Selector{Symbol: "prepare_url"}, "Models.py", 0)
+	if err != nil {
+		t.Fatalf("CalleesSelected: %v", err)
+	}
+	if diff := cmp.Diff([]string{"requote_uri"}, rowNames(got.Callees)); diff != "" {
+		t.Errorf("callees of prepare_url in models.py (-want +got):\n%s", diff)
+	}
+}
+
+// TestCallersWithAFileThatMatchesNothingListsEachFileOnce is the scenario
+// "A file with no definition of the name". a.py holds two definitions.
+func TestCallersWithAFileThatMatchesNothingListsEachFileOnce(t *testing.T) {
+	g := twoRuns()
+	g.fn("run-a-2", "run", "a.py", 20)
+	_, err := g.engine().CallersSelected(Selector{Symbol: "run"}, "c.py", 0)
+	if err == nil {
+		t.Fatal("CallersSelected(run, c.py): no error")
+	}
+	const want = `query: no definition of "run" is in a file that matches "c.py"; the files are a.py, b.py`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("error %q is not classified as not found", err)
+	}
+}
+
+// TestCallersWithFileAndSignature is the scenario "A file and a
+// signature".
+func TestCallersWithFileAndSignature(t *testing.T) {
+	got, err := javaLogs().engine().CallersSelected(Selector{Symbol: "log", Signature: "String"}, "Logger.java", 0)
+	if err != nil {
+		t.Fatalf("CallersSelected: %v", err)
+	}
+	var resolved []string
+	for _, l := range got.Callers {
+		if !l.Ambiguous {
+			resolved = append(resolved, l.Name)
+		}
+	}
+	if diff := cmp.Diff([]string{"start"}, resolved); diff != "" {
+		t.Errorf("resolved callers of Logger.log(String) (-want +got):\n%s", diff)
+	}
+}
+
+// TestFileThatExcludesASetDropsItsAmbiguousCallers pins design D6: the
+// Logger set has an ambiguous caller, and a query for Audit.java does
+// not list it.
+func TestFileThatExcludesASetDropsItsAmbiguousCallers(t *testing.T) {
+	g := javaLogs()
+	// Positive assertion: the ambiguous caller is there with no file.
+	all, err := g.engine().Callers("log", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if !strings.Contains(strings.Join(rowNames(all.Callers), ","), "use") {
+		t.Fatalf("callers of log = %v, want use among them", rowNames(all.Callers))
+	}
+	got, err := g.engine().CallersSelected(Selector{Symbol: "log"}, "Audit.java", 0)
+	if err != nil {
+		t.Fatalf("CallersSelected: %v", err)
+	}
+	if diff := cmp.Diff([]string{"run"}, rowNames(got.Callers)); diff != "" {
+		t.Errorf("callers of log in Audit.java (-want +got):\n%s", diff)
+	}
+}
+
+// drawnGraph is a drawn graph of same-named functions: defs definitions
+// of "target" in drawn files, callers that each call a drawn subset, and
+// one callee for each definition. The first caller calls the first two
+// definitions, so one caller of two definitions always exists.
+type drawnGraph struct {
+	files   []string // file of each definition
+	calls   [][]int  // for each caller, the definitions it calls
+	callees int
+}
+
+func drawGraph(t *rapid.T) drawnGraph {
+	n := rapid.IntRange(2, 4).Draw(t, "defs")
+	d := drawnGraph{callees: n}
+	for i := 0; i < n; i++ {
+		d.files = append(d.files, rapid.SampledFrom([]string{"a.go", "b.go", "c.go"}).Draw(t, "file"))
+	}
+	d.calls = append(d.calls, []int{0, 1})
+	for c := rapid.IntRange(0, 4).Draw(t, "callers"); c > 0; c-- {
+		d.calls = append(d.calls, rapid.SliceOfNDistinct(rapid.IntRange(0, n-1), 1, n, rapid.ID[int]).Draw(t, "calls"))
+	}
+	return d
+}
+
+// build makes the graph with the node ids that id gives. Every field
+// other than the id is the same for each id function.
+func (d drawnGraph) build(id func(string) string) *defGraph {
+	g := newDefGraph()
+	for i, file := range d.files {
+		def := fmt.Sprintf("def%d", i)
+		g.fn(id(def), "target", file, int32(10*(i+1)))
+		callee := fmt.Sprintf("callee%d", i)
+		g.fn(id(callee), callee, "lib.go", int32(i+1))
+		g.call(id(def), id(callee))
+	}
+	for c, defs := range d.calls {
+		caller := fmt.Sprintf("caller%d", c)
+		g.fn(id(caller), caller, "use.go", int32(c+1))
+		for _, i := range defs {
+			g.call(id(caller), id(fmt.Sprintf("def%d", i)))
+		}
+	}
+	return g
+}
+
+// TestQueryResultDoesNotDependOnNodeIDs builds one drawn graph under two
+// id schemes that sort in opposite orders, and requires equal results:
+// rows, their order, their labels and the list of definitions, also
+// under a drawn limit.
+func TestQueryResultDoesNotDependOnNodeIDs(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		d := drawGraph(t)
+		limit := rapid.IntRange(0, 6).Draw(t, "limit")
+		forward := func(name string) string { return "id-" + name }
+		backward := func(name string) string {
+			b := []byte(name)
+			for i := range b {
+				b[i] = 255 - b[i]
+			}
+			return fmt.Sprintf("id-%x", b)
+		}
+		// Positive assertion: the two schemes order the definitions in
+		// opposite ways, so a result that follows the ids differs.
+		if (forward("def0") < forward("def1")) == (backward("def0") < backward("def1")) {
+			t.Fatalf("the two id schemes order def0 and def1 the same way")
+		}
+		a, b := d.build(forward).engine(), d.build(backward).engine()
+
+		ca, err := a.Callers("target", limit)
+		if err != nil {
+			t.Fatalf("Callers: %v", err)
+		}
+		cb, _ := b.Callers("target", limit)
+		if diff := cmp.Diff(ca, cb); diff != "" {
+			t.Fatalf("callers differ between the id schemes:\n%s", diff)
+		}
+		if limit == 0 && len(ca.Callers) < 2 {
+			t.Fatalf("callers = %+v, want the two rows of caller0 at least", ca.Callers)
+		}
+		ea, _ := a.Callees("target", limit)
+		eb, _ := b.Callees("target", limit)
+		if diff := cmp.Diff(ea, eb); diff != "" {
+			t.Fatalf("callees differ between the id schemes:\n%s", diff)
+		}
+		ia, _ := a.Impact("target", 2)
+		ib, _ := b.Impact("target", 2)
+		if diff := cmp.Diff(ia, ib); diff != "" {
+			t.Fatalf("impact differs between the id schemes:\n%s", diff)
+		}
+	})
+}
+
+// TestFileSelectionPartitionsTheUnion checks that the rows of a query
+// with no file are the union of the rows of the same query for each file
+// that holds a definition. The comparison leaves the definition label
+// out, because a query over one definition carries none.
+func TestFileSelectionPartitionsTheUnion(t *testing.T) {
+	key := func(l Location) string { return fmt.Sprintf("%s %s:%d", l.Name, l.FilePath, l.StartLine) }
+	twoFiles := 0
+	rapid.Check(t, func(t *rapid.T) {
+		d := drawGraph(t)
+		e := d.build(func(name string) string { return name }).engine()
+		files := map[string]bool{}
+		for _, f := range d.files {
+			files[f] = true
+		}
+		if len(files) >= 2 {
+			twoFiles++
+		}
+
+		all, err := e.Callers("target", 0)
+		if err != nil {
+			t.Fatalf("Callers: %v", err)
+		}
+		want := map[string]bool{}
+		for _, l := range all.Callers {
+			want[key(l)] = true
+		}
+		got := map[string]bool{}
+		for f := range files {
+			part, err := e.CallersSelected(Selector{Symbol: "target"}, f, 0)
+			if err != nil {
+				t.Fatalf("CallersSelected(%s): %v", f, err)
+			}
+			for _, l := range part.Callers {
+				got[key(l)] = true
+			}
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Fatalf("rows with no file against the union of the rows for each file (-want +got):\n%s", diff)
+		}
+	})
+	// Positive assertion: the property ran over more than one file.
+	if twoFiles == 0 {
+		t.Fatal("no run drew definitions in two files, so the union had one part")
+	}
+}

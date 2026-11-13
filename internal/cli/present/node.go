@@ -161,7 +161,7 @@ func writeMultiDef(b *strings.Builder, pal Palette, m *query.MultiDefDetail) err
 		}
 	}
 
-	b.WriteString(pal.Header.Render(strconv.Itoa(len(m.Matches)) + " definitions named " + strconv.Quote(m.Symbol)))
+	b.WriteString(pal.Header.Render(query.DefinitionsHeading(len(m.Matches), m.Symbol)))
 	b.WriteString("\n")
 	overflow := ""
 	if len(listed) > 0 {

@@ -14,7 +14,7 @@ import (
 // scan (D-04 — no reverse-adjacency scan needed). --json emits the golden
 // callees.json shape (query.MarshalCalleesJSON).
 func newCalleesCmd() *cobra.Command {
-	var path, signature string
+	var path, signature, file string
 	var limit int
 	var jsonOut bool
 
@@ -34,7 +34,7 @@ func newCalleesCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			result, err := eng.CalleesSelected(query.Selector{Symbol: args[0], Signature: signature}, limit)
+			result, err := eng.CalleesSelected(query.Selector{Symbol: args[0], Signature: signature}, file, limit)
 			if err != nil {
 				return err
 			}
@@ -68,15 +68,19 @@ func newCalleesCmd() *cobra.Command {
 			// see explore.go's call site for the full rationale.
 			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprintf(out, "%s calls %d callee(s):\n", result.Symbol, len(result.Callees))
+			if line := query.DefinitionsLine(result.Symbol, result.Definitions); line != "" {
+				fmt.Fprintln(out, line)
+			}
 			for _, l := range result.Callees {
-				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
+				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
-	cmd.Flags().StringVar(&signature, "signature", "", "parameter types that select one overload, for example \"String, Throwable\"")
+	addSignatureFlag(cmd, &signature)
+	addFileFlag(cmd, &file)
 	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "cap on results returned")
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 

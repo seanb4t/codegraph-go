@@ -195,6 +195,21 @@ func normalizeNarrowPath(p string) string {
 	return strings.ToLower(strings.ReplaceAll(p, "\\", "/"))
 }
 
+// filterByFile keeps the nodes whose normalized path contains the
+// normalized hint. A node with no file never matches. `node --file` uses
+// the result as a preference, and callers, callees and impact use it as
+// a hard filter.
+func filterByFile(nodes []*schema.Node, hint string) []*schema.Node {
+	fh := normalizeNarrowPath(hint)
+	var kept []*schema.Node
+	for _, n := range nodes {
+		if n.FilePath != "" && strings.Contains(normalizeNarrowPath(n.FilePath), fh) {
+			kept = append(kept, n)
+		}
+	}
+	return kept
+}
+
 // absInt32 returns the absolute value of n.
 func absInt32(n int32) int32 {
 	if n < 0 {
@@ -251,15 +266,7 @@ func narrowNodeMatches(matches []*schema.Node, fileHint string, lineHint *int) [
 
 	narrowed := matches
 	if fileHint != "" {
-		fh := normalizeNarrowPath(fileHint)
-		var byFile []*schema.Node
-		for _, n := range narrowed {
-			np := normalizeNarrowPath(n.FilePath)
-			if strings.HasSuffix(np, fh) || strings.Contains(np, fh) {
-				byFile = append(byFile, n)
-			}
-		}
-		if len(byFile) > 0 {
+		if byFile := filterByFile(narrowed, fileHint); len(byFile) > 0 {
 			narrowed = byFile // only replace if non-empty
 		}
 	}

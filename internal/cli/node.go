@@ -89,7 +89,7 @@ func newNodeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().StringVarP(&file, "file", "f", "", "file path — disambiguates symbol, or selects file-mode when symbol is omitted")
 	cmd.Flags().IntVarP(&line, "line", "l", 0, "line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)")
-	cmd.Flags().StringVar(&signature, "signature", "", "parameter types that select one overload, for example \"String, Throwable\"")
+	addSignatureFlag(cmd, &signature)
 
 	return cmd
 }

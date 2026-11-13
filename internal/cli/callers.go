@@ -13,7 +13,7 @@ import (
 // reverse callers, computed via the D-04 in-memory reverse-adjacency map.
 // --json emits the golden callers.json shape (query.MarshalCallersJSON).
 func newCallersCmd() *cobra.Command {
-	var path, signature string
+	var path, signature, file string
 	var limit int
 	var jsonOut bool
 
@@ -33,7 +33,7 @@ func newCallersCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			result, err := eng.CallersSelected(query.Selector{Symbol: args[0], Signature: signature}, limit)
+			result, err := eng.CallersSelected(query.Selector{Symbol: args[0], Signature: signature}, file, limit)
 			if err != nil {
 				return err
 			}
@@ -67,15 +67,19 @@ func newCallersCmd() *cobra.Command {
 			// see explore.go's call site for the full rationale.
 			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprintf(out, "%s has %d caller(s):\n", result.Symbol, len(result.Callers))
+			if line := query.DefinitionsLine(result.Symbol, result.Definitions); line != "" {
+				fmt.Fprintln(out, line)
+			}
 			for _, l := range result.Callers {
-				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
+				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
-	cmd.Flags().StringVar(&signature, "signature", "", "parameter types that select one overload, for example \"String, Throwable\"")
+	addSignatureFlag(cmd, &signature)
+	addFileFlag(cmd, &file)
 	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "cap on results returned")
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 

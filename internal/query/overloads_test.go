@@ -93,7 +93,7 @@ func TestCallersMarksAnAmbiguousCaller(t *testing.T) {
 func TestCallersWithSignatureSelectsOneOverload(t *testing.T) {
 	engine := overloadFixture(t)
 	for signature, want := range map[string]string{"String, Throwable": "useB", "(String)": "useA", "String": "useA"} {
-		got, err := engine.CallersSelected(Selector{Symbol: "log", Signature: signature}, 0)
+		got, err := engine.CallersSelected(Selector{Symbol: "log", Signature: signature}, "", 0)
 		if err != nil {
 			t.Fatalf("CallersSelected(%q): %v", signature, err)
 		}
@@ -101,7 +101,7 @@ func TestCallersWithSignatureSelectsOneOverload(t *testing.T) {
 			t.Errorf("callers of log --signature %q = %+v, want only %s", signature, got.Callers, want)
 		}
 	}
-	got, err := engine.CallersSelected(Selector{Symbol: "add", Signature: "int"}, 0)
+	got, err := engine.CallersSelected(Selector{Symbol: "add", Signature: "int"}, "", 0)
 	if err != nil {
 		t.Fatalf("CallersSelected(add int): %v", err)
 	}
@@ -115,7 +115,7 @@ func TestCallersWithSignatureSelectsOneOverload(t *testing.T) {
 // lists the signatures that exist, from callers and from node.
 func TestCallersWithUnknownSignatureListsTheSignatures(t *testing.T) {
 	engine := overloadFixture(t)
-	_, err := engine.CallersSelected(Selector{Symbol: "log", Signature: "int"}, 0)
+	_, err := engine.CallersSelected(Selector{Symbol: "log", Signature: "int"}, "", 0)
 	if err == nil {
 		t.Fatal("CallersSelected(log int): no error")
 	}

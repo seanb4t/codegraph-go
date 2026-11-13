@@ -2,7 +2,9 @@ package query
 
 import (
 	"errors"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -28,46 +30,40 @@ type target struct {
 	ambiguous bool
 }
 
-// targets holds what symbolTargets resolved: the nodes, and whether the
-// query spans overloads, in which case each result carries a signature.
+// targets holds what symbolTargets resolved: the nodes, and the two
+// modes of a query over more than one node. overloaded marks a query
+// that spans overloads or selects one, so each row carries a signature.
+// spans marks a query whose definitions are not all members of one
+// overload set, so each row carries its definition. definitions is the
+// list of those definitions, and is nil when spans is false.
 type targets struct {
-	nodes      []target
-	overloaded bool
+	nodes       []target
+	overloaded  bool
+	spans       bool
+	definitions []Location
 }
 
-// symbolTargets resolves sel to the nodes a traversal starts from. With
-// no signature: the members and the node of every overload set named
-// sel.Symbol, or else the one node resolveSymbolNode picks. With a
-// signature: the callables named sel.Symbol whose parameter types match
-// it, plus the set that holds them, so the set's ambiguous callers are
-// reported too. When no overload matches, the error lists the
-// signatures that exist.
-func (e *Engine) symbolTargets(sel Selector) (targets, error) {
-	it, err := e.reader.IterateNodes()
+// symbolTargets resolves sel to the nodes a traversal starts from: every
+// definition named sel.Symbol (enumerateSymbolDefs, the meaning `node`
+// uses), and every overload_set node of that name, marked ambiguous.
+// sel.Signature keeps the callables whose parameter types match it, and
+// file keeps the definitions in the files that match it. A set stays
+// only while one of its members stays. When a filter keeps nothing, the
+// error lists what exists.
+//
+// The start nodes are ordered by file, line, kind and qualified name,
+// never by id, so no answer depends on the hash of a node.
+func (e *Engine) symbolTargets(sel Selector, file string) (targets, error) {
+	defs, err := e.enumerateSymbolDefs(sel.Symbol)
 	if err != nil {
 		return targets{}, err
 	}
-	var named []*schema.Node
-	for it.Next() {
-		if n := it.Node(); n.Name == sel.Symbol {
-			named = append(named, n)
-		}
-	}
-	err = it.Err()
-	it.Close()
+	sets, err := e.overloadSets(sel.Symbol)
 	if err != nil {
 		return targets{}, err
 	}
-	if len(named) == 0 {
+	if len(defs) == 0 && len(sets) == 0 {
 		return targets{}, notFoundf("query: symbol %q not found", sel.Symbol)
-	}
-	sort.Slice(named, func(i, j int) bool { return named[i].Id < named[j].Id })
-
-	var sets, members []*schema.Node
-	for _, n := range named {
-		if n.Kind == goextract.KindOverloadSet {
-			sets = append(sets, n)
-		}
 	}
 	setOfMember := make(map[string]*schema.Node)
 	for _, set := range sets {
@@ -78,53 +74,125 @@ func (e *Engine) symbolTargets(sel Selector) (targets, error) {
 		for _, m := range ms {
 			setOfMember[m.Id] = set
 		}
-		members = append(members, ms...)
 	}
 
+	kept := defs
 	if sel.Signature != "" {
-		var chosen []target
-		seenSet := make(map[string]bool)
-		var signatures []string
-		for _, n := range named {
-			if n.Kind != goextract.KindFunction && n.Kind != goextract.KindMethod {
-				continue
-			}
-			signatures = append(signatures, n.Signature)
-			if !matchesSignature(n, sel.Signature) {
-				continue
-			}
-			chosen = append(chosen, target{node: n})
-			if set, ok := setOfMember[n.Id]; ok && !seenSet[set.Id] {
-				seenSet[set.Id] = true
-				chosen = append(chosen, target{node: set, ambiguous: true})
-			}
-		}
-		if len(chosen) == 0 {
-			sort.Strings(signatures)
-			signatures = compactStrings(signatures)
-			if len(signatures) == 0 {
-				return targets{}, notFoundf("query: no overload of %q has the signature %q: %q is not a function or method", sel.Symbol, sel.Signature, sel.Symbol)
-			}
-			return targets{}, notFoundf("query: no overload of %q has the signature %q; the signatures are %s", sel.Symbol, sel.Signature, strings.Join(signatures, ", "))
-		}
-		return targets{nodes: chosen, overloaded: true}, nil
-	}
-
-	if len(sets) == 0 {
-		n, err := e.resolveSymbolNode(sel.Symbol)
-		if err != nil {
+		if kept, err = narrowBySignature(sel.Symbol, kept, sel.Signature); err != nil {
 			return targets{}, err
 		}
-		return targets{nodes: []target{{node: n}}}, nil
 	}
-	out := targets{overloaded: true}
-	for _, m := range members {
-		out.nodes = append(out.nodes, target{node: m})
+	if file != "" {
+		inFile := filterByFile(kept, file)
+		if len(inFile) == 0 {
+			return targets{}, notFoundf("query: no definition of %q is in a file that matches %q; the files are %s", sel.Symbol, file, strings.Join(definitionFiles(kept), ", "))
+		}
+		kept = inFile
 	}
+	kept = slices.Clone(kept)
+	sortDefinitions(kept)
+
+	filtered := sel.Signature != "" || file != ""
+	out := targets{overloaded: sel.Signature != ""}
+	keptSets := make(map[string]bool)
+	for _, n := range kept {
+		out.nodes = append(out.nodes, target{node: n})
+		if set, ok := setOfMember[n.Id]; ok {
+			keptSets[set.Id] = true
+		}
+	}
+	sortDefinitions(sets)
 	for _, set := range sets {
+		if filtered && !keptSets[set.Id] {
+			continue
+		}
+		out.overloaded = true
 		out.nodes = append(out.nodes, target{node: set, ambiguous: true})
 	}
+	if spansDefinitions(kept, setOfMember) {
+		out.spans = true
+		for _, n := range kept {
+			l := nodeLocation(n)
+			l.Definition = DefinitionLabel(n)
+			out.definitions = append(out.definitions, l)
+		}
+	}
 	return out, nil
+}
+
+// overloadSets returns the overload_set nodes named symbol.
+func (e *Engine) overloadSets(symbol string) ([]*schema.Node, error) {
+	it, err := e.reader.IterateNodes()
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+	var sets []*schema.Node
+	for it.Next() {
+		if n := it.Node(); n.Name == symbol && n.Kind == goextract.KindOverloadSet {
+			sets = append(sets, n)
+		}
+	}
+	return sets, it.Err()
+}
+
+// spansDefinitions reports whether defs are not all members of one
+// overload set: two or more definitions outside a set, a set and a
+// definition outside it, or members of two sets.
+func spansDefinitions(defs []*schema.Node, setOfMember map[string]*schema.Node) bool {
+	if len(defs) < 2 {
+		return false
+	}
+	first, ok := setOfMember[defs[0].Id]
+	if !ok {
+		return true
+	}
+	for _, n := range defs[1:] {
+		if set, ok := setOfMember[n.Id]; !ok || set.Id != first.Id {
+			return true
+		}
+	}
+	return false
+}
+
+// sortDefinitions orders nodes by file, line, kind and qualified name.
+func sortDefinitions(nodes []*schema.Node) {
+	sort.SliceStable(nodes, func(i, j int) bool {
+		a, b := nodes[i], nodes[j]
+		if a.FilePath != b.FilePath {
+			return a.FilePath < b.FilePath
+		}
+		if a.StartLine != b.StartLine {
+			return a.StartLine < b.StartLine
+		}
+		if a.Kind != b.Kind {
+			return a.Kind < b.Kind
+		}
+		return a.QualifiedName < b.QualifiedName
+	})
+}
+
+// definitionFiles returns the files that hold one of defs, each once,
+// sorted. A definition with no file is left out.
+func definitionFiles(defs []*schema.Node) []string {
+	var files []string
+	for _, n := range defs {
+		if n.FilePath != "" {
+			files = append(files, n.FilePath)
+		}
+	}
+	sort.Strings(files)
+	return compactStrings(files)
+}
+
+// DefinitionLabel names a definition in the output: its file and line,
+// or its kind and qualified name when it has no file, as a package or a
+// type whose parts are in several files.
+func DefinitionLabel(n *schema.Node) string {
+	if n.FilePath == "" {
+		return n.Kind + " " + n.QualifiedName
+	}
+	return n.FilePath + ":" + strconv.Itoa(int(n.StartLine))
 }
 
 // setMembers returns the overloads an overload_set node contains, by id.
@@ -225,25 +293,30 @@ func compactStrings(in []string) []string {
 // Signature names t, the overload the call was made from, and Ambiguous
 // marks a callee that is itself an overload set, so one row can carry
 // both.
-func calleeLocation(callee *schema.Node, t target, overloaded bool) Location {
-	l := overloadLocation(callee, t, overloaded)
+func calleeLocation(callee *schema.Node, t target, tg targets) Location {
+	l := overloadLocation(callee, t, tg)
 	if callee.Kind == goextract.KindOverloadSet {
 		l.Ambiguous = true
 	}
 	return l
 }
 
-// overloadLocation is nodeLocation plus the overload fields, for a row
-// that belongs to target t of a query that spans overloads.
-func overloadLocation(n *schema.Node, t target, overloaded bool) Location {
+// overloadLocation is nodeLocation plus the fields of a query over more
+// than one node, for a row that belongs to target t: the signature of t
+// or the ambiguous mark when the query is overloaded, and the definition
+// label of t when the query spans definitions. A row that belongs to a
+// set names no definition.
+func overloadLocation(n *schema.Node, t target, tg targets) Location {
 	l := nodeLocation(n)
-	if !overloaded {
-		return l
+	if tg.overloaded {
+		if t.ambiguous {
+			l.Ambiguous = true
+		} else {
+			l.Signature = compactSignature(t.node.Signature)
+		}
 	}
-	if t.ambiguous {
-		l.Ambiguous = true
-	} else {
-		l.Signature = compactSignature(t.node.Signature)
+	if tg.spans && !t.ambiguous {
+		l.Definition = DefinitionLabel(t.node)
 	}
 	return l
 }

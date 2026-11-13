@@ -82,6 +82,15 @@ func RenderSearchFull(nodes []*schema.Node, pal Palette, w io.Writer) error {
 	return err
 }
 
+// writeDefinitionsLine writes query.DefinitionsLine and a newline after
+// the header of a result that spans definitions, and nothing otherwise.
+func writeDefinitionsLine(b *strings.Builder, pal Palette, symbol string, defs []query.Location) {
+	if line := query.DefinitionsLine(symbol, defs); line != "" {
+		b.WriteString(pal.Label.Render(sanitizeControl(line)))
+		b.WriteString("\n")
+	}
+}
+
 // RenderCallers renders r — the callers shape: header "Symbol has N
 // caller(s):\n" (Symbol → Value, N → Count), then each entry indented
 // "  " via writeLocationLine. Mirrors callers.go's plain branch exactly.
@@ -91,8 +100,9 @@ func RenderCallers(r query.CallersResult, pal Palette, w io.Writer) error {
 	b.WriteString(" has ")
 	b.WriteString(pal.Count.Render(strconv.Itoa(len(r.Callers))))
 	b.WriteString(" caller(s):\n")
+	writeDefinitionsLine(&b, pal, r.Symbol, r.Definitions)
 	for _, l := range r.Callers {
-		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
+		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -107,8 +117,9 @@ func RenderCallees(r query.CalleesResult, pal Palette, w io.Writer) error {
 	b.WriteString(" calls ")
 	b.WriteString(pal.Count.Render(strconv.Itoa(len(r.Callees))))
 	b.WriteString(" callee(s):\n")
+	writeDefinitionsLine(&b, pal, r.Symbol, r.Definitions)
 	for _, l := range r.Callees {
-		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
+		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -127,8 +138,9 @@ func RenderImpact(r query.ImpactResult, pal Palette, w io.Writer) error {
 	b.WriteString(" node(s), ")
 	b.WriteString(pal.Count.Render(strconv.Itoa(r.EdgeCount)))
 	b.WriteString(" edge(s)\n")
+	writeDefinitionsLine(&b, pal, r.Symbol, r.Definitions)
 	for _, l := range r.Affected {
-		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
+		writeLocationLineSuffix(&b, pal, "  ", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
