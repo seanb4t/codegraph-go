@@ -584,6 +584,34 @@ func TestOpencode_AppDataSweep_SkipsALinkToTheLiveConfig(t *testing.T) {
 	assertSymlinkTo(t, stale, live)
 }
 
+// Every target that edits a configuration file at local scope refuses one
+// that links outside the project.
+func TestInstall_LocalConfigSymlinkOutsideProjectIsRefusedByEachTarget(t *testing.T) {
+	for _, target := range []AgentTarget{cursorTarget{}, kiroTarget{}, opencodeTarget{}, geminiTarget{}} {
+		t.Run(string(target.ID()), func(t *testing.T) {
+			_, outside := projectAndOutside(t)
+			config, err := target.Capabilities().MCPConfig(LocationLocal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			real := filepath.Join(outside, "config.json")
+			const content = `{"other": true}`
+			writeFile(t, real, content)
+			realpathtest.Symlink(t, real, config)
+
+			result := target.Install(LocationLocal, symlinkTestOpts)
+
+			if !errorNaming(result, config, real) {
+				t.Fatalf("errors %v do not name %s and %s", result.Errors, config, real)
+			}
+			if got := readFile(t, real); got != content {
+				t.Fatalf("the outside file changed: %q", got)
+			}
+			assertSymlinkTo(t, config, real)
+		})
+	}
+}
+
 // An install that turns the Codex nudge off edits hooks.json. It is an
 // install, so a local hooks.json outside the project is an error.
 func TestInstall_Codex_NudgeOffRefusesHooksFileOutsideProject(t *testing.T) {
@@ -603,4 +631,23 @@ func TestInstall_Codex_NudgeOffRefusesHooksFileOutsideProject(t *testing.T) {
 		t.Fatalf("the outside file changed: %q", got)
 	}
 	assertSymlinkTo(t, hooks, target)
+}
+
+// A dangling skill directory link whose target ends with a separator still
+// installs: the target is a directory, and the install makes it.
+func TestSkillPackage_DanglingSymlinkDirWithTrailingSlashIsRecreated(t *testing.T) {
+	base := realpathtest.TempDir(t)
+	t.Chdir(base)
+	link := filepath.Join("claude", "skills", "codegraph")
+	target := filepath.Join(base, "agents", "skills", "codegraph")
+	realpathtest.Symlink(t, target+string(filepath.Separator), link)
+
+	var result WriteResult
+	installSkillPackage(&result, link, LocationLocal, Cursor, refuseUnmanifested)
+
+	assertNoErrors(t, result)
+	if !fileExists(filepath.Join(target, skillFileName)) {
+		t.Fatalf("SKILL.md was not made in the target %s", target)
+	}
+	assertSymlinkTo(t, link, target+string(filepath.Separator))
 }

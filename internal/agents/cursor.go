@@ -127,10 +127,8 @@ func (t cursorTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := cursorConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor config path: %w", err))
 	} else {
-		_ = recordUserFile(&result, configPath, loc, opInstall, func(real string) (FileResult, error) {
-			return writeMcpEntry(real, func() any {
-				return stdioMcpEntry(opts.ExecPath, "serve", "--mcp", "--path", pathArg)
-			})
+		_ = installMcpEntry(&result, configPath, loc, func() any {
+			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp", "--path", pathArg)
 		})
 	}
 

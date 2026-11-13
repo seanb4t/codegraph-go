@@ -133,10 +133,8 @@ func (t kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := kiroConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro config path: %w", err))
 	} else {
-		_ = recordUserFile(&result, configPath, loc, opInstall, func(real string) (FileResult, error) {
-			return writeMcpEntry(real, func() any {
-				return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
-			})
+		_ = installMcpEntry(&result, configPath, loc, func() any {
+			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
 		})
 	}
 

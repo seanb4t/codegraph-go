@@ -59,7 +59,7 @@ func localProjectRoot() (string, error) {
 // location outside the project is errOutsideProject, so a link that a
 // repository commits cannot send a write to another file of the user.
 func resolveUserFile(path string, loc Location) (string, error) {
-	real, err := realpath.Resolve(path)
+	real, err := realpath.ResolveFile(path)
 	if err != nil {
 		return "", err
 	}
@@ -88,6 +88,13 @@ func resolveUserFile(path string, loc Location) (string, error) {
 // recorded, or nil.
 func recordUserFile(result *WriteResult, path string, loc Location, op userFileOp, edit func(real string) (FileResult, error)) error {
 	real, err := resolveUserFile(path, loc)
+	if err == nil {
+		// With no link in the way, edit gets the configured path, so a
+		// helper error that names its file reads as it did before.
+		if abs, aerr := filepath.Abs(path); aerr == nil && abs == real {
+			real = path
+		}
+	}
 	if err != nil {
 		if errors.Is(err, errOutsideProject) {
 			if op == opUninstall {
@@ -981,6 +988,15 @@ func instructionsKeptNote(path string, others []TargetID) string {
 		names[i] = name
 	}
 	return fmt.Sprintf("%s keeps its codegraph block: still used by %s", path, strings.Join(names, ", "))
+}
+
+// installMcpEntry writes the codegraph MCP server entry into the
+// configuration file at path, through the funnel for a user's file. It
+// returns the error that the funnel recorded, or nil.
+func installMcpEntry(result *WriteResult, path string, loc Location, buildEntry func() any) error {
+	return recordUserFile(result, path, loc, opInstall, func(real string) (FileResult, error) {
+		return writeMcpEntry(real, buildEntry)
+	})
 }
 
 // installInstructions writes the codegraph section into the instruction

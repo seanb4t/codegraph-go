@@ -63,7 +63,7 @@ New leaf package `internal/realpath`, with no import outside the standard librar
 - For an element that is a link, it reads the link and walks the target the same way. A relative target starts at the real directory of the link.
 - For an element that does not exist, it joins the name on. Every later element is joined the same way.
 - For `..` after an element that does not exist, it returns an error. The operating system refuses such a path.
-- For a path or a last link target that ends with a separator and names a missing entry, it returns an error. The operating system accepts only a directory that exists there.
+- A path or a last link target can end with a separator or with `.` and name a missing entry. The operating system accepts only a directory that exists there. `ResolveFile(path string) (string, error)` returns an error for such a path, and `resolveUserFile` calls it. `Resolve` returns the location, because the skill directory code makes that directory with `os.MkdirAll`.
 
 Each link that the walk reads counts against the bound of 8. A missing directory does not count. The walk never cleans a path as text, because `..` after a link names the parent of the link's target. Two examples that a textual join gets wrong:
 
@@ -131,7 +131,7 @@ If `os.Lstat` reports that the configured path is a symlink, the funnel adds the
 
 The steps that record directly today become `edit` functions that return a `FileResult`. The Context lists them. The existence tests of the codex and hermes uninstalls move into the `edit` function. They then run after the resolve, so a loop is an error there too. The Antigravity migration also resolves its legacy path with `resolveUserFile`, and uses the result for its existence test, its read and its `removeMcpEntry` call.
 
-`recordKept` is the two lines that `codex.go:332` and `opencode.go:346` repeat. Both sites and D5 call it.
+`recordKept` is the two lines that `codex.go:332` and `opencode.go:346` repeated at `a12602e6`. `removeSharedInstructions` of D7 replaced both sites. It and D5 call `recordKept`.
 
 The implementation settled four points that the plan review left open:
 
@@ -139,7 +139,9 @@ The implementation settled four points that the plan review left open:
 - `removedOnly` wraps a remover for a step that reports only a removal. The Claude legacy migration, the Claude PreToolUse removal and the Antigravity legacy removal use it.
 - The Antigravity migration does not become one `edit` function. It resolves the unified path and the legacy path with `resolveUserFile` for its existence tests and its reads. Its three writes go through the funnel: the copy of the legacy entry into the unified file, which now calls `writeMcpEntry`, the legacy removal, and the unified `writeMcpEntry`.
 - The funnel adds the real location to a helper error only if the error does not name it already. An error line for a linked file therefore names the real location once.
-- `installInstructions` is the install counterpart of `removeSharedInstructions`. The claude, gemini, codex and opencode installs call it.
+- `installInstructions` is the install counterpart of `removeSharedInstructions`. The claude, gemini, codex and opencode installs call it. `installMcpEntry` does the same for the six `writeMcpEntry` calls.
+- With no link in the path, the funnel hands the configured path to `edit`. A helper error that names its file then reads as it did before this change, also for a relative local path.
+- `realpath.Within` keeps the `filepath.Rel` test that it had in `internal/mcp`. `filepath.IsLocal` on the relative path gives the same answer on macOS and Linux. The move changes no code, so that the MCP confinement of #299 stays as reviewed.
 - `isSymlink` holds the `os.Lstat` test that the funnel and two older sites in `internal/agents` repeated.
 - The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve. It also skips a path whose real location is inside the live configuration directory, because the entry there is the one the install just wrote. That test replaces the older comparison of the two directory names as text.
 - The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too. The removal takes the operation from its caller. An install that turns the nudge off passes `opInstall`, so D5 applies to it as an install.

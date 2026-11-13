@@ -32,24 +32,49 @@ func Within(root, path string) bool {
 // Resolve never cleans a path as text. ".." after a link names the parent
 // of the link's target, and a relative link target starts at the real
 // directory of the link.
+//
+// Resolve suits a directory that the caller makes with os.MkdirAll. For a
+// file that the caller makes, use ResolveFile.
 func Resolve(path string) (string, error) {
+	real, _, err := resolve(path)
+	return real, err
+}
+
+// ResolveFile is Resolve for a path where the caller makes a regular file.
+// It returns an error for a missing location that the path names with a
+// trailing separator or a trailing ".". The operating system accepts only
+// a directory that exists there, so no file can be made through the path.
+func ResolveFile(path string) (string, error) {
+	real, dirOnly, err := resolve(path)
+	if err != nil {
+		return "", err
+	}
+	if dirOnly {
+		return "", fmt.Errorf("realpath: %s: a trailing separator names a directory that does not exist", path)
+	}
+	return real, nil
+}
+
+// resolve is the walk behind Resolve and ResolveFile. dirOnly reports a
+// missing location that the path names as a directory.
+func resolve(path string) (real string, dirOnly bool, err error) {
 	if path == "" {
-		return "", errors.New("realpath: empty path")
+		return "", false, errors.New("realpath: empty path")
 	}
 	sep := string(filepath.Separator)
 	if !filepath.IsAbs(path) {
 		wd, err := os.Getwd()
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		path = wd + sep + path
 	}
-	real, err := filepath.EvalSymlinks(path)
+	real, err = filepath.EvalSymlinks(path)
 	if err == nil {
-		return real, nil
+		return real, false, nil
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
-		return "", err
+		return "", false, err
 	}
 
 	// Some part of path does not exist. Start at the longest leading part
@@ -68,21 +93,19 @@ func Resolve(path string) (string, error) {
 	links := 0
 	missing := false
 	// needsDir is set when the path, or the target of its last link, ends
-	// with a separator. The operating system then accepts only a directory
-	// that exists.
+	// with a separator or with ".". The operating system then accepts only
+	// a directory that exists.
 	needsDir := false
 	for len(rest) > 0 {
 		el := rest[0]
 		rest = rest[1:]
 		switch el {
-		case "":
+		case "", ".":
 			needsDir = needsDir || len(rest) == 0
-			continue
-		case ".":
 			continue
 		case "..":
 			if missing {
-				return "", fmt.Errorf("realpath: %s: \"..\" follows a path element that does not exist", path)
+				return "", false, fmt.Errorf("realpath: %s: \"..\" follows a path element that does not exist", path)
 			}
 			cur = filepath.Dir(cur)
 			continue
@@ -99,7 +122,7 @@ func Resolve(path string) (string, error) {
 			continue
 		}
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if info.Mode()&os.ModeSymlink == 0 {
 			cur = next
@@ -107,11 +130,11 @@ func Resolve(path string) (string, error) {
 		}
 		links++
 		if links > maxLinks {
-			return "", fmt.Errorf("realpath: %s: more than %d symlinks to a path that does not exist, possibly a loop", path, maxLinks)
+			return "", false, fmt.Errorf("realpath: %s: more than %d symlinks to a path that does not exist, possibly a loop", path, maxLinks)
 		}
 		target, err := os.Readlink(next)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if filepath.IsAbs(target) {
 			cur = filepath.VolumeName(target) + sep
@@ -119,8 +142,5 @@ func Resolve(path string) (string, error) {
 		}
 		rest = append(strings.Split(target, sep), rest...)
 	}
-	if missing && needsDir {
-		return "", fmt.Errorf("realpath: %s: a trailing separator names a directory that does not exist", path)
-	}
-	return cur, nil
+	return cur, missing && needsDir, nil
 }

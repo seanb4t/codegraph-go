@@ -221,8 +221,14 @@ func TestResolveUserFile_LocalNeverLeavesTheProject(t *testing.T) {
 			got, err := resolveUserFile(p, LocationLocal)
 			if errors.Is(err, errOutsideProject) {
 				// A refusal is right only for a path that leads outside.
-				if real, rerr := realpath.Resolve(p); rerr != nil || realpath.Within(project, real) {
-					rt.Fatalf("resolveUserFile(%q) refused a path whose real location is %q, %v", p, real, rerr)
+				// The operating system is the judge: a file made through
+				// the path must land outside the project directory.
+				if f, openErr := os.OpenFile(p, os.O_WRONLY|os.O_CREATE, 0o644); openErr == nil {
+					f.Close()
+				}
+				reached, evalErr := filepath.EvalSymlinks(p)
+				if evalErr == nil && (reached == project || strings.HasPrefix(reached, project+string(filepath.Separator))) {
+					rt.Fatalf("resolveUserFile(%q) refused a path that the operating system reaches inside the project, at %q", p, reached)
 				}
 				refused++
 				continue

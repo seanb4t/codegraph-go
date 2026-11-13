@@ -222,9 +222,7 @@ func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResul
 		// stale legacy codegraph entry into the unified path before this
 		// install writes the current entry.
 		if legacyEntry, ok := readMcpEntry(legacyReal); ok {
-			if err := recordUserFile(&result, unified, loc, opInstall, func(real string) (FileResult, error) {
-				return writeMcpEntry(real, func() any { return legacyEntry })
-			}); err != nil {
+			if err := installMcpEntry(&result, unified, loc, func() any { return legacyEntry }); err != nil {
 				migrationOK = false
 			}
 		}
@@ -236,10 +234,8 @@ func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResul
 		}
 	}
 
-	if err := recordUserFile(&result, unified, loc, opInstall, func(real string) (FileResult, error) {
-		return writeMcpEntry(real, func() any {
-			return antigravityEntry(opts.ExecPath)
-		})
+	if err := installMcpEntry(&result, unified, loc, func() any {
+		return antigravityEntry(opts.ExecPath)
 	}); err != nil {
 		migrationOK = false
 	}

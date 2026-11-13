@@ -126,12 +126,27 @@ func TestResolve_LinkWithTrailingSlashToAMissingTarget(t *testing.T) {
 	dir := realpathtest.TempDir(t)
 	link := filepath.Join(dir, "link")
 	realpathtest.Symlink(t, filepath.Join(dir, "missingdir")+string(filepath.Separator), link)
-	if got, err := realpath.Resolve(link); err == nil {
-		t.Fatalf("Resolve = %q, want an error", got)
+	if got, err := realpath.ResolveFile(link); err == nil {
+		t.Fatalf("ResolveFile = %q, want an error", got)
 	}
+	// A caller that makes a directory still gets the location.
+	wantResolve(t, link, filepath.Join(dir, "missingdir"))
 	if f, err := os.OpenFile(link, os.O_WRONLY|os.O_CREATE, 0o644); err == nil {
 		f.Close()
 		t.Fatal("the operating system made a file through the link, so the test premise is wrong")
+	}
+}
+
+// "missing/." names a directory too.
+func TestResolveFile_TrailingDotAfterAMissingElementIsAnError(t *testing.T) {
+	dir := realpathtest.TempDir(t)
+	path := filepath.Join(dir, "missing") + string(filepath.Separator) + "."
+	if got, err := realpath.ResolveFile(path); err == nil {
+		t.Fatalf("ResolveFile = %q, want an error", got)
+	}
+	if f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o644); err == nil {
+		f.Close()
+		t.Fatal("the operating system made a file at the path, so the test premise is wrong")
 	}
 }
 
@@ -193,10 +208,10 @@ func TestResolve_AgreesWithTheOperatingSystem(t *testing.T) {
 		tree := realpathtest.Draw(rt, root)
 		for _, p := range tree.Paths {
 			osReal, osErr := filepath.EvalSymlinks(p)
-			got, err := realpath.Resolve(p)
+			got, err := realpath.ResolveFile(p)
 			if osErr == nil {
 				if err != nil || got != osReal {
-					rt.Fatalf("Resolve(%q) = %q, %v; the operating system reaches %q", p, got, err, osReal)
+					rt.Fatalf("ResolveFile(%q) = %q, %v; the operating system reaches %q", p, got, err, osReal)
 				}
 				existing++
 				continue
@@ -208,21 +223,21 @@ func TestResolve_AgreesWithTheOperatingSystem(t *testing.T) {
 				if !strings.Contains(err.Error(), "more than") {
 					if f, openErr := os.OpenFile(p, os.O_WRONLY|os.O_CREATE, 0o644); openErr == nil {
 						f.Close()
-						rt.Fatalf("Resolve(%q) failed with %v, but the operating system made a file there", p, err)
+						rt.Fatalf("ResolveFile(%q) failed with %v, but the operating system made a file there", p, err)
 					}
 				}
 				refused++
 				continue
 			}
 			if err := os.MkdirAll(filepath.Dir(got), 0o755); err != nil {
-				rt.Fatalf("Resolve(%q) = %q, and its directory cannot be made: %v", p, got, err)
+				rt.Fatalf("ResolveFile(%q) = %q, and its directory cannot be made: %v", p, got, err)
 			}
 			if err := os.WriteFile(got, []byte("x"), 0o644); err != nil {
-				rt.Fatalf("Resolve(%q) = %q, and no file can be written there: %v", p, got, err)
+				rt.Fatalf("ResolveFile(%q) = %q, and no file can be written there: %v", p, got, err)
 			}
 			after, err := filepath.EvalSymlinks(p)
 			if err != nil || after != got {
-				rt.Fatalf("Resolve(%q) = %q, but after a file was made there the operating system reaches %q, %v", p, got, after, err)
+				rt.Fatalf("ResolveFile(%q) = %q, but after a file was made there the operating system reaches %q, %v", p, got, after, err)
 			}
 			created++
 		}
