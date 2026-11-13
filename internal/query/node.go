@@ -11,6 +11,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -52,11 +53,7 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 	}
 	abs := filepath.Join(root, cleaned)
 
-	rel, err := filepath.Rel(root, abs)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if !realpath.Within(root, abs) {
 		return "", invalidArgumentf("query: path %q escapes the repo root", relPath)
 	}
 
@@ -70,8 +67,7 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resolvedRel, err := filepath.Rel(resolvedRoot, resolvedAbs)
-	if err != nil || resolvedRel == ".." || strings.HasPrefix(resolvedRel, ".."+string(filepath.Separator)) {
+	if !realpath.Within(resolvedRoot, resolvedAbs) {
 		return "", invalidArgumentf("query: path %q escapes the repo root", relPath)
 	}
 

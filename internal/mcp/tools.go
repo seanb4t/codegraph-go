@@ -101,6 +101,12 @@ const (
 // that exists and joins the rest back on. A path that does not exist yet
 // has no symlinks of its own to resolve, but a directory above it can be
 // one.
+//
+// It stays apart from realpath.Resolve on purpose (#310). Resolve follows
+// a link whose target is missing, because its caller is about to create
+// that target. This function joins the missing rest back as text, because
+// its caller only reads: nothing exists behind a missing name, so the
+// name itself decides the confinement.
 func resolveExistingPrefix(abs string) (string, error) {
 	rest := ""
 	for p := abs; ; {
