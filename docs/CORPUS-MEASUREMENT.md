@@ -124,12 +124,12 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 130
 - **Edges by kind:**
-  - calls: 172
+  - calls: 443
   - contains: 766
   - extends: 38
   - implements: 0
   - imports: 0
-  - instantiates: 32
+  - instantiates: 124
   - overrides: 11
   - references: 21
   - returns: 6

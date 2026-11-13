@@ -207,8 +207,10 @@ func TestLanguageRegistry_Python(t *testing.T) {
 	if spec.ModuleKey == nil {
 		t.Fatal("expected a non-nil ModuleKey func")
 	}
-	if got, want := spec.ModuleKey(nil, "sub/widget.py"), "sub/widget.py"; got != want {
-		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	// With no project file the repository root is the package root, so
+	// an import written as a dotted path still names the module (#262).
+	if got, want := spec.ModuleKey(nil, "sub/widget.py"), "sub.widget"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (the dotted path from the repository root)", got, want)
 	}
 }
 

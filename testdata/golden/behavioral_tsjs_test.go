@@ -180,12 +180,10 @@ var corpusSamples = []corpusSample{
 		Reviewed: []string{
 			"src/requests/api.py:get -> src/requests/api.py:request",
 			"src/requests/sessions.py:get -> src/requests/sessions.py:request",
+			"src/requests/sessions.py:prepare_request -> src/requests/cookies.py:merge_cookies",
 			"src/requests/sessions.py:prepare_request -> src/requests/sessions.py:merge_setting",
 			"src/requests/sessions.py:rebuild_auth -> src/requests/sessions.py:should_strip_auth",
 			"src/requests/sessions.py:resolve_redirects -> src/requests/sessions.py:get_redirect_target",
-		},
-		KnownMissing: map[string]string{
-			"src/requests/sessions.py:prepare_request -> src/requests/cookies.py:merge_cookies": "#262",
 		},
 	},
 	{

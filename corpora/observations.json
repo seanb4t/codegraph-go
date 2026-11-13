@@ -242,14 +242,14 @@
       "trackedFiles": 130,
       "status": {
         "backend": "pebble",
-        "edgeCount": 1048,
+        "edgeCount": 1411,
         "edgesByKind": {
-          "calls": 172,
+          "calls": 443,
           "contains": 766,
           "extends": 38,
           "implements": 0,
           "imports": 0,
-          "instantiates": 32,
+          "instantiates": 124,
           "overrides": 11,
           "references": 21,
           "returns": 6,

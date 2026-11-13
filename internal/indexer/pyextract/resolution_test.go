@@ -26,13 +26,16 @@ type pyFixtureFile struct {
 
 // writePyFixture always includes a minimal pyproject.toml so the real
 // pythonProjectDescriptor resolves (flat layout, repo root as the package
-// root) — without it, ModuleKey would degrade to bare-relPath path-identity
-// and none of these cross-module import statements (which name real dotted
-// module paths) could ever match a file's own moduleKey.
+// root). writePyFiles gives a tree with no project file.
 func writePyFixture(t *testing.T, files []pyFixtureFile) string {
 	t.Helper()
+	return writePyFiles(t, append([]pyFixtureFile{{relPath: "pyproject.toml", src: "[project]\nname = \"demo\"\n"}}, files...))
+}
+
+// writePyFiles writes the files as given, with no project file added.
+func writePyFiles(t *testing.T, all []pyFixtureFile) string {
+	t.Helper()
 	root := t.TempDir()
-	all := append([]pyFixtureFile{{relPath: "pyproject.toml", src: "[project]\nname = \"demo\"\n"}}, files...)
 	for _, f := range all {
 		abs := filepath.Join(root, filepath.FromSlash(f.relPath))
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
@@ -135,6 +138,53 @@ func TestResolve_CrossModuleImportedCall(t *testing.T) {
 
 	if !hasEdge(edges, run.Id, assist.Id, "calls") {
 		t.Errorf("expected a calls edge Caller.run -> Helper.assist (cross-module, from-import), got edges: %+v", edges)
+	}
+}
+
+// TestResolve_FromImportedFunctionCall pins issue #262: a call to a bare
+// name that a `from` import binds resolves to the declaration in the named
+// module, under the name the module declares and not under the alias. A
+// parameter of the same name shadows the import, so that call gets no
+// edge. The rows run with and without a project file: with none, a module
+// is still named by its dotted path from the repository root.
+func TestResolve_FromImportedFunctionCall(t *testing.T) {
+	files := []pyFixtureFile{
+		{relPath: "lib.py", src: "def helper():\n    return 1\n\n\ndef other():\n    return 2\n\n\nclass Box:\n    pass\n"},
+		{relPath: "main.py", src: "from lib import helper as h, other, Box\n\n\ndef caller():\n    return h() + other()\n\n\ndef shadow(other):\n    return other()\n\n\ndef make():\n    return Box()\n"},
+	}
+	for _, tc := range []struct {
+		name  string
+		write func(*testing.T, []pyFixtureFile) string
+	}{
+		{"with a project file", writePyFixture},
+		{"with no project file", writePyFiles},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			nodes, edges := buildPyGraph(t, tc.write(t, files))
+			node := func(kind, name, file string) *schema.Node {
+				t.Helper()
+				n, ok := nodes[nodeKey{kind: kind, name: name, filePath: file}]
+				if !ok {
+					t.Fatalf("no %s node %s in %s", kind, name, file)
+				}
+				return n
+			}
+			caller, shadow, makeFn := node("function", "caller", "main.py"), node("function", "shadow", "main.py"), node("function", "make", "main.py")
+			helper, other, box := node("function", "helper", "lib.py"), node("function", "other", "lib.py"), node("struct", "Box", "lib.py")
+
+			if !hasEdge(edges, caller.Id, helper.Id, "calls") {
+				t.Errorf("no calls edge caller -> helper for the aliased name h")
+			}
+			if !hasEdge(edges, caller.Id, other.Id, "calls") {
+				t.Errorf("no calls edge caller -> other")
+			}
+			if !hasEdge(edges, makeFn.Id, box.Id, "instantiates") {
+				t.Errorf("no instantiates edge make -> Box")
+			}
+			if hasEdge(edges, shadow.Id, other.Id, "calls") {
+				t.Errorf("calls edge shadow -> other: the parameter other shadows the import")
+			}
+		})
 	}
 }
 

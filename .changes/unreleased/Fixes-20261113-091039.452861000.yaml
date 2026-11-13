@@ -1,0 +1,3 @@
+kind: Fixes
+body: A Python call to a name that a `from` import binds now has a `calls` edge to the declaration in the imported module, and a Python tree with no `pyproject.toml` or `setup.py` resolves its imports. Run `codegraph index --force` to add the edges to an existing index.
+time: 2026-11-13T09:10:39.452861-05:00
