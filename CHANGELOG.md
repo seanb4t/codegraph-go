@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.18.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.18.0) — 2026-11-13
+
+### Breaking
+
+- A local codegraph install refuses an agent file whose real location is outside the project, and no longer replaces the link with a copy.
+
+### Features
+
+- Each release binary now has a signed SBOM attestation, which `gh attestation verify --predicate-type https://spdx.dev/Document/v2.3` checks.
+
+### Fixes
+
+- codegraph install refuses an agent configuration file that is not valid JSON and leaves it unchanged, instead of replacing it with only the codegraph entry.
+- codegraph install keeps a symlinked agent configuration file as a symlink and edits the file it leads to.
+
 ## [v0.17.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.17.0) — 2026-11-12
 
 ### Features
