@@ -373,7 +373,10 @@ func (hermesTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	}
 	_ = recordUserAction(&result, configPath, loc, opInstall, func(real string) (FileAction, error) {
 		existed := fileExists(real)
-		existing := readFileOrEmpty(real)
+		existing, rerr := readUserFile(real)
+		if rerr != nil {
+			return "", rerr
+		}
 
 		updated := hermesSpliceMcpServersBlock(existing, opts.ExecPath)
 		updated = hermesAppendCliToolset(updated)
@@ -409,7 +412,10 @@ func (hermesTarget) Uninstall(loc Location) WriteResult {
 		if !fileExists(real) {
 			return ActionNotFound, nil
 		}
-		existing := readFileOrEmpty(real)
+		existing, rerr := readUserFile(real)
+		if rerr != nil {
+			return "", rerr
+		}
 		updated := hermesStripMcpServersBlock(existing)
 		updated = hermesRemoveCliToolset(updated)
 
