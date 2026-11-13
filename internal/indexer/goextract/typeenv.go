@@ -158,6 +158,18 @@ func LocalAlias(name string) string {
 	return "<local:" + name + ">"
 }
 
+// ShadowAlias is the PkgAlias of a call to the bare name at byte pos. A
+// parameter or a local that pos can see shadows a package or imported
+// declaration of the same name, so the call names that binding: the
+// result is LocalAlias(name), and the call matches no declaration. With
+// no such binding the result is "".
+func ShadowAlias(env *TypeEnv, name string, pos uint32) string {
+	if _, declared := env.LookupAt(name, pos); declared {
+		return LocalAlias(name)
+	}
+	return ""
+}
+
 // UnknownAlias is the PkgAlias of a reference through an expression the
 // extractor does not read, named by the expression's syntax kind.
 func UnknownAlias(kind string) string {

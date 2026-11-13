@@ -829,6 +829,9 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	switch fn.Kind() {
 	case "identifier":
 		pkgAlias, name := ex.resolveBareIdentifier(fn.Utf8Text(ex.src))
+		if shadow := goextract.ShadowAlias(ex.env, fn.Utf8Text(ex.src), uint32(fn.StartByte())); shadow != "" {
+			pkgAlias, name = shadow, fn.Utf8Text(ex.src)
+		}
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
 			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,

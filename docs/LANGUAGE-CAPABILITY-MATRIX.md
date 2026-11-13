@@ -86,10 +86,10 @@ A `full` cell above and a construct below answer different questions. A `full` c
 
 | Language | Passing evidence | Exact limit |
 |---|---|---|
-| Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/lifecycle`, `go/public-queries` | `go/grouped-bindings` (#239), `go/resolution` (#261) |
+| Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/lifecycle`, `go/public-queries`, `go/resolution` | `go/grouped-bindings` (#239) |
 | Java | `java/resolution`, `java/inherited-methods`, `java/lifecycle`, `java/public-queries` | `java/fields-and-owners` (#239), `TestSemanticCorpusSamples/java` (#263) |
 | Python | `python/same-file-resolution`, `python/malformed-input`, `python/lifecycle`, `python/public-queries`, `python/resolution` | `python/module-and-class-attributes` (#239) |
-| TypeScript | `typescript/class-hierarchy`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges` | `typescript/module-bindings-and-fields` (#239), `typescript/resolution` (#261) |
+| TypeScript | `typescript/class-hierarchy`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges`, `typescript/resolution` | `typescript/module-bindings-and-fields` (#239) |
 | TSX | `tsx/components`, `tsx/nested-components` | No case evaluates lifecycle or public queries for TSX. |
 | JavaScript | `javascript/module-functions` | `javascript/callable-declarations` (#239). No case evaluates lifecycle or public queries for JavaScript. |
 
@@ -100,7 +100,6 @@ Four groups of constructs are outside the target specification, so they have the
 ### `go`
 
 - Struct fields have no node, and a call in a package-level initializer has no `calls` edge. Case `go/grouped-bindings` holds the exact differences (#239).
-- A local function binding that shadows a package function gets a false `calls` edge to the package function. See case `go/resolution` (#261).
 
 ### `java`
 
@@ -128,7 +127,6 @@ Four groups of constructs are outside the target specification, so they have the
 ### `typescript`
 
 - Destructured bindings, module variables and class fields have no node, and a call in a class field has no `calls` edge. Case `typescript/module-bindings-and-fields` holds the exact differences (#239).
-- A local function binding that shadows an imported function gets a false `calls` edge to the imported function. See case `typescript/resolution` (#261).
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.
 - TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.

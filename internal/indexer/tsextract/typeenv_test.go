@@ -85,3 +85,58 @@ class App {
 		}
 	}
 }
+
+// TestBareCallToAShadowingLocalMatchesNoDeclaration pins issue #261 for
+// TypeScript: a call to a bare name that a parameter or a local binds at
+// the call's position carries LocalAlias and its own name, not the alias
+// and the origin of a named import. A call before the local's block still
+// names the import.
+func TestBareCallToAShadowingLocalMatchesNoDeclaration(t *testing.T) {
+	src := `import { helper as h, other } from "./lib";
+
+export function caller() {
+  return h() + other();
+}
+
+export function shadow() {
+  const other = () => 3;
+  return other();
+}
+
+export function param(h: () => number) {
+  return h();
+}
+
+export function block() {
+  const x = other();
+  {
+    const other = () => 5;
+    other();
+  }
+  return x;
+}
+`
+	p := newTestParser(t, "ts")
+	res, err := Extract(p, "app", "main.ts", []byte(src))
+	if err != nil || res.Err != nil {
+		t.Fatalf("Extract: %v / %v", err, res.Err)
+	}
+	type call struct{ Name, PkgAlias string }
+	got := make(map[string]call)
+	for _, r := range res.Unresolved {
+		if r.Kind == goextract.RefKindCalls {
+			got[fmt.Sprintf("%d:%d", r.Line, r.Col)] = call{r.Name, r.PkgAlias}
+		}
+	}
+	want := map[string]call{
+		"4:9":   {"helper", "h"},
+		"4:15":  {"other", "other"},
+		"9:9":   {"other", goextract.LocalAlias("other")},
+		"13:9":  {"h", goextract.LocalAlias("h")},
+		"17:12": {"other", "other"},
+		"20:4":  {"other", goextract.LocalAlias("other")},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("calls by line:col (-want +got):\n%s", diff)
+	}
+}

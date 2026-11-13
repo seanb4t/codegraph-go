@@ -777,8 +777,9 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 	args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 	switch fn.Kind() {
 	case "identifier":
+		name := fn.Utf8Text(ex.src)
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
-			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: RefKindCalls, Line: line, Col: col, EndLine: EndLine(call), EndCol: EndCol(call),
+			FromID: fromID, Name: name, PkgAlias: ShadowAlias(ex.env, name, uint32(fn.StartByte())), Kind: RefKindCalls, Line: line, Col: col, EndLine: EndLine(call), EndCol: EndCol(call),
 			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types,
 		})
 	case "selector_expression":
