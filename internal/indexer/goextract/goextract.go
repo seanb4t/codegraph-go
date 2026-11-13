@@ -79,12 +79,13 @@ func Extract(p parser.Parser, importPath, relPath string, src []byte) (FileResul
 		fields:          make(map[string]*TypeEnv),
 	}
 
-	// Types are collected first so a same-file method's receiver-type
-	// lookup (below) always sees every type this file declares,
-	// regardless of declaration order in the source.
+	// The imports come first: a package variable's initializer, as
+	// `var f = pkg.F`, names an import alias. The types come before the
+	// functions, so a same-file method's receiver-type lookup sees every
+	// type this file declares, whatever the declaration order.
+	ex.collectImports(root)
 	ex.collectTypes(root)
 	ex.collectConstsVars(root)
-	ex.collectImports(root)
 	ex.collectFuncsAndMethods(root)
 
 	FinalizeIDs(ex.alloc, root, &result)
@@ -502,6 +503,16 @@ func (ex *extractor) emitConstVarSpec(kind string, spec *tree_sitter.Node) {
 	if kind == KindVariable {
 		typeNode = spec.ChildByFieldName("type")
 	}
+	var values []*tree_sitter.Node
+	if v := spec.ChildByFieldName("value"); v != nil {
+		for i := uint(0); i < v.NamedChildCount(); i++ {
+			values = append(values, v.NamedChild(i))
+		}
+	}
+	names := 0
+	for k := uint(0); k < spec.NamedChildCount() && spec.NamedChild(k).Kind() == "identifier"; k++ {
+		names++
+	}
 	for k := uint(0); k < spec.NamedChildCount(); k++ {
 		c := spec.NamedChild(k)
 		if c.Kind() != "identifier" {
@@ -536,7 +547,34 @@ func (ex *extractor) emitConstVarSpec(kind string, spec *tree_sitter.Node) {
 		if typeNode != nil {
 			ex.emitTypeOfRef(id, typeNode)
 		}
+		// Each name takes the value at its position. A spec whose value
+		// count differs from its name count, as `a, b = f()`, gives every
+		// name every value.
+		if len(values) == names {
+			ex.captureInitializer(id, values[k])
+		} else {
+			for _, v := range values {
+				ex.captureInitializer(id, v)
+			}
+		}
 	}
+}
+
+// captureInitializer records what the initializer value of the data
+// symbol fromID reads, and the calls it makes when the program
+// initializes. The body of a function literal does not run then, so its
+// calls are not the symbol's.
+func (ex *extractor) captureInitializer(fromID string, value *tree_sitter.Node) {
+	ex.captureExprRead(fromID, value)
+	walkDescendants(value, func(n *tree_sitter.Node) bool {
+		switch n.Kind() {
+		case "func_literal":
+			return false
+		case "call_expression":
+			ex.recordCall(fromID, n)
+		}
+		return true
+	})
 }
 
 // emitTypeOfRef emits a D-09 `type_of` Pass-1 ref (RESEARCH §B) from a
@@ -927,7 +965,7 @@ func (ex *extractor) recordInstantiate(fromID string, lit *tree_sitter.Node) {
 // to bound safely than calls/embeds — an over-broad walk risks the exact
 // false same-package-name-collision resolution the codebase's existing
 // WR-02 discipline (recordCall's selector handling, mirrored below in
-// captureSelectorRead) exists to avoid.
+// captureSelector) exists to avoid.
 func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_sitter.Node) {
 	walkDescendants(body, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
@@ -960,17 +998,72 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 			}
 			return false
 		case "assignment_statement":
-			// The "left" side is a write target, never a reference — only
-			// "right" (the assigned values) is walked.
+			// The "left" side holds the write targets: a plain `=` writes
+			// them, and a compound operator such as `+=` reads and writes
+			// them. "right" holds the assigned values, which are reads.
+			access := AccessWrite
+			if op := n.ChildByFieldName("operator"); op != nil && op.Utf8Text(ex.src) != "=" {
+				access = AccessReadWrite
+			}
+			if left := n.ChildByFieldName("left"); left != nil {
+				for i := uint(0); i < left.NamedChildCount(); i++ {
+					ex.captureWrite(fromID, left.NamedChild(i), access)
+				}
+			}
 			if right := n.ChildByFieldName("right"); right != nil {
 				for i := uint(0); i < right.NamedChildCount(); i++ {
 					ex.captureExprRead(fromID, right.NamedChild(i))
 				}
 			}
 			return false
+		case "inc_statement", "dec_statement":
+			if n.NamedChildCount() > 0 {
+				ex.captureWrite(fromID, n.NamedChild(0), AccessReadWrite)
+			}
+			return false
+		case "if_statement", "expression_switch_statement":
+			// The condition or the switch value is a read. The bodies are
+			// walked as usual.
+			field := "condition"
+			if n.Kind() == "expression_switch_statement" {
+				field = "value"
+			}
+			if c := n.ChildByFieldName(field); c != nil {
+				ex.captureExprRead(fromID, c)
+			}
+			return true
 		}
 		return true
 	})
+}
+
+// captureWrite records the write target expr of an assignment with
+// access: a bare name, or a selector such as a field or a package
+// variable. An index or a pointer target reads the container it changes.
+func (ex *extractor) captureWrite(fromID string, expr *tree_sitter.Node, access string) {
+	if expr == nil {
+		return
+	}
+	switch expr.Kind() {
+	case "identifier":
+		name := expr.Utf8Text(ex.src)
+		if name == "_" {
+			return
+		}
+		pos := expr.StartPosition()
+		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
+			FromID: fromID, Name: name, PkgAlias: ShadowAlias(ex.env, name, uint32(expr.StartByte())), Kind: RefKindReferences,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column), Access: access,
+		})
+	case "selector_expression":
+		ex.captureSelector(fromID, expr, access)
+	case "parenthesized_expression":
+		if expr.NamedChildCount() > 0 {
+			ex.captureWrite(fromID, expr.NamedChild(0), access)
+		}
+	default:
+		ex.captureExprRead(fromID, expr)
+	}
 }
 
 // captureExprRead classifies a single expression node reached from an
@@ -990,13 +1083,16 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	}
 	switch expr.Kind() {
 	case "identifier":
+		// A local or a parameter that the position can see shadows a
+		// package-level name, so its read names no declaration.
+		name := expr.Utf8Text(ex.src)
 		pos := expr.StartPosition()
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
-			FromID: fromID, Name: expr.Utf8Text(ex.src), Kind: RefKindReferences,
-			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+			FromID: fromID, Name: name, PkgAlias: ShadowAlias(ex.env, name, uint32(expr.StartByte())), Kind: RefKindReferences,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column), Access: AccessRead,
 		})
 	case "selector_expression":
-		ex.captureSelectorRead(fromID, expr)
+		ex.captureSelector(fromID, expr, AccessRead)
 	case "parenthesized_expression":
 		if expr.NamedChildCount() > 0 {
 			ex.captureExprRead(fromID, expr.NamedChild(0))
@@ -1060,8 +1156,8 @@ func (ex *extractor) captureCompositeElement(fromID string, elem *tree_sitter.No
 	ex.captureExprRead(fromID, elem)
 }
 
-// captureSelectorRead handles a selector_expression VALUE read
-// (pkg.Symbol used as a value, not called — recordCall's own selector
+// captureSelector handles a selector_expression that is read or written
+// with access (pkg.Symbol or recv.field used as a value, not called — recordCall's own selector
 // handling already captures the call-callee shape via collectCalls'
 // separate walk). Mirrors recordCall's WR-02 alias-safety discipline
 // exactly: a non-identifier operand can never be a package alias, so it
@@ -1069,7 +1165,7 @@ func (ex *extractor) captureCompositeElement(fromID string, elem *tree_sitter.No
 // keeping resolution deterministically unresolved rather than risking a
 // same-package name collision — and the operand itself is still walked
 // for further nested reads.
-func (ex *extractor) captureSelectorRead(fromID string, sel *tree_sitter.Node) {
+func (ex *extractor) captureSelector(fromID string, sel *tree_sitter.Node, access string) {
 	operand := sel.ChildByFieldName("operand")
 	field := sel.ChildByFieldName("field")
 	if operand == nil {
@@ -1089,6 +1185,7 @@ func (ex *extractor) captureSelectorRead(fromID string, sel *tree_sitter.Node) {
 	ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindReferences,
 		Line: int32(pos.Row) + 1, Col: int32(pos.Column), EndLine: EndLine(sel), EndCol: EndCol(sel), ReceiverType: receiverType,
+		Access: access,
 	})
 }
 

@@ -5,7 +5,7 @@ Project: <FIXTURE>
 Index Statistics:
   Files:     4
   Nodes:     23
-  Edges:     26
+  Edges:     27
   DB Size:   <SIZE> MB
   Backend:   pebble
 Nodes by Kind:
@@ -26,6 +26,7 @@ Edges by Kind:
   embeds          1
   extends         1
   instantiates    1
+  references      1
 Files by Language:
   go              4
 

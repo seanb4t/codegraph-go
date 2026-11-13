@@ -163,15 +163,19 @@ func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOut
 			// shape exactly — no Kind-check disambiguation on the
 			// target (any resolvable symbol is a valid references
 			// target, unlike instantiates/type_of/returns below).
-			targetID, ok := rs.resolveRef(r, ref, false)
+			targetID, ok := rs.resolveDataRef(r, ref)
 			if !ok {
 				out.unresolved++
 				wait(ref.PkgAlias, ref.Name)
 				continue
 			}
+			var metadata map[string]string
+			if ref.Access != "" {
+				metadata = map[string]string{"access": ref.Access}
+			}
 			out.edges = append(out.edges, &schema.Edge{
 				Source: ref.FromID, Target: targetID, Kind: goextract.RefKindReferences,
-				Line: ref.Line, Col: ref.Col, Provenance: "ast",
+				Line: ref.Line, Col: ref.Col, Provenance: "ast", Metadata: metadata,
 			})
 			out.resolved++
 

@@ -350,6 +350,30 @@ func (rs *resolver) resolveRef(r goextract.FileResult, ref goextract.UnresolvedR
 	return symbols.Pick(kept), true
 }
 
+// resolveDataRef resolves a references ref. A ref through a receiver of
+// known type, as `p.X`, names a member of that type: a field, or a method
+// used as a value. It never falls back to a module-level name, so `p.X`
+// cannot reach an unrelated declaration named X. Every other ref resolves
+// as resolveRef does.
+func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.UnresolvedRef) (string, bool) {
+	recv := ref.ReceiverType
+	if recv == "" || (ref.PkgAlias != "" && ref.PkgAlias == recv) {
+		return rs.resolveRef(r, ref, false)
+	}
+	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
+	if !ok {
+		return "", false
+	}
+	ms := rs.view.Members(owner.ID, ref.Name)
+	if len(ms) == 0 {
+		return "", false
+	}
+	if len(ms) == 1 {
+		return ms[0].ID, true
+	}
+	return symbols.Pick(ms), true
+}
+
 // membersOf returns the call candidates named name among the members of
 // the type ownerID, or of the nearest supertype that declares one. A
 // field is no call candidate, so a field never hides a method of the

@@ -211,6 +211,31 @@ type UnresolvedRef struct {
 	HasSpread    bool
 	ArgTypes     []string
 	ArgLabels    []string
+
+	// Access is the role of a RefKindReferences ref that reads or writes
+	// a data symbol: AccessRead, AccessWrite or AccessReadWrite. It is ""
+	// for a ref whose extractor does not record the role. The resolver
+	// copies it to the edge's "access" metadata.
+	Access string
+}
+
+// The access roles of a references edge, in its "access" metadata.
+const (
+	AccessRead      = "read"
+	AccessWrite     = "write"
+	AccessReadWrite = "read_write"
+)
+
+// MergeAccess returns the role of one edge that carries both a and b. An
+// empty role adds nothing.
+func MergeAccess(a, b string) string {
+	switch {
+	case a == "" || a == b:
+		return b
+	case b == "":
+		return a
+	}
+	return AccessReadWrite
 }
 
 // DeferredTypePrefix starts a type that pass 2 fills from another call's

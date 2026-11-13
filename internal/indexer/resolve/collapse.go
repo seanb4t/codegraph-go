@@ -3,6 +3,9 @@ package resolve
 import (
 	"sort"
 
+	"google.golang.org/protobuf/proto"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -62,7 +65,29 @@ func CollapseEdges(edges []*schema.Edge) []*schema.Edge {
 			}
 			return ci.Col < cj.Col
 		})
-		collapsed = append(collapsed, candidates[0])
+		collapsed = append(collapsed, withMergedAccess(candidates))
 	}
 	return collapsed
+}
+
+// withMergedAccess returns the representative of candidates, the first,
+// carrying the access role of all of them: an edge that one candidate
+// reads through and another writes through is read_write. The
+// representative is copied when its role changes, so no candidate is
+// modified.
+func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
+	rep := candidates[0]
+	access := rep.Metadata["access"]
+	for _, c := range candidates[1:] {
+		access = goextract.MergeAccess(access, c.Metadata["access"])
+	}
+	if access == rep.Metadata["access"] {
+		return rep
+	}
+	merged := proto.Clone(rep).(*schema.Edge)
+	if merged.Metadata == nil {
+		merged.Metadata = map[string]string{}
+	}
+	merged.Metadata["access"] = access
+	return merged
 }
