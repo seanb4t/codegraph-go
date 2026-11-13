@@ -141,12 +141,29 @@ func codexTableBody(execPath string) []string {
 	}
 }
 
+// readFileOrEmpty is for a read that decides nothing on disk (Detect). A
+// read-modify-write uses readUserFile.
 func readFileOrEmpty(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
 	return string(data)
+}
+
+// readUserFile is the read half of a read-modify-write of a text file the
+// user owns. A missing file gives "": nothing is lost when it is written.
+// Any other read error is returned, so the caller writes nothing; treating
+// an unreadable file as empty would replace its content.
+func readUserFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("could not read existing file: %w", err)
+	}
+	return string(data), nil
 }
 
 // Detect is a derivation of the capability table (D-02, D-03): at local
@@ -194,7 +211,10 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	} else {
 		_ = recordUserAction(&result, configPath, loc, opInstall, func(real string) (FileAction, error) {
 			existed := fileExists(real)
-			existing := readFileOrEmpty(real)
+			existing, rerr := readUserFile(real)
+			if rerr != nil {
+				return "", rerr
+			}
 			if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
 				return "", cerr
 			}
@@ -305,7 +325,10 @@ func (t codexTarget) Uninstall(loc Location) WriteResult {
 			if !fileExists(real) {
 				return ActionNotFound, nil
 			}
-			existing := readFileOrEmpty(real)
+			existing, rerr := readUserFile(real)
+			if rerr != nil {
+				return "", rerr
+			}
 			if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
 				return "", cerr
 			}
