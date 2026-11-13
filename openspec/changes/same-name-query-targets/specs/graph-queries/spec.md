@@ -106,7 +106,7 @@ When an `impact` query spans definitions, each definition SHALL be a result that
 
 ### Requirement: The order of the results does not depend on node ids
 
-The results of `callers`, `callees` and `impact` SHALL be ordered by file, then name, then line. Results that are equal in all three SHALL be ordered by the name of their definition, then by their signature. The list of definitions SHALL be ordered by file, then line, then kind and qualified name.
+The results of `callers`, `callees` and `impact` SHALL be ordered by file, then name, then line. Results that are equal in all three SHALL be ordered by the name of their definition, then by their signature, then by their kind. The list of definitions SHALL be ordered by file, then line, then kind and qualified name.
 
 #### Scenario: One caller of two definitions
 

@@ -6,7 +6,7 @@ See proposal.md for the motivation. The facts below are from `main` at `5920f7ce
 
 - `symbolTargets` in `internal/query/overloads.go` turns a `Selector` (symbol and signature) into the start nodes of a traversal. It collects each node with the name and sorts them by id. With an overload set and no signature, the start nodes are the members and the set. With no set, it calls `resolveSymbolNode`, which returns the node with the lowest id. The signature branch returns early with `overloaded` true.
 - `CallersSelected`, `CalleesSelected` and `ImpactSelected` in `internal/query/traverse.go` are the only callers of `symbolTargets`. The CLI, the MCP tools and the UI handlers in `internal/uiserver/handlers.go` call them, or the wrappers `Callers`, `Callees` and `Impact`.
-- `resolveSymbolNode` has one more caller: `resolveNodeForDetail` in `internal/query/node.go`, for `node` with no file. This design does not change that path.
+- `resolveSymbolNode` has one more caller: a branch of `resolveNodeForDetail` in `internal/query/node.go` for an empty file. `buildNodeDetail` calls that function only with a file, so the branch has no production caller. After D1, `resolveSymbolNode` has none either. The implementation removes both.
 - `enumerateSymbolDefs` in `internal/query/node.go` already returns the nodes of a name that are not `overload_set` nodes. `node` uses it.
 - `targets.overloaded` marks a query that spans overloads. Each row then carries `Location.Signature` or `Location.Ambiguous`.
 - `callers` removes a repeated row with a key. The key is the caller. If `overloaded` is true, the key also includes the start node. `callees` always uses the start node and the callee as its key.
@@ -71,7 +71,7 @@ Alternative: treat every multi-node query as `overloaded` and reuse the signatur
 
 A row that comes from the `overload_set` node is marked ambiguous and gets no label. It belongs to the set, and the set is not a definition.
 
-The three result types gain `Definitions []Location` with the JSON name `definitions` and `omitempty`. Each entry carries its own label in `Definition`. The list is in the order of D1, and its length is capped at `MaxLimit`.
+The three result types gain `Definitions []Location` with the JSON name `definitions` and `omitempty`. Each entry carries its own label in `Definition`. The list is in the order of D1. It has no cap, so its length is the true count of the definitions. The text line of D5 has its own cap.
 
 If `spans` is false, both fields are empty. `encoding/json` then leaves them out, which gives the byte-for-byte rule of the spec with no second code path.
 
@@ -81,30 +81,33 @@ Alternative: an object `{filePath, startLine}` in each row. Rejected: the row al
 
 ### D4: The order of the rows
 
-`sortLocations` gains two more keys after file, name and line: the definition label, then the signature. Rows that tie today tie only inside an overloaded query, where their order follows the node ids. With the new keys, that order follows the signature. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
+`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, no two rows of one result tie. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
 
 Alternative: keep `sortLocations` and sort the start nodes only. Rejected, because the stable sort then still carries an order that the rows do not show, and a reader of the output cannot predict it.
 
 ### D5: Text and table rendering
 
 - One function beside `OverloadSuffix` builds the definitions line from a result's `Definitions`. The CLI plain branches, the styled renderers and the markdown renderers all call it. The wording follows `node`: `N definitions named "X"`, then the labels. The line lists at most `nodeMultiDefListCap` labels and then `+K more`.
-- One function builds the row suffix of a definition. In the CLI text it follows the overload suffix.
+- One function, `query.RowSuffix`, returns the overload suffix followed by the definition suffix. The six row printers that call `OverloadSuffix` today call it.
+- The heading and the capped list with its `+K more` tail are shared with the `node` output for several definitions. Only the format of one entry differs.
 - The definitions line is printed also for a result with no row. In the CLI text it follows the header line. In the markdown it follows the "no callers found" sentence. This is the case of the issue: a name with several definitions and "0 callers".
-- `renderLocationTable` builds its header and its cells from two flags, one for the Definition column and one for the Overload column. The Definition column follows Location.
+- `renderLocationTable` builds its header and its cells from two flags, one for the Definition column and one for the Overload column. The Definition flag comes from the result (its `Definitions` list is not empty) and not from the rows, so a result whose rows are all ambiguous still has the column. The Definition column follows Location.
 - The frozen outputs pin the exact bytes after the first capture.
 
 ### D6: `--file` filters the start nodes
 
 `CallersSelected`, `CalleesSelected` and `ImpactSelected` take the file as a parameter beside the `Selector`, as `NodeSelected` does. The wrappers `Callers`, `Callees` and `Impact` pass an empty file, so the UI handlers need no change.
 
-`symbolTargets` keeps the definitions whose `FilePath` contains the value, compared through `normalizeNarrowPath`. This is the test of `narrowNodeMatches`. The difference is that the filter here is hard: if nothing matches, the query fails. `node` falls back to all matches in that case, because `node` shows each of them. A traversal with that fallback answers for definitions the user excluded.
+`symbolTargets` keeps the definitions whose `FilePath` contains the value, compared through `normalizeNarrowPath`. The loop of `narrowNodeMatches` that makes this test moves into one function, and both callers use it. The signature filter is `narrowBySignature`, which `node` uses. The difference is that the filter here is hard: if nothing matches, the query fails. `node` falls back to all matches in that case, because `node` shows each of them. A traversal with that fallback answers for definitions the user excluded.
 
 - A node with no file never matches.
 - If no member of a set stays, the set is not a start node.
-- The filter runs before the signature filter, and `spans` is computed after both.
+- The signature filter runs first and the file filter second, as in `node`. `spans` is computed after both.
 - If nothing matches, the error is a not-found error. It names the value and lists each file that holds a definition once, sorted. The form follows the existing error for a signature that matches no overload.
 
-One helper in `internal/cli` registers `--signature` and `--file` (short form `-f`) on the three commands, so the flag text exists once. The MCP input is `file`, placed in the argument structs in the order of the JSON names.
+Two helpers in `internal/cli`, in the pattern of `addWorkersFlag`, register `--signature` and `--file` (short form `-f`). `node`, `callers`, `callees` and `impact` use them, so each flag text exists once.
+
+A `Selector.File` field is the other way to pass the file. It keeps the three signatures as they are. This design uses the parameter, because `NodeSelected` already passes the file that way and one engine has one pattern. A change that moves both into `Selector` can follow. The MCP input is `file`, placed in the argument structs in the order of the JSON names.
 
 Alternative: a selector by line, as `node --line`. Rejected for this change: `-l` is taken on two commands, and a file is enough to select in each case the issue reports.
 
@@ -117,7 +120,7 @@ Alternative: equality only. Rejected, because `node --file models.py` already fi
 Three kinds of frozen output can change, and each has its own capture command:
 
 - The plain CLI goldens: `go test ./internal/cli -run 'TestPlainGolden$' -update-plain-goldens -count=1`.
-- The wire oracle transcripts: the capture command under `test/wireoracle/cmd/wireoracle`. The input schemas of three tools change, so each transcript that holds `tools/list` changes.
+- The wire oracle transcripts: the capture command under `test/wireoracle/cmd/wireoracle`. The input schemas of three tools change, so each transcript that holds `tools/list` changes. The `resources-read` transcripts of the callers, callees and impact documents change with task 6.4.
 - The corpus goldens of `task golden:regen`. They hold `explore` and `node` output, which this change does not touch, so no diff is expected there.
 
 The implementation reads each diff and records it in the pull request. A capture for a name with one definition must not change, except for the row order of an overloaded query (D4) and the schema text.
@@ -133,7 +136,7 @@ A label in the UI needs a protobuf field, generated code for Go and TypeScript, 
 - [A query for a very common name, such as `get` or `__init__`, returns many rows] → The limit caps the rows. The definitions line shows how many definitions exist, and `--file` selects. Today's answer for such a name is one arbitrary definition, which is worse.
 - [A caller of one definition also appears through the dispatch widening of another definition] → The row key includes the start node. The row therefore appears once for each definition, each with its label. The widening itself does not change.
 - [`impact` counts change for a name with several definitions] → `nodeCount` and `edgeCount` already count from every start node of an overload set. The same rule now applies to more names. `TestImpact_DispatchTraversal` shows it: `Handle` has two definitions, so its `NodeCount` goes from 2 to 3.
-- [An agent parses the CLI text and meets the new definitions line] → The line appears only where today's answer is incomplete. The `--json` shape is the stable surface, and its new fields are additive.
+- [An agent parses the CLI text and meets the new definitions line] → The line appears only for a name with more than one definition. One known case where today's rows are already complete: a Java class with overloaded constructors. The class and the constructors share a name, so such a query now lists the definitions and labels its rows. The `--json` shape is the stable surface, and its new fields are additive.
 - [A `--file` value matches more files than the user meant] → The definitions line of the result shows what the query started from. A longer value narrows the match.
 - [The row order of an overloaded query changes once] → The new order follows the signature and not the node id. The pull request lists each such diff.
 

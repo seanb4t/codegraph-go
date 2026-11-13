@@ -10,13 +10,13 @@
 
 ## 2. Row order without node ids
 
-- [ ] 2.1 Add the definition label and the signature as the last two keys of `sortLocations` (design D4). Verify with `TestOneCallerOfTwoDefinitionsIsOrderedByDefinition`, which covers the scenario "One caller of two definitions" and asserts the order of the two rows.
+- [ ] 2.1 Add the definition label, the signature and the kind as the last three keys of `sortLocations` (design D4). Add `TestCalleesOrderOfASetAndItsFirstMember`: one function calls a member of a set and the set, and the two rows have a fixed order. Verify with `TestOneCallerOfTwoDefinitionsIsOrderedByDefinition`, which covers the scenario "One caller of two definitions" and asserts the order of the two rows.
 - [ ] 2.2 Add a property test `TestQueryResultDoesNotDependOnNodeIDs` with `pgregory.net/rapid`. Draw a graph with two to four same-named functions, drawn callers and callees, and at least one caller of two definitions. Build it twice in the fake reader of `traverse_test.go`, with node ids drawn at random and all other fields equal. Require equal `CallersResult`, `CalleesResult` and `ImpactResult` values, with row order, labels and the `Definitions` list included, also under a drawn `limit`. Positive assertion: a run whose two builds have the same ids fails the test.
 
 ## 3. Definition labels in the results
 
 - [ ] 3.1 Add `Location.Definition`, the label function and the `Definitions` list of `CallersResult`, `CalleesResult` and `ImpactResult` (design D3). If `spans` is false, leave them empty. Verify with `TestCallerNamesTheDefinitionItCalls` and `TestImpactReachesOneSymbolFromTwoDefinitions`.
-- [ ] 3.2 Add `TestSignatureThatMatchesInTwoFilesSpansDefinitions` and `TestAmbiguousCallerInASpanningQueryHasNoDefinition`. They cover the two scenarios of those names. Verify that both pass.
+- [ ] 3.2 Add `TestSignatureThatMatchesInTwoFilesSpansDefinitions` and `TestAmbiguousCallerInASpanningQueryHasNoDefinition`. They cover the two scenarios of those names. Add `TestTwoOverloadSetsSpanDefinitions`: two classes each declare two overloads of `log`, and the result has four definitions and labeled rows. Verify that all three pass.
 - [ ] 3.3 Add `TestAFunctionAndAPackageOfOneName` for the requirement "A definition is named by its file and line". It uses a node with an empty `FilePath` and asserts the label `package example.com/app/cache`. Verify that it passes.
 - [ ] 3.4 Add `TestJSONOfANameWithTwoDefinitionsHasDefinitions`, `TestJSONOfANameWithOneDefinitionHasNoNewKeys` and `TestJSONOfOneOverloadSetHasNoDefinitionKeys`. They marshal the results and compare the exact key sets. They cover "JSON output over several definitions", "One definition in JSON" and "One overload set alone". Verify that all three pass.
 
@@ -24,21 +24,21 @@
 
 - [ ] 4.1 Add the two shared functions of design D5 beside `OverloadSuffix`: one for the definitions line, with the cap of `nodeMultiDefListCap`, and one for the row suffix. Use them in the plain branches and the styled renderers of `callers`, `callees` and `impact`. Verify with `TestCallersTextListsTheDefinitions` and `TestCallersTextOfNoResultListsTheDefinitions` in `internal/cli/query_cli_test.go`. The second covers "A query that spans definitions and finds no result".
 - [ ] 4.2 Make `renderLocationTable` build its header and cells from two flags. Print the definitions line in the three markdown renderers, also for a result with no row. Verify with new cases in `TestRenderCallersMarkdown`, `TestRenderCalleesMarkdown` and `TestRenderImpactMarkdown`: two definitions with rows, two definitions with no row, and an impact row with an empty Definition cell.
-- [ ] 4.3 Add a case to `TestCallersTextListsTheDefinitions` with 25 definitions. Assert that the line holds 20 labels and `+5 more`.
+- [ ] 4.3 Add a case to `TestCallersTextListsTheDefinitions` with 20 and with 21 definitions. Assert 20 labels and no `more` for 20, and 20 labels and `+1 more` for 21. Add the same pair to `TestRenderCallersMarkdown`.
 - [ ] 4.4 Verify the scenario "One definition in text" with `go test ./internal/cli -run 'TestPlainGolden$' -count=1` and no update flag. Add an assertion to `TestCallersTextListsTheDefinitions` that the output for a name with one definition holds no `definitions named`.
 
 ## 5. Selection by file
 
-- [ ] 5.1 Add the file parameter to `CallersSelected`, `CalleesSelected` and `ImpactSelected` and the hard filter in `symbolTargets` (design D6). Verify with `TestCalleesWithFileSelectsOneDefinition`, `TestCalleesWithTheEndOfAFilePath`, `TestCallersWithAFileThatMatchesNothingListsEachFileOnce` and `TestCallersWithFileAndSignature`, one for each scenario of the requirement "A file selects the definitions in it".
-- [ ] 5.2 Add a property test `TestFileSelectionPartitionsTheUnion` with `pgregory.net/rapid`. Draw a graph and run a query with no file. Run it again with each file that holds a definition. The rows of the first run equal the union of the rows of the other runs. Positive assertion: a run with fewer than two files that hold a definition fails the test.
-- [ ] 5.3 Add one helper in `internal/cli` that registers `--signature` and `--file` with the short form `-f`. Use it in `callers`, `callees` and `impact`. Verify with `TestCalleesFileFlag` in `internal/cli/query_cli_test.go`. It runs the real command tree and asserts the non-zero exit status of the no-match case.
+- [ ] 5.1 Add the file parameter to `CallersSelected`, `CalleesSelected` and `ImpactSelected` and the hard filter in `symbolTargets` (design D6). Verify with `TestCalleesWithFileSelectsOneDefinition`, `TestCalleesWithTheEndOfAFilePath`, `TestCallersWithAFileThatMatchesNothingListsEachFileOnce` and `TestCallersWithFileAndSignature`, one for each scenario of the requirement "A file selects the definitions in it". Add `TestFileThatExcludesASetDropsItsAmbiguousCallers`: `Logger.java` holds a set with an ambiguous caller, and a query with `--file Audit.java` does not list that caller.
+- [ ] 5.2 Add a property test `TestFileSelectionPartitionsTheUnion` with `pgregory.net/rapid`. Draw a graph and run a query with no file. Run it again with each file that holds a definition. The rows of the first run equal the union of the rows of the other runs. Compare the rows with `Definition` removed, and draw only definitions that have a file. Positive assertion: a run with fewer than two files that hold a definition fails the test.
+- [ ] 5.3 Add `addSignatureFlag` and `addFileFlag` in `internal/cli`. Use them in `node`, `callers`, `callees` and `impact`. Verify with `TestCalleesFileFlag` in `internal/cli/query_cli_test.go`. It runs the real command tree and asserts the non-zero exit status of the no-match case.
 - [ ] 5.4 Run `task docs:cli` and commit `docs/CLI-REFERENCE.md`. Verify that `task docs:cli:drift` passes.
 
 ## 6. MCP tools
 
 - [ ] 6.1 Add the optional `file` input to `CallersArgs`, `CalleesArgs` and `ImpactArgs` in `internal/mcp/tools.go`, in the order of the JSON names. Pass it to the traversal. Verify with `TestCallersToolOnANameWithTwoDefinitions` and `TestCalleesToolWithAFile` in `internal/mcp/overloads_test.go`.
 - [ ] 6.2 Add `TestDefinitionToolsDeclareOptionalFile` in `internal/mcp/tools_schema_drift_test.go`. It asserts an optional string property `file` on the three input schemas and covers "The input schema of the three tools". Verify that it passes.
-- [ ] 6.3 Add `TestCallersToolTableHasADefinitionColumn`, `TestCallersToolOfNoCallerListsTheDefinitions`, `TestImpactToolRowReachedByTheWalkHasNoDefinition` and `TestCallersToolTableOfOneDefinitionHasThreeColumns`. They cover the four table scenarios of the `mcp-server` delta. Verify that all four pass.
+- [ ] 6.3 Add `TestCallersToolTableHasADefinitionColumn`, `TestCallersToolOfNoCallerListsTheDefinitions`, `TestImpactToolRowReachedByTheWalkHasNoDefinition` and `TestCallersToolTableOfOneDefinitionHasThreeColumns`. They cover the four table scenarios of the `mcp-server` delta. Add `TestSpanningTableOfAmbiguousRowsHasADefinitionColumn`. Verify that all five pass.
 - [ ] 6.4 Update `internal/mcp/resources/callers.md`, `callees.md` and `impact.md` with the `file` input and the behavior for several definitions. Verify that `go test ./internal/mcp` passes.
 
 ## 7. Frozen outputs and docs
