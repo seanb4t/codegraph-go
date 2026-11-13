@@ -1,19 +1,143 @@
 ---
 verdict: approve-with-notes
-phase: plan
-reviewed_at: 2026-11-13T17:05:04+00:00
-head: 3c126455a9adecc1dd5634896f478793613fb280
+phase: implementation
+reviewed_at: 2026-11-13T19:56:30+00:00
+head: 46748ae2699fbff0bac9e3677c48c354f2f7457a
 lenses:
-  spec-lint: ok
+  spec-lint: not-applicable
   approach: ok
   fit: ok
   test-coverage: ok
-  test-honesty: not-applicable
+  test-honesty: ok
   invariants: ok
 ---
 # Review
 
 ## Findings
+
+| id | lens | severity | claim | evidence | action |
+|---|---|---|---|---|---|
+| app-1 | approach | should-fix | D4 says the three new sort keys apply only to a result over several start nodes and that the affected command keeps its old row order byte for byte. sortLocations applies the definition, signature and kind keys to every result, and Affected sorts its affectedTests with it, so affected rows that tie on file, name and line are now ordered by kind. design.md records no deviation for affected, and the same paragraph later says a query over one definition can change its order, which contradicts its own first claim. | design.md > D4: The order of the rows — "They apply only to a result over several start nodes, one that spans definitions or overloads. A query over one definiti" | Either keep Affected (and one-start-node results, if intended) on the old three-key comparator, or rewrite the D4 sentence to say the keys apply to every result, affected included, and name the affected tie order as a changed output. |
+| fit-1 | fit | should-fix | The change adds the shared test helper testtree.Write, which writes a map of files with MkdirAll and WriteFile, while the repository already has the same loop in wtindex writeFiles and in the wtindex benchmark fixture, which the change leaves as they are. | internal/testtree/testtree.go:16 — "func Write(t testing.TB, files map[string]string) string {" | Give testtree a root-taking form (for example WriteAt(t, root, files), with Write calling it on t.TempDir()) and replace wtindex writeFiles and the loop of the benchmark fixture with it. |
+| inv-1 | invariants | should-fix | The row tie-break compares definition labels as strings, so a row for lib.py:12 sorts before a row for lib.py:5, while the definitions list sorts the same two by numeric line. No test passes two definitions of one file whose lines differ in digit count; the property test draws lines 1 and 2 only. | internal/query/traverse.go:593 — "return locs[i].Definition < locs[j].Definition" | Add a test where one caller calls two definitions in one file at lines 5 and 12 and assert the row order. If rows should follow the definitions list, compare the definition by file and numeric line (for example by the index of the definition in tg.definitions) instead of by the label string, and widen the property test's line range past 9. |
+| inv-2 | invariants | should-fix | Impact still composes dispatch siblings into its walk, but TestImpact_DispatchTraversal now starts from both Handle methods, so B.Handle reaches Caller by its own edge and the test passes with the dispatch composition removed. No other test exercises impact dispatch. | internal/query/traverse_test.go:345 — "got, err := e.Impact("Handle", 1)" | Give A.Handle and B.Handle a FilePath in dispatchFixtureNodesEdges and call ImpactSelected with the file of A.Handle, so the walk starts from A.Handle alone and Caller is reachable only through the dispatch composition. Keep the union case as a second assertion. |
+| inv-3 | invariants | should-fix | The spec requires --file to ignore letter case. filterByFile lowercases both sides, but no test of callers, callees, impact, the MCP tools or node passes a value whose case differs from the stored path. | specs/graph-queries/spec.md > Requirement: A file selects the definitions in it — "The comparison SHALL ignore letter case and SHALL treat `\\` as `/`, as `node --file` does." | Extend TestCalleesWithABackslashFilePath, or add a sibling, with a value such as `APP\\Models.PY` and assert that only the callees of src/app/models.py are listed. |
+| inv-4 | invariants | should-fix | D4 states that the affected command keeps its old row order byte for byte, but sortLocations now breaks every file, name and line tie by kind, and Affected sorts its rows with sortLocations. Tied affected rows of two kinds move from discovery order to kind order, and no test pins either order. | design.md > D4: The order of the rows — "A query over one definition and the `affected` command keep their old row order byte for byte." | Either restrict the three new keys to results over several start nodes, as D4 first says, or correct D4 to name affected under the same one-time tie exception, and add a test that pins the order of two tied affected rows. |
+| inv-6 | invariants | should-fix | D7 states that the row limit never shortens the list of definitions. The result takes Definitions from the targets and caps only the rows, but no test runs a query that spans definitions with a limit below the row count and asserts that every definition is still listed. | design.md > D7: Limits and frozen outputs — "The definitions line is not subject to the row limit, so the user still sees how many definitions exist and can select w" | Add a test in internal/query/definitions_test.go that calls CallersSelected on two definitions with three caller rows and limit 1, and asserts one row and two entries in Definitions. |
+| fit-2 | fit | note | definitionsParagraph and emptyDefinitions are the same wrapper of DefinitionsLine and differ only in the text around the line. | internal/query/render_results.go:176 — "return line + "\\n\\n"" | Keep one function that takes the prefix and the suffix around the line, or leave both and accept the two names. |
+| inv-5 | invariants | note | The file selection partitions the rows of the union for callees and impact as well as for callers, an invariant over an unbounded graph domain; TestFileSelectionPartitionsTheUnion checks Callers only. | internal/query/definitions_test.go:953 — "part, err := e.CallersSelected(Selector{Symbol: "target"}, f, 0)" | Extend TestFileSelectionPartitionsTheUnion in internal/query/definitions_test.go (pgregory.net/rapid) to compare CalleesSelected rows the same way. |
+
+## Coverage matrix
+
+| scenario | covered by | status | verified |
+|---|---|---|---|
+| Two functions of one name in two files | internal/query/definitions_test.go: TestCalleesOfANameWithTwoDefinitions | covered | pass |
+| A typing stub and the real function | internal/query/definitions_test.go: TestCallersOfAStubAndTheRealFunction | covered | pass |
+| A method and a test helper of one name | internal/query/definitions_test.go: TestCalleesOfAMethodAndATestHelper | covered | pass |
+| Impact over two definitions | internal/query/definitions_test.go: TestImpactOverTwoDefinitions | covered | pass |
+| An overload set and a definition outside it | internal/query/definitions_test.go: TestCallersOfASetAndADefinitionOutsideIt | covered | pass |
+| The definitions are listed | internal/cli/query_cli_test.go: TestCallersTextListsTheDefinitions | covered | pass |
+| A query that spans definitions and finds no result | internal/cli/query_cli_test.go: TestCallersTextOfNoResultListsTheDefinitions | covered | pass |
+| JSON output over several definitions | internal/query/definitions_test.go: TestJSONOfANameWithTwoDefinitionsHasDefinitions | covered | pass |
+| One overload set alone | internal/query/definitions_test.go: TestJSONOfOneOverloadSetHasNoDefinitionKeys | covered | pass |
+| A function and a package of one name | internal/query/definitions_test.go: TestAFunctionAndAPackageOfOneName | covered | pass |
+| A caller names the definition it calls | internal/query/definitions_test.go: TestCallerNamesTheDefinitionItCalls | covered | pass |
+| A signature that matches in two files | internal/query/definitions_test.go: TestSignatureThatMatchesInTwoFilesSpansDefinitions | covered | pass |
+| An ambiguous callee in a query that spans definitions | internal/query/definitions_test.go: TestAmbiguousCalleeInASpanningQueryNamesItsDefinition | covered | pass |
+| An ambiguous caller in a query that spans definitions | internal/query/definitions_test.go: TestAmbiguousCallerInASpanningQueryHasNoDefinition | covered | pass |
+| Impact reaches one symbol from two definitions | internal/query/definitions_test.go: TestImpactReachesOneSymbolFromTwoDefinitions | covered | pass |
+| One caller of two definitions | internal/query/definitions_test.go: TestOneCallerOfTwoDefinitionsIsOrderedByDefinition | covered | pass |
+| Tied results of one definition | internal/query/definitions_test.go: TestTiedResultsOfOneDefinition | covered | pass |
+| One definition in JSON | internal/query/definitions_test.go: TestJSONOfANameWithOneDefinitionHasNoNewKeys | covered | pass |
+| One definition in text | internal/cli/query_cli_test.go: TestCallersTextListsTheDefinitions (exact output of callers load) | covered | pass |
+| Callees of the definition in one file | internal/query/definitions_test.go: TestCalleesWithFileSelectsOneDefinition; internal/cli/query_cli_test.go: TestCalleesFileFlag | covered | pass |
+| A file named by the end of its path | internal/query/definitions_test.go: TestCalleesWithTheEndOfAFilePath | covered | pass |
+| A file with no definition of the name | internal/query/definitions_test.go: TestCallersWithAFileThatMatchesNothingListsEachFileOnce; internal/cli/query_cli_test.go: TestCalleesFileFlag | covered | pass |
+| A file and a signature | internal/query/definitions_test.go: TestCallersWithFileAndSignature | covered | pass |
+| An MCP callers call on a name with two definitions | internal/mcp/definitions_test.go: TestCallersToolOnANameWithTwoDefinitions | covered | pass |
+| An MCP callees call with a file | internal/mcp/definitions_test.go: TestCalleesToolWithAFile | covered | pass |
+| Callers of a name with two definitions | internal/mcp/definitions_test.go: TestCallersToolTableHasADefinitionColumn | covered | pass |
+| No caller of a name with two definitions | internal/mcp/definitions_test.go: TestCallersToolOfNoCallerListsTheDefinitions | covered | pass |
+| An impact row that the walk reached | internal/mcp/definitions_test.go: TestImpactToolRowReachedByTheWalkHasNoDefinition | covered | pass |
+| Callers of a name with one definition | internal/mcp/definitions_test.go: TestCallersToolTableOfOneDefinitionHasThreeColumns | covered | pass |
+| The input schema of the three tools | internal/mcp/tools_schema_drift_test.go: TestDefinitionToolsDeclareOptionalFile | covered | pass |
+
+### Not run
+
+None.
+
+## Verification runs
+
+- exit 0: `go test -count=1 -run '^(TestCallersTextListsTheDefinitions)$' ./internal/cli`
+- exit 0: `go test -count=1 -run '^(TestCallersTextListsTheDefinitions)$' ./internal/cli # covers: internal/cli/query_cli_test.go: TestCallersTextListsTheDefinitions (exact output of callers load)`
+- exit 0: `go test -count=1 -run '^(TestCallersTextOfNoResultListsTheDefinitions)$' ./internal/cli`
+- exit 0: `go test -count=1 -run '^(TestCalleesToolWithAFile)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestCallersToolOfNoCallerListsTheDefinitions)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestCallersToolOnANameWithTwoDefinitions)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestCallersToolTableHasADefinitionColumn)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestCallersToolTableOfOneDefinitionHasThreeColumns)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestImpactToolRowReachedByTheWalkHasNoDefinition)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestDefinitionToolsDeclareOptionalFile)$' ./internal/mcp`
+- exit 0: `go test -count=1 -run '^(TestAFunctionAndAPackageOfOneName)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestAmbiguousCalleeInASpanningQueryNamesItsDefinition)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestAmbiguousCallerInASpanningQueryHasNoDefinition)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCalleesOfAMethodAndATestHelper)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCalleesOfANameWithTwoDefinitions)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCalleesWithFileSelectsOneDefinition|TestCalleesFileFlag)$' ./internal/cli ./internal/query # covers: internal/query/definitions_test.go: TestCalleesWithFileSelectsOneDefinition; internal/cli/query_cli_test.go: TestCalleesFileFlag`
+- exit 0: `go test -count=1 -run '^(TestCalleesWithTheEndOfAFilePath)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCallerNamesTheDefinitionItCalls)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCallersOfASetAndADefinitionOutsideIt)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCallersOfAStubAndTheRealFunction)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestCallersWithAFileThatMatchesNothingListsEachFileOnce|TestCalleesFileFlag)$' ./internal/cli ./internal/query # covers: internal/query/definitions_test.go: TestCallersWithAFileThatMatchesNothingListsEachFileOnce; internal/cli/query_cli_test.go: TestCalleesFileFlag`
+- exit 0: `go test -count=1 -run '^(TestCallersWithFileAndSignature)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestImpactOverTwoDefinitions)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestImpactReachesOneSymbolFromTwoDefinitions)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestJSONOfANameWithOneDefinitionHasNoNewKeys)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestJSONOfANameWithTwoDefinitionsHasDefinitions)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestJSONOfOneOverloadSetHasNoDefinitionKeys)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestOneCallerOfTwoDefinitionsIsOrderedByDefinition)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestSignatureThatMatchesInTwoFilesSpansDefinitions)$' ./internal/query`
+- exit 0: `go test -count=1 -run '^(TestTiedResultsOfOneDefinition)$' ./internal/query`
+
+## Dropped
+
+None.
+
+## Lens notes
+
+- approach: Every requirement of both spec deltas maps to a decision that the code at head produces: symbolTargets (internal/query/overloads.go) unions definitionsOf with the overload_set nodes, computes spans after both filters, builds Definitions and labels via DefinitionLabel; CallersSelected/CalleesSelected/ImpactSelected take the file parameter; the CLI and MCP surfaces pass it; the markdown table takes the Definition flag from the result.
+- approach: Cited facts checked and holding at head: definitionsOf/nodesNamed/enumerateSymbolDefs, filterByFile shared with narrowNodeMatches, nodeMultiDefListCap = 20, addWorkersFlag pattern, -l on callers/callees and -d on impact, uiv1.Location has no definition field, UI handlers call the unselected wrappers, gocapture captures explore and node only, -update-plain-goldens flag, test/wireoracle/cmd/wireoracle exists, TestImpact_DispatchTraversal asserts NodeCount 3, package node Name is the last path segment with QualifiedName the import path.
+- approach: resolveSymbolNode and the empty-file branch of resolveNodeForDetail are gone at head, as design Context says the implementation removes them.
+- approach: diff-files.txt lists internal/indexer/symbols/candidate.go and internal/indexer/sync_test.go although the proposal puts the index out of scope. Without git I could not see the hunk; candidate.go at head shows no behavior tied to this change, so it is likely a comment edit. The controller may want to confirm.
+- approach: Tied rows are ordered by the definition label as a string, so a.go:10 sorts before a.go:9, while the definitions list orders by numeric line. This matches the spec wording 'by the name of their definition' and is not a finding of this lens.
+- fit: D1 to D6 fit their named patterns: symbolTargets reuses nodesNamed and definitionsOf, filterByFile is the one file test that narrowNodeMatches and symbolTargets share, addSignatureFlag and addFileFlag follow addWorkersFlag in their own file, and DefinitionsHeading and CapDefinitions are shared with the node renderers.
+- fit: The MCP args repeat the file and signature help text in struct tags; Go struct tags cannot reference a constant, so this is not reported.
+- fit: The plain and styled renderers of callers, callees and impact keep their sanctioned plain/styled mirror; each calls query.RowSuffix and query.DefinitionsLine, so the new text has one source.
+- fit: D8 holds: internal/uiserver/handlers.go calls Callers, Callees and Impact with no file and needs no change.
+- fit: The prompt names no path for repository library-preference rows; only the generic rows were applied.
+- invariants: I1: The start nodes of callers, callees and impact are every non-set node of the name plus each overload_set of the name, never one picked node \| enforced at symbolTargets, internal/query/overloads.go:56 \| boundary test TestCalleesOfANameWithTwoDefinitions (two), TestJSONOfANameWithOneDefinitionHasNoNewKeys (one), existing not-found path (zero)
+- invariants: I2: spans is true exactly when the kept definitions are not all members of one set \| enforced at spansDefinitions, internal/query/overloads.go:133 (len<2 guard) \| boundary test TestJSONOfOneOverloadSetHasNoDefinitionKeys (one set), TestCallersOfASetAndADefinitionOutsideIt, TestTwoOverloadSetsSpanDefinitions, TestCalleesWithFileSelectsOneDefinition (filter down to one)
+- invariants: I3: A name with one definition emits no definitions and no definition key \| enforced at omitempty on Location.Definition and the three Definitions fields, set only when spans \| boundary test TestJSONOfANameWithOneDefinitionHasNoNewKeys, plain goldens
+- invariants: I4: Row order never depends on node ids \| enforced at sortLocations (traverse.go:579) and sortDefinitions (overloads.go:151) \| boundary test TestQueryResultDoesNotDependOnNodeIDs (rapid, two opposite id schemes, drawn limit); lines drawn 1..2 only, see inv-1
+- invariants: I5: The definitions line shows at most 20 labels and then +K more \| enforced at CapDefinitions, render_results.go \| boundary test TestCallersTextListsTheDefinitions and TestRenderCallersMarkdown at 20 and 21
+- invariants: I6: --file is a hard filter; no match fails and lists each file once, also with no file at all \| enforced at symbolTargets file branch and definitionFiles (slices.Compact after sort) \| boundary test TestCallersWithAFileThatMatchesNothingListsEachFileOnce, TestFileWhenNoDefinitionHasAFile, TestFileThatMatchesNothingWithASignatureListsEveryFile; letter case untested, see inv-3
+- invariants: I7: A set whose members are all filtered out is not a start node \| enforced at symbolTargets keptSets check \| boundary test TestFileThatExcludesASetDropsItsAmbiguousCallers
+- invariants: I8: A caller of two definitions appears once per definition; an ambiguous caller of two sets appears once \| enforced at the callers row key, traverse.go CallersSelected \| boundary test TestOneCallerOfTwoDefinitionsIsOrderedByDefinition, TestAmbiguousCallerOfTwoSetsIsListedOnce, TestTwoCallersWithEqualRowsAreBothListed
+- invariants: I9: The table of one definition or one set is byte-identical to before \| enforced at renderLocationTableColumns, read line by line against the removed branches: header, separator and row bytes match \| boundary test TestCallersToolTableOfOneDefinitionHasThreeColumns, wire oracle transcripts
+- invariants: I10: The --file and --signature flags register without a shorthand clash \| enforced at addFileFlag (-f); no persistent -f flag exists on the root \| boundary test TestCalleesFileFlag runs the real command tree
+- invariants: I11: The three MCP tool inputs declare an optional string file \| enforced at CallersArgs, CalleesArgs, ImpactArgs omitempty tags \| boundary test TestDefinitionToolsDeclareOptionalFile
+- invariants: No enforcement point of this change is a script; all are Go functions in internal packages, so no probe was run. The string order claim of inv-1 follows from Go byte-wise string comparison ('1' < '5').
+- invariants: resolveNodeForDetail lost its empty-file branch; its one production caller (detail.go:207) guards with file != "", so no check that a caller relies on is dropped.
+- test-coverage: Not read: the rapid property tests TestQueryResultDoesNotDependOnNodeIDs and TestFileSelectionPartitionsTheUnion (task-explained, not orphans), and the markdown renderer tests of tasks 4.2 and 4.3.
+- test-coverage: The MCP file input is exercised only through codegraph_callees; the pass-through in callers and impact is covered only by the schema test.
+- test-honesty: Read internal/query/definitions_test.go in full, the MCP definitions_test.go, the schema drift test and the CLI definition tests. No skips, no missing assertions, no mock-echo or tautology found; id-independence and file-partition property tests carry positive assertions.
+- test-honesty: Not read in depth: edits to engine_test, explore_test, files_status_test, render_*_test, sync_test, overloads tests, traverse_test edits, and the regenerated golden files.
+
+## Plan review (2026-11-13)
+
+Verdict approve-with-notes at head 3c126455a9adecc1dd5634896f478793613fb280.
+
+### Findings
 
 | id | lens | severity | claim | evidence | action |
 |---|---|---|---|---|---|
@@ -36,7 +160,7 @@ lenses:
 | fit-7 | fit | note | The D5 definitions line repeats the header and the capped list with a +K more tail from RenderNodeMultiDef. Only the format of one entry differs: a label on one line here, a bullet with name and kind in node. | design.md > D5: Text and table rendering — "The line lists at most `nodeMultiDefListCap` labels and then `+K more`." | Parameter: the formatter of one entry. A shared heading function, for example definitionsHeading(n, symbol), and the cap with its tail can serve both node and the D5 line, so the wording that D5 says follows node stays the same. |
 | inv-8 | invariants | note | The partition property of task 5.2 does not hold as written. A per-file run over one definition has spans false and carries no Definition label, while the no-file run labels every row. A definition with no file appears in no per-file run. | tasks.md > 5. Selection by file — "The rows of the first run equal the union of the rows of the other runs." | Keep the property with pgregory.net/rapid (as in internal/indexer/spill_roundtrip_test.go), but compare rows with Definition removed, or keyed by start definition, and give every drawn definition a file. Say so in task 5.2. |
 
-## Coverage matrix
+### Coverage matrix
 
 | scenario | covered by | status | verified |
 |---|---|---|---|
@@ -72,50 +196,3 @@ lenses:
 ### Not run
 
 Plan phase: no verification runs.
-
-## Verification runs
-
-None.
-
-## Dropped
-
-None.
-
-## Lens notes
-
-- approach: D5 says renderLocationTable takes two flags but not where the Definition flag comes from. Today the Overload flag comes from the rows (render_results.go:48-54). If the Definition flag also comes from the rows, a spanning callers query whose rows are all ambiguous (no label) gets no Definition column. The mcp-server requirement says a spanning table SHALL have that column. Deriving the flag from len(Definitions) > 0 produces the requirement.
-- approach: D3 caps Definitions at MaxLimit (1000), and D5 prints `N definitions named "X"` with `+K more`. If N and K come from len(Definitions), they undercount for a name with more than 1000 definitions. D5 does not say where N comes from.
-- approach: Verified at head: the -l, -d, -p and -j short flags and no -f on callers, callees and impact; the omitempty Signature and Ambiguous fields on Location; MarshalCallersJSON as json.Marshal of the result; nodeMultiDefListCap = 20 in internal/query/render_markdown.go; the package node with an empty FilePath and its QualifiedName; uiv1.Location with no definition field; the UI handlers calling Callers, Callees and Impact; the -update-plain-goldens flag; gocapture producing only explore and node corpus goldens; TestImpact_DispatchTraversal asserting NodeCount 2 on two Handle methods; the CallersArgs, CalleesArgs and ImpactArgs fields in JSON-name order; pgregory.net/rapid v1.3.0 in go.mod.
-- approach: Every requirement in both spec deltas has a producing decision: R1 in D1, the definitions list in D3 and D5, labels in D3, row labels in D2 and D3, impact in D3, order in D1 and D4, one definition in D3 omitempty, --file in D6, MCP in D6 and D5. No open questions section exists, and the migration plan has a rollback (a revert) with no deployed configuration.
-- fit: openspec/config.yaml has no library-preference rows. Only the generic rows of the rulebook applied.
-- fit: pgregory.net/rapid, used by tasks 2.2 and 5.2, is already in go.mod (v1.3.0). No new dependency.
-- fit: After D1, symbolTargets still needs its own scan for overload_set nodes, because enumerateSymbolDefs excludes them. The name scan then exists in resolveSymbolNode, resolveNodeForDetail, enumerateSymbolDefs and symbolTargets. The approach lens decides whether two scans per query matter.
-- fit: internal/cli/present/node.go is a sanctioned mirror of render_markdown.go's node constants and is excluded from fit-7.
-- fit: D3, D4, D7 and D8 fit the existing patterns: omitempty fields like Signature and Ambiguous, sortLocations' key chain, the existing capture commands (no Taskfile task exists for the plain goldens or the wireoracle capture), and the UI handlers that call the wrappers.
-- invariants: I1: The start nodes of callers, callees and impact are every non-set node with the name plus each set of the name; never one picked node \| enforced at symbolTargets in internal/query/overloads.go (task 1.1; today line 113-118 still calls resolveSymbolNode) \| boundary test TestCalleesOfANameWithTwoDefinitions (two), TestJSONOfANameWithOneDefinitionHasNoNewKeys and plain goldens (one); zero is the existing not-found path
-- invariants: I2: The rows, their order, the labels and the Definitions list never depend on node ids \| enforced at sortLocations plus the D1 order (tasks 2.1, 1.1) \| boundary test TestQueryResultDoesNotDependOnNodeIDs (task 2.2); ties on Kind and Ambiguous are not covered (inv-1)
-- invariants: I3: spans is true exactly when the start definitions are not all members of one overload set \| enforced at the one spans function of D2 (task 1.1) \| boundary test TestJSONOfOneOverloadSetHasNoDefinitionKeys (false), TestCallersOfASetAndADefinitionOutsideIt and TestSignatureThatMatchesInTwoFilesSpansDefinitions (true); two sets untested (inv-4)
-- invariants: I4: A definition label is file:line, or kind and qualified name for a node with no file \| enforced at the label function of D3 (task 3.1) \| boundary test TestAFunctionAndAPackageOfOneName (empty FilePath). The package node is resolve.KindPackage with Name lastPathSegment and QualifiedName the import path (internal/indexer/resolve/types.go:148-153), so the scenario label holds
-- invariants: I5: A name with one definition gives byte-identical text, JSON and markdown \| enforced at omitempty on Definition and Definitions plus spans false \| boundary test TestJSONOfANameWithOneDefinitionHasNoNewKeys, TestCallersToolTableOfOneDefinitionHasThreeColumns, TestPlainGolden without update
-- invariants: I6: An ambiguous row names no definition \| enforced at overloadLocation and the D3 rule \| boundary test TestAmbiguousCallerInASpanningQueryHasNoDefinition
-- invariants: I7: In callers, a caller of two definitions appears once per definition \| enforced at the callers row key with the start node when overloaded or spans (D2) \| boundary test TestOneCallerOfTwoDefinitionsIsOrderedByDefinition
-- invariants: I8: In impact, a node the walk reaches appears once with no label, and a start node is never repeated \| enforced at the visited set, pre-filled with every start node (internal/query/traverse.go:869-873) \| boundary test TestImpactReachesOneSymbolFromTwoDefinitions
-- invariants: I9: --file is a hard filter: no match fails with a not-found error that lists each file once, sorted \| enforced at symbolTargets (task 5.1) \| boundary test TestCallersWithAFileThatMatchesNothingListsEachFileOnce, TestCalleesFileFlag; a set with no remaining member untested (inv-5)
-- invariants: I10: The definitions line lists at most 20 labels and then +K more \| enforced at the D5 line function \| boundary test TestCallersTextListsTheDefinitions at 25 only (inv-3)
-- invariants: I11: The Definitions list has at most MaxLimit entries and the line shows the number of definitions \| enforced at the D3 cap \| boundary test none (inv-2)
-- invariants: I12: The three MCP inputs declare an optional string file \| enforced at the json tag with omitempty in CallersArgs, CalleesArgs and ImpactArgs (internal/mcp/tools.go:339-364) \| boundary test TestDefinitionToolsDeclareOptionalFile
-- invariants: I13: A spanning result's MCP table always has a Definition column \| enforced at renderLocationTable flags (task 4.2), source of the flag not stated \| boundary test none for an all-ambiguous spanning result (inv-6)
-- invariants: No -f shorthand is registered on callers, callees or impact, and no persistent -f exists on the root, so the -f of D6 does not collide in cobra (internal/cli/colorflag.go:54 is the only persistent flag found).
-- invariants: Edge left open by D6: strings.Contains(path, "") is true, so an empty --file must mean no filter, or every node, fileless ones included, matches. The wrappers already pass an empty file for no filter.
-- invariants: Edge left open by D6: when every definition has no file, the no-match error lists no file. The spec says only that it lists each file that holds a definition.
-- invariants: Two definitions on one line of one file (for example a minified JavaScript file) get the same label; their rows are then indistinguishable in the output, which hides no id order but cannot be selected by --file either.
-- invariants: Task 6.4 changes internal/mcp/resources/callees.md, and testdata/wireoracle/transcripts/resources-read-callees.golden holds it; D7 names only the tools/list transcripts as changing.
-- invariants: D8: the graph UI keys blast-radius rows by filePath:startLine:name (web/src/lib/components/browse/NeighborsPanel.svelte:38-40). An overload_set start node shares that key with its first member, so impact over a set already yields duplicate keys today; the union adds the case of a set plus an outside definition. Svelte checks each-block keys in development builds, so this is a pre-existing edge, not one this change creates.
-- invariants: No enforcement point of this change is a script, so no edge input was probed with Bash; the enforcement points are Go functions that the plan creates.
-- spec-lint: BREAKING: proposal.md says 'No change is **BREAKING**.' and no delta spec carries the marker. The mention is a negation, so it is not a marker mismatch. The controller may confirm this reading.
-- spec-lint: Form check passed: every requirement in both delta specs has at least one scenario, every scenario has a WHEN or GIVEN line and a THEN line, and each THEN names a list, a field, a value, an exit status or a row.
-- spec-lint: Task coverage passed: every requirement heading is named by a task line with two or more of its words, or by a test name that carries them. The weakest match is 'A bare name with several definitions reports across them', covered through task 1.1 by the word 'name' and the test name TestCalleesOfANameWithTwoDefinitions.
-- spec-lint: Build targets passed: task test, lint, eval:semantic, eval:semantic:run, docs:cli, docs:cli:drift, golden:regen and changie exist in Taskfile.yml. The wire oracle path test/wireoracle/cmd/wireoracle/main.go exists and the -update-plain-goldens flag is declared in internal/cli/plain_golden_test.go.
-- spec-lint: design.md has no open-questions section. The --line conflict is recorded as not settled and tasks only file an issue for it, so no answer is assumed.
-- test-coverage: Every scenario has a task that names a test and a verify step. Several tasks name a test but no go test command; the test names are accepted as the verification.
-- test-coverage: The proposal declares no BREAKING requirement, so no breaking-unproven finding applies.
