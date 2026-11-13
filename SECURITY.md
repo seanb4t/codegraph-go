@@ -47,6 +47,11 @@ Build provenance is attested by GitHub's first-party attestor
 archive, published through GitHub's Attestations API, and is verifiable with
 `gh attestation verify <asset> -R seanb4t/codegraph-go`.
 
+The release workflow also attests the SBOM of each binary with
+`actions/attest`. Releases after `v0.17.0` have this attestation. To verify
+it, add `--predicate-type https://spdx.dev/Document/v2.3` to the same command
+and name a raw binary.
+
 The release job runs on a macOS runner that [Namespace](https://namespace.so)
 manages, not on a GitHub-hosted runner. The provenance therefore records
 `runnerEnvironment: self-hosted`, and `gh attestation verify` with

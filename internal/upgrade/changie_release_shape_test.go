@@ -1611,7 +1611,7 @@ func TestReleaseGoreleaserPassesReleaseNotes(t *testing.T) {
 	}
 
 	// D-12: the flag lives here, so release.yml's run bodies stay exactly the
-	// two task invocations (TestWorkflowRunBodiesInvokeTask holds the rule;
+	// three task invocations (TestWorkflowRunBodiesInvokeTask holds the rule;
 	// this pins the set so a literal goreleaser line cannot appear there).
 	wfData, err := os.ReadFile(releaseWorkflowPath)
 	if err != nil {
@@ -1630,7 +1630,7 @@ func TestReleaseGoreleaserPassesReleaseNotes(t *testing.T) {
 		}
 	}
 	sort.Strings(runs)
-	if want := []string{"task release:goreleaser", "task release:record-final-hashes"}; !slices.Equal(runs, want) {
+	if want := []string{"task release:goreleaser", "task release:record-final-hashes", "task release:sbom-subjects"}; !slices.Equal(runs, want) {
 		t.Errorf("%s run bodies = %q, want exactly %q", releaseWorkflowPath, runs, want)
 	}
 	t.Logf("release:goreleaser: %d of %d ordered tokens found; %d release invocation; %d TAG definition; %d release.yml run bodies", found, len(releaseChainGoreleaserTokens), releaseCalls, tagDefs, len(runs))

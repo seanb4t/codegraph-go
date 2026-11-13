@@ -176,6 +176,30 @@ This is the authoritative, machine-readable package inventory for that
 specific binary — see the dependency-tree narrative below for how to read
 it.
 
+The release workflow also signs an attestation that binds each SBOM to its
+binary. An attestation is a signed statement about one file, stored in
+GitHub's Attestations API. Releases after `v0.17.0` have it. Verify it with:
+
+```sh
+gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+The subject is the raw binary. A `.zip` archive has no SBOM attestation.
+For `v0.17.0` and earlier releases, this command reports HTTP 404, because
+those releases have no SBOM attestation.
+
+To print the SBOM that the workflow signed, add `--format json`:
+
+```sh
+gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go \
+  --predicate-type https://spdx.dev/Document/v2.3 \
+  --format json --jq '.[0].verificationResult.statement.predicate'
+```
+
+If you do not trust the `.spdx.json` release asset, compare it with this
+output.
+
 ### d) Verify Gatekeeper trust (notarization)
 
 **Applicability — read this table first.** This project's darwin release

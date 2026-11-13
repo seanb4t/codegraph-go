@@ -188,7 +188,8 @@ The reason this is one static binary rather than a bundled runtime:
 - **Provenance** — GitHub-native build provenance via
   `actions/attest-build-provenance`, published through GitHub's Attestations
   API, verifiable with `gh attestation verify`.
-- **SBOM** — SPDX per platform, published as a release asset.
+- **SBOM** — SPDX per platform, published as a release asset. Releases after
+  `v0.17.0` also attest each SBOM to its binary.
 - **License notices** — `THIRD_PARTY_NOTICES.txt` holds the license text of every
   Go module and UI package in the binary. It ships in each `.zip` and as a
   release asset, and CI fails when it is stale.

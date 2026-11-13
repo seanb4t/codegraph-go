@@ -2314,6 +2314,43 @@ tasks:
           exit 1
         fi
 
+  release:sbom-subjects:
+    desc: >-
+      Resolves the subject of each SBOM attestation. For every release
+      platform it reads the binary's sha256 from GoReleaser's checksums file
+      and makes sure that the binary's SBOM exists in dist/. It writes one
+      `<goos>_<goarch>=sha256:<hex>` line per platform to GITHUB_OUTPUT, or
+      to stdout outside GitHub Actions. release.yml's four `Attest SBOM`
+      steps read those outputs, so each SBOM is bound to one binary and
+      never to all 8 checksum subjects. A missing checksums file, digest or
+      SBOM is a hard failure.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. release:sbom-subjects requires TAG (the release tag) in the environment — release.yml supplies github.ref_name."
+    cmds:
+      - |
+        set -euo pipefail
+
+        CHECKSUMS_FILE="dist/codegraph_${TAG}_checksums.txt"
+        if [ ! -f "${CHECKSUMS_FILE}" ]; then
+          echo "::error::${CHECKSUMS_FILE} not found — release:sbom-subjects must run after task release:goreleaser"
+          exit 1
+        fi
+
+        for suf in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+          NAME="codegraph_${TAG}_${suf}"
+          DIGEST="$(awk -v name="${NAME}" '$2 == name { print $1 }' "${CHECKSUMS_FILE}")"
+          if ! printf '%s' "${DIGEST}" | grep -Eqx '[0-9a-f]{64}'; then
+            echo "::error::release:sbom-subjects: want exactly one sha256 for ${NAME} in ${CHECKSUMS_FILE}, got '${DIGEST}'"
+            exit 1
+          fi
+          if [ ! -s "dist/${NAME}.spdx.json" ]; then
+            echo "::error::release:sbom-subjects: dist/${NAME}.spdx.json is missing or empty"
+            exit 1
+          fi
+          echo "${suf}=sha256:${DIGEST}" >> "${GITHUB_OUTPUT:-/dev/stdout}"
+        done
+
   release:rehearse-notarize:
     desc: >-
       MAINTAINER-ONLY (D-08/D-09). Rehearses the one release-pipeline path
@@ -3883,7 +3920,15 @@ tasks:
         # --- Attestation verification, the command plan 01-04 selected.
         gh attestation verify "${DL_DIR}/codegraph_${TAG}_linux_amd64" -R "${REPO}"
 
-        echo "verify:release-assets: PASS — checksums, cosign, and attestation all verified against re-downloaded published assets for ${TAG}"
+        # --- SBOM attestation (#294). release.yml attests one SBOM per
+        # binary, so every binary is checked: a platform with no SBOM
+        # attestation fails here. A tag from before #294 has none.
+        for suf in ${REQUIRED_RAW_SUFFIXES}; do
+          gh attestation verify "${DL_DIR}/codegraph_${TAG}_${suf}" -R "${REPO}" \
+            --predicate-type https://spdx.dev/Document/v2.3
+        done
+
+        echo "verify:release-assets: PASS — checksums, cosign, provenance and SBOM attestations all verified against re-downloaded published assets for ${TAG}"
 
   verify:self-upgrade:
     desc: >-
