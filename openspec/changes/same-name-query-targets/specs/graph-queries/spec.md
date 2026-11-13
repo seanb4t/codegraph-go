@@ -120,9 +120,14 @@ The results of `callers`, `callees` and `impact` SHALL be ordered by file, then 
 - **WHEN** `a.go:1` and `b.go:1` in two packages each declare `func Reset()`, `main` calls both, and a user runs `codegraph callers Reset`
 - **THEN** `main` is listed twice, first with the definition `a.go:1` and then with `b.go:1`
 
+#### Scenario: Tied results of one definition
+
+- **WHEN** one function `run` exists, a method `x` and a function `x` at the same line of `c.go` call it, and a user runs `codegraph callers run`
+- **THEN** the function `x` is listed before the method `x`
+
 ### Requirement: A name with one definition keeps its output
 
-When a bare name has exactly one definition, `callers`, `callees` and `impact` SHALL give the output they gave before this requirement. This holds byte for byte, for the text output and for `--json`. The `--json` output SHALL NOT contain the `definitions` field or a `definition` field.
+When a bare name has exactly one definition, `callers`, `callees` and `impact` SHALL give the output they gave before this requirement. This holds byte for byte, for the text output and for `--json`, with one exception: results that are equal in file, name and line follow the order requirement above. The `--json` output SHALL NOT contain the `definitions` field or a `definition` field.
 
 #### Scenario: One definition in JSON
 

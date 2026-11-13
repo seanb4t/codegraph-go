@@ -10,7 +10,7 @@
 
 ## 2. Row order without node ids
 
-- [x] 2.1 Add the definition label, the signature and the kind as the last three keys of `sortLocations` (design D4). Add `TestCalleesOrderOfASetAndItsFirstMember`: one function calls a member of a set and the set, and the two rows have a fixed order. Verify with `TestOneCallerOfTwoDefinitionsIsOrderedByDefinition`, which covers the scenario "One caller of two definitions" and asserts the order of the two rows.
+- [x] 2.1 Add the definition label, the signature and the kind as the last three keys of `sortLocations` (design D4). Add `TestCalleesOrderOfASetAndItsFirstMember`: one function calls a member of a set and the set, and the two rows have a fixed order. Verify with `TestOneCallerOfTwoDefinitionsIsOrderedByDefinition`, which covers the scenario "One caller of two definitions" and asserts the order of the two rows. Add `TestTiedResultsOfOneDefinition` for the scenario of that name.
 - [x] 2.2 Add a property test `TestQueryResultDoesNotDependOnNodeIDs` with `pgregory.net/rapid`. Draw a graph with two to four same-named functions, drawn callers and callees, and at least one caller of two definitions. Build it twice in the fake reader of `traverse_test.go`, with node ids drawn at random and all other fields equal. Require equal `CallersResult`, `CalleesResult` and `ImpactResult` values, with row order, labels and the `Definitions` list included, also under a drawn `limit`. Positive assertion: a run whose two builds have the same ids fails the test.
 
 ## 3. Definition labels in the results
