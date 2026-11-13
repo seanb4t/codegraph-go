@@ -1,13 +1,13 @@
 package agents
 
 import (
-	"github.com/seanb4t/codegraph-go/internal/realpath"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 	"github.com/tailscale/hujson"
 )
 

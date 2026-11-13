@@ -135,7 +135,7 @@ The steps that record directly today become `edit` functions that return a `File
 The implementation settled four points that the plan review left open:
 
 - An `edit` function that returns a `FileResult` with no `Action` records nothing. The Claude legacy migration and the Claude PreToolUse removal use this for a step that changed nothing.
-- `removedOnly` wraps a remover for a step that reports a file only when it removed something. The Claude legacy migration, the Claude PreToolUse removal and the Antigravity legacy removal use it.
+- `removedOnly` wraps a remover for a step that reports only a removal. The Claude legacy migration, the Claude PreToolUse removal and the Antigravity legacy removal use it.
 - The Antigravity migration does not become one `edit` function. It resolves the unified path and the legacy path with `resolveUserFile` for its existence tests and its reads. Its copy of the legacy entry into the unified file records directly, under the configured path. The legacy removal and the unified `writeMcpEntry` go through the funnel.
 - The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve. It also skips a path whose real location is inside the live configuration directory, because the entry there is the one the install just wrote.
 - The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too. The removal takes the operation from its caller. An install that turns the nudge off passes `opInstall`, so D5 applies to it as an install.
