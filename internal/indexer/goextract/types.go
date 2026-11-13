@@ -9,9 +9,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// Node kinds this extractor emits (D-06). No other kind is ever produced —
-// in particular, no "field" node is emitted (ratified skip, 02-RESEARCH.md
-// Open Question 3).
+// Node kinds the extractors emit (D-06).
 const (
 	KindFile      = "file"
 	KindFunction  = "function"
@@ -21,6 +19,12 @@ const (
 	KindTypeAlias = "type_alias"
 	KindConstant  = "constant"
 	KindVariable  = "variable"
+
+	// KindField is a statically named data member of a type: a Go struct
+	// field, a class field, or a Python class or receiver attribute. Its
+	// qualified name is "Owner.name", and a contains edge from the owner
+	// holds it. It is never a bare-name call candidate.
+	KindField = "field"
 
 	// KindRoute is a Phase 5 addition (LANG-07, D-08): a framework-detected
 	// HTTP route (path + method), linked to its handler symbol via a

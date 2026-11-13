@@ -574,29 +574,6 @@ func F() {
 	}
 }
 
-// TestExtract_NoFieldNodes proves struct fields never become their own
-// "field" node (ratified skip, D-06 / Open Question 3).
-func TestExtract_NoFieldNodes(t *testing.T) {
-	src := `package p
-
-type Widget struct {
-	Name string
-	Age  int
-}
-`
-	p := newTestParser(t)
-	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract returned error: %v", err)
-	}
-
-	for _, n := range result.Nodes {
-		if n.Node.Kind == "field" {
-			t.Fatalf("unexpected field node emitted: %+v", n.Node)
-		}
-	}
-}
-
 // TestExtract_ContentHashIsSHA256 proves ContentHash is computed via
 // crypto/sha256 (never crypto/md5), per D-02a.
 func TestExtract_ContentHashIsSHA256(t *testing.T) {

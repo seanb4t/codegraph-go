@@ -96,7 +96,8 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 	for _, n := range stored {
 		// A stored overload set is not a candidate: the resolver declares
 		// sets again from their members, as a fresh index does.
-		if n.Kind == goextract.KindFile || n.Kind == goextract.KindOverloadSet {
+		// A field is reached through its owner only, never by bare name.
+		if n.Kind == goextract.KindFile || n.Kind == goextract.KindOverloadSet || n.Kind == goextract.KindField {
 			continue
 		}
 		if symbols.Reachable(n, fileExports[n.FilePath]) {

@@ -272,7 +272,9 @@ func (rs *resolver) sameFile(r goextract.FileResult, name string, line, col int3
 		rs.fileNodesPath = r.RelPath
 		rs.fileNodes = make(map[string][]goextract.ExtractedNode, len(r.Nodes))
 		for _, en := range r.Nodes {
-			if en.Node.Kind != goextract.KindFile {
+			// A field is reached through its owner only, never by
+			// bare name.
+			if en.Node.Kind != goextract.KindFile && en.Node.Kind != goextract.KindField {
 				rs.fileNodes[en.Node.Name] = append(rs.fileNodes[en.Node.Name], en)
 			}
 		}
@@ -348,18 +350,31 @@ func (rs *resolver) resolveRef(r goextract.FileResult, ref goextract.UnresolvedR
 	return symbols.Pick(kept), true
 }
 
-// membersOf returns the members named name of the type ownerID, or of the
-// nearest supertype that declares the name.
+// membersOf returns the call candidates named name among the members of
+// the type ownerID, or of the nearest supertype that declares one. A
+// field is no call candidate, so a field never hides a method of the
+// same name.
 func (rs *resolver) membersOf(ownerID, name string) []symbols.Candidate {
-	if ms := rs.view.Members(ownerID, name); len(ms) > 0 {
+	if ms := callMembers(rs.view.Members(ownerID, name)); len(ms) > 0 {
 		return ms
 	}
 	var found []symbols.Candidate
 	rs.h.WalkSupertypes(ownerID, func(sup string) bool {
-		found = rs.view.Members(sup, name)
+		found = callMembers(rs.view.Members(sup, name))
 		return len(found) > 0
 	})
 	return found
+}
+
+// callMembers returns ms without its fields.
+func callMembers(ms []symbols.Candidate) []symbols.Candidate {
+	var kept []symbols.Candidate
+	for _, m := range ms {
+		if m.Kind != goextract.KindField {
+			kept = append(kept, m)
+		}
+	}
+	return kept
 }
 
 // implicitThis reports whether a bare call in a method body of lang can

@@ -191,6 +191,7 @@ func (ex *extractor) emitTypeSpec(spec *tree_sitter.Node) {
 	case KindStruct:
 		if typeNode != nil {
 			ex.collectStructEmbeds(id, typeNode)
+			ex.emitStructFields(id, name, typeNode)
 			if _, ok := ex.fields[name]; !ok {
 				ex.fields[name] = ex.structFieldsOf(typeNode)
 			}
@@ -242,6 +243,53 @@ func (ex *extractor) collectStructEmbeds(structID string, structType *tree_sitte
 			FromID: structID, Name: name, PkgAlias: pkgAlias, Kind: RefKindEmbeds,
 			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
 		})
+	}
+}
+
+// emitStructFields emits a field node for each explicitly named field of
+// a struct_type, owned by the struct through a contains edge. An embedded
+// field has no field_identifier, so it stays an embeds reference only, and
+// the blank identifier declares nothing.
+func (ex *extractor) emitStructFields(structID, structName string, structType *tree_sitter.Node) {
+	list := FirstNamedChildOfKind(structType, "field_declaration_list")
+	if list == nil {
+		return
+	}
+	for i := uint(0); i < list.NamedChildCount(); i++ {
+		fd := list.NamedChild(i)
+		if fd.Kind() != "field_declaration" {
+			continue
+		}
+		for j := uint(0); j < fd.NamedChildCount(); j++ {
+			c := fd.NamedChild(j)
+			if c.Kind() != "field_identifier" {
+				continue
+			}
+			name := c.Utf8Text(ex.src)
+			if name == "_" {
+				continue
+			}
+			qualifiedName := structName + "." + name
+			id := ex.alloc.Declare(KindField, qualifiedName, "", c.StartByte())
+			start, end := fd.StartPosition(), fd.EndPosition()
+			ex.result.Nodes = append(ex.result.Nodes, ExtractedNode{Node: &schema.Node{
+				Id:            id,
+				Kind:          KindField,
+				Name:          name,
+				QualifiedName: qualifiedName,
+				FilePath:      ex.relPath,
+				Language:      "go",
+				StartLine:     int32(start.Row) + 1,
+				EndLine:       int32(end.Row) + 1,
+				StartCol:      int32(start.Column),
+				EndCol:        int32(end.Column),
+				Visibility:    visibilityFor(name),
+				IsExported:    isExported(name),
+			}})
+			ex.result.IntraEdges = append(ex.result.IntraEdges, IntraEdge{Edge: &schema.Edge{
+				Source: structID, Target: id, Kind: RefKindContains, Provenance: "ast",
+			}})
+		}
 	}
 }
 
