@@ -475,8 +475,7 @@ func admitGlueCandidate(r graphstore.Reader, id string, rootSet, surfacedFiles, 
 // across every root are capped at glueCap; when the cap binds,
 // candidates are kept in sorted-Id order — RESEARCH §C.2/H12's own
 // admission order is not recoverable from the frozen capture, so D-04's
-// lowest-Id-first convention is used (matching
-// resolveSymbolNode/sortRWRScores), giving repeated calls over the same
+// lowest-Id-first convention is used (matching sortRWRScores), giving repeated calls over the same
 // input an identical result.
 func expandGlueNodes(r graphstore.Reader, rootIDs []string, surfacedFiles map[string]bool, glueCap int) ([]string, error) {
 	if glueCap <= 0 || len(rootIDs) == 0 {

@@ -15,7 +15,7 @@ import (
 // T-03-04-DoS). --json emits the golden impact.json shape
 // (query.MarshalImpactJSON).
 func newImpactCmd() *cobra.Command {
-	var path, signature string
+	var path, signature, file string
 	var depth int
 	var jsonOut bool
 
@@ -35,7 +35,7 @@ func newImpactCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			result, err := eng.ImpactSelected(query.Selector{Symbol: args[0], Signature: signature}, depth)
+			result, err := eng.ImpactSelected(query.Selector{Symbol: args[0], Signature: signature}, file, depth)
 			if err != nil {
 				return err
 			}
@@ -70,15 +70,17 @@ func newImpactCmd() *cobra.Command {
 			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprintf(out, "%s impact (depth=%d): %d node(s), %d edge(s)\n",
 				result.Symbol, result.Depth, result.NodeCount, result.EdgeCount)
+			printDefinitionsLine(out, result.Symbol, result.Definitions)
 			for _, l := range result.Affected {
-				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.OverloadSuffix(l))
+				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
-	cmd.Flags().StringVar(&signature, "signature", "", "parameter types that select one overload, for example \"String, Throwable\"")
+	addSignatureFlag(cmd, &signature)
+	addFileFlag(cmd, &file, fileFilterUsage)
 	cmd.Flags().IntVarP(&depth, "depth", "d", 0, "BFS depth (default 2, max 50)")
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 

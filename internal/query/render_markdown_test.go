@@ -68,14 +68,7 @@ func nodeExploreFixture(t *testing.T) (*Engine, string) {
 	t.Helper()
 
 	dir := copyFixture(t)
-	indexFixture(t, dir)
-
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: unexpected error: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine, dir
+	return indexedEngine(t, dir), dir
 }
 
 // TestNode pins Engine.Node's two modes: symbol detail (golden node.json
@@ -85,21 +78,11 @@ func TestNode(t *testing.T) {
 	t.Run("symbol mode renders the fixed node.json section order", func(t *testing.T) {
 		engine, _ := nodeExploreFixture(t)
 
-		// Independent oracle: resolve the same symbols traverse.go already
-		// resolves, so this test does not just re-implement Node's own
-		// logic as its own check.
-		alpha, err := engine.resolveSymbolNode("Alpha")
-		if err != nil {
-			t.Fatalf("resolveSymbolNode(Alpha): unexpected error: %v", err)
-		}
-		helper, err := engine.resolveSymbolNode("helper")
-		if err != nil {
-			t.Fatalf("resolveSymbolNode(helper): unexpected error: %v", err)
-		}
-		run, err := engine.resolveSymbolNode("Run")
-		if err != nil {
-			t.Fatalf("resolveSymbolNode(Run): unexpected error: %v", err)
-		}
+		// Independent oracle: read the symbols straight from the store, so
+		// this test does not re-implement Node's own logic as its check.
+		alpha := onlyNodeNamed(t, engine, "Alpha")
+		helper := onlyNodeNamed(t, engine, "helper")
+		run := onlyNodeNamed(t, engine, "Run")
 
 		got, err := engine.Node("Alpha", "", nil)
 		if err != nil {
@@ -174,10 +157,7 @@ func TestExplore(t *testing.T) {
 	t.Run("renders the fixed explore.json section order for a single-file match", func(t *testing.T) {
 		engine, dir := nodeExploreFixture(t)
 
-		alpha, err := engine.resolveSymbolNode("Alpha")
-		if err != nil {
-			t.Fatalf("resolveSymbolNode(Alpha): unexpected error: %v", err)
-		}
+		alpha := onlyNodeNamed(t, engine, "Alpha")
 
 		got, err := engine.Explore("Alpha", 1)
 		if err != nil {
@@ -503,10 +483,7 @@ func TestSkeletonization(t *testing.T) {
 func TestRenderNodeSingleDefUnchanged(t *testing.T) {
 	engine, _ := nodeExploreFixture(t)
 
-	alpha, err := engine.resolveSymbolNode("Alpha")
-	if err != nil {
-		t.Fatalf("resolveSymbolNode(Alpha): unexpected error: %v", err)
-	}
+	alpha := onlyNodeNamed(t, engine, "Alpha")
 	calls, err := engine.fetchCalls(alpha)
 	if err != nil {
 		t.Fatalf("fetchCalls(Alpha): unexpected error: %v", err)
@@ -639,4 +616,28 @@ func TestNodeFileHintNeverEmptiesOnNoMatch(t *testing.T) {
 	if !strings.HasPrefix(got, wantHead) {
 		t.Fatalf("Node(Dup, file=nope/nowhere.go): expected all 3 defs (never-empty fallback), got head:\n%s", got)
 	}
+}
+
+// onlyNodeNamed scans the engine's store for the one node named name,
+// and fails the test when there is not exactly one.
+func onlyNodeNamed(t *testing.T, engine *Engine, name string) *schema.Node {
+	t.Helper()
+	it, err := engine.reader.IterateNodes()
+	if err != nil {
+		t.Fatalf("IterateNodes: %v", err)
+	}
+	defer it.Close()
+	var found []*schema.Node
+	for it.Next() {
+		if n := it.Node(); n.Name == name {
+			found = append(found, n)
+		}
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("IterateNodes: %v", err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("nodes named %q = %d, want exactly 1", name, len(found))
+	}
+	return found[0]
 }

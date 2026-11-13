@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -149,17 +150,10 @@ func isGeneratedFile(filePath string) bool {
 	return false
 }
 
-// enumerateSymbolDefs collects EVERY node whose Name equals symbol — a
-// full IterateNodes scan, the same D-03 base resolveSymbolNode uses —
-// instead of resolving to a single winner (NODE-01, RESEARCH §6
-// findSymbolMatches). The result is sorted generated-files-last
-// (isGeneratedFile, primary key) then lowest-Id-first (secondary key —
-// a documented divergence from the documented implicit,
-// non-deterministic row order per RESEARCH Pattern 2: the documented
-// sort has no secondary tie-break, so this is an intentional Go-side
-// determinism improvement, not a byte-for-byte transcription of the
-// ordering).
-func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
+// nodesNamed returns every node whose Name equals symbol, overload_set
+// nodes included. Each query that resolves a bare name makes this one
+// full IterateNodes scan, because no index by name exists (D-03).
+func (e *Engine) nodesNamed(symbol string) ([]*schema.Node, error) {
 	it, err := e.reader.IterateNodes()
 	if err != nil {
 		return nil, err
@@ -168,24 +162,42 @@ func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
 
 	var matches []*schema.Node
 	for it.Next() {
-		n := it.Node()
-		// An overload set is not a definition: its overloads are.
-		if n.Name == symbol && n.Kind != goextract.KindOverloadSet {
+		if n := it.Node(); n.Name == symbol {
 			matches = append(matches, n)
 		}
 	}
-	if err := it.Err(); err != nil {
+	return matches, it.Err()
+}
+
+// enumerateSymbolDefs returns EVERY definition named symbol instead of
+// one winner (NODE-01), in the order of definitionsOf.
+func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
+	named, err := e.nodesNamed(symbol)
+	if err != nil {
 		return nil, err
 	}
+	return definitionsOf(named), nil
+}
 
-	sort.SliceStable(matches, func(i, j int) bool {
-		gi, gj := isGeneratedFile(matches[i].FilePath), isGeneratedFile(matches[j].FilePath)
+// definitionsOf keeps the nodes of named that are definitions: an
+// overload set is not a definition, its overloads are. The result is
+// sorted generated files last, then by lowest Id, so repeated calls give
+// the same order.
+func definitionsOf(named []*schema.Node) []*schema.Node {
+	var defs []*schema.Node
+	for _, n := range named {
+		if n.Kind != goextract.KindOverloadSet {
+			defs = append(defs, n)
+		}
+	}
+	sort.SliceStable(defs, func(i, j int) bool {
+		gi, gj := isGeneratedFile(defs[i].FilePath), isGeneratedFile(defs[j].FilePath)
 		if gi != gj {
 			return !gi // non-generated first
 		}
-		return matches[i].Id < matches[j].Id
+		return defs[i].Id < defs[j].Id
 	})
-	return matches, nil
+	return defs
 }
 
 // normalizeNarrowPath canonicalizes a path for narrowNodeMatches's
@@ -193,6 +205,21 @@ func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
 // so a hint typed with the "wrong" separator or casing still matches.
 func normalizeNarrowPath(p string) string {
 	return strings.ToLower(strings.ReplaceAll(p, "\\", "/"))
+}
+
+// filterByFile keeps the nodes whose normalized path contains the
+// normalized hint. A node with no file never matches. `node --file` uses
+// the result as a preference, and callers, callees and impact use it as
+// a hard filter.
+func filterByFile(nodes []*schema.Node, hint string) []*schema.Node {
+	fh := normalizeNarrowPath(hint)
+	var kept []*schema.Node
+	for _, n := range nodes {
+		if n.FilePath != "" && strings.Contains(normalizeNarrowPath(n.FilePath), fh) {
+			kept = append(kept, n)
+		}
+	}
+	return kept
 }
 
 // absInt32 returns the absolute value of n.
@@ -222,7 +249,7 @@ func narrowBySignature(symbol string, matches []*schema.Node, signature string) 
 		return kept, nil
 	}
 	sort.Strings(signatures)
-	signatures = compactStrings(signatures)
+	signatures = slices.Compact(signatures)
 	if len(signatures) == 0 {
 		return nil, notFoundf("query: no overload of %q has the signature %q: %q is not a function or method", symbol, signature, symbol)
 	}
@@ -251,15 +278,7 @@ func narrowNodeMatches(matches []*schema.Node, fileHint string, lineHint *int) [
 
 	narrowed := matches
 	if fileHint != "" {
-		fh := normalizeNarrowPath(fileHint)
-		var byFile []*schema.Node
-		for _, n := range narrowed {
-			np := normalizeNarrowPath(n.FilePath)
-			if strings.HasSuffix(np, fh) || strings.Contains(np, fh) {
-				byFile = append(byFile, n)
-			}
-		}
-		if len(byFile) > 0 {
+		if byFile := filterByFile(narrowed, fileHint); len(byFile) > 0 {
 			narrowed = byFile // only replace if non-empty
 		}
 	}
@@ -296,19 +315,12 @@ func narrowNodeMatches(matches []*schema.Node, fileHint string, lineHint *int) [
 	return matches
 }
 
-// resolveNodeForDetail resolves symbol to a concrete node for Node's
-// symbol-detail mode. When file is empty, it reuses traverse.go's
-// resolveSymbolNode (D-03 full-scan, deterministic lowest-Id tie-break) —
-// no duplicated resolution logic. When file is given (the CLI's `-f`
-// disambiguation flag, matching the golden `node "mergeStyle" -f
-// internal/cli/finish.go` command), it scans for nodes matching both name
-// and file, picking the lexicographically lowest Id among ties for the
-// same determinism guarantee.
+// resolveNodeForDetail resolves symbol in file to a concrete node for
+// Node's symbol-detail mode (the CLI's `-f` disambiguation flag, matching
+// the golden `node "mergeStyle" -f internal/cli/finish.go` command). It
+// scans for nodes matching both name and file exactly, and picks the
+// lexicographically lowest Id among ties, so repeated calls agree.
 func (e *Engine) resolveNodeForDetail(symbol, file string) (*schema.Node, error) {
-	if file == "" {
-		return e.resolveSymbolNode(symbol)
-	}
-
 	it, err := e.reader.IterateNodes()
 	if err != nil {
 		return nil, err

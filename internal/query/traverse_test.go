@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -261,13 +262,12 @@ func TestImpactSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
 
 // dispatchFixtureNodesEdges builds a small in-memory graph proving RES-02's
 // query-time dispatch traversal: structs A and B both implement interface
-// I and both declare a method named "Handle" — A's node id sorts lower
-// than B's ("method:a-handle" < "method:b-handle"), so
-// resolveSymbolNode("Handle") deterministically picks A.Handle, which has
-// NO direct caller of its own. Only B.Handle is actually called (by
-// Caller). The dispatch-traversal composition must still surface Caller
-// as a "Handle" caller/impact result, since a call dispatched dynamically
-// through interface I could have reached either implementer.
+// I and both declare a method named "Handle". A.Handle has NO direct
+// caller of its own. Only B.Handle is actually called (by Caller). A
+// query for "Handle" starts from both definitions. The dispatch-traversal
+// composition must also surface Caller as a caller of A.Handle, since a
+// call dispatched dynamically through interface I could have reached
+// either implementer.
 func dispatchFixtureNodesEdges() (map[string]*schema.Node, []*schema.Edge) {
 	nodes := map[string]*schema.Node{
 		"iface:I":         {Id: "iface:I", Kind: "interface", Name: "I", QualifiedName: "I"},
@@ -287,10 +287,10 @@ func dispatchFixtureNodesEdges() (map[string]*schema.Node, []*schema.Edge) {
 	return nodes, edges
 }
 
-// TestCallers_DispatchTraversal proves RES-02: Callers("Handle") resolves
-// to A.Handle (lower node id) but must ALSO surface Caller — the caller of
-// SIBLING implementer B's same-named Handle method — via the "implements"
-// edge composition, even though no edge points at A.Handle directly.
+// TestCallers_DispatchTraversal proves RES-02: Callers("Handle") lists
+// Caller for A.Handle too — the caller of SIBLING implementer B's
+// same-named Handle method — via the "implements" edge composition, even
+// though no edge points at A.Handle directly.
 func TestCallers_DispatchTraversal(t *testing.T) {
 	nodes, edges := dispatchFixtureNodesEdges()
 	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
@@ -300,14 +300,16 @@ func TestCallers_DispatchTraversal(t *testing.T) {
 		t.Fatalf("Callers: unexpected error: %v", err)
 	}
 
-	var found bool
+	// One row for each definition: B.Handle by its own edge, A.Handle
+	// only through the dispatch composition.
+	var defs []string
 	for _, loc := range got.Callers {
 		if loc.Name == "Caller" {
-			found = true
+			defs = append(defs, loc.Definition)
 		}
 	}
-	if !found {
-		t.Fatalf("Callers(Handle) = %+v, want Caller present (dispatch traversal through interface I)", got.Callers)
+	if len(defs) != 2 || defs[0] == defs[1] {
+		t.Fatalf("Callers(Handle) = %+v, want Caller once for A.Handle (dispatch traversal through interface I) and once for B.Handle", got.Callers)
 	}
 }
 
@@ -355,9 +357,25 @@ func TestImpact_DispatchTraversal(t *testing.T) {
 	if !found {
 		t.Fatalf("Impact(Handle, depth=1).Affected = %+v, want Caller present (dispatch traversal through interface I)", got.Affected)
 	}
-	// self (A.Handle) + Caller = 2 distinct visited nodes.
-	if got.NodeCount != 2 {
-		t.Errorf("NodeCount = %d, want 2 (A.Handle self + Caller via dispatch)", got.NodeCount)
+	// Both definitions of Handle + Caller = 3 distinct visited nodes.
+	if got.NodeCount != 3 {
+		t.Errorf("NodeCount = %d, want 3 (A.Handle, B.Handle and Caller)", got.NodeCount)
+	}
+
+	// From A.Handle alone, only the dispatch composition reaches Caller:
+	// no edge points at A.Handle.
+	nodes["method:a-handle"].FilePath = "a.go"
+	nodes["method:b-handle"].FilePath = "b.go"
+	one, err := New(&traverseFakeReader{nodes: nodes, edges: edges}).ImpactSelected(Selector{Symbol: "Handle"}, "a.go", 1)
+	if err != nil {
+		t.Fatalf("ImpactSelected: unexpected error: %v", err)
+	}
+	var names []string
+	for _, loc := range one.Affected {
+		names = append(names, loc.Name)
+	}
+	if !slices.Contains(names, "Caller") || one.NodeCount != 2 {
+		t.Errorf("ImpactSelected(Handle, a.go, 1) = %v (NodeCount %d), want Handle and Caller", names, one.NodeCount)
 	}
 }
 
@@ -419,14 +437,7 @@ func traverseFixture(t *testing.T) *Engine {
 	if err := os.WriteFile(targetTestFile, []byte(traverseFixtureTargetTestFile), 0o644); err != nil {
 		t.Fatalf("seed target_test.go: %v", err)
 	}
-	indexFixture(t, dir)
-
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: unexpected error: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine
+	return indexedEngine(t, dir)
 }
 
 // TestCallersCallees pins forward (IterateEdges(src) directly, no scan)

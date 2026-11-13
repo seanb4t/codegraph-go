@@ -2,8 +2,11 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -553,5 +556,107 @@ func TestStatusCmd(t *testing.T) {
 	}
 	if result.Index.State != "complete" {
 		t.Fatalf("status: index.state = %q, want %q", result.Index.State, "complete")
+	}
+}
+
+// initTree writes files with testtree.Write and indexes them through the
+// real init command.
+func initTree(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := testtree.Write(t, files)
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	return dir
+}
+
+// twoRunsTree is two functions named run. main calls the one in a.py.
+func twoRunsTree(t *testing.T) string {
+	return initTree(t, map[string]string{
+		"a.py": "def load():\n    return 1\n\n\ndef run():\n    return load()\n",
+		"b.py": "def save():\n    return 2\n\n\ndef run():\n    return save()\n",
+		"m.py": "from a import run\n\n\ndef main():\n    return run()\n",
+	})
+}
+
+// TestCallersTextListsTheDefinitions covers the scenarios "The
+// definitions are listed" and "One definition in text", and the cap of
+// the definitions line on both of its sides.
+func TestCallersTextListsTheDefinitions(t *testing.T) {
+	dir := twoRunsTree(t)
+	out, _, err := execCmd("callers", "run", "-p", dir)
+	if err != nil {
+		t.Fatalf("callers run: %v", err)
+	}
+	want := "run has 1 caller(s):\n2 definitions named \"run\": a.py:5, b.py:5\n  main (function) m.py:4 (definition a.py:5)\n"
+	if out != want {
+		t.Errorf("callers run =\n%q\nwant\n%q", out, want)
+	}
+
+	one, _, err := execCmd("callers", "load", "-p", dir)
+	if err != nil {
+		t.Fatalf("callers load: %v", err)
+	}
+	if want := "load has 1 caller(s):\n  run (function) a.py:5\n"; one != want {
+		t.Errorf("callers load =\n%q\nwant\n%q", one, want)
+	}
+	if strings.Contains(one, "definitions named") {
+		t.Errorf("a name with one definition lists definitions:\n%s", one)
+	}
+
+	for _, n := range []int{20, 21} {
+		files := map[string]string{}
+		for i := 0; i < n; i++ {
+			files[fmt.Sprintf("f%02d.py", i)] = "def many():\n    return 1\n"
+		}
+		out, _, err := execCmd("callers", "many", "-p", initTree(t, files))
+		if err != nil {
+			t.Fatalf("callers many (%d): %v", n, err)
+		}
+		line := strings.SplitN(out, "\n", 3)[1]
+		if got := strings.Count(line, ".py:1"); got != 20 {
+			t.Errorf("%d definitions: the line holds %d labels, want 20:\n%s", n, got, line)
+		}
+		if tail := fmt.Sprintf(", +%d more", n-20); (n > 20) != strings.HasSuffix(line, tail) || (n == 20 && strings.Contains(line, "more")) {
+			t.Errorf("%d definitions: wrong tail of the line:\n%s", n, line)
+		}
+	}
+}
+
+// TestCallersTextOfNoResultListsTheDefinitions is the scenario "A query
+// that spans definitions and finds no result".
+func TestCallersTextOfNoResultListsTheDefinitions(t *testing.T) {
+	dir := initTree(t, map[string]string{
+		"a.py": "def run():\n    return 1\n",
+		"b.py": "def run():\n    return 2\n",
+	})
+	out, _, err := execCmd("callers", "run", "-p", dir)
+	if err != nil {
+		t.Fatalf("callers run: %v", err)
+	}
+	if want := "run has 0 caller(s):\n2 definitions named \"run\": a.py:1, b.py:1\n"; out != want {
+		t.Errorf("callers run =\n%q\nwant\n%q", out, want)
+	}
+}
+
+// TestCalleesFileFlag runs --file and -f through the real command tree:
+// a match selects one definition, and no match exits non-zero and lists
+// the files.
+func TestCalleesFileFlag(t *testing.T) {
+	dir := twoRunsTree(t)
+	for _, flag := range []string{"--file", "-f"} {
+		out, _, err := execCmd("callees", "run", flag, "a.py", "-p", dir)
+		if err != nil {
+			t.Fatalf("callees run %s a.py: %v", flag, err)
+		}
+		if want := "run calls 1 callee(s):\n  load (function) a.py:1\n"; out != want {
+			t.Errorf("callees run %s a.py =\n%q\nwant\n%q", flag, out, want)
+		}
+	}
+	for _, cmd := range []string{"callers", "callees", "impact"} {
+		_, _, err := execCmd(cmd, "run", "--file", "c.py", "-p", dir)
+		if err == nil || !strings.Contains(err.Error(), `no definition of "run" is in a file that matches "c.py"; the files are a.py, b.py`) {
+			t.Errorf("%s run --file c.py: error = %v, want the no-match error with both files", cmd, err)
+		}
 	}
 }

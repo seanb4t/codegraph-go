@@ -2,6 +2,7 @@ package query
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -146,6 +147,39 @@ func TestRenderCallersMarkdown(t *testing.T) {
 	t.Run("ANSI-free", func(t *testing.T) {
 		assertANSIFree(t, RenderCallersMarkdown(CallersResult{Symbol: "Alpha", Callers: nonAlphaLocations()}))
 	})
+	t.Run("two definitions with rows", func(t *testing.T) {
+		out := RenderCallersMarkdown(spanningCallers(Location{Name: "main", Kind: "function", FilePath: "m.py", StartLine: 1, Definition: "a.py:1"}))
+		for _, want := range []string{"2 definitions named \"run\": a.py:1, b.py:1\n", "| Name | Kind | Location | Definition |\n", "| `main` | function | `m.py:1` | `a.py:1` |\n"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output lacks %q:\n%s", want, out)
+			}
+		}
+	})
+
+	t.Run("two definitions with no row", func(t *testing.T) {
+		out := RenderCallersMarkdown(spanningCallers())
+		if !strings.Contains(out, "no callers found") || !strings.Contains(out, "2 definitions named \"run\": a.py:1, b.py:1\n") {
+			t.Errorf("an empty result over two definitions does not list them:\n%s", out)
+		}
+	})
+
+	t.Run("rows that are all ambiguous keep the Definition column", func(t *testing.T) {
+		out := RenderCallersMarkdown(spanningCallers(Location{Name: "use", Kind: "method", FilePath: "u.py", StartLine: 2, Ambiguous: true}))
+		if !strings.Contains(out, "| Name | Kind | Location | Definition | Overload |\n") || !strings.Contains(out, "| `use` | method | `u.py:2` |  | ambiguous |\n") {
+			t.Errorf("the table lacks the Definition column or the empty cell:\n%s", out)
+		}
+	})
+
+	t.Run("the definitions line holds 20 labels at most", func(t *testing.T) {
+		at := RenderCallersMarkdown(CallersResult{Symbol: "run", Definitions: manyDefinitions(20)})
+		if !strings.Contains(at, "f19.py:1\n") || strings.Contains(at, "more") {
+			t.Errorf("20 definitions: want 20 labels and no tail:\n%s", at)
+		}
+		over := RenderCallersMarkdown(CallersResult{Symbol: "run", Definitions: manyDefinitions(21)})
+		if !strings.Contains(over, "21 definitions named") || !strings.Contains(over, "f19.py:1, +1 more\n") || strings.Contains(over, "f20.py") {
+			t.Errorf("21 definitions: want 20 labels and +1 more:\n%s", over)
+		}
+	})
 }
 
 // --- RenderCalleesMarkdown ---
@@ -197,6 +231,17 @@ func TestRenderCalleesMarkdown(t *testing.T) {
 
 	t.Run("ANSI-free", func(t *testing.T) {
 		assertANSIFree(t, RenderCalleesMarkdown(CalleesResult{Symbol: "Alpha", Callees: nonAlphaLocations()}))
+	})
+	t.Run("two definitions with rows and with no row", func(t *testing.T) {
+		defs := spanningCallers().Definitions
+		out := RenderCalleesMarkdown(CalleesResult{Symbol: "run", Definitions: defs, Callees: []Location{{Name: "load", Kind: "function", FilePath: "a.py", StartLine: 9, Definition: "a.py:1"}}})
+		if !strings.Contains(out, "2 definitions named \"run\": a.py:1, b.py:1\n") || !strings.Contains(out, "| `load` | function | `a.py:9` | `a.py:1` |\n") {
+			t.Errorf("output lacks the definitions line or the Definition cell:\n%s", out)
+		}
+		empty := RenderCalleesMarkdown(CalleesResult{Symbol: "run", Definitions: defs})
+		if !strings.Contains(empty, "no callees found") || !strings.Contains(empty, "2 definitions named") {
+			t.Errorf("an empty result over two definitions does not list them:\n%s", empty)
+		}
 	})
 }
 
@@ -258,6 +303,22 @@ func TestRenderImpactMarkdown(t *testing.T) {
 
 	t.Run("ANSI-free", func(t *testing.T) {
 		assertANSIFree(t, RenderImpactMarkdown(mkResult(nonAlphaLocations())))
+	})
+
+	t.Run("a row that the walk reached has an empty Definition cell", func(t *testing.T) {
+		out := RenderImpactMarkdown(ImpactResult{Symbol: "Reset", Depth: 1, NodeCount: 3, Definitions: []Location{
+			{Name: "Reset", FilePath: "a.go", StartLine: 1, Definition: "a.go:1"},
+			{Name: "Reset", FilePath: "b.go", StartLine: 1, Definition: "b.go:1"},
+		}, Affected: []Location{
+			{Name: "Reset", Kind: "function", FilePath: "a.go", StartLine: 1, Definition: "a.go:1"},
+			{Name: "Reset", Kind: "function", FilePath: "b.go", StartLine: 1, Definition: "b.go:1"},
+			{Name: "main", Kind: "function", FilePath: "main.go", StartLine: 3},
+		}})
+		for _, want := range []string{"2 definitions named \"Reset\": a.go:1, b.go:1\n", "| `Reset` | function | `b.go:1` | `b.go:1` |\n", "| `main` | function | `main.go:3` |  |\n"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("output lacks %q:\n%s", want, out)
+			}
+		}
 	})
 }
 
@@ -417,4 +478,22 @@ func TestRenderFilesMarkdown(t *testing.T) {
 	t.Run("tree: ANSI-free", func(t *testing.T) {
 		assertANSIFree(t, RenderFilesMarkdown(FilesResult{Format: "tree", Tree: tree}))
 	})
+}
+
+// spanningCallers is a callers result over the two definitions of run.
+func spanningCallers(rows ...Location) CallersResult {
+	return CallersResult{Symbol: "run", Callers: rows, Definitions: []Location{
+		{Name: "run", Kind: "function", FilePath: "a.py", StartLine: 1, Definition: "a.py:1"},
+		{Name: "run", Kind: "function", FilePath: "b.py", StartLine: 1, Definition: "b.py:1"},
+	}}
+}
+
+// manyDefinitions returns n definitions of run, in n files.
+func manyDefinitions(n int) []Location {
+	var defs []Location
+	for i := 0; i < n; i++ {
+		f := fmt.Sprintf("f%02d.py", i)
+		defs = append(defs, Location{Name: "run", Kind: "function", FilePath: f, StartLine: 1, Definition: f + ":1"})
+	}
+	return defs
 }

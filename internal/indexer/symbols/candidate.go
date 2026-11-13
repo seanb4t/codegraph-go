@@ -57,8 +57,7 @@ func Reachable(n *schema.Node, fileExports bool) bool {
 // conditional-compilation block has a key the group cannot see
 // (goextract.ConditionalBlockKey), so a group without such a candidate
 // keeps its lowest id. Second, across the groups, it keeps the lowest
-// id, mirroring query.Engine.resolveSymbolNode's own lowest-Id
-// tie-break (internal/query/traverse.go).
+// id, the codebase-wide lowest-Id tie-break (D-04).
 func Pick(cands []Candidate) string {
 	if len(cands) == 1 {
 		return cands[0].ID

@@ -16,26 +16,13 @@ import (
 // from useC so that the call is ambiguous.
 func overloadFixture(t *testing.T) *Engine {
 	t.Helper()
-	dir := t.TempDir()
-	files := map[string]string{
+	return treeEngine(t, map[string]string{
 		"Logger.java": "package app;\n\npublic class Logger {\n    public void log(String msg) {}\n\n    public void log(String msg, Throwable t) {}\n}\n",
 		"Sink.java":   "package app;\n\npublic class Sink {\n    public void add(int n) {}\n\n    public void add(String s) {}\n}\n",
 		"A.java":      "package app;\n\npublic class A {\n    public void useA(Logger logger) {\n        logger.log(\"a\");\n    }\n}\n",
 		"B.java":      "package app;\n\npublic class B {\n    public void useB(Logger logger, Throwable e) {\n        logger.log(\"b\", e);\n    }\n}\n",
 		"C.java":      "package app;\n\npublic class C {\n    public void useC(Sink sink) {\n        sink.add(null);\n    }\n}\n",
-	}
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	indexFixture(t, dir)
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine
+	})
 }
 
 func callerRows(r CallersResult) map[string]Location {
@@ -93,7 +80,7 @@ func TestCallersMarksAnAmbiguousCaller(t *testing.T) {
 func TestCallersWithSignatureSelectsOneOverload(t *testing.T) {
 	engine := overloadFixture(t)
 	for signature, want := range map[string]string{"String, Throwable": "useB", "(String)": "useA", "String": "useA"} {
-		got, err := engine.CallersSelected(Selector{Symbol: "log", Signature: signature}, 0)
+		got, err := engine.CallersSelected(Selector{Symbol: "log", Signature: signature}, "", 0)
 		if err != nil {
 			t.Fatalf("CallersSelected(%q): %v", signature, err)
 		}
@@ -101,7 +88,7 @@ func TestCallersWithSignatureSelectsOneOverload(t *testing.T) {
 			t.Errorf("callers of log --signature %q = %+v, want only %s", signature, got.Callers, want)
 		}
 	}
-	got, err := engine.CallersSelected(Selector{Symbol: "add", Signature: "int"}, 0)
+	got, err := engine.CallersSelected(Selector{Symbol: "add", Signature: "int"}, "", 0)
 	if err != nil {
 		t.Fatalf("CallersSelected(add int): %v", err)
 	}
@@ -115,7 +102,7 @@ func TestCallersWithSignatureSelectsOneOverload(t *testing.T) {
 // lists the signatures that exist, from callers and from node.
 func TestCallersWithUnknownSignatureListsTheSignatures(t *testing.T) {
 	engine := overloadFixture(t)
-	_, err := engine.CallersSelected(Selector{Symbol: "log", Signature: "int"}, 0)
+	_, err := engine.CallersSelected(Selector{Symbol: "log", Signature: "int"}, "", 0)
 	if err == nil {
 		t.Fatal("CallersSelected(log int): no error")
 	}

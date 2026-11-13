@@ -2,8 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -12,21 +10,11 @@ import (
 // Logger.log, called from useA and useB.
 func overloadCLIFixture(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	files := map[string]string{
+	return initTree(t, map[string]string{
 		"Logger.java": "package app;\n\npublic class Logger {\n    public void log(String msg) {}\n\n    public void log(String msg, Throwable t) {}\n}\n",
 		"A.java":      "package app;\n\npublic class A {\n    public void useA(Logger logger) {\n        logger.log(\"a\");\n    }\n}\n",
 		"B.java":      "package app;\n\npublic class B {\n    public void useB(Logger logger, Throwable e) {\n        logger.log(\"b\", e);\n    }\n}\n",
-	}
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, _, err := execCmd("init", dir); err != nil {
-		t.Fatalf("init fixture: %v", err)
-	}
-	return dir
+	})
 }
 
 // TestSignatureFlagSelectsOneOverload checks --signature on the four

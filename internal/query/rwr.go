@@ -179,8 +179,7 @@ type rwrScoredNode struct {
 }
 
 // sortRWRScores orders a score map score-descending then Id-ascending
-// (D-04's stable tie-break — reuses the codebase-wide lowest-Id
-// convention from resolveSymbolNode, traverse.go).
+// (D-04's stable tie-break, the codebase-wide lowest-Id convention).
 func sortRWRScores(scores map[string]float64) []rwrScoredNode {
 	out := make([]rwrScoredNode, 0, len(scores))
 	for id, score := range scores {

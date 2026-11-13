@@ -554,39 +554,6 @@ func dispatchSiblingIDs(reader graphstore.Reader, node *schema.Node, methodOwner
 	return siblings, nil
 }
 
-// resolveSymbolNode resolves a CLI-supplied symbol string to a concrete
-// schema.Node by scanning IterateNodes() for an exact Name match
-// (D-03 — no per-name key lookup exists, so this is a full scan like
-// matchNodes in search.go). When multiple nodes share the same Name
-// (e.g. same-named methods on different types), the pick is
-// deterministic: the node with the lexicographically lowest Id wins, so
-// repeated calls for the same symbol always resolve to the same node.
-func (e *Engine) resolveSymbolNode(symbol string) (*schema.Node, error) {
-	it, err := e.reader.IterateNodes()
-	if err != nil {
-		return nil, err
-	}
-	defer it.Close()
-
-	var best *schema.Node
-	for it.Next() {
-		n := it.Node()
-		if n.Name != symbol {
-			continue
-		}
-		if best == nil || n.Id < best.Id {
-			best = n
-		}
-	}
-	if err := it.Err(); err != nil {
-		return nil, err
-	}
-	if best == nil {
-		return nil, notFoundf("query: symbol %q not found", symbol)
-	}
-	return best, nil
-}
-
 // nodeLocation projects a schema.Node to the locations-only Location
 // shape (search.go, D-06) shared by callers/callees/impact/affected.
 func nodeLocation(n *schema.Node) Location {
@@ -617,8 +584,34 @@ func sortLocations(locs []Location) {
 		if locs[i].Name != locs[j].Name {
 			return locs[i].Name < locs[j].Name
 		}
-		return locs[i].StartLine < locs[j].StartLine
+		if locs[i].StartLine != locs[j].StartLine {
+			return locs[i].StartLine < locs[j].StartLine
+		}
+		// Rows of one symbol for two start nodes tie above. These keys
+		// order them by what the row shows, never by a node id.
+		if locs[i].Definition != locs[j].Definition {
+			return locs[i].Definition < locs[j].Definition
+		}
+		if locs[i].Signature != locs[j].Signature {
+			return locs[i].Signature < locs[j].Signature
+		}
+		return locs[i].Kind < locs[j].Kind
 	})
+}
+
+// sortAndCap sorts locs and then cuts them to limit (0 means no limit)
+// and to MaxLimit (WR-05/WR-02). The sort comes first, so the capped
+// subset is the first N in sorted order and does not depend on the
+// order in which the store returned the edges.
+func sortAndCap(locs []Location, limit int) []Location {
+	sortLocations(locs)
+	if limit > 0 && limit < len(locs) {
+		locs = locs[:limit]
+	}
+	if len(locs) > MaxLimit {
+		locs = locs[:MaxLimit]
+	}
+	return locs
 }
 
 // CalleesResult mirrors the golden callees.json shape: {"symbol",
@@ -626,6 +619,10 @@ func sortLocations(locs []Location) {
 type CalleesResult struct {
 	Symbol  string     `json:"symbol"`
 	Callees []Location `json:"callees"`
+
+	// Definitions lists the definitions of Symbol when the query spans
+	// them, and is nil otherwise.
+	Definitions []Location `json:"definitions,omitempty"`
 }
 
 // CallersResult mirrors the golden callers.json shape: {"symbol",
@@ -633,6 +630,10 @@ type CalleesResult struct {
 type CallersResult struct {
 	Symbol  string     `json:"symbol"`
 	Callers []Location `json:"callers"`
+
+	// Definitions lists the definitions of Symbol when the query spans
+	// them, and is nil otherwise.
+	Definitions []Location `json:"definitions,omitempty"`
 }
 
 // ImpactResult mirrors the golden impact.json shape: {"symbol","depth",
@@ -643,6 +644,10 @@ type ImpactResult struct {
 	NodeCount int        `json:"nodeCount"`
 	EdgeCount int        `json:"edgeCount"`
 	Affected  []Location `json:"affected"`
+
+	// Definitions lists the definitions of Symbol when the query spans
+	// them, and is nil otherwise.
+	Definitions []Location `json:"definitions,omitempty"`
 }
 
 // AffectedResult has no golden oracle (D-07a) — this shape is this
@@ -658,19 +663,19 @@ type AffectedResult struct {
 // needed for the forward direction), capped at limit (0/negative means
 // unlimited, validated by validateLimit before any scan runs, V5).
 func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
-	return e.CalleesSelected(Selector{Symbol: symbol}, limit)
+	return e.CalleesSelected(Selector{Symbol: symbol}, "", limit)
 }
 
 // CalleesSelected is Callees over a Selector. Over an overload set it
 // lists the callees of every overload, each with the signature of the
 // overload that makes the call. A callee that is itself a set is marked
 // ambiguous.
-func (e *Engine) CalleesSelected(sel Selector, limit int) (CalleesResult, error) {
+func (e *Engine) CalleesSelected(sel Selector, file string, limit int) (CalleesResult, error) {
 	if err := validateLimit(limit); err != nil {
 		return CalleesResult{}, err
 	}
 
-	tg, err := e.symbolTargets(sel)
+	tg, err := e.symbolTargets(sel, file)
 	if err != nil {
 		return CalleesResult{}, err
 	}
@@ -701,7 +706,7 @@ func (e *Engine) CalleesSelected(sel Selector, limit int) (CalleesResult, error)
 				return CalleesResult{}, err
 			}
 			seen[t.node.Id+"|"+edge.Target] = true
-			locs = append(locs, calleeLocation(callee, t, tg.overloaded))
+			locs = append(locs, calleeLocation(callee, t, tg))
 		}
 		err = it.Err()
 		it.Close()
@@ -710,18 +715,7 @@ func (e *Engine) CalleesSelected(sel Selector, limit int) (CalleesResult, error)
 		}
 	}
 
-	// WR-05/WR-02: sort BEFORE applying limit/MaxLimit caps — mirrors
-	// Callers/Impact/Affected's deterministic (FilePath, Name, StartLine)
-	// ordering rather than leaving Callees at the mercy of
-	// IterateEdges's raw Pebble key-range scan order.
-	sortLocations(locs)
-	if limit > 0 && limit < len(locs) {
-		locs = locs[:limit]
-	}
-	if len(locs) > MaxLimit {
-		locs = locs[:MaxLimit]
-	}
-	return CalleesResult{Symbol: sel.Symbol, Callees: locs}, nil
+	return CalleesResult{Symbol: sel.Symbol, Callees: sortAndCap(locs, limit), Definitions: tg.definitions}, nil
 }
 
 // Callers returns symbol's reverse callers via the D-04 in-memory
@@ -735,7 +729,7 @@ func (e *Engine) CalleesSelected(sel Selector, limit int) (CalleesResult, error)
 // "contains" index — both fresh-per-call, same discipline as
 // BuildReverseAdjacency).
 func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
-	return e.CallersSelected(Selector{Symbol: symbol}, limit)
+	return e.CallersSelected(Selector{Symbol: symbol}, "", limit)
 }
 
 // CallersSelected is Callers over a Selector. Over an overload set it
@@ -744,12 +738,12 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 // With a signature it lists the callers of that overload and the set's
 // ambiguous callers, and never a caller that resolved to another
 // overload.
-func (e *Engine) CallersSelected(sel Selector, limit int) (CallersResult, error) {
+func (e *Engine) CallersSelected(sel Selector, file string, limit int) (CallersResult, error) {
 	if err := validateLimit(limit); err != nil {
 		return CallersResult{}, err
 	}
 
-	tg, err := e.symbolTargets(sel)
+	tg, err := e.symbolTargets(sel, file)
 	if err != nil {
 		return CallersResult{}, err
 	}
@@ -782,9 +776,14 @@ func (e *Engine) CallersSelected(sel Selector, limit int) (CallersResult, error)
 			for _, edge := range rev[tid] {
 				// Over one target a caller is listed once. Over overloads
 				// a caller is listed once per overload it calls.
+				// An ambiguous row carries no definition and no signature,
+				// so one caller with ambiguous calls into two sets of the
+				// name is listed once.
 				key := edge.Source
-				if tg.overloaded {
+				if (tg.overloaded || tg.spans) && !t.ambiguous {
 					key = edge.Source + "|" + t.node.Id
+				} else if t.ambiguous {
+					key = edge.Source + "|ambiguous"
 				}
 				if seen[key] {
 					continue
@@ -798,23 +797,12 @@ func (e *Engine) CallersSelected(sel Selector, limit int) (CallersResult, error)
 					return CallersResult{}, err
 				}
 				seen[key] = true
-				locs = append(locs, overloadLocation(src, t, tg.overloaded))
+				locs = append(locs, overloadLocation(src, t, tg))
 			}
 		}
 	}
 
-	// WR-05: sort BEFORE applying limit/MaxLimit caps, so the capped
-	// subset itself is a deterministic "first N in sorted order" rather
-	// than depending on the underlying reverse-adjacency map's
-	// enumeration order.
-	sortLocations(locs)
-	if limit > 0 && limit < len(locs) {
-		locs = locs[:limit]
-	}
-	if len(locs) > MaxLimit {
-		locs = locs[:MaxLimit]
-	}
-	return CallersResult{Symbol: sel.Symbol, Callers: locs}, nil
+	return CallersResult{Symbol: sel.Symbol, Callers: sortAndCap(locs, limit), Definitions: tg.definitions}, nil
 }
 
 // Impact returns the depth-bounded reverse blast radius of symbol: a
@@ -833,19 +821,19 @@ func (e *Engine) CallersSelected(sel Selector, limit int) (CallersResult, error)
 // this method's tests exercise), dispatch siblings are always empty and
 // this composition is a no-op — the arithmetic above is unchanged.
 func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
-	return e.ImpactSelected(Selector{Symbol: symbol}, depth)
+	return e.ImpactSelected(Selector{Symbol: symbol}, "", depth)
 }
 
 // ImpactSelected is Impact over a Selector. Over an overload set the
 // walk starts from every overload and from the set, so the ambiguous
 // callers count as affected.
-func (e *Engine) ImpactSelected(sel Selector, depth int) (ImpactResult, error) {
+func (e *Engine) ImpactSelected(sel Selector, file string, depth int) (ImpactResult, error) {
 	if err := validateDepth(depth); err != nil {
 		return ImpactResult{}, err
 	}
 	depth = clampDepth(depth)
 
-	tg, err := e.symbolTargets(sel)
+	tg, err := e.symbolTargets(sel, file)
 	if err != nil {
 		return ImpactResult{}, err
 	}
@@ -868,7 +856,7 @@ func (e *Engine) ImpactSelected(sel Selector, depth int) (ImpactResult, error) {
 	var frontier []*schema.Node
 	for _, t := range tg.nodes {
 		visited[t.node.Id] = true
-		affected = append(affected, overloadLocation(t.node, t, tg.overloaded))
+		affected = append(affected, overloadLocation(t.node, t, tg))
 		frontier = append(frontier, t.node)
 	}
 	edgeCount := 0
@@ -913,11 +901,12 @@ func (e *Engine) ImpactSelected(sel Selector, depth int) (ImpactResult, error) {
 	sortLocations(affected)
 
 	return ImpactResult{
-		Symbol:    sel.Symbol,
-		Depth:     depth,
-		NodeCount: len(affected),
-		EdgeCount: edgeCount,
-		Affected:  affected,
+		Symbol:      sel.Symbol,
+		Depth:       depth,
+		NodeCount:   len(affected),
+		EdgeCount:   edgeCount,
+		Affected:    affected,
+		Definitions: tg.definitions,
 	}, nil
 }
 

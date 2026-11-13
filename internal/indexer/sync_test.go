@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 
 	"google.golang.org/protobuf/proto"
 
@@ -29,20 +32,10 @@ import (
 // interconnected to isolate a single-hop dependency).
 func writeFixture(t *testing.T, files map[string]string) string {
 	t.Helper()
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/syncfixture\n\ngo 1.26\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
-	}
-	for rel, content := range files {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir for %s: %v", rel, err)
-		}
-		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
-	return root
+	// A test that passes its own go.mod keeps it.
+	tree := map[string]string{"go.mod": "module example.com/syncfixture\n\ngo 1.26\n"}
+	maps.Copy(tree, files)
+	return testtree.Write(t, tree)
 }
 
 // writeFileSeq guarantees every writeFile call in this test binary stamps

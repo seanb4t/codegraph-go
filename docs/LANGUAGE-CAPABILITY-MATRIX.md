@@ -64,6 +64,8 @@ A same-file reference resolves to the innermost declaration of its name whose sc
 
 The `node`, `callers`, `callees` and `impact` commands accept `--signature`. The MCP tools with the same names accept the `signature` input. The value is the parameter types of one overload, such as `"String, Throwable"`. Without it, `callers`, `callees` and `impact` report across every overload of the name, and each row carries the overload it belongs to. The output marks an ambiguous caller as `ambiguous`. Without it, `node` lists each overload as a definition. The `explore` command folds a set into one row that names the overloads.
 
+A name can also have several definitions that are not one overload set, for example two functions of one name in two files, or a typing stub and the real function. Then `callers`, `callees` and `impact` report across every definition. The output lists the definitions, and each row names the definition it belongs to by its file and line. The `--file` flag, and the `file` input of the MCP tools, keeps the definitions in the files whose path contains the value. If no definition matches, the query fails and lists each file that holds a definition.
+
 The rules for two declarations with one name under one owner differ by language.
 
 | Language | Rule |

@@ -42,31 +42,58 @@ import (
 // no-results sentence (each renderer names its own noun — "no callers",
 // "no callees", etc.) rather than this shared helper guessing one.
 func renderLocationTable(locs []Location) string {
+	return renderLocationTableColumns(locs, false)
+}
+
+// renderLocationTableColumns is renderLocationTable with the two
+// optional columns. The Overload column is present when one row carries
+// a signature or is ambiguous. The Definition column is present when
+// hasDefinition is set: the caller passes it from the result, never from
+// the rows, so a query that spans definitions has the column also when
+// every row is ambiguous and names none.
+func renderLocationTableColumns(locs []Location, hasDefinition bool) string {
 	if len(locs) == 0 {
 		return ""
 	}
-	overloaded := false
+	hasOverload := false
 	for _, l := range locs {
 		if l.Signature != "" || l.Ambiguous {
-			overloaded = true
+			hasOverload = true
 			break
 		}
 	}
+	cell := func(s string) string { return strings.ReplaceAll(s, "|", "\\|") }
 	var b strings.Builder
-	if overloaded {
-		// A query over an overload set adds the overload each row belongs
-		// to, or marks the row ambiguous.
-		b.WriteString("| Name | Kind | Location | Overload |\n")
-		b.WriteString("|---|---|---|---|\n")
-		for _, l := range locs {
-			fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` | %s |\n", l.Name, l.Kind, l.FilePath, l.StartLine, strings.ReplaceAll(OverloadLabel(l), "|", "\\|"))
-		}
-		return b.String()
+	b.WriteString("| Name | Kind | Location |")
+	if hasDefinition {
+		b.WriteString(" Definition |")
 	}
-	b.WriteString("| Name | Kind | Location |\n")
-	b.WriteString("|---|---|---|\n")
+	if hasOverload {
+		b.WriteString(" Overload |")
+	}
+	b.WriteString("\n|---|---|---|")
+	if hasDefinition {
+		b.WriteString("---|")
+	}
+	if hasOverload {
+		b.WriteString("---|")
+	}
+	b.WriteString("\n")
 	for _, l := range locs {
-		fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` |\n", l.Name, l.Kind, l.FilePath, l.StartLine)
+		fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` |", l.Name, l.Kind, l.FilePath, l.StartLine)
+		if hasDefinition {
+			if l.Definition != "" {
+				fmt.Fprintf(&b, " `%s` |", cell(l.Definition))
+			} else {
+				b.WriteString("  |")
+			}
+		}
+		if hasOverload {
+			// A query over an overload set adds the overload each row
+			// belongs to, or marks the row ambiguous.
+			fmt.Fprintf(&b, " %s |", cell(OverloadLabel(l)))
+		}
+		b.WriteString("\n")
 	}
 	return b.String()
 }
@@ -94,6 +121,73 @@ func OverloadSuffix(l Location) string {
 	return ""
 }
 
+// RowSuffix is the text the plain location line appends to a row: the
+// overload suffix, then the definition the row belongs to when the query
+// spans definitions. It is "" for a row of an ordinary query.
+func RowSuffix(l Location) string {
+	s := OverloadSuffix(l)
+	if l.Definition != "" {
+		s += " (definition " + l.Definition + ")"
+	}
+	return s
+}
+
+// DefinitionsHeading is the heading of a list of the definitions of one
+// name. `node` and the definitions line of callers, callees and impact
+// share it.
+func DefinitionsHeading(n int, symbol string) string {
+	return fmt.Sprintf("%d definitions named %q", n, symbol)
+}
+
+// CapDefinitions returns the first nodeMultiDefListCap items of a list of
+// definitions and the count of the rest. The list of `node` and the
+// definitions line of callers, callees and impact all cap with it.
+func CapDefinitions[T any](items []T) (shown []T, more int) {
+	if len(items) > nodeMultiDefListCap {
+		return items[:nodeMultiDefListCap], len(items) - nodeMultiDefListCap
+	}
+	return items, 0
+}
+
+// DefinitionsLine is the line that lists the definitions of a query that
+// spans them: the heading, then the label of each definition, at most
+// nodeMultiDefListCap of them. It is "" when defs is empty, which is the
+// case for every query over one definition or one overload set.
+func DefinitionsLine(symbol string, defs []Location) string {
+	if len(defs) == 0 {
+		return ""
+	}
+	shown, more := CapDefinitions(defs)
+	labels := make([]string, len(shown))
+	for i, d := range shown {
+		labels[i] = d.Definition
+	}
+	line := DefinitionsHeading(len(defs), symbol) + ": " + strings.Join(labels, ", ")
+	if more > 0 {
+		line += fmt.Sprintf(", +%d more", more)
+	}
+	return line
+}
+
+// definitionsParagraph is DefinitionsLine as a markdown paragraph after
+// the header of a result, or "".
+func definitionsParagraph(symbol string, defs []Location) string {
+	if line := DefinitionsLine(symbol, defs); line != "" {
+		return line + "\n\n"
+	}
+	return ""
+}
+
+// emptyDefinitions is the definitions line after the sentence of a
+// result with no row, or "". A name with several definitions and no
+// caller still says which definitions the query started from.
+func emptyDefinitions(symbol string, defs []Location) string {
+	if line := DefinitionsLine(symbol, defs); line != "" {
+		return "\n" + line + "\n"
+	}
+	return ""
+}
+
 // RenderCallersMarkdown renders a CallersResult as markdown: a bolded
 // header naming the symbol and caller count, then the shared location
 // table. An empty result renders an explicit "no callers" sentence naming
@@ -101,11 +195,12 @@ func OverloadSuffix(l Location) string {
 // zero rows reads as a rendering bug to a model.
 func RenderCallersMarkdown(r CallersResult) string {
 	if len(r.Callers) == 0 {
-		return fmt.Sprintf("**Callers of `%s`** — no callers found.\n", r.Symbol)
+		return fmt.Sprintf("**Callers of `%s`** — no callers found.\n", r.Symbol) + emptyDefinitions(r.Symbol, r.Definitions)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "**Callers of `%s`** — %d %s\n\n", r.Symbol, len(r.Callers), pluralize(len(r.Callers), "caller"))
-	b.WriteString(renderLocationTable(r.Callers))
+	b.WriteString(definitionsParagraph(r.Symbol, r.Definitions))
+	b.WriteString(renderLocationTableColumns(r.Callers, len(r.Definitions) > 0))
 	return b.String()
 }
 
@@ -113,11 +208,12 @@ func RenderCallersMarkdown(r CallersResult) string {
 // RenderCallersMarkdown's shape for call targets instead of call sites.
 func RenderCalleesMarkdown(r CalleesResult) string {
 	if len(r.Callees) == 0 {
-		return fmt.Sprintf("**Callees of `%s`** — no callees found.\n", r.Symbol)
+		return fmt.Sprintf("**Callees of `%s`** — no callees found.\n", r.Symbol) + emptyDefinitions(r.Symbol, r.Definitions)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "**Callees of `%s`** — %d %s\n\n", r.Symbol, len(r.Callees), pluralize(len(r.Callees), "callee"))
-	b.WriteString(renderLocationTable(r.Callees))
+	b.WriteString(definitionsParagraph(r.Symbol, r.Definitions))
+	b.WriteString(renderLocationTableColumns(r.Callees, len(r.Definitions) > 0))
 	return b.String()
 }
 
@@ -127,11 +223,12 @@ func RenderCalleesMarkdown(r CalleesResult) string {
 // place in a per-row table — mirroring the documented bolded-key style.
 func RenderImpactMarkdown(r ImpactResult) string {
 	if len(r.Affected) == 0 {
-		return fmt.Sprintf("**Impact of `%s`** — depth %d, %d nodes, %d edges — no affected symbols found.\n", r.Symbol, r.Depth, r.NodeCount, r.EdgeCount)
+		return fmt.Sprintf("**Impact of `%s`** — depth %d, %d nodes, %d edges — no affected symbols found.\n", r.Symbol, r.Depth, r.NodeCount, r.EdgeCount) + emptyDefinitions(r.Symbol, r.Definitions)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "**Impact of `%s`** — depth %d, %d nodes, %d edges\n\n", r.Symbol, r.Depth, r.NodeCount, r.EdgeCount)
-	b.WriteString(renderLocationTable(r.Affected))
+	b.WriteString(definitionsParagraph(r.Symbol, r.Definitions))
+	b.WriteString(renderLocationTableColumns(r.Affected, len(r.Definitions) > 0))
 	return b.String()
 }
 

@@ -73,7 +73,7 @@ Where the output names a definition, the name SHALL be the file and the line of 
 
 ### Requirement: A row of a query that spans definitions names its definition
 
-When a query spans definitions, each result of `callers` and `callees` SHALL name the definition it belongs to. A result that belongs to two definitions SHALL appear once for each. A result marked ambiguous belongs to an overload set and SHALL name no definition. The `--json` output SHALL carry the name in a `definition` field of the entry.
+When a query spans definitions, each result of `callers` and `callees` SHALL name the definition it belongs to. A result that belongs to two definitions SHALL appear once for each. A caller marked ambiguous calls an overload set and not one definition, and SHALL name no definition. A callee marked ambiguous is itself an overload set, and SHALL name the definition that makes the call. The `--json` output SHALL carry the name in a `definition` field of the entry.
 
 #### Scenario: A caller names the definition it calls
 
@@ -86,6 +86,13 @@ When a query spans definitions, each result of `callers` and `callees` SHALL nam
 - **AND** `Main.start` calls the one in `Logger.java`, and `Job.run` calls the one in `Audit.java`
 - **WHEN** a user runs `codegraph callers log --signature "String" --json`
 - **THEN** the entry for `Main.start` has the `definition` `Logger.java:4`, and the entry for `Job.run` has the `definition` `Audit.java:7`
+
+#### Scenario: An ambiguous callee in a query that spans definitions
+
+- **GIVEN** `Job.java` and `Main.java` each declare a method `run`, at lines 3 and 8
+- **AND** the `run` in `Job.java` calls `log(null)`, and `Logger` declares `log(String)` and `log(Throwable)`
+- **WHEN** a user runs `codegraph callees run --json`
+- **THEN** the entry for `log` is marked ambiguous and its `definition` field is `Job.java:3`
 
 #### Scenario: An ambiguous caller in a query that spans definitions
 
@@ -113,9 +120,14 @@ The results of `callers`, `callees` and `impact` SHALL be ordered by file, then 
 - **WHEN** `a.go:1` and `b.go:1` in two packages each declare `func Reset()`, `main` calls both, and a user runs `codegraph callers Reset`
 - **THEN** `main` is listed twice, first with the definition `a.go:1` and then with `b.go:1`
 
+#### Scenario: Tied results of one definition
+
+- **WHEN** one function `run` exists, a method `x` and a function `x` at the same line of `c.go` call it, and a user runs `codegraph callers run`
+- **THEN** the function `x` is listed before the method `x`
+
 ### Requirement: A name with one definition keeps its output
 
-When a bare name has exactly one definition, `callers`, `callees` and `impact` SHALL give the output they gave before this requirement. This holds byte for byte, for the text output and for `--json`. The `--json` output SHALL NOT contain the `definitions` field or a `definition` field.
+When a bare name has exactly one definition, `callers`, `callees` and `impact` SHALL give the output they gave before this requirement. This holds byte for byte, for the text output and for `--json`, with one exception: results that are equal in file, name and line follow the order requirement above. The `--json` output SHALL NOT contain the `definitions` field or a `definition` field.
 
 #### Scenario: One definition in JSON
 

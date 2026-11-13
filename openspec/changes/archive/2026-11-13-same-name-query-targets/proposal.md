@@ -12,8 +12,8 @@ On the locked `psf/requests` corpus, `callers to_key_val_list` picks a typing st
 - `callers`, `callees` and `impact` answer for every definition of a bare name. This is the rule they already follow for the members of an overload set.
 - If more than one definition answers, the output lists the definitions, and each result names the definition it belongs to. The CLI text, the `--json` output and the MCP tool results all carry this.
 - `callers`, `callees` and `impact` accept `--file <path>`, which selects the definitions in the files that match the value, as `node --file` matches. The MCP tools `codegraph_callers`, `codegraph_callees` and `codegraph_impact` accept a `file` input with the same meaning. `node` already has this flag.
-- A name with one definition gives the same output as today, byte for byte.
-- The order of the rows no longer depends on node ids. For a query over one overload set, rows that tie on file, name and line can change their order once.
+- A name with one definition gives the same output as today, byte for byte, except for the order of rows that tie on file, name and line.
+- The order of the rows no longer depends on node ids. Rows that tie on file, name and line can change their order once, for example an overload set and its first member among the callees of one function.
 
 No change is **BREAKING**. The JSON fields are additive, and they are absent for a name with one definition. A query for a name with several definitions returns more rows than today, because today's answer leaves rows out.
 

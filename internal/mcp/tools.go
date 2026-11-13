@@ -334,9 +334,10 @@ type SearchArgs struct {
 }
 
 // CallersArgs is codegraph_callers' input schema (D-07). Fields declared
-// alphabetically by JSON name (limit, path, signature, symbol). Symbol carries no
+// alphabetically by JSON name (file, limit, path, signature, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type CallersArgs struct {
+	File      string `json:"file,omitempty" jsonschema:"File path. Keeps the definitions of the symbol in the files whose path contains it"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
 	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
 	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
@@ -344,9 +345,10 @@ type CallersArgs struct {
 }
 
 // CalleesArgs is codegraph_callees' input schema (D-07). Fields declared
-// alphabetically by JSON name (limit, path, signature, symbol). Symbol carries no
+// alphabetically by JSON name (file, limit, path, signature, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type CalleesArgs struct {
+	File      string `json:"file,omitempty" jsonschema:"File path. Keeps the definitions of the symbol in the files whose path contains it"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"Cap on results returned"`
 	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
 	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
@@ -354,10 +356,11 @@ type CalleesArgs struct {
 }
 
 // ImpactArgs is codegraph_impact's input schema (D-07). Fields declared
-// alphabetically by JSON name (depth, path, signature, symbol). Symbol carries no
+// alphabetically by JSON name (depth, file, path, signature, symbol). Symbol carries no
 // omitempty — it is the only required field.
 type ImpactArgs struct {
 	Depth     int    `json:"depth,omitempty" jsonschema:"BFS depth (default 2, max 50)"`
+	File      string `json:"file,omitempty" jsonschema:"File path. Keeps the definitions of the symbol in the files whose path contains it"`
 	Path      string `json:"path,omitempty" jsonschema:"Repo path (default: server cwd)"`
 	Signature string `json:"signature,omitempty" jsonschema:"Parameter types that select one overload, for example \"String, Throwable\""`
 	Symbol    string `json:"symbol" jsonschema:"Symbol name"`
@@ -547,7 +550,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			result, err := eng.CallersSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.Limit)
+			result, err := eng.CallersSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.File, args.Limit)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -565,7 +568,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			result, err := eng.CalleesSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.Limit)
+			result, err := eng.CalleesSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.File, args.Limit)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -583,7 +586,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// close error is non-actionable here — see openEngine's own doc comment.
 			defer func() { _ = close() }()
 
-			result, err := eng.ImpactSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.Depth)
+			result, err := eng.ImpactSelected(query.Selector{Symbol: args.Symbol, Signature: args.Signature}, args.File, args.Depth)
 			if err != nil {
 				return nil, nil, err
 			}

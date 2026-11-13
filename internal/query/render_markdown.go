@@ -227,7 +227,7 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "**%d definitions named %q**\n", len(matches), symbol)
+	fmt.Fprintf(&b, "**%s**\n", DefinitionsHeading(len(matches), symbol))
 	overflowClause := ""
 	if len(listed) > 0 {
 		overflowClause = fmt.Sprintf("; %d more listed below", len(listed))
@@ -239,15 +239,12 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 	if len(listed) > 0 {
 		b.WriteByte('\n')
 		b.WriteString("**Other definitions**\n")
-		capped := listed
-		if len(capped) > nodeMultiDefListCap {
-			capped = capped[:nodeMultiDefListCap]
-		}
+		capped, more := CapDefinitions(listed)
 		for _, n := range capped {
 			fmt.Fprintf(&b, "- `%s` (%s) — %s:%d\n", n.Name, n.Kind, n.FilePath, n.StartLine)
 		}
-		if len(listed) > nodeMultiDefListCap {
-			fmt.Fprintf(&b, "- … +%d more\n", len(listed)-nodeMultiDefListCap)
+		if more > 0 {
+			fmt.Fprintf(&b, "- … +%d more\n", more)
 		}
 		b.WriteByte('\n')
 		fmt.Fprintf(&b, "> Need one of these in full? Call codegraph_node again with `file` (e.g. `%q`) or `line` — do NOT Read it.\n", path.Base(listed[0].FilePath))

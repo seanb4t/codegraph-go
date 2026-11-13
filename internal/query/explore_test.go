@@ -79,14 +79,7 @@ func behavioralEngine(t *testing.T) *Engine {
 	t.Helper()
 
 	dir := copyBehavioralFixture(t)
-	indexFixture(t, dir)
-
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: unexpected error: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine
+	return indexedEngine(t, dir)
 }
 
 // TestExploreMultiWord pins EXPL-01 end-to-end: a 3-word query tokenizes

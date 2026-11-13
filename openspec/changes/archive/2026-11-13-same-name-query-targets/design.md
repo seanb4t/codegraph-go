@@ -33,7 +33,7 @@ One conflict exists between the spec and the code, and this design does not sett
 **Non-Goals:**
 
 - A change to `node`, `search`, `explore` or `affected`.
-- A change to `resolveSymbolNode` or its use by `node`.
+- A change to how `node` resolves a name. The unused `resolveSymbolNode` is removed, and `node` does not change.
 - A ranking of definitions, for example "the non-test file first" or "the last Python definition".
 - A definition label or a file selector in the graph UI. D8 gives the reason.
 - The `--line` conflict above.
@@ -42,9 +42,9 @@ One conflict exists between the spec and the code, and this design does not sett
 
 ### D1: The start nodes are every node with the name
 
-`symbolTargets` gets the definitions from `enumerateSymbolDefs`, so `node` and the three traversals share one meaning of "definition". It adds the `overload_set` nodes of the name as start nodes marked ambiguous, as today. The branch that calls `resolveSymbolNode` goes away.
+`symbolTargets` gets the definitions from `definitionsOf`, which `enumerateSymbolDefs` also uses, so `node` and the three traversals share one meaning of "definition". `symbolTargets` calls `nodesNamed` once and takes both the definitions and the `overload_set` nodes from that one scan. It adds the `overload_set` nodes of the name as start nodes marked ambiguous, as today. The branch that calls `resolveSymbolNode` goes away.
 
-`symbolTargets` orders the start nodes by file, line, kind and qualified name, and not by id. `enumerateSymbolDefs` has its own order for `node`, which puts generated files last. `symbolTargets` sorts again, because a traversal needs an order that no heuristic changes.
+`symbolTargets` orders the start nodes by file, line, kind and qualified name, and not by id. `definitionsOf` has its own order for `node`, which puts generated files last. `symbolTargets` sorts again, because a traversal needs an order that no heuristic changes.
 
 Alternative: keep one pick and add a note that lists the others. Rejected, because the answer stays wrong by default. An agent acts on "0 callers" and does not read a note.
 
@@ -69,7 +69,7 @@ Alternative: treat every multi-node query as `overloaded` and reuse the signatur
 - `<FilePath>:<StartLine>` for a node with a file.
 - `<Kind> <QualifiedName>` for a node with no file, for example `package example.com/app/cache`.
 
-A row that comes from the `overload_set` node is marked ambiguous and gets no label. It belongs to the set, and the set is not a definition.
+A row that comes from the `overload_set` node is marked ambiguous and gets no label. It belongs to the set, and the set is not a definition. A callee row that is itself a set is also marked ambiguous, but it comes from a definition, so it keeps the label of that definition, as it keeps the signature of an overload it is called from.
 
 The three result types gain `Definitions []Location` with the JSON name `definitions` and `omitempty`. Each entry carries its own label in `Definition`. The list is in the order of D1. It has no cap, so its length is the true count of the definitions. The text line of D5 has its own cap.
 
@@ -81,7 +81,7 @@ Alternative: an object `{filePath, startLine}` in each row. Rejected: the row al
 
 ### D4: The order of the rows
 
-`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, no two rows of one result tie. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
+`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. They apply to every result that `sortLocations` orders, the tests of `affected` included. They change only rows that tie on file, name and line. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, two rows of one result tie only when they are equal in every field, which takes two nodes with one name, kind, file and line, or one caller with ambiguous calls into two overload sets of one name. The first case keeps one row for each node. In the second, `callers` keys an ambiguous row by its caller alone and not by the set, because the row carries no definition and no signature, so the caller is listed once. A frozen output can therefore change its row order once where rows tie. This holds also for a query over one definition, for example when its callees hold an overload set and its first member, so the requirement that keeps the output of one definition names this exception. No golden and no transcript of this repository has such a tie. D7 covers the review of that diff.
 
 Alternative: keep `sortLocations` and sort the start nodes only. Rejected, because the stable sort then still carries an order that the rows do not show, and a reader of the output cannot predict it.
 
@@ -89,9 +89,9 @@ Alternative: keep `sortLocations` and sort the start nodes only. Rejected, becau
 
 - One function beside `OverloadSuffix` builds the definitions line from a result's `Definitions`. The CLI plain branches, the styled renderers and the markdown renderers all call it. The wording follows `node`: `N definitions named "X"`, then the labels. The line lists at most `nodeMultiDefListCap` labels and then `+K more`.
 - One function, `query.RowSuffix`, returns the overload suffix followed by the definition suffix. The six row printers that call `OverloadSuffix` today call it.
-- The heading and the capped list with its `+K more` tail are shared with the `node` output for several definitions. Only the format of one entry differs.
+- The heading (`DefinitionsHeading`) and the cap (`CapDefinitions`) are shared with every `node` renderer for several definitions. The format of one entry and of the tail differ: the definitions line is one line that ends in `, +K more`, and the `node` list has one bullet per entry and a `- … +K more` bullet. A `node` entry keeps its `file:line` location and does not use `DefinitionLabel`, because `node` output is out of scope here and a definition with no file has no source to show in `node`.
 - The definitions line is printed also for a result with no row. In the CLI text it follows the header line. In the markdown it follows the "no callers found" sentence. This is the case of the issue: a name with several definitions and "0 callers".
-- `renderLocationTable` builds its header and its cells from two flags, one for the Definition column and one for the Overload column. The Definition flag comes from the result (its `Definitions` list is not empty) and not from the rows, so a result whose rows are all ambiguous still has the column. The Definition column follows Location.
+- `renderLocationTableColumns` builds the header and the cells from two flags, one for the Definition column and one for the Overload column. The Definition flag comes from the result (its `Definitions` list is not empty) and not from the rows, so a result whose rows are all ambiguous still has the column. The Definition column follows Location.
 - The frozen outputs pin the exact bytes after the first capture.
 
 ### D6: `--file` filters the start nodes
@@ -103,9 +103,9 @@ Alternative: keep `sortLocations` and sort the start nodes only. Rejected, becau
 - A node with no file never matches.
 - If no member of a set stays, the set is not a start node.
 - The signature filter runs first and the file filter second, as in `node`. `spans` is computed after both.
-- If nothing matches, the error is a not-found error. It names the value and lists each file that holds a definition once, sorted. The form follows the existing error for a signature that matches no overload.
+- If nothing matches, the error is a not-found error. It names the value and lists each file that holds a definition once, sorted. The list counts every definition of the name, also one that the signature filter left out. If no definition has a file, the error says that instead of listing files. The form follows the existing error for a signature that matches no overload.
 
-Two helpers in `internal/cli`, in the pattern of `addWorkersFlag`, register `--signature` and `--file` (short form `-f`). `node`, `callers`, `callees` and `impact` use them, so each flag text exists once.
+Two helpers in `internal/cli`, in the pattern of `addWorkersFlag`, register `--signature` and `--file` (short form `-f`). `node`, `callers`, `callees` and `impact` use them. The `--file` helper takes the help text, because the meaning differs: in `node` the flag is a preference and also selects the file mode, and in the other three it is a hard filter.
 
 A `Selector.File` field is the other way to pass the file. It keeps the three signatures as they are. This design uses the parameter, because `NodeSelected` already passes the file that way and one engine has one pattern. A change that moves both into `Selector` can follow. The MCP input is `file`, placed in the argument structs in the order of the JSON names.
 
