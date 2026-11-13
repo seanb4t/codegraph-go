@@ -111,8 +111,16 @@ correct behavior, not a missing attestation.
 Verify with the `gh` CLI, already installed if you use GitHub at all:
 
 ```sh
-gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go
+gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go \
+  --signer-workflow seanb4t/codegraph-go/.github/workflows/release.yml \
+  --source-ref refs/tags/<tag>
 ```
+
+`-R` alone accepts an attestation that any workflow in this repository
+signed, at any ref. The two other flags pin the signer to the release
+workflow and the source to the tag that you verify, as the identity regex
+does for the cosign signature in section a. With another tag in
+`--source-ref`, the command fails.
 
 Run this against whichever published asset you intend to trust — a raw
 binary or a `.zip` archive; both are covered by the same attestation, over
@@ -182,6 +190,8 @@ GitHub's Attestations API. Releases after `v0.17.0` have it. Verify it with:
 
 ```sh
 gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go \
+  --signer-workflow seanb4t/codegraph-go/.github/workflows/release.yml \
+  --source-ref refs/tags/<tag> \
   --predicate-type https://spdx.dev/Document/v2.3
 ```
 
@@ -193,12 +203,22 @@ To print the SBOM that the workflow signed, add `--format json`:
 
 ```sh
 gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go \
+  --signer-workflow seanb4t/codegraph-go/.github/workflows/release.yml \
+  --source-ref refs/tags/<tag> \
   --predicate-type https://spdx.dev/Document/v2.3 \
-  --format json --jq '.[0].verificationResult.statement.predicate'
+  --format json --jq '.[0].verificationResult.statement.predicate' \
+  | jq -S . > attested.json
 ```
 
-If you do not trust the `.spdx.json` release asset, compare it with this
-output.
+The attestation check does not read the `.spdx.json` release asset. To make
+sure that the asset is the SBOM that the workflow signed, compare the two:
+
+```sh
+jq -S . codegraph_<tag>_<goos>_<goarch>.spdx.json | cmp - attested.json
+```
+
+No output means that they are equal. The post-release job runs this
+comparison for all four binaries of every release.
 
 ### d) Verify Gatekeeper trust (notarization)
 

@@ -3918,15 +3918,49 @@ tasks:
         echo "verify:release-assets: cosign verify-blob: Verified OK"
 
         # --- Attestation verification, the command plan 01-04 selected.
-        gh attestation verify "${DL_DIR}/codegraph_${TAG}_linux_amd64" -R "${REPO}"
+        # -R alone accepts an attestation that any workflow in this
+        # repository signed, at any ref. The two flags below pin the signer
+        # to release.yml and the source to this tag, as the cosign identity
+        # regex above does for the signature (#308).
+        SIGNER_WORKFLOW="${REPO}/.github/workflows/release.yml"
+        SOURCE_REF="refs/tags/${TAG}"
+        gh attestation verify "${DL_DIR}/codegraph_${TAG}_linux_amd64" -R "${REPO}" \
+          --signer-workflow "${SIGNER_WORKFLOW}" --source-ref "${SOURCE_REF}"
 
         # --- SBOM attestation (#294). release.yml attests one SBOM per
         # binary, so every binary is checked: a platform with no SBOM
         # attestation fails here. A tag from before #294 has none.
+        #
+        # The published .spdx.json asset is then compared with the SBOM
+        # inside the verified attestation (#308). Without that, a replaced
+        # asset passes, because the attestation check never reads the asset.
+        # Both sides go through `jq -S`, so key order and spacing do not
+        # count. The SBOM holds no JSON number, so the comparison is exact.
+        COMPARED=0
         for suf in ${REQUIRED_RAW_SUFFIXES}; do
+          SBOM_NAME="codegraph_${TAG}_${suf}.spdx.json"
           gh attestation verify "${DL_DIR}/codegraph_${TAG}_${suf}" -R "${REPO}" \
-            --predicate-type https://spdx.dev/Document/v2.3
+            --signer-workflow "${SIGNER_WORKFLOW}" --source-ref "${SOURCE_REF}" \
+            --predicate-type https://spdx.dev/Document/v2.3 \
+            --format json --jq '.[0].verificationResult.statement.predicate' \
+            | jq -S . > "${SIG_DIR}/${SBOM_NAME}.attested"
+          gh release download "${TAG}" --repo "${REPO}" --dir "${SIG_DIR}" --pattern "${SBOM_NAME}"
+          jq -S . "${SIG_DIR}/${SBOM_NAME}" > "${SIG_DIR}/${SBOM_NAME}.published"
+          if [ "$(jq -r '.spdxVersion // empty' "${SIG_DIR}/${SBOM_NAME}.attested")" = "" ]; then
+            echo "::error::the SBOM attestation of codegraph_${TAG}_${suf} holds no SPDX document"
+            exit 1
+          fi
+          if ! cmp -s "${SIG_DIR}/${SBOM_NAME}.attested" "${SIG_DIR}/${SBOM_NAME}.published"; then
+            echo "::error::${SBOM_NAME} differs from the SBOM that release.yml attested for codegraph_${TAG}_${suf}"
+            exit 1
+          fi
+          COMPARED=$((COMPARED + 1))
         done
+        if [ "${COMPARED}" != "4" ]; then
+          echo "::error::compared ${COMPARED} SBOM assets with their attestations, want 4"
+          exit 1
+        fi
+        echo "verify:release-assets: ${COMPARED} SBOM assets equal their attested SBOMs"
 
         echo "verify:release-assets: PASS — checksums, cosign, provenance and SBOM attestations all verified against re-downloaded published assets for ${TAG}"
 
