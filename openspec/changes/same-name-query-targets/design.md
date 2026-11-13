@@ -81,7 +81,7 @@ Alternative: an object `{filePath, startLine}` in each row. Rejected: the row al
 
 ### D4: The order of the rows
 
-`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, no two rows of one result tie. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
+`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, two rows of one result tie only when they are equal in every field. That happens when one caller makes an ambiguous call into two overload sets of one name: an ambiguous row carries no definition and no signature. `callers` and `callees` list such a row once. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
 
 Alternative: keep `sortLocations` and sort the start nodes only. Rejected, because the stable sort then still carries an order that the rows do not show, and a reader of the output cannot predict it.
 
@@ -89,7 +89,7 @@ Alternative: keep `sortLocations` and sort the start nodes only. Rejected, becau
 
 - One function beside `OverloadSuffix` builds the definitions line from a result's `Definitions`. The CLI plain branches, the styled renderers and the markdown renderers all call it. The wording follows `node`: `N definitions named "X"`, then the labels. The line lists at most `nodeMultiDefListCap` labels and then `+K more`.
 - One function, `query.RowSuffix`, returns the overload suffix followed by the definition suffix. The six row printers that call `OverloadSuffix` today call it.
-- The heading and the capped list with its `+K more` tail are shared with the `node` output for several definitions. Only the format of one entry differs.
+- The heading (`DefinitionsHeading`) and the cap (`CapDefinitions`) are shared with every `node` renderer for several definitions. The format of one entry and of the tail differ: the definitions line is one line that ends in `, +K more`, and the `node` list has one bullet per entry and a `- … +K more` bullet.
 - The definitions line is printed also for a result with no row. In the CLI text it follows the header line. In the markdown it follows the "no callers found" sentence. This is the case of the issue: a name with several definitions and "0 callers".
 - `renderLocationTable` builds its header and its cells from two flags, one for the Definition column and one for the Overload column. The Definition flag comes from the result (its `Definitions` list is not empty) and not from the rows, so a result whose rows are all ambiguous still has the column. The Definition column follows Location.
 - The frozen outputs pin the exact bytes after the first capture.
@@ -103,9 +103,9 @@ Alternative: keep `sortLocations` and sort the start nodes only. Rejected, becau
 - A node with no file never matches.
 - If no member of a set stays, the set is not a start node.
 - The signature filter runs first and the file filter second, as in `node`. `spans` is computed after both.
-- If nothing matches, the error is a not-found error. It names the value and lists each file that holds a definition once, sorted. The form follows the existing error for a signature that matches no overload.
+- If nothing matches, the error is a not-found error. It names the value and lists each file that holds a definition once, sorted. The list counts every definition of the name, also one that the signature filter left out. If no definition has a file, the error says that instead of listing files. The form follows the existing error for a signature that matches no overload.
 
-Two helpers in `internal/cli`, in the pattern of `addWorkersFlag`, register `--signature` and `--file` (short form `-f`). `node`, `callers`, `callees` and `impact` use them, so each flag text exists once.
+Two helpers in `internal/cli`, in the pattern of `addWorkersFlag`, register `--signature` and `--file` (short form `-f`). `node`, `callers`, `callees` and `impact` use them. The `--file` helper takes the help text, because the meaning differs: in `node` the flag is a preference and also selects the file mode, and in the other three it is a hard filter.
 
 A `Selector.File` field is the other way to pass the file. It keeps the three signatures as they are. This design uses the parameter, because `NodeSelected` already passes the file that way and one engine has one pattern. A change that moves both into `Selector` can follow. The MCP input is `file`, placed in the argument structs in the order of the JSON names.
 

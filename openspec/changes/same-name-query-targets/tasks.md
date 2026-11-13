@@ -2,7 +2,7 @@
 
 ## 1. Start nodes for every definition
 
-- [x] 1.1 In `internal/query/overloads.go`, make `symbolTargets` build its start nodes from `enumerateSymbolDefs` plus the set nodes, in the order of design D1. Add `targets.spans`, computed by one function on each return path (design D2). Remove the branch that calls `resolveSymbolNode`. Verify with a new `TestCalleesOfANameWithTwoDefinitions` in `internal/query/overloads_test.go`. It covers the scenario "Two functions of one name in two files" and fails on the current code.
+- [x] 1.1 In `internal/query/overloads.go`, make `symbolTargets` build its start nodes from `enumerateSymbolDefs` plus the set nodes, in the order of design D1. Add `targets.spans`, computed by one function on each return path (design D2). Remove the branch that calls `resolveSymbolNode`. Verify with a new `TestCalleesOfANameWithTwoDefinitions` in `internal/query/definitions_test.go`. It covers the scenario "Two functions of one name in two files" and fails on the current code.
 - [x] 1.2 Add `TestCallersOfAStubAndTheRealFunction` and `TestCalleesOfAMethodAndATestHelper`. They index small Python fixtures through the real indexer. They cover the scenarios "A typing stub and the real function" and "A method and a test helper of one name". Verify that both fail before 1.1 and pass after it.
 - [x] 1.3 Add `TestImpactOverTwoDefinitions` and `TestCallersOfASetAndADefinitionOutsideIt` for the scenarios "Impact over two definitions" and "An overload set and a definition outside it". Verify that both pass.
 - [x] 1.4 Update `TestImpact_DispatchTraversal` in `internal/query/traverse_test.go` and the comment of its fixture. `Handle` has two definitions, so `NodeCount` is 3 and both `Handle` methods are in `Affected`. Update the comment of `TestCallers_DispatchTraversal`, which says the query resolves to the lower node id. Verify that `go test ./internal/query -run DispatchTraversal` passes.
@@ -36,7 +36,7 @@
 
 ## 6. MCP tools
 
-- [x] 6.1 Add the optional `file` input to `CallersArgs`, `CalleesArgs` and `ImpactArgs` in `internal/mcp/tools.go`, in the order of the JSON names. Pass it to the traversal. Verify with `TestCallersToolOnANameWithTwoDefinitions` and `TestCalleesToolWithAFile` in `internal/mcp/overloads_test.go`.
+- [x] 6.1 Add the optional `file` input to `CallersArgs`, `CalleesArgs` and `ImpactArgs` in `internal/mcp/tools.go`, in the order of the JSON names. Pass it to the traversal. Verify with `TestCallersToolOnANameWithTwoDefinitions` and `TestCalleesToolWithAFile` in `internal/mcp/definitions_test.go`.
 - [x] 6.2 Add `TestDefinitionToolsDeclareOptionalFile` in `internal/mcp/tools_schema_drift_test.go`. It asserts an optional string property `file` on the three input schemas and covers "The input schema of the three tools". Verify that it passes.
 - [x] 6.3 Add `TestCallersToolTableHasADefinitionColumn`, `TestCallersToolOfNoCallerListsTheDefinitions`, `TestImpactToolRowReachedByTheWalkHasNoDefinition` and `TestCallersToolTableOfOneDefinitionHasThreeColumns`. They cover the four table scenarios of the `mcp-server` delta. Add `TestSpanningTableOfAmbiguousRowsHasADefinitionColumn`. Verify that all five pass.
 - [x] 6.4 Update `internal/mcp/resources/callers.md`, `callees.md` and `impact.md` with the `file` input and the behavior for several definitions. Verify that `go test ./internal/mcp` passes.
