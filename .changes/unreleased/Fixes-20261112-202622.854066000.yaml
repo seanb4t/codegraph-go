@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph install keeps a symlinked agent configuration file as a symlink and edits the file it leads to.
-time: 2026-11-12T20:26:22.854066-05:00

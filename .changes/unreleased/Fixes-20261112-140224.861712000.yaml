@@ -1,3 +1,0 @@
-kind: Fixes
-body: codegraph install refuses an agent configuration file that is not valid JSON and leaves it unchanged, instead of replacing it with only the codegraph entry.
-time: 2026-11-12T14:02:24.861712-05:00
