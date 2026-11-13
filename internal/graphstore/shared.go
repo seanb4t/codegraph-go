@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/pebble/v2"
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
 // handleState is the state of a handle in the table of shared handles.
@@ -53,7 +54,7 @@ type dbHandle struct {
 }
 
 // sharedHandles is the table of shared handles of this process. The key is
-// the absolute path of the store.
+// the real location of the store (sharedKey).
 //
 // Pebble allows one open of a store directory at a time, also inside one
 // process. The table lets a tool call and a sync of one process use the
@@ -93,11 +94,28 @@ func alreadyClassified(err error) error { return err }
 // lock that the open can meet: the swap lock, the Pebble lock of another
 // holder, and a handle of this process in the closing state.
 func openShared(dir string) (*dbHandle, error) {
-	key, err := filepath.Abs(dir)
+	key, err := sharedKey(dir)
 	if err != nil {
 		return nil, err
 	}
 	return retryLocked(func() (*dbHandle, error) { return acquireShared(key, dir) }, alreadyClassified)
+}
+
+// sharedKey returns the key of the store at dir in the table: its real
+// location, with every symlink resolved. A store that does not exist yet
+// has a key too, because realpath.Resolve reads the links in the part of
+// the path that exists.
+//
+// An absolute path alone is not enough. Pebble refuses a second open in
+// one process only for the same path text, and its file lock is a POSIX
+// record lock, which one process can take twice. Two names for one store
+// then give two databases over one directory with no error (#286).
+func sharedKey(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return realpath.Resolve(abs)
 }
 
 // acquireShared is one attempt of openShared.
