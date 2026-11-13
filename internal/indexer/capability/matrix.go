@@ -140,7 +140,6 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageFull,
 		Gaps: []string{
 			"Module bindings, class attributes and receiver attributes have no node. Case `python/module-and-class-attributes` holds the exact differences (#239).",
-			"A call to a from-imported name has no `calls` edge. See case `python/resolution` (#262).",
 			"pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.",
 			"A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.",
 			"Wildcard from-imports (`from x import *`) are not resolved.",

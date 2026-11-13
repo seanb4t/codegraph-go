@@ -266,10 +266,10 @@ func TestDiscover_MixedLanguage_DescriptorAbsentFallback(t *testing.T) {
 
 	pyFile, ok := byRelPath["app.py"]
 	if !ok {
-		t.Fatal("app.py was dropped, want present with path-based fallback identity")
+		t.Fatal("app.py was dropped, want present with its dotted module path")
 	}
-	if want := "app.py"; pyFile.ImportPath != want {
-		t.Errorf("python ImportPath = %q, want %q (path-based fallback: real pyextract Descriptor errors on no pyproject.toml/setup.py)", pyFile.ImportPath, want)
+	if want := "app"; pyFile.ImportPath != want {
+		t.Errorf("python ImportPath = %q, want %q (the dotted path from the repository root: the real pyextract Descriptor errors on no pyproject.toml/setup.py)", pyFile.ImportPath, want)
 	}
 }
 

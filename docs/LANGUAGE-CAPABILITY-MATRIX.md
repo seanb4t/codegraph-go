@@ -88,7 +88,7 @@ A `full` cell above and a construct below answer different questions. A `full` c
 |---|---|---|
 | Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/lifecycle`, `go/public-queries` | `go/grouped-bindings` (#239), `go/resolution` (#261) |
 | Java | `java/resolution`, `java/inherited-methods`, `java/lifecycle`, `java/public-queries` | `java/fields-and-owners` (#239), `TestSemanticCorpusSamples/java` (#263) |
-| Python | `python/same-file-resolution`, `python/malformed-input`, `python/lifecycle`, `python/public-queries` | `python/module-and-class-attributes` (#239), `python/resolution` (#262) |
+| Python | `python/same-file-resolution`, `python/malformed-input`, `python/lifecycle`, `python/public-queries`, `python/resolution` | `python/module-and-class-attributes` (#239) |
 | TypeScript | `typescript/class-hierarchy`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges` | `typescript/module-bindings-and-fields` (#239), `typescript/resolution` (#261) |
 | TSX | `tsx/components`, `tsx/nested-components` | No case evaluates lifecycle or public queries for TSX. |
 | JavaScript | `javascript/module-functions` | `javascript/callable-declarations` (#239). No case evaluates lifecycle or public queries for JavaScript. |
@@ -119,7 +119,6 @@ Four groups of constructs are outside the target specification, so they have the
 ### `python`
 
 - Module bindings, class attributes and receiver attributes have no node. Case `python/module-and-class-attributes` holds the exact differences (#239).
-- A call to a from-imported name has no `calls` edge. See case `python/resolution` (#262).
 - pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.
 - A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.
 - Wildcard from-imports (`from x import *`) are not resolved.

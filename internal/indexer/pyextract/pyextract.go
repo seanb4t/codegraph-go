@@ -80,6 +80,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		alloc:            nodeid.NewAllocator(relPath),
 		typeNodesByStart: make(map[uint]string),
 		ownPackage:       ownPackageFor(moduleKey, relPath),
+		fromImportOrigin: make(map[string]string),
 	}
 
 	// Imports are collected first so calls and base-class references below
@@ -121,6 +122,11 @@ type extractor struct {
 	// an __init__.py module) — the base a relative import's leading dots
 	// resolve against (see resolveFromModule).
 	ownPackage string
+
+	// fromImportOrigin maps the local name that a `from` import binds to
+	// the name the module declares: `from lib import helper as h` gives
+	// fromImportOrigin["h"] = "helper".
+	fromImportOrigin map[string]string
 }
 
 // ownPackageFor derives a file's enclosing dotted package from its own
@@ -275,6 +281,23 @@ func (ex *extractor) emitFromImportName(fromModule string, entry *tree_sitter.No
 		alias = simple
 	}
 	ex.result.Imports[alias] = fromModule
+	ex.fromImportOrigin[alias] = simple
+}
+
+// bareCallTarget returns the (pkgAlias, name) pair of a call to a bare
+// name. A name that a `from` import binds gives the local name as the
+// alias and the name the module declares, so pass 2 looks in that module
+// (the pair tsextract's resolveBareIdentifier gives). A parameter or a
+// local of the body shadows the import: the call then names that binding
+// and keeps the same-module form.
+func (ex *extractor) bareCallTarget(ident string) (pkgAlias, name string) {
+	if _, local := ex.env.Lookup(ident); local {
+		return "", ident
+	}
+	if origin, ok := ex.fromImportOrigin[ident]; ok {
+		return ident, origin
+	}
+	return "", ident
 }
 
 // resolveFromModule resolves an import_from_statement's module_name field
@@ -622,13 +645,13 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 	switch fn.Kind() {
 	case "identifier":
-		name := fn.Utf8Text(ex.src)
+		pkgAlias, name := ex.bareCallTarget(fn.Utf8Text(ex.src))
 		args := ex.callArgs(ex.env, call.ChildByFieldName("arguments"))
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls, Line: line, Col: col, EndLine: goextract.EndLine(call), EndCol: goextract.EndCol(call),
 			ArgCount: args.Count(), HasSpread: args.Spread, ArgTypes: args.Types, ArgLabels: args.Labels,
 		})
-		ex.recordInstantiateCandidate(fromID, name, "", line, col)
+		ex.recordInstantiateCandidate(fromID, name, pkgAlias, line, col)
 	case "attribute":
 		object := fn.ChildByFieldName("object")
 		field := fn.ChildByFieldName("attribute")

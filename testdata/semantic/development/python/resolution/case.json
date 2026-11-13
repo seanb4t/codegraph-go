@@ -7,7 +7,7 @@
   "labeling": "sampled",
   "dimension": "resolution",
   "construct": "imports, aliases, shadowing, dynamic calls",
-  "status": "known-gap",
+  "status": "supported",
   "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
   "evidence": "CPython ast and symtable; reviewed dynamic annotations",
   "scope": {
@@ -169,14 +169,5 @@
       "kind": "calls",
       "target": "other"
     }
-  ],
-  "exception": {
-    "issue": "#262",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-relationship caller calls helper",
-      "missing-relationship caller calls other"
-    ]
-  }
+  ]
 }

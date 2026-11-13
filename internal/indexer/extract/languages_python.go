@@ -75,9 +75,11 @@ func init() {
 		Extract: pyextract.Extract,
 		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
 			if descriptor == nil {
-				// D-03 path-identity fallback (mirrors Go/Java/C#'s own
-				// nil-descriptor fallback).
-				return relPath
+				// No project file: the repository root is the package
+				// root. A path identity ("lib.py") matches no import,
+				// because an import names a module by its dotted path
+				// ("lib"), so no cross-file reference resolved (#262).
+				return dottedModulePath(relPath)
 			}
 			packageRoot := descriptor.ModulePath()
 			rel := relPath
