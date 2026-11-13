@@ -67,11 +67,18 @@ func Resolve(path string) (string, error) {
 
 	links := 0
 	missing := false
+	// needsDir is set when the path, or the target of its last link, ends
+	// with a separator. The operating system then accepts only a directory
+	// that exists.
+	needsDir := false
 	for len(rest) > 0 {
 		el := rest[0]
 		rest = rest[1:]
 		switch el {
-		case "", ".":
+		case "":
+			needsDir = needsDir || len(rest) == 0
+			continue
+		case ".":
 			continue
 		case "..":
 			if missing {
@@ -111,6 +118,9 @@ func Resolve(path string) (string, error) {
 			target = strings.TrimPrefix(target, cur)
 		}
 		rest = append(strings.Split(target, sep), rest...)
+	}
+	if missing && needsDir {
+		return "", fmt.Errorf("realpath: %s: a trailing separator names a directory that does not exist", path)
 	}
 	return cur, nil
 }

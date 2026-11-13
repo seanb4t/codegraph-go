@@ -475,9 +475,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if instrPath, err := claudeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude instructions path: %w", err))
 	} else {
-		_ = recordUserFile(&result, instrPath, loc, opInstall, func(real string) (FileResult, error) {
-			return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		})
+		installInstructions(&result, instrPath, loc)
 	}
 
 	if opts.AutoAllow {

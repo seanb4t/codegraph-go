@@ -214,7 +214,7 @@ func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResul
 	unifiedReal, unifiedErr := resolveUserFile(unified, loc)
 	legacyReal, legacyErr := resolveUserFile(legacy, loc)
 	if legacyErr != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacy, legacyErr))
+		recordFile(&result, legacy, FileResult{}, legacyErr)
 	}
 
 	if unifiedErr == nil && legacyErr == nil && !fileExists(marker) && !fileExists(unifiedReal) && fileExists(legacyReal) {
@@ -222,18 +222,10 @@ func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResul
 		// stale legacy codegraph entry into the unified path before this
 		// install writes the current entry.
 		if legacyEntry, ok := readMcpEntry(legacyReal); ok {
-			unifiedExisting, _ := readJSONFile(unifiedReal)
-			unifiedServers, _ := unifiedExisting["mcpServers"].(map[string]any)
-			if unifiedServers == nil {
-				unifiedServers = map[string]any{}
-			}
-			unifiedServers["codegraph"] = legacyEntry
-			unifiedExisting["mcpServers"] = unifiedServers
-			if err := writeJSONFile(unifiedReal, unifiedExisting); err != nil {
+			if err := recordUserFile(&result, unified, loc, opInstall, func(real string) (FileResult, error) {
+				return writeMcpEntry(real, func() any { return legacyEntry })
+			}); err != nil {
 				migrationOK = false
-				result.Errors = append(result.Errors, fmt.Errorf("migrate legacy entry into %s: %w", unified, err))
-			} else {
-				result.Files = append(result.Files, FileResult{Path: unified, Action: ActionUpdated})
 			}
 		}
 		// Only remove the legacy entry once the unified write above is

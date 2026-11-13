@@ -134,9 +134,7 @@ func (t geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if instrPath, err := geminiInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
 	} else {
-		_ = recordUserFile(&result, instrPath, loc, opInstall, func(real string) (FileResult, error) {
-			return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		})
+		installInstructions(&result, instrPath, loc)
 	}
 
 	installDeclaredSkill(&result, t, loc)

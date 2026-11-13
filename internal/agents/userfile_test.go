@@ -49,6 +49,33 @@ func TestResolveUserFile_LocalOutsideIsErrOutsideProject(t *testing.T) {
 	}
 }
 
+// With no working directory there is no project to compare with, so a
+// local file is refused and never edited.
+func TestResolveUserFile_LocalWithNoWorkingDirectoryIsRefused(t *testing.T) {
+	fakeHome(t)
+	gone := filepath.Join(realpathtest.TempDir(t), "gone")
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(realpathtest.TempDir(t), "AGENTS.md")
+
+	if got, err := resolveUserFile(file, LocationLocal); err == nil {
+		t.Fatalf("resolveUserFile = %q, want an error", got)
+	}
+	var result WriteResult
+	_ = recordUserFile(&result, file, LocationLocal, opInstall, func(string) (FileResult, error) {
+		t.Fatal("edit ran with no project root")
+		return FileResult{}, nil
+	})
+	if len(result.Errors) != 1 {
+		t.Fatalf("errors = %v, want one", result.Errors)
+	}
+}
+
 func TestRecordUserFile_ResultNamesTheConfiguredPath(t *testing.T) {
 	dir := realpathtest.TempDir(t)
 	target := filepath.Join(dir, "real.json")
@@ -193,6 +220,10 @@ func TestResolveUserFile_LocalNeverLeavesTheProject(t *testing.T) {
 		for _, p := range realpathtest.Draw(rt, in, out).Paths {
 			got, err := resolveUserFile(p, LocationLocal)
 			if errors.Is(err, errOutsideProject) {
+				// A refusal is right only for a path that leads outside.
+				if real, rerr := realpath.Resolve(p); rerr != nil || realpath.Within(project, real) {
+					rt.Fatalf("resolveUserFile(%q) refused a path whose real location is %q, %v", p, real, rerr)
+				}
 				refused++
 				continue
 			}

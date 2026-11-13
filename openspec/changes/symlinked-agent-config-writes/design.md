@@ -10,7 +10,7 @@ See proposal.md for the motivation. These facts are read from `main` at `a12602e
 - Most `Install` and `Uninstall` steps record an outcome through `recordFile` or `recordAction` in `shared.go`. Both take the path for the error text. Some steps append to `result.Files` and `result.Errors` directly. They are the configuration edits in `codex.go` and `hermes.go`, and the Antigravity migration with its unified write (`antigravity.go:210-250`). In `claude.go`, they are the legacy `.claude.json` migration (lines 460-467) and the removal of the PreToolUse entry (lines 636-647).
 - The uninstalls of codex (`codex.go:302`) and hermes (`hermes.go:407`) test `fileExists` before they read the configuration file.
 - Some call sites use the error of a helper after they record it. Claude's `Install` sets flags for its manifest from it. The Antigravity migration sets `migrationOK` from it.
-- The error of a helper does not always name a path. The TOML conflict error and a JSON parse error carry none.
+- The error of a helper does not always name a path. The TOML conflict error carries none. The JSON parse errors of the strict reader and of the OpenCode writer name the file that they read.
 - Each target's `Install` and `Uninstall` receive the `Location`. The helpers do not. Local paths are relative to the working directory. `cursor.go:115` derives the local root from `os.Getwd` and `filepath.EvalSymlinks`, and falls back to the unresolved directory.
 - `uninstall` runs every registered target by default.
 - The "inside this directory" test exists twice: `isWithin` with `resolveExistingPrefix` in `internal/mcp/tools.go`, and inline `filepath.Rel` code in `resolveSourcePath` in `internal/query/node.go`.
@@ -19,7 +19,7 @@ See proposal.md for the motivation. These facts are read from `main` at `a12602e
 - `ActionKept` is the action for a file left as it is on purpose. `codex.go:332` and `opencode.go:346` each append it and a note with the same two lines.
 - `errTOMLTableConflict` in `toml.go` is a sentinel error that callers wrap with context.
 - The Antigravity `Install` migration at `antigravity.go:210-222` tests, reads and writes the unified configuration file outside the helpers. It also reads the legacy file and removes the entry from it.
-- #303, the fix for #292, makes `writeMcpEntry` and `writeOpencodeEntry` refuse a file that does not parse. It is not on `main` yet.
+- #303, the fix for #292, makes `writeMcpEntry` and `writeOpencodeEntry` refuse a file that does not parse. It was not on `main` at `a12602e6`. It merged before the implementation started.
 
 ## Goals / Non-Goals
 
@@ -63,6 +63,7 @@ New leaf package `internal/realpath`, with no import outside the standard librar
 - For an element that is a link, it reads the link and walks the target the same way. A relative target starts at the real directory of the link.
 - For an element that does not exist, it joins the name on. Every later element is joined the same way.
 - For `..` after an element that does not exist, it returns an error. The operating system refuses such a path.
+- For a path or a last link target that ends with a separator and names a missing entry, it returns an error. The operating system accepts only a directory that exists there.
 
 Each link that the walk reads counts against the bound of 8. A missing directory does not count. The walk never cleans a path as text, because `..` after a link names the parent of the link's target. Two examples that a textual join gets wrong:
 
@@ -136,8 +137,11 @@ The implementation settled four points that the plan review left open:
 
 - An `edit` function that returns a `FileResult` with no `Action` records nothing. The Claude legacy migration and the Claude PreToolUse removal use this for a step that changed nothing.
 - `removedOnly` wraps a remover for a step that reports only a removal. The Claude legacy migration, the Claude PreToolUse removal and the Antigravity legacy removal use it.
-- The Antigravity migration does not become one `edit` function. It resolves the unified path and the legacy path with `resolveUserFile` for its existence tests and its reads. Its copy of the legacy entry into the unified file records directly, under the configured path. The legacy removal and the unified `writeMcpEntry` go through the funnel.
-- The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve. It also skips a path whose real location is inside the live configuration directory, because the entry there is the one the install just wrote.
+- The Antigravity migration does not become one `edit` function. It resolves the unified path and the legacy path with `resolveUserFile` for its existence tests and its reads. Its three writes go through the funnel: the copy of the legacy entry into the unified file, which now calls `writeMcpEntry`, the legacy removal, and the unified `writeMcpEntry`.
+- The funnel adds the real location to a helper error only if the error does not name it already. An error line for a linked file therefore names the real location once.
+- `installInstructions` is the install counterpart of `removeSharedInstructions`. The claude, gemini, codex and opencode installs call it.
+- `isSymlink` holds the `os.Lstat` test that the funnel and two older sites in `internal/agents` repeated.
+- The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve. It also skips a path whose real location is inside the live configuration directory, because the entry there is the one the install just wrote. That test replaces the older comparison of the two directory names as text.
 - The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too. The removal takes the operation from its caller. An install that turns the nudge off passes `opInstall`, so D5 applies to it as an install.
 - `resolveSourcePath` in `internal/query` keeps its two inline copies of the "inside" test. The user cut that move from the scope after the fourth plan review.
 - `resolveExistingPrefix` in `internal/mcp` and `realpath.Resolve` both start at the longest part of a path that exists. They differ on purpose in the rest. The MCP confinement joins the missing rest as text, because a path that does not exist has no links of its own. `Resolve` follows a link in the rest, because a dangling link is an entry that exists.

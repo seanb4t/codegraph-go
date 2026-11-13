@@ -101,7 +101,8 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 	}
 	fr, err := edit(real)
 	if err != nil {
-		if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+		// Some helper errors already name the file they read.
+		if isSymlink(path) && !strings.Contains(err.Error(), real) {
 			err = fmt.Errorf("%s: %w", real, err)
 		}
 		recordFile(result, path, FileResult{}, err)
@@ -113,6 +114,12 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 	fr.Path = path
 	recordFile(result, path, fr, nil)
 	return nil
+}
+
+// isSymlink reports whether path itself is a symlink.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
 // removedOnly adapts a remover for a step that reports a file only when it
@@ -700,7 +707,7 @@ func removeEmbeddedFile(path string) (FileResult, error) {
 // directory-empty SWEEP is skipped for a link, exactly as it already is
 // for a non-empty plain directory.
 func removeSkillDirIfEmpty(dir string) error {
-	if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+	if isSymlink(dir) {
 		return nil
 	}
 	err := os.Remove(dir)
@@ -974,6 +981,14 @@ func instructionsKeptNote(path string, others []TargetID) string {
 		names[i] = name
 	}
 	return fmt.Sprintf("%s keeps its codegraph block: still used by %s", path, strings.Join(names, ", "))
+}
+
+// installInstructions writes the codegraph section into the instruction
+// file at path, through the funnel for a user's file.
+func installInstructions(result *WriteResult, path string, loc Location) {
+	_ = recordUserFile(result, path, loc, opInstall, func(real string) (FileResult, error) {
+		return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+	})
 }
 
 // removeSharedInstructions removes self's codegraph section from the

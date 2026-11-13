@@ -50,7 +50,7 @@ type Tree struct {
 // locations. It makes directories, files, and symlinks. A link target is
 // absolute or relative, can hold ".." after a linked directory, can name a
 // path in another root, and can name a path in a directory that does not
-// exist. Links can form a loop.
+// exist, and can end with a separator. Links can form a loop.
 func Draw(t *rapid.T, roots ...string) Tree {
 	tree := Tree{Dirs: append([]string(nil), roots...)}
 	taken := map[string]bool{}
@@ -99,9 +99,13 @@ func drawTarget(t *rapid.T, tree Tree, dir string) string {
 	sep := string(filepath.Separator)
 	base := rapid.SampledFrom(tree.Dirs).Draw(t, "target dir")
 	name := rapid.SampledFrom(names).Draw(t, "target name")
-	switch rapid.SampledFrom([]string{"abs", "rel", "dotdot", "missing"}).Draw(t, "target kind") {
+	switch rapid.SampledFrom([]string{"abs", "rel", "dotdot", "missing", "slash"}).Draw(t, "target kind") {
 	case "abs":
 		return filepath.Join(base, name)
+	case "slash":
+		// A trailing separator: the operating system accepts only a
+		// directory that exists.
+		return filepath.Join(base, name) + sep
 	case "rel":
 		rel, err := filepath.Rel(dir, filepath.Join(base, name))
 		must(t, err)

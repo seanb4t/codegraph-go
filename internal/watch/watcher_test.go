@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
 // TestWatcherRecursiveAdd proves a file created inside a newly-created
@@ -17,10 +19,7 @@ func TestWatcherRecursiveAdd(t *testing.T) {
 
 	// FSEvents reports real paths (/private/var/..., not /var/...), so the
 	// expected event path is built from the resolved root.
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
+	root := realpathtest.TempDir(t)
 	w, err := Open(root)
 	if err != nil {
 		t.Fatalf("Open: %v", err)

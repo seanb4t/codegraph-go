@@ -215,9 +215,7 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if instrPath, err := caps.InstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex instructions path: %w", err))
 	} else {
-		_ = recordUserFile(&result, instrPath, loc, opInstall, func(real string) (FileResult, error) {
-			return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		})
+		installInstructions(&result, instrPath, loc)
 
 		// D-12: an AGENTS.override.md beside the instructions file Codex
 		// reads shadows AGENTS.md for Codex — the block is still written

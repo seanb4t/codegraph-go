@@ -130,7 +130,7 @@ func writeSkillFile(result *WriteResult, dir string, policy unmanifestedPolicy) 
 	// FileResult path recorded below still uses the caller's own dir (the
 	// link) — not the resolved target — for both a non-link and a live
 	// link, and this branch changes nothing about it either.
-	if info, lerr := os.Lstat(dir); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+	if isSymlink(dir) {
 		if _, statErr := os.Stat(dir); statErr != nil && os.IsNotExist(statErr) {
 			target, rerr := realpath.Resolve(dir)
 			if rerr != nil {

@@ -250,12 +250,17 @@ func opencodeMcpEntryPresent(path string) bool {
 
 // opencodeSweepStaleAppData self-heals a legacy %APPDATA%/opencode
 // codegraph entry a broken pre-fix TS install may have left behind
-// (Pitfall 4, TS issue #535) — only when APPDATA is set and resolves to a
-// directory different from the correct XDG-resolved config dir, so this
-// never touches the real config file on a normal run.
+// (Pitfall 4, TS issue #535) — only when APPDATA is set. It skips a stale
+// path whose real location is inside the live configuration directory, so
+// this never touches the real config file: not when APPDATA is the XDG
+// directory, and not when a stale path is a link into it.
 func opencodeSweepStaleAppData(resolvedCfgDir string) {
 	appData := os.Getenv("APPDATA")
-	if appData == "" || filepath.Clean(appData) == filepath.Clean(resolvedCfgDir) {
+	if appData == "" {
+		return
+	}
+	liveDir, err := realpath.Resolve(filepath.Join(resolvedCfgDir, "opencode"))
+	if err != nil {
 		return
 	}
 	for _, name := range []string{"opencode.jsonc", "opencode.json"} {
@@ -266,9 +271,8 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 		if err != nil {
 			continue
 		}
-		// A stale path can be a link into the live configuration directory.
-		// The entry there is the one this install just wrote.
-		if liveDir, err := realpath.Resolve(filepath.Join(resolvedCfgDir, "opencode")); err != nil || realpath.Within(liveDir, stalePath) {
+		// The entry in the live directory is the one this install just wrote.
+		if realpath.Within(liveDir, stalePath) {
 			continue
 		}
 		if fileExists(stalePath) {
@@ -322,9 +326,7 @@ func (t opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
 	} else {
-		_ = recordUserFile(&result, instrPath, loc, opInstall, func(real string) (FileResult, error) {
-			return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		})
+		installInstructions(&result, instrPath, loc)
 	}
 
 	installDeclaredSkill(&result, t, loc)

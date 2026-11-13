@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"pgregory.net/rapid"
@@ -119,6 +120,21 @@ func TestResolve_DotDotAfterAMissingElementIsAnError(t *testing.T) {
 	}
 }
 
+// A link target that ends with a separator names a directory. When it is
+// missing, the operating system refuses an open through the link.
+func TestResolve_LinkWithTrailingSlashToAMissingTarget(t *testing.T) {
+	dir := realpathtest.TempDir(t)
+	link := filepath.Join(dir, "link")
+	realpathtest.Symlink(t, filepath.Join(dir, "missingdir")+string(filepath.Separator), link)
+	if got, err := realpath.Resolve(link); err == nil {
+		t.Fatalf("Resolve = %q, want an error", got)
+	}
+	if f, err := os.OpenFile(link, os.O_WRONLY|os.O_CREATE, 0o644); err == nil {
+		f.Close()
+		t.Fatal("the operating system made a file through the link, so the test premise is wrong")
+	}
+}
+
 func TestResolve_LoopIsAnError(t *testing.T) {
 	dir := realpathtest.TempDir(t)
 	realpathtest.Symlink(t, filepath.Join(dir, "b"), filepath.Join(dir, "a"))
@@ -168,7 +184,7 @@ func TestResolve_MissingTargetUnderTenMissingDirectoriesResolves(t *testing.T) {
 // then asks the operating system where the path leads.
 func TestResolve_AgreesWithTheOperatingSystem(t *testing.T) {
 	base := realpathtest.TempDir(t)
-	existing, created := 0, 0
+	existing, created, refused := 0, 0, 0
 	rapid.Check(t, func(rt *rapid.T) {
 		root, err := os.MkdirTemp(base, "tree")
 		if err != nil {
@@ -186,6 +202,16 @@ func TestResolve_AgreesWithTheOperatingSystem(t *testing.T) {
 				continue
 			}
 			if err != nil {
+				// Resolve refuses the path. Unless its own bound on links
+				// stopped it, the operating system must refuse to make a
+				// file there too.
+				if !strings.Contains(err.Error(), "more than") {
+					if f, openErr := os.OpenFile(p, os.O_WRONLY|os.O_CREATE, 0o644); openErr == nil {
+						f.Close()
+						rt.Fatalf("Resolve(%q) failed with %v, but the operating system made a file there", p, err)
+					}
+				}
+				refused++
 				continue
 			}
 			if err := os.MkdirAll(filepath.Dir(got), 0o755); err != nil {
@@ -201,7 +227,7 @@ func TestResolve_AgreesWithTheOperatingSystem(t *testing.T) {
 			created++
 		}
 	})
-	if existing == 0 || created == 0 {
-		t.Fatalf("compared %d existing paths and %d created paths, want both above zero", existing, created)
+	if existing == 0 || created == 0 || refused == 0 {
+		t.Fatalf("compared %d existing, %d created and %d refused paths, want all above zero", existing, created, refused)
 	}
 }
