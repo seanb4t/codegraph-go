@@ -321,12 +321,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// edge, so the sync builds it once, at the first of the moments that
 	// need it: the dependents of a pruned node, here, or the files that
 	// emit a shared node, below. A sync with neither builds none. It
-	// holds the calls edges and the contains edges, and each reader keeps
-	// to its own kind.
+	// holds the calls, contains and references edges, and each reader
+	// keeps to its own kinds.
 	var revCache map[string][]*schema.Edge
 	reverse := func() (map[string][]*schema.Edge, error) {
 		if revCache == nil {
-			rev, err := buildReverseAdjacency(r0, goextract.RefKindCalls, goextract.RefKindContains)
+			rev, err := buildReverseAdjacency(r0, goextract.RefKindCalls, goextract.RefKindContains, goextract.RefKindReferences)
 			if err != nil {
 				return nil, err
 			}
@@ -344,9 +344,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 		for id := range goneIDs {
 			for _, edge := range rev[id] {
-				// Only a caller depends on a pruned node. A contains edge
-				// into a pruned method adds no dependent.
-				if edge.Kind != goextract.RefKindCalls {
+				// A caller and a reader depend on a pruned node. A
+				// contains edge into a pruned method adds no dependent.
+				if edge.Kind != goextract.RefKindCalls && edge.Kind != goextract.RefKindReferences {
 					continue
 				}
 				srcNode, err := r0.GetNode(edge.Source)
@@ -486,9 +486,27 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	waiting = mergeSortedPaths(mergeSortedPaths(waiting, outbid), more)
+	// A file that calls through a data symbol whose writes the reparse
+	// can change is reparsed too, so its derived calls follow the writes.
+	reparsed := make([]string, 0, len(batchFiles)+len(deleted))
+	for _, f := range batchFiles {
+		reparsed = append(reparsed, f.RelPath)
+	}
+	reparsed = append(reparsed, deleted...)
+	// A deleted file was pruned in full above, so it must not come back
+	// as a reader: a second prune would count its edges twice.
+	for _, p := range deleted {
+		inBatch[p] = true
+	}
+	readers, err := bindingDependents(r0, results, reparsed, inBatch)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers)
 	// The later waves. A file of a wave can emit a shared id that the
-	// cycle did not hold yet, and the other files that emit that id then
+	// cycle did not hold yet, or change the binding facts of a data
+	// symbol, and the files that emit that id or read that symbol then
 	// form the next wave. The loop ends when a wave adds no file.
 	for len(waiting) > 0 {
 		waitingFiles := make([]discover.DiscoveredFile, 0, len(waiting))
@@ -521,12 +539,21 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		for _, r := range wave {
 			addSharedIDs(shared, r)
 		}
-		if len(shared) == before {
-			break
+		wavePaths := make([]string, 0, len(waitingFiles))
+		for _, f := range waitingFiles {
+			wavePaths = append(wavePaths, f.RelPath)
 		}
-		if waiting, err = emitters(); err != nil {
+		if waiting, err = bindingDependents(r0, wave, wavePaths, inBatch); err != nil {
 			w.Close()
 			return Stats{}, err
+		}
+		if len(shared) != before {
+			more, err := emitters()
+			if err != nil {
+				w.Close()
+				return Stats{}, err
+			}
+			waiting = mergeSortedPaths(waiting, more)
 		}
 	}
 	// A later wave appends its files out of path order, and the merge of
