@@ -54,7 +54,7 @@ func queryNames(t *testing.T, field string, args ...string) []string {
 	return names
 }
 
-// TestFunctionVariableQueries is the #175 regression. The daemon command
+// TestFunctionVariableQueries covers the daemonList seam. The daemon command
 // calls daemon.List through the daemonList variable, so callers, callees
 // and impact show that call. The test file's replacements are a local and
 // a function literal, which a production call site does not count. The
