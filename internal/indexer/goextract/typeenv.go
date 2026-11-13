@@ -102,6 +102,20 @@ func (e *TypeEnv) LookupAt(name string, pos uint32) (string, bool) {
 	return "", false
 }
 
+// DeclaredAt reports whether e itself, not a parent, declares name in a
+// scope that holds pos.
+func (e *TypeEnv) DeclaredAt(name string, pos uint32) bool {
+	if e == nil {
+		return false
+	}
+	for _, b := range e.names[name] {
+		if b.at <= pos && pos < b.end {
+			return true
+		}
+	}
+	return false
+}
+
 // DeferredType is the type of an expression that is a call: pass 2 fills
 // it from the return type of the call at n's position (D17).
 func DeferredType(n *tree_sitter.Node) string {

@@ -471,7 +471,7 @@ func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
 // the classes it extends.
 func inheritsMembers(lang string) bool {
 	switch lang {
-	case "typescript", "tsx", "javascript", "python":
+	case "typescript", "tsx", "javascript", "python", "java":
 		return true
 	}
 	return false

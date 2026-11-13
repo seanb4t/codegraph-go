@@ -167,22 +167,6 @@ func TestExtract_MethodContainsEdge(t *testing.T) {
 	}
 }
 
-// TestExtract_NoFieldNodes proves field_declaration never becomes its own
-// "field" node (mirrors goextract's ratified skip).
-func TestExtract_NoFieldNodes(t *testing.T) {
-	src := "package p;\n\npublic class Widget {\n\tprivate String name;\n\tprivate int age;\n}\n"
-	p := newTestParser(t)
-	result, err := Extract(p, "p", "Widget.java", []byte(src))
-	if err != nil {
-		t.Fatalf("Extract returned error: %v", err)
-	}
-	for _, n := range result.Nodes {
-		if n.Node.Kind == "field" {
-			t.Fatalf("unexpected field node emitted: %+v", n.Node)
-		}
-	}
-}
-
 // TestExtract_Imports proves import_declaration produces a RefKindImports
 // unresolved ref and populates Imports keyed by the imported simple name.
 func TestExtract_Imports(t *testing.T) {

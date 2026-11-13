@@ -22,7 +22,7 @@
 
 - [x] 4.1 Extend `internal/indexer/pyextract` for module assignments, annotations, and class attributes. Cover destructuring and repeated assignments in `TestPythonDataDeclarations`.
 - [x] 4.2 Add declared-receiver attributes and scoped Python data references. Cover renamed receivers, inherited class attributes, subclass instance writes, descriptors, class methods, static methods, and shadowing in `TestPythonDataReferences`.
-- [ ] 4.3 Extend `internal/indexer/javaextract` for class and interface fields and their references. Cover inherited owners, subclass shadowing, access limits, final fields, initializer calls, and local shadowing in `TestJavaDataDeclarations` and `TestJavaDataReferences`.
+- [x] 4.3 Extend `internal/indexer/javaextract` for class and interface fields and their references. Cover inherited owners, subclass shadowing, access limits, final fields, initializer calls, and local shadowing in `TestJavaDataDeclarations` and `TestJavaDataReferences`.
 - [ ] 4.4 Update Python and Java capability evidence. Run their #238 acceptance cases and retain record components, enum-specific forms, and dynamic ownership as visible gaps.
 
 ## 5. Callable bindings and public queries
