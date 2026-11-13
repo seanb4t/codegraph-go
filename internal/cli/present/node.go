@@ -11,15 +11,13 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// nodeMultiDefHardCap, nodeMultiDefBodyBudget and nodeMultiDefListCap
-// duplicate internal/query/render_markdown.go's unexported NODE-02 budget
+// nodeMultiDefHardCap and nodeMultiDefBodyBudget duplicate internal/query/render_markdown.go's unexported NODE-02 budget
 // constants verbatim (present/status.go's formatNumber precedent) —
 // internal/query must not export or change them this phase (D-07). Kept
 // in lockstep with render_markdown.go by review.
 const (
 	nodeMultiDefHardCap    = 16
 	nodeMultiDefBodyBudget = 12000
-	nodeMultiDefListCap    = 20
 )
 
 // nodeSectionAnsi matches an SGR escape sequence — used ONLY to measure a
@@ -175,10 +173,7 @@ func writeMultiDef(b *strings.Builder, pal Palette, m *query.MultiDefDetail) err
 		b.WriteString("\n")
 		b.WriteString(pal.Header.Render("Other definitions"))
 		b.WriteString("\n")
-		capped := listed
-		if len(capped) > nodeMultiDefListCap {
-			capped = capped[:nodeMultiDefListCap]
-		}
+		capped, more := query.CapDefinitions(listed)
 		for _, n := range capped {
 			b.WriteString("- ")
 			b.WriteString(pal.Value.Render(sanitizeControl(n.Name)))
@@ -188,8 +183,8 @@ func writeMultiDef(b *strings.Builder, pal Palette, m *query.MultiDefDetail) err
 			b.WriteString(pal.Path.Render(sanitizeControl(n.FilePath) + ":" + strconv.Itoa(int(n.StartLine))))
 			b.WriteString("\n")
 		}
-		if len(listed) > nodeMultiDefListCap {
-			b.WriteString("- … +" + strconv.Itoa(len(listed)-nodeMultiDefListCap) + " more\n")
+		if more > 0 {
+			b.WriteString("- … +" + strconv.Itoa(more) + " more\n")
 		}
 		b.WriteString("\n")
 		hint := "Need one of these in full? Call codegraph_node again with file (e.g. " + strconv.Quote(path.Base(listed[0].FilePath)) + ") or line — do NOT Read it."

@@ -3,6 +3,7 @@ package query
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 
@@ -554,39 +555,6 @@ func dispatchSiblingIDs(reader graphstore.Reader, node *schema.Node, methodOwner
 	return siblings, nil
 }
 
-// resolveSymbolNode resolves a CLI-supplied symbol string to a concrete
-// schema.Node by scanning IterateNodes() for an exact Name match
-// (D-03 — no per-name key lookup exists, so this is a full scan like
-// matchNodes in search.go). When multiple nodes share the same Name
-// (e.g. same-named methods on different types), the pick is
-// deterministic: the node with the lexicographically lowest Id wins, so
-// repeated calls for the same symbol always resolve to the same node.
-func (e *Engine) resolveSymbolNode(symbol string) (*schema.Node, error) {
-	it, err := e.reader.IterateNodes()
-	if err != nil {
-		return nil, err
-	}
-	defer it.Close()
-
-	var best *schema.Node
-	for it.Next() {
-		n := it.Node()
-		if n.Name != symbol {
-			continue
-		}
-		if best == nil || n.Id < best.Id {
-			best = n
-		}
-	}
-	if err := it.Err(); err != nil {
-		return nil, err
-	}
-	if best == nil {
-		return nil, notFoundf("query: symbol %q not found", symbol)
-	}
-	return best, nil
-}
-
 // nodeLocation projects a schema.Node to the locations-only Location
 // shape (search.go, D-06) shared by callers/callees/impact/affected.
 func nodeLocation(n *schema.Node) Location {
@@ -738,6 +706,10 @@ func (e *Engine) CalleesSelected(sel Selector, file string, limit int) (CalleesR
 	// ordering rather than leaving Callees at the mercy of
 	// IterateEdges's raw Pebble key-range scan order.
 	sortLocations(locs)
+	// Two start nodes can give one row that is equal in every field: an
+	// ambiguous call into two overload sets of one name carries no
+	// definition and no signature. Such a row is listed once.
+	locs = slices.Compact(locs)
 	if limit > 0 && limit < len(locs) {
 		locs = locs[:limit]
 	}
@@ -831,6 +803,10 @@ func (e *Engine) CallersSelected(sel Selector, file string, limit int) (CallersR
 	// than depending on the underlying reverse-adjacency map's
 	// enumeration order.
 	sortLocations(locs)
+	// Two start nodes can give one row that is equal in every field: an
+	// ambiguous call into two overload sets of one name carries no
+	// definition and no signature. Such a row is listed once.
+	locs = slices.Compact(locs)
 	if limit > 0 && limit < len(locs) {
 		locs = locs[:limit]
 	}

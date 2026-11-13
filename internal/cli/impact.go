@@ -82,7 +82,7 @@ func newImpactCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	addSignatureFlag(cmd, &signature)
-	addFileFlag(cmd, &file)
+	addFileFlag(cmd, &file, fileFilterUsage)
 	cmd.Flags().IntVarP(&depth, "depth", "d", 0, "BFS depth (default 2, max 50)")
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 

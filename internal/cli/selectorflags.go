@@ -9,9 +9,14 @@ func addSignatureFlag(cmd *cobra.Command, signature *string) {
 	cmd.Flags().StringVar(signature, "signature", "", "parameter types that select one overload, for example \"String, Throwable\"")
 }
 
-// addFileFlag registers the --file flag of callers, callees and impact
-// on cmd, bound to file. It is a hard filter there. node has its own
-// --file, which also selects the file mode of that command.
-func addFileFlag(cmd *cobra.Command, file *string) {
-	cmd.Flags().StringVarP(file, "file", "f", "", "file path — keeps the definitions of the symbol in the files whose path contains it")
+// addFileFlag registers --file (short form -f) on cmd, bound to file,
+// with the help text usage. node, callers, callees and impact call it.
+// The meaning differs, so each command gives its own text: callers,
+// callees and impact pass fileFilterUsage, a hard filter, and node
+// passes a text that says the flag also selects its file mode.
+func addFileFlag(cmd *cobra.Command, file *string, usage string) {
+	cmd.Flags().StringVarP(file, "file", "f", "", usage)
 }
+
+// fileFilterUsage is the --file help text of callers, callees and impact.
+const fileFilterUsage = "file path — keeps the definitions of the symbol in the files whose path contains it"

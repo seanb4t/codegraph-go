@@ -111,7 +111,7 @@ var definitionKinds = map[string]bool{
 
 // sortGatherCandidates orders candidates score-descending then
 // Id-ascending (D-04's codebase-wide stable tie-break, reused verbatim
-// from resolveSymbolNode/sortRWRScores).
+// from sortRWRScores).
 func sortGatherCandidates(c []gatherCandidate) {
 	sort.SliceStable(c, func(i, j int) bool {
 		if c[i].Score != c[j].Score {

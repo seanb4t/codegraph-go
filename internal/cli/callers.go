@@ -79,7 +79,7 @@ func newCallersCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	addSignatureFlag(cmd, &signature)
-	addFileFlag(cmd, &file)
+	addFileFlag(cmd, &file, fileFilterUsage)
 	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "cap on results returned")
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 

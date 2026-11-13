@@ -239,7 +239,7 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 	if len(listed) > 0 {
 		b.WriteByte('\n')
 		b.WriteString("**Other definitions**\n")
-		capped, more := capList(listed, nodeMultiDefListCap)
+		capped, more := CapDefinitions(listed)
 		for _, n := range capped {
 			fmt.Fprintf(&b, "- `%s` (%s) — %s:%d\n", n.Name, n.Kind, n.FilePath, n.StartLine)
 		}

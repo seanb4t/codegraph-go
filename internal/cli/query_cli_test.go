@@ -3,10 +3,10 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -562,12 +562,7 @@ func TestStatusCmd(t *testing.T) {
 // pyTree writes and indexes a Python tree through the real init command.
 func pyTree(t *testing.T, files map[string]string) string {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	dir := testtree.Write(t, files)
 	if _, _, err := execCmd("init", dir); err != nil {
 		t.Fatalf("init: %v", err)
 	}

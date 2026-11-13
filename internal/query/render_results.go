@@ -139,10 +139,12 @@ func DefinitionsHeading(n int, symbol string) string {
 	return fmt.Sprintf("%d definitions named %q", n, symbol)
 }
 
-// capList returns the first max items and the count of the rest.
-func capList[T any](items []T, max int) (shown []T, more int) {
-	if len(items) > max {
-		return items[:max], len(items) - max
+// CapDefinitions returns the first nodeMultiDefListCap items of a list of
+// definitions and the count of the rest. The list of `node` and the
+// definitions line of callers, callees and impact all cap with it.
+func CapDefinitions[T any](items []T) (shown []T, more int) {
+	if len(items) > nodeMultiDefListCap {
+		return items[:nodeMultiDefListCap], len(items) - nodeMultiDefListCap
 	}
 	return items, 0
 }
@@ -155,7 +157,7 @@ func DefinitionsLine(symbol string, defs []Location) string {
 	if len(defs) == 0 {
 		return ""
 	}
-	shown, more := capList(defs, nodeMultiDefListCap)
+	shown, more := CapDefinitions(defs)
 	labels := make([]string, len(shown))
 	for i, d := range shown {
 		labels[i] = d.Definition

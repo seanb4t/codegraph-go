@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -15,6 +13,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // defGraph builds a graph for the fake reader of traverse_test.go. A node
@@ -105,16 +104,7 @@ func TestCalleesOfANameWithTwoDefinitions(t *testing.T) {
 // pyEngine writes and indexes a Python tree.
 func pyEngine(t *testing.T, files map[string]string) *Engine {
 	t.Helper()
-	dir := t.TempDir()
-	for name, src := range files {
-		p := filepath.Join(dir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	dir := testtree.Write(t, files)
 	indexFixture(t, dir)
 	engine, closer, err := OpenAt(dir)
 	if err != nil {
@@ -421,9 +411,33 @@ func callersJSON(t *testing.T, e *Engine, symbol string) (object []string, first
 // TestJSONOfANameWithTwoDefinitionsHasDefinitions is the scenario "JSON
 // output over several definitions".
 func TestJSONOfANameWithTwoDefinitionsHasDefinitions(t *testing.T) {
-	object, row := callersJSON(t, twoRuns().engine(), "run")
+	e := twoRuns().engine()
+	object, row := callersJSON(t, e, "run")
 	if diff := cmp.Diff([]string{"callers", "definitions", "symbol"}, object); diff != "" {
 		t.Errorf("keys of the object (-want +got):\n%s", diff)
+	}
+	got, err := e.Callers("run", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	data, err := MarshalCallersJSON(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Definitions []struct {
+			Definition string `json:"definition"`
+		} `json:"definitions"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("unmarshal %s: %v", data, err)
+	}
+	var defs []string
+	for _, d := range parsed.Definitions {
+		defs = append(defs, d.Definition)
+	}
+	if diff := cmp.Diff([]string{"a.py:1", "b.py:1"}, defs); diff != "" {
+		t.Errorf("definitions in the JSON (-want +got):\n%s", diff)
 	}
 	if diff := cmp.Diff([]string{"definition", "filePath", "kind", "name", "startLine"}, row); diff != "" {
 		t.Errorf("keys of the entry (-want +got):\n%s", diff)
@@ -510,6 +524,94 @@ func TestCallersWithAFileThatMatchesNothingListsEachFileOnce(t *testing.T) {
 	}
 }
 
+// TestFileThatMatchesNothingWithASignatureListsEveryFile pins design D6:
+// the error lists each file that holds a definition, also the files
+// whose definitions the signature left out.
+func TestFileThatMatchesNothingWithASignatureListsEveryFile(t *testing.T) {
+	_, err := javaLogs().engine().CallersSelected(Selector{Symbol: "log", Signature: "String, Throwable"}, "Audit.java", 0)
+	if err == nil {
+		t.Fatal("CallersSelected(log(String, Throwable), Audit.java): no error")
+	}
+	const want = `query: no definition of "log" is in a file that matches "Audit.java"; the files are Audit.java, Logger.java`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+}
+
+// TestFileWhenNoDefinitionHasAFile covers a name whose definitions all
+// have no file, a package and a type in parts: the error says so and
+// does not end in an empty list.
+func TestFileWhenNoDefinitionHasAFile(t *testing.T) {
+	g := newDefGraph()
+	g.node("pkg", "package", "cache", "", 0)
+	g.node("typ", goextract.KindStruct, "cache", "", 0)
+	_, err := g.engine().CallersSelected(Selector{Symbol: "cache"}, "x.go", 0)
+	if err == nil {
+		t.Fatal("CallersSelected(cache, x.go): no error")
+	}
+	const want = `query: no definition of "cache" is in a file that matches "x.go"; no definition of "cache" has a file`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("error %q is not classified as not found", err)
+	}
+}
+
+// TestRowsOfOneCallerOrderBySignature pins the signature key of the row
+// order. One caller calls both overloads of one set, so its two rows
+// tie on file, name, line and definition. The overload with the later
+// signature has the earlier line and the lower id, so an order by start
+// node or by id puts it first.
+func TestRowsOfOneCallerOrderBySignature(t *testing.T) {
+	g := newDefGraph()
+	str := g.node("z-str", goextract.KindMethod, "add", "Calc.java", 6)
+	str.Signature = "(String s)"
+	num := g.node("a-int", goextract.KindMethod, "add", "Calc.java", 4)
+	num.Signature = "(int n)"
+	g.set("set-add", num, str)
+	g.fn("use", "use", "Run.java", 2)
+	g.call("use", "z-str")
+	g.call("use", "a-int")
+	got, err := g.engine().Callers("add", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	var sigs []string
+	for _, l := range got.Callers {
+		sigs = append(sigs, l.Signature)
+	}
+	if diff := cmp.Diff([]string{"(String s)", "(int n)"}, sigs); diff != "" {
+		t.Errorf("signatures of the rows of use, in order (-want +got):\n%s", diff)
+	}
+}
+
+// TestAmbiguousCallerOfTwoSetsIsListedOnce pins design D4: one caller
+// makes an ambiguous call into each of two sets of one name. The two
+// rows carry no definition and no signature, so they are equal, and the
+// result lists the caller once.
+func TestAmbiguousCallerOfTwoSetsIsListedOnce(t *testing.T) {
+	g := newDefGraph()
+	for i, file := range []string{"A.java", "B.java"} {
+		one := g.node(fmt.Sprintf("m%d-1", i), goextract.KindMethod, "log", file, 4)
+		one.Signature = "(String msg)"
+		two := g.node(fmt.Sprintf("m%d-2", i), goextract.KindMethod, "log", file, 6)
+		two.Signature = "(int n)"
+		g.set(fmt.Sprintf("set%d", i), one, two)
+	}
+	g.fn("use", "use", "C.java", 2)
+	g.call("use", "set0")
+	g.call("use", "set1")
+	got, err := g.engine().Callers("log", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	want := []Location{{Name: "use", Kind: goextract.KindFunction, FilePath: "C.java", StartLine: 2, Ambiguous: true}}
+	if diff := cmp.Diff(want, got.Callers); diff != "" {
+		t.Errorf("callers of log (-want +got):\n%s", diff)
+	}
+}
+
 // TestCallersWithFileAndSignature is the scenario "A file and a
 // signature".
 func TestCallersWithFileAndSignature(t *testing.T) {
@@ -551,24 +653,40 @@ func TestFileThatExcludesASetDropsItsAmbiguousCallers(t *testing.T) {
 }
 
 // drawnGraph is a drawn graph of same-named functions: defs definitions
-// of "target" in drawn files, callers that each call a drawn subset, and
-// one callee for each definition. The first caller calls the first two
-// definitions, so one caller of two definitions always exists.
+// of "target" in drawn files at drawn lines, callers that each call a
+// drawn subset, and one callee for each definition. The first caller
+// calls the first two definitions, so one caller of two definitions
+// always exists. When set is true, the first two definitions are the
+// members of one overload set with two signatures, and ambiguous lists
+// the callers whose call targets the set. A definition with an empty
+// file has no file, as a package.
 type drawnGraph struct {
-	files   []string // file of each definition
-	calls   [][]int  // for each caller, the definitions it calls
-	callees int
+	files     []string // file of each definition
+	lines     []int32  // line of each definition
+	calls     [][]int  // for each caller, the definitions it calls
+	set       bool
+	ambiguous []int // callers that call the set
 }
 
-func drawGraph(t *rapid.T) drawnGraph {
+// drawGraph draws a graph. noFile allows a definition with no file.
+func drawGraph(t *rapid.T, noFile bool) drawnGraph {
 	n := rapid.IntRange(2, 4).Draw(t, "defs")
-	d := drawnGraph{callees: n}
+	files := []string{"a.go", "b.go", "c.go"}
+	if noFile {
+		files = append(files, "")
+	}
+	var d drawnGraph
 	for i := 0; i < n; i++ {
-		d.files = append(d.files, rapid.SampledFrom([]string{"a.go", "b.go", "c.go"}).Draw(t, "file"))
+		d.files = append(d.files, rapid.SampledFrom(files).Draw(t, "file"))
+		d.lines = append(d.lines, rapid.Int32Range(1, 2).Draw(t, "line"))
 	}
 	d.calls = append(d.calls, []int{0, 1})
 	for c := rapid.IntRange(0, 4).Draw(t, "callers"); c > 0; c-- {
 		d.calls = append(d.calls, rapid.SliceOfNDistinct(rapid.IntRange(0, n-1), 1, n, rapid.ID[int]).Draw(t, "calls"))
+	}
+	d.set = rapid.Bool().Draw(t, "set")
+	if d.set {
+		d.ambiguous = rapid.SliceOfNDistinct(rapid.IntRange(0, len(d.calls)-1), 0, len(d.calls), rapid.ID[int]).Draw(t, "ambiguous")
 	}
 	return d
 }
@@ -577,12 +695,21 @@ func drawGraph(t *rapid.T) drawnGraph {
 // other than the id is the same for each id function.
 func (d drawnGraph) build(id func(string) string) *defGraph {
 	g := newDefGraph()
+	var members []*schema.Node
 	for i, file := range d.files {
 		def := fmt.Sprintf("def%d", i)
-		g.fn(id(def), "target", file, int32(10*(i+1)))
+		n := g.fn(id(def), "target", file, d.lines[i])
+		if d.set && i < 2 {
+			n.Kind = goextract.KindMethod
+			n.Signature = fmt.Sprintf("(int%d n)", i)
+			members = append(members, n)
+		}
 		callee := fmt.Sprintf("callee%d", i)
 		g.fn(id(callee), callee, "lib.go", int32(i+1))
 		g.call(id(def), id(callee))
+	}
+	if d.set {
+		g.set(id("set"), members...)
 	}
 	for c, defs := range d.calls {
 		caller := fmt.Sprintf("caller%d", c)
@@ -590,6 +717,9 @@ func (d drawnGraph) build(id func(string) string) *defGraph {
 		for _, i := range defs {
 			g.call(id(caller), id(fmt.Sprintf("def%d", i)))
 		}
+	}
+	for _, c := range d.ambiguous {
+		g.call(id(fmt.Sprintf("caller%d", c)), id("set"))
 	}
 	return g
 }
@@ -600,7 +730,7 @@ func (d drawnGraph) build(id func(string) string) *defGraph {
 // under a drawn limit.
 func TestQueryResultDoesNotDependOnNodeIDs(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		d := drawGraph(t)
+		d := drawGraph(t, true)
 		limit := rapid.IntRange(0, 6).Draw(t, "limit")
 		forward := func(name string) string { return "id-" + name }
 		backward := func(name string) string {
@@ -649,7 +779,7 @@ func TestFileSelectionPartitionsTheUnion(t *testing.T) {
 	key := func(l Location) string { return fmt.Sprintf("%s %s:%d", l.Name, l.FilePath, l.StartLine) }
 	twoFiles := 0
 	rapid.Check(t, func(t *rapid.T) {
-		d := drawGraph(t)
+		d := drawGraph(t, false)
 		e := d.build(func(name string) string { return name }).engine()
 		files := map[string]bool{}
 		for _, f := range d.files {

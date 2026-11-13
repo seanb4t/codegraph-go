@@ -54,13 +54,16 @@ type targets struct {
 // The start nodes are ordered by file, line, kind and qualified name,
 // never by id, so no answer depends on the hash of a node.
 func (e *Engine) symbolTargets(sel Selector, file string) (targets, error) {
-	defs, err := e.enumerateSymbolDefs(sel.Symbol)
+	named, err := e.nodesNamed(sel.Symbol)
 	if err != nil {
 		return targets{}, err
 	}
-	sets, err := e.overloadSets(sel.Symbol)
-	if err != nil {
-		return targets{}, err
+	defs := definitionsOf(named)
+	var sets []*schema.Node
+	for _, n := range named {
+		if n.Kind == goextract.KindOverloadSet {
+			sets = append(sets, n)
+		}
 	}
 	if len(defs) == 0 && len(sets) == 0 {
 		return targets{}, notFoundf("query: symbol %q not found", sel.Symbol)
@@ -85,7 +88,11 @@ func (e *Engine) symbolTargets(sel Selector, file string) (targets, error) {
 	if file != "" {
 		inFile := filterByFile(kept, file)
 		if len(inFile) == 0 {
-			return targets{}, notFoundf("query: no definition of %q is in a file that matches %q; the files are %s", sel.Symbol, file, strings.Join(definitionFiles(kept), ", "))
+			files := definitionFiles(defs)
+			if len(files) == 0 {
+				return targets{}, notFoundf("query: no definition of %q is in a file that matches %q; no definition of %q has a file", sel.Symbol, file, sel.Symbol)
+			}
+			return targets{}, notFoundf("query: no definition of %q is in a file that matches %q; the files are %s", sel.Symbol, file, strings.Join(files, ", "))
 		}
 		kept = inFile
 	}
@@ -118,22 +125,6 @@ func (e *Engine) symbolTargets(sel Selector, file string) (targets, error) {
 		}
 	}
 	return out, nil
-}
-
-// overloadSets returns the overload_set nodes named symbol.
-func (e *Engine) overloadSets(symbol string) ([]*schema.Node, error) {
-	it, err := e.reader.IterateNodes()
-	if err != nil {
-		return nil, err
-	}
-	defer it.Close()
-	var sets []*schema.Node
-	for it.Next() {
-		if n := it.Node(); n.Name == symbol && n.Kind == goextract.KindOverloadSet {
-			sets = append(sets, n)
-		}
-	}
-	return sets, it.Err()
 }
 
 // spansDefinitions reports whether defs are not all members of one
