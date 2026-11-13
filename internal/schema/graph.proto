@@ -339,6 +339,14 @@ message Meta {
   // node_count can be too high: `sync` then rebuilds it from scratch once.
   bool has_unique_decl_ids = 15;
 
+  // has_data_symbols reports whether this graph holds struct fields, the
+  // read and write references of data symbols with their binding facts,
+  // and the calls through function-valued variables. Absent or false
+  // means a graph written before them: `sync` then rebuilds it from
+  // scratch once, since it does not reparse the unchanged files that
+  // lack them.
+  bool has_data_symbols = 16;
+
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of
   // colliding with whatever the next organic field would be — mirroring

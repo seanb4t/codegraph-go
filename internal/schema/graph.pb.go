@@ -990,8 +990,15 @@ type Meta struct {
 	// written before that change, whose copies share one node and whose
 	// node_count can be too high: `sync` then rebuilds it from scratch once.
 	HasUniqueDeclIds bool `protobuf:"varint,15,opt,name=has_unique_decl_ids,json=hasUniqueDeclIds,proto3" json:"has_unique_decl_ids,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// has_data_symbols reports whether this graph holds struct fields, the
+	// read and write references of data symbols with their binding facts,
+	// and the calls through function-valued variables. Absent or false
+	// means a graph written before them: `sync` then rebuilds it from
+	// scratch once, since it does not reparse the unchanged files that
+	// lack them.
+	HasDataSymbols bool `protobuf:"varint,16,opt,name=has_data_symbols,json=hasDataSymbols,proto3" json:"has_data_symbols,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
@@ -1129,6 +1136,13 @@ func (x *Meta) GetHasUniqueDeclIds() bool {
 	return false
 }
 
+func (x *Meta) GetHasDataSymbols() bool {
+	if x != nil {
+		return x.HasDataSymbols
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -1218,7 +1232,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xe4\x04\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\x8e\x05\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -1238,7 +1252,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x18has_declared_module_keys\x18\f \x01(\bR\x15hasDeclaredModuleKeys\x12(\n" +
 	"\x10has_method_specs\x18\r \x01(\bR\x0ehasMethodSpecs\x12(\n" +
 	"\x10has_grouped_vars\x18\x0e \x01(\bR\x0ehasGroupedVars\x12-\n" +
-	"\x13has_unique_decl_ids\x18\x0f \x01(\bR\x10hasUniqueDeclIdsJ\x04\b2\x10<*\xe5\x01\n" +
+	"\x13has_unique_decl_ids\x18\x0f \x01(\bR\x10hasUniqueDeclIds\x12(\n" +
+	"\x10has_data_symbols\x18\x10 \x01(\bR\x0ehasDataSymbolsJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +

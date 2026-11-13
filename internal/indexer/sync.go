@@ -960,7 +960,8 @@ func sortedBoolKeys(m map[string]bool) []string {
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
 // has_unresolved_names, has_declared_module_keys, has_method_specs,
-// has_grouped_vars or has_unique_decl_ids flag is false (D-02b). It reads
+// has_grouped_vars, has_unique_decl_ids or has_data_symbols flag is
+// false (D-02b). It reads
 // the metadata through readStoreMeta, which opens and closes the store on
 // its own and never creates one, so a check of a missing store leaves no
 // empty store behind.
@@ -973,7 +974,8 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		return false, err
 	}
 	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() ||
-		!meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars() || !meta.GetHasUniqueDeclIds(), nil
+		!meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars() || !meta.GetHasUniqueDeclIds() ||
+		!meta.GetHasDataSymbols(), nil
 }
 
 // NeedsFullIndex reports whether Sync on the store at storeDir would build
