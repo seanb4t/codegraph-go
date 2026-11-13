@@ -93,7 +93,7 @@ func resolveUserFile(path string, loc Location) (string, error)
 func localProjectRoot() (string, error)
 ```
 
-1. Call `realpath.Resolve(path)`. If it fails, return the error. A loop fails here.
+1. Call `realpath.ResolveFile(path)`, which D2 describes. If it fails, return the error. A loop fails here.
 2. At global scope, return the result.
 3. At local scope, call `localProjectRoot`. If `realpath.Within` reports the result inside the root, return the result. Otherwise return `errOutsideProject`, wrapped with the real location.
 
@@ -129,7 +129,7 @@ The funnel returns the error. Claude's `Install` keeps its manifest flags from t
 
 If `os.Lstat` reports that the configured path is a symlink, the funnel adds the real location to a helper error. `recordFile` puts the configured path in front. An error line for a linked file therefore names both, whatever the helper error says. For a path that is not a symlink, the error text is the same as today.
 
-The steps that record directly today become `edit` functions that return a `FileResult`. The Context lists them. The existence tests of the codex and hermes uninstalls move into the `edit` function. They then run after the resolve, so a loop is an error there too. The Antigravity migration also resolves its legacy path with `resolveUserFile`, and uses the result for its existence test, its read and its `removeMcpEntry` call.
+The steps that record directly today become `edit` functions that return a `FileResult`. The Context lists them. The existence tests of the codex and hermes uninstalls move into the `edit` function. They then run after the resolve, so a loop is an error there too. The Antigravity migration also resolves its legacy path with `resolveUserFile`, and uses the result for its existence test and its read. Its `removeMcpEntry` call goes through the funnel, which resolves the configured path again.
 
 `recordKept` is the two lines that `codex.go:332` and `opencode.go:346` repeated at `a12602e6`. `removeSharedInstructions` of D7 replaced both sites. It and D5 call `recordKept`.
 
@@ -143,6 +143,8 @@ The implementation settled four points that the plan review left open:
 - With no link in the path, the funnel hands the configured path to `edit`. A helper error that names its file then reads as it did before this change, also for a relative local path.
 - `realpath.Within` keeps the `filepath.Rel` test that it had in `internal/mcp`. `filepath.IsLocal` on the relative path gives the same answer on macOS and Linux. The move changes no code, so that the MCP confinement of #299 stays as reviewed.
 - `isSymlink` holds the `os.Lstat` test that the funnel and two older sites in `internal/agents` repeated.
+- `realpathtest` also exports `TempDir` and `Symlink`. The tests of `internal/graphstore`, `internal/watch` and `internal/wtindex` held their own copy of `TempDir` and now call the shared one.
+- macOS accepts a link with an empty target. `filepath.EvalSymlinks` resolves it to the directory that holds the link, and `ResolveFile` returns that. The helper then fails to read a directory as a file, reports the error and writes nothing. The location is the directory of the link, so the local-scope rule still holds.
 - The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve. It also skips a path whose real location is inside the live configuration directory, because the entry there is the one the install just wrote. That test replaces the older comparison of the two directory names as text.
 - The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too. The removal takes the operation from its caller. An install that turns the nudge off passes `opInstall`, so D5 applies to it as an install.
 - `resolveSourcePath` in `internal/query` keeps its two inline copies of the "inside" test. The user cut that move from the scope after the fourth plan review.

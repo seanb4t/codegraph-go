@@ -488,6 +488,20 @@ func TestInstall_GlobalConfigSymlinkToUnparseableTargetIsUntouched(t *testing.T)
 	assertSymlinkTo(t, link, target)
 }
 
+// The spec scenario "An empty file", through the install itself.
+func TestInstall_GlobalEmptyConfigFileIsWritten(t *testing.T) {
+	home := realHome(t)
+	config := filepath.Join(home, ".gemini", "settings.json")
+	writeFile(t, config, "")
+
+	result := geminiTarget{}.Install(LocationGlobal, symlinkTestOpts)
+
+	assertNoErrors(t, result)
+	if got := readFile(t, config); !strings.Contains(got, `"codegraph"`) {
+		t.Fatalf("settings.json does not hold the codegraph entry: %q", got)
+	}
+}
+
 func TestOpencode_EmptyAndWhitespaceConfigIsWritten(t *testing.T) {
 	for name, content := range map[string]string{"empty": "", "whitespace": " \n\t\n"} {
 		t.Run(name, func(t *testing.T) {

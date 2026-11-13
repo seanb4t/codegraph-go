@@ -35,8 +35,8 @@
 
 ## 6. Integration
 
-- [ ] 6.1 Run `task test`, `task lint` and `openspec validate symlinked-agent-config-writes --strict --no-interactive`. All three pass.
-- [ ] 6.2 Add two changelog fragments. `task changie -- new --interactive=false -k Fixes -b "codegraph install keeps a symlinked agent configuration file as a symlink and edits the file it leads to."` and `task changie -- new --interactive=false -k Breaking -b "A local codegraph install refuses an agent file whose real location is outside the project, and no longer replaces the link with a copy."`
+- [x] 6.1 Run `task test`, `task lint` and `openspec validate symlinked-agent-config-writes --strict --no-interactive`. All three pass.
+- [x] 6.2 Add two changelog fragments. `task changie -- new --interactive=false -k Fixes -b "codegraph install keeps a symlinked agent configuration file as a symlink and edits the file it leads to."` and `task changie -- new --interactive=false -k Breaking -b "A local codegraph install refuses an agent file whose real location is outside the project, and no longer replaces the link with a copy."`
 
 ## Workflow follow-up
 
