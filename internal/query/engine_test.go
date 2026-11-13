@@ -67,6 +67,19 @@ func indexFixture(t *testing.T, dir string) {
 	}
 }
 
+// indexedEngine indexes dir with indexFixture and opens an Engine on it,
+// closed when the test ends.
+func indexedEngine(t *testing.T, dir string) *Engine {
+	t.Helper()
+	indexFixture(t, dir)
+	engine, closer, err := OpenAt(dir)
+	if err != nil {
+		t.Fatalf("OpenAt: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	return engine
+}
+
 func TestResolveCodegraphDir(t *testing.T) {
 	t.Run("finds .codegraph at start", func(t *testing.T) {
 		dir := copyFixture(t)

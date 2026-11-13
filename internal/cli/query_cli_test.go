@@ -559,8 +559,9 @@ func TestStatusCmd(t *testing.T) {
 	}
 }
 
-// pyTree writes and indexes a Python tree through the real init command.
-func pyTree(t *testing.T, files map[string]string) string {
+// initTree writes files with testtree.Write and indexes them through the
+// real init command.
+func initTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := testtree.Write(t, files)
 	if _, _, err := execCmd("init", dir); err != nil {
@@ -571,7 +572,7 @@ func pyTree(t *testing.T, files map[string]string) string {
 
 // twoRunsTree is two functions named run. main calls the one in a.py.
 func twoRunsTree(t *testing.T) string {
-	return pyTree(t, map[string]string{
+	return initTree(t, map[string]string{
 		"a.py": "def load():\n    return 1\n\n\ndef run():\n    return load()\n",
 		"b.py": "def save():\n    return 2\n\n\ndef run():\n    return save()\n",
 		"m.py": "from a import run\n\n\ndef main():\n    return run()\n",
@@ -608,7 +609,7 @@ func TestCallersTextListsTheDefinitions(t *testing.T) {
 		for i := 0; i < n; i++ {
 			files[fmt.Sprintf("f%02d.py", i)] = "def many():\n    return 1\n"
 		}
-		out, _, err := execCmd("callers", "many", "-p", pyTree(t, files))
+		out, _, err := execCmd("callers", "many", "-p", initTree(t, files))
 		if err != nil {
 			t.Fatalf("callers many (%d): %v", n, err)
 		}
@@ -625,7 +626,7 @@ func TestCallersTextListsTheDefinitions(t *testing.T) {
 // TestCallersTextOfNoResultListsTheDefinitions is the scenario "A query
 // that spans definitions and finds no result".
 func TestCallersTextOfNoResultListsTheDefinitions(t *testing.T) {
-	dir := pyTree(t, map[string]string{
+	dir := initTree(t, map[string]string{
 		"a.py": "def run():\n    return 1\n",
 		"b.py": "def run():\n    return 2\n",
 	})

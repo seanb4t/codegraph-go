@@ -420,14 +420,7 @@ func traverseFixture(t *testing.T) *Engine {
 	if err := os.WriteFile(targetTestFile, []byte(traverseFixtureTargetTestFile), 0o644); err != nil {
 		t.Fatalf("seed target_test.go: %v", err)
 	}
-	indexFixture(t, dir)
-
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: unexpected error: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine
+	return indexedEngine(t, dir)
 }
 
 // TestCallersCallees pins forward (IterateEdges(src) directly, no scan)

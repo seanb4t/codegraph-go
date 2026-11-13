@@ -101,23 +101,17 @@ func TestCalleesOfANameWithTwoDefinitions(t *testing.T) {
 	}
 }
 
-// pyEngine writes and indexes a Python tree.
-func pyEngine(t *testing.T, files map[string]string) *Engine {
+// treeEngine writes files with testtree.Write, indexes the tree and opens
+// an Engine on it.
+func treeEngine(t *testing.T, files map[string]string) *Engine {
 	t.Helper()
-	dir := testtree.Write(t, files)
-	indexFixture(t, dir)
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine
+	return indexedEngine(t, testtree.Write(t, files))
 }
 
 // TestCallersOfAStubAndTheRealFunction is the scenario "A typing stub and
 // the real function", through the real indexer.
 func TestCallersOfAStubAndTheRealFunction(t *testing.T) {
-	engine := pyEngine(t, map[string]string{
+	engine := treeEngine(t, map[string]string{
 		"lib.py": "from typing import overload\n\n\n@overload\ndef to_list(value: None) -> None: ...\n@overload\ndef to_list(value: int) -> list: ...\ndef to_list(value):\n    return value\n",
 		"app.py": "from lib import to_list\n\n\ndef build(x):\n    return to_list(x)\n",
 	})
@@ -136,7 +130,7 @@ func TestCallersOfAStubAndTheRealFunction(t *testing.T) {
 // TestCalleesOfAMethodAndATestHelper is the scenario "A method and a test
 // helper of one name", through the real indexer.
 func TestCalleesOfAMethodAndATestHelper(t *testing.T) {
-	engine := pyEngine(t, map[string]string{
+	engine := treeEngine(t, map[string]string{
 		"src/models.py":     "def requote_uri(u):\n    return u\n\n\nclass Request:\n    def prepare_url(self, url):\n        return requote_uri(url)\n",
 		"tests/conftest.py": "def prepare_url(value):\n    return value\n",
 	})
@@ -400,6 +394,29 @@ func TestImpactWhenOneDefinitionCallsTheOther(t *testing.T) {
 	}
 	if diff := cmp.Diff([]string{"a.go:1", "b.go:1"}, resets); diff != "" {
 		t.Errorf("Reset rows of the impact (-want +got):\n%s", diff)
+	}
+}
+
+// TestTiedResultsOfOneDefinition is the scenario of that name: two
+// callers tie on file, name and line, and the kind orders them, not the
+// ids, which sort the other way.
+func TestTiedResultsOfOneDefinition(t *testing.T) {
+	g := newDefGraph()
+	g.fn("run", "run", "a.go", 1)
+	g.node("a-x", goextract.KindMethod, "x", "c.go", 5)
+	g.node("b-x", "function", "x", "c.go", 5)
+	g.call("a-x", "run")
+	g.call("b-x", "run")
+	got, err := g.engine().Callers("run", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	var kinds []string
+	for _, l := range got.Callers {
+		kinds = append(kinds, l.Kind)
+	}
+	if diff := cmp.Diff([]string{"function", goextract.KindMethod}, kinds); diff != "" {
+		t.Errorf("kinds of the callers of run, in order (-want +got):\n%s", diff)
 	}
 }
 

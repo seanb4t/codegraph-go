@@ -9,13 +9,18 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// definitionsServer writes and indexes files and returns a function that
-// calls a tool of a server over them and returns the text of the result.
-func definitionsServer(t *testing.T, files map[string]string) func(tool string, args map[string]any) string {
+// treeServer writes and indexes files, builds a server with the named
+// tools, and returns a function that calls one of them and returns the
+// text of the result.
+func treeServer(t *testing.T, files map[string]string, tools ...string) func(tool string, args map[string]any) string {
 	t.Helper()
 	dir := testtree.Write(t, files)
 	indexFixture(t, dir)
-	s := BuildServer(true, map[string]bool{"callers": true, "callees": true, "impact": true}, dir, dir)
+	enabled := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		enabled[tool] = true
+	}
+	s := BuildServer(true, enabled, dir, dir)
 	return func(tool string, args map[string]any) string {
 		var b strings.Builder
 		for _, c := range callTool(t, s, tool, args).Content {
@@ -47,14 +52,14 @@ func requireAll(t *testing.T, text string, wants ...string) {
 // TestCallersToolOnANameWithTwoDefinitions is the scenario "An MCP
 // callers call on a name with two definitions".
 func TestCallersToolOnANameWithTwoDefinitions(t *testing.T) {
-	call := definitionsServer(t, twoRuns)
+	call := treeServer(t, twoRuns, "callers", "callees", "impact")
 	requireAll(t, call("codegraph_callers", map[string]any{"symbol": "run"}), "`main`", "`other`")
 }
 
 // TestCallersToolTableHasADefinitionColumn is the scenario "Callers of a
 // name with two definitions".
 func TestCallersToolTableHasADefinitionColumn(t *testing.T) {
-	call := definitionsServer(t, twoRuns)
+	call := treeServer(t, twoRuns, "callers", "callees", "impact")
 	requireAll(t, call("codegraph_callers", map[string]any{"symbol": "run"}),
 		"2 definitions named \"run\": a.py:5, b.py:5\n",
 		"| Name | Kind | Location | Definition |\n",
@@ -65,7 +70,7 @@ func TestCallersToolTableHasADefinitionColumn(t *testing.T) {
 // TestCalleesToolWithAFile is the scenario "An MCP callees call with a
 // file".
 func TestCalleesToolWithAFile(t *testing.T) {
-	call := definitionsServer(t, twoRuns)
+	call := treeServer(t, twoRuns, "callers", "callees", "impact")
 	text := call("codegraph_callees", map[string]any{"symbol": "run", "file": "a.py"})
 	requireAll(t, text, "`load`")
 	if strings.Contains(text, "`save`") || strings.Contains(text, "definitions named") {
@@ -76,10 +81,10 @@ func TestCalleesToolWithAFile(t *testing.T) {
 // TestCallersToolOfNoCallerListsTheDefinitions is the scenario "No caller
 // of a name with two definitions".
 func TestCallersToolOfNoCallerListsTheDefinitions(t *testing.T) {
-	call := definitionsServer(t, map[string]string{
+	call := treeServer(t, map[string]string{
 		"a.py": "def run():\n    return 1\n",
 		"b.py": "def run():\n    return 2\n",
-	})
+	}, "callers", "callees", "impact")
 	requireAll(t, call("codegraph_callers", map[string]any{"symbol": "run"}),
 		"no callers found", "2 definitions named \"run\": a.py:1, b.py:1\n")
 }
@@ -87,7 +92,7 @@ func TestCallersToolOfNoCallerListsTheDefinitions(t *testing.T) {
 // TestImpactToolRowReachedByTheWalkHasNoDefinition is the scenario "An
 // impact row that the walk reached".
 func TestImpactToolRowReachedByTheWalkHasNoDefinition(t *testing.T) {
-	call := definitionsServer(t, twoRuns)
+	call := treeServer(t, twoRuns, "callers", "callees", "impact")
 	requireAll(t, call("codegraph_impact", map[string]any{"symbol": "run", "depth": 1}),
 		"| `run` | function | `a.py:5` | `a.py:5` |\n",
 		"| `run` | function | `b.py:5` | `b.py:5` |\n",
@@ -98,7 +103,7 @@ func TestImpactToolRowReachedByTheWalkHasNoDefinition(t *testing.T) {
 // TestCallersToolTableOfOneDefinitionHasThreeColumns is the scenario
 // "Callers of a name with one definition".
 func TestCallersToolTableOfOneDefinitionHasThreeColumns(t *testing.T) {
-	call := definitionsServer(t, twoRuns)
+	call := treeServer(t, twoRuns, "callers", "callees", "impact")
 	text := call("codegraph_callers", map[string]any{"symbol": "load"})
 	requireAll(t, text, "| Name | Kind | Location |\n", "| `run` | function | `a.py:5` |\n")
 	if strings.Contains(text, "Definition") || strings.Contains(text, "definitions named") {
@@ -110,11 +115,11 @@ func TestCallersToolTableOfOneDefinitionHasThreeColumns(t *testing.T) {
 // Definition column comes from the result and not from the rows: the
 // only caller is ambiguous and names no definition.
 func TestSpanningTableOfAmbiguousRowsHasADefinitionColumn(t *testing.T) {
-	call := definitionsServer(t, map[string]string{
+	call := treeServer(t, map[string]string{
 		"Sink.java":  "package app;\n\npublic class Sink {\n    public void add(int n) {}\n\n    public void add(String s) {}\n}\n",
 		"Other.java": "package app;\n\npublic class Other {\n    public void add() {}\n}\n",
 		"C.java":     "package app;\n\npublic class C {\n    public void useC(Sink sink) {\n        sink.add(null);\n    }\n}\n",
-	})
+	}, "callers", "callees", "impact")
 	requireAll(t, call("codegraph_callers", map[string]any{"symbol": "add"}),
 		"3 definitions named \"add\": Other.java:4, Sink.java:4, Sink.java:6\n",
 		"| Name | Kind | Location | Definition | Overload |\n",

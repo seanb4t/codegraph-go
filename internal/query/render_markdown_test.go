@@ -68,14 +68,7 @@ func nodeExploreFixture(t *testing.T) (*Engine, string) {
 	t.Helper()
 
 	dir := copyFixture(t)
-	indexFixture(t, dir)
-
-	engine, closer, err := OpenAt(dir)
-	if err != nil {
-		t.Fatalf("OpenAt: unexpected error: %v", err)
-	}
-	t.Cleanup(func() { _ = closer.Close() })
-	return engine, dir
+	return indexedEngine(t, dir), dir
 }
 
 // TestNode pins Engine.Node's two modes: symbol detail (golden node.json
