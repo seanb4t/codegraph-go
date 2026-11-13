@@ -1,7 +1,7 @@
 # graph-queries Specification
 
 ## Purpose
-How a query names a symbol that has several overloads, and how it reports across them, in the CLI and the MCP tools.
+How a query names a symbol that has several definitions, such as overloads or functions of one name in several files, and how it reports across them, in the CLI and the MCP tools.
 
 ## Requirements
 
