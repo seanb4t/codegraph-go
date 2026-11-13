@@ -61,7 +61,7 @@ func DetectIndexMismatch(ctx context.Context, startPath, indexRoot string) *Mism
 	// indexing a super-repo descends into its submodules and gitlinked
 	// clones. The warning's entire premise — "results reflect a different
 	// branch of the SAME repo; symbols changed only here are missing" — is
-	// false in that case, and its "run codegraph init -i" advice would
+	// false in that case, and its "run codegraph init" advice would
 	// needlessly fragment a unified workspace index. A submodule/embedded
 	// clone reports its OWN git common dir (e.g. `.git/modules/<name>`, or
 	// its own standalone `.git`), which DIFFERS from the parent's.
