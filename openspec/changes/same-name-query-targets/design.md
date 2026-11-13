@@ -33,7 +33,7 @@ One conflict exists between the spec and the code, and this design does not sett
 **Non-Goals:**
 
 - A change to `node`, `search`, `explore` or `affected`.
-- A change to `resolveSymbolNode` or its use by `node`.
+- A change to how `node` resolves a name. The unused `resolveSymbolNode` is removed, and `node` does not change.
 - A ranking of definitions, for example "the non-test file first" or "the last Python definition".
 - A definition label or a file selector in the graph UI. D8 gives the reason.
 - The `--line` conflict above.
@@ -42,9 +42,9 @@ One conflict exists between the spec and the code, and this design does not sett
 
 ### D1: The start nodes are every node with the name
 
-`symbolTargets` gets the definitions from `enumerateSymbolDefs`, so `node` and the three traversals share one meaning of "definition". It adds the `overload_set` nodes of the name as start nodes marked ambiguous, as today. The branch that calls `resolveSymbolNode` goes away.
+`symbolTargets` gets the definitions from `definitionsOf`, which `enumerateSymbolDefs` also uses, so `node` and the three traversals share one meaning of "definition". `symbolTargets` calls `nodesNamed` once and takes both the definitions and the `overload_set` nodes from that one scan. It adds the `overload_set` nodes of the name as start nodes marked ambiguous, as today. The branch that calls `resolveSymbolNode` goes away.
 
-`symbolTargets` orders the start nodes by file, line, kind and qualified name, and not by id. `enumerateSymbolDefs` has its own order for `node`, which puts generated files last. `symbolTargets` sorts again, because a traversal needs an order that no heuristic changes.
+`symbolTargets` orders the start nodes by file, line, kind and qualified name, and not by id. `definitionsOf` has its own order for `node`, which puts generated files last. `symbolTargets` sorts again, because a traversal needs an order that no heuristic changes.
 
 Alternative: keep one pick and add a note that lists the others. Rejected, because the answer stays wrong by default. An agent acts on "0 callers" and does not read a note.
 
@@ -81,7 +81,7 @@ Alternative: an object `{filePath, startLine}` in each row. Rejected: the row al
 
 ### D4: The order of the rows
 
-`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, two rows of one result tie only when they are equal in every field. That happens when one caller makes an ambiguous call into two overload sets of one name: an ambiguous row carries no definition and no signature. `callers` and `callees` list such a row once. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
+`sortLocations` gains three more keys after file, name and line: the definition label, then the signature, then the kind. The kind separates the row of an `overload_set` node from the row of its first member, which have the same file, name and line. Rows that tie today follow the node ids. With the new keys, two rows of one result tie only when they are equal in every field, which takes two nodes with one name, kind, file and line, or one caller with ambiguous calls into two overload sets of one name. The first case keeps one row for each node. In the second, `callers` keys an ambiguous row by its caller alone and not by the set, because the row carries no definition and no signature, so the caller is listed once. A frozen output of an overloaded query can therefore change its row order once. D7 covers the review of that diff.
 
 Alternative: keep `sortLocations` and sort the start nodes only. Rejected, because the stable sort then still carries an order that the rows do not show, and a reader of the output cannot predict it.
 
@@ -91,7 +91,7 @@ Alternative: keep `sortLocations` and sort the start nodes only. Rejected, becau
 - One function, `query.RowSuffix`, returns the overload suffix followed by the definition suffix. The six row printers that call `OverloadSuffix` today call it.
 - The heading (`DefinitionsHeading`) and the cap (`CapDefinitions`) are shared with every `node` renderer for several definitions. The format of one entry and of the tail differ: the definitions line is one line that ends in `, +K more`, and the `node` list has one bullet per entry and a `- … +K more` bullet.
 - The definitions line is printed also for a result with no row. In the CLI text it follows the header line. In the markdown it follows the "no callers found" sentence. This is the case of the issue: a name with several definitions and "0 callers".
-- `renderLocationTable` builds its header and its cells from two flags, one for the Definition column and one for the Overload column. The Definition flag comes from the result (its `Definitions` list is not empty) and not from the rows, so a result whose rows are all ambiguous still has the column. The Definition column follows Location.
+- `renderLocationTableColumns` builds the header and the cells from two flags, one for the Definition column and one for the Overload column. The Definition flag comes from the result (its `Definitions` list is not empty) and not from the rows, so a result whose rows are all ambiguous still has the column. The Definition column follows Location.
 - The frozen outputs pin the exact bytes after the first capture.
 
 ### D6: `--file` filters the start nodes

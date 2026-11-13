@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -248,7 +249,7 @@ func narrowBySignature(symbol string, matches []*schema.Node, signature string) 
 		return kept, nil
 	}
 	sort.Strings(signatures)
-	signatures = compactStrings(signatures)
+	signatures = slices.Compact(signatures)
 	if len(signatures) == 0 {
 		return nil, notFoundf("query: no overload of %q has the signature %q: %q is not a function or method", symbol, signature, symbol)
 	}

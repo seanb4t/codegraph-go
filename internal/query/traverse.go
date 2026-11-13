@@ -3,7 +3,6 @@ package query
 import (
 	"encoding/json"
 	"errors"
-	"slices"
 	"sort"
 	"strings"
 
@@ -600,6 +599,21 @@ func sortLocations(locs []Location) {
 	})
 }
 
+// sortAndCap sorts locs and then cuts them to limit (0 means no limit)
+// and to MaxLimit (WR-05/WR-02). The sort comes first, so the capped
+// subset is the first N in sorted order and does not depend on the
+// order in which the store returned the edges.
+func sortAndCap(locs []Location, limit int) []Location {
+	sortLocations(locs)
+	if limit > 0 && limit < len(locs) {
+		locs = locs[:limit]
+	}
+	if len(locs) > MaxLimit {
+		locs = locs[:MaxLimit]
+	}
+	return locs
+}
+
 // CalleesResult mirrors the golden callees.json shape: {"symbol",
 // "callees": [locations]}.
 type CalleesResult struct {
@@ -701,22 +715,7 @@ func (e *Engine) CalleesSelected(sel Selector, file string, limit int) (CalleesR
 		}
 	}
 
-	// WR-05/WR-02: sort BEFORE applying limit/MaxLimit caps — mirrors
-	// Callers/Impact/Affected's deterministic (FilePath, Name, StartLine)
-	// ordering rather than leaving Callees at the mercy of
-	// IterateEdges's raw Pebble key-range scan order.
-	sortLocations(locs)
-	// Two start nodes can give one row that is equal in every field: an
-	// ambiguous call into two overload sets of one name carries no
-	// definition and no signature. Such a row is listed once.
-	locs = slices.Compact(locs)
-	if limit > 0 && limit < len(locs) {
-		locs = locs[:limit]
-	}
-	if len(locs) > MaxLimit {
-		locs = locs[:MaxLimit]
-	}
-	return CalleesResult{Symbol: sel.Symbol, Callees: locs, Definitions: tg.definitions}, nil
+	return CalleesResult{Symbol: sel.Symbol, Callees: sortAndCap(locs, limit), Definitions: tg.definitions}, nil
 }
 
 // Callers returns symbol's reverse callers via the D-04 in-memory
@@ -777,9 +776,14 @@ func (e *Engine) CallersSelected(sel Selector, file string, limit int) (CallersR
 			for _, edge := range rev[tid] {
 				// Over one target a caller is listed once. Over overloads
 				// a caller is listed once per overload it calls.
+				// An ambiguous row carries no definition and no signature,
+				// so one caller with ambiguous calls into two sets of the
+				// name is listed once.
 				key := edge.Source
-				if tg.overloaded || tg.spans {
+				if (tg.overloaded || tg.spans) && !t.ambiguous {
 					key = edge.Source + "|" + t.node.Id
+				} else if t.ambiguous {
+					key = edge.Source + "|ambiguous"
 				}
 				if seen[key] {
 					continue
@@ -798,22 +802,7 @@ func (e *Engine) CallersSelected(sel Selector, file string, limit int) (CallersR
 		}
 	}
 
-	// WR-05: sort BEFORE applying limit/MaxLimit caps, so the capped
-	// subset itself is a deterministic "first N in sorted order" rather
-	// than depending on the underlying reverse-adjacency map's
-	// enumeration order.
-	sortLocations(locs)
-	// Two start nodes can give one row that is equal in every field: an
-	// ambiguous call into two overload sets of one name carries no
-	// definition and no signature. Such a row is listed once.
-	locs = slices.Compact(locs)
-	if limit > 0 && limit < len(locs) {
-		locs = locs[:limit]
-	}
-	if len(locs) > MaxLimit {
-		locs = locs[:MaxLimit]
-	}
-	return CallersResult{Symbol: sel.Symbol, Callers: locs, Definitions: tg.definitions}, nil
+	return CallersResult{Symbol: sel.Symbol, Callers: sortAndCap(locs, limit), Definitions: tg.definitions}, nil
 }
 
 // Impact returns the depth-bounded reverse blast radius of symbol: a

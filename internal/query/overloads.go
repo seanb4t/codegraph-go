@@ -173,7 +173,7 @@ func definitionFiles(defs []*schema.Node) []string {
 		}
 	}
 	sort.Strings(files)
-	return compactStrings(files)
+	return slices.Compact(files)
 }
 
 // DefinitionLabel names a definition in the output: its file and line,
@@ -268,16 +268,6 @@ func compactSignature(sig string) string {
 		return r
 	}, sig)
 	return strings.Join(strings.Fields(sig), " ")
-}
-
-func compactStrings(in []string) []string {
-	var out []string
-	for i, s := range in {
-		if i == 0 || s != in[i-1] {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 // calleeLocation is the row of a callee reached from the overload t: the

@@ -195,6 +195,34 @@ func TestImpactReachesOneSymbolFromTwoDefinitions(t *testing.T) {
 	if diff := cmp.Diff([]string{""}, seen["main"]); diff != "" {
 		t.Errorf("definition labels of the main rows (-want +got):\n%s", diff)
 	}
+
+	// In the JSON, a Reset entry has the definition key and the main
+	// entry has none.
+	data, err := MarshalImpactJSON(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Affected []map[string]json.RawMessage `json:"affected"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("unmarshal %s: %v", data, err)
+	}
+	hasKey := map[string][]bool{}
+	for _, entry := range parsed.Affected {
+		var name string
+		if err := json.Unmarshal(entry["name"], &name); err != nil {
+			t.Fatalf("name of %v: %v", entry, err)
+		}
+		_, ok := entry["definition"]
+		hasKey[name] = append(hasKey[name], ok)
+	}
+	if diff := cmp.Diff([]bool{true, true}, hasKey["Reset"]); diff != "" {
+		t.Errorf("definition key on the Reset entries (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]bool{false}, hasKey["main"]); diff != "" {
+		t.Errorf("definition key on the main entry (-want +got):\n%s", diff)
+	}
 }
 
 // TestOneCallerOfTwoDefinitionsIsOrderedByDefinition is the scenario "One
@@ -506,6 +534,25 @@ func TestCalleesWithTheEndOfAFilePath(t *testing.T) {
 	}
 }
 
+// TestCalleesWithABackslashFilePath pins the spec rule that --file treats
+// a backslash as a slash: a Windows-style value selects the definition.
+func TestCalleesWithABackslashFilePath(t *testing.T) {
+	g := newDefGraph()
+	g.fn("z-m", "prepare_url", "src/app/models.py", 4)
+	g.fn("a-t", "prepare_url", "tests/conftest.py", 1)
+	g.fn("q", "requote_uri", "src/app/utils.py", 1)
+	g.fn("x", "noise", "tests/conftest.py", 9)
+	g.call("z-m", "q")
+	g.call("a-t", "x")
+	got, err := g.engine().CalleesSelected(Selector{Symbol: "prepare_url"}, `app\models.py`, 0)
+	if err != nil {
+		t.Fatalf("CalleesSelected: %v", err)
+	}
+	if diff := cmp.Diff([]string{"requote_uri"}, rowNames(got.Callees)); diff != "" {
+		t.Errorf(`callees of prepare_url in app\models.py (-want +got):`+"\n%s", diff)
+	}
+}
+
 // TestCallersWithAFileThatMatchesNothingListsEachFileOnce is the scenario
 // "A file with no definition of the name". a.py holds two definitions.
 func TestCallersWithAFileThatMatchesNothingListsEachFileOnce(t *testing.T) {
@@ -583,6 +630,25 @@ func TestRowsOfOneCallerOrderBySignature(t *testing.T) {
 	}
 	if diff := cmp.Diff([]string{"(String s)", "(int n)"}, sigs); diff != "" {
 		t.Errorf("signatures of the rows of use, in order (-want +got):\n%s", diff)
+	}
+}
+
+// TestTwoCallersWithEqualRowsAreBothListed keeps one row for each caller
+// node of a name with one definition, also when two callers have the same
+// name, kind, file and line, as two nodes of generated code can.
+func TestTwoCallersWithEqualRowsAreBothListed(t *testing.T) {
+	g := newDefGraph()
+	g.fn("target", "target", "t.go", 1)
+	g.fn("caller-1", "init", "gen.go", 3)
+	g.fn("caller-2", "init", "gen.go", 3)
+	g.call("caller-1", "target")
+	g.call("caller-2", "target")
+	got, err := g.engine().Callers("target", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if len(got.Callers) != 2 {
+		t.Errorf("callers of target = %+v, want one row for each of the two caller nodes", got.Callers)
 	}
 }
 
@@ -676,7 +742,7 @@ func drawGraph(t *rapid.T, noFile bool) drawnGraph {
 		files = append(files, "")
 	}
 	var d drawnGraph
-	for i := 0; i < n; i++ {
+	for range n {
 		d.files = append(d.files, rapid.SampledFrom(files).Draw(t, "file"))
 		d.lines = append(d.lines, rapid.Int32Range(1, 2).Draw(t, "line"))
 	}
