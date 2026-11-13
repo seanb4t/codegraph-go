@@ -1,0 +1,3 @@
+kind: Fixes
+body: A Go or TypeScript call to a parameter or a local no longer gets a `calls` edge to a package or imported function of the same name. Run `codegraph index --force` to remove the false edges from an existing index.
+time: 2026-11-13T10:07:29.074738-05:00

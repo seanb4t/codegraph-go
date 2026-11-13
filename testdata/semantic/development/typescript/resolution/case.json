@@ -7,7 +7,7 @@
   "labeling": "complete",
   "dimension": "resolution",
   "construct": "imports, aliases, cross-file calls, shadowing",
-  "status": "known-gap",
+  "status": "supported",
   "targetSpec": "openspec/specs/graph-index/spec.md@a7b9050f",
   "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
   "scope": {
@@ -149,13 +149,5 @@
       "kind": "calls",
       "target": "other"
     }
-  ],
-  "exception": {
-    "issue": "#261",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "forbidden-relationship shadow calls other"
-    ]
-  }
+  ]
 }

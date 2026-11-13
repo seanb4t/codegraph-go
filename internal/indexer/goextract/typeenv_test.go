@@ -136,3 +136,47 @@ func (s *scope) render() {
 		t.Errorf("line 16: alias %q type %q, want the deferred type of the local markup", r.PkgAlias, r.ReceiverType)
 	}
 }
+
+// TestBareCallToAShadowingLocalMatchesNoDeclaration pins issue #261 for
+// Go: a call to a bare name that a parameter or a local binds at the
+// call's position carries LocalAlias, so pass 2 matches no package
+// function of that name. A call before the local's declaration, or after
+// the block that holds it, still names the package function.
+func TestBareCallToAShadowingLocalMatchesNoDeclaration(t *testing.T) {
+	src := `package sh
+
+func target() int { return 1 }
+
+func Param(target func() int) int { return target() }
+
+func Before() int {
+	x := target()
+	target := func() int { return 2 }
+	return x + target()
+}
+
+func Block() int {
+	if true {
+		target := func() int { return 3 }
+		_ = target()
+	}
+	return target()
+}
+`
+	p := newTestParser(t)
+	res, err := Extract(p, "example.com/sh", "a.go", []byte(src))
+	if err != nil || res.Err != nil {
+		t.Fatalf("Extract: %v / %v", err, res.Err)
+	}
+	got := make(map[int32]string)
+	for _, r := range res.Unresolved {
+		if r.Kind == RefKindCalls && r.Name == "target" {
+			got[r.Line] = r.PkgAlias
+		}
+	}
+	local := LocalAlias("target")
+	want := map[int32]string{5: local, 8: "", 10: local, 16: local, 18: ""}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("PkgAlias of the calls to target by line (-want +got):\n%s", diff)
+	}
+}

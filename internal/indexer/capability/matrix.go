@@ -99,7 +99,6 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageFull,
 		Gaps: []string{
 			"Struct fields have no node, and a call in a package-level initializer has no `calls` edge. Case `go/grouped-bindings` holds the exact differences (#239).",
-			"A local function binding that shadows a package function gets a false `calls` edge to the package function. See case `go/resolution` (#261).",
 		},
 	},
 
@@ -154,7 +153,6 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageFull,
 		Gaps: []string{
 			"Destructured bindings, module variables and class fields have no node, and a call in a class field has no `calls` edge. Case `typescript/module-bindings-and-fields` holds the exact differences (#239).",
-			"A local function binding that shadows an imported function gets a false `calls` edge to the imported function. See case `typescript/resolution` (#261).",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
 			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
