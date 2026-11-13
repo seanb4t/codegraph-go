@@ -131,6 +131,11 @@ func TestOpenSpellingsShareHandle(t *testing.T) {
 	if err := os.Mkdir("a", 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// A link to the parent directory gives one more name for each store
+	// (#286).
+	if err := os.Symlink(base, "lnk"); err != nil {
+		t.Fatal(err)
+	}
 
 	stores := 0
 	rapid.Check(t, func(rt *rapid.T) {
@@ -145,6 +150,8 @@ func TestOpenSpellingsShareHandle(t *testing.T) {
 			".//" + name,
 			filepath.Join(base, name),
 			filepath.Join(base, name) + "/",
+			"lnk/" + name,
+			filepath.Join(base, "lnk", name),
 		}
 		drawn := rapid.SliceOfN(rapid.SampledFrom(spellings), 2, 6).Draw(rt, "spellings")
 
