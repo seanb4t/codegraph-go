@@ -1,6 +1,13 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+	"io"
+
+	"github.com/spf13/cobra"
+
+	"github.com/seanb4t/codegraph-go/internal/query"
+)
 
 // addSignatureFlag registers the --signature flag on cmd, bound to
 // signature. node, callers, callees and impact call it, so the name and
@@ -20,3 +27,12 @@ func addFileFlag(cmd *cobra.Command, file *string, usage string) {
 
 // fileFilterUsage is the --file help text of callers, callees and impact.
 const fileFilterUsage = "file path — keeps the definitions of the symbol in the files whose path contains it"
+
+// printDefinitionsLine prints the definitions line of a query that spans
+// definitions, in the plain output of callers, callees and impact. It
+// prints nothing for a query over one definition or one overload set.
+func printDefinitionsLine(out io.Writer, symbol string, defs []query.Location) {
+	if line := query.DefinitionsLine(symbol, defs); line != "" {
+		fmt.Fprintln(out, line)
+	}
+}

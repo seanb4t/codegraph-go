@@ -70,9 +70,7 @@ func newImpactCmd() *cobra.Command {
 			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprintf(out, "%s impact (depth=%d): %d node(s), %d edge(s)\n",
 				result.Symbol, result.Depth, result.NodeCount, result.EdgeCount)
-			if line := query.DefinitionsLine(result.Symbol, result.Definitions); line != "" {
-				fmt.Fprintln(out, line)
-			}
+			printDefinitionsLine(out, result.Symbol, result.Definitions)
 			for _, l := range result.Affected {
 				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 			}

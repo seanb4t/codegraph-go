@@ -335,6 +335,74 @@ func TestAmbiguousCallerInASpanningQueryHasNoDefinition(t *testing.T) {
 	}
 }
 
+// TestAmbiguousCalleeInASpanningQueryNamesItsDefinition is the scenario
+// "An ambiguous callee in a query that spans definitions": the callee is
+// an overload set, and the row names the definition that makes the call.
+func TestAmbiguousCalleeInASpanningQueryNamesItsDefinition(t *testing.T) {
+	g := newDefGraph()
+	g.fn("z-run-job", "run", "Job.java", 3)
+	g.fn("a-run-main", "run", "Main.java", 8)
+	str := g.node("log-1", goextract.KindMethod, "log", "Logger.java", 4)
+	str.Signature = "(String msg)"
+	thr := g.node("log-2", goextract.KindMethod, "log", "Logger.java", 6)
+	thr.Signature = "(Throwable t)"
+	g.set("set-log", str, thr)
+	g.call("z-run-job", "set-log")
+	got, err := g.engine().Callees("run", 0)
+	if err != nil {
+		t.Fatalf("Callees: %v", err)
+	}
+	want := []Location{{Name: "log", Kind: goextract.KindOverloadSet, FilePath: "Logger.java", StartLine: 4, Ambiguous: true, Definition: "Job.java:3"}}
+	if diff := cmp.Diff(want, got.Callees); diff != "" {
+		t.Errorf("callees of run (-want +got):\n%s", diff)
+	}
+	data, err := MarshalCalleesJSON(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"ambiguous":true,"definition":"Job.java:3"`) {
+		t.Errorf("JSON %s has no ambiguous entry with the definition Job.java:3", data)
+	}
+}
+
+// TestDefinitionsWithNoFileOrderByQualifiedName pins the last key of the
+// order of definitions: two packages of one name have no file and no
+// line, and the ids sort opposite to the qualified names.
+func TestDefinitionsWithNoFileOrderByQualifiedName(t *testing.T) {
+	g := newDefGraph()
+	a := g.node("z-pkg", "package", "cache", "", 0)
+	a.QualifiedName = "example.com/a/cache"
+	b := g.node("a-pkg", "package", "cache", "", 0)
+	b.QualifiedName = "example.com/b/cache"
+	got, err := g.engine().Callers("cache", 0)
+	if err != nil {
+		t.Fatalf("Callers: %v", err)
+	}
+	if diff := cmp.Diff([]string{"package example.com/a/cache", "package example.com/b/cache"}, labels(got.Definitions)); diff != "" {
+		t.Errorf("definitions of cache, in order (-want +got):\n%s", diff)
+	}
+}
+
+// TestImpactWhenOneDefinitionCallsTheOther keeps each start definition
+// once, with its own label, when one of them calls the other.
+func TestImpactWhenOneDefinitionCallsTheOther(t *testing.T) {
+	g := twoResets()
+	g.call("z-reset-a", "a-reset-b")
+	got, err := g.engine().Impact("Reset", 1)
+	if err != nil {
+		t.Fatalf("Impact: %v", err)
+	}
+	var resets []string
+	for _, l := range got.Affected {
+		if l.Name == "Reset" {
+			resets = append(resets, l.Definition)
+		}
+	}
+	if diff := cmp.Diff([]string{"a.go:1", "b.go:1"}, resets); diff != "" {
+		t.Errorf("Reset rows of the impact (-want +got):\n%s", diff)
+	}
+}
+
 // TestTwoOverloadSetsSpanDefinitions pins the third case of design D2:
 // two sets and no definition outside them.
 func TestTwoOverloadSetsSpanDefinitions(t *testing.T) {

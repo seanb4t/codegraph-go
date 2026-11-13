@@ -67,9 +67,7 @@ func newCallersCmd() *cobra.Command {
 			// see explore.go's call site for the full rationale.
 			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprintf(out, "%s has %d caller(s):\n", result.Symbol, len(result.Callers))
-			if line := query.DefinitionsLine(result.Symbol, result.Definitions); line != "" {
-				fmt.Fprintln(out, line)
-			}
+			printDefinitionsLine(out, result.Symbol, result.Definitions)
 			for _, l := range result.Callers {
 				fmt.Fprintf(out, "  %s (%s) %s:%d%s\n", l.Name, l.Kind, l.FilePath, l.StartLine, query.RowSuffix(l))
 			}
