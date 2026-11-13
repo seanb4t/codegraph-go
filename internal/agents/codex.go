@@ -279,7 +279,7 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		// touches nothing — "cannot tell, so don't guess" (matches Claude's
 		// preToolNudgeEvidenced posture for the same ambiguity).
 	case PreToolNudgeOff:
-		uninstallCodexPreToolNudge(&result, loc)
+		uninstallCodexPreToolNudge(&result, loc, opInstall)
 	}
 
 	return result
@@ -338,7 +338,7 @@ func (t codexTarget) Uninstall(loc Location) WriteResult {
 
 	// D-09/D-11 discipline: uninstall always attempts removal, whether or
 	// not the opt-in was ever recorded — reports not-found when it wasn't.
-	uninstallCodexPreToolNudge(&result, loc)
+	uninstallCodexPreToolNudge(&result, loc, opUninstall)
 
 	return result
 }

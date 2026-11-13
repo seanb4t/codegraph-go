@@ -12,24 +12,6 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
-// realTemp returns a temporary directory with its own symlinks resolved, so
-// that a test compares real locations (macOS keeps temp under a link).
-func realTemp(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-func symlink(t *testing.T, target, link string) {
-	t.Helper()
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func mkdir(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -63,6 +45,14 @@ func TestWithin_ParentIsOutside(t *testing.T) {
 	}
 }
 
+func TestWithin_SiblingWithSharedPrefixIsOutside(t *testing.T) {
+	for _, path := range []string{"/pq/x", "/p-other", "/p.md"} {
+		if realpath.Within("/p", path) {
+			t.Errorf("Within(%q, %q) = true, want false", "/p", path)
+		}
+	}
+}
+
 func TestWithin_RootItselfIsInside(t *testing.T) {
 	if !realpath.Within("/p", "/p") {
 		t.Fatal(`Within("/p", "/p") = false, want true`)
@@ -70,31 +60,31 @@ func TestWithin_RootItselfIsInside(t *testing.T) {
 }
 
 func TestResolve_RelativePathIsMadeAbsolute(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	t.Chdir(dir)
 	wantResolve(t, "new.json", filepath.Join(dir, "new.json"))
 }
 
 func TestResolve_FollowsAChainOfLinks(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "real"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	symlink(t, "real", filepath.Join(dir, "two"))
-	symlink(t, filepath.Join(dir, "two"), filepath.Join(dir, "one"))
+	realpathtest.Symlink(t, "real", filepath.Join(dir, "two"))
+	realpathtest.Symlink(t, filepath.Join(dir, "two"), filepath.Join(dir, "one"))
 	wantResolve(t, filepath.Join(dir, "one"), filepath.Join(dir, "real"))
 }
 
 func TestResolve_LinkToAMissingTarget(t *testing.T) {
-	dir := realTemp(t)
-	symlink(t, filepath.Join(dir, "dotfiles", "claude.json"), filepath.Join(dir, "link"))
+	dir := realpathtest.TempDir(t)
+	realpathtest.Symlink(t, filepath.Join(dir, "dotfiles", "claude.json"), filepath.Join(dir, "link"))
 	wantResolve(t, filepath.Join(dir, "link"), filepath.Join(dir, "dotfiles", "claude.json"))
 }
 
 func TestResolve_LinkedParentOfAMissingPath(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	mkdir(t, filepath.Join(dir, "real"))
-	symlink(t, "real", filepath.Join(dir, "link"))
+	realpathtest.Symlink(t, "real", filepath.Join(dir, "link"))
 	wantResolve(t, filepath.Join(dir, "link", "sub", "new.json"), filepath.Join(dir, "real", "sub", "new.json"))
 }
 
@@ -102,37 +92,37 @@ func TestResolve_LinkedParentOfAMissingPath(t *testing.T) {
 // the target is dotfiles/shared/CLAUDE.md. A textual join names
 // home/shared/CLAUDE.md.
 func TestResolve_RelativeDotDotTargetUnderALinkedDirectory(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	mkdir(t, filepath.Join(dir, "home"))
 	mkdir(t, filepath.Join(dir, "dotfiles", "claude"))
-	symlink(t, filepath.Join(dir, "dotfiles", "claude"), filepath.Join(dir, "home", ".claude"))
-	symlink(t, filepath.Join("..", "shared", "CLAUDE.md"), filepath.Join(dir, "dotfiles", "claude", "CLAUDE.md"))
+	realpathtest.Symlink(t, filepath.Join(dir, "dotfiles", "claude"), filepath.Join(dir, "home", ".claude"))
+	realpathtest.Symlink(t, filepath.Join("..", "shared", "CLAUDE.md"), filepath.Join(dir, "dotfiles", "claude", "CLAUDE.md"))
 	wantResolve(t, filepath.Join(dir, "home", ".claude", "CLAUDE.md"), filepath.Join(dir, "dotfiles", "shared", "CLAUDE.md"))
 }
 
 // With sub -> outside/a and AGENTS.md -> sub/../x.md, the target is
 // outside/x.md. A textual join names x.md beside the link.
 func TestResolve_MissingTargetWithDotDotAfterALinkedDirectory(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	mkdir(t, filepath.Join(dir, "project"))
 	mkdir(t, filepath.Join(dir, "outside", "a"))
-	symlink(t, filepath.Join(dir, "outside", "a"), filepath.Join(dir, "project", "sub"))
-	symlink(t, "sub/../x.md", filepath.Join(dir, "project", "AGENTS.md"))
+	realpathtest.Symlink(t, filepath.Join(dir, "outside", "a"), filepath.Join(dir, "project", "sub"))
+	realpathtest.Symlink(t, "sub/../x.md", filepath.Join(dir, "project", "AGENTS.md"))
 	wantResolve(t, filepath.Join(dir, "project", "AGENTS.md"), filepath.Join(dir, "outside", "x.md"))
 }
 
 func TestResolve_DotDotAfterAMissingElementIsAnError(t *testing.T) {
-	dir := realTemp(t)
-	symlink(t, "missing/../x.md", filepath.Join(dir, "link"))
+	dir := realpathtest.TempDir(t)
+	realpathtest.Symlink(t, "missing/../x.md", filepath.Join(dir, "link"))
 	if got, err := realpath.Resolve(filepath.Join(dir, "link")); err == nil {
 		t.Fatalf("Resolve = %q, want an error", got)
 	}
 }
 
 func TestResolve_LoopIsAnError(t *testing.T) {
-	dir := realTemp(t)
-	symlink(t, filepath.Join(dir, "b"), filepath.Join(dir, "a"))
-	symlink(t, filepath.Join(dir, "a"), filepath.Join(dir, "b"))
+	dir := realpathtest.TempDir(t)
+	realpathtest.Symlink(t, filepath.Join(dir, "b"), filepath.Join(dir, "a"))
+	realpathtest.Symlink(t, filepath.Join(dir, "a"), filepath.Join(dir, "b"))
 	if got, err := realpath.Resolve(filepath.Join(dir, "a")); err == nil {
 		t.Fatalf("Resolve = %q, want an error", got)
 	}
@@ -146,18 +136,18 @@ func chain(t *testing.T, dir string, n int) string {
 		if i == n {
 			target = filepath.Join(dir, "missing", "target")
 		}
-		symlink(t, target, filepath.Join(dir, fmt.Sprintf("l%d", i)))
+		realpathtest.Symlink(t, target, filepath.Join(dir, fmt.Sprintf("l%d", i)))
 	}
 	return filepath.Join(dir, "l1")
 }
 
 func TestResolve_EightHopsThroughMissingTargetsResolve(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	wantResolve(t, chain(t, dir, 8), filepath.Join(dir, "missing", "target"))
 }
 
 func TestResolve_NineHopsThroughMissingTargetsFail(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	if got, err := realpath.Resolve(chain(t, dir, 9)); err == nil {
 		t.Fatalf("Resolve = %q, want an error", got)
 	}
@@ -165,9 +155,9 @@ func TestResolve_NineHopsThroughMissingTargetsFail(t *testing.T) {
 
 // A missing directory does not count against the bound on links.
 func TestResolve_MissingTargetUnderTenMissingDirectoriesResolves(t *testing.T) {
-	dir := realTemp(t)
+	dir := realpathtest.TempDir(t)
 	deep := filepath.Join(dir, "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "file")
-	symlink(t, deep, filepath.Join(dir, "link"))
+	realpathtest.Symlink(t, deep, filepath.Join(dir, "link"))
 	wantResolve(t, filepath.Join(dir, "link"), deep)
 }
 
@@ -177,7 +167,7 @@ func TestResolve_MissingTargetUnderTenMissingDirectoriesResolves(t *testing.T) {
 // names for a path that does not exist, the test creates a file there and
 // then asks the operating system where the path leads.
 func TestResolve_AgreesWithTheOperatingSystem(t *testing.T) {
-	base := realTemp(t)
+	base := realpathtest.TempDir(t)
 	existing, created := 0, 0
 	rapid.Check(t, func(rt *rapid.T) {
 		root, err := os.MkdirTemp(base, "tree")

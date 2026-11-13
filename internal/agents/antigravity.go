@@ -240,13 +240,7 @@ func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResul
 		// confirmed successful (CR-02) — never lose the entry to a
 		// partial-write failure with no file left holding it.
 		if migrationOK {
-			fr, err := removeMcpEntry(legacyReal)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacy, err))
-			} else if fr.Action == ActionRemoved {
-				fr.Path = legacy
-				result.Files = append(result.Files, fr)
-			}
+			_ = recordUserFile(&result, legacy, loc, opInstall, removedOnly(removeMcpEntry))
 		}
 	}
 

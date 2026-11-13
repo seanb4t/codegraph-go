@@ -5,46 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
 const symlinkTestExec = "/usr/local/bin/codegraph"
 
 var symlinkTestOpts = InstallOptions{ExecPath: symlinkTestExec}
-
-// realHome is fakeHome with the home's own symlinks resolved.
-func realHome(t *testing.T) string {
-	t.Helper()
-	home, err := filepath.EvalSymlinks(fakeHome(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for key, value := range homeEnv(home) {
-		t.Setenv(key, value)
-	}
-	return home
-}
-
-func assertNoErrors(t *testing.T, result WriteResult) {
-	t.Helper()
-	if len(result.Errors) != 0 {
-		t.Fatalf("unexpected errors: %v", result.Errors)
-	}
-}
-
-func assertMissing(t *testing.T, path string) {
-	t.Helper()
-	if _, err := os.Lstat(path); !os.IsNotExist(err) {
-		t.Fatalf("%s exists (or cannot be read: %v), want no file", path, err)
-	}
-}
-
-func writeFileAt(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, path, content)
-}
 
 const otherServerJSON = `{"mcpServers": {"other-server": {"command": "other-binary"}}}`
 
@@ -54,8 +21,8 @@ func TestInstall_GlobalConfigSymlinkIsWrittenThrough(t *testing.T) {
 	home := realHome(t)
 	target := filepath.Join(home, "dotfiles", "claude.json")
 	link := filepath.Join(home, ".claude.json")
-	writeFileAt(t, target, otherServerJSON)
-	mustSymlink(t, target, link)
+	writeFile(t, target, otherServerJSON)
+	realpathtest.Symlink(t, target, link)
 
 	result := claudeTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -75,9 +42,9 @@ func TestInstall_GlobalConfigSymlinkChain(t *testing.T) {
 	target := filepath.Join(home, "dotfiles", "gemini.json")
 	link := filepath.Join(home, ".gemini", "settings.json")
 	link2 := filepath.Join(home, ".gemini", "link2")
-	writeFileAt(t, target, `{}`)
-	mustSymlink(t, target, link2)
-	mustSymlink(t, link2, link)
+	writeFile(t, target, `{}`)
+	realpathtest.Symlink(t, target, link2)
+	realpathtest.Symlink(t, link2, link)
 
 	result := geminiTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -96,7 +63,7 @@ func TestInstall_GlobalConfigSymlinkToMissingTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 
 	result := claudeTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -113,9 +80,9 @@ func TestInstall_GlobalRelativeLinkUnderLinkedDirectory(t *testing.T) {
 	if err := os.MkdirAll(dotClaude, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, dotClaude, filepath.Join(home, ".claude"))
+	realpathtest.Symlink(t, dotClaude, filepath.Join(home, ".claude"))
 	relTarget := filepath.Join("..", "shared", "CLAUDE.md")
-	mustSymlink(t, relTarget, filepath.Join(dotClaude, "CLAUDE.md"))
+	realpathtest.Symlink(t, relTarget, filepath.Join(dotClaude, "CLAUDE.md"))
 
 	result := claudeTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -131,11 +98,11 @@ func TestInstall_GlobalConfigSymlinkKeepsTargetMode(t *testing.T) {
 	home := realHome(t)
 	target := filepath.Join(home, "dotfiles", "claude.json")
 	link := filepath.Join(home, ".claude.json")
-	writeFileAt(t, target, `{}`)
+	writeFile(t, target, `{}`)
 	if err := os.Chmod(target, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 
 	result := claudeTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -156,8 +123,8 @@ func TestUninstall_GlobalConfigSymlinkIsKept(t *testing.T) {
 	home := realHome(t)
 	target := filepath.Join(home, "dotfiles", "claude.json")
 	link := filepath.Join(home, ".claude.json")
-	writeFileAt(t, target, otherServerJSON)
-	mustSymlink(t, target, link)
+	writeFile(t, target, otherServerJSON)
+	realpathtest.Symlink(t, target, link)
 	assertNoErrors(t, claudeTarget{}.Install(LocationGlobal, symlinkTestOpts))
 
 	result := claudeTarget{}.Uninstall(LocationGlobal)
@@ -177,7 +144,7 @@ func TestUninstall_GlobalInstructionSymlinkWithOnlyTheSectionKeepsLink(t *testin
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 	assertNoErrors(t, claudeTarget{}.Install(LocationGlobal, symlinkTestOpts))
 	if got := readFile(t, target); !strings.Contains(got, codegraphSectionStart) {
 		t.Fatalf("the install did not write the section through the link: %s", got)
@@ -197,7 +164,7 @@ func TestUninstall_GlobalSettingsSymlinkWithOnlyCodegraphHooksKeepsLink(t *testi
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 	assertNoErrors(t, claudeTarget{}.Install(LocationGlobal, symlinkTestOpts))
 	if got := readFile(t, target); !strings.Contains(got, "SessionStart") {
 		t.Fatalf("the install did not write the hook through the link: %s", got)
@@ -217,7 +184,7 @@ func TestUninstall_GlobalCodexConfigSymlinkWithOnlyTheTableKeepsLink(t *testing.
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 	assertNoErrors(t, codexTarget{}.Install(LocationGlobal, symlinkTestOpts))
 	if got := readFile(t, target); !strings.Contains(got, "codegraph") {
 		t.Fatalf("the install did not write the table through the link: %s", got)
@@ -234,7 +201,7 @@ func TestUninstall_GlobalCodexConfigSymlinkWithOnlyTheTableKeepsLink(t *testing.
 
 func TestInstall_LocalInstructionSymlinkInsideProjectIsWrittenThrough(t *testing.T) {
 	projectAndOutside(t)
-	mustSymlink(t, "AGENTS.md", "GEMINI.md")
+	realpathtest.Symlink(t, "AGENTS.md", "GEMINI.md")
 
 	result := geminiTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -247,7 +214,7 @@ func TestInstall_LocalInstructionSymlinkInsideProjectIsWrittenThrough(t *testing
 
 func TestInstall_LocalSymlinkToDotDotPrefixedNameIsWrittenThrough(t *testing.T) {
 	projectAndOutside(t)
-	mustSymlink(t, "..notes.md", "AGENTS.md")
+	realpathtest.Symlink(t, "..notes.md", "AGENTS.md")
 
 	result := codexTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -263,7 +230,7 @@ func TestInstall_LocalInstructionSymlinkOutsideProjectIsRefused(t *testing.T) {
 	target := filepath.Join(outside, ".zshrc")
 	const content = "export PATH=/bin\n"
 	writeFile(t, target, content)
-	mustSymlink(t, target, "AGENTS.md")
+	realpathtest.Symlink(t, target, "AGENTS.md")
 
 	result := codexTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -280,7 +247,7 @@ func TestInstall_LocalConfigSymlinkOutsideProjectIsRefused(t *testing.T) {
 	_, outside := projectAndOutside(t)
 	target := filepath.Join(outside, ".claude.json")
 	writeFile(t, target, otherServerJSON)
-	mustSymlink(t, target, ".mcp.json")
+	realpathtest.Symlink(t, target, ".mcp.json")
 
 	result := claudeTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -300,7 +267,7 @@ func TestInstall_LocalConfigSymlinkOutsideWithTheEntryIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := readFile(t, target)
-	mustSymlink(t, target, ".mcp.json")
+	realpathtest.Symlink(t, target, ".mcp.json")
 
 	result := claudeTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -318,9 +285,9 @@ func TestInstall_LocalSymlinkOutsideThroughLinkedDirectoryIsRefused(t *testing.T
 	notes := filepath.Join(outside, "notes.md")
 	const content = "my notes\n"
 	writeFile(t, notes, content)
-	mustSymlink(t, outside, "docs")
+	realpathtest.Symlink(t, outside, "docs")
 	linkTarget := filepath.Join("docs", "notes.md")
-	mustSymlink(t, linkTarget, "AGENTS.md")
+	realpathtest.Symlink(t, linkTarget, "AGENTS.md")
 
 	result := codexTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -338,8 +305,8 @@ func TestInstall_LocalSymlinkThatClimbsOutOfALinkedDirectoryIsRefused(t *testing
 	if err := os.Mkdir(filepath.Join(outside, "a"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, filepath.Join(outside, "a"), "sub")
-	mustSymlink(t, "sub/../x.md", "AGENTS.md")
+	realpathtest.Symlink(t, filepath.Join(outside, "a"), "sub")
+	realpathtest.Symlink(t, "sub/../x.md", "AGENTS.md")
 
 	result := codexTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -353,7 +320,7 @@ func TestInstall_LocalSymlinkThatClimbsOutOfALinkedDirectoryIsRefused(t *testing
 
 func TestInstall_LocalUserFilesUnderDirectoryLinkedOutsideAreRefused(t *testing.T) {
 	_, outside := projectAndOutside(t)
-	mustSymlink(t, outside, ".claude")
+	realpathtest.Symlink(t, outside, ".claude")
 
 	result := claudeTarget{}.Install(LocationLocal, symlinkTestOpts)
 
@@ -374,7 +341,7 @@ func TestUninstall_LocalSymlinkOutsideProjectIsKeptWithANote(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := readFile(t, target)
-	mustSymlink(t, target, "AGENTS.md")
+	realpathtest.Symlink(t, target, "AGENTS.md")
 
 	result := codexTarget{}.Uninstall(LocationLocal)
 
@@ -383,9 +350,7 @@ func TestUninstall_LocalSymlinkOutsideProjectIsKeptWithANote(t *testing.T) {
 		t.Fatalf("the outside file changed: %q", got)
 	}
 	assertSymlinkTo(t, "AGENTS.md", target)
-	if fileAction(result, "AGENTS.md") != ActionKept {
-		t.Fatalf("result.Files = %v, want AGENTS.md kept", result.Files)
-	}
+	assertFileResult(t, result.Files, "AGENTS.md", ActionKept)
 	if !noteNaming(result, "AGENTS.md") {
 		t.Fatalf("notes %v do not name AGENTS.md", result.Notes)
 	}
@@ -398,7 +363,7 @@ func TestUninstall_LocalConfigSymlinkOutsideProjectIsKeptWithANote(t *testing.T)
 		t.Fatal(err)
 	}
 	before := readFile(t, target)
-	mustSymlink(t, target, ".mcp.json")
+	realpathtest.Symlink(t, target, ".mcp.json")
 
 	result := claudeTarget{}.Uninstall(LocationLocal)
 
@@ -407,9 +372,7 @@ func TestUninstall_LocalConfigSymlinkOutsideProjectIsKeptWithANote(t *testing.T)
 		t.Fatalf("the outside file changed: %q", got)
 	}
 	assertSymlinkTo(t, ".mcp.json", target)
-	if fileAction(result, ".mcp.json") != ActionKept {
-		t.Fatalf("result.Files = %v, want .mcp.json kept", result.Files)
-	}
+	assertFileResult(t, result.Files, ".mcp.json", ActionKept)
 	if !noteNaming(result, ".mcp.json") {
 		t.Fatalf("notes %v do not name .mcp.json", result.Notes)
 	}
@@ -419,7 +382,7 @@ func TestUninstall_LocalConfigSymlinkOutsideProjectIsKeptWithANote(t *testing.T)
 
 func TestUninstall_Gemini_LinkedInstructionFileKeepsTheSectionCodexUses(t *testing.T) {
 	projectAndOutside(t)
-	mustSymlink(t, "AGENTS.md", "GEMINI.md")
+	realpathtest.Symlink(t, "AGENTS.md", "GEMINI.md")
 	assertNoErrors(t, codexTarget{}.Install(LocationLocal, symlinkTestOpts))
 	assertNoErrors(t, geminiTarget{}.Install(LocationLocal, symlinkTestOpts))
 
@@ -429,9 +392,7 @@ func TestUninstall_Gemini_LinkedInstructionFileKeepsTheSectionCodexUses(t *testi
 	if got := readFile(t, "AGENTS.md"); !strings.Contains(got, codegraphSectionStart) {
 		t.Fatalf("AGENTS.md lost the section that codex still uses: %s", got)
 	}
-	if fileAction(result, "GEMINI.md") != ActionKept {
-		t.Fatalf("result.Files = %v, want GEMINI.md kept", result.Files)
-	}
+	assertFileResult(t, result.Files, "GEMINI.md", ActionKept)
 	assertSymlinkTo(t, "GEMINI.md", "AGENTS.md")
 }
 
@@ -439,7 +400,7 @@ func TestUninstall_Claude_LinkedInstructionFileKeepsTheSectionCodexUses(t *testi
 	project, _ := projectAndOutside(t)
 	agents := filepath.Join(project, "AGENTS.md")
 	instr := filepath.Join(".claude", "CLAUDE.md")
-	mustSymlink(t, agents, instr)
+	realpathtest.Symlink(t, agents, instr)
 	assertNoErrors(t, codexTarget{}.Install(LocationLocal, symlinkTestOpts))
 	assertNoErrors(t, claudeTarget{}.Install(LocationLocal, symlinkTestOpts))
 
@@ -449,9 +410,7 @@ func TestUninstall_Claude_LinkedInstructionFileKeepsTheSectionCodexUses(t *testi
 	if got := readFile(t, agents); !strings.Contains(got, codegraphSectionStart) {
 		t.Fatalf("AGENTS.md lost the section that codex still uses: %s", got)
 	}
-	if fileAction(result, instr) != ActionKept {
-		t.Fatalf("result.Files = %v, want %s kept", result.Files, instr)
-	}
+	assertFileResult(t, result.Files, instr, ActionKept)
 	assertSymlinkTo(t, instr, agents)
 }
 
@@ -461,8 +420,8 @@ func TestUninstall_Claude_LinkedInstructionFileKeepsTheSectionCodexUses(t *testi
 func loop(t *testing.T, path string) string {
 	t.Helper()
 	other := filepath.Join(filepath.Dir(path), "a")
-	mustSymlink(t, other, path)
-	mustSymlink(t, path, other)
+	realpathtest.Symlink(t, other, path)
+	realpathtest.Symlink(t, path, other)
 	return other
 }
 
@@ -515,8 +474,8 @@ func TestInstall_GlobalConfigSymlinkToUnparseableTargetIsUntouched(t *testing.T)
 	target := filepath.Join(home, "dotfiles", "claude.json")
 	link := filepath.Join(home, ".claude.json")
 	const content = `{"mcpServers": {"other-server": {"command": "other-binary"}},}`
-	writeFileAt(t, target, content)
-	mustSymlink(t, target, link)
+	writeFile(t, target, content)
+	realpathtest.Symlink(t, target, link)
 
 	result := claudeTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -556,8 +515,8 @@ func TestAntigravity_MigrationKeepsADanglingLinkAtTheUnifiedPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, target, unified)
-	writeFileAt(t, filepath.Join(home, ".gemini", "antigravity", "mcp_config.json"), legacyAntigravityJSON)
+	realpathtest.Symlink(t, target, unified)
+	writeFile(t, filepath.Join(home, ".gemini", "antigravity", "mcp_config.json"), legacyAntigravityJSON)
 
 	result := antigravityTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -572,8 +531,8 @@ func TestAntigravity_MigrationKeepsALinkAtTheLegacyPath(t *testing.T) {
 	home := realHome(t)
 	legacy := filepath.Join(home, ".gemini", "antigravity", "mcp_config.json")
 	target := filepath.Join(home, "dotfiles", "legacy.json")
-	writeFileAt(t, target, legacyAntigravityJSON)
-	mustSymlink(t, target, legacy)
+	writeFile(t, target, legacyAntigravityJSON)
+	realpathtest.Symlink(t, target, legacy)
 
 	result := antigravityTarget{}.Install(LocationGlobal, symlinkTestOpts)
 
@@ -583,9 +542,7 @@ func TestAntigravity_MigrationKeepsALinkAtTheLegacyPath(t *testing.T) {
 	if strings.Contains(got, "codegraph") || !strings.Contains(got, "other-server") {
 		t.Fatalf("the file behind the legacy link does not hold only the other server: %s", got)
 	}
-	if fileAction(result, legacy) != ActionRemoved {
-		t.Fatalf("result.Files = %v, want the configured legacy path %s removed", result.Files, legacy)
-	}
+	assertFileResult(t, result.Files, legacy, ActionRemoved)
 	unified := filepath.Join(home, ".gemini", "config", "mcp_config.json")
 	if got := readFile(t, unified); !strings.Contains(got, symlinkTestExec) {
 		t.Fatalf("the unified file does not hold the current entry: %s", got)
@@ -604,4 +561,46 @@ func TestAntigravity_MigrationSymlinkLoopAtTheUnifiedPathReportsAnError(t *testi
 	}
 	assertSymlinkTo(t, unified, other)
 	assertMissing(t, filepath.Join(home, ".gemini", "config", ".migrated"))
+}
+
+// --- Review findings ----------------------------------------------------
+
+// A stale APPDATA path can be a link to the live OpenCode file. The sweep
+// must not remove the entry that the same install just wrote there.
+func TestOpencode_AppDataSweep_SkipsALinkToTheLiveConfig(t *testing.T) {
+	home := realHome(t)
+	live := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	appData := filepath.Join(home, "AppData")
+	t.Setenv("APPDATA", appData)
+	stale := filepath.Join(appData, "opencode", "opencode.jsonc")
+	realpathtest.Symlink(t, live, stale)
+
+	result := opencodeTarget{}.Install(LocationGlobal, symlinkTestOpts)
+
+	assertNoErrors(t, result)
+	if got := readFile(t, live); !strings.Contains(got, `"codegraph"`) {
+		t.Fatalf("the sweep removed the entry from the live file: %s", got)
+	}
+	assertSymlinkTo(t, stale, live)
+}
+
+// An install that turns the Codex nudge off edits hooks.json. It is an
+// install, so a local hooks.json outside the project is an error.
+func TestInstall_Codex_NudgeOffRefusesHooksFileOutsideProject(t *testing.T) {
+	_, outside := projectAndOutside(t)
+	target := filepath.Join(outside, "hooks.json")
+	const content = `{"hooks": {}}`
+	writeFile(t, target, content)
+	hooks := filepath.Join(".codex", "hooks.json")
+	realpathtest.Symlink(t, target, hooks)
+
+	result := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: symlinkTestExec, PreToolNudge: PreToolNudgeOff})
+
+	if !errorNaming(result, hooks, target) {
+		t.Fatalf("errors %v do not name %s and %s", result.Errors, hooks, target)
+	}
+	if got := readFile(t, target); got != content {
+		t.Fatalf("the outside file changed: %q", got)
+	}
+	assertSymlinkTo(t, hooks, target)
 }

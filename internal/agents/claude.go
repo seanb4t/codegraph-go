@@ -459,13 +459,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// ./.mcp.json before writing the correct entry.
 	if loc == LocationLocal {
 		legacyPath := claudeLegacyLocalConfigPath()
-		_ = recordUserFile(&result, legacyPath, loc, opInstall, func(real string) (FileResult, error) {
-			fr, err := removeMcpEntry(real)
-			if err != nil || fr.Action != ActionRemoved {
-				return FileResult{}, err
-			}
-			return fr, nil
-		})
+		_ = recordUserFile(&result, legacyPath, loc, opInstall, removedOnly(removeMcpEntry))
 	}
 
 	if configPath, err := claudeConfigPath(loc); err != nil {
@@ -644,13 +638,9 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		} else if _, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 			removeFailed = true
-		} else if werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
-			fr, err := removeHookEntry(real, "PreToolUse", ownCommands)
-			if err != nil || fr.Action != ActionRemoved {
-				return FileResult{}, err
-			}
-			return fr, nil
-		}); werr != nil {
+		} else if werr := recordUserFile(&result, settingsPath, loc, opInstall, removedOnly(func(real string) (FileResult, error) {
+			return removeHookEntry(real, "PreToolUse", ownCommands)
+		})); werr != nil {
 			removeFailed = true
 		}
 		dropPreTool = !removeFailed

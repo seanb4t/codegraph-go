@@ -6,9 +6,34 @@ package realpathtest
 import (
 	"os"
 	"path/filepath"
+	"testing"
 
 	"pgregory.net/rapid"
 )
+
+// TempDir returns a new temporary directory with its own symlinks resolved,
+// so that a test can compare real locations. macOS keeps its temporary
+// directory under a link.
+func TempDir(t testing.TB) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	return dir
+}
+
+// Symlink makes link a symlink to target. It makes the parent directory of
+// link first.
+func Symlink(t testing.TB, target, link string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+}
 
 var names = []string{"a", "b", "c", "d"}
 

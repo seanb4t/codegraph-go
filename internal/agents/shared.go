@@ -115,6 +115,18 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 	return nil
 }
 
+// removedOnly adapts a remover for a step that reports a file only when it
+// removed something from it. Any other outcome records nothing.
+func removedOnly(remove func(real string) (FileResult, error)) func(real string) (FileResult, error) {
+	return func(real string) (FileResult, error) {
+		fr, err := remove(real)
+		if err != nil || fr.Action != ActionRemoved {
+			return FileResult{}, err
+		}
+		return fr, nil
+	}
+}
+
 // recordUserAction adapts a helper that returns a FileAction to
 // recordUserFile.
 func recordUserAction(result *WriteResult, path string, loc Location, op userFileOp, edit func(real string) (FileAction, error)) error {

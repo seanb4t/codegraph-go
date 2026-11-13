@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
 // installSGRSequence is a local copy of present/ansistrip_test.go's SGR
@@ -1282,10 +1283,7 @@ func TestInstall_PlainBranchPathsAreControlCharacterSanitized(t *testing.T) {
 func projectWithOutsideLink(t *testing.T, link, content string) string {
 	t.Helper()
 	fakeHome(t)
-	base, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := realpathtest.TempDir(t)
 	project := filepath.Join(base, "project")
 	target := filepath.Join(base, "outside.md")
 	if err := os.Mkdir(project, 0o755); err != nil {
@@ -1346,5 +1344,30 @@ func TestUninstall_LocalSymlinkOutsideProjectExitsZeroWithANote(t *testing.T) {
 	}
 	if got := readFileString(t, target); got != content {
 		t.Fatalf("the outside file changed: %q", got)
+	}
+}
+
+// TestInstallAndUninstall_SymlinkLoopExitsNonZero covers the exit code of
+// the spec requirement "A symlink loop writes nothing" for both commands.
+func TestInstallAndUninstall_SymlinkLoopExitsNonZero(t *testing.T) {
+	home := fakeHome(t)
+	config := filepath.Join(home, ".codex", "config.toml")
+	other := filepath.Join(home, ".codex", "a")
+	realpathtest.Symlink(t, other, config)
+	realpathtest.Symlink(t, config, other)
+
+	for _, command := range []string{"install", "uninstall"} {
+		out, _, err := execCmd(command, "--target", "codex", "--location", "global")
+		if err == nil {
+			t.Fatalf("%s exited zero for a symlink loop; output:\n%s", command, out)
+		}
+		if !strings.Contains(out, "error:") || !strings.Contains(out, ".codex/config.toml") {
+			t.Fatalf("%s output has no error line that names the file:\n%s", command, out)
+		}
+		for _, link := range []string{config, other} {
+			if info, lerr := os.Lstat(link); lerr != nil || info.Mode()&os.ModeSymlink == 0 {
+				t.Fatalf("after %s, %s is no longer a symlink", command, link)
+			}
+		}
 	}
 }

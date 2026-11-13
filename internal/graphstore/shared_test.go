@@ -14,6 +14,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -125,7 +126,7 @@ func TestOpenSecondOpenInProcessSharesHandle(t *testing.T) {
 
 func TestOpenSpellingsShareHandle(t *testing.T) {
 	noRetrySleep(t)
-	base := realTempDir(t)
+	base := realpathtest.TempDir(t)
 	t.Chdir(base)
 	if err := os.Mkdir("a", 0o755); err != nil {
 		t.Fatal(err)

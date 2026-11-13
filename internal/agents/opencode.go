@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -263,6 +264,11 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 		// to, never the link. A path that does not resolve is skipped.
 		stalePath, err := resolveUserFile(stalePath, LocationGlobal)
 		if err != nil {
+			continue
+		}
+		// A stale path can be a link into the live configuration directory.
+		// The entry there is the one this install just wrote.
+		if liveDir, err := realpath.Resolve(filepath.Join(resolvedCfgDir, "opencode")); err != nil || realpath.Within(liveDir, stalePath) {
 			continue
 		}
 		if fileExists(stalePath) {

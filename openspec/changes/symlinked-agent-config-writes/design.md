@@ -135,9 +135,12 @@ The steps that record directly today become `edit` functions that return a `File
 The implementation settled four points that the plan review left open:
 
 - An `edit` function that returns a `FileResult` with no `Action` records nothing. The Claude legacy migration and the Claude PreToolUse removal use this for a step that changed nothing.
-- The Antigravity migration reports the configured legacy path, not the real location.
-- The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve.
-- The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too.
+- `removedOnly` wraps a remover for a step that reports a file only when it removed something. The Claude legacy migration, the Claude PreToolUse removal and the Antigravity legacy removal use it.
+- The Antigravity migration does not become one `edit` function. It resolves the unified path and the legacy path with `resolveUserFile` for its existence tests and its reads. Its copy of the legacy entry into the unified file records directly, under the configured path. The legacy removal and the unified `writeMcpEntry` go through the funnel.
+- The OpenCode cleanup of a stale configuration file resolves its path with `resolveUserFile` at global scope. It skips a path that does not resolve. It also skips a path whose real location is inside the live configuration directory, because the entry there is the one the install just wrote.
+- The Codex `hooks.json` file holds hook entries, so its write and its removal go through the funnel too. The removal takes the operation from its caller. An install that turns the nudge off passes `opInstall`, so D5 applies to it as an install.
+- `resolveSourcePath` in `internal/query` keeps its two inline copies of the "inside" test. The user cut that move from the scope after the fourth plan review.
+- `resolveExistingPrefix` in `internal/mcp` and `realpath.Resolve` both start at the longest part of a path that exists. They differ on purpose in the rest. The MCP confinement joins the missing rest as text, because a path that does not exist has no links of its own. `Resolve` follows a link in the rest, because a dangling link is an entry that exists.
 
 The Cursor and Kiro legacy instruction files stay outside the funnel. `codegraph` wrote their whole content, and `os.Remove` on a link deletes the link and never its target.
 

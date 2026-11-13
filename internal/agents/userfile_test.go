@@ -13,82 +13,11 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
-// realTempDir returns a temporary directory with its own symlinks resolved
-// (macOS keeps temp under a link), so a test compares real locations.
-func realTempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-func mustSymlink(t *testing.T, target, link string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// assertSymlinkTo fails unless link is still a symlink with that target.
-func assertSymlinkTo(t *testing.T, link, target string) {
-	t.Helper()
-	got, err := os.Readlink(link)
-	if err != nil {
-		t.Fatalf("%s is no longer a symlink: %v", link, err)
-	}
-	if got != target {
-		t.Fatalf("%s links to %q, want %q", link, got, target)
-	}
-}
-
-// projectAndOutside makes a project directory and a directory outside it,
-// and makes the project the working directory.
-func projectAndOutside(t *testing.T) (project, outside string) {
-	t.Helper()
-	fakeHome(t)
-	base := realTempDir(t)
-	project, outside = filepath.Join(base, "project"), filepath.Join(base, "outside")
-	for _, dir := range []string{project, outside} {
-		if err := os.Mkdir(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Chdir(project)
-	return project, outside
-}
-
-func errorNaming(result WriteResult, parts ...string) bool {
-	for _, err := range result.Errors {
-		all := true
-		for _, part := range parts {
-			all = all && strings.Contains(err.Error(), part)
-		}
-		if all {
-			return true
-		}
-	}
-	return false
-}
-
-func noteNaming(result WriteResult, part string) bool {
-	for _, note := range result.Notes {
-		if strings.Contains(note, part) {
-			return true
-		}
-	}
-	return false
-}
-
 func TestResolveUserFile_GlobalReturnsTheRealLocation(t *testing.T) {
-	dir := realTempDir(t)
+	dir := realpathtest.TempDir(t)
 	target := filepath.Join(dir, "dotfiles", "claude.json")
 	link := filepath.Join(dir, "home", ".claude.json")
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 
 	got, err := resolveUserFile(link, LocationGlobal)
 	if err != nil || got != target {
@@ -98,7 +27,7 @@ func TestResolveUserFile_GlobalReturnsTheRealLocation(t *testing.T) {
 
 func TestResolveUserFile_LocalInsideTheProject(t *testing.T) {
 	project, _ := projectAndOutside(t)
-	mustSymlink(t, "AGENTS.md", "GEMINI.md")
+	realpathtest.Symlink(t, "AGENTS.md", "GEMINI.md")
 
 	got, err := resolveUserFile("GEMINI.md", LocationLocal)
 	if want := filepath.Join(project, "AGENTS.md"); err != nil || got != want {
@@ -109,7 +38,7 @@ func TestResolveUserFile_LocalInsideTheProject(t *testing.T) {
 func TestResolveUserFile_LocalOutsideIsErrOutsideProject(t *testing.T) {
 	_, outside := projectAndOutside(t)
 	target := filepath.Join(outside, "zshrc")
-	mustSymlink(t, target, "AGENTS.md")
+	realpathtest.Symlink(t, target, "AGENTS.md")
 
 	_, err := resolveUserFile("AGENTS.md", LocationLocal)
 	if !errors.Is(err, errOutsideProject) {
@@ -121,10 +50,10 @@ func TestResolveUserFile_LocalOutsideIsErrOutsideProject(t *testing.T) {
 }
 
 func TestRecordUserFile_ResultNamesTheConfiguredPath(t *testing.T) {
-	dir := realTempDir(t)
+	dir := realpathtest.TempDir(t)
 	target := filepath.Join(dir, "real.json")
 	link := filepath.Join(dir, "link.json")
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 
 	var result WriteResult
 	var edited string
@@ -144,10 +73,10 @@ func TestRecordUserFile_ResultNamesTheConfiguredPath(t *testing.T) {
 }
 
 func TestRecordUserFile_HelperErrorNamesTheRealLocation(t *testing.T) {
-	dir := realTempDir(t)
+	dir := realpathtest.TempDir(t)
 	target := filepath.Join(dir, "real.json")
 	link := filepath.Join(dir, "link.json")
-	mustSymlink(t, target, link)
+	realpathtest.Symlink(t, target, link)
 
 	var result WriteResult
 	_ = recordUserFile(&result, link, LocationGlobal, opInstall, func(string) (FileResult, error) {
@@ -171,7 +100,7 @@ func TestRecordUserFile_UnlinkedLocalErrorKeepsItsText(t *testing.T) {
 }
 
 func TestRecordUserFile_ReturnsTheRecordedError(t *testing.T) {
-	dir := realTempDir(t)
+	dir := realpathtest.TempDir(t)
 	var result WriteResult
 	helperErr := errors.New("write failed")
 	err := recordUserFile(&result, filepath.Join(dir, "f"), LocationGlobal, opInstall, func(string) (FileResult, error) {
@@ -188,7 +117,7 @@ func TestRecordUserFile_ReturnsTheRecordedError(t *testing.T) {
 func TestRecordUserFile_InstallOutsideRecordsAnError(t *testing.T) {
 	_, outside := projectAndOutside(t)
 	target := filepath.Join(outside, "zshrc")
-	mustSymlink(t, target, "AGENTS.md")
+	realpathtest.Symlink(t, target, "AGENTS.md")
 
 	var result WriteResult
 	called := false
@@ -209,7 +138,7 @@ func TestRecordUserFile_InstallOutsideRecordsAnError(t *testing.T) {
 
 func TestRecordUserFile_UninstallOutsideRecordsKeptAndANote(t *testing.T) {
 	_, outside := projectAndOutside(t)
-	mustSymlink(t, filepath.Join(outside, "agents.md"), "AGENTS.md")
+	realpathtest.Symlink(t, filepath.Join(outside, "agents.md"), "AGENTS.md")
 
 	var result WriteResult
 	called := false
@@ -220,9 +149,7 @@ func TestRecordUserFile_UninstallOutsideRecordsKeptAndANote(t *testing.T) {
 	if err != nil || called || len(result.Errors) != 0 {
 		t.Fatalf("err = %v, edit called = %v, errors = %v; want none of them", err, called, result.Errors)
 	}
-	if fileAction(result, "AGENTS.md") != ActionKept {
-		t.Fatalf("result.Files = %v, want AGENTS.md kept", result.Files)
-	}
+	assertFileResult(t, result.Files, "AGENTS.md", ActionKept)
 	if !noteNaming(result, "AGENTS.md") {
 		t.Fatalf("notes %v do not name AGENTS.md", result.Notes)
 	}
@@ -230,7 +157,7 @@ func TestRecordUserFile_UninstallOutsideRecordsKeptAndANote(t *testing.T) {
 
 func TestRecordUserAction_UninstallOutsideRecordsKeptAndANote(t *testing.T) {
 	_, outside := projectAndOutside(t)
-	mustSymlink(t, filepath.Join(outside, "agents.md"), "AGENTS.md")
+	realpathtest.Symlink(t, filepath.Join(outside, "agents.md"), "AGENTS.md")
 
 	var result WriteResult
 	err := recordUserAction(&result, "AGENTS.md", LocationLocal, opUninstall, func(string) (FileAction, error) {
@@ -240,9 +167,7 @@ func TestRecordUserAction_UninstallOutsideRecordsKeptAndANote(t *testing.T) {
 	if err != nil || len(result.Errors) != 0 {
 		t.Fatalf("err = %v, errors = %v; want none", err, result.Errors)
 	}
-	if fileAction(result, "AGENTS.md") != ActionKept {
-		t.Fatalf("result.Files = %v, want AGENTS.md kept", result.Files)
-	}
+	assertFileResult(t, result.Files, "AGENTS.md", ActionKept)
 	if !noteNaming(result, "AGENTS.md") {
 		t.Fatalf("notes %v do not name AGENTS.md", result.Notes)
 	}
