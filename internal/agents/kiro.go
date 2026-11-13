@@ -133,10 +133,9 @@ func (t kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := kiroConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro config path: %w", err))
 	} else {
-		fr, err := writeMcpEntry(configPath, func() any {
+		_ = installMcpEntry(&result, configPath, loc, func() any {
 			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
 		})
-		recordFile(&result, configPath, fr, err)
 	}
 
 	installDeclaredSkill(&result, t, loc)
@@ -155,8 +154,7 @@ func (t kiroTarget) Uninstall(loc Location) WriteResult {
 	if configPath, err := kiroConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro config path: %w", err))
 	} else {
-		fr, err := removeMcpEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)

@@ -192,31 +192,30 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := caps.MCPConfig(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex config path: %w", err))
 	} else {
-		existed := fileExists(configPath)
-		existing := readFileOrEmpty(configPath)
-		if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, cerr))
-		} else {
+		_ = recordUserAction(&result, configPath, loc, opInstall, func(real string) (FileAction, error) {
+			existed := fileExists(real)
+			existing := readFileOrEmpty(real)
+			if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
+				return "", cerr
+			}
 			updated := spliceTOMLTable(existing, codexTOMLTable, codexTableBody(opts.ExecPath))
 			if updated == existing {
-				result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionUnchanged})
-			} else if err := atomicWriteFile(configPath, updated); err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
-			} else {
-				action := ActionUpdated
-				if !existed {
-					action = ActionCreated
-				}
-				result.Files = append(result.Files, FileResult{Path: configPath, Action: action})
+				return ActionUnchanged, nil
 			}
-		}
+			if err := atomicWriteFile(real, updated); err != nil {
+				return "", err
+			}
+			if !existed {
+				return ActionCreated, nil
+			}
+			return ActionUpdated, nil
+		})
 	}
 
 	if instrPath, err := caps.InstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex instructions path: %w", err))
 	} else {
-		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		recordFile(&result, instrPath, fr, err)
+		installInstructions(&result, instrPath, loc)
 
 		// D-12: an AGENTS.override.md beside the instructions file Codex
 		// reads shadows AGENTS.md for Codex — the block is still written
@@ -278,7 +277,7 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		// touches nothing — "cannot tell, so don't guess" (matches Claude's
 		// preToolNudgeEvidenced posture for the same ambiguity).
 	case PreToolNudgeOff:
-		uninstallCodexPreToolNudge(&result, loc)
+		uninstallCodexPreToolNudge(&result, loc, opInstall)
 	}
 
 	return result
@@ -299,48 +298,45 @@ func (t codexTarget) Uninstall(loc Location) WriteResult {
 
 	if configPath, err := caps.MCPConfig(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex config path: %w", err))
-	} else if !fileExists(configPath) {
-		result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
 	} else {
-		existing := readFileOrEmpty(configPath)
-		if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, cerr))
-		} else {
+		// The existence test runs on the real location, after the resolve,
+		// so a symlink loop is an error and not "no file".
+		_ = recordUserAction(&result, configPath, loc, opUninstall, func(real string) (FileAction, error) {
+			if !fileExists(real) {
+				return ActionNotFound, nil
+			}
+			existing := readFileOrEmpty(real)
+			if cerr := tomlTableConflict(existing, codexTOMLTable); cerr != nil {
+				return "", cerr
+			}
 			updated := stripTOMLTable(existing, codexTOMLTable)
 			switch updated {
 			case existing:
-				result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
+				return ActionNotFound, nil
 			case "":
-				if err := os.Remove(configPath); err != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
-				} else {
-					result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionRemoved})
+				if err := os.Remove(real); err != nil {
+					return "", err
 				}
 			default:
-				if err := atomicWriteFile(configPath, updated); err != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
-				} else {
-					result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionRemoved})
+				if err := atomicWriteFile(real, updated); err != nil {
+					return "", err
 				}
 			}
-		}
+			return ActionRemoved, nil
+		})
 	}
 
 	if instrPath, err := caps.InstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex instructions path: %w", err))
-	} else if others := instructionsRequestedElsewhere(instrPath, loc, t.ID()); len(others) > 0 {
-		result.Files = append(result.Files, FileResult{Path: instrPath, Action: ActionKept})
-		result.Notes = append(result.Notes, instructionsKeptNote(instrPath, others))
 	} else {
-		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
-		recordAction(&result, instrPath, action, err)
+		removeSharedInstructions(&result, instrPath, loc, t.ID())
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)
 
 	// D-09/D-11 discipline: uninstall always attempts removal, whether or
 	// not the opt-in was ever recorded — reports not-found when it wasn't.
-	uninstallCodexPreToolNudge(&result, loc)
+	uninstallCodexPreToolNudge(&result, loc, opUninstall)
 
 	return result
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -35,10 +36,7 @@ func writeFiles(t *testing.T, root string, files map[string]string) {
 // worktree of it, outside the main checkout, on its own branch.
 func worktreeFixture(t *testing.T, files map[string]string) (mainRoot, wt string) {
 	t.Helper()
-	parent, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
+	parent := realpathtest.TempDir(t)
 	mainRoot = filepath.Join(parent, "main")
 	writeFiles(t, mainRoot, map[string]string{"go.mod": "module example.com/wt\n\ngo 1.26\n"})
 	writeFiles(t, mainRoot, files)

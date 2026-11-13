@@ -2,12 +2,14 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
 // recordFile appends fr to result.Files, or — if err is non-nil — wraps
@@ -24,15 +26,135 @@ func recordFile(result *WriteResult, path string, fr FileResult, err error) {
 	result.Files = append(result.Files, fr)
 }
 
-// recordAction is recordFile's analog for helpers (removeMarkedSection,
-// stripTOMLTable-style callers) that report a bare FileAction rather than
-// a full FileResult.
-func recordAction(result *WriteResult, path string, action FileAction, err error) {
+// userFileOp says which command edits a user's file. The two commands
+// treat a local file outside the project differently.
+type userFileOp int
+
+const (
+	opInstall userFileOp = iota
+	opUninstall
+)
+
+// errOutsideProject reports a local file whose real location is outside
+// the project. resolveUserFile wraps it with the real location.
+var errOutsideProject = errors.New("leads outside the project")
+
+// outsideProjectAdvice ends the install error for errOutsideProject with
+// the three ways forward.
+const outsideProjectAdvice = "run the install in the directory that holds the real file, use --location global, or replace the link with a regular file"
+
+// localProjectRoot returns the real location of the working directory,
+// which is the project at local scope.
+func localProjectRoot() (string, error) {
+	wd, err := os.Getwd()
 	if err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", path, err))
-		return
+		return "", err
 	}
-	result.Files = append(result.Files, FileResult{Path: path, Action: action})
+	return filepath.EvalSymlinks(wd)
+}
+
+// resolveUserFile returns the real location of a file that an install or an
+// uninstall edits: the path with every symlink resolved, also when the last
+// parts do not exist yet. A symlink loop is an error. At local scope, a real
+// location outside the project is errOutsideProject, so a link that a
+// repository commits cannot send a write to another file of the user.
+func resolveUserFile(path string, loc Location) (string, error) {
+	real, err := realpath.ResolveFile(path)
+	if err != nil {
+		return "", err
+	}
+	if loc != LocationLocal {
+		return real, nil
+	}
+	root, err := localProjectRoot()
+	if err != nil {
+		return "", err
+	}
+	if !realpath.Within(root, real) {
+		return "", fmt.Errorf("%w: its real location is %s", errOutsideProject, real)
+	}
+	return real, nil
+}
+
+// recordUserFile is the funnel for a file that codegraph edits in place and
+// shares with the user. It resolves path, calls edit with the real
+// location, and records the outcome under the configured path. Because
+// edit gets a path with no symlink in it, the read, the write and the
+// delete all reach the same file, and a rename never replaces a link.
+//
+// An edit that returns a FileResult with no Action records nothing. A
+// local file outside the project is an error for an install and is kept,
+// with a note, for an uninstall. recordUserFile returns the error that it
+// recorded, or nil.
+func recordUserFile(result *WriteResult, path string, loc Location, op userFileOp, edit func(real string) (FileResult, error)) error {
+	real, err := resolveUserFile(path, loc)
+	if err == nil {
+		// With no link in the way, edit gets the configured path, so a
+		// helper error that names its file reads as it did before.
+		if abs, aerr := filepath.Abs(path); aerr == nil && abs == real {
+			real = path
+		}
+	}
+	if err != nil {
+		if errors.Is(err, errOutsideProject) {
+			if op == opUninstall {
+				recordKept(result, path, fmt.Sprintf("%s is left as it is: it %v", path, err))
+				return nil
+			}
+			err = fmt.Errorf("%w; %s", err, outsideProjectAdvice)
+		}
+		recordFile(result, path, FileResult{}, err)
+		return err
+	}
+	fr, err := edit(real)
+	if err != nil {
+		// Some helper errors already name the file they read.
+		if isSymlink(path) && !strings.Contains(err.Error(), real) {
+			err = fmt.Errorf("%s: %w", real, err)
+		}
+		recordFile(result, path, FileResult{}, err)
+		return err
+	}
+	if fr.Action == "" {
+		return nil
+	}
+	fr.Path = path
+	recordFile(result, path, fr, nil)
+	return nil
+}
+
+// isSymlink reports whether path itself is a symlink.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
+}
+
+// removedOnly adapts a remover for a step that reports a file only when it
+// removed something from it. Any other outcome records nothing.
+func removedOnly(remove func(real string) (FileResult, error)) func(real string) (FileResult, error) {
+	return func(real string) (FileResult, error) {
+		fr, err := remove(real)
+		if err != nil || fr.Action != ActionRemoved {
+			return FileResult{}, err
+		}
+		return fr, nil
+	}
+}
+
+// recordUserAction adapts a helper that returns a FileAction to
+// recordUserFile.
+func recordUserAction(result *WriteResult, path string, loc Location, op userFileOp, edit func(real string) (FileAction, error)) error {
+	return recordUserFile(result, path, loc, op, func(real string) (FileResult, error) {
+		action, err := edit(real)
+		return FileResult{Action: action}, err
+	})
+}
+
+// recordKept records path as left in place on purpose, with a note that
+// says why.
+func recordKept(result *WriteResult, path, note string) {
+	result.Files = append(result.Files, FileResult{Path: path, Action: ActionKept})
+	result.Notes = append(result.Notes, note)
 }
 
 // readJSONFile parses path as a JSON object and returns it as a generic
@@ -592,7 +714,7 @@ func removeEmbeddedFile(path string) (FileResult, error) {
 // directory-empty SWEEP is skipped for a link, exactly as it already is
 // for a non-empty plain directory.
 func removeSkillDirIfEmpty(dir string) error {
-	if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+	if isSymlink(dir) {
 		return nil
 	}
 	err := os.Remove(dir)
@@ -813,16 +935,15 @@ func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (
 // on-disk truth, so re-deriving it here can never drift from what
 // AllTargets() actually contains.
 //
-// Both paths are resolved to their absolute, cleaned form before
-// comparison — path and every candidate target's own InstructionsPath(loc)
-// — so a relative "AGENTS.md" (the local-scope convention) still compares
-// correctly against another relative "AGENTS.md" resolved from the same
-// cwd. A target that does not support loc, declares no instructions path,
+// Both paths are compared by real location (sameRealPath) — path and every
+// candidate target's own InstructionsPath(loc) — so a relative "AGENTS.md"
+// (the local-scope convention) still compares correctly against another
+// relative "AGENTS.md" resolved from the same cwd, and so does a GEMINI.md
+// that is a symlink to AGENTS.md. A target that does not support loc, declares no instructions path,
 // or whose path fails to resolve is silently skipped, exactly like every
 // other Capabilities-derived helper in this package.
 func instructionsRequestedElsewhere(path string, loc Location, self TargetID) []TargetID {
-	absPath, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
+	if _, err := realpath.Resolve(path); err != nil {
 		return nil
 	}
 
@@ -839,8 +960,7 @@ func instructionsRequestedElsewhere(path string, loc Location, self TargetID) []
 		if err != nil || p == "" {
 			continue
 		}
-		absP, err := filepath.Abs(filepath.Clean(p))
-		if err != nil || absP != absPath {
+		if same, err := sameRealPath(p, path); err != nil || !same {
 			continue
 		}
 		if t.Detect(loc).AlreadyConfigured {
@@ -868,6 +988,37 @@ func instructionsKeptNote(path string, others []TargetID) string {
 		names[i] = name
 	}
 	return fmt.Sprintf("%s keeps its codegraph block: still used by %s", path, strings.Join(names, ", "))
+}
+
+// installMcpEntry writes the codegraph MCP server entry into the
+// configuration file at path, through the funnel for a user's file. It
+// returns the error that the funnel recorded, or nil.
+func installMcpEntry(result *WriteResult, path string, loc Location, buildEntry func() any) error {
+	return recordUserFile(result, path, loc, opInstall, func(real string) (FileResult, error) {
+		return writeMcpEntry(real, buildEntry)
+	})
+}
+
+// installInstructions writes the codegraph section into the instruction
+// file at path, through the funnel for a user's file.
+func installInstructions(result *WriteResult, path string, loc Location) {
+	_ = recordUserFile(result, path, loc, opInstall, func(real string) (FileResult, error) {
+		return upsertInstructionsEntry(real, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+	})
+}
+
+// removeSharedInstructions removes self's codegraph section from the
+// instruction file at path, unless another installed agent uses the same
+// real file. In that case the section stays, and the file is reported as
+// kept with a note that names the other agents (D-11).
+func removeSharedInstructions(result *WriteResult, path string, loc Location, self TargetID) {
+	if others := instructionsRequestedElsewhere(path, loc, self); len(others) > 0 {
+		recordKept(result, path, instructionsKeptNote(path, others))
+		return
+	}
+	_ = recordUserAction(result, path, loc, opUninstall, func(real string) (FileAction, error) {
+		return removeMarkedSection(real, codegraphSectionStart, codegraphSectionEnd)
+	})
 }
 
 // atomicWriteFile writes content to path via a temp file created in the

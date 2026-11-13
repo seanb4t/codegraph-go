@@ -197,7 +197,7 @@ func claudeHooksScriptPath(loc Location) (string, error) {
 // `~/.claude/skills/codegraph -> ../../.agents/skills/codegraph` symlink
 // (the `npx skills` convention) makes Claude's skill directory and the
 // shared directory every other target writes into the SAME physical
-// directory. sameSkillDir (filepath.EvalSymlinks-based, dangling links
+// directory. sameRealPath (filepath.EvalSymlinks-based, dangling links
 // followed) is used rather than a literal path comparison because a
 // symlink is exactly the case a literal string comparison cannot see
 // through, and a dangling link (its target not yet created) must still
@@ -220,7 +220,7 @@ func claudeSkillPolicy(loc Location) (unmanifestedPolicy, error) {
 	if err != nil {
 		return refuseUnmanifested, err
 	}
-	same, err := sameSkillDir(claudeDir, sharedDir)
+	same, err := sameRealPath(claudeDir, sharedDir)
 	if err != nil {
 		return refuseUnmanifested, err
 	}
@@ -459,35 +459,28 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// ./.mcp.json before writing the correct entry.
 	if loc == LocationLocal {
 		legacyPath := claudeLegacyLocalConfigPath()
-		if fr, err := removeMcpEntry(legacyPath); err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacyPath, err))
-		} else if fr.Action == ActionRemoved {
-			result.Files = append(result.Files, fr)
-		}
+		_ = recordUserFile(&result, legacyPath, loc, opInstall, removedOnly(removeMcpEntry))
 	}
 
 	if configPath, err := claudeConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude config path: %w", err))
 	} else {
-		fr, err := writeMcpEntry(configPath, func() any {
+		_ = installMcpEntry(&result, configPath, loc, func() any {
 			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
 		})
-		recordFile(&result, configPath, fr, err)
 	}
 
 	if instrPath, err := claudeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude instructions path: %w", err))
 	} else {
-		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		recordFile(&result, instrPath, fr, err)
+		installInstructions(&result, instrPath, loc)
 	}
 
 	if opts.AutoAllow {
 		if settingsPath, err := claudeSettingsPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
 		} else {
-			fr, err := addClaudeAllowPermission(settingsPath)
-			recordFile(&result, settingsPath, fr, err)
+			_ = recordUserFile(&result, settingsPath, loc, opInstall, addClaudeAllowPermission)
 		}
 	}
 
@@ -564,8 +557,9 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 		} else {
-			fr, werr := writeHookEntry(settingsPath, "SessionStart", blocks, ownCommands)
-			recordFile(&result, settingsPath, fr, werr)
+			werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
+				return writeHookEntry(real, "SessionStart", blocks, ownCommands)
+			})
 			if werr == nil {
 				sessionStartBlocks = blocks
 				haveSessionStart = true
@@ -610,8 +604,9 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 				} else if blocks, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
 					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 				} else {
-					fr, werr := writeHookEntry(settingsPath, "PreToolUse", blocks, ownCommands)
-					recordFile(&result, settingsPath, fr, werr)
+					werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
+						return writeHookEntry(real, "PreToolUse", blocks, ownCommands)
+					})
 					if werr == nil {
 						preToolGuardContent = []byte(rendered)
 						preToolBlocks = blocks
@@ -639,11 +634,10 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		} else if _, ownCommands, berr := claudePreToolUseBlocks(loc); berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 			removeFailed = true
-		} else if fr, werr := removeHookEntry(settingsPath, "PreToolUse", ownCommands); werr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, werr))
+		} else if werr := recordUserFile(&result, settingsPath, loc, opInstall, removedOnly(func(real string) (FileResult, error) {
+			return removeHookEntry(real, "PreToolUse", ownCommands)
+		})); werr != nil {
 			removeFailed = true
-		} else if fr.Action == ActionRemoved {
-			result.Files = append(result.Files, fr)
 		}
 		dropPreTool = !removeFailed
 	}
@@ -695,33 +689,29 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 	if configPath, err := claudeConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude config path: %w", err))
 	} else {
-		fr, err := removeMcpEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	if loc == LocationLocal {
 		legacyPath := claudeLegacyLocalConfigPath()
-		fr, err := removeMcpEntry(legacyPath)
-		recordFile(&result, legacyPath, fr, err)
+		_ = recordUserFile(&result, legacyPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	if instrPath, err := claudeInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude instructions path: %w", err))
 	} else {
-		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
-		recordAction(&result, instrPath, action, err)
+		removeSharedInstructions(&result, instrPath, loc, Claude)
 	}
 
 	if settingsPath, err := claudeSettingsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
 	} else {
-		fr, err := removeClaudeAllowPermission(settingsPath)
-		recordFile(&result, settingsPath, fr, err)
+		_ = recordUserFile(&result, settingsPath, loc, opUninstall, removeClaudeAllowPermission)
 	}
 
 	// D-17 (Plan 03, superseding Plan 02/03's hand-rolled manifest+SKILL.md
 	// removal): remove Claude's ownership through the manifest-owned
-	// writer (05-02), using the same sameSkillDir-derived policy Install
+	// writer (05-02), using the same sameRealPath-derived policy Install
 	// uses. In a symlinked layout this is D-08's last-requester rule: only
 	// when Claude is the LAST requester does the shared package actually
 	// get removed (manifest, then SKILL.md, then the directory-empty
@@ -760,8 +750,9 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		if berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 		} else {
-			fr, werr := removeHookEntry(settingsPath, "SessionStart", ownCommands)
-			recordFile(&result, settingsPath, fr, werr)
+			_ = recordUserFile(&result, settingsPath, loc, opUninstall, func(real string) (FileResult, error) {
+				return removeHookEntry(real, "SessionStart", ownCommands)
+			})
 		}
 	}
 
@@ -785,8 +776,9 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		if berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 		} else {
-			fr, werr := removeHookEntry(settingsPath, "PreToolUse", ownCommands)
-			recordFile(&result, settingsPath, fr, werr)
+			_ = recordUserFile(&result, settingsPath, loc, opUninstall, func(real string) (FileResult, error) {
+				return removeHookEntry(real, "PreToolUse", ownCommands)
+			})
 		}
 	}
 

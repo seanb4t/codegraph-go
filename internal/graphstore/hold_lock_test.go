@@ -7,18 +7,8 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
-
-// realTempDir returns a new temporary directory under a path that has no
-// symbolic link in it, so that a test can compare spellings of one path.
-func realTempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-	return dir
-}
 
 // requireLocked fails the test unless Open(dir) returns ErrStoreLocked.
 func requireLocked(t *testing.T, dir string) {
@@ -48,11 +38,11 @@ func requireOpens(t *testing.T, dir string) {
 func TestHoldStoreLockExcludesOpen(t *testing.T) {
 	t.Run("held through a symbolic link", func(t *testing.T) {
 		noRetrySleep(t)
-		store := filepath.Join(realTempDir(t), "store")
+		store := filepath.Join(realpathtest.TempDir(t), "store")
 		if err := os.Mkdir(store, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		link := filepath.Join(realTempDir(t), "link")
+		link := filepath.Join(realpathtest.TempDir(t), "link")
 		if err := os.Symlink(store, link); err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +61,7 @@ func TestHoldStoreLockExcludesOpen(t *testing.T) {
 
 	t.Run("held through a relative spelling", func(t *testing.T) {
 		noRetrySleep(t)
-		parent := realTempDir(t)
+		parent := realpathtest.TempDir(t)
 		store := filepath.Join(parent, "store")
 		if err := os.Mkdir(store, 0o755); err != nil {
 			t.Fatal(err)

@@ -190,8 +190,9 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, err))
 		return
 	}
-	fr, werr = writeHookEntry(hooksPath, "PreToolUse", blocks, ownCommands)
-	recordFile(result, hooksPath, fr, werr)
+	_ = recordUserFile(result, hooksPath, loc, opInstall, func(real string) (FileResult, error) {
+		return writeHookEntry(real, "PreToolUse", blocks, ownCommands)
+	})
 }
 
 // codexHooksExplicitlyDisabled reports whether the config.toml governing
@@ -293,8 +294,10 @@ func codexHooksFileWasWritten(files []FileResult, hooksPath string) bool {
 // the hooks.json registration, reporting not-found when the user never
 // opted in — matching the "uninstall always attempts removal" discipline
 // already established for every other codegraph-owned artifact in this
-// package (D-09/D-11).
-func uninstallCodexPreToolNudge(result *WriteResult, loc Location) {
+// package (D-09/D-11). op is the command that asked: an install that turns
+// the nudge off refuses a local hooks.json outside the project, and an
+// uninstall keeps it with a note.
+func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp) {
 	if guardPath, err := codexPreToolGuardPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
 	} else {
@@ -312,6 +315,7 @@ func uninstallCodexPreToolNudge(result *WriteResult, loc Location) {
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, err))
 		return
 	}
-	fr, werr := removeHookEntry(hooksPath, "PreToolUse", ownCommands)
-	recordFile(result, hooksPath, fr, werr)
+	_ = recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
+		return removeHookEntry(real, "PreToolUse", ownCommands)
+	})
 }

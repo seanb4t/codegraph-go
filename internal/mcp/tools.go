@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
 // resolvePath returns argPath, falling back to defaultPath when the caller
@@ -41,7 +41,7 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !isWithin(repoAbs, pathAbs) {
+	if !realpath.Within(repoAbs, pathAbs) {
 		return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root", path)
 	}
 
@@ -57,7 +57,7 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !isWithin(repoReal, pathReal) {
+	if !realpath.Within(repoReal, pathReal) {
 		return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root", path)
 	}
 
@@ -67,7 +67,7 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	// another project's index would be opened from a path that is itself
 	// inside the root. The repo root's own .codegraph is the one the
 	// server was started on and is not checked here.
-	for dir := pathAbs; dir != repoAbs && isWithin(repoAbs, dir); dir = filepath.Dir(dir) {
+	for dir := pathAbs; dir != repoAbs && realpath.Within(repoAbs, dir); dir = filepath.Dir(dir) {
 		// The resolver accepts a .codegraph that is a directory after
 		// symlinks, whether or not it holds a store yet, and the open
 		// then creates the store. Check the directory first, and then
@@ -84,7 +84,7 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if !isWithin(repoReal, indexReal) || !isWithin(repoReal, storeReal) {
+		if !realpath.Within(repoReal, indexReal) || !realpath.Within(repoReal, storeReal) {
 			return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: the index at %q leads outside it", path, index)
 		}
 	}
@@ -96,13 +96,6 @@ const (
 	indexDirName     = ".codegraph"
 	indexStoreSubdir = "store"
 )
-
-// isWithin reports whether path is root itself or a descendant of it. Both
-// must be absolute.
-func isWithin(root, path string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
 
 // resolveExistingPrefix resolves the symlinks of the longest part of abs
 // that exists and joins the rest back on. A path that does not exist yet

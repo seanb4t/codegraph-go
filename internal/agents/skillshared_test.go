@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
 // TestSharedSkillPackage_WritesOnceAndAccumulatesTargets is the tracer test
@@ -731,12 +732,12 @@ func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		same, err := sameSkillDir(dir, dir)
+		same, err := sameRealPath(dir, dir)
 		if err != nil {
-			t.Fatalf("sameSkillDir: %v", err)
+			t.Fatalf("sameRealPath: %v", err)
 		}
 		if !same {
-			t.Fatalf("sameSkillDir(a, a) = false, want true")
+			t.Fatalf("sameRealPath(a, a) = false, want true")
 		}
 	})
 
@@ -755,12 +756,12 @@ func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = os.Chdir(oldwd) })
 
-		same, err := sameSkillDir("b", dir)
+		same, err := sameRealPath("b", dir)
 		if err != nil {
-			t.Fatalf("sameSkillDir: %v", err)
+			t.Fatalf("sameRealPath: %v", err)
 		}
 		if !same {
-			t.Fatalf("sameSkillDir(relative, absolute) = false, want true")
+			t.Fatalf("sameRealPath(relative, absolute) = false, want true")
 		}
 	})
 
@@ -778,12 +779,12 @@ func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
 		if err := os.Symlink(filepath.Join("..", "..", "agents", "skills", "codegraph"), link); err != nil {
 			t.Fatalf("symlink: %v", err)
 		}
-		same, err := sameSkillDir(link, agentsDir)
+		same, err := sameRealPath(link, agentsDir)
 		if err != nil {
-			t.Fatalf("sameSkillDir: %v", err)
+			t.Fatalf("sameRealPath: %v", err)
 		}
 		if !same {
-			t.Fatalf("sameSkillDir(symlink, real target) = false, want true")
+			t.Fatalf("sameRealPath(symlink, real target) = false, want true")
 		}
 	})
 
@@ -802,12 +803,12 @@ func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
 			t.Fatalf("symlink: %v", err)
 		}
 		// agentsDir itself is deliberately never created — dangling link.
-		same, err := sameSkillDir(link, agentsDir)
+		same, err := sameRealPath(link, agentsDir)
 		if err != nil {
-			t.Fatalf("sameSkillDir(dangling): %v", err)
+			t.Fatalf("sameRealPath(dangling): %v", err)
 		}
 		if !same {
-			t.Fatalf("sameSkillDir(dangling symlink, its not-yet-created target) = false, want true")
+			t.Fatalf("sameRealPath(dangling symlink, its not-yet-created target) = false, want true")
 		}
 	})
 
@@ -821,12 +822,12 @@ func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
 		if err := os.MkdirAll(b, 0o755); err != nil {
 			t.Fatalf("mkdir b: %v", err)
 		}
-		same, err := sameSkillDir(a, b)
+		same, err := sameRealPath(a, b)
 		if err != nil {
-			t.Fatalf("sameSkillDir: %v", err)
+			t.Fatalf("sameRealPath: %v", err)
 		}
 		if same {
-			t.Fatalf("sameSkillDir(unrelated, unrelated) = true, want false")
+			t.Fatalf("sameRealPath(unrelated, unrelated) = true, want false")
 		}
 	})
 
@@ -836,8 +837,8 @@ func TestSameSkillDir_ResolvesSymlinksAndDanglingLinks(t *testing.T) {
 		if err := os.Symlink("self", link); err != nil {
 			t.Fatalf("symlink: %v", err)
 		}
-		if _, err := sameSkillDir(link, link); err == nil {
-			t.Fatalf("sameSkillDir(self-referential symlink) returned no error")
+		if _, err := sameRealPath(link, link); err == nil {
+			t.Fatalf("sameRealPath(self-referential symlink) returned no error")
 		}
 	})
 }
@@ -880,9 +881,9 @@ func TestSkillPackage_DanglingSymlinkDirIsRecreated(t *testing.T) {
 		t.Fatalf("link was replaced — no longer a symlink")
 	}
 
-	resolved, err := resolveSkillDir("claude/skills/codegraph")
+	resolved, err := realpath.Resolve("claude/skills/codegraph")
 	if err != nil {
-		t.Fatalf("resolveSkillDir: %v", err)
+		t.Fatalf("realpath.Resolve: %v", err)
 	}
 	if !fileExists(filepath.Join(resolved, skillFileName)) {
 		t.Fatalf("SKILL.md not created at resolved target %s", resolved)

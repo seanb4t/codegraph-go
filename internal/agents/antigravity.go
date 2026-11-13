@@ -207,46 +207,37 @@ func (t antigravityTarget) Install(loc Location, opts InstallOptions) WriteResul
 	// to unconfigured with no rollback.
 	migrationOK := true
 
-	if !fileExists(marker) && !fileExists(unified) && fileExists(legacy) {
+	// Both files are a user's files. Each path is resolved once, and the
+	// existence tests, the reads and the writes below all use the real
+	// location, so a symlink at either path stays a symlink. A unified path
+	// that does not resolve is reported by the write step below.
+	unifiedReal, unifiedErr := resolveUserFile(unified, loc)
+	legacyReal, legacyErr := resolveUserFile(legacy, loc)
+	if legacyErr != nil {
+		recordFile(&result, legacy, FileResult{}, legacyErr)
+	}
+
+	if unifiedErr == nil && legacyErr == nil && !fileExists(marker) && !fileExists(unifiedReal) && fileExists(legacyReal) {
 		// Pre-migration legacy config, no unified file yet — sweep the
 		// stale legacy codegraph entry into the unified path before this
 		// install writes the current entry.
-		if legacyEntry, ok := readMcpEntry(legacy); ok {
-			unifiedExisting, _ := readJSONFile(unified)
-			unifiedServers, _ := unifiedExisting["mcpServers"].(map[string]any)
-			if unifiedServers == nil {
-				unifiedServers = map[string]any{}
-			}
-			unifiedServers["codegraph"] = legacyEntry
-			unifiedExisting["mcpServers"] = unifiedServers
-			if err := writeJSONFile(unified, unifiedExisting); err != nil {
+		if legacyEntry, ok := readMcpEntry(legacyReal); ok {
+			if err := installMcpEntry(&result, unified, loc, func() any { return legacyEntry }); err != nil {
 				migrationOK = false
-				result.Errors = append(result.Errors, fmt.Errorf("migrate legacy entry into %s: %w", unified, err))
-			} else {
-				result.Files = append(result.Files, FileResult{Path: unified, Action: ActionUpdated})
 			}
 		}
 		// Only remove the legacy entry once the unified write above is
 		// confirmed successful (CR-02) — never lose the entry to a
 		// partial-write failure with no file left holding it.
 		if migrationOK {
-			fr, err := removeMcpEntry(legacy)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacy, err))
-			} else if fr.Action == ActionRemoved {
-				result.Files = append(result.Files, fr)
-			}
+			_ = recordUserFile(&result, legacy, loc, opInstall, removedOnly(removeMcpEntry))
 		}
 	}
 
-	fr, err := writeMcpEntry(unified, func() any {
+	if err := installMcpEntry(&result, unified, loc, func() any {
 		return antigravityEntry(opts.ExecPath)
-	})
-	if err != nil {
+	}); err != nil {
 		migrationOK = false
-		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", unified, err))
-	} else {
-		result.Files = append(result.Files, fr)
 	}
 
 	// The ".migrated" marker is only written once the unified file is
@@ -277,8 +268,7 @@ func (t antigravityTarget) Uninstall(loc Location) WriteResult {
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity config path: %w", err))
 	} else {
-		fr, err := removeMcpEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)

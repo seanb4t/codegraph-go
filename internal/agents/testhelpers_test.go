@@ -3,7 +3,10 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
 // fakeHome points HOME (and every per-agent home-derived env var this
@@ -57,5 +60,82 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("writeFile(%s): %v", path, err)
+	}
+}
+
+// assertSymlinkTo fails unless link is still a symlink with that target.
+func assertSymlinkTo(t *testing.T, link, target string) {
+	t.Helper()
+	got, err := os.Readlink(link)
+	if err != nil {
+		t.Fatalf("%s is no longer a symlink: %v", link, err)
+	}
+	if got != target {
+		t.Fatalf("%s links to %q, want %q", link, got, target)
+	}
+}
+
+// projectAndOutside makes a project directory and a directory outside it,
+// and makes the project the working directory.
+func projectAndOutside(t *testing.T) (project, outside string) {
+	t.Helper()
+	fakeHome(t)
+	base := realpathtest.TempDir(t)
+	project, outside = filepath.Join(base, "project"), filepath.Join(base, "outside")
+	for _, dir := range []string{project, outside} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(project)
+	return project, outside
+}
+
+func errorNaming(result WriteResult, parts ...string) bool {
+	for _, err := range result.Errors {
+		all := true
+		for _, part := range parts {
+			all = all && strings.Contains(err.Error(), part)
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}
+
+func noteNaming(result WriteResult, part string) bool {
+	for _, note := range result.Notes {
+		if strings.Contains(note, part) {
+			return true
+		}
+	}
+	return false
+}
+
+// realHome is fakeHome with the home's own symlinks resolved.
+func realHome(t *testing.T) string {
+	t.Helper()
+	home, err := filepath.EvalSymlinks(fakeHome(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range homeEnv(home) {
+		t.Setenv(key, value)
+	}
+	return home
+}
+
+func assertNoErrors(t *testing.T, result WriteResult) {
+	t.Helper()
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected errors: %v", result.Errors)
+	}
+}
+
+func assertMissing(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("%s exists (or cannot be read: %v), want no file", path, err)
 	}
 }

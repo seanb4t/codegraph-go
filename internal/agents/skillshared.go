@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 	"github.com/seanb4t/codegraph-go/internal/version"
 )
 
@@ -129,9 +130,9 @@ func writeSkillFile(result *WriteResult, dir string, policy unmanifestedPolicy) 
 	// FileResult path recorded below still uses the caller's own dir (the
 	// link) — not the resolved target — for both a non-link and a live
 	// link, and this branch changes nothing about it either.
-	if info, lerr := os.Lstat(dir); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+	if isSymlink(dir) {
 		if _, statErr := os.Stat(dir); statErr != nil && os.IsNotExist(statErr) {
-			target, rerr := resolveSkillDir(dir)
+			target, rerr := realpath.Resolve(dir)
 			if rerr != nil {
 				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, rerr))
 				return nil, false
@@ -262,7 +263,7 @@ func installSkillPackageWithFallback(result *WriteResult, dir string, loc Locati
 	if requester != Claude {
 		if claudeDir, err := claudeSkillDirPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, err))
-		} else if same, serr := sameSkillDir(dir, claudeDir); serr != nil {
+		} else if same, serr := sameRealPath(dir, claudeDir); serr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", dir, serr))
 		} else if same {
 			result.Notes = append(result.Notes, fmt.Sprintf(
@@ -388,77 +389,15 @@ func uninstallSkillPackageWithFallback(result *WriteResult, dir string, requeste
 	result.Files = append(result.Files, FileResult{Path: skillPath, Action: ActionKept})
 }
 
-// maxSymlinkResolveDepth bounds resolveSkillDir's recursive symlink
-// resolution so a self-referential link (or any link cycle) surfaces as
-// an error rather than a hang (D-17).
-const maxSymlinkResolveDepth = 8
-
-// resolveSkillDir resolves dir to its canonical, symlink-free absolute
-// path — even when dir does not exist yet, or exists only as a DANGLING
-// symlink whose target has never been created (D-17, RESEARCH Pitfall 2:
-// the maintainer's own
-// `~/.claude/skills/codegraph -> ../../.agents/skills/codegraph`).
-// filepath.EvalSymlinks alone cannot handle either case (it requires
-// every path component to exist), so this recurses: if dir itself is a
-// live symlink, EvalSymlinks succeeds directly; if dir is a DANGLING
-// symlink, its link target is read and resolved in dir's own parent
-// directory; if dir simply does not exist and is not a link at all, its
-// PARENT is resolved the same way and dir's own base name is joined back
-// on. Recursion is bounded to maxSymlinkResolveDepth so a self-referential
-// link errors instead of looping forever.
-func resolveSkillDir(dir string) (string, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	return resolveSkillDirDepth(abs, 0)
-}
-
-func resolveSkillDirDepth(abs string, depth int) (string, error) {
-	if depth > maxSymlinkResolveDepth {
-		return "", fmt.Errorf("agents: resolveSkillDir exceeded max depth (%d) at %s — possible symlink cycle", maxSymlinkResolveDepth, abs)
-	}
-
-	if resolved, evalErr := filepath.EvalSymlinks(abs); evalErr == nil {
-		return resolved, nil
-	} else if info, lerr := os.Lstat(abs); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
-		// abs itself is a symlink (EvalSymlinks failed, so it must be
-		// dangling) — read its target and resolve that, relative to
-		// abs's own parent when the target itself is relative.
-		target, rerr := os.Readlink(abs)
-		if rerr != nil {
-			return "", rerr
-		}
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(filepath.Dir(abs), target)
-		}
-		return resolveSkillDirDepth(filepath.Clean(target), depth+1)
-	} else if os.IsNotExist(evalErr) {
-		// abs does not exist and is not itself a link — resolve its
-		// parent and join abs's own base name back on.
-		parent := filepath.Dir(abs)
-		if parent == abs {
-			return abs, nil
-		}
-		resolvedParent, perr := resolveSkillDirDepth(parent, depth+1)
-		if perr != nil {
-			return "", perr
-		}
-		return filepath.Join(resolvedParent, filepath.Base(abs)), nil
-	} else {
-		return "", evalErr
-	}
-}
-
-// sameSkillDir reports whether a and b are the same physical directory —
+// sameRealPath reports whether a and b are the same physical location,
 // resolving through any chain of symlinks, including a dangling one whose
 // target does not exist yet (D-17).
-func sameSkillDir(a, b string) (bool, error) {
-	ra, err := resolveSkillDir(a)
+func sameRealPath(a, b string) (bool, error) {
+	ra, err := realpath.Resolve(a)
 	if err != nil {
 		return false, err
 	}
-	rb, err := resolveSkillDir(b)
+	rb, err := realpath.Resolve(b)
 	if err != nil {
 		return false, err
 	}

@@ -124,17 +124,15 @@ func (t geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if configPath, err := geminiConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))
 	} else {
-		fr, err := writeMcpEntry(configPath, func() any {
+		_ = installMcpEntry(&result, configPath, loc, func() any {
 			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
 		})
-		recordFile(&result, configPath, fr, err)
 	}
 
 	if instrPath, err := geminiInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
 	} else {
-		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
-		recordFile(&result, instrPath, fr, err)
+		installInstructions(&result, instrPath, loc)
 	}
 
 	installDeclaredSkill(&result, t, loc)
@@ -148,15 +146,13 @@ func (t geminiTarget) Uninstall(loc Location) WriteResult {
 	if configPath, err := geminiConfigPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))
 	} else {
-		fr, err := removeMcpEntry(configPath)
-		recordFile(&result, configPath, fr, err)
+		_ = recordUserFile(&result, configPath, loc, opUninstall, removeMcpEntry)
 	}
 
 	if instrPath, err := geminiInstructionsPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
 	} else {
-		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
-		recordAction(&result, instrPath, action, err)
+		removeSharedInstructions(&result, instrPath, loc, t.ID())
 	}
 
 	uninstallDeclaredSkill(&result, t, loc)
