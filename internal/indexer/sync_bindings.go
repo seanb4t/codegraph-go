@@ -10,7 +10,6 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
-	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // isDataID reports whether the node id names a data symbol.
@@ -30,7 +29,7 @@ func isDataID(id string) bool {
 // of a directory in which one of the paths has or had a syntax error. The
 // set then grows over the stored binding edges: a symbol initialized to
 // or assigned an affected symbol is affected.
-func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, paths []string, inBatch map[string]bool) ([]string, error) {
+func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []string, inBatch map[string]bool) ([]string, error) {
 	seeds := make(map[string]bool)
 	names := make(map[string]bool)
 	dirs := make(map[string]bool)
@@ -51,7 +50,7 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 		}
 	}
 	for _, p := range paths {
-		f, err := r0.GetFile(p)
+		f, err := idx.r0.GetFile(p)
 		switch {
 		case err == nil:
 			if f.GetSyntaxErrors() {
@@ -60,7 +59,7 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 		case !errors.Is(err, graphstore.ErrNotFound):
 			return nil, err
 		}
-		it, err := r0.IterateFileIndex(p)
+		it, err := idx.r0.IterateFileIndex(p)
 		if err != nil {
 			return nil, err
 		}
@@ -80,65 +79,31 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 		return nil, nil
 	}
 
+	if err := idx.load(); err != nil {
+		return nil, err
+	}
 	inPaths := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		inPaths[p] = true
 	}
-	pathOf := make(map[string]string)
-	nit, err := r0.IterateNodes()
-	if err != nil {
-		return nil, err
-	}
-	for nit.Next() {
-		n := nit.Node()
-		pathOf[n.Id] = n.FilePath
-		if !isDataID(n.Id) {
-			continue
-		}
-		if inPaths[n.FilePath] || names[n.Name] || dirs[filepath.Dir(n.FilePath)] {
-			seeds[n.Id] = true
+	for _, n := range idx.data {
+		if inPaths[n.path] || names[n.name] || dirs[filepath.Dir(n.path)] {
+			seeds[n.id] = true
 		}
 	}
-	err = nit.Err()
-	nit.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	var binding []*schema.Edge
-	readers := make(map[string][]string)
-	eit, err := r0.IterateEdges("")
-	if err != nil {
-		return nil, err
-	}
-	for eit.Next() {
-		e := eit.Edge()
-		if e.Kind != goextract.RefKindReferences {
-			continue
-		}
-		if resolve.IsBindingEdge(e) {
-			binding = append(binding, e)
-			if inPaths[pathOf[resolve.EdgeOwnerID(e)]] {
-				if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
-					seeds[e.Source] = true
-				} else {
-					seeds[e.Target] = true
-				}
+	for _, e := range idx.binding {
+		if inPaths[idx.pathOf[resolve.EdgeOwnerID(e)]] {
+			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+				seeds[e.Source] = true
+			} else {
+				seeds[e.Target] = true
 			}
 		}
-		if isDataID(e.Target) {
-			readers[e.Target] = append(readers[e.Target], pathOf[e.Source])
-		}
-	}
-	err = eit.Err()
-	eit.Close()
-	if err != nil {
-		return nil, err
 	}
 
 	for grew := true; grew; {
 		grew = false
-		for _, e := range binding {
+		for _, e := range idx.binding {
 			from, to := "", ""
 			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
 				from, to = e.Target, e.Source
@@ -159,7 +124,7 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 
 	set := make(map[string]bool)
 	for id := range seeds {
-		for _, p := range readers[id] {
+		for _, p := range idx.readers[id] {
 			if p != "" && !inBatch[p] {
 				set[p] = true
 			}

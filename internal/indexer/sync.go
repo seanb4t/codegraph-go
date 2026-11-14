@@ -498,7 +498,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	for _, p := range deleted {
 		inBatch[p] = true
 	}
-	readers, err := bindingDependents(r0, results, reparsed, inBatch)
+	// One scan of r0 serves both dependency passes and every later wave.
+	deps := newStoreIndex(r0)
+	readers, err := bindingDependents(deps, results, reparsed, inBatch)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
@@ -506,7 +508,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// A file that refers to a field through a class whose owner chain the
 	// reparse can change is reparsed too, so the reference follows the
 	// fields and subclasses that the chain now has.
-	owners, err := ownerDependents(r0, results, reparsed, inBatch)
+	owners, err := ownerDependents(deps, results, reparsed, inBatch)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
@@ -551,7 +553,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		for _, f := range waitingFiles {
 			wavePaths = append(wavePaths, f.RelPath)
 		}
-		if waiting, err = bindingDependents(r0, wave, wavePaths, inBatch); err != nil {
+		if waiting, err = bindingDependents(deps, wave, wavePaths, inBatch); err != nil {
 			w.Close()
 			return Stats{}, err
 		}

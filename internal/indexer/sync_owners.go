@@ -8,7 +8,6 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
-	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -29,7 +28,7 @@ import (
 // ancestors. A file that refers to a field of an affected type is a
 // dependent. So is a file with an unresolved name that is the name of a
 // field of such a path, because that field can now resolve it.
-func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths []string, inBatch map[string]bool) ([]string, error) {
+func ownerDependents(idx *storeIndex, results []goextract.FileResult, paths []string, inBatch map[string]bool) ([]string, error) {
 	typeNames := make(map[string]bool)
 	fieldNames := make(map[string]bool)
 	byPath := make(map[string]*goextract.FileResult, len(results))
@@ -37,7 +36,7 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 		byPath[results[i].RelPath] = &results[i]
 	}
 	for _, p := range paths {
-		before, err := storedOwnerFacts(r0, p)
+		before, err := storedOwnerFacts(idx.r0, p)
 		if err != nil {
 			return nil, err
 		}
@@ -61,51 +60,14 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 		return nil, nil
 	}
 
+	if err := idx.load(); err != nil {
+		return nil, err
+	}
 	types := make(map[string]bool)
-	pathOf := make(map[string]string)
-	nit, err := r0.IterateNodes()
-	if err != nil {
-		return nil, err
-	}
-	for nit.Next() {
-		n := nit.Node()
-		pathOf[n.Id] = n.FilePath
-		if typeNames[n.Name] && symbols.IsTypeKind(n.Kind) && resolve.InheritsMembers(n.Language) {
-			types[n.Id] = true
+	for name := range typeNames {
+		for _, id := range idx.types[name] {
+			types[id] = true
 		}
-	}
-	err = nit.Err()
-	nit.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	supers := make(map[string][]string)
-	members := make(map[string][]string)
-	readers := make(map[string][]string)
-	eit, err := r0.IterateEdges("")
-	if err != nil {
-		return nil, err
-	}
-	for eit.Next() {
-		e := eit.Edge()
-		switch e.Kind {
-		case goextract.RefKindEmbeds, goextract.EdgeKindExtends, goextract.EdgeKindImplements:
-			supers[e.Source] = append(supers[e.Source], e.Target)
-		case goextract.RefKindContains:
-			if nodeid.KindOf(e.Target) == goextract.KindField {
-				members[e.Source] = append(members[e.Source], e.Target)
-			}
-		case goextract.RefKindReferences:
-			if nodeid.KindOf(e.Target) == goextract.KindField {
-				readers[e.Target] = append(readers[e.Target], pathOf[e.Source])
-			}
-		}
-	}
-	err = eit.Err()
-	eit.Close()
-	if err != nil {
-		return nil, err
 	}
 
 	queue := make([]string, 0, len(types))
@@ -115,7 +77,7 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 	for len(queue) > 0 {
 		id := queue[len(queue)-1]
 		queue = queue[:len(queue)-1]
-		for _, s := range supers[id] {
+		for _, s := range idx.supers[id] {
 			if !types[s] {
 				types[s] = true
 				queue = append(queue, s)
@@ -130,8 +92,8 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 		}
 	}
 	for id := range types {
-		for _, f := range members[id] {
-			for _, p := range readers[f] {
+		for _, f := range idx.members[id] {
+			for _, p := range idx.readers[f] {
 				add(p)
 			}
 		}
@@ -139,7 +101,7 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 	if len(fieldNames) > 0 {
 		skip := func(path string) bool { return inBatch[path] }
 		match := func(u *schema.UnresolvedName) bool { return fieldNames[u.GetName()] }
-		waiting, err := filesWithUnresolved(r0, skip, match)
+		waiting, err := filesWithUnresolved(idx.r0, skip, match)
 		if err != nil {
 			return nil, err
 		}
