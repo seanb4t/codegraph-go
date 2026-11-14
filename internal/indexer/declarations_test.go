@@ -34,7 +34,7 @@ func (o declOccurrence) String() string {
 var declarationExceptions = map[string]string{
 	"go-local-declaration":                     "the Go extractor indexes package-level declarations only",
 	"ts-method-outside-class-declaration":      "the TypeScript extractor emits methods of class declarations only, not of object literals or class expressions",
-	"ts-function-value-outside-exported-const": "the TypeScript extractor emits a function value only in a top-level exported const",
+	"ts-function-value-outside-module-binding": "the TypeScript extractor emits a function value only in a module-level var, let or const binding",
 	"java-enum-not-extracted":                  "the Java extractor emits no enum nodes",
 	"java-member-outside-class-or-interface":   "the Java extractor emits methods of class and interface declarations only, not of enums, records or anonymous classes",
 	"python-function-not-at-module-or-class":   "the Python extractor emits module-level functions and class methods only",
@@ -238,8 +238,8 @@ func tsDecls(c *declCollector, root *tree_sitter.Node) {
 			if nameNode == nil || nameNode.Kind() != "identifier" {
 				return
 			}
-			if !tsExportedTopLevelConst(c, d) {
-				c.except("ts-function-value-outside-exported-const")
+			if !tsModuleBinding(d) {
+				c.except("ts-function-value-outside-module-binding")
 				return
 			}
 			c.add(c.text(nameNode), goextract.KindFunction, d)
@@ -253,18 +253,18 @@ func tsDecls(c *declCollector, root *tree_sitter.Node) {
 	})
 }
 
-// tsExportedTopLevelConst reports whether declarator d is in an
-// `export const` statement at the top of the file.
-func tsExportedTopLevelConst(c *declCollector, d *tree_sitter.Node) bool {
+// tsModuleBinding reports whether declarator d is in a var, let or const
+// statement at the top of the file, exported or not.
+func tsModuleBinding(d *tree_sitter.Node) bool {
 	decl := d.Parent()
-	if decl == nil || decl.Kind() != "lexical_declaration" {
-		return false
-	}
-	if k := decl.ChildByFieldName("kind"); k == nil || c.text(k) != "const" {
+	if decl == nil || (decl.Kind() != "lexical_declaration" && decl.Kind() != "variable_declaration") {
 		return false
 	}
 	stmt := decl.Parent()
-	return stmt != nil && stmt.Kind() == "export_statement" && parentKind(stmt) == "program"
+	if stmt != nil && stmt.Kind() == "export_statement" {
+		stmt = stmt.Parent()
+	}
+	return stmt != nil && stmt.Kind() == "program"
 }
 
 func javaDecls(c *declCollector, root *tree_sitter.Node) {

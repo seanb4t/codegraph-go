@@ -120,19 +120,38 @@ func joinNodeRefs(nodes []*schema.Node) string {
 	return strings.Join(parts, ", ")
 }
 
+// fieldFacts returns the owner and language lines of a field's node
+// detail, and nothing for any other kind. The owner line names the
+// qualified name of the node that contains the field.
+func fieldFacts(d *DefinitionDetail) []string {
+	if d.Node.Kind != goextract.KindField {
+		return nil
+	}
+	var lines []string
+	if d.Owner != nil && d.Owner.QualifiedName != "" {
+		lines = append(lines, fmt.Sprintf("**Owner:** `%s`", d.Owner.QualifiedName))
+	}
+	return append(lines, fmt.Sprintf("**Language:** %s", d.Node.Language))
+}
+
 // RenderNode reproduces the golden node.json markdown shape byte-for-byte
 // in its fixed regions (D-05b): "**name** (kind)", a blank line,
 // "**Location:**", "**Signature:**", the fixed Trail line, "**Calls →**"
 // (forward edges), and "**Called by ←**" (reverse edges) — each entry
-// list comma-joined via joinNodeRefs.
-func RenderNode(n *schema.Node, calls, calledBy []*schema.Node) string {
+// list comma-joined via joinNodeRefs. A field adds its owner and language
+// after the location (fieldFacts).
+func RenderNode(d *DefinitionDetail) string {
+	n := d.Node
 	var b strings.Builder
 	fmt.Fprintf(&b, "**%s** (%s)\n\n", n.Name, n.Kind)
 	fmt.Fprintf(&b, "**Location:** %s:%d\n", n.FilePath, n.StartLine)
+	for _, line := range fieldFacts(d) {
+		b.WriteString(line + "\n")
+	}
 	fmt.Fprintf(&b, "**Signature:** `%s`\n", n.Signature)
 	b.WriteString("**Trail — codegraph_node any of these to follow it (no Read needed)**\n")
-	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(calls))
-	fmt.Fprintf(&b, "**Called by ←** %s\n", joinNodeRefs(calledBy))
+	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(d.Calls))
+	fmt.Fprintf(&b, "**Called by ←** %s\n", joinNodeRefs(d.CalledBy))
 	return b.String()
 }
 
@@ -150,18 +169,18 @@ const (
 )
 
 // nodeSectionFetch resolves the full-body render inputs (verbatim
-// on-disk source plus the forward/reverse call trail) for one multi-def
-// candidate. RenderNodeMultiDef calls this LAZILY, in matches order,
+// on-disk source, the forward/reverse call trail and a field's owner)
+// for one multi-def candidate. RenderNodeMultiDef calls this LAZILY, in matches order,
 // and stops calling it once HARD_CAP renders have been produced —
 // mirroring the documented loop (RESEARCH §8) so a symbol with far more
 // definitions than the budget allows never pays the I/O cost of
 // resolving bodies past HARD_CAP.
-type nodeSectionFetch func(n *schema.Node) (source []byte, calls, calledBy []*schema.Node, err error)
+type nodeSectionFetch func(n *schema.Node) (*DefinitionDetail, error)
 
 // renderNodeSection renders one multi-def candidate's full detail
 // (name/kind, Location, Signature, verbatim source, and — only when
 // non-empty — the Trail/Calls/CalledBy lines): the documented
-// renderNodeSection(cg, n, true) (RESEARCH §8). source is the
+// renderNodeSection(cg, n, true) (RESEARCH §8). d.Source is the
 // definition's ENCLOSING FILE's full content — renderNodeSection slices
 // it down to n's own [StartLine,EndLine] span (renderNumberedSourceRange),
 // matching the golden captures, which show only the definition's body,
@@ -172,15 +191,19 @@ type nodeSectionFetch func(n *schema.Node) (source []byte, calls, calledBy []*sc
 // "Validate" case, where both definitions have zero callers and neither
 // section renders a "**Called by ←**" line at all, unlike the single-def
 // path which always renders it even when empty).
-func renderNodeSection(n *schema.Node, source []byte, calls, calledBy []*schema.Node) string {
+func renderNodeSection(d *DefinitionDetail) string {
+	n, calls, calledBy := d.Node, d.Calls, d.CalledBy
 	parts := []string{
 		fmt.Sprintf("**%s** (%s)", n.Name, n.Kind),
 		"",
 		fmt.Sprintf("**Location:** %s:%d", n.FilePath, n.StartLine),
+	}
+	parts = append(parts, fieldFacts(d)...)
+	parts = append(parts,
 		fmt.Sprintf("**Signature:** `%s`", n.Signature),
 		"",
-		strings.TrimSuffix(renderNumberedSourceRange(source, n.StartLine, n.EndLine), "\n"),
-	}
+		strings.TrimSuffix(renderNumberedSourceRange(d.Source, n.StartLine, n.EndLine), "\n"),
+	)
 	if len(calls) > 0 || len(calledBy) > 0 {
 		parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
 		if len(calls) > 0 {
@@ -213,11 +236,11 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 			listed = append(listed, n)
 			continue
 		}
-		source, calls, calledBy, err := fetch(n)
+		d, err := fetch(n)
 		if err != nil {
 			return "", err
 		}
-		section := renderNodeSection(n, source, calls, calledBy)
+		section := renderNodeSection(d)
 		if len(rendered) == 0 || used+len(section) <= nodeMultiDefBodyBudget {
 			rendered = append(rendered, section)
 			used += len(section)

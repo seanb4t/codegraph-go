@@ -21,11 +21,10 @@
 //     name (Java constructors share the class's identifier); this is a
 //     deliberate, minor QualifiedName collision with the class's own
 //     "Type.Type" shape rather than a modeling gap.
-//   - field_declaration -> NO node is ever emitted (mirrors goextract's
-//     ratified "no field node" skip, 02-RESEARCH.md Open Question 3 — see
-//     goextract/types.go's own doc comment). Extending this skip to Java
-//     keeps the vocabulary consistent across languages rather than
-//     special-casing Java to emit what Go deliberately does not.
+//   - each declarator of a field_declaration, and of an interface's
+//     constant_declaration -> goextract.KindField, named Type.name and
+//     contained by its type. Record components and enum constants emit
+//     no field.
 //   - import_declaration -> goextract.RefKindImports.
 //   - superclass (extends) / super_interfaces / extends_interfaces
 //     (implements) -> goextract.RefKindEmbeds, exactly one unresolved ref

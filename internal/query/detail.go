@@ -3,10 +3,12 @@ package query
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -49,8 +51,8 @@ type FileDetail struct {
 	Source []byte
 }
 
-// DefinitionDetail is Node()'s single-definition shape — the exact
-// argument tuple RenderNode already takes (node, calls, calledBy), plus
+// DefinitionDetail is Node()'s single-definition shape — what RenderNode
+// renders (node, owner, calls, calledBy), plus
 // Source for the multi-definition candidate case, where each candidate's
 // verbatim body is read (renderNodeSection's input). The single-
 // definition path never populates Source (RenderNode does not take one);
@@ -61,8 +63,12 @@ type FileDetail struct {
 // nil stays nil, zero-length stays zero-length. The builders below never
 // normalise these values (ENG-01): this type is a transcription of the
 // fetchers' output, not a reinterpretation of it.
+//
+// Owner is the node that contains a field, found through its "contains"
+// edge. It is nil for every other kind and for a field with no owner.
 type DefinitionDetail struct {
 	Node     *schema.Node
+	Owner    *schema.Node
 	Source   []byte
 	Calls    []*schema.Node
 	CalledBy []*schema.Node
@@ -135,7 +141,32 @@ func (e *Engine) buildSingleDefDetail(node *schema.Node) (*DefinitionDetail, err
 	if err != nil {
 		return nil, err
 	}
-	return &DefinitionDetail{Node: node, Calls: calls, CalledBy: calledBy}, nil
+	var owner *schema.Node
+	if node.Kind == goextract.KindField {
+		_, owners, err := buildContainsIndex(e.reader)
+		if err != nil {
+			return nil, err
+		}
+		if owner, err = e.fieldOwner(node, owners); err != nil {
+			return nil, err
+		}
+	}
+	return &DefinitionDetail{Node: node, Owner: owner, Calls: calls, CalledBy: calledBy}, nil
+}
+
+// fieldOwner returns the node that contains field n according to owners,
+// the reverse "contains" view of buildContainsIndex. A field with no
+// contains edge, or one whose owner node is missing, has no owner.
+func (e *Engine) fieldOwner(n *schema.Node, owners map[string]string) (*schema.Node, error) {
+	id, ok := owners[n.Id]
+	if !ok {
+		return nil, nil
+	}
+	owner, err := e.reader.GetNode(id)
+	if errors.Is(err, graphstore.ErrNotFound) {
+		return nil, nil
+	}
+	return owner, err
 }
 
 // buildMultiDefDetail builds the reverse adjacency ONCE (via the
@@ -153,6 +184,12 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 	if err != nil {
 		return nil, err
 	}
+	var owners map[string]string
+	if slices.ContainsFunc(matches, func(n *schema.Node) bool { return n.Kind == goextract.KindField }) {
+		if _, owners, err = buildContainsIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
 
 	definition := func(n *schema.Node) (*DefinitionDetail, error) {
 		source, err := e.readSourceFile(n.FilePath)
@@ -167,7 +204,13 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 		if err != nil {
 			return nil, err
 		}
-		return &DefinitionDetail{Node: n, Source: source, Calls: calls, CalledBy: calledBy}, nil
+		var owner *schema.Node
+		if n.Kind == goextract.KindField {
+			if owner, err = e.fieldOwner(n, owners); err != nil {
+				return nil, err
+			}
+		}
+		return &DefinitionDetail{Node: n, Owner: owner, Source: source, Calls: calls, CalledBy: calledBy}, nil
 	}
 
 	return NewMultiDefDetail(symbol, matches, definition), nil

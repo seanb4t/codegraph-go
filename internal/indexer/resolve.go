@@ -66,4 +66,7 @@ func stampCapabilities(meta *schema.Meta) {
 	// Each declaration has its own node: nodeid.Allocator gives the
 	// second and later copies of a repeated declaration their own ids.
 	meta.HasUniqueDeclIds = true
+	// The extractors emit fields and data references with their binding
+	// facts, and the resolver derives the calls through data symbols.
+	meta.HasDataSymbols = true
 }

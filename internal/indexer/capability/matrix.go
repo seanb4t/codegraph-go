@@ -98,7 +98,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Struct fields have no node, and a call in a package-level initializer has no `calls` edge. Case `go/grouped-bindings` holds the exact differences (#239).",
+			"A keyed composite-literal element is a read of its value, not a write to the field. A write through a receiver of unknown type leaves no binding edge, so neither withholds the function that a field holds.",
 		},
 	},
 
@@ -114,7 +114,8 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Field declarations have no node. Case `java/fields-and-owners` holds the exact differences (#239).",
+			"A bare name that is not a local, a parameter or a field of the enclosing class resolves as a read through `this` does. Inside an anonymous or local class, the receiver is the enclosing named class. A method of the class with the same name as the field stops this lookup.",
+			"Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.",
 			"When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).",
 			"A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.",
 			"TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.",
@@ -138,7 +139,8 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageNone,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Module bindings, class attributes and receiver attributes have no node. Case `python/module-and-class-attributes` holds the exact differences (#239).",
+			"Only the class body and the receiver of a method declare a field. An attribute that code sets on another object, or through `setattr`, declares no field. Case `python/decorators-and-dynamic-attributes` records what the graph emits.",
+			"A class attribute that holds an instance of a descriptor class declares no field. The index finds a descriptor class only in the same file, so an attribute that holds a descriptor from another file is an ordinary field.",
 			"pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.",
 			"A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.",
 			"Wildcard from-imports (`from x import *`) are not resolved.",
@@ -152,7 +154,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Destructured bindings, module variables and class fields have no node, and a call in a class field has no `calls` edge. Case `typescript/module-bindings-and-fields` holds the exact differences (#239).",
+			"A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
 			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
@@ -164,6 +166,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
+			"A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
 			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
@@ -175,7 +178,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageNone,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Constants, destructured bindings, function expressions and class fields have no node, and a call in or to a function expression has no `calls` edge. Case `javascript/callable-declarations` holds the exact differences (#239).",
+			"A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.",
 			"JavaScript's own grammar has no interface_declaration node and no implements clause — class heritage is extends-only, so RefKindEmbeds refs never resolve to an interface target and never promote to an implements edge for pure-JavaScript files.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",

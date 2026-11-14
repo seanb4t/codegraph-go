@@ -4,11 +4,11 @@
 
 See [proposal.md](proposal.md) for motivation and scope. [Issue #175](https://github.com/seanb4t/codegraph-go/issues/175) identifies a broken path through a Go function variable.
 
-The [Go extractor](../../../internal/indexer/goextract/types.go) emits package variables but does not expose struct fields as data nodes. The grouped-variable omission already received a separate fix.
+The [Go extractor](../../../../internal/indexer/goextract/types.go) emitted package variables but did not expose struct fields as data nodes before this change. The grouped-variable omission already received a separate fix.
 
-The [TypeScript extractor](../../../internal/indexer/tsextract/types.go), [Python extractor](../../../internal/indexer/pyextract/types.go), and [Java extractor](../../../internal/indexer/javaextract/types.go) do not provide the full proposed declaration contract.
+The [TypeScript extractor](../../../../internal/indexer/tsextract/types.go), [Python extractor](../../../../internal/indexer/pyextract/types.go), and [Java extractor](../../../../internal/indexer/javaextract/types.go) did not provide the full proposed declaration contract before this change.
 
-[Query traversal](../../../internal/query/traverse.go) follows call edges for caller relationships. Treating every reference as a call changes that meaning and creates incorrect results.
+[Query traversal](../../../../internal/query/traverse.go) follows call edges for caller relationships. Treating every reference as a call changes that meaning and creates incorrect results.
 
 ## Goals / Non-Goals
 
@@ -43,7 +43,7 @@ Implement this bounded declaration matrix:
 | Language | Included declarations | Explicit limits |
 | --- | --- | --- |
 | Go | Package `var` and `const`, grouped declarations, multi-name specs, explicitly named struct fields | Preserve existing embedding relationships. Implicit embedded-field names and unrestricted local variables remain separate work. |
-| TypeScript, JavaScript, TSX | Module `var`, `let`, `const`, identifier destructuring, class fields with static names, private fields | Do not invent names for computed property expressions. Preserve existing callable-constant representation. |
+| TypeScript, JavaScript, TSX | Module `var`, `let`, `const`, identifier destructuring, class fields with static names, private fields | Do not invent names for computed property expressions. A quoted field name also declares no field, as the capability matrix records. Preserve existing callable-constant representation. |
 | Python | Module assignments and annotations, named tuple/list targets, class assignments, receiver attributes in instance methods | Identify the actual declared receiver. Do not treat every variable named `self` as a receiver. Dynamic attributes and metaclass effects remain unresolved. |
 | Java | Class and interface fields, including multiple declarators and static fields | Record components, enum constants, implicit synthetic fields, and overload resolution remain visible gaps. |
 
@@ -53,11 +53,13 @@ Resolve direct identifier reads and writes in their lexical scope. Track local b
 
 For Java, TypeScript, JavaScript, and TSX, follow an explicit, uniquely resolved base-class chain for accessible fields. Reference the declaring base owner unless a derived declaration shadows that name. Do not resolve inaccessible private fields or ambiguous bases. This does not add arbitrary receiver inference or Go embedded-field promotion.
 
-For Python, a declared instance receiver's assignment establishes a field on its lexical class, even when a base defines a same-named class attribute. Prefer that established instance field for supported reads. Otherwise, follow only a uniquely established class chain. Leave descriptors, dynamic method resolution, and ambiguous class/instance storage unresolved.
+For Python, a declared instance receiver's assignment establishes a field on its lexical class, even when a base defines a same-named class attribute. Prefer that established instance field for supported reads. Otherwise, follow only a uniquely established class chain. Leave descriptors, dynamic method resolution, and ambiguous class/instance storage unresolved. The extractor finds a descriptor class only in the same file. A class attribute that holds an instance of a descriptor from another file is an ordinary field, and the capability matrix records this limit.
 
 An explicit `classmethod` establishes a class receiver for declarations in its lexical class. Do not assume that inherited calls bind `cls` to that class. Preserve one logical field per owner/name and record class or instance assignment evidence. This field identity does not equate their runtime storage.
 
-Represent data access with the existing `references` edge and additive `access` metadata: `read`, `write`, or `read_write`. Merge access roles deterministically because storage combines edges with equal source, kind, and target. Preserve initializer binding evidence with an additive metadata key.
+An inherited field resolves through `extends` and `implements` edges, so a Java interface constant is an inherited field. Each supertype path stops at the nearest type that declares the name. When two paths reach different declaring types, the name does not resolve. A diamond that reaches one declaring type through both paths resolves. A Java bare name that is not a local, a parameter or a field of its class resolves as a read through `this`.
+
+Represent data access with the existing `references` edge and additive `access` metadata: `read`, `write`, or `read_write`. Merge access roles deterministically because storage combines edges with equal source, kind, and target. Preserve initializer binding evidence with an additive metadata key. When edges merge, the result keeps that key if any merged edge carries it.
 
 Use the containing function or method as the source of executable reads and writes. Use the data declaration as the source of its initializer relationships. Reuse existing file or module anchors for top-level statements without a declaration owner.
 
@@ -65,13 +67,13 @@ Retain type relationships where the existing extractor can establish them. This 
 
 For callable aliases, retain a reference from the data symbol to the function value. Represent the caller's access to the data binding as a read reference, not a calls edge. Emit a calls edge only to a uniquely established function target. Mark it with static-binding evidence. Initialization alone never emits that call.
 
-Apply the competing-write rule to mutable module bindings even when their direct function expression uses the `function` kind. Kind alone cannot authorize direct call resolution. For `let f = () => 1; f = g; f()`, preserve value references but withhold a definitive target. This preserves existing callable identities without bypassing conservative resolution.
+Apply the competing-write rule to mutable module bindings even when their direct function expression uses the `function` kind. The binding pass treats a written function as holding its own value and every written one. Kind alone cannot authorize direct call resolution. For `let f = () => 1; f = g; f()`, preserve value references but withhold a definitive target. This preserves existing callable identities without bypassing conservative resolution.
 
 Resolve bounded alias chains with cycle detection. Require a single established target and no conflicting writes in the declared analysis context. A direct import alias can participate. Attribute lookup with an unknown receiver cannot.
 
-Collect syntactic assignments conservatively within each analysis context. A competing write, augmented assignment, unknown target assignment, or relevant parse failure prevents definitive alias resolution. Do not simulate branches or execution order. Known value references remain available in explore even when call resolution is withheld.
+Collect syntactic assignments conservatively within each analysis context. A competing write, augmented assignment, unknown target assignment, or relevant parse failure prevents definitive alias resolution. An augmented or logical assignment (`+=`, `??=`, `||=`) is a read_write write of an unknown value. Do not simulate branches or execution order. Known value references remain available in explore even when call resolution is withheld. In Go, a keyed composite-literal element is a read of its value, not a write to the field, and a write through a receiver of unknown type leaves no binding edge. A Go field is not open, so such writes do not withhold its target. This is a known limit of this change.
 
-For Go, evaluate non-test call sites in `go-production`, which excludes `_test.go` assignments. Evaluate `go-test` with production and test assignments together. Retain test declarations and references in the graph. Attach `binding_context` to each derived call's evidence. A call established only in production makes no claim about the same function's execution under tests.
+For Go, evaluate non-test call sites in `go-production`, which excludes `_test.go` assignments. Evaluate `go-test` with production and test assignments together. Retain test declarations and references in the graph. Attach `binding_context` to each derived call's evidence. Each binding path in `via` names its data symbols in order, joined by `>`. A Go path ends with `@` and the context that established it, so each path keeps its own context. A call established only in production makes no claim about the same function's execution under tests.
 
 Test-only callers use the test context. Non-test callers can carry evidence for either context when that context establishes a unique target. Test conflicts remove only test-context evidence. Other languages use the declared indexed scope without filename-based test exclusions. Build tags and platform selection remain explicit evaluation boundaries rather than new production compiler analysis.
 
@@ -79,7 +81,7 @@ When direct and derived calls share source, kind, and target, retain one edge wi
 
 These calls describe statically established potential calls, not guaranteed runtime execution. Unindexed code and external mutation remain documented limits. The #175 acceptance includes this repository's `internal/cli/daemon.go` binding and invocation alongside replacements in `internal/cli/daemon_test.go`. Require production call visibility, withheld conflicting test evidence, and a production-reassignment variant. Do not close #175 solely because the declaration becomes searchable.
 
-Keep callers and callees on call edges. Existing impact traversal benefits from the derived call edge. Definitions and explore expose the binding and data-reference path. Broader impact analysis for arbitrary data reads remains separate work.
+Keep callers and callees on call edges. Existing impact traversal benefits from the derived call edge. Definitions show the owner of a field and the calls of a symbol. They do not list data references. Explore shows a field inside the source of its owner. It leaves fields out of its candidates and its ranking graph, so a field that matches only through the name of its owner never takes the place of a function. The references edges hold the data-reference path for later queries. Broader impact analysis for arbitrary data reads remains separate work.
 
 Audit allowed kinds, result filters, graph presentation, and serialization. Change generated clients only through their owning generator when a protocol source actually changes. String kind values alone do not justify unrelated protocol changes.
 
@@ -87,7 +89,7 @@ Allocate a rebuild capability marker in `Meta`, as PR #250 did with `has_unique_
 
 Compare fresh indexing with edits, renames, deletion, and restoration. Include a field that moves between owners and an alias whose target changes. Identity stability applies to unchanged declarations, not removed or moved symbols.
 
-Persist each file's binding-write contributions and lookup dependencies through the existing schema source and generator. Include unresolved lookups, binding chains, analysis contexts, and every owner/name consulted by inherited-field lookup. Compare old and new contributions for each synchronization batch. Re-resolve dependent files when a write set, owner chain, or shadowing declaration changes, even when those files are unchanged.
+The store already holds each file's binding-write contributions and lookup dependencies, so the schema gains no field for them. The one new persisted fact of a file is `File.syntax_errors`. It marks a file whose parse recovered from an error. A data symbol in a module that holds such a file establishes no target, and a write from such a module writes an unknown value. In Go the module is the package, and in Python, TypeScript and JavaScript it is the file. In Java the module is the declared package, which can span source roots. Binding edges carry the writes, the binding chains and the analysis contexts. The extends, implements and contains edges carry the owner chains, and each file record carries its unresolved lookups. For each synchronization batch, the sync compares the old facts of each changed file with its new facts. Old facts come from the store, and new facts come from the extraction. Re-resolve dependent files when a write set, owner chain, or shadowing declaration changes, even when those files are unchanged. A change that leaves the types, supertypes, fields and field visibility of a file the same adds no owner dependent. A supertype whose name is not a stored or new type, such as a library base class, does not count.
 
 Propagate affected dependency keys until the dependent-file set stops growing, with cycle detection. Rebuild their outgoing relationships from the complete post-batch context and commit contributions and facts together. Removing a conflict must restore eligible calls, just as adding one removes them. PR #250 supplies structural invariants, not this new dependency mechanism.
 

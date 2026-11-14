@@ -41,6 +41,9 @@ type hierarchy struct {
 	// implements, and ownerOf maps a member to the type that contains it.
 	typeSupertypes map[string][]string
 	ownerOf        map[string]string
+	// subtyped holds the types that another type embeds, extends or
+	// implements.
+	subtyped map[string]bool
 
 	// sets holds every overload set by id.
 	sets map[string]*OverloadSet
@@ -55,6 +58,7 @@ func NewHierarchy(view View, typeEdges []*schema.Edge) Hierarchy {
 		view:           view,
 		typeSupertypes: make(map[string][]string),
 		ownerOf:        make(map[string]string),
+		subtyped:       make(map[string]bool),
 		sets:           make(map[string]*OverloadSet),
 	}
 	edges := typeEdges
@@ -73,6 +77,7 @@ func (h *hierarchy) learnEdges(edges []*schema.Edge) {
 		switch e.Kind {
 		case "embeds", goextract.EdgeKindExtends, goextract.EdgeKindImplements:
 			h.typeSupertypes[e.Source] = append(h.typeSupertypes[e.Source], e.Target)
+			h.subtyped[e.Target] = true
 		case goextract.RefKindContains:
 			if IsTypeKind(h.view.Kind(e.Source)) {
 				h.ownerOf[e.Target] = e.Source
@@ -262,10 +267,28 @@ func (h Hierarchy) OwnerOf(id string) (string, bool) {
 	return o, ok
 }
 
+// Supertypes returns the types that typeID directly embeds, extends or
+// implements. The zero Hierarchy has none.
+func (h Hierarchy) Supertypes(typeID string) []string {
+	if h.h == nil {
+		return nil
+	}
+	return h.h.typeSupertypes[typeID]
+}
+
 // WalkSupertypes visits the supertypes of typeID, breadth first; see
-// WalkSupertypes.
+// WalkSupertypes. The zero Hierarchy has no supertypes.
 func (h Hierarchy) WalkSupertypes(typeID string, visit func(supertypeID string) bool) bool {
+	if h.h == nil {
+		return false
+	}
 	return WalkSupertypes(typeID, h.h.typeSupertypes, visit)
+}
+
+// HasSubtypes reports whether another type embeds, extends or implements
+// typeID.
+func (h Hierarchy) HasSubtypes(typeID string) bool {
+	return h.h != nil && h.h.subtyped[typeID]
 }
 
 // Set returns the overload set id.

@@ -272,7 +272,7 @@ func (rs *resolver) sameFile(r goextract.FileResult, name string, line, col int3
 		rs.fileNodesPath = r.RelPath
 		rs.fileNodes = make(map[string][]goextract.ExtractedNode, len(r.Nodes))
 		for _, en := range r.Nodes {
-			if en.Node.Kind != goextract.KindFile {
+			if symbols.BareNameCandidate(en.Node.Kind) {
 				rs.fileNodes[en.Node.Name] = append(rs.fileNodes[en.Node.Name], en)
 			}
 		}
@@ -348,18 +348,220 @@ func (rs *resolver) resolveRef(r goextract.FileResult, ref goextract.UnresolvedR
 	return symbols.Pick(kept), true
 }
 
-// membersOf returns the members named name of the type ownerID, or of the
-// nearest supertype that declares the name.
-func (rs *resolver) membersOf(ownerID, name string) []symbols.Candidate {
-	if ms := rs.view.Members(ownerID, name); len(ms) > 0 {
+// resolveDataRef resolves a references ref. A ref through a receiver of
+// known type, as `p.X`, names a member of that type: a field, or a method
+// used as a value. It never falls back to a module-level name, so `p.X`
+// cannot reach an unrelated declaration named X. A receiver that is both
+// an alias and a type name, as `Point.X` or `pkg.X`, names a member of
+// the type when one exists, and a module-level name of the module the
+// alias imports otherwise. A bare name with an implicit receiver names a
+// member of the enclosing type when one exists, and resolves as a bare
+// name otherwise. Every other ref resolves as resolveRef does.
+func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.UnresolvedRef) (string, bool) {
+	recv := ref.ReceiverType
+	if recv == "" {
+		return rs.resolveRef(r, ref, false)
+	}
+	moduleAlias := ref.PkgAlias != "" && ref.PkgAlias == recv
+	if owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col); ok {
+		ms := rs.ownMembers(r.Language, owner.ID, ref.Name)
+		if ref.ImplicitReceiver {
+			ms = fieldsOnly(ms)
+		}
+		switch len(ms) {
+		case 0:
+		case 1:
+			return ms[0].ID, true
+		default:
+			return symbols.Pick(ms), true
+		}
+	}
+	if moduleAlias || ref.ImplicitReceiver {
+		return rs.resolveRef(r, ref, false)
+	}
+	return "", false
+}
+
+// inheritedRef reports whether the references ref names a member of a
+// receiver type that the type itself does not declare, in a language
+// whose classes have the members of the classes they extend. Such a ref
+// resolves through the class hierarchy, so Calls resolves it and Types
+// leaves it.
+func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.UnresolvedRef) bool {
+	recv := ref.ReceiverType
+	if ref.Kind != goextract.RefKindReferences || recv == "" || !InheritsMembers(r.Language) {
+		return false
+	}
+	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
+	return ok && len(rs.view.Members(owner.ID, ref.Name)) == 0
+}
+
+// dataRefMetadata returns the metadata of the references edge of ref:
+// its access role, goextract.BindingInit when ref is the whole initializer of its
+// source, and for a write the value it binds, or goextract.BindsUnknown.
+func (rs *resolver) dataRefMetadata(r goextract.FileResult, ref goextract.UnresolvedRef) map[string]string {
+	if ref.Access == "" && !ref.Binding {
+		return nil
+	}
+	md := map[string]string{}
+	if ref.Access != "" {
+		md[goextract.MetaAccess] = ref.Access
+	}
+	if ref.Binding {
+		md[goextract.MetaBinding] = goextract.BindingInit
+	}
+	if goextract.IsWriteAccess(ref.Access) {
+		md[goextract.MetaBinds] = goextract.BindsUnknown
+		if v := ref.Value; v != nil && ref.Access == goextract.AccessWrite {
+			if id, ok := rs.resolveDataRef(r, goextract.UnresolvedRef{
+				FromID: ref.FromID, Name: v.Name, PkgAlias: v.PkgAlias, ReceiverType: v.ReceiverType,
+				Kind: goextract.RefKindReferences, Line: ref.Line, Col: ref.Col,
+			}); ok {
+				md[goextract.MetaBinds] = id
+			}
+		}
+	}
+	return md
+}
+
+// membersOf returns the call candidates named name among the members of
+// the type ownerID, or of the nearest supertype that declares one. A
+// method wins over a field of the same name. With no method, the field
+// that ownMembers finds is the candidate, and a call through it becomes
+// a read of the field.
+func (rs *resolver) membersOf(lang, ownerID, name string) []symbols.Candidate {
+	if ms := callMembers(rs.view.Members(ownerID, name)); len(ms) > 0 {
 		return ms
 	}
 	var found []symbols.Candidate
 	rs.h.WalkSupertypes(ownerID, func(sup string) bool {
-		found = rs.view.Members(sup, name)
+		found = callMembers(rs.view.Members(sup, name))
 		return len(found) > 0
 	})
-	return found
+	if len(found) > 0 {
+		return found
+	}
+	return fieldsOnly(rs.ownMembers(lang, ownerID, name))
+}
+
+// ownMembers returns the members named name of the type ownerID. In a
+// language with class inheritance, a type that declares none has the
+// members of the one supertype that supplies the name, less the private
+// ones, which a subtype cannot reach. When two supertype paths supply
+// the name from different types, the type has no member of that name
+// here. Go has no such step: an embedded struct's fields are not the
+// embedding type's members here.
+func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
+	ms := rs.view.Members(ownerID, name)
+	if len(ms) > 0 || !InheritsMembers(lang) {
+		return ms
+	}
+	supplier, ok := rs.supplier(lang, ownerID, name, map[string]string{}, map[string]bool{ownerID: true})
+	if !ok || supplier == "" {
+		return nil
+	}
+	return inheritableMembers(lang, rs.view.Members(supplier, name))
+}
+
+// supplier returns the type that supplies the member name to typeID
+// through its supertypes. Each path from typeID ends at the nearest
+// type that declares the name, and that path supplies the name only
+// when a subtype can reach the declaration. It returns "" when no path
+// supplies the name, and false when two paths supply it from different
+// types. A diamond that reaches the same type through both paths has
+// one supplier. done holds the supplier of each type already settled,
+// and onPath the types on the current path, so a supertype cycle ends.
+func (rs *resolver) supplier(lang, typeID, name string, done map[string]string, onPath map[string]bool) (string, bool) {
+	found := ""
+	for _, sup := range rs.h.Supertypes(typeID) {
+		if onPath[sup] {
+			continue
+		}
+		var s string
+		switch declared := rs.view.Members(sup, name); {
+		case len(declared) > 0:
+			if len(inheritableMembers(lang, declared)) > 0 {
+				s = sup
+			}
+		default:
+			cached, settled := done[sup]
+			if !settled {
+				onPath[sup] = true
+				var ok bool
+				cached, ok = rs.supplier(lang, sup, name, done, onPath)
+				delete(onPath, sup)
+				if !ok {
+					return "", false
+				}
+				done[sup] = cached
+			}
+			s = cached
+		}
+		if s == "" {
+			continue
+		}
+		if found != "" && found != s {
+			return "", false
+		}
+		found = s
+	}
+	return found, true
+}
+
+// inheritableMembers returns the members of ms that a subclass written
+// in lang reaches.
+func inheritableMembers(lang string, ms []symbols.Candidate) []symbols.Candidate {
+	var kept []symbols.Candidate
+	for _, m := range ms {
+		if inheritable(lang, m.Node) {
+			kept = append(kept, m)
+		}
+	}
+	return kept
+}
+
+// InheritsMembers reports whether a class of lang has the data members of
+// the classes it extends.
+func InheritsMembers(lang string) bool {
+	switch lang {
+	case "typescript", "tsx", "javascript", "python", "java":
+		return true
+	}
+	return false
+}
+
+// inheritable reports whether a subclass written in lang reaches the
+// member n of a base class. A private member is out of reach, and in
+// Python a name with two leading underscores and no trailing pair is
+// mangled with its class name, so a subclass reaches another attribute.
+func inheritable(lang string, n *schema.Node) bool {
+	if lang == "python" {
+		name := n.GetName()
+		return !strings.HasPrefix(name, "__") || strings.HasSuffix(name, "__")
+	}
+	return n.GetVisibility() != "private"
+}
+
+// fieldsOnly returns the fields of ms.
+func fieldsOnly(ms []symbols.Candidate) []symbols.Candidate {
+	var kept []symbols.Candidate
+	for _, m := range ms {
+		if m.Kind == goextract.KindField {
+			kept = append(kept, m)
+		}
+	}
+	return kept
+}
+
+// callMembers returns ms without its fields.
+func callMembers(ms []symbols.Candidate) []symbols.Candidate {
+	var kept []symbols.Candidate
+	for _, m := range ms {
+		if m.Kind != goextract.KindField {
+			kept = append(kept, m)
+		}
+	}
+	return kept
 }
 
 // implicitThis reports whether a bare call in a method body of lang can
@@ -401,7 +603,7 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 	case recv != "":
 		owner, module, ok := rs.findType(r, ref.PkgAlias, recv, recvWrittenIn, ref.Line, ref.Col)
 		if ok {
-			cands := rs.membersOf(owner.ID, ref.Name)
+			cands := rs.membersOf(r.Language, owner.ID, ref.Name)
 			if len(cands) == 0 && ref.PkgAlias != "" && ref.PkgAlias == recv {
 				// The alias named a module after all: `util.Parse()`.
 				if mod, ok := r.Imports[ref.PkgAlias]; ok {
@@ -428,15 +630,17 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		// A bare name: the innermost same-file declaration in scope, the
 		// enclosing type's member, the file's module-level declaration,
 		// then the module's cross-file index (D15).
+		// A call through a data symbol is a read of it, which Assemble
+		// turns into the calls its bindings establish.
 		local := rs.sameFile(r, ref.Name, ref.Line, ref.Col, func(kind string) bool {
-			return callableKind(kind) || symbols.IsTypeKind(kind)
+			return callableKind(kind) || symbols.IsTypeKind(kind) || IsDataKind(kind)
 		})
 		if len(local) > 0 && local[0].Node.Nested {
 			return rs.choose(r, ref, local, argTypes, r.ImportPath)
 		}
 		if implicitThis(r.Language) {
 			if owner, ok := rs.h.OwnerOf(ref.FromID); ok {
-				if cands := rs.membersOf(owner, ref.Name); len(cands) > 0 {
+				if cands := rs.membersOf(r.Language, owner, ref.Name); len(cands) > 0 {
 					return rs.choose(r, ref, cands, argTypes, r.ImportPath)
 				}
 			}

@@ -28,6 +28,14 @@ func IsTypeKind(kind string) bool {
 	return false
 }
 
+// BareNameCandidate reports whether a node of kind can be the target of
+// a bare name. A file node is never a target, and its synthetic name must
+// not collide with a declared symbol. A field is reached through its
+// owner only.
+func BareNameCandidate(kind string) bool {
+	return kind != goextract.KindFile && kind != goextract.KindField
+}
+
 // Reachable reports whether another file can refer to n (design D15): a
 // nested declaration never, and in TypeScript only an exported one. A
 // JavaScript file that uses ESM exports follows the TypeScript rule; a

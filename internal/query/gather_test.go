@@ -423,6 +423,32 @@ func TestGatherMerge_UnionAcrossDistinctNodes(t *testing.T) {
 	}
 }
 
+// TestGatherMerge_DropsFields covers a field whose qualified name holds
+// the query terms through its owner, as UserAccountManager.Balance does
+// for "user account": the merge keeps its owner type and drops the field,
+// which shows inside the owner's source.
+func TestGatherMerge_DropsFields(t *testing.T) {
+	owner := &schema.Node{Id: "struct:o", Kind: goextract.KindStruct, Name: "UserAccountManager"}
+	field := &schema.Node{Id: "field:f", Kind: goextract.KindField, Name: "Balance", QualifiedName: "UserAccountManager.Balance"}
+	fts := map[gatherChannelKind]bool{gatherChannelFTS: true}
+
+	got := gatherMerge([]gatherCandidate{{Node: field, Score: 30, Channels: fts}, {Node: owner, Score: 20, Channels: fts}})
+	if len(got) != 1 || got[0].Node.Id != owner.Id {
+		t.Fatalf("gatherMerge = %+v, want only the owner %s", got, owner.Id)
+	}
+}
+
+// TestIsRankEdge covers the ranking graph: a reference to a variable
+// ranks, and a reference to a field does not.
+func TestIsRankEdge(t *testing.T) {
+	if !isRankEdge(&schema.Edge{Kind: goextract.RefKindReferences, Target: "variable:v"}) {
+		t.Error("a reference to a variable does not rank")
+	}
+	if isRankEdge(&schema.Edge{Kind: goextract.RefKindReferences, Target: "field:f"}) {
+		t.Error("a reference to a field ranks")
+	}
+}
+
 // TestGatherMerge_Empty asserts merging zero channels (or channels with
 // no candidates) returns an empty, non-nil-panicking slice.
 func TestGatherMerge_Empty(t *testing.T) {

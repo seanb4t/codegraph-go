@@ -48,19 +48,19 @@ public class Widget {
 		t.Fatalf("Extract returned error: %v", err)
 	}
 
-	widget := findNode(result, goextract.KindStruct, "Widget")
-	if widget == nil {
-		t.Fatal("Widget node not found")
+	field1 := findNode(result, goextract.KindField, "field1")
+	if field1 == nil {
+		t.Fatal("Widget.field1 node not found")
 	}
 
 	found := false
 	for _, u := range result.Unresolved {
-		if u.Kind == goextract.RefKindTypeOf && u.Name == "Helper" && u.FromID == widget.Node.Id {
+		if u.Kind == goextract.RefKindTypeOf && u.Name == "Helper" && u.FromID == field1.Node.Id {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected type_of ref from Widget to Helper (field declared type), got %+v", result.Unresolved)
+		t.Errorf("expected type_of ref from Widget.field1 to Helper (field declared type), got %+v", result.Unresolved)
 	}
 	for _, u := range result.Unresolved {
 		if u.Kind == goextract.RefKindTypeOf && (u.Name == "int" || u.Name == "primField") {

@@ -44,15 +44,6 @@ func findNode(result goextract.FileResult, kind, name string) *goextract.Extract
 	return nil
 }
 
-func hasNodeNamed(result goextract.FileResult, name string) bool {
-	for _, n := range result.Nodes {
-		if n.Node.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 func hasIntraEdge(result goextract.FileResult, source, target, kind string) bool {
 	for _, e := range result.IntraEdges {
 		if e.Edge.Source == source && e.Edge.Target == target && e.Edge.Kind == kind {
@@ -249,34 +240,6 @@ func TestExtract_MethodContainsEdge(t *testing.T) {
 	if !hasIntraEdge(result, widget.Node.Id, render.Node.Id, "contains") {
 		t.Errorf("expected a contains edge Widget -> render, got %+v", result.IntraEdges)
 	}
-}
-
-// TestExtract_NoFieldNodes proves a TS public_field_definition and a JS
-// field_definition never emit a node — the field-skip precedent every
-// priority-4 sibling extends.
-func TestExtract_NoFieldNodes(t *testing.T) {
-	t.Run("ts", func(t *testing.T) {
-		src := "export class Widget {\n  name: string;\n  private age: number = 0;\n}\n"
-		p := newTestParser(t, "ts")
-		result, err := Extract(p, "m", "Widget.ts", []byte(src))
-		if err != nil {
-			t.Fatalf("Extract returned error: %v", err)
-		}
-		if hasNodeNamed(result, "name") || hasNodeNamed(result, "age") {
-			t.Errorf("expected no field nodes, got %+v", result.Nodes)
-		}
-	})
-	t.Run("js", func(t *testing.T) {
-		src := "export class Widget {\n  name = 'x';\n}\n"
-		p := newTestParser(t, "js")
-		result, err := Extract(p, "m", "Widget.js", []byte(src))
-		if err != nil {
-			t.Fatalf("Extract returned error: %v", err)
-		}
-		if hasNodeNamed(result, "name") {
-			t.Errorf("expected no field nodes, got %+v", result.Nodes)
-		}
-	})
 }
 
 // TestExtract_ExtendsImplements proves a TS `class X extends Y implements
@@ -482,8 +445,9 @@ const secret = "shh";
 		t.Error("PI.IsExported = false, want true")
 	}
 
-	if hasNodeNamed(result, "secret") {
-		t.Errorf("expected no node for a non-exported top-level const, got %+v", result.Nodes)
+	secret := findNode(result, goextract.KindConstant, "secret")
+	if secret == nil || secret.Node.IsExported {
+		t.Errorf("expected an unexported constant node named secret, got %+v", secret)
 	}
 }
 

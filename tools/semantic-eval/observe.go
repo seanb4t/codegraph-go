@@ -17,6 +17,8 @@ type Observed struct {
 	// Unindexed names source files without a file record, with the reason
 	// CodeGraph recorded, or "no file record" when it recorded none.
 	Unindexed map[string]string
+	// Files maps the id of each file node to its path.
+	Files map[string]string
 }
 
 // ObservedDeclaration is one stored node in semantic terms.
@@ -82,6 +84,12 @@ func ReadStore(storeDir string, sources []string) (*Observed, error) {
 	for nit.Next() {
 		n := nit.Node()
 		nodes[n.Id] = node{n.Kind, n.Name, n.FilePath}
+		if n.Kind == "file" {
+			if obs.Files == nil {
+				obs.Files = map[string]string{}
+			}
+			obs.Files[n.Id] = n.FilePath
+		}
 		if role := roleOf(n.Kind); role != "" {
 			decls = append(decls, ObservedDeclaration{
 				NodeID: n.Id, Path: n.FilePath, Role: role, Name: n.Name,

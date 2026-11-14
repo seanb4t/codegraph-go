@@ -14,6 +14,8 @@ edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"struct:bfe84dd9
 edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"struct:d86658e2cc661d957dbdf09002519d6a","kind":"contains","provenance":"ast"}
 edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"struct:ee16528519c6e9690aaf0c126ce557e0","kind":"contains","provenance":"ast"}
 edge {"source":"file:f8acf35755035606c84e889fcf319a46","target":"interface:9b2f7172655dce06d558e09ae93be6e4","kind":"contains","provenance":"ast"}
+edge {"source":"field:457ef8b2fafe662674c02a56b651f022","target":"struct:20d24b1a0d3c9b5c6d58eec47bb92426","kind":"type_of","line":5,"col":12,"provenance":"ast"}
+edge {"source":"field:fd421ec16e2fe7f355eaa83cb8f92c39","target":"struct:9fffb6b6470532474279ed99674d3bdc","kind":"type_of","line":4,"col":12,"provenance":"ast"}
 edge {"source":"method:00a4bca1647e1df8f1f32c72d7df14e3","target":"struct:c20dd3fe394e68f598c5877688fbc14e","kind":"returns","line":4,"col":18,"provenance":"ast"}
 edge {"source":"method:00a4bca1647e1df8f1f32c72d7df14e3","target":"struct:c20dd3fe394e68f598c5877688fbc14e","kind":"instantiates","line":5,"col":15,"provenance":"ast"}
 edge {"source":"method:2016207e61f9fdc9de812c6fb47862d8","target":"method:a5f8ab4ee9ef29fd134a21001381eaa9","kind":"calls","line":31,"col":8,"provenance":"ast","receiverType":"Logger","argCount":1,"argTypes":["String"]}
@@ -37,8 +39,8 @@ edge {"source":"method:ec440bfc8eb56a43524ae8af900943f4","target":"struct:7d2b45
 edge {"source":"method:ec440bfc8eb56a43524ae8af900943f4","target":"struct:7d2b45c494d45f78c3cf25bce58774ea","kind":"instantiates","line":12,"col":20,"provenance":"ast"}
 edge {"source":"struct:20d24b1a0d3c9b5c6d58eec47bb92426","target":"method:c73e38ef6bd6c753ae53ecf0f348a8fa","kind":"contains","provenance":"ast"}
 edge {"source":"struct:46bd63905fedf80cc56bab4ddc2fc69a","target":"method:00a4bca1647e1df8f1f32c72d7df14e3","kind":"contains","provenance":"ast"}
-edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"struct:20d24b1a0d3c9b5c6d58eec47bb92426","kind":"type_of","line":5,"col":12,"provenance":"ast"}
-edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"struct:9fffb6b6470532474279ed99674d3bdc","kind":"type_of","line":4,"col":12,"provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"field:457ef8b2fafe662674c02a56b651f022","kind":"contains","provenance":"ast"}
+edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"field:fd421ec16e2fe7f355eaa83cb8f92c39","kind":"contains","provenance":"ast"}
 edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:2016207e61f9fdc9de812c6fb47862d8","kind":"contains","provenance":"ast"}
 edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:37b1dac5bc3a5ab60100f4bcceafed39","kind":"contains","provenance":"ast"}
 edge {"source":"struct:4ab095866882495929a28dce2f941742","target":"method:3a8a405bf321d7839df3a3f7a8e1333c","kind":"contains","provenance":"ast"}
@@ -80,7 +82,7 @@ file {"path":"util/util.go","contentHash":"993edc3374640ecc1749701ece578d0093392
 file {"path":"csharp/StoreA.cs","contentHash":"719571baec8ab9f3f7bfe123b804d3e58b0e3d9273206011b00add1949c77383","language":"csharp","nodeCount":"4","edgeCount":"3","sizeBytes":"131","declaredModuleKey":"Logging"}
 file {"path":"csharp/StoreB.cs","contentHash":"d0e28dbde48ea2b3f7165a629cc55e6aa36460f9223845e24115223de9db6f34","language":"csharp","nodeCount":"4","edgeCount":"4","sizeBytes":"157","declaredModuleKey":"Logging"}
 file {"path":"csharp/Logging.cs","contentHash":"fa03f5839d912fb65fd0b53088f47de4734a22e9eaed95a1cf4e8423dd7f9f8c","language":"csharp","nodeCount":"11","edgeCount":"12","sizeBytes":"476","declaredModuleKey":"Logging"}
-file {"path":"java/com/example/App.java","contentHash":"9f9b0ac51b15f2a763bd8b545f5b84ced9b9b4255a17c1d9e9201ca4d25a11a5","language":"java","nodeCount":"12","edgeCount":"29","sizeBytes":"921","unresolvedNames":[{"moduleKey":"com.example","name":"add"},{"moduleKey":"com.example","name":"e"},{"moduleKey":"com.example","name":"lookup"},{"moduleKey":"com.example","name":"s"},{"moduleKey":"com.example","name":"var"}],"declaredModuleKey":"com.example"}
+file {"path":"java/com/example/App.java","contentHash":"9f9b0ac51b15f2a763bd8b545f5b84ced9b9b4255a17c1d9e9201ca4d25a11a5","language":"java","nodeCount":"14","edgeCount":"31","sizeBytes":"921","unresolvedNames":[{"moduleKey":"com.example","name":"add"},{"moduleKey":"com.example","name":"lookup"},{"moduleKey":"com.example","name":"var"}],"declaredModuleKey":"com.example"}
 file {"path":"java/com/example/Sink.java","contentHash":"ac31e5729c4b1e2ebbfd36b7c6828a58a2a9bc6415099768a3c44b739d825b19","language":"java","nodeCount":"4","edgeCount":"3","sizeBytes":"118","declaredModuleKey":"com.example"}
 file {"path":"java/com/example/Logger.java","contentHash":"d892d9dad0cdea00b4e8b9532d51f6a6a78a0be71c0ed1197702da042abe7bf1","language":"java","nodeCount":"5","edgeCount":"4","sizeBytes":"200","declaredModuleKey":"com.example"}
 file {"path":"java/com/example/helper.java","contentHash":"5a778a72f4a14a73d58e08984cc313ed579d57579262afcbf4688f894c564355","language":"java","nodeCount":"3","edgeCount":"2","sizeBytes":"145","declaredModuleKey":"com.example"}
@@ -125,6 +127,8 @@ index csharp/StoreB.cs edge method:9b4ae1ea6faa2afcbe7e1ece929de82c calls method
 index csharp/StoreB.cs edge struct:4ee0acbff5d07297e21f6a9e7b5203d2 contains method:9b4ae1ea6faa2afcbe7e1ece929de82c
 index csharp/StoreB.cs edge overload_set:974ab2b737b14e6009c0d2a926880f22 contains method:5c18c4daeb7d19dc2f1d6889c2fa4b14
 index java/com/example/App.java node file:e1ff74f9d03773f338ec5298f5245840
+index java/com/example/App.java node field:457ef8b2fafe662674c02a56b651f022
+index java/com/example/App.java node field:fd421ec16e2fe7f355eaa83cb8f92c39
 index java/com/example/App.java node method:2016207e61f9fdc9de812c6fb47862d8
 index java/com/example/App.java node method:37b1dac5bc3a5ab60100f4bcceafed39
 index java/com/example/App.java node method:3a8a405bf321d7839df3a3f7a8e1333c
@@ -137,6 +141,8 @@ index java/com/example/App.java node method:e682680395d60f277a451c65e2a404de
 index java/com/example/App.java node method:ec440bfc8eb56a43524ae8af900943f4
 index java/com/example/App.java node struct:4ab095866882495929a28dce2f941742
 index java/com/example/App.java edge file:e1ff74f9d03773f338ec5298f5245840 contains struct:4ab095866882495929a28dce2f941742
+index java/com/example/App.java edge field:457ef8b2fafe662674c02a56b651f022 type_of struct:20d24b1a0d3c9b5c6d58eec47bb92426
+index java/com/example/App.java edge field:fd421ec16e2fe7f355eaa83cb8f92c39 type_of struct:9fffb6b6470532474279ed99674d3bdc
 index java/com/example/App.java edge method:2016207e61f9fdc9de812c6fb47862d8 calls method:a5f8ab4ee9ef29fd134a21001381eaa9
 index java/com/example/App.java edge method:37b1dac5bc3a5ab60100f4bcceafed39 calls method:44101a5cd4de4902fde585933fec4791
 index java/com/example/App.java edge method:3a8a405bf321d7839df3a3f7a8e1333c calls method:3bacdd35a24c8aa58d4851966eb70aca
@@ -153,8 +159,8 @@ index java/com/example/App.java edge method:e682680395d60f277a451c65e2a404de ins
 index java/com/example/App.java edge method:ec440bfc8eb56a43524ae8af900943f4 calls method:9c19a7bd13011a2db948590a1fa0f07c
 index java/com/example/App.java edge method:ec440bfc8eb56a43524ae8af900943f4 type_of struct:7d2b45c494d45f78c3cf25bce58774ea
 index java/com/example/App.java edge method:ec440bfc8eb56a43524ae8af900943f4 instantiates struct:7d2b45c494d45f78c3cf25bce58774ea
-index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 type_of struct:20d24b1a0d3c9b5c6d58eec47bb92426
-index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 type_of struct:9fffb6b6470532474279ed99674d3bdc
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains field:457ef8b2fafe662674c02a56b651f022
+index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains field:fd421ec16e2fe7f355eaa83cb8f92c39
 index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:2016207e61f9fdc9de812c6fb47862d8
 index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:37b1dac5bc3a5ab60100f4bcceafed39
 index java/com/example/App.java edge struct:4ab095866882495929a28dce2f941742 contains method:3a8a405bf321d7839df3a3f7a8e1333c

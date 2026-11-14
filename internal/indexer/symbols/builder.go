@@ -49,9 +49,13 @@ type data struct {
 
 	// storedSets are the overload sets the store holds for the files a
 	// sync does not reparse, and storedEdges the contains, embeds,
-	// extends and declared implements edges those files own.
+	// extends, declared implements and binding edges those files own.
 	storedSets  map[string]StoredSet
 	storedEdges []*schema.Edge
+
+	// syntaxErrorFiles are the files in which the parser recovered from
+	// a syntax error.
+	syntaxErrorFiles map[string]bool
 
 	// typeNames are the names of the type nodes, for the known-type rule
 	// of the type filter, and typesByName the ids of the type nodes under
@@ -151,13 +155,23 @@ func (b *Builder) SetModule(file, moduleKey string) {
 	b.write().moduleOf[file] = moduleKey
 }
 
+// MarkSyntaxErrors records that the parser recovered from a syntax error
+// in file.
+func (b *Builder) MarkSyntaxErrors(file string) {
+	d := b.write()
+	if d.syntaxErrorFiles == nil {
+		d.syntaxErrorFiles = make(map[string]bool)
+	}
+	d.syntaxErrorFiles[file] = true
+}
+
 // AddStoredSet records the stored overload set id.
 func (b *Builder) AddStoredSet(id string, set StoredSet) {
 	b.write().storedSets[id] = set
 }
 
-// AddStoredEdge records a contains, embeds, extends or declared
-// implements edge of a file the sync does not reparse.
+// AddStoredEdge records a contains, embeds, extends, declared implements
+// or binding edge of a file the sync does not reparse.
 func (b *Builder) AddStoredEdge(e *schema.Edge) {
 	d := b.write()
 	d.storedEdges = append(d.storedEdges, e)
@@ -189,6 +203,9 @@ func (b *Builder) AddResults(decls []Declarations) {
 			b.SetArity(id, arity)
 		}
 		b.SetModule(decl.RelPath, decl.ImportPath)
+		if decl.SyntaxErrors {
+			b.MarkSyntaxErrors(decl.RelPath)
+		}
 	}
 	for _, decl := range decls {
 		if decl.Err == nil {
@@ -207,10 +224,7 @@ func (b *Builder) addSymbols(decl Declarations) {
 	}
 	for _, n := range decl.Nodes {
 		n = nodes[n.Id]
-		if n.Kind == goextract.KindFile {
-			// A file node is never a callable or embeddable target, and
-			// its synthetic name, its RelPath, must not collide with a
-			// declared symbol of the module.
+		if !BareNameCandidate(n.Kind) {
 			continue
 		}
 		if !Reachable(n, fileExports) {

@@ -4,13 +4,14 @@ Project: <FIXTURE>
 
 Index Statistics:
   Files:     4
-  Nodes:     20
-  Edges:     23
+  Nodes:     23
+  Edges:     28
   DB Size:   <SIZE> MB
   Backend:   pebble
 Nodes by Kind:
   file            4
   function        4
+  field           3
   struct          3
   interface       2
   method          2
@@ -19,9 +20,10 @@ Nodes by Kind:
   type_alias      1
   variable        1
 Edges by Kind:
-  contains        14
+  contains        17
   calls           4
   imports         2
+  references      2
   embeds          1
   extends         1
   instantiates    1

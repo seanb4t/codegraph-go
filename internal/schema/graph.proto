@@ -193,6 +193,12 @@ message File {
   // the file's path or the project descriptor, which `sync` recomputes
   // on every run.
   string declared_module_key = 10;
+
+  // syntax_errors is true when the parser recovered from a syntax error in
+  // this file. Its declarations and references are indexed, but a write in
+  // the damaged region can be missing, so no call through a data symbol of
+  // its package is derived.
+  bool syntax_errors = 11;
 }
 
 // MethodSpec is one method an interface declares: its name and declared
@@ -332,6 +338,14 @@ message Meta {
   // written before that change, whose copies share one node and whose
   // node_count can be too high: `sync` then rebuilds it from scratch once.
   bool has_unique_decl_ids = 15;
+
+  // has_data_symbols reports whether this graph holds struct fields, the
+  // read and write references of data symbols with their binding facts,
+  // and the calls through function-valued variables. Absent or false
+  // means a graph written before them: `sync` then rebuilds it from
+  // scratch once, since it does not reparse the unchanged files that
+  // lack them.
+  bool has_data_symbols = 16;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of

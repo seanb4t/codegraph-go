@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -30,6 +31,14 @@ var RankEdges = map[string]bool{
 	goextract.RefKindImports:      true,
 }
 
+// isRankEdge reports whether e joins the ranking graph: its kind is in
+// RankEdges and its target is not a field. A field shows through the type
+// that holds it, so a read or a write of a field does not rank the field
+// on its own.
+func isRankEdge(e *schema.Edge) bool {
+	return RankEdges[e.Kind] && nodeid.KindOf(e.Target) != goextract.KindField
+}
+
 // buildRWRAdjacency builds an in-memory undirected adjacency list (index
 // positions into nodeIDs, not node ids themselves) from edges whose Kind
 // is in RankEdges. Mirrors BuildReverseAdjacency's (traverse.go)
@@ -46,7 +55,7 @@ func buildRWRAdjacency(nodeIDs []string, edges []*schema.Edge) [][]int {
 
 	adj := make([][]int, len(nodeIDs))
 	for _, e := range edges {
-		if !RankEdges[e.Kind] {
+		if !isRankEdge(e) {
 			continue
 		}
 		i, iok := idx[e.Source]

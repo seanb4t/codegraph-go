@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"strings"
 )
 
 // appendSegment appends a varint-length-prefixed encoding of seg to buf.
@@ -48,4 +49,14 @@ func NodeID(kind, qualifiedName, filePath string) string {
 
 	sum := sha256.Sum256(buf)
 	return kind + ":" + hex.EncodeToString(sum[:])[:32]
+}
+
+// KindOf returns the kind that the node id starts with, or "" for an id
+// with no kind.
+func KindOf(id string) string {
+	kind, _, ok := strings.Cut(id, ":")
+	if !ok {
+		return ""
+	}
+	return kind
 }

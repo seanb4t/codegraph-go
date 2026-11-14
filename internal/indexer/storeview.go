@@ -45,8 +45,12 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 		return nil, err
 	}
 	for fit.Next() {
-		if f := fit.File(); f.GetDeclaredModuleKey() != "" {
+		f := fit.File()
+		if f.GetDeclaredModuleKey() != "" {
 			declared[f.GetPath()] = f.GetDeclaredModuleKey()
+		}
+		if f.GetSyntaxErrors() && !exclude[f.GetPath()] {
+			b.MarkSyntaxErrors(f.GetPath())
 		}
 	}
 	err = fit.Err()
@@ -96,7 +100,7 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 	for _, n := range stored {
 		// A stored overload set is not a candidate: the resolver declares
 		// sets again from their members, as a fresh index does.
-		if n.Kind == goextract.KindFile || n.Kind == goextract.KindOverloadSet {
+		if !symbols.BareNameCandidate(n.Kind) || n.Kind == goextract.KindOverloadSet {
 			continue
 		}
 		if symbols.Reachable(n, fileExports[n.FilePath]) {
@@ -132,6 +136,8 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 			if e.Kind == "contains" {
 				recordSetEdge(b, storedSets, e)
 			}
+		case resolve.IsBindingEdge(e):
+			b.AddStoredEdge(e)
 		case e.Kind == "contains", e.Kind == "embeds", e.Kind == goextract.EdgeKindExtends, e.Kind == goextract.EdgeKindImplements:
 			b.AddStoredEdge(e)
 			if e.Kind == "contains" {

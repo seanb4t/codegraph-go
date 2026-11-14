@@ -109,6 +109,10 @@ type extractor struct {
 	// env is the type environment of the method body under extraction
 	// (design D17), or nil outside a body.
 	env *goextract.TypeEnv
+	// fields and owner are the fields and the name of the type whose
+	// code the extractor reads, while env is set.
+	fields *goextract.TypeEnv
+	owner  string
 
 	// typeNodesByStart maps the start byte of each type declaration to its
 	// node id, so that each copy of a repeated type gets its own methods.
@@ -262,7 +266,7 @@ func (ex *extractor) emitTypeDecl(node *tree_sitter.Node, kind string) {
 
 	ex.collectSupertypeRefs(id, node, kind)
 	if body := node.ChildByFieldName("body"); body != nil {
-		ex.collectFieldTypeOfRefs(id, body)
+		ex.emitFields(id, name, body, kind == goextract.KindInterface)
 	}
 }
 
@@ -485,9 +489,10 @@ func (ex *extractor) emitMethod(typeID, typeName string, fields *goextract.TypeE
 
 	if body := decl.ChildByFieldName("body"); body != nil {
 		ex.env = ex.bodyEnv(fields, typeName, decl)
+		ex.fields, ex.owner = fields, typeName
 		ex.collectCalls(id, body)
 		ex.collectReferencesAndInstantiates(id, body)
-		ex.env = nil
+		ex.env, ex.fields, ex.owner = nil, nil, ""
 	}
 }
 
@@ -548,9 +553,8 @@ func (ex *extractor) recordInstantiate(fromID string, creation *tree_sitter.Node
 // collectReferencesAndInstantiates walks a method/constructor body for
 // three D-09 Pass-1 capture kinds (01-RESEARCH.md §B): instantiates (via
 // recordInstantiate), type_of for LOCAL variable declarations (anchored at
-// the enclosing method id fromID — field type_of is handled separately by
-// collectFieldTypeOfRefs, anchored at the enclosing type, since this
-// extractor emits no field OR local-variable node either), and references
+// the enclosing method id fromID, since this extractor emits no
+// local-variable node; a field's type_of comes from its own node), and references
 // (a value read of an identifier/field access that is NOT a
 // method_invocation's own callee/object — collectCalls already captures
 // those via its own independent whole-body scan, and de-dup requires a
@@ -567,7 +571,7 @@ func (ex *extractor) recordInstantiate(fromID string, creation *tree_sitter.Node
 // scrutinee are not captured). This is a deliberate, bounded scope, not a
 // silent drop of ground truth — an over-broad walk risks the exact false
 // same-package-name-collision resolution recordCall's local-vs-type
-// discipline (mirrored below in captureFieldAccessRead) already guards
+// discipline (mirrored below in captureFieldAccess) already guards
 // against for `calls`.
 func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_sitter.Node) {
 	walkDescendants(body, func(n *tree_sitter.Node) bool {
@@ -608,8 +612,11 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 			}
 			return false
 		case "assignment_expression":
-			if right := n.ChildByFieldName("right"); right != nil {
-				ex.captureExprRead(fromID, right)
+			ex.captureAssignment(fromID, n)
+			return false
+		case "update_expression":
+			if n.NamedChildCount() > 0 {
+				ex.captureWrite(fromID, n.NamedChild(0), goextract.AccessReadWrite)
 			}
 			return false
 		}
@@ -629,13 +636,9 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	}
 	switch expr.Kind() {
 	case "identifier":
-		pos := expr.StartPosition()
-		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: expr.Utf8Text(ex.src), Kind: goextract.RefKindReferences,
-			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
-		})
+		ex.captureName(fromID, expr, goextract.AccessRead)
 	case "field_access":
-		ex.captureFieldAccessRead(fromID, expr)
+		ex.captureFieldAccess(fromID, expr, goextract.AccessRead)
 	case "parenthesized_expression":
 		if expr.NamedChildCount() > 0 {
 			ex.captureExprRead(fromID, expr.NamedChild(0))
@@ -679,7 +682,7 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	// reference captured, no error.
 }
 
-// captureFieldAccessRead handles a field_access VALUE read
+// captureFieldAccess handles a field_access read or write
 // (`Type.field`/`obj.field` used as a value, not called — recordCall's own
 // method_invocation handling already captures the call-callee shape via
 // collectCalls' separate walk). Mirrors recordCall's receiver
@@ -689,7 +692,7 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 // goextract.captureSelectorRead's discipline; only a non-identifier operand
 // (another field_access chain, a method_invocation result, ...) is walked
 // further.
-func (ex *extractor) captureFieldAccessRead(fromID string, sel *tree_sitter.Node) {
+func (ex *extractor) captureFieldAccess(fromID string, sel *tree_sitter.Node, access string) {
 	object := sel.ChildByFieldName("object")
 	field := sel.ChildByFieldName("field")
 	if field == nil {
@@ -703,27 +706,8 @@ func (ex *extractor) captureFieldAccessRead(fromID string, sel *tree_sitter.Node
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
 		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
-		ReceiverType: receiverType,
+		ReceiverType: receiverType, Access: access,
 	})
-}
-
-// collectFieldTypeOfRefs emits a D-09 `type_of` Pass-1 ref (01-RESEARCH.md
-// §B) for each of typeID's own class/interface body's direct
-// field_declaration children, anchored at typeID itself — a documented Java
-// D-02 precision note (mirrors this package's pre-existing "no field node"
-// skip, types.go's package doc): since this extractor never emits a field
-// node, a field's declared-type ref has no field-level FromID to anchor on,
-// so it is recorded against the enclosing type instead. A primitive-typed
-// field (integral_type, boolean_type, ...) emits no ref via
-// emitNamedTypeRef's own filtering.
-func (ex *extractor) collectFieldTypeOfRefs(typeID string, body *tree_sitter.Node) {
-	for i := uint(0); i < body.NamedChildCount(); i++ {
-		fd := body.NamedChild(i)
-		if fd.Kind() != "field_declaration" {
-			continue
-		}
-		ex.emitNamedTypeRef(typeID, fd.ChildByFieldName("type"), goextract.RefKindTypeOf)
-	}
 }
 
 func (ex *extractor) collectCalls(fromID string, body *tree_sitter.Node) {

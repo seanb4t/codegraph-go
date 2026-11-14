@@ -3,12 +3,12 @@
   "id": "go/grouped-bindings",
   "language": "go",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "grouped bindings, constants, fields, methods",
-  "status": "known-gap",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "status": "supported",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-go definitions and enclosing ranges; reviewed call annotations",
   "buildContext": "GOOS=linux,GOARCH=amd64",
   "scope": {
@@ -23,18 +23,8 @@
       "field"
     ],
     "relationshipKinds": [
-      "calls"
-    ]
-  },
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration bindings.go/Point/field/Tag@22:1",
-      "missing-declaration bindings.go/Point/field/X@21:1",
-      "missing-declaration bindings.go/Point/field/Y@21:4",
-      "missing-relationship Third calls name"
+      "calls",
+      "references"
     ]
   },
   "declarations": [
@@ -343,6 +333,16 @@
       "path": "bindings.go",
       "site": {
         "line": 8,
+        "col": 41
+      }
+    },
+    {
+      "source": "Point.Label",
+      "kind": "references",
+      "target": "Point.Tag",
+      "path": "bindings.go",
+      "site": {
+        "line": 25,
         "col": 41
       }
     }

@@ -1,0 +1,40 @@
+# Tasks
+
+## 1. Shared data-symbol contract
+
+- [x] 1.1 Integrate with the identity finalizer that PR #250 merged (`nodeid.Allocator.Finalize`, specified in `openspec/specs/graph-index`). Keep fields out of fresh and store-seeded bare-name call indexes. Cover identities, remapped references, and Java field/method name collisions in `TestDataSymbolIdentity`.
+- [x] 1.2 Add the field kind and the design's per-language kind mapping. Merge read/write roles and direct/derived call evidence before collapse and storage. Cover modifiers, callable aliases, serialization, mixed call paths, and extraction order in `TestDataReferenceMetadata`.
+- [x] 1.3 Add independently annotated cross-language fixtures to #238's evaluation inputs. Review the declaration and reference inventory against `specs/data-symbols/spec.md`.
+
+## 2. Go data declarations and references
+
+- [x] 2.1 Extend `internal/indexer/goextract` for named struct fields and complete package declaration lists. Cover grouped declarations, blank identifiers, and owners in `TestGoDataDeclarations`.
+- [x] 2.2 Add initializer references and scoped data reads and writes. Cover receiver types, local shadowing, and actual initializer calls in `TestGoDataReferences`.
+- [x] 2.3 Update the Go capability evidence and documented limits. Run the Go reference cases from #238 and make sure that supported facts match exactly.
+
+## 3. TypeScript and JavaScript data declarations
+
+- [x] 3.1 Extend `internal/indexer/tsextract` for module bindings, identifier destructuring, and static class field names. Cover TypeScript, JavaScript, TSX, and private fields in `TestTypeScriptDataDeclarations`.
+- [x] 3.2 Preserve callable identities and add scoped data references. Cover nonexported callables, callable fields, inherited fields, subclass shadowing, computed names, and block shadowing for TypeScript, JavaScript, and TSX in `TestTypeScriptDataReferences`.
+- [x] 3.3 Update separate TypeScript, JavaScript, and TSX capability evidence. Run the corresponding #238 cases and document remaining dynamic forms.
+
+## 4. Python and Java data declarations
+
+- [x] 4.1 Extend `internal/indexer/pyextract` for module assignments, annotations, and class attributes. Cover destructuring and repeated assignments in `TestPythonDataDeclarations`.
+- [x] 4.2 Add declared-receiver attributes and scoped Python data references. Cover renamed receivers, inherited class attributes, subclass instance writes, descriptors, class methods, static methods, and shadowing in `TestPythonDataReferences`.
+- [x] 4.3 Extend `internal/indexer/javaextract` for class and interface fields and their references. Cover inherited owners, subclass shadowing, access limits, final fields, initializer calls, and local shadowing in `TestJavaDataDeclarations` and `TestJavaDataReferences`.
+- [x] 4.4 Update Python and Java capability evidence. Run their #238 acceptance cases and retain record components, enum-specific forms, and dynamic ownership as visible gaps.
+
+## 5. Callable bindings and public queries
+
+- [x] 5.1 Add callable-binding resolution with bounded chains, cycle detection, and explicit Go production/test contexts. Apply it to mutable function-kind bindings too. Cover imports, competing writes, unknown assignments, context metadata, and parse failures in `TestCallableBindingResolution`.
+- [x] 5.2 Add the #175 regression using this repository's daemon implementation and test replacements. Require production callers, callees, and impact while withholding conflicting test evidence in `TestFunctionVariableQueries`. Include a production reassignment variant and retain test-file indexing.
+- [x] 5.3 Expose fields through existing kind filters and graph presentation. Cover CLI and MCP definitions and explore in `TestDataSymbolPublicQueries`. Add a field-rendering case to the existing web test suite.
+- [x] 5.4 Document binding evidence and query limits beside the capability matrix. In `TestFunctionVariableQueries`, require caller-to-binding read references and calls only to established functions. Make sure that an uncalled initializer never appears as a caller.
+
+## 6. Migration and integration acceptance
+
+- [x] 6.1 Add an additive rebuild marker through the existing metadata source and generator. Cover old indexes with unchanged sources in `TestDataSymbolRebuild`. Document the one-time rebuild behavior.
+- [x] 6.2 Persist write contributions and binding/owner lookup dependencies through schema sources and generators. Re-resolve unchanged dependents after cross-file assignment or inheritance changes. Compare fresh and updated facts in `TestDataSymbolSyncEquivalence`, including conflict removal, shadowing additions, renames, deletion, restoration, and moved fields.
+- [x] 6.3 Run the implemented `index-invariants` tests and #238 semantic acceptance for all affected languages. Remove fixed known-failure entries and record remaining gaps without weakening supported cases.
+- [x] 6.4 Add the release note with `task changie -- new --interactive=false -k Features -b "Index core-language variables and fields with scoped references and conservative callable bindings."`. Make sure that the generated fragment describes the shipped contract.

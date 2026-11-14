@@ -60,6 +60,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		result.Err = fmt.Errorf("tsextract: parser returned an empty tree for %s", relPath)
 		return result, nil
 	}
+	result.SyntaxErrors = root.HasError()
 
 	fileID := nodeid.NodeID(goextract.KindFile, relPath, relPath)
 	result.Nodes = append(result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
@@ -96,7 +97,8 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectTypes(root)
 	ex.collectMethods(root)
 	ex.collectFunctions(root)
-	ex.collectExportedConsts(root)
+	ex.collectModuleBindings(root)
+	ex.collectModuleWrites(root)
 
 	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
@@ -605,82 +607,25 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	}
 }
 
-// --- exported const declarations ---
+// --- function bindings ---
 
-func (ex *extractor) collectExportedConsts(root *tree_sitter.Node) {
-	for i := uint(0); i < root.NamedChildCount(); i++ {
-		stmt := root.NamedChild(i)
-		if stmt.Kind() != "export_statement" {
-			continue
-		}
-		decl := stmt.ChildByFieldName("declaration")
-		if decl == nil || decl.Kind() != "lexical_declaration" {
-			continue
-		}
-		kindNode := decl.ChildByFieldName("kind")
-		if kindNode == nil || kindNode.Utf8Text(ex.src) != "const" {
-			continue
-		}
-		for j := uint(0); j < decl.NamedChildCount(); j++ {
-			d := decl.NamedChild(j)
-			if d.Kind() == "variable_declarator" {
-				ex.emitExportedConstDeclarator(d)
-			}
-		}
-	}
-}
-
-func (ex *extractor) emitExportedConstDeclarator(d *tree_sitter.Node) {
-	nameNode := d.ChildByFieldName("name")
-	if nameNode == nil || nameNode.Kind() != "identifier" {
-		// A destructuring pattern target (`export const { a, b } = obj;`)
-		// — out of this bounded extractor's scope.
-		return
-	}
-	name := nameNode.Utf8Text(ex.src)
-	valueNode := d.ChildByFieldName("value")
-
-	if valueNode != nil {
-		switch valueNode.Kind() {
-		case "arrow_function", "function_expression", "generator_function":
-			id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(valueNode), d.StartByte())
-			ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{
-				Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, d, valueNode, true),
-			})
-			ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
-				Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
-			}})
-			ex.emitNamedTypeRef(id, valueNode.ChildByFieldName("return_type"), goextract.RefKindReturns)
-			if body := valueNode.ChildByFieldName("body"); body != nil {
-				ex.env = ex.bodyEnv(nil, "", valueNode, body)
-				ex.collectCalls(id, body)
-				ex.collectReferencesAndInstantiates(id, body)
-				ex.env = nil
-			}
-			return
-		}
-	}
-
-	id := ex.alloc.Declare(goextract.KindConstant, name, "", d.StartByte())
-	start := d.StartPosition()
-	end := d.EndPosition()
-	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
-		Id:            id,
-		Kind:          goextract.KindConstant,
-		Name:          name,
-		QualifiedName: name,
-		FilePath:      ex.relPath,
-		Language:      ex.language,
-		StartLine:     int32(start.Row) + 1,
-		EndLine:       int32(end.Row) + 1,
-		StartCol:      int32(start.Column),
-		EndCol:        int32(end.Column),
-		Visibility:    "public",
-		IsExported:    true,
-	}})
+// emitFunctionBinding emits the function that the module-level binding d
+// of decl declares with an arrow function or a function expression.
+func (ex *extractor) emitFunctionBinding(decl, d *tree_sitter.Node, name string, valueNode *tree_sitter.Node) {
+	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(valueNode), d.StartByte())
+	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{
+		Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, d, valueNode, ex.exported(decl, name)),
+	})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
+	ex.emitNamedTypeRef(id, valueNode.ChildByFieldName("return_type"), goextract.RefKindReturns)
+	if body := valueNode.ChildByFieldName("body"); body != nil {
+		ex.env = ex.bodyEnv(nil, "", valueNode, body)
+		ex.collectCalls(id, body)
+		ex.collectReferencesAndInstantiates(id, body)
+		ex.env = nil
+	}
 }
 
 // buildFuncNode builds a function/method schema.Node. posNode supplies the
@@ -757,8 +702,11 @@ func (ex *extractor) emitMethodsForType(typeNode *tree_sitter.Node) {
 	fields := ex.fieldsOf(body)
 	for i := uint(0); i < body.NamedChildCount(); i++ {
 		m := body.NamedChild(i)
-		if m.Kind() == "method_definition" {
+		switch m.Kind() {
+		case "method_definition":
 			ex.emitMethod(typeID, typeName, fields, m)
+		case "public_field_definition", "field_definition":
+			ex.emitField(typeID, typeName, fields, m)
 		}
 	}
 }
@@ -992,10 +940,8 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 				ex.captureExprRead(fromID, v)
 			}
 			return false
-		case "assignment_expression":
-			if right := n.ChildByFieldName("right"); right != nil {
-				ex.captureExprRead(fromID, right)
-			}
+		case "assignment_expression", "augmented_assignment_expression", "update_expression":
+			ex.captureAssignment(fromID, n)
 			return false
 		}
 		return true
@@ -1014,14 +960,14 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	}
 	switch expr.Kind() {
 	case "identifier":
-		pkgAlias, name := ex.resolveBareIdentifier(expr.Utf8Text(ex.src))
+		pkgAlias, name := ex.bareName(expr)
 		pos := expr.StartPosition()
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
-			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column), Access: goextract.AccessRead,
 		})
 	case "member_expression":
-		ex.captureMemberAccessRead(fromID, expr)
+		ex.captureMemberAccess(fromID, expr, goextract.AccessRead)
 	case "parenthesized_expression":
 		if expr.NamedChildCount() > 0 {
 			ex.captureExprRead(fromID, expr.NamedChild(0))
@@ -1061,7 +1007,7 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	// reference captured, no error.
 }
 
-// captureMemberAccessRead handles a member_expression VALUE read
+// captureMemberAccess handles a member_expression read or write
 // (`Type.prop`/`obj.prop` used as a value, not called — recordCall's own
 // call_expression handling already captures the call-callee shape via
 // collectCalls' separate walk). Mirrors recordCall's memberAccessAlias
@@ -1069,7 +1015,7 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 // nested member_expression chain, a call_expression result, ...) is walked
 // further via captureExprRead, mirroring goextract's captureSelectorRead
 // recursion discipline.
-func (ex *extractor) captureMemberAccessRead(fromID string, sel *tree_sitter.Node) {
+func (ex *extractor) captureMemberAccess(fromID string, sel *tree_sitter.Node, access string) {
 	object := sel.ChildByFieldName("object")
 	propNode := sel.ChildByFieldName("property")
 	if propNode == nil {
@@ -1082,7 +1028,7 @@ func (ex *extractor) captureMemberAccessRead(fromID string, sel *tree_sitter.Nod
 	pos := sel.StartPosition()
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
-		Line: int32(pos.Row) + 1, Col: int32(pos.Column), ReceiverType: receiverType,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column), ReceiverType: receiverType, Access: access,
 	})
 }
 

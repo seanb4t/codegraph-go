@@ -321,12 +321,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// edge, so the sync builds it once, at the first of the moments that
 	// need it: the dependents of a pruned node, here, or the files that
 	// emit a shared node, below. A sync with neither builds none. It
-	// holds the calls edges and the contains edges, and each reader keeps
-	// to its own kind.
+	// holds the calls, contains and references edges, and each reader
+	// keeps to its own kinds.
 	var revCache map[string][]*schema.Edge
 	reverse := func() (map[string][]*schema.Edge, error) {
 		if revCache == nil {
-			rev, err := buildReverseAdjacency(r0, goextract.RefKindCalls, goextract.RefKindContains)
+			rev, err := buildReverseAdjacency(r0, goextract.RefKindCalls, goextract.RefKindContains, goextract.RefKindReferences)
 			if err != nil {
 				return nil, err
 			}
@@ -344,9 +344,9 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 		for id := range goneIDs {
 			for _, edge := range rev[id] {
-				// Only a caller depends on a pruned node. A contains edge
-				// into a pruned method adds no dependent.
-				if edge.Kind != goextract.RefKindCalls {
+				// A caller and a reader depend on a pruned node. A
+				// contains edge into a pruned method adds no dependent.
+				if edge.Kind != goextract.RefKindCalls && edge.Kind != goextract.RefKindReferences {
 					continue
 				}
 				srcNode, err := r0.GetNode(edge.Source)
@@ -486,9 +486,37 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	waiting = mergeSortedPaths(mergeSortedPaths(waiting, outbid), more)
+	// A file that calls through a data symbol whose writes the reparse
+	// can change is reparsed too, so its derived calls follow the writes.
+	reparsed := make([]string, 0, len(batchFiles)+len(deleted))
+	for _, f := range batchFiles {
+		reparsed = append(reparsed, f.RelPath)
+	}
+	reparsed = append(reparsed, deleted...)
+	// A deleted file was pruned in full above, so it must not come back
+	// as a reader: a second prune would count its edges twice.
+	for _, p := range deleted {
+		inBatch[p] = true
+	}
+	// One scan of r0 serves both dependency passes and every later wave.
+	deps := newStoreIndex(r0, discovered)
+	readers, err := bindingDependents(deps, results, reparsed, inBatch)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	// A file that refers to a field through a class whose owner chain the
+	// reparse can change is reparsed too, so the reference follows the
+	// fields and subclasses that the chain now has.
+	owners, err := ownerDependents(deps, results, reparsed, inBatch)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers), owners)
 	// The later waves. A file of a wave can emit a shared id that the
-	// cycle did not hold yet, and the other files that emit that id then
+	// cycle did not hold yet, or change the binding facts of a data
+	// symbol, and the files that emit that id or read that symbol then
 	// form the next wave. The loop ends when a wave adds no file.
 	for len(waiting) > 0 {
 		waitingFiles := make([]discover.DiscoveredFile, 0, len(waiting))
@@ -521,12 +549,21 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		for _, r := range wave {
 			addSharedIDs(shared, r)
 		}
-		if len(shared) == before {
-			break
+		wavePaths := make([]string, 0, len(waitingFiles))
+		for _, f := range waitingFiles {
+			wavePaths = append(wavePaths, f.RelPath)
 		}
-		if waiting, err = emitters(); err != nil {
+		if waiting, err = bindingDependents(deps, wave, wavePaths, inBatch); err != nil {
 			w.Close()
 			return Stats{}, err
+		}
+		if len(shared) != before {
+			more, err := emitters()
+			if err != nil {
+				w.Close()
+				return Stats{}, err
+			}
+			waiting = mergeSortedPaths(waiting, more)
 		}
 	}
 	// A later wave appends its files out of path order, and the merge of
@@ -933,7 +970,8 @@ func sortedBoolKeys(m map[string]bool) []string {
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
 // has_unresolved_names, has_declared_module_keys, has_method_specs,
-// has_grouped_vars or has_unique_decl_ids flag is false (D-02b). It reads
+// has_grouped_vars, has_unique_decl_ids or has_data_symbols flag is
+// false (D-02b). It reads
 // the metadata through readStoreMeta, which opens and closes the store on
 // its own and never creates one, so a check of a missing store leaves no
 // empty store behind.
@@ -946,7 +984,8 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 		return false, err
 	}
 	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() ||
-		!meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars() || !meta.GetHasUniqueDeclIds(), nil
+		!meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars() || !meta.GetHasUniqueDeclIds() ||
+		!meta.GetHasDataSymbols(), nil
 }
 
 // NeedsFullIndex reports whether Sync on the store at storeDir would build
@@ -1253,6 +1292,21 @@ func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, chan
 	if len(names) == 0 {
 		return nil, nil
 	}
+	skip := func(path string) bool {
+		_, inChanged := changed[path]
+		_, inDependents := dependents[path]
+		return inChanged || inDependents
+	}
+	match := func(u *schema.UnresolvedName) bool {
+		_, ok := names[unresolvedKey{moduleKey: u.GetModuleKey(), name: u.GetName()}]
+		return ok
+	}
+	return filesWithUnresolved(r0, skip, match)
+}
+
+// filesWithUnresolved returns, sorted, the paths of r0's files that skip
+// does not exclude and that have an unresolved name that match accepts.
+func filesWithUnresolved(r0 graphstore.Reader, skip func(path string) bool, match func(*schema.UnresolvedName) bool) ([]string, error) {
 	it, err := r0.IterateFiles()
 	if err != nil {
 		return nil, err
@@ -1263,14 +1317,11 @@ func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, chan
 	for it.Next() {
 		f := it.File()
 		path := f.GetPath()
-		if _, ok := changed[path]; ok {
-			continue
-		}
-		if _, ok := dependents[path]; ok {
+		if skip(path) {
 			continue
 		}
 		for _, u := range f.GetUnresolvedNames() {
-			if _, ok := names[unresolvedKey{moduleKey: u.GetModuleKey(), name: u.GetName()}]; ok {
+			if match(u) {
 				paths = append(paths, path)
 				break
 			}

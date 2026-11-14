@@ -3,12 +3,12 @@
   "id": "javascript/callable-declarations",
   "language": "javascript",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "callables, destructuring holes, class fields",
-  "status": "known-gap",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "status": "supported",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
   "scope": {
     "roles": [
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "declarations": [
@@ -226,23 +227,33 @@
         "line": 13,
         "col": 11
       }
+    },
+    {
+      "source": "alias",
+      "kind": "references",
+      "target": "plain",
+      "path": "m.js",
+      "site": {
+        "line": 8,
+        "col": 14
+      }
+    },
+    {
+      "source": "file:m.js",
+      "kind": "references",
+      "target": "one",
+      "path": "m.js",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:m.js",
+      "kind": "references",
+      "target": "two",
+      "path": "m.js",
+      "evidence": "reviewed"
     }
   ],
   "sources": [
     "m.js"
-  ],
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration m.js//constant/alias@8:6",
-      "missing-declaration m.js//constant/one@9:7",
-      "missing-declaration m.js//constant/two@9:14",
-      "missing-declaration m.js//function/expr@5:6",
-      "missing-declaration m.js/Counter/field/total@11:2",
-      "missing-relationship Counter.bump calls expr",
-      "missing-relationship expr calls plain"
-    ]
-  }
+  ]
 }

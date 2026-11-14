@@ -178,7 +178,7 @@ SOFTWARE.
 ----------------------------------------
 
 Name: @sveltejs/kit
-Version: 2.70.3
+Version: 2.70.4
 License: MIT
 Source: git+https://github.com/sveltejs/kit.git
 

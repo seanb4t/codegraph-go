@@ -59,6 +59,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		result.Err = fmt.Errorf("pyextract: parser returned an empty tree for %s", relPath)
 		return result, nil
 	}
+	result.SyntaxErrors = root.HasError()
 
 	fileID := nodeid.NodeID(goextract.KindFile, relPath, relPath)
 	result.Nodes = append(result.Nodes, goextract.ExtractedNode{Node: &schema.Node{
@@ -81,6 +82,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		typeNodesByStart: make(map[uint]string),
 		ownPackage:       ownPackageFor(moduleKey, relPath),
 		fromImportOrigin: make(map[string]string),
+		descriptors:      descriptorClasses(root, src),
 	}
 
 	// Imports are collected first so calls and base-class references below
@@ -95,6 +97,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 	ex.collectClasses(root)
 	ex.collectMethods(root)
 	ex.collectTopLevelFunctions(root)
+	ex.collectModuleData(root)
 
 	goextract.FinalizeIDs(ex.alloc, root, &result)
 	return result, nil
@@ -127,6 +130,10 @@ type extractor struct {
 	// the name the module declares: `from lib import helper as h` gives
 	// fromImportOrigin["h"] = "helper".
 	fromImportOrigin map[string]string
+
+	// descriptors holds the names of the classes of the file that define
+	// __get__, __set__ or __delete__.
+	descriptors map[string]bool
 }
 
 // ownPackageFor derives a file's enclosing dotted package from its own
@@ -292,7 +299,7 @@ func (ex *extractor) emitFromImportName(fromModule string, entry *tree_sitter.No
 // and keeps the same-module form.
 func (ex *extractor) bareCallTarget(ident string) (pkgAlias, name string) {
 	if _, local := ex.env.Lookup(ident); local {
-		return "", ident
+		return goextract.LocalAlias(ident), ident
 	}
 	if origin, ok := ex.fromImportOrigin[ident]; ok {
 		return ident, origin
@@ -393,6 +400,7 @@ func (ex *extractor) emitClass(node *tree_sitter.Node) {
 	ex.collectBaseClasses(id, node)
 	if body := node.ChildByFieldName("body"); body != nil {
 		ex.collectClassBodyTypeOf(id, body)
+		ex.emitFieldsForClass(id, name, body)
 	}
 }
 
@@ -838,9 +846,10 @@ func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_
 			return false
 		case "assignment":
 			ex.emitNamedTypeRef(fromID, n.ChildByFieldName("type"), goextract.RefKindTypeOf)
-			if right := n.ChildByFieldName("right"); right != nil {
-				ex.captureExprRead(fromID, right)
-			}
+			ex.captureAssignment(fromID, n)
+			return false
+		case "augmented_assignment":
+			ex.captureAssignment(fromID, n)
 			return false
 		}
 		return true
@@ -859,13 +868,14 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	}
 	switch expr.Kind() {
 	case "identifier":
+		alias, name := ex.bareName(expr)
 		pos := expr.StartPosition()
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: expr.Utf8Text(ex.src), Kind: goextract.RefKindReferences,
-			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+			FromID: fromID, Name: name, PkgAlias: alias, Kind: goextract.RefKindReferences,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column), Access: goextract.AccessRead,
 		})
 	case "attribute":
-		ex.captureAttributeRead(fromID, expr)
+		ex.captureAttribute(fromID, expr, goextract.AccessRead)
 	case "parenthesized_expression":
 		if expr.NamedChildCount() > 0 {
 			ex.captureExprRead(fromID, expr.NamedChild(0))
@@ -901,11 +911,11 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	// reference captured, no error.
 }
 
-// captureAttributeRead handles an attribute VALUE read (`Type.attr`/
+// captureAttribute handles an attribute read or write (`Type.attr`/
 // `obj.attr` used as a value, not called — recordCall's own "call" handling
 // already captures the call-callee shape via collectCalls' separate walk).
 // Mirrors recordCall's local-vs-type alias discipline exactly (self/cls,
-func (ex *extractor) captureAttributeRead(fromID string, sel *tree_sitter.Node) {
+func (ex *extractor) captureAttribute(fromID string, sel *tree_sitter.Node, access string) {
 	object := sel.ChildByFieldName("object")
 	field := sel.ChildByFieldName("attribute")
 	if field == nil {
@@ -919,7 +929,7 @@ func (ex *extractor) captureAttributeRead(fromID string, sel *tree_sitter.Node) 
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
 		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
-		ReceiverType: receiverType,
+		ReceiverType: receiverType, Access: access,
 	})
 }
 

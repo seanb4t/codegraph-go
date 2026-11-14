@@ -3,12 +3,12 @@
   "id": "java/fields-and-owners",
   "language": "java",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "field lists, owners, interface constants, methods",
-  "status": "known-gap",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "status": "supported",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-javac definitions and enclosing ranges; reviewed call annotations",
   "scope": {
     "roles": [
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "referenceExclusions": [
@@ -287,22 +288,40 @@
         "line": 10,
         "col": 11
       }
+    },
+    {
+      "source": "Box.area",
+      "kind": "references",
+      "target": "Box.width",
+      "path": "p/Box.java",
+      "site": {
+        "line": 10,
+        "col": 15
+      }
+    },
+    {
+      "source": "Box.area",
+      "kind": "references",
+      "target": "Box.height",
+      "path": "p/Box.java",
+      "site": {
+        "line": 10,
+        "col": 22
+      }
+    },
+    {
+      "source": "Box.size.method",
+      "kind": "references",
+      "target": "Box.size.field",
+      "path": "p/Box.java",
+      "site": {
+        "line": 18,
+        "col": 11
+      }
     }
   ],
   "sources": [
     "p/Box.java",
     "p/Shape.java"
-  ],
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration p/Box.java/Box/field/NAME@6:22",
-      "missing-declaration p/Box.java/Box/field/height@5:13",
-      "missing-declaration p/Box.java/Box/field/size@7:6",
-      "missing-declaration p/Box.java/Box/field/width@5:6",
-      "missing-declaration p/Shape.java/Shape/field/SIDES@4:6"
-    ]
-  }
+  ]
 }

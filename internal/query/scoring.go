@@ -79,7 +79,7 @@ func computeConnectedToEntry(edges []*schema.Edge, namedSeedIDs, entryIDs map[st
 
 	connected := make(map[string]bool)
 	for _, e := range edges {
-		if !RankEdges[e.Kind] {
+		if !isRankEdge(e) {
 			continue
 		}
 		if isEntryTier(e.Source) && !isEntryTier(e.Target) {

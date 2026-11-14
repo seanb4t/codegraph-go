@@ -3,12 +3,12 @@
   "id": "typescript/module-bindings-and-fields",
   "language": "typescript",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "destructuring, callable declarations, class fields, interfaces",
-  "status": "known-gap",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "status": "supported",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
   "scope": {
     "roles": [
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "referenceExclusions": [
@@ -336,23 +337,40 @@
         "line": 8,
         "col": 21
       }
+    },
+    {
+      "source": "Box.get",
+      "kind": "references",
+      "target": "Box.field",
+      "path": "a.ts",
+      "site": {
+        "line": 10,
+        "col": 22
+      }
+    },
+    {
+      "source": "file:a.ts",
+      "kind": "references",
+      "target": "left",
+      "path": "a.ts",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:a.ts",
+      "kind": "references",
+      "target": "renamed",
+      "path": "a.ts",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:a.ts",
+      "kind": "references",
+      "target": "Box.doubled",
+      "path": "a.ts",
+      "evidence": "reviewed"
     }
   ],
   "sources": [
     "a.ts"
-  ],
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration a.ts//constant/left@2:15",
-      "missing-declaration a.ts//constant/renamed@2:28",
-      "missing-declaration a.ts//variable/counter@4:11",
-      "missing-declaration a.ts/Box/field/doubled@8:11",
-      "missing-declaration a.ts/Box/field/field@6:2",
-      "missing-declaration a.ts/Box/field/label@7:9",
-      "missing-relationship Box.doubled calls arrow"
-    ]
-  }
+  ]
 }

@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// Node kinds this extractor emits (D-06). No other kind is ever produced —
-// in particular, no "field" node is emitted (ratified skip, 02-RESEARCH.md
-// Open Question 3).
+// Node kinds the extractors emit (D-06).
 const (
 	KindFile      = "file"
 	KindFunction  = "function"
@@ -21,6 +20,12 @@ const (
 	KindTypeAlias = "type_alias"
 	KindConstant  = "constant"
 	KindVariable  = "variable"
+
+	// KindField is a statically named data member of a type: a Go struct
+	// field, a class field, or a Python class or receiver attribute. Its
+	// qualified name is "Owner.name", and a contains edge from the owner
+	// holds it. It is never a bare-name call candidate.
+	KindField = "field"
 
 	// KindRoute is a Phase 5 addition (LANG-07, D-08): a framework-detected
 	// HTTP route (path + method), linked to its handler symbol via a
@@ -207,6 +212,123 @@ type UnresolvedRef struct {
 	HasSpread    bool
 	ArgTypes     []string
 	ArgLabels    []string
+
+	// Access is the role of a RefKindReferences ref that reads or writes
+	// a data symbol: AccessRead, AccessWrite or AccessReadWrite. It is ""
+	// for a ref whose extractor does not record the role. The resolver
+	// copies it to the edge's "access" metadata.
+	Access string
+
+	// Binding marks the references ref of a data symbol's initializer
+	// whose whole value is the referenced name, as `var f = pkg.F`: the
+	// symbol starts out bound to that name. The resolver records it as
+	// "binding": "init" on the edge.
+	Binding bool
+	// Value is the name a write assigns, when the assigned value is a
+	// name: a bare identifier or a selector. It is nil for a write whose
+	// value is anything else, such as a function literal or a call, and
+	// for a read. The resolver records what it resolves to as "binds" on
+	// the edge.
+	Value *ValueRef
+	// ImplicitReceiver marks a bare name that may be a member of
+	// ReceiverType, the enclosing type, through its supertypes. When the
+	// type has no such member, the name resolves as a bare name.
+	ImplicitReceiver bool
+}
+
+// ValueRef is a name used as a value: Name, and PkgAlias and
+// ReceiverType as an UnresolvedRef records them.
+type ValueRef struct {
+	Name, PkgAlias, ReceiverType string
+}
+
+// The metadata keys and values of a data reference and of a call that
+// goes through a data symbol. The extractors and the resolver write them.
+const (
+	// MetaAccess is the role of a references edge: AccessRead,
+	// AccessWrite or AccessReadWrite.
+	MetaAccess = "access"
+	// MetaBinds is on a write: the ids of the values it assigns, sorted
+	// and comma-separated. BindsUnknown stands for a value that is not a
+	// resolved name.
+	MetaBinds    = "binds"
+	BindsUnknown = "unknown"
+	// MetaBinding is BindingInit on the reference from a data symbol to
+	// the name its initializer holds.
+	MetaBinding = "binding"
+	BindingInit = "init"
+	// MetaVia is on a call through data symbols: each binding path, the
+	// data symbol ids from the called one to the last, joined by ">". In
+	// Go, each path ends with "@" and the analysis context that
+	// establishes it. Several paths are sorted and comma-separated.
+	MetaVia = "via"
+	// MetaContext is on a call through a Go data symbol: the analysis
+	// contexts that establish the target, sorted and comma-separated.
+	MetaContext = "binding_context"
+	// MetaDirect is "true" on a call that is both direct and through a
+	// data symbol.
+	MetaDirect = "direct"
+)
+
+// The access roles of a references edge, in its MetaAccess metadata.
+const (
+	AccessRead      = "read"
+	AccessWrite     = "write"
+	AccessReadWrite = "read_write"
+)
+
+// IsWriteAccess reports whether the access role a writes the symbol.
+func IsWriteAccess(a string) bool {
+	return a == AccessWrite || a == AccessReadWrite
+}
+
+// IsGoTestFile reports whether path is a Go test file.
+func IsGoTestFile(path string) bool {
+	return strings.HasSuffix(path, "_test.go")
+}
+
+// UnknownWrite returns the edge that records a module-level write of a
+// value with no name to the data symbol id, from the file fileID. No
+// later write is then the symbol's only value.
+func UnknownWrite(fileID, id string) IntraEdge {
+	return IntraEdge{Edge: &schema.Edge{
+		Source: fileID, Target: id, Kind: RefKindReferences, Provenance: "ast",
+		Metadata: map[string]string{MetaAccess: AccessWrite, MetaBinds: BindsUnknown},
+	}}
+}
+
+// BindInitializer records what the initializer value of the data symbol
+// id binds, after the extractor captured the value's reads from index
+// before in r.Unresolved. whole is false for a name that a destructuring
+// target binds: it takes a part of the value, so no name is its value.
+// named reports that the whole value is one name, and mayHoldFunction
+// that a value with no name can be a function. A named value binds the
+// symbol to the name's ref, which the capture appended last. A part of a
+// value, or a value with no name that can be a function, is a write of
+// an unknown value.
+func BindInitializer(r *FileResult, fileID, id string, before int, whole, named, mayHoldFunction bool) {
+	switch {
+	case !whole:
+		r.IntraEdges = append(r.IntraEdges, UnknownWrite(fileID, id))
+	case named:
+		if len(r.Unresolved) > before {
+			r.Unresolved[len(r.Unresolved)-1].Binding = true
+		}
+	case mayHoldFunction:
+		r.IntraEdges = append(r.IntraEdges, UnknownWrite(fileID, id))
+	}
+}
+
+// MergeAccess returns the role of one edge that carries both a and b. An
+// empty role adds nothing.
+func MergeAccess(a, b string) string {
+	switch {
+	case a == "" || a == b:
+		return b
+	case b == "":
+		return a
+	}
+	return AccessReadWrite
 }
 
 // DeferredTypePrefix starts a type that pass 2 fills from another call's
@@ -291,6 +413,10 @@ type FileResult struct {
 	// Err is set instead of returning a non-nil error from Extract when
 	// this specific file could not be parsed/extracted.
 	Err error
+
+	// SyntaxErrors is true when the parser recovered from a syntax error:
+	// the result holds what the parser could read.
+	SyntaxErrors bool
 }
 
 // RewriteIDs replaces each node id r holds with rewrite(id): node ids,

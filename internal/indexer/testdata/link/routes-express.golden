@@ -1,14 +1,19 @@
+edge {"source":"file:fc05611475ef6594a1cd0a36bea42484","target":"constant:b9f9288e6952f20bdc8a0e1cff81d626","kind":"contains","provenance":"ast"}
 edge {"source":"file:fc05611475ef6594a1cd0a36bea42484","target":"function:b1d71e9d00e9104dde6d244ee19fa414","kind":"contains","provenance":"ast"}
 edge {"source":"file:fc05611475ef6594a1cd0a36bea42484","target":"function:d69f260072b0328e8d5d672db8f820cb","kind":"contains","provenance":"ast"}
+edge {"source":"file:fc05611475ef6594a1cd0a36bea42484","target":"constant:b9f9288e6952f20bdc8a0e1cff81d626","kind":"references","provenance":"ast","metadata":{"access":"write","binds":"unknown"}}
 edge {"source":"route:60592b895500da0ea11374e5755f7032","target":"function:b1d71e9d00e9104dde6d244ee19fa414","kind":"calls","line":8,"provenance":"heuristic","metadata":{"httpMethod":"GET","routePath":"/users/:id","synthesizedBy":"express-route"}}
 edge {"source":"route:f6bcdb1282149b0127debfba6ebbacd2","target":"function:d69f260072b0328e8d5d672db8f820cb","kind":"calls","line":9,"provenance":"heuristic","metadata":{"httpMethod":"POST","routePath":"/users","synthesizedBy":"express-route"}}
-file {"path":"app.ts","contentHash":"6bdcd80a110a2af981db3c18f697f748c9deb2ea262ce880b492a18d71bc5c7e","language":"typescript","nodeCount":"3","edgeCount":"2","sizeBytes":"196"}
+file {"path":"app.ts","contentHash":"6bdcd80a110a2af981db3c18f697f748c9deb2ea262ce880b492a18d71bc5c7e","language":"typescript","nodeCount":"4","edgeCount":"4","sizeBytes":"196","unresolvedNames":[{"moduleKey":"app","name":"express"}]}
 index app.ts node file:fc05611475ef6594a1cd0a36bea42484
 index app.ts node route:60592b895500da0ea11374e5755f7032
 index app.ts node route:f6bcdb1282149b0127debfba6ebbacd2
+index app.ts node constant:b9f9288e6952f20bdc8a0e1cff81d626
 index app.ts node function:b1d71e9d00e9104dde6d244ee19fa414
 index app.ts node function:d69f260072b0328e8d5d672db8f820cb
+index app.ts edge file:fc05611475ef6594a1cd0a36bea42484 contains constant:b9f9288e6952f20bdc8a0e1cff81d626
 index app.ts edge file:fc05611475ef6594a1cd0a36bea42484 contains function:b1d71e9d00e9104dde6d244ee19fa414
 index app.ts edge file:fc05611475ef6594a1cd0a36bea42484 contains function:d69f260072b0328e8d5d672db8f820cb
+index app.ts edge file:fc05611475ef6594a1cd0a36bea42484 references constant:b9f9288e6952f20bdc8a0e1cff81d626
 index app.ts edge route:60592b895500da0ea11374e5755f7032 calls function:b1d71e9d00e9104dde6d244ee19fa414
 index app.ts edge route:f6bcdb1282149b0127debfba6ebbacd2 calls function:d69f260072b0328e8d5d672db8f820cb

@@ -56,7 +56,7 @@ A case is a directory, `<partition>/<language>/<case>/`, with a `case.json` file
 | `expectationRevision` | Increase this number when you change a reviewed expectation. |
 | `labeling` | `complete` or `sampled`. In `complete`, an unlabeled fact is a false positive. In `sampled`, an unlabeled fact is an unknown fact, and it enters no denominator. |
 | `declarations` | Expected declarations: path, owner, role, name, identifier position and span. |
-| `relationships` | Expected edges, by declaration `id`. |
+| `relationships` | Expected edges, by declaration `id`. A statement at module level, such as a destructuring assignment, has the source `file:<path>`. |
 | `forbidden` | Edges that must not exist. |
 | `unknown` | Edges that exceed the reference evidence. |
 | `referenceExclusions` | Reference facts that this case does not expect, each with a reason. |
@@ -74,7 +74,7 @@ Unknown fields fail the case load. The identifier at `at` must equal `name` in t
 | Status | Meaning |
 |---|---|
 | `supported` | The case must match exactly. |
-| `known-gap` | The behavior is inside the contract and is missing. The case needs `exception` with an issue, an owner, a review date and the exact mismatches. |
+| `known-gap` | The behavior is inside the contract and is missing, or a deferred form shares a file with facts that must match. The case needs `exception` with an issue, an owner, a review date and the exact mismatches. |
 | `unsupported` | The construct is outside the target specification. The report counts what the graph emits for it. |
 | `unevaluated` | No independent evaluation exists yet. |
 
@@ -93,6 +93,7 @@ A span rule names the source construct that a declaration span covers. Lines sta
 | `java-type-declaration` | The whole type declaration, with modifiers. |
 | `java-method-declaration` | The whole method declaration, with modifiers. |
 | `java-field-declaration` | The whole field declaration, with modifiers and the semicolon. Names in one declaration share this span. |
+| `java-enum-constant` | The enum constant, with its arguments and body, without the separating comma. |
 | `py-function-definition` | The `def` statement and its body. |
 | `py-class-definition` | The `class` statement and its body. |
 | `py-assignment` | The assignment or annotation statement that binds the name. Names in one statement share this span. |

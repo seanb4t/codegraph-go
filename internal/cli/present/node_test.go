@@ -114,20 +114,10 @@ func newMultiDefFixture(count, bodyLinesForFirst int, hugeFirst bool) *multiDefF
 	return f
 }
 
-// fetchForQuery adapts the fixture to query.RenderNodeMultiDef's
-// nodeSectionFetch shape (a func literal is assignable to that unexported
-// type, per its own doc comment), counting invocations via counter so the
-// test can assert the loop's lazy, in-match-order fetch behaviour.
-func (f *multiDefFixture) fetchForQuery(counter *int) func(*schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-	return func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-		*counter++
-		return f.sources[n.Id], nil, nil, nil
-	}
-}
-
-// fetchForDetail adapts the SAME fixture data to
-// query.NewMultiDefDetail's definition-func shape, so the styled render
-// path fetches from identical data via the identical lazy protocol.
+// fetchForDetail adapts the fixture to the definition-func shape both
+// query.RenderNodeMultiDef and query.NewMultiDefDetail take, counting
+// invocations via counter so the test can assert the loop's lazy,
+// in-match-order fetch behaviour.
 func (f *multiDefFixture) fetchForDetail(counter *int) func(*schema.Node) (*query.DefinitionDetail, error) {
 	return func(n *schema.Node) (*query.DefinitionDetail, error) {
 		*counter++
@@ -178,7 +168,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 			t.Fatalf("RenderNode: %v", err)
 		}
 		got := stripANSI(buf.String())
-		want := markdownToPlainContract(query.RenderNode(n, []*schema.Node{callee}, []*schema.Node{caller}))
+		want := markdownToPlainContract(query.RenderNode(d.Definition))
 		if got != want {
 			t.Errorf("SingleDef stripped =\n%q\nwant\n%q", got, want)
 		}
@@ -192,7 +182,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 			t.Fatalf("RenderNode: %v", err)
 		}
 		got := stripANSI(buf.String())
-		want := markdownToPlainContract(query.RenderNode(n, nil, nil))
+		want := markdownToPlainContract(query.RenderNode(d.Definition))
 		if got != want {
 			t.Errorf("SingleDef-nil-refs stripped =\n%q\nwant\n%q", got, want)
 		}
@@ -201,7 +191,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 	t.Run("MultiDef-2", func(t *testing.T) {
 		f := newMultiDefFixture(2, 2, false)
 		var plainCount, styledCount int
-		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForQuery(&plainCount))
+		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForDetail(&plainCount))
 		if err != nil {
 			t.Fatalf("query.RenderNodeMultiDef: %v", err)
 		}
@@ -224,7 +214,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 	t.Run("MultiDef-HardCap-17", func(t *testing.T) {
 		f := newMultiDefFixture(17, 2, false)
 		var plainCount, styledCount int
-		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForQuery(&plainCount))
+		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForDetail(&plainCount))
 		if err != nil {
 			t.Fatalf("query.RenderNodeMultiDef: %v", err)
 		}
@@ -250,7 +240,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 	t.Run("MultiDef-BodyBudget", func(t *testing.T) {
 		f := newMultiDefFixture(2, 900, true) // node 0's body alone exceeds nodeMultiDefBodyBudget
 		var plainCount, styledCount int
-		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForQuery(&plainCount))
+		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForDetail(&plainCount))
 		if err != nil {
 			t.Fatalf("query.RenderNodeMultiDef: %v", err)
 		}
@@ -273,7 +263,7 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 	t.Run("MultiDef-ListCap-40", func(t *testing.T) {
 		f := newMultiDefFixture(40, 900, true) // node 0 huge, so all 39 others overflow BODY_BUDGET
 		var plainCount, styledCount int
-		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForQuery(&plainCount))
+		plainOut, err := query.RenderNodeMultiDef("Sym", f.nodes, f.fetchForDetail(&plainCount))
 		if err != nil {
 			t.Fatalf("query.RenderNodeMultiDef: %v", err)
 		}

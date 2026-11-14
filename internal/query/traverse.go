@@ -923,7 +923,7 @@ func (e *Engine) ImpactSelected(sel Selector, file string, depth int) (ImpactRes
 // file cannot be run by `go test` in the first place, so the fallback
 // added false positives without ever covering a real gap.
 func isTestSymbol(n *schema.Node) bool {
-	return strings.HasSuffix(n.FilePath, "_test.go")
+	return goextract.IsGoTestFile(n.FilePath)
 }
 
 // Affected derives impacted test files/symbols for a set of changed

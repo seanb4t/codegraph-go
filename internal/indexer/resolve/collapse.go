@@ -1,8 +1,12 @@
 package resolve
 
 import (
+	"maps"
 	"sort"
 
+	"google.golang.org/protobuf/proto"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -62,7 +66,61 @@ func CollapseEdges(edges []*schema.Edge) []*schema.Edge {
 			}
 			return ci.Col < cj.Col
 		})
-		collapsed = append(collapsed, candidates[0])
+		collapsed = append(collapsed, withMergedAccess(candidates))
 	}
 	return collapsed
+}
+
+// withMergedAccess returns the representative of candidates, the first,
+// carrying the evidence of all of them. The access roles merge: an edge
+// that one candidate reads through and another writes through is
+// read_write. The values a write binds, the binding paths and the
+// contexts of a call merge as sets. A call that one candidate makes
+// directly and another through a data symbol is marked direct. The edge
+// keeps the initializer mark when any candidate carries it. The
+// representative is copied when its metadata changes, so no candidate is
+// modified.
+func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
+	rep := candidates[0]
+	if len(candidates) == 1 {
+		return rep
+	}
+	md := maps.Clone(rep.Metadata)
+	if md == nil {
+		md = map[string]string{}
+	}
+	direct, derived := false, false
+	for i, c := range candidates {
+		if c.Metadata[goextract.MetaVia] == "" {
+			direct = true
+		} else {
+			derived = true
+		}
+		if c.Metadata[goextract.MetaDirect] == "true" {
+			direct = true
+		}
+		if c.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+			md[goextract.MetaBinding] = goextract.BindingInit
+		}
+		if i == 0 {
+			continue
+		}
+		if a := goextract.MergeAccess(md[goextract.MetaAccess], c.Metadata[goextract.MetaAccess]); a != "" {
+			md[goextract.MetaAccess] = a
+		}
+		for _, k := range []string{goextract.MetaBinds, goextract.MetaVia, goextract.MetaContext} {
+			if u := unionSet(md[k], c.Metadata[k]); u != "" {
+				md[k] = u
+			}
+		}
+	}
+	if rep.Kind == goextract.RefKindCalls && direct && derived {
+		md[goextract.MetaDirect] = "true"
+	}
+	if maps.Equal(md, rep.Metadata) || (len(md) == 0 && rep.Metadata == nil) {
+		return rep
+	}
+	merged := proto.Clone(rep).(*schema.Edge)
+	merged.Metadata = md
+	return merged
 }

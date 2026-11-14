@@ -181,8 +181,12 @@ func Compare(c *Case, obs *Observed) *Comparison {
 	return res
 }
 
-// nodeEndpoint names a node that matched no expected declaration.
+// nodeEndpoint names a node that matched no expected declaration. A file
+// node is file:<path>, the source of a module-level statement.
 func nodeEndpoint(nodeID string, obs *Observed) string {
+	if path, ok := obs.Files[nodeID]; ok {
+		return "file:" + path
+	}
 	for _, d := range obs.Declarations {
 		if d.NodeID == nodeID {
 			return "unmatched:" + d.Path + "/" + d.Owner + "/" + d.Name

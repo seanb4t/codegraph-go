@@ -94,9 +94,19 @@ func (v View) StoredSetIDs() []string {
 	return ids
 }
 
-// StoredEdges returns the contains, embeds, extends and declared
-// implements edges of the files a sync does not reparse.
+// StoredEdges returns the contains, embeds, extends, declared implements
+// and binding edges of the files a sync does not reparse.
 func (v View) StoredEdges() []*schema.Edge { return slices.Clip(v.d.storedEdges) }
+
+// SyntaxErrorModules returns the module keys of the files in which the
+// parser recovered from a syntax error.
+func (v View) SyntaxErrorModules() map[string]bool {
+	out := make(map[string]bool, len(v.d.syntaxErrorFiles))
+	for f := range v.d.syntaxErrorFiles {
+		out[v.d.moduleOf[f]] = true
+	}
+	return out
+}
 
 // Collisions returns the number of names that received more than one
 // symbol.
