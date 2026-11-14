@@ -1,3 +1,0 @@
-kind: Features
-body: The first codegraph sync after upgrading rebuilds an older index once, to add variables, fields, their references and the calls through function-valued variables.
-time: 2026-11-13T17:33:10.198496-05:00
