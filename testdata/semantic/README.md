@@ -74,7 +74,7 @@ Unknown fields fail the case load. The identifier at `at` must equal `name` in t
 | Status | Meaning |
 |---|---|
 | `supported` | The case must match exactly. |
-| `known-gap` | The behavior is inside the contract and is missing. The case needs `exception` with an issue, an owner, a review date and the exact mismatches. |
+| `known-gap` | The behavior is inside the contract and is missing, or a deferred form shares a file with facts that must match. The case needs `exception` with an issue, an owner, a review date and the exact mismatches. |
 | `unsupported` | The construct is outside the target specification. The report counts what the graph emits for it. |
 | `unevaluated` | No independent evaluation exists yet. |
 

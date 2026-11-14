@@ -108,12 +108,14 @@ A call through a data symbol becomes a read of that symbol. It also becomes a ca
 - Every write must name the same function. Two different functions, or a value that is not a resolved name, withhold the call.
 - A symbol can hold another data symbol. The index follows such a chain for a bounded number of steps and stops at a cycle.
 - A field that a subclass can write establishes no function, because the index does not know all of its writes.
-- A data symbol in a Go package with a syntax error establishes no function.
+- A data symbol in a module with a syntax error establishes no function, and a write from such a module writes an unknown value. In Go the module is the package. In Python, TypeScript and JavaScript it is the file.
+- A function that code reassigns, as `let f = function () {}` and then `f = g`, holds every value written to it. A call into it is a read of it until every write assigns the function itself.
+- A field that two base classes supply from different declaring types does not resolve.
 - In Go, a call outside a `_test.go` file uses only the writes outside test files. A call inside a test file also uses the writes of test files. A test that replaces a function variable therefore does not change the production callers.
 
 The read reference stays when the call is withheld. A data read never makes a caller. `callers`, `callees` and `impact` follow only calls, so they do not list a function that only reads a symbol. `explore` can list a field and shows it inside the source of its owner. A field that matches a query only through the name of its owner does not take the place of a function.
 
-The limits of each language are under Per-Language Gaps below. A read of an inherited Java field by its bare name is one example.
+The limits of each language are under Per-Language Gaps below. Record components and enum constants of Java, which declare no field, are one example.
 
 ## Per-Language Gaps
 
@@ -123,7 +125,7 @@ No gap is known.
 
 ### `java`
 
-- A bare name of an inherited field does not resolve. The extractor reads one file, so it does not see the fields of the base class. A read through `this` resolves.
+- A bare name that is not a local, a parameter or a field of the enclosing class resolves as a read through `this` does. Inside an anonymous or local class, the receiver is the enclosing named class. A method of the class with the same name as the field stops this lookup.
 - Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.
 - When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).
 - A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.
@@ -139,6 +141,7 @@ No gap is known.
 ### `python`
 
 - Only the class body and the receiver of a method declare a field. An attribute that code sets on another object, or through `setattr`, declares no field. Case `python/decorators-and-dynamic-attributes` records what the graph emits.
+- A class attribute that holds an instance of a descriptor class declares no field. The index finds a descriptor class only in the same file, so an attribute that holds a descriptor from another file is an ordinary field.
 - pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.
 - A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.
 - Wildcard from-imports (`from x import *`) are not resolved.

@@ -111,7 +111,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"A bare name of an inherited field does not resolve. The extractor reads one file, so it does not see the fields of the base class. A read through `this` resolves.",
+			"A bare name that is not a local, a parameter or a field of the enclosing class resolves as a read through `this` does. Inside an anonymous or local class, the receiver is the enclosing named class. A method of the class with the same name as the field stops this lookup.",
 			"Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.",
 			"When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).",
 			"A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.",
@@ -137,6 +137,7 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageFull,
 		Gaps: []string{
 			"Only the class body and the receiver of a method declare a field. An attribute that code sets on another object, or through `setattr`, declares no field. Case `python/decorators-and-dynamic-attributes` records what the graph emits.",
+			"A class attribute that holds an instance of a descriptor class declares no field. The index finds a descriptor class only in the same file, so an attribute that holds a descriptor from another file is an ordinary field.",
 			"pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.",
 			"A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.",
 			"Wildcard from-imports (`from x import *`) are not resolved.",
