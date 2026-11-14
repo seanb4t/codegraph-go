@@ -1,11 +1,13 @@
 package resolve
 
 import (
+	"maps"
 	"slices"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"pgregory.net/rapid"
 )
 
 // TestDataReferenceMetadata covers the merge of references edges that
@@ -98,4 +100,54 @@ func TestDataReferenceMetadata_CallEvidence(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCollapseEdges_MergeIsOrderFree draws candidate edges of one triple
+// with any access roles, values, binding paths, contexts and direct
+// marks, on lines that can tie. Every order of the candidates must merge
+// to the same metadata.
+func TestCollapseEdges_MergeIsOrderFree(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		kind := rapid.SampledFrom([]string{goextract.RefKindReferences, goextract.RefKindCalls}).Draw(t, "kind")
+		set := func(label string, items []string) string {
+			return joinSet(rapid.SliceOfN(rapid.SampledFrom(items), 0, 3).Draw(t, label))
+		}
+		n := rapid.IntRange(1, 6).Draw(t, "n")
+		edges := make([]*schema.Edge, n)
+		for i := range edges {
+			md := map[string]string{}
+			put := func(k, v string) {
+				if v != "" {
+					md[k] = v
+				}
+			}
+			put(goextract.MetaAccess, rapid.SampledFrom([]string{"", goextract.AccessRead, goextract.AccessWrite, goextract.AccessReadWrite}).Draw(t, "access"))
+			put(goextract.MetaBinds, set("binds", []string{"f", "g", goextract.BindsUnknown}))
+			put(goextract.MetaVia, set("via", []string{"a@go-production", "a@go-test", "b>a"}))
+			put(goextract.MetaContext, set("context", []string{ContextGoProduction, ContextGoTest}))
+			// Only a merged call edge with a binding path carries the
+			// direct mark.
+			if kind == goextract.RefKindCalls && md[goextract.MetaVia] != "" && rapid.Bool().Draw(t, "direct") {
+				md[goextract.MetaDirect] = "true"
+			}
+			edges[i] = &schema.Edge{Source: "s", Target: "t", Kind: kind, Line: int32(rapid.IntRange(1, 2).Draw(t, "line")), Metadata: md}
+		}
+		keys := []string{goextract.MetaAccess, goextract.MetaBinds, goextract.MetaVia, goextract.MetaContext, goextract.MetaDirect}
+		merged := func(order []*schema.Edge) map[string]string {
+			got := CollapseEdges(slices.Clone(order))
+			if len(got) != 1 {
+				t.Fatalf("CollapseEdges kept %d edges, want 1", len(got))
+			}
+			out := map[string]string{}
+			for _, k := range keys {
+				out[k] = got[0].Metadata[k]
+			}
+			return out
+		}
+		want := merged(edges)
+		perm := rapid.Permutation(edges).Draw(t, "order")
+		if got := merged(perm); !maps.Equal(got, want) {
+			t.Fatalf("merged metadata depends on order: %v, want %v", got, want)
+		}
+	})
 }
