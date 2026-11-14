@@ -1,10 +1,12 @@
 package indexer
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
@@ -210,8 +212,15 @@ func TestStable(t *testing.T) {
 		if got := e.Metadata["binding_context"]; got != wantCtx {
 			t.Errorf("%s -> List binding_context = %q, want %q", fn, got, wantCtx)
 		}
-		if e.Metadata["via"] == "" {
-			t.Errorf("%s -> List has no binding path: %v", fn, e.Metadata)
+		// Each binding path names the context that establishes it.
+		var pathContexts []string
+		for _, p := range strings.Split(e.Metadata["via"], ",") {
+			if _, ctx, ok := strings.Cut(p, "@"); ok {
+				pathContexts = append(pathContexts, ctx)
+			}
+		}
+		if got := strings.Join(pathContexts, ","); got != wantCtx {
+			t.Errorf("%s -> List binding paths %q name the contexts %q, want %q", fn, e.Metadata["via"], got, wantCtx)
 		}
 	}
 	check(cli, goextract.KindFunction, "run", "go-production")
@@ -241,8 +250,8 @@ func TestStable(t *testing.T) {
 	}
 
 	b := bindingEdges(t, r, cli, goextract.KindFunction, "both", goextract.RefKindCalls)["function List"]
-	if b == nil || b.Metadata["direct"] != "true" || b.Metadata["via"] == "" {
-		t.Errorf("both -> List = %v, want one edge with direct and binding evidence", b)
+	if b == nil || b.Metadata["direct"] != "true" || !strings.Contains(b.Metadata["via"], "@"+resolve.ContextGoProduction) {
+		t.Errorf("both -> List = %v, want one edge with direct evidence and a binding path with its context", b)
 	}
 	if b != nil && b.Target != list {
 		t.Errorf("both -> List targets %s, want %s", b.Target, list)

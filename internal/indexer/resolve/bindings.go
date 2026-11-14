@@ -201,10 +201,12 @@ func (b bindings) derive(e *schema.Edge) []*schema.Edge {
 			ev = &evidence{}
 			found[fn] = ev
 		}
-		ev.via = append(ev.via, strings.Join(via, ">"))
+		path := strings.Join(via, ">")
 		if context != "" {
+			path += "@" + context
 			ev.contexts = append(ev.contexts, context)
 		}
+		ev.via = append(ev.via, path)
 	}
 	switch src := b.view.Node(e.Source); {
 	case src == nil || src.Language != "go":
