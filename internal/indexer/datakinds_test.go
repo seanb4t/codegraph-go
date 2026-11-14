@@ -47,6 +47,11 @@ func TestDataReferenceMetadata_KindsAndStorage(t *testing.T) {
 				t.Errorf("%s: %s %s in %s = %d nodes, want 1", stage, want.kind, want.name, want.path, len(got))
 			}
 		}
+		for _, kind := range []string{goextract.KindConstant, goextract.KindVariable} {
+			if got := declaredNodes(t, r, "m.js", kind, "expr"); len(got) != 0 {
+				t.Errorf("%s: m.js has %d %s nodes named expr beside its function node", stage, len(got), kind)
+			}
+		}
 		if limit := declaredNodes(t, r, "p/Box.java", goextract.KindField, "LIMIT"); len(limit) == 1 && limit[0].Visibility != "private" {
 			t.Errorf("%s: the field LIMIT has visibility %q, want its private modifier", stage, limit[0].Visibility)
 		}

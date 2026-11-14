@@ -22,6 +22,8 @@ const { left, right: renamed, ...rest } = source;
 const [first, , second = 2] = list;
 const helper = () => 1;
 export const exported = function () { return 2; };
+export const exportedArrow = () => 3;
+const _ = 1;
 const key = "k";
 export class Box {
   static instances = 0;
@@ -41,6 +43,8 @@ const { left, right: renamed, ...rest } = source;
 const [first, , second = 2] = list;
 const helper = () => 1;
 export const exported = function () { return 2; };
+export const exportedArrow = () => 3;
+const _ = 1;
 const key = "k";
 export class Box {
   static instances = 0;
@@ -60,6 +64,8 @@ const { left, right: renamed, ...rest } = source;
 const [first, , second = 2] = list;
 const helper = () => <div />;
 export const exported = function () { return 2; };
+export const exportedArrow = () => 3;
+const _ = 1;
 const key = "k";
 export class Box {
   static instances = 0;
@@ -94,6 +100,7 @@ export class Box {
 				{goextract.KindConstant, "rest"}, {goextract.KindConstant, "first"},
 				{goextract.KindConstant, "second"}, {goextract.KindConstant, "key"},
 				{goextract.KindFunction, "helper"}, {goextract.KindFunction, "exported"},
+				{goextract.KindFunction, "exportedArrow"}, {goextract.KindConstant, "_"},
 				{goextract.KindField, "Box.instances"}, {goextract.KindField, "Box.label"},
 				{goextract.KindField, "Box.secret"}, {goextract.KindField, "Box.#hidden"},
 				{goextract.KindField, "Box.onChange"}, {goextract.KindMethod, "Box.size"},
@@ -101,6 +108,13 @@ export class Box {
 			for _, k := range want {
 				if count[k] != 1 {
 					t.Errorf("%s %s: %d nodes, want 1", k.kind, k.qname, count[k])
+				}
+			}
+			for _, name := range []string{"helper", "exported", "exportedArrow"} {
+				for _, kind := range []string{goextract.KindConstant, goextract.KindVariable} {
+					if count[key{kind, name}] != 0 {
+						t.Errorf("%s has a %s node beside its function node", name, kind)
+					}
 				}
 			}
 			for k := range count {
