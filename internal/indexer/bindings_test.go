@@ -317,16 +317,26 @@ func TestBindingsWithheldBySyntaxErrors(t *testing.T) {
 	const pyCall = "from lib import run\n\nhandler = run\n\n\ndef call():\n    handler()\n"
 	const pyDamage = "\n\ndef damage():\n    x = )\n"
 	r, _ := runAndSnapshot(t, testtree.Write(t, map[string]string{
-		"run.ts":    "export function run() { return 0; }\n",
-		"clean.ts":  tsCall,
-		"broken.ts": tsCall + tsDamage,
-		"run.js":    "export function run() { return 0; }\n",
-		"clean.js":  tsCall,
-		"broken.js": tsCall + tsDamage,
-		"lib.py":    "def run():\n    return 0\n",
-		"clean.py":  pyCall,
-		"broken.py": pyCall + pyDamage,
+		"run.ts":     "export function run() { return 0; }\n",
+		"clean.ts":   tsCall,
+		"broken.ts":  tsCall + tsDamage,
+		"run.js":     "export function run() { return 0; }\n",
+		"clean.js":   tsCall,
+		"broken.js":  tsCall + tsDamage,
+		"lib.py":     "def run():\n    return 0\n",
+		"clean.py":   pyCall,
+		"broken.py":  pyCall + pyDamage,
+		"target.py":  pyCall,
+		"patcher.py": "import target\nfrom lib import run\n\n\ndef patch():\n    target.handler = run\n" + pyDamage,
 	}))
+	// A write from a file with a syntax error withholds the call, even
+	// when it assigns the same function.
+	if writes := dataEdges(t, r, "patcher.py", goextract.KindFunction, "patch", goextract.RefKindReferences); writes["variable handler"] != goextract.AccessWrite {
+		t.Errorf("patch references %v, want a write of target.handler", writes)
+	}
+	if calls := dataEdges(t, r, "target.py", goextract.KindFunction, "call", goextract.RefKindCalls); len(calls) != 0 {
+		t.Errorf("target.py: call calls %v, want none: patcher.py writes handler and has a syntax error", calls)
+	}
 	for _, c := range []struct {
 		path, kind string
 		want       bool

@@ -93,7 +93,9 @@ func newBindings(view symbols.View, h symbols.Hierarchy, lists ...[]*schema.Edge
 			// read_write edge that merged a read with a write keeps the
 			// write's values.
 			binds := e.Metadata[goextract.MetaBinds]
-			if binds == "" {
+			// A file with a syntax error can hold writes that the
+			// parser did not see, so its write establishes no value.
+			if src := view.Node(e.Source); binds == "" || (src != nil && b.damaged[view.ModuleOf(src.FilePath)]) {
 				binds = goextract.BindsUnknown
 			}
 			for _, v := range strings.Split(binds, ",") {
@@ -109,8 +111,8 @@ func newBindings(view symbols.View, h symbols.Hierarchy, lists ...[]*schema.Edge
 // every write the context counts assigns the same value, and that value
 // is a function or a data symbol that holds one. A write of an unknown
 // value, two values, no value, a cycle, a path longer than
-// maxBindingChain, a data symbol in a package with a syntax error, or
-// an open field establish no target.
+// maxBindingChain, a data symbol in a package with a syntax error, a
+// write from such a package, or an open field establish no target.
 func (b bindings) target(id string, test bool) (string, []string, bool) {
 	var via []string
 	for len(via) < maxBindingChain {
