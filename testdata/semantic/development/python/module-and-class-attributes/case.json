@@ -3,7 +3,7 @@
   "id": "python/module-and-class-attributes",
   "language": "python",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "module bindings, class attributes, receiver attributes",
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "declarations": [
@@ -312,6 +313,51 @@
         "line": 22,
         "col": 21
       }
+    },
+    {
+      "source": "helper",
+      "kind": "references",
+      "target": "LIMIT",
+      "path": "models.py",
+      "site": {
+        "line": 7,
+        "col": 11
+      }
+    },
+    {
+      "source": "Base.__init__",
+      "kind": "references",
+      "target": "Base.name",
+      "path": "models.py",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "Base.rename",
+      "kind": "references",
+      "target": "Base.name",
+      "path": "models.py",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "Child.__init__",
+      "kind": "references",
+      "target": "Child.value",
+      "path": "models.py",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:models.py",
+      "kind": "references",
+      "target": "LIMIT",
+      "path": "models.py",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:models.py",
+      "kind": "references",
+      "target": "OTHER",
+      "path": "models.py",
+      "evidence": "reviewed"
     }
   ],
   "sources": [

@@ -3,7 +3,7 @@
   "id": "typescript/module-bindings-and-fields",
   "language": "typescript",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "destructuring, callable declarations, class fields, interfaces",
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "referenceExclusions": [
@@ -336,6 +337,37 @@
         "line": 8,
         "col": 21
       }
+    },
+    {
+      "source": "Box.get",
+      "kind": "references",
+      "target": "Box.field",
+      "path": "a.ts",
+      "site": {
+        "line": 10,
+        "col": 22
+      }
+    },
+    {
+      "source": "file:a.ts",
+      "kind": "references",
+      "target": "left",
+      "path": "a.ts",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:a.ts",
+      "kind": "references",
+      "target": "renamed",
+      "path": "a.ts",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:a.ts",
+      "kind": "references",
+      "target": "Box.doubled",
+      "path": "a.ts",
+      "evidence": "reviewed"
     }
   ],
   "sources": [

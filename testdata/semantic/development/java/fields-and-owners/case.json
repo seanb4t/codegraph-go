@@ -3,7 +3,7 @@
   "id": "java/fields-and-owners",
   "language": "java",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "field lists, owners, interface constants, methods",
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "referenceExclusions": [
@@ -285,6 +286,36 @@
       "path": "p/Box.java",
       "site": {
         "line": 10,
+        "col": 11
+      }
+    },
+    {
+      "source": "Box.area",
+      "kind": "references",
+      "target": "Box.width",
+      "path": "p/Box.java",
+      "site": {
+        "line": 10,
+        "col": 15
+      }
+    },
+    {
+      "source": "Box.area",
+      "kind": "references",
+      "target": "Box.height",
+      "path": "p/Box.java",
+      "site": {
+        "line": 10,
+        "col": 22
+      }
+    },
+    {
+      "source": "Box.size.method",
+      "kind": "references",
+      "target": "Box.size.field",
+      "path": "p/Box.java",
+      "site": {
+        "line": 18,
         "col": 11
       }
     }

@@ -3,7 +3,7 @@
   "id": "go/grouped-bindings",
   "language": "go",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "grouped bindings, constants, fields, methods",
@@ -23,7 +23,8 @@
       "field"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "declarations": [
@@ -332,6 +333,16 @@
       "path": "bindings.go",
       "site": {
         "line": 8,
+        "col": 41
+      }
+    },
+    {
+      "source": "Point.Label",
+      "kind": "references",
+      "target": "Point.Tag",
+      "path": "bindings.go",
+      "site": {
+        "line": 25,
         "col": 41
       }
     }

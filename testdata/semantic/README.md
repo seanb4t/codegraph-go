@@ -56,7 +56,7 @@ A case is a directory, `<partition>/<language>/<case>/`, with a `case.json` file
 | `expectationRevision` | Increase this number when you change a reviewed expectation. |
 | `labeling` | `complete` or `sampled`. In `complete`, an unlabeled fact is a false positive. In `sampled`, an unlabeled fact is an unknown fact, and it enters no denominator. |
 | `declarations` | Expected declarations: path, owner, role, name, identifier position and span. |
-| `relationships` | Expected edges, by declaration `id`. |
+| `relationships` | Expected edges, by declaration `id`. A statement at module level, such as a destructuring assignment, has the source `file:<path>`. |
 | `forbidden` | Edges that must not exist. |
 | `unknown` | Edges that exceed the reference evidence. |
 | `referenceExclusions` | Reference facts that this case does not expect, each with a reason. |

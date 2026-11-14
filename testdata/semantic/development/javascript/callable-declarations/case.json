@@ -3,7 +3,7 @@
   "id": "javascript/callable-declarations",
   "language": "javascript",
   "partition": "development",
-  "expectationRevision": 1,
+  "expectationRevision": 2,
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "callables, destructuring holes, class fields",
@@ -23,7 +23,8 @@
       "enum"
     ],
     "relationshipKinds": [
-      "calls"
+      "calls",
+      "references"
     ]
   },
   "declarations": [
@@ -226,6 +227,30 @@
         "line": 13,
         "col": 11
       }
+    },
+    {
+      "source": "alias",
+      "kind": "references",
+      "target": "plain",
+      "path": "m.js",
+      "site": {
+        "line": 8,
+        "col": 14
+      }
+    },
+    {
+      "source": "file:m.js",
+      "kind": "references",
+      "target": "one",
+      "path": "m.js",
+      "evidence": "reviewed"
+    },
+    {
+      "source": "file:m.js",
+      "kind": "references",
+      "target": "two",
+      "path": "m.js",
+      "evidence": "reviewed"
     }
   ],
   "sources": [
