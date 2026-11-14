@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -111,27 +110,28 @@ func TestProgress_StopIdempotent(t *testing.T) {
 	np.Stop() // Stop without a prior Start must also be a safe no-op
 }
 
-// TestProgress_NoGoroutineLeak covers Test 1's no-leak half: after Stop
-// returns, the ticker goroutine it launched must have actually exited.
-// Because Stop blocks on doneCh until the goroutine returns, this is
-// provable synchronously via runtime.NumGoroutine() while Progress is
-// running vs. baseline; the "did the goroutine actually go away" half is
-// covered package-wide by TestMain's goleak.VerifyTestMain gate (WR-02) —
-// Stop's close(stopCh); <-doneCh join guarantees the goroutine has exited
-// by the time Stop returns, so goleak's post-test-run scan passes
-// deterministically instead of via a timing-sensitive poll.
+// TestProgress_NoGoroutineLeak checks that the ticker goroutine runs
+// until Stop and has exited when Stop returns. The goroutine closes doneCh
+// when it returns. TestMain's goleak check covers the whole package.
 func TestProgress_NoGoroutineLeak(t *testing.T) {
-	baseline := runtime.NumGoroutine()
-
-	var buf bytes.Buffer
-	p := NewProgress(&buf)
+	p := NewProgress(&bytes.Buffer{})
 	p.Start("indexing")
-	waitForFrames()
-
-	during := runtime.NumGoroutine()
-	if during <= baseline {
-		t.Fatalf("runtime.NumGoroutine() = %d while Progress is running, want > baseline %d — Start did not appear to launch its goroutine", during, baseline)
+	p.mu.Lock()
+	done := p.doneCh
+	p.mu.Unlock()
+	if done == nil {
+		t.Fatal("Start did not launch the ticker goroutine")
+	}
+	select {
+	case <-done:
+		t.Fatal("the ticker goroutine exited before Stop")
+	default:
 	}
 
 	p.Stop()
+	select {
+	case <-done:
+	default:
+		t.Fatal("Stop returned while the ticker goroutine was still running")
+	}
 }
