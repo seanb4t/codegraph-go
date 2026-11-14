@@ -3,8 +3,12 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 )
 
 // functionVariableTree indexes copies of this repository's daemon list
@@ -54,6 +58,55 @@ func queryNames(t *testing.T, field string, args ...string) []string {
 	return names
 }
 
+// edgeKey names one stored edge as "<edge kind> <target kind> <target
+// name> <access>".
+type edgeKey = string
+
+// outEdges returns the stored edges that leave the symbol name declared
+// in path.
+func outEdges(t *testing.T, dir, path, name string) []edgeKey {
+	t.Helper()
+	store, err := graphstore.Open(filepath.Join(dir, codegraphDirName, storeDirName))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	r, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	defer r.Close()
+	it, err := r.IterateNodes()
+	if err != nil {
+		t.Fatalf("IterateNodes: %v", err)
+	}
+	var from string
+	for it.Next() {
+		if n := it.Node(); n.FilePath == path && n.Name == name {
+			from = n.Id
+		}
+	}
+	it.Close()
+	if from == "" {
+		t.Fatalf("no symbol %s in %s", name, path)
+	}
+	eit, err := r.IterateEdges(from)
+	if err != nil {
+		t.Fatalf("IterateEdges: %v", err)
+	}
+	defer eit.Close()
+	var out []edgeKey
+	for eit.Next() {
+		e := eit.Edge()
+		n, err := r.GetNode(e.Target)
+		if err != nil {
+			t.Fatalf("GetNode(%s): %v", e.Target, err)
+		}
+		out = append(out, e.Kind+" "+n.Kind+" "+n.Name+" "+e.Metadata["access"])
+	}
+	return out
+}
+
 // TestFunctionVariableQueries covers the daemonList seam. The daemon command
 // calls daemon.List through the daemonList variable, so callers, callees
 // and impact show that call. The test file's replacements are a local and
@@ -79,6 +132,24 @@ func TestFunctionVariableQueries(t *testing.T) {
 		}
 		if got := queryNames(t, "callers", "callers", "withStubbedDaemonList", "-p", dir); len(got) == 0 {
 			t.Error("callers withStubbedDaemonList is empty: daemon_test.go is not indexed")
+		}
+		cmd := outEdges(t, dir, "internal/cli/daemon.go", "newDaemonCmd")
+		if !slices.Contains(cmd, "references variable daemonList read") {
+			t.Errorf("newDaemonCmd edges %v, want a read reference to the binding daemonList", cmd)
+		}
+		for _, e := range cmd {
+			if kind, _, _ := strings.Cut(e, " "); kind == "calls" && !strings.HasPrefix(e, "calls function ") && !strings.HasPrefix(e, "calls method ") {
+				t.Errorf("newDaemonCmd has the call %q to something that is not a function", e)
+			}
+		}
+		binding := outEdges(t, dir, "internal/cli/daemon.go", "daemonList")
+		if !slices.Contains(binding, "references function List read") {
+			t.Errorf("daemonList edges %v, want a reference to the function List it holds", binding)
+		}
+		for _, e := range binding {
+			if strings.HasPrefix(e, "calls ") {
+				t.Errorf("the initializer of daemonList makes the call %q", e)
+			}
 		}
 	})
 	t.Run("production reassignment", func(t *testing.T) {

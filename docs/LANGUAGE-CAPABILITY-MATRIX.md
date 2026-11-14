@@ -97,6 +97,24 @@ A `full` cell above and a construct below answer different questions. A `full` c
 
 Four groups of constructs are outside the target specification, so they have the `unsupported` status. These are Go interface dispatch, Java records and enum-specific declarations, Python decorators and dynamic attributes, and TypeScript decorators. Each group has an `unsupported` case that records what the graph emits.
 
+## Data Symbols and Callable Bindings
+
+In Go, Java, Python, TypeScript, TSX and JavaScript, the index holds variables, constants and fields as symbols. A field is a data member of a type, and its owner is that type. `codegraph node` and `codegraph_node` show the owner and the language of a field. `--kind field` limits a search to fields.
+
+A function that reads or writes a data symbol has a `references` edge to it. The edge records the access as `read`, `write` or `read_write`. A data symbol has a `references` edge to the name that its initializer holds. A call in an initializer is a call of the data symbol.
+
+A call through a data symbol becomes a read of that symbol. It also becomes a call of a function when the binding evidence names exactly one function. The binding evidence is every value that the index sees written to the symbol. The rules are these:
+
+- Every write must name the same function. Two different functions, or a value that is not a resolved name, withhold the call.
+- A symbol can hold another data symbol. The index follows such a chain for a bounded number of steps and stops at a cycle.
+- A field that a subclass can write establishes no function, because the index does not know all of its writes.
+- A data symbol in a Go package with a syntax error establishes no function.
+- In Go, a call outside a `_test.go` file uses only the writes outside test files. A call inside a test file also uses the writes of test files. A test that replaces a function variable therefore does not change the production callers.
+
+The read reference stays when the call is withheld. A data read never makes a caller. `callers`, `callees` and `impact` follow only calls, so they do not list a function that only reads a symbol. `explore` can list a field and shows it inside the source of its owner. A field that matches a query only through the name of its owner does not take the place of a function.
+
+The limits of each language are under Per-Language Gaps below. A read of an inherited Java field by its bare name is one example.
+
 ## Per-Language Gaps
 
 ### `go`
