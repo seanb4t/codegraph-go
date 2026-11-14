@@ -10,7 +10,7 @@
 
 - [x] 2.1 Extend `internal/indexer/goextract` for named struct fields and complete package declaration lists. Cover grouped declarations, blank identifiers, and owners in `TestGoDataDeclarations`.
 - [x] 2.2 Add initializer references and scoped data reads and writes. Cover receiver types, local shadowing, and actual initializer calls in `TestGoDataReferences`.
-- [ ] 2.3 Update the Go capability evidence and documented limits. Run the Go reference cases from #238 and make sure that supported facts match exactly.
+- [x] 2.3 Update the Go capability evidence and documented limits. Run the Go reference cases from #238 and make sure that supported facts match exactly.
 
 ## 3. TypeScript and JavaScript data declarations
 

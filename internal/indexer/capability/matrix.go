@@ -97,9 +97,6 @@ var matrix = map[string]CapabilityEntry{
 		Resolution: CoverageFull,
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
-		Gaps: []string{
-			"Struct fields have no node, and a call in a package-level initializer has no `calls` edge. Case `go/grouped-bindings` holds the exact differences (#239).",
-		},
 	},
 
 	// --- Priority-4 (LANG-02..05): full extraction+resolution+dispatch,

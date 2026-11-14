@@ -88,7 +88,7 @@ A `full` cell above and a construct below answer different questions. A `full` c
 
 | Language | Passing evidence | Exact limit |
 |---|---|---|
-| Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/lifecycle`, `go/public-queries`, `go/resolution` | `go/grouped-bindings` (#239) |
+| Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/grouped-bindings`, `go/lifecycle`, `go/public-queries`, `go/resolution` | No case holds a known gap. |
 | Java | `java/resolution`, `java/inherited-methods`, `java/lifecycle`, `java/public-queries` | `java/fields-and-owners` (#239), `TestSemanticCorpusSamples/java` (#263) |
 | Python | `python/same-file-resolution`, `python/malformed-input`, `python/lifecycle`, `python/public-queries`, `python/resolution` | `python/module-and-class-attributes` (#239) |
 | TypeScript | `typescript/class-hierarchy`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges`, `typescript/resolution` | `typescript/module-bindings-and-fields` (#239) |
@@ -101,7 +101,7 @@ Four groups of constructs are outside the target specification, so they have the
 
 ### `go`
 
-- Struct fields have no node, and a call in a package-level initializer has no `calls` edge. Case `go/grouped-bindings` holds the exact differences (#239).
+No gap is known.
 
 ### `java`
 
