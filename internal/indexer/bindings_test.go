@@ -154,6 +154,52 @@ func callImported() {
 
 var Handler = List
 `,
+		"chain/chain.go": `package chain
+
+import "example.com/m/daemon"
+
+var eight1 = eight2
+
+var eight2 = eight3
+
+var eight3 = eight4
+
+var eight4 = eight5
+
+var eight5 = eight6
+
+var eight6 = eight7
+
+var eight7 = eight8
+
+var eight8 = daemon.List
+
+var nine1 = nine2
+
+var nine2 = nine3
+
+var nine3 = nine4
+
+var nine4 = nine5
+
+var nine5 = nine6
+
+var nine6 = nine7
+
+var nine7 = nine8
+
+var nine8 = nine9
+
+var nine9 = daemon.List
+
+func callEight() {
+	eight1()
+}
+
+func callNine() {
+	nine1()
+}
+`,
 		"broken/broken.go": `package broken
 
 import "example.com/m/daemon"
@@ -232,6 +278,9 @@ func TestStable(t *testing.T) {
 	check(cli, goextract.KindFunction, "callLiteral", "")
 	check(cli, goextract.KindFunction, "callImported", "go-production,go-test")
 	check("broken/broken.go", goextract.KindFunction, "call", "")
+	// A binding path goes through at most eight data symbols.
+	check("chain/chain.go", goextract.KindFunction, "callEight", "go-production,go-test")
+	check("chain/chain.go", goextract.KindFunction, "callNine", "")
 	if calls := bindingEdges(t, r, cli, goextract.KindFunction, "callLoop", goextract.RefKindCalls); len(calls) != 0 {
 		t.Errorf("callLoop calls %v, want none: loopA and loopB form a cycle", calls)
 	}
