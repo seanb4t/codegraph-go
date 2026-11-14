@@ -137,23 +137,14 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 		}
 	}
 	if len(fieldNames) > 0 {
-		fit, err := r0.IterateFiles()
+		skip := func(path string) bool { return inBatch[path] }
+		match := func(u *schema.UnresolvedName) bool { return fieldNames[u.GetName()] }
+		waiting, err := filesWithUnresolved(r0, skip, match)
 		if err != nil {
 			return nil, err
 		}
-		for fit.Next() {
-			f := fit.File()
-			for _, u := range f.GetUnresolvedNames() {
-				if fieldNames[u.GetName()] {
-					add(f.GetPath())
-					break
-				}
-			}
-		}
-		err = fit.Err()
-		fit.Close()
-		if err != nil {
-			return nil, err
+		for _, p := range waiting {
+			add(p)
 		}
 	}
 

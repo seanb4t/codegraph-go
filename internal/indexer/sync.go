@@ -1290,6 +1290,21 @@ func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, chan
 	if len(names) == 0 {
 		return nil, nil
 	}
+	skip := func(path string) bool {
+		_, inChanged := changed[path]
+		_, inDependents := dependents[path]
+		return inChanged || inDependents
+	}
+	match := func(u *schema.UnresolvedName) bool {
+		_, ok := names[unresolvedKey{moduleKey: u.GetModuleKey(), name: u.GetName()}]
+		return ok
+	}
+	return filesWithUnresolved(r0, skip, match)
+}
+
+// filesWithUnresolved returns, sorted, the paths of r0's files that skip
+// does not exclude and that have an unresolved name that match accepts.
+func filesWithUnresolved(r0 graphstore.Reader, skip func(path string) bool, match func(*schema.UnresolvedName) bool) ([]string, error) {
 	it, err := r0.IterateFiles()
 	if err != nil {
 		return nil, err
@@ -1300,14 +1315,11 @@ func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, chan
 	for it.Next() {
 		f := it.File()
 		path := f.GetPath()
-		if _, ok := changed[path]; ok {
-			continue
-		}
-		if _, ok := dependents[path]; ok {
+		if skip(path) {
 			continue
 		}
 		for _, u := range f.GetUnresolvedNames() {
-			if _, ok := names[unresolvedKey{moduleKey: u.GetModuleKey(), name: u.GetName()}]; ok {
+			if match(u) {
 				paths = append(paths, path)
 				break
 			}
