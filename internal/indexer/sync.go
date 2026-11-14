@@ -499,7 +499,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		inBatch[p] = true
 	}
 	// One scan of r0 serves both dependency passes and every later wave.
-	deps := newStoreIndex(r0)
+	deps := newStoreIndex(r0, discovered)
 	readers, err := bindingDependents(deps, results, reparsed, inBatch)
 	if err != nil {
 		w.Close()

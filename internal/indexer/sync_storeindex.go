@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
@@ -10,12 +11,13 @@ import (
 )
 
 // storeIndex holds what bindingDependents and ownerDependents read from
-// every stored node and edge of the sync snapshot r0. One scan of the
-// nodes and one of the edges fill it on first use. r0 is a point-in-time
+// every stored file, node and edge of the sync snapshot r0. One scan of
+// each fills it on first use. r0 is a point-in-time
 // snapshot that a sync never writes, so one index serves every wave.
 type storeIndex struct {
-	r0     graphstore.Reader
-	loaded bool
+	r0         graphstore.Reader
+	discovered map[string]discover.DiscoveredFile
+	loaded     bool
 
 	// pathOf maps a node id to the path of its file.
 	pathOf map[string]string
@@ -36,11 +38,23 @@ type storeIndex struct {
 	members map[string][]string
 }
 
-// dataNode is one stored data symbol.
-type dataNode struct{ id, name, path string }
+// dataNode is one stored data symbol and the module key of its file.
+type dataNode struct{ id, name, path, module string }
 
-func newStoreIndex(r0 graphstore.Reader) *storeIndex {
-	return &storeIndex{r0: r0}
+// newStoreIndex returns an index of r0. discovered are the files of the
+// tree that the sync found.
+func newStoreIndex(r0 graphstore.Reader, discovered map[string]discover.DiscoveredFile) *storeIndex {
+	return &storeIndex{r0: r0, discovered: discovered}
+}
+
+// moduleOf returns the module key of path as the resolver reads it from
+// the store: the key that its File record declares, or else the key of
+// the discovered file. It returns "" when neither is known.
+func (x *storeIndex) moduleOf(path, declared string) string {
+	if declared != "" {
+		return declared
+	}
+	return x.discovered[path].ImportPath
 }
 
 // load fills the index from r0 unless an earlier call did.
@@ -54,6 +68,22 @@ func (x *storeIndex) load() error {
 	x.supers = make(map[string][]string)
 	x.members = make(map[string][]string)
 
+	declared := make(map[string]string)
+	fit, err := x.r0.IterateFiles()
+	if err != nil {
+		return err
+	}
+	for fit.Next() {
+		if f := fit.File(); f.GetDeclaredModuleKey() != "" {
+			declared[f.GetPath()] = f.GetDeclaredModuleKey()
+		}
+	}
+	err = fit.Err()
+	fit.Close()
+	if err != nil {
+		return err
+	}
+
 	nit, err := x.r0.IterateNodes()
 	if err != nil {
 		return err
@@ -63,7 +93,7 @@ func (x *storeIndex) load() error {
 		x.pathOf[n.Id] = n.FilePath
 		switch {
 		case isDataID(n.Id):
-			x.data = append(x.data, dataNode{n.Id, n.Name, n.FilePath})
+			x.data = append(x.data, dataNode{n.Id, n.Name, n.FilePath, x.moduleOf(n.FilePath, declared[n.FilePath])})
 		case symbols.IsTypeKind(n.Kind) && resolve.InheritsMembers(n.Language):
 			x.types[n.Name] = append(x.types[n.Name], n.Id)
 		}

@@ -25,17 +25,20 @@ func isDataID(id string) bool {
 // The affected symbols are the data symbols that paths declare, before
 // and after; the symbols that their old binding edges write or initialize;
 // the stored data symbols named by their new writes; and the data symbols
-// of a directory in which one of the paths has or had a syntax error. The
-// set then grows over the stored binding edges: a symbol initialized to
-// or assigned an affected symbol is affected.
+// of a module in which one of the paths has or had a syntax error. The
+// module is the module key that the resolver gives the file. When a
+// stored path has no known key, its directory stands in for it. The set
+// then grows over the stored binding edges: a symbol initialized to or
+// assigned an affected symbol is affected.
 func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []string, inBatch map[string]bool) ([]string, error) {
 	seeds := make(map[string]bool)
 	names := make(map[string]bool)
+	modules := make(map[string]bool)
 	dirs := make(map[string]bool)
 	touched := false
 	for _, r := range results {
 		if r.SyntaxErrors {
-			dirs[filepath.Dir(r.RelPath)] = true
+			damage(modules, dirs, r.RelPath, r.ImportPath)
 		}
 		for _, n := range r.Nodes {
 			if isDataID(n.Node.Id) {
@@ -53,7 +56,7 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 		switch {
 		case err == nil:
 			if f.GetSyntaxErrors() {
-				dirs[filepath.Dir(p)] = true
+				damage(modules, dirs, p, idx.moduleOf(p, f.GetDeclaredModuleKey()))
 			}
 		case !errors.Is(err, graphstore.ErrNotFound):
 			return nil, err
@@ -74,7 +77,7 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 			return nil, err
 		}
 	}
-	if !touched && len(seeds) == 0 && len(names) == 0 && len(dirs) == 0 {
+	if !touched && len(seeds) == 0 && len(names) == 0 && len(modules) == 0 && len(dirs) == 0 {
 		return nil, nil
 	}
 
@@ -86,7 +89,7 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 		inPaths[p] = true
 	}
 	for _, n := range idx.data {
-		if inPaths[n.path] || names[n.name] || dirs[filepath.Dir(n.path)] {
+		if inPaths[n.path] || names[n.name] || (n.module != "" && modules[n.module]) || dirs[filepath.Dir(n.path)] {
 			seeds[n.id] = true
 		}
 	}
@@ -130,4 +133,14 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 		}
 	}
 	return sortedBoolKeys(set), nil
+}
+
+// damage records the module key of a file with a syntax error in
+// modules, or the directory of path in dirs when the key is unknown.
+func damage(modules, dirs map[string]bool, path, key string) {
+	if key != "" {
+		modules[key] = true
+	} else {
+		dirs[filepath.Dir(path)] = true
+	}
 }
