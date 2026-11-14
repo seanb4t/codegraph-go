@@ -173,7 +173,7 @@
     "p/Order.java"
   ],
   "exception": {
-    "issue": "#239",
+    "issue": "#332",
     "owner": "seanb4t",
     "reviewBy": "2027-02-01",
     "mismatches": [
