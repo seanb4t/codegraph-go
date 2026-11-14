@@ -29,7 +29,7 @@
 
 - [x] 5.1 Add callable-binding resolution with bounded chains, cycle detection, and explicit Go production/test contexts. Apply it to mutable function-kind bindings too. Cover imports, competing writes, unknown assignments, context metadata, and parse failures in `TestCallableBindingResolution`.
 - [x] 5.2 Add the #175 regression using this repository's daemon implementation and test replacements. Require production callers, callees, and impact while withholding conflicting test evidence in `TestFunctionVariableQueries`. Include a production reassignment variant and retain test-file indexing.
-- [ ] 5.3 Expose fields through existing kind filters and graph presentation. Cover CLI and MCP definitions and explore in `TestDataSymbolPublicQueries`. Add a field-rendering case to the existing web test suite.
+- [x] 5.3 Expose fields through existing kind filters and graph presentation. Cover CLI and MCP definitions and explore in `TestDataSymbolPublicQueries`. Add a field-rendering case to the existing web test suite.
 - [ ] 5.4 Document binding evidence and query limits beside the capability matrix. In `TestFunctionVariableQueries`, require caller-to-binding read references and calls only to established functions. Make sure that an uncalled initializer never appears as a caller.
 
 ## 6. Migration and integration acceptance

@@ -120,15 +120,33 @@ func joinNodeRefs(nodes []*schema.Node) string {
 	return strings.Join(parts, ", ")
 }
 
+// fieldFacts returns the owner and language lines of a field's node
+// detail, and nothing for any other kind. The owner is the qualified name
+// without the field's own name.
+func fieldFacts(n *schema.Node) []string {
+	if n.Kind != goextract.KindField {
+		return nil
+	}
+	var lines []string
+	if owner, ok := strings.CutSuffix(n.QualifiedName, "."+n.Name); ok && owner != "" {
+		lines = append(lines, fmt.Sprintf("**Owner:** `%s`", owner))
+	}
+	return append(lines, fmt.Sprintf("**Language:** %s", n.Language))
+}
+
 // RenderNode reproduces the golden node.json markdown shape byte-for-byte
 // in its fixed regions (D-05b): "**name** (kind)", a blank line,
 // "**Location:**", "**Signature:**", the fixed Trail line, "**Calls →**"
 // (forward edges), and "**Called by ←**" (reverse edges) — each entry
-// list comma-joined via joinNodeRefs.
+// list comma-joined via joinNodeRefs. A field adds its owner and language
+// after the location (fieldFacts).
 func RenderNode(n *schema.Node, calls, calledBy []*schema.Node) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "**%s** (%s)\n\n", n.Name, n.Kind)
 	fmt.Fprintf(&b, "**Location:** %s:%d\n", n.FilePath, n.StartLine)
+	for _, line := range fieldFacts(n) {
+		b.WriteString(line + "\n")
+	}
 	fmt.Fprintf(&b, "**Signature:** `%s`\n", n.Signature)
 	b.WriteString("**Trail — codegraph_node any of these to follow it (no Read needed)**\n")
 	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(calls))
@@ -177,10 +195,13 @@ func renderNodeSection(n *schema.Node, source []byte, calls, calledBy []*schema.
 		fmt.Sprintf("**%s** (%s)", n.Name, n.Kind),
 		"",
 		fmt.Sprintf("**Location:** %s:%d", n.FilePath, n.StartLine),
+	}
+	parts = append(parts, fieldFacts(n)...)
+	parts = append(parts,
 		fmt.Sprintf("**Signature:** `%s`", n.Signature),
 		"",
 		strings.TrimSuffix(renderNumberedSourceRange(source, n.StartLine, n.EndLine), "\n"),
-	}
+	)
 	if len(calls) > 0 || len(calledBy) > 0 {
 		parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
 		if len(calls) > 0 {

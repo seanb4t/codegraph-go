@@ -262,3 +262,17 @@ describe('DefinitionPicker: keyboard drivability', () => {
 	});
 });
 
+
+describe('DefinitionPicker: a field and a method that share a name', () => {
+	it('labels each candidate with its own kind and location', () => {
+		const field = definition('size', {});
+		field.node = node('size', { kind: 'field', filePath: 'p/Box.java', startLine: 7, language: 'java' });
+		const method = definition('size', {});
+		method.node = node('size', { kind: 'method', filePath: 'p/Box.java', startLine: 17, language: 'java' });
+		render(DefinitionPicker, {
+			props: { symbol: 'size', definitions: [field, method], totalCandidates: 2, onNavigate: vi.fn() }
+		});
+		expect(screen.getByTestId('definition-candidate-0').textContent).toContain('field · p/Box.java:7');
+		expect(screen.getByTestId('definition-candidate-1').textContent).toContain('method · p/Box.java:17');
+	});
+});
