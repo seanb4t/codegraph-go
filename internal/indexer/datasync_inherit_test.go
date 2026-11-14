@@ -90,6 +90,22 @@ func readsCount(reader countReader, path, owner string) func(*testing.T, graphst
 	}
 }
 
+// firesRun returns a step check: the method fire in derived calls the
+// function run in lib through the callable field hook exactly when want.
+func firesRun(derived, lib string, want bool) func(*testing.T, graphstore.Reader) {
+	return func(t *testing.T, r graphstore.Reader) {
+		t.Helper()
+		fire := declaredNodes(t, r, derived, goextract.KindMethod, "fire")
+		run := declaredNodes(t, r, lib, goextract.KindFunction, "run")
+		if len(fire) != 1 || len(run) != 1 {
+			t.Fatalf("%d methods fire in %s and %d functions run in %s, want 1 each", len(fire), derived, len(run), lib)
+		}
+		if got := hasEdge(t, r, fire[0].Id, goextract.RefKindCalls, run[0].Id); got != want {
+			t.Errorf("fire calls run through hook: %v, want %v", got, want)
+		}
+	}
+}
+
 func text(s string) *string { return &s }
 
 // runInheritSteps indexes files, then applies each step and requires that
@@ -165,6 +181,7 @@ func TestDataSymbolSyncEquivalence_Inheritance(t *testing.T) {
 		derived := "import { Base } from './base';\n\nexport class Derived extends Base {\n  fire() {\n    this.hook();\n  }\n}\n"
 		runInheritSteps(t, map[string]string{
 			"lib.ts":     "export function run() {\n  return 0;\n}\n",
+			"tool.ts":    "import { run } from './lib';\n\nexport class Tool {\n  hook = run;\n  fire() {\n    this.hook();\n  }\n}\n",
 			"base.ts":    base,
 			"derived.ts": derived,
 			"reader.ts":  "import { Derived } from './derived';\n\nexport function use(d: Derived) {\n  return d.count;\n}\n",
@@ -173,8 +190,8 @@ func TestDataSymbolSyncEquivalence_Inheritance(t *testing.T) {
 			{"subclass loses the shadowing field", map[string]*string{"derived.ts": text(derived)}, readsCount(tsReader, "base.ts", "Base")},
 			{"base loses the field", map[string]*string{"base.ts": text("import { run } from './lib';\n\nexport class Base {\n  hook = run;\n}\n")}, readsCount(tsReader, "", "")},
 			{"base regains the field", map[string]*string{"base.ts": text(base)}, readsCount(tsReader, "base.ts", "Base")},
-			{"a subclass can replace the callable field", map[string]*string{"sub.ts": text("import { Derived } from './derived';\n\nexport class Sub extends Derived {}\n")}, nil},
-			{"the subclass goes", map[string]*string{"sub.ts": nil}, nil},
+			{"a subclass can replace the callable field", map[string]*string{"sub.ts": text("import { Tool } from './tool';\n\nexport class Sub extends Tool {}\n")}, firesRun("tool.ts", "lib.ts", false)},
+			{"the subclass goes", map[string]*string{"sub.ts": nil}, firesRun("tool.ts", "lib.ts", true)},
 			{"the field moves to another class", map[string]*string{"base.ts": text("import { run } from './lib';\n\nexport class Base {\n  hook = run;\n}\n\nexport class Other {\n  count = 0;\n}\n")}, fieldMovedToOther},
 			{"the field moves back", map[string]*string{"base.ts": text(base)}, readsCount(tsReader, "base.ts", "Base")},
 			{"a method body changes", map[string]*string{"derived.ts": text("import { Base } from './base';\n\nexport class Derived extends Base {\n  fire() {\n    this.hook();\n    return 1;\n  }\n}\n")}, nil},
@@ -186,6 +203,7 @@ func TestDataSymbolSyncEquivalence_Inheritance(t *testing.T) {
 		derived := "from base import Base\n\n\nclass Derived(Base):\n    def fire(self):\n        self.hook()\n"
 		runInheritSteps(t, map[string]string{
 			"lib.py":     "def run():\n    return 0\n",
+			"tool.py":    "from lib import run\n\n\nclass Tool:\n    hook = run\n\n    def fire(self):\n        self.hook()\n",
 			"base.py":    base,
 			"derived.py": derived,
 			"reader.py":  "from derived import Derived\n\n\nclass Reader(Derived):\n    def use(self):\n        return self.count\n",
@@ -194,8 +212,8 @@ func TestDataSymbolSyncEquivalence_Inheritance(t *testing.T) {
 			{"subclass loses the shadowing field", map[string]*string{"derived.py": text(derived)}, readsCount(pyReader, "base.py", "Base")},
 			{"base loses the field", map[string]*string{"base.py": text("from lib import run\n\n\nclass Base:\n    hook = run\n")}, readsCount(pyReader, "", "")},
 			{"base regains the field", map[string]*string{"base.py": text(base)}, readsCount(pyReader, "base.py", "Base")},
-			{"a subclass can replace the callable field", map[string]*string{"sub.py": text("from derived import Derived\n\n\nclass Sub(Derived):\n    pass\n")}, nil},
-			{"the subclass goes", map[string]*string{"sub.py": nil}, nil},
+			{"a subclass can replace the callable field", map[string]*string{"sub.py": text("from tool import Tool\n\n\nclass Sub(Tool):\n    pass\n")}, firesRun("tool.py", "lib.py", false)},
+			{"the subclass goes", map[string]*string{"sub.py": nil}, firesRun("tool.py", "lib.py", true)},
 		}, nil)
 	})
 
@@ -211,8 +229,8 @@ func TestDataSymbolSyncEquivalence_Inheritance(t *testing.T) {
 			{"subclass loses the shadowing field", map[string]*string{"p/Derived.java": text(derived)}, readsCount(javaReader, "p/Base.java", "Base")},
 			{"base loses the field", map[string]*string{"p/Base.java": text("package p;\n\npublic class Base {\n}\n")}, readsCount(javaReader, "", "")},
 			{"base regains the field", map[string]*string{"p/Base.java": text(base)}, readsCount(javaReader, "p/Base.java", "Base")},
-			{"the base field becomes private", map[string]*string{"p/Base.java": text("package p;\n\npublic class Base {\n    private int count;\n}\n")}, nil},
-			{"the base field is protected again", map[string]*string{"p/Base.java": text(base)}, nil},
+			{"the base field becomes private", map[string]*string{"p/Base.java": text("package p;\n\npublic class Base {\n    private int count;\n}\n")}, readsCount(javaReader, "", "")},
+			{"the base field is protected again", map[string]*string{"p/Base.java": text(base)}, readsCount(javaReader, "p/Base.java", "Base")},
 		}, nil)
 	})
 }
