@@ -10,33 +10,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// The metadata keys and values of data references and of the calls that
-// go through a data symbol.
 const (
-	// MetaAccess is the role of a references edge: goextract.AccessRead,
-	// AccessWrite or AccessReadWrite.
-	MetaAccess = goextract.MetaAccess
-	// MetaBinding is BindingInit on the reference from a data symbol to
-	// the name its initializer holds.
-	MetaBinding = "binding"
-	// MetaBinds is on a write: the ids of the values it assigns, sorted
-	// and comma-separated. BindsUnknown stands for a value that is not a
-	// resolved name.
-	MetaBinds = goextract.MetaBinds
-	// MetaVia is on a call through data symbols: each binding path, the
-	// data symbol ids from the called one to the last, joined by ">".
-	// Several paths are sorted and comma-separated.
-	MetaVia = "via"
-	// MetaContext is on a call through a Go data symbol: the analysis
-	// contexts that establish the target, sorted and comma-separated.
-	MetaContext = "binding_context"
-	// MetaDirect is "true" on a call that is both direct and through a
-	// data symbol.
-	MetaDirect = "direct"
-
-	BindingInit  = "init"
-	BindsUnknown = goextract.BindsUnknown
-
 	// ContextGoProduction leaves out the writes of _test.go files, and
 	// ContextGoTest counts every write.
 	ContextGoProduction = "go-production"
@@ -53,11 +27,10 @@ func IsBindingEdge(e *schema.Edge) bool {
 	if e.Kind != goextract.RefKindReferences {
 		return false
 	}
-	if e.Metadata[MetaBinding] == BindingInit {
+	if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
 		return true
 	}
-	a := e.Metadata[MetaAccess]
-	return a == goextract.AccessWrite || a == goextract.AccessReadWrite
+	return goextract.IsWriteAccess(e.Metadata[goextract.MetaAccess])
 }
 
 // GlobalEdges returns the edges of a result that the passes over the
@@ -72,9 +45,9 @@ func GlobalEdges(edges []*schema.Edge) []*schema.Edge {
 	return out
 }
 
-// isDataKind reports whether a node of kind holds a value: a call through
-// it is a read, never a call of it.
-func isDataKind(kind string) bool {
+// IsDataKind reports whether a node of kind holds a value: a call
+// through it is a read, never a call of it.
+func IsDataKind(kind string) bool {
 	switch kind {
 	case goextract.KindVariable, goextract.KindConstant, goextract.KindField:
 		return true
@@ -82,9 +55,9 @@ func isDataKind(kind string) bool {
 	return false
 }
 
-// isGoTestFile reports whether n is in a Go _test.go file.
+// isGoTestFile reports whether n is in a Go test file.
 func isGoTestFile(n *schema.Node) bool {
-	return n != nil && n.Language == "go" && strings.HasSuffix(n.FilePath, "_test.go")
+	return n != nil && n.Language == "go" && goextract.IsGoTestFile(n.FilePath)
 }
 
 // bindingWrite is one value assigned to a data symbol. test is true for a
@@ -112,13 +85,13 @@ func newBindings(view symbols.View, h symbols.Hierarchy, lists ...[]*schema.Edge
 				continue
 			}
 			test := isGoTestFile(view.Node(e.Source))
-			if e.Metadata[MetaBinding] == BindingInit {
+			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
 				b.writes[e.Source] = append(b.writes[e.Source], bindingWrite{e.Target, test})
 				continue
 			}
-			binds := e.Metadata[MetaBinds]
-			if e.Metadata[MetaAccess] != goextract.AccessWrite || binds == "" {
-				binds = BindsUnknown
+			binds := e.Metadata[goextract.MetaBinds]
+			if e.Metadata[goextract.MetaAccess] != goextract.AccessWrite || binds == "" {
+				binds = goextract.BindsUnknown
 			}
 			for _, v := range strings.Split(binds, ",") {
 				b.writes[e.Target] = append(b.writes[e.Target], bindingWrite{v, test})
@@ -150,7 +123,7 @@ func (b bindings) target(id string, test bool) (string, []string, bool) {
 			switch {
 			case w.test && !test:
 				continue
-			case w.value == BindsUnknown:
+			case w.value == goextract.BindsUnknown:
 				return "", nil, false
 			case value == "":
 				value = w.value
@@ -163,7 +136,7 @@ func (b bindings) target(id string, test bool) (string, []string, bool) {
 			return "", nil, false
 		case k == goextract.KindFunction || k == goextract.KindMethod:
 			return value, via, true
-		case isDataKind(k):
+		case IsDataKind(k):
 			id = value
 		default:
 			return "", nil, false
@@ -193,14 +166,14 @@ func (b bindings) throughBindings(list []*schema.Edge) ([]*schema.Edge, int) {
 	var out []*schema.Edge
 	added := 0
 	for _, e := range list {
-		if e.Kind != goextract.RefKindCalls || !isDataKind(b.view.Kind(e.Target)) {
+		if e.Kind != goextract.RefKindCalls || !IsDataKind(b.view.Kind(e.Target)) {
 			out = append(out, e)
 			continue
 		}
 		out = append(out, &schema.Edge{
 			Source: e.Source, Target: e.Target, Kind: goextract.RefKindReferences,
 			Line: e.Line, Col: e.Col, Provenance: "ast",
-			Metadata: map[string]string{MetaAccess: goextract.AccessRead},
+			Metadata: map[string]string{goextract.MetaAccess: goextract.AccessRead},
 		})
 		for _, d := range b.derive(e) {
 			out = append(out, d)
@@ -242,9 +215,9 @@ func (b bindings) derive(e *schema.Edge) []*schema.Edge {
 	var out []*schema.Edge
 	for _, fn := range slices.Sorted(maps.Keys(found)) {
 		ev := found[fn]
-		md := map[string]string{MetaVia: joinSet(ev.via)}
+		md := map[string]string{goextract.MetaVia: joinSet(ev.via)}
 		if len(ev.contexts) > 0 {
-			md[MetaContext] = joinSet(ev.contexts)
+			md[goextract.MetaContext] = joinSet(ev.contexts)
 		}
 		out = append(out, &schema.Edge{
 			Source: e.Source, Target: fn, Kind: goextract.RefKindCalls,

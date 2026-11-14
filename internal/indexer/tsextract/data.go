@@ -192,18 +192,7 @@ func (ex *extractor) emitField(typeID, typeName string, fields *goextract.TypeEn
 func (ex *extractor) captureInitializer(fromID string, value *tree_sitter.Node, whole bool) {
 	before := len(ex.result.Unresolved)
 	ex.captureExprRead(fromID, value)
-	switch {
-	case !whole:
-		ex.unknownWrite(fromID)
-	case ex.valueRef(value) != nil:
-		if len(ex.result.Unresolved) > before {
-			// The whole value is one name, whose ref captureExprRead
-			// appended last: the symbol starts out bound to it.
-			ex.result.Unresolved[len(ex.result.Unresolved)-1].Binding = true
-		}
-	case mayHoldFunction(value):
-		ex.unknownWrite(fromID)
-	}
+	goextract.BindInitializer(ex.result, ex.fileID, fromID, before, whole, ex.valueRef(value) != nil, mayHoldFunction(value))
 	walkDescendants(value, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
 		case "arrow_function", "function_expression", "generator_function", "class":
@@ -213,16 +202,6 @@ func (ex *extractor) captureInitializer(fromID string, value *tree_sitter.Node, 
 		}
 		return true
 	})
-}
-
-// unknownWrite records that the symbol id holds a value that has no
-// name, such as a function expression, so no later write is its only
-// value.
-func (ex *extractor) unknownWrite(id string) {
-	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
-		Source: ex.fileID, Target: id, Kind: goextract.RefKindReferences, Provenance: "ast",
-		Metadata: map[string]string{goextract.MetaAccess: goextract.AccessWrite, goextract.MetaBinds: goextract.BindsUnknown},
-	}})
 }
 
 // mayHoldFunction reports whether the value of expr can be a function. A

@@ -8,19 +8,14 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// isDataID reports whether the node id names a data symbol. A node id
-// starts with its kind.
+// isDataID reports whether the node id names a data symbol.
 func isDataID(id string) bool {
-	for _, k := range []string{goextract.KindVariable, goextract.KindConstant, goextract.KindField} {
-		if strings.HasPrefix(id, k+":") {
-			return true
-		}
-	}
-	return false
+	return resolve.IsDataKind(nodeid.KindOf(id))
 }
 
 // bindingDependents returns the files outside inBatch that read a data
@@ -50,7 +45,7 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 			}
 		}
 		for _, ref := range r.Unresolved {
-			if ref.Access == goextract.AccessWrite || ref.Access == goextract.AccessReadWrite {
+			if goextract.IsWriteAccess(ref.Access) {
 				names[ref.Name] = true
 			}
 		}
@@ -124,7 +119,7 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 		if resolve.IsBindingEdge(e) {
 			binding = append(binding, e)
 			if inPaths[pathOf[resolve.EdgeOwnerID(e)]] {
-				if e.Metadata[resolve.MetaBinding] == resolve.BindingInit {
+				if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
 					seeds[e.Source] = true
 				} else {
 					seeds[e.Target] = true
@@ -145,11 +140,11 @@ func bindingDependents(r0 graphstore.Reader, results []goextract.FileResult, pat
 		grew = false
 		for _, e := range binding {
 			from, to := "", ""
-			if e.Metadata[resolve.MetaBinding] == resolve.BindingInit {
+			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
 				from, to = e.Target, e.Source
 			} else {
 				to = e.Target
-				for _, v := range strings.Split(e.Metadata[resolve.MetaBinds], ",") {
+				for _, v := range strings.Split(e.Metadata[goextract.MetaBinds], ",") {
 					if seeds[v] {
 						from = v
 					}

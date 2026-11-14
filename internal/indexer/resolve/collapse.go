@@ -90,28 +90,28 @@ func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
 	}
 	direct, derived := false, false
 	for i, c := range candidates {
-		if c.Metadata[MetaVia] == "" {
+		if c.Metadata[goextract.MetaVia] == "" {
 			direct = true
 		} else {
 			derived = true
 		}
-		if c.Metadata[MetaDirect] == "true" {
+		if c.Metadata[goextract.MetaDirect] == "true" {
 			direct = true
 		}
 		if i == 0 {
 			continue
 		}
-		if a := goextract.MergeAccess(md[MetaAccess], c.Metadata[MetaAccess]); a != "" {
-			md[MetaAccess] = a
+		if a := goextract.MergeAccess(md[goextract.MetaAccess], c.Metadata[goextract.MetaAccess]); a != "" {
+			md[goextract.MetaAccess] = a
 		}
-		for _, k := range []string{MetaBinds, MetaVia, MetaContext} {
+		for _, k := range []string{goextract.MetaBinds, goextract.MetaVia, goextract.MetaContext} {
 			if u := unionSet(md[k], c.Metadata[k]); u != "" {
 				md[k] = u
 			}
 		}
 	}
 	if rep.Kind == goextract.RefKindCalls && direct && derived {
-		md[MetaDirect] = "true"
+		md[goextract.MetaDirect] = "true"
 	}
 	if maps.Equal(md, rep.Metadata) || (len(md) == 0 && rep.Metadata == nil) {
 		return rep

@@ -8,9 +8,9 @@ package query
 import (
 	"math"
 	"sort"
-	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -36,7 +36,7 @@ var RankEdges = map[string]bool{
 // that holds it, so a read or a write of a field does not rank the field
 // on its own.
 func isRankEdge(e *schema.Edge) bool {
-	return RankEdges[e.Kind] && !strings.HasPrefix(e.Target, goextract.KindField+":")
+	return RankEdges[e.Kind] && nodeid.KindOf(e.Target) != goextract.KindField
 }
 
 // buildRWRAdjacency builds an in-memory undirected adjacency list (index

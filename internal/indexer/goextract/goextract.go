@@ -568,22 +568,7 @@ func (ex *extractor) emitConstVarSpec(kind string, spec *tree_sitter.Node) {
 func (ex *extractor) captureInitializer(fromID string, value *tree_sitter.Node) {
 	before := len(ex.result.Unresolved)
 	ex.captureExprRead(fromID, value)
-	switch {
-	case ex.valueRef(value) != nil:
-		if len(ex.result.Unresolved) > before {
-			// The whole value is one name, whose ref captureExprRead
-			// appended last: the symbol starts out bound to it.
-			ex.result.Unresolved[len(ex.result.Unresolved)-1].Binding = true
-		}
-	case mayHoldFunction(value):
-		// The package initialization writes a value that has no name,
-		// such as a function literal, so no later write is the symbol's
-		// only value.
-		ex.result.IntraEdges = append(ex.result.IntraEdges, IntraEdge{Edge: &schema.Edge{
-			Source: ex.fileID, Target: fromID, Kind: RefKindReferences, Provenance: "ast",
-			Metadata: map[string]string{MetaAccess: AccessWrite, MetaBinds: BindsUnknown},
-		}})
-	}
+	BindInitializer(ex.result, ex.fileID, fromID, before, true, ex.valueRef(value) != nil, mayHoldFunction(value))
 	walkDescendants(value, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
 		case "func_literal":

@@ -272,9 +272,7 @@ func (rs *resolver) sameFile(r goextract.FileResult, name string, line, col int3
 		rs.fileNodesPath = r.RelPath
 		rs.fileNodes = make(map[string][]goextract.ExtractedNode, len(r.Nodes))
 		for _, en := range r.Nodes {
-			// A field is reached through its owner only, never by
-			// bare name.
-			if en.Node.Kind != goextract.KindFile && en.Node.Kind != goextract.KindField {
+			if symbols.BareNameCandidate(en.Node.Kind) {
 				rs.fileNodes[en.Node.Name] = append(rs.fileNodes[en.Node.Name], en)
 			}
 		}
@@ -393,27 +391,27 @@ func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.Unresolve
 }
 
 // dataRefMetadata returns the metadata of the references edge of ref:
-// its access role, BindingInit when ref is the whole initializer of its
-// source, and for a write the value it binds, or BindsUnknown.
+// its access role, goextract.BindingInit when ref is the whole initializer of its
+// source, and for a write the value it binds, or goextract.BindsUnknown.
 func (rs *resolver) dataRefMetadata(r goextract.FileResult, ref goextract.UnresolvedRef) map[string]string {
 	if ref.Access == "" && !ref.Binding {
 		return nil
 	}
 	md := map[string]string{}
 	if ref.Access != "" {
-		md[MetaAccess] = ref.Access
+		md[goextract.MetaAccess] = ref.Access
 	}
 	if ref.Binding {
-		md[MetaBinding] = BindingInit
+		md[goextract.MetaBinding] = goextract.BindingInit
 	}
-	if ref.Access == goextract.AccessWrite || ref.Access == goextract.AccessReadWrite {
-		md[MetaBinds] = BindsUnknown
+	if goextract.IsWriteAccess(ref.Access) {
+		md[goextract.MetaBinds] = goextract.BindsUnknown
 		if v := ref.Value; v != nil && ref.Access == goextract.AccessWrite {
 			if id, ok := rs.resolveDataRef(r, goextract.UnresolvedRef{
 				FromID: ref.FromID, Name: v.Name, PkgAlias: v.PkgAlias, ReceiverType: v.ReceiverType,
 				Kind: goextract.RefKindReferences, Line: ref.Line, Col: ref.Col,
 			}); ok {
-				md[MetaBinds] = id
+				md[goextract.MetaBinds] = id
 			}
 		}
 	}
@@ -569,7 +567,7 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		// A call through a data symbol is a read of it, which Assemble
 		// turns into the calls its bindings establish.
 		local := rs.sameFile(r, ref.Name, ref.Line, ref.Col, func(kind string) bool {
-			return callableKind(kind) || symbols.IsTypeKind(kind) || isDataKind(kind)
+			return callableKind(kind) || symbols.IsTypeKind(kind) || IsDataKind(kind)
 		})
 		if len(local) > 0 && local[0].Node.Nested {
 			return rs.choose(r, ref, local, argTypes, r.ImportPath)

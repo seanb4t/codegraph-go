@@ -224,11 +224,7 @@ func (b *Builder) addSymbols(decl Declarations) {
 	}
 	for _, n := range decl.Nodes {
 		n = nodes[n.Id]
-		if n.Kind == goextract.KindFile || n.Kind == goextract.KindField {
-			// A file node is never a callable or embeddable target, and
-			// its synthetic name, its RelPath, must not collide with a
-			// declared symbol of the module. A field is reached through
-			// its owner only, so it is never a bare-name candidate.
+		if !BareNameCandidate(n.Kind) {
 			continue
 		}
 		if !Reachable(n, fileExports) {

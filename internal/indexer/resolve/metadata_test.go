@@ -69,7 +69,7 @@ func TestDataReferenceMetadata_CallEvidence(t *testing.T) {
 	call := func(line int32, via, ctx string) *schema.Edge {
 		e := &schema.Edge{Source: "f", Target: "fn", Kind: goextract.RefKindCalls, Line: line}
 		if via != "" {
-			e.Metadata = map[string]string{MetaVia: via, MetaContext: ctx}
+			e.Metadata = map[string]string{goextract.MetaVia: via, goextract.MetaContext: ctx}
 		}
 		return e
 	}
@@ -92,7 +92,7 @@ func TestDataReferenceMetadata_CallEvidence(t *testing.T) {
 					t.Fatalf("CollapseEdges kept %d edges, want 1", len(got))
 				}
 				md := got[0].Metadata
-				if md[MetaVia] != tc.via || md[MetaContext] != tc.ctx || md[MetaDirect] != tc.direct {
+				if md[goextract.MetaVia] != tc.via || md[goextract.MetaContext] != tc.ctx || md[goextract.MetaDirect] != tc.direct {
 					t.Errorf("metadata = %v, want via %q, context %q, direct %q", md, tc.via, tc.ctx, tc.direct)
 				}
 			}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -92,11 +93,11 @@ func ownerDependents(r0 graphstore.Reader, results []goextract.FileResult, paths
 		case goextract.RefKindEmbeds, goextract.EdgeKindExtends, goextract.EdgeKindImplements:
 			supers[e.Source] = append(supers[e.Source], e.Target)
 		case goextract.RefKindContains:
-			if strings.HasPrefix(e.Target, goextract.KindField+":") {
+			if nodeid.KindOf(e.Target) == goextract.KindField {
 				members[e.Source] = append(members[e.Source], e.Target)
 			}
 		case goextract.RefKindReferences:
-			if strings.HasPrefix(e.Target, goextract.KindField+":") {
+			if nodeid.KindOf(e.Target) == goextract.KindField {
 				readers[e.Target] = append(readers[e.Target], pathOf[e.Source])
 			}
 		}

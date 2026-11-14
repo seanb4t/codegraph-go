@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -237,23 +238,82 @@ type ValueRef struct {
 	Name, PkgAlias, ReceiverType string
 }
 
-// The access roles of a references edge, in its "access" metadata.
-// The metadata keys of a write that an extractor builds as an intra-file
-// edge. The resolver writes the same keys.
+// The metadata keys and values of a data reference and of a call that
+// goes through a data symbol. The extractors and the resolver write them.
 const (
-	// MetaAccess is the role of a references edge.
+	// MetaAccess is the role of a references edge: AccessRead,
+	// AccessWrite or AccessReadWrite.
 	MetaAccess = "access"
-	// MetaBinds is on a write: the ids of the values it assigns, or
-	// BindsUnknown.
+	// MetaBinds is on a write: the ids of the values it assigns, sorted
+	// and comma-separated. BindsUnknown stands for a value that is not a
+	// resolved name.
 	MetaBinds    = "binds"
 	BindsUnknown = "unknown"
+	// MetaBinding is BindingInit on the reference from a data symbol to
+	// the name its initializer holds.
+	MetaBinding = "binding"
+	BindingInit = "init"
+	// MetaVia is on a call through data symbols: each binding path, the
+	// data symbol ids from the called one to the last, joined by ">". In
+	// Go, each path ends with "@" and the analysis context that
+	// establishes it. Several paths are sorted and comma-separated.
+	MetaVia = "via"
+	// MetaContext is on a call through a Go data symbol: the analysis
+	// contexts that establish the target, sorted and comma-separated.
+	MetaContext = "binding_context"
+	// MetaDirect is "true" on a call that is both direct and through a
+	// data symbol.
+	MetaDirect = "direct"
 )
 
+// The access roles of a references edge, in its MetaAccess metadata.
 const (
 	AccessRead      = "read"
 	AccessWrite     = "write"
 	AccessReadWrite = "read_write"
 )
+
+// IsWriteAccess reports whether the access role a writes the symbol.
+func IsWriteAccess(a string) bool {
+	return a == AccessWrite || a == AccessReadWrite
+}
+
+// IsGoTestFile reports whether path is a Go test file.
+func IsGoTestFile(path string) bool {
+	return strings.HasSuffix(path, "_test.go")
+}
+
+// UnknownWrite returns the edge that records a module-level write of a
+// value with no name to the data symbol id, from the file fileID. No
+// later write is then the symbol's only value.
+func UnknownWrite(fileID, id string) IntraEdge {
+	return IntraEdge{Edge: &schema.Edge{
+		Source: fileID, Target: id, Kind: RefKindReferences, Provenance: "ast",
+		Metadata: map[string]string{MetaAccess: AccessWrite, MetaBinds: BindsUnknown},
+	}}
+}
+
+// BindInitializer records what the initializer value of the data symbol
+// id binds, after the extractor captured the value's reads from index
+// before in r.Unresolved. whole is false for a name that a destructuring
+// target binds: it takes a part of the value, so no name is its value.
+// named reports that the whole value is one name, and mayHoldFunction
+// that a value with no name can be a function. A named value binds the
+// symbol to the name's ref, which the capture appended last. A part of a
+// value, or a value with no name that can be a function, is a write of
+// an unknown value.
+func BindInitializer(r *FileResult, fileID, id string, before int, whole, named, mayHoldFunction bool) {
+	switch {
+	case !whole:
+		r.IntraEdges = append(r.IntraEdges, UnknownWrite(fileID, id))
+	case named:
+		if len(r.Unresolved) > before {
+			r.Unresolved[len(r.Unresolved)-1].Binding = true
+		}
+	case mayHoldFunction:
+		r.IntraEdges = append(r.IntraEdges, UnknownWrite(fileID, id))
+	}
+}
 
 // MergeAccess returns the role of one edge that carries both a and b. An
 // empty role adds nothing.
