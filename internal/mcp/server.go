@@ -329,12 +329,9 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 			}
 			return 0, readErr
 		}
-		// A trailing partial line (readErr != nil but bytes were still
-		// returned, e.g. the stream ended without a final newline) is
-		// returned to the caller now; the error itself is reported on
-		// the NEXT call once unread is drained, matching bufio.Reader's
-		// own "data now, error later" contract — ReadBytes already
-		// followed that contract for us, so nothing extra to do here.
+		// A last line without a newline comes back with its error. The
+		// line is returned now, and the error on the next call, because
+		// bufio.Reader returns the error again once unread is drained.
 	}
 	n := copy(p, s.unread)
 	s.unread = s.unread[n:]
