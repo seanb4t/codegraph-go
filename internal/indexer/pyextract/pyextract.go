@@ -59,6 +59,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		result.Err = fmt.Errorf("pyextract: parser returned an empty tree for %s", relPath)
 		return result, nil
 	}
+	result.SyntaxErrors = root.HasError()
 
 	fileID := nodeid.NodeID(goextract.KindFile, relPath, relPath)
 	result.Nodes = append(result.Nodes, goextract.ExtractedNode{Node: &schema.Node{

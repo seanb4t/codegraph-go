@@ -306,3 +306,51 @@ func TestStable(t *testing.T) {
 		t.Errorf("both -> List targets %s, want %s", b.Target, list)
 	}
 }
+
+// TestBindingsWithheldBySyntaxErrors covers the syntax-error rule in
+// TypeScript, JavaScript and Python. A call through a module variable
+// that holds a function reaches the function in a clean file, and
+// reaches nothing in a file with a syntax error.
+func TestBindingsWithheldBySyntaxErrors(t *testing.T) {
+	const tsCall = "import { run } from \"./run\";\n\nconst handler = run;\n\nfunction call() {\n  handler();\n}\n"
+	const tsDamage = "\nfunction damage() {\n  let x = (;\n}\n"
+	const pyCall = "from lib import run\n\nhandler = run\n\n\ndef call():\n    handler()\n"
+	const pyDamage = "\n\ndef damage():\n    x = )\n"
+	r, _ := runAndSnapshot(t, testtree.Write(t, map[string]string{
+		"run.ts":    "export function run() { return 0; }\n",
+		"clean.ts":  tsCall,
+		"broken.ts": tsCall + tsDamage,
+		"run.js":    "export function run() { return 0; }\n",
+		"clean.js":  tsCall,
+		"broken.js": tsCall + tsDamage,
+		"lib.py":    "def run():\n    return 0\n",
+		"clean.py":  pyCall,
+		"broken.py": pyCall + pyDamage,
+	}))
+	for _, c := range []struct {
+		path, kind string
+		want       bool
+	}{
+		{"clean.ts", goextract.KindConstant, true},
+		{"broken.ts", goextract.KindConstant, false},
+		{"clean.js", goextract.KindConstant, true},
+		{"broken.js", goextract.KindConstant, false},
+		{"clean.py", goextract.KindVariable, true},
+		{"broken.py", goextract.KindVariable, false},
+	} {
+		calls := dataEdges(t, r, c.path, goextract.KindFunction, "call", goextract.RefKindCalls)
+		if _, ok := calls["function run"]; ok != c.want {
+			t.Errorf("%s: call calls %v, want a call of run = %v", c.path, calls, c.want)
+		}
+		if got := dataEdges(t, r, c.path, goextract.KindFunction, "call", goextract.RefKindReferences)[c.kind+" handler"]; got != "read" {
+			t.Errorf("%s: call -> handler access = %q, want read", c.path, got)
+		}
+		f, err := r.GetFile(c.path)
+		if err != nil {
+			t.Fatalf("GetFile(%s): %v", c.path, err)
+		}
+		if f.GetSyntaxErrors() == c.want {
+			t.Errorf("%s: syntax_errors = %v, want %v", c.path, f.GetSyntaxErrors(), !c.want)
+		}
+	}
+}
