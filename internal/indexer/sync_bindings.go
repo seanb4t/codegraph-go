@@ -3,7 +3,6 @@ package indexer
 import (
 	"errors"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -130,10 +129,5 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 			}
 		}
 	}
-	out := make([]string, 0, len(set))
-	for p := range set {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out, nil
+	return sortedBoolKeys(set), nil
 }

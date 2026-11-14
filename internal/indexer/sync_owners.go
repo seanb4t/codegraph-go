@@ -3,7 +3,6 @@ package indexer
 import (
 	"errors"
 	"maps"
-	"sort"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -70,19 +69,11 @@ func ownerDependents(idx *storeIndex, results []goextract.FileResult, paths []st
 		}
 	}
 
-	queue := make([]string, 0, len(types))
-	for id := range types {
-		queue = append(queue, id)
-	}
-	for len(queue) > 0 {
-		id := queue[len(queue)-1]
-		queue = queue[:len(queue)-1]
-		for _, s := range idx.supers[id] {
-			if !types[s] {
-				types[s] = true
-				queue = append(queue, s)
-			}
-		}
+	for _, id := range sortedBoolKeys(types) {
+		symbols.WalkSupertypes(id, idx.supers, func(s string) bool {
+			types[s] = true
+			return false
+		})
 	}
 
 	set := make(map[string]bool)
@@ -110,12 +101,7 @@ func ownerDependents(idx *storeIndex, results []goextract.FileResult, paths []st
 		}
 	}
 
-	out := make([]string, 0, len(set))
-	for p := range set {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out, nil
+	return sortedBoolKeys(set), nil
 }
 
 // ownerFact is one field of a file: its name and its visibility.
