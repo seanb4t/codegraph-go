@@ -22,7 +22,8 @@ import (
 // nothing. A local, and a name the function assigns without a global
 // statement, shadows the module variable. A call through a module
 // variable or a class attribute reaches the function it holds, unless a
-// subclass can replace the attribute.
+// subclass can replace the attribute. An augmented assignment to a
+// module variable withholds the call through it.
 func TestPythonDataReferences(t *testing.T) {
 	r, _ := runAndSnapshot(t, testtree.Write(t, map[string]string{
 		"lib.py": "def run():\n    return 0\n\n\ndef other():\n    return 1\n",
@@ -126,6 +127,18 @@ def shadow():
 
 def call_handler():
     handler()
+
+
+grown = run
+
+
+def grow():
+    global grown
+    grown += other
+
+
+def call_grown():
+    grown()
 `,
 	}))
 	const app = "app.py"
@@ -234,6 +247,15 @@ def call_handler():
 	}
 	if got := refs(goextract.KindFunction, "call_handler")["variable handler"]; got != "read" {
 		t.Errorf("call_handler -> handler access = %q, want read", got)
+	}
+	if c := calls(goextract.KindFunction, "call_grown"); len(c) != 0 {
+		t.Errorf("call_grown calls %v, want none: grow augments grown with other", c)
+	}
+	if got := refs(goextract.KindFunction, "call_grown")["variable grown"]; got != "read" {
+		t.Errorf("call_grown -> grown access = %q, want read", got)
+	}
+	if got := refs(goextract.KindFunction, "grow")["variable grown"]; got != "read_write" {
+		t.Errorf("grow -> grown access = %q, want read_write from the augmented assignment", got)
 	}
 }
 

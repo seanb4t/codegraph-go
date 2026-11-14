@@ -66,6 +66,12 @@ function callSwap() {
   swap();
   steady();
 }
+
+let fallback = run;
+
+function defaultFallback() { fallback ??= helper; }
+
+function callFallback() { fallback(); }
 `
 
 // TestTypeScriptDataReferences covers the TypeScript, JavaScript and TSX
@@ -81,7 +87,8 @@ function callSwap() {
 // class that another class extends establishes no call. A private TypeScript
 // field of a base class is no reference target from its subclass. A
 // function in a let binding that another function reassigns is read,
-// not called, and one that nothing reassigns is called.
+// not called, and one that nothing reassigns is called. A logical
+// assignment such as ??= also withholds the call through its binding.
 func TestTypeScriptDataReferences(t *testing.T) {
 	for _, ext := range []string{"ts", "js", "tsx"} {
 		t.Run(ext, func(t *testing.T) {
@@ -131,6 +138,16 @@ class Thief extends Vault {
 			}
 			if got := dataEdges(t, r, data, goextract.KindFunction, "callSwap", goextract.RefKindReferences)["function swap"]; got != "read" {
 				t.Errorf("callSwap -> swap access = %q, want read", got)
+			}
+
+			if c := dataEdges(t, r, data, goextract.KindFunction, "callFallback", goextract.RefKindCalls); len(c) != 0 {
+				t.Errorf("callFallback calls %v, want none: defaultFallback assigns helper with ??=", c)
+			}
+			if got := dataEdges(t, r, data, goextract.KindFunction, "callFallback", goextract.RefKindReferences)["variable fallback"]; got != "read" {
+				t.Errorf("callFallback -> fallback access = %q, want read", got)
+			}
+			if got := dataEdges(t, r, data, goextract.KindFunction, "defaultFallback", goextract.RefKindReferences)["variable fallback"]; got != "read_write" {
+				t.Errorf("defaultFallback -> fallback access = %q, want read_write", got)
 			}
 
 			bump := dataEdges(t, r, data, goextract.KindMethod, "Derived.bump", goextract.RefKindReferences)
