@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "id": "java/fields-beside-enum",
+  "language": "java",
+  "partition": "development",
+  "expectationRevision": 1,
+  "labeling": "complete",
+  "dimension": "declarations",
+  "construct": "class fields beside a nested enum and its constants in one file",
+  "status": "known-gap",
+  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "evidence": "scip-javac definitions and enclosing ranges",
+  "scope": {
+    "roles": [
+      "function",
+      "method",
+      "type",
+      "interface",
+      "type_alias",
+      "variable",
+      "constant",
+      "field",
+      "enum"
+    ],
+    "relationshipKinds": [
+      "calls",
+      "references"
+    ]
+  },
+  "referenceExclusions": [
+    {
+      "symbol": "<init>",
+      "status": "unsupported",
+      "reason": "implicit constructors have no source declaration"
+    }
+  ],
+  "declarations": [
+    {
+      "id": "Order",
+      "path": "p/Order.java",
+      "owner": "",
+      "role": "type",
+      "name": "Order",
+      "at": {
+        "line": 3,
+        "col": 13
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 0
+        },
+        "end": {
+          "line": 11,
+          "col": 1
+        }
+      }
+    },
+    {
+      "id": "Order.quantity",
+      "path": "p/Order.java",
+      "owner": "Order",
+      "role": "field",
+      "name": "quantity",
+      "at": {
+        "line": 4,
+        "col": 6
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 4,
+          "col": 2
+        },
+        "end": {
+          "line": 4,
+          "col": 15
+        }
+      }
+    },
+    {
+      "id": "Order.CURRENCY",
+      "path": "p/Order.java",
+      "owner": "Order",
+      "role": "field",
+      "name": "CURRENCY",
+      "at": {
+        "line": 5,
+        "col": 22
+      },
+      "spanRule": "java-field-declaration",
+      "span": {
+        "start": {
+          "line": 5,
+          "col": 2
+        },
+        "end": {
+          "line": 5,
+          "col": 39
+        }
+      }
+    },
+    {
+      "id": "Order.State",
+      "path": "p/Order.java",
+      "owner": "Order",
+      "role": "enum",
+      "name": "State",
+      "at": {
+        "line": 7,
+        "col": 7
+      },
+      "spanRule": "java-type-declaration",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 2
+        },
+        "end": {
+          "line": 10,
+          "col": 3
+        }
+      }
+    },
+    {
+      "id": "Order.State.OPEN",
+      "path": "p/Order.java",
+      "owner": "Order.State",
+      "role": "field",
+      "name": "OPEN",
+      "at": {
+        "line": 8,
+        "col": 4
+      },
+      "spanRule": "java-enum-constant",
+      "span": {
+        "start": {
+          "line": 8,
+          "col": 4
+        },
+        "end": {
+          "line": 8,
+          "col": 8
+        }
+      }
+    },
+    {
+      "id": "Order.State.CLOSED",
+      "path": "p/Order.java",
+      "owner": "Order.State",
+      "role": "field",
+      "name": "CLOSED",
+      "at": {
+        "line": 9,
+        "col": 4
+      },
+      "spanRule": "java-enum-constant",
+      "span": {
+        "start": {
+          "line": 9,
+          "col": 4
+        },
+        "end": {
+          "line": 9,
+          "col": 10
+        }
+      }
+    }
+  ],
+  "relationships": [],
+  "sources": [
+    "p/Order.java"
+  ],
+  "exception": {
+    "issue": "#239",
+    "owner": "seanb4t",
+    "reviewBy": "2027-02-01",
+    "mismatches": [
+      "missing-declaration p/Order.java/Order.State/field/CLOSED@9:4",
+      "missing-declaration p/Order.java/Order.State/field/OPEN@8:4",
+      "missing-declaration p/Order.java/Order/enum/State@7:7"
+    ]
+  }
+}

@@ -93,6 +93,7 @@ A span rule names the source construct that a declaration span covers. Lines sta
 | `java-type-declaration` | The whole type declaration, with modifiers. |
 | `java-method-declaration` | The whole method declaration, with modifiers. |
 | `java-field-declaration` | The whole field declaration, with modifiers and the semicolon. Names in one declaration share this span. |
+| `java-enum-constant` | The enum constant, with its arguments and body, without the separating comma. |
 | `py-function-definition` | The `def` statement and its body. |
 | `py-class-definition` | The `class` statement and its body. |
 | `py-assignment` | The assignment or annotation statement that binds the name. Names in one statement share this span. |
