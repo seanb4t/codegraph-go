@@ -1,0 +1,18 @@
+# A line that go-sdk cannot decode gets a JSON-RPC error with a null id,
+# and the session goes on: the calls before and after it are still
+# answered, and the process exits 0 at the end of stdin. A line that is not
+# JSON gets -32700, and valid JSON that is not a message gets -32600.
+
+env CODEGRAPH_NO_WATCH=1
+stdin input.jsonl
+exec codegraph serve --mcp
+stdout '^\{"jsonrpc":"2.0","id":null,"error":\{"code":-32700,"message":"parse error"\}\}$'
+stdout '^\{"jsonrpc":"2.0","id":null,"error":\{"code":-32600,"message":"invalid request"\}\}$'
+stdout '^\{"jsonrpc":"2.0","id":1,"result":'
+stdout '^\{"jsonrpc":"2.0","id":2,"result":'
+
+-- input.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}
+{oops not json
+5
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}

@@ -668,7 +668,7 @@ func TestPipelinedToolsListResponsesAreMatchedByIDWithoutNotifications(t *testin
 func drainAfterLines(t *testing.T, lines string) time.Duration {
 	t.Helper()
 	var pending atomic.Int64
-	r := newStdinLingerReader(io.NopCloser(strings.NewReader(lines)), &pending)
+	r := newStdinLingerReader(io.NopCloser(strings.NewReader(lines)), &pending, io.Discard)
 	start := time.Now()
 	if _, err := io.ReadAll(r); err != nil {
 		t.Fatalf("io.ReadAll through stdinLingerReader: %v", err)
@@ -676,35 +676,27 @@ func drainAfterLines(t *testing.T, lines string) time.Duration {
 	return time.Since(start)
 }
 
-// TestUnparseableLineDoesNotCostAFullDrainGrace proves WR-06's fix: an
-// increment made for a line that could not be parsed is subtracted from
-// waitForDrain's target, because the only reply such a line ever gets is
-// a `null`-id parse-error response that looksLikeJSONRPCResponse
-// correctly refuses to count — so nothing will ever balance it and
-// waiting for zero burns the entire stdinLingerGrace at EOF.
+// TestUnparseableLineDoesNotCostAFullDrainGrace covers WR-06: a batch
+// line is counted as a call that no response line balances, so
+// waitForDrain must not wait for it. A line that is not valid JSON never
+// reaches the counter at all.
 //
-// Both sides of the rule are asserted, so neither can pass vacuously:
-//
-//   - a malformed line must NOT cost the grace period (RED without the
-//     fix: pending sticks at 1 and the drain runs the full 5s); and
-//   - a well-formed call with no response written must STILL cost it,
-//     which is the guard's actual job — a fix that simply stopped
-//     waiting would pass the first assertion and fail this one.
+// Both sides are asserted, so neither can pass vacuously: the uncounted
+// lines must not cost the grace period, and a well-formed call with no
+// response written must still cost it.
 func TestUnparseableLineDoesNotCostAFullDrainGrace(t *testing.T) {
-	t.Run("malformed-line-drains-promptly", func(t *testing.T) {
-		elapsed := drainAfterLines(t, "{oops not json\n")
+	batch := `[{"jsonrpc":"2.0","id":1,"method":"ping"}]` + "\n"
+	t.Run("batch-and-malformed-lines-drain-promptly", func(t *testing.T) {
+		elapsed := drainAfterLines(t, batch+"{oops not json\n")
 		if elapsed >= stdinLingerGrace/2 {
-			t.Fatalf("draining after a single malformed line took %v, want well under stdinLingerGrace (%v) — an increment nothing can ever balance must not be waited on", elapsed, stdinLingerGrace)
+			t.Fatalf("draining after a batch and a malformed line took %v, want well under stdinLingerGrace (%v)", elapsed, stdinLingerGrace)
 		}
 	})
 
-	t.Run("malformed-line-does-not-mask-a-real-pending-call", func(t *testing.T) {
-		// One malformed line AND one well-formed call whose response is
-		// never written: pending=2, unparseable=1, so the drain target
-		// is 1 and the real call is still waited on for the full grace.
-		elapsed := drainAfterLines(t, "{oops not json\n"+`{"jsonrpc":"2.0","id":7,"method":"tools/call"}`+"\n")
+	t.Run("batch-does-not-mask-a-real-pending-call", func(t *testing.T) {
+		elapsed := drainAfterLines(t, batch+`{"jsonrpc":"2.0","id":7,"method":"tools/call"}`+"\n")
 		if elapsed < stdinLingerGrace {
-			t.Fatalf("draining with a real unanswered call outstanding took %v, want at least stdinLingerGrace (%v) — the malformed-line correction must not cancel the wait for a genuinely pending response", elapsed, stdinLingerGrace)
+			t.Fatalf("draining with a real unanswered call outstanding took %v, want at least stdinLingerGrace (%v)", elapsed, stdinLingerGrace)
 		}
 	})
 }
