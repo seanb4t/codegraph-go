@@ -4,11 +4,11 @@
 
 See [proposal.md](proposal.md) for motivation and scope. [Issue #175](https://github.com/seanb4t/codegraph-go/issues/175) identifies a broken path through a Go function variable.
 
-The [Go extractor](../../../internal/indexer/goextract/types.go) emitted package variables but did not expose struct fields as data nodes before this change. The grouped-variable omission already received a separate fix.
+The [Go extractor](../../../../internal/indexer/goextract/types.go) emitted package variables but did not expose struct fields as data nodes before this change. The grouped-variable omission already received a separate fix.
 
-The [TypeScript extractor](../../../internal/indexer/tsextract/types.go), [Python extractor](../../../internal/indexer/pyextract/types.go), and [Java extractor](../../../internal/indexer/javaextract/types.go) did not provide the full proposed declaration contract before this change.
+The [TypeScript extractor](../../../../internal/indexer/tsextract/types.go), [Python extractor](../../../../internal/indexer/pyextract/types.go), and [Java extractor](../../../../internal/indexer/javaextract/types.go) did not provide the full proposed declaration contract before this change.
 
-[Query traversal](../../../internal/query/traverse.go) follows call edges for caller relationships. Treating every reference as a call changes that meaning and creates incorrect results.
+[Query traversal](../../../../internal/query/traverse.go) follows call edges for caller relationships. Treating every reference as a call changes that meaning and creates incorrect results.
 
 ## Goals / Non-Goals
 

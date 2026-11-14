@@ -8,7 +8,7 @@
   "dimension": "declarations",
   "construct": "record components, enum-specific declarations, general overload resolution",
   "status": "unsupported",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "inventory only, outside the target specification",
   "scope": {
     "roles": [

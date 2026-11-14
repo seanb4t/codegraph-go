@@ -8,7 +8,7 @@
   "dimension": "declarations",
   "construct": "class fields beside a nested enum and its constants in one file",
   "status": "known-gap",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-javac definitions and enclosing ranges",
   "scope": {
     "roles": [

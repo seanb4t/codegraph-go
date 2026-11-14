@@ -8,7 +8,7 @@
   "dimension": "declarations",
   "construct": "module bindings, class attributes, receiver attributes",
   "status": "supported",
-  "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
+  "targetSpec": "openspec/changes/archive/2026-11-13-symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "CPython ast and symtable; reviewed dynamic annotations",
   "scope": {
     "roles": [
