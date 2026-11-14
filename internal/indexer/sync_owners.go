@@ -21,8 +21,8 @@ import (
 // subclass can gain or lose a shadowing field, a base class can gain or
 // lose the field or change its access, and a new or removed subclass
 // opens or closes a field to replacement. Only a path whose owner facts
-// change counts: its types, their supertypes, or its fields and their
-// visibility. The affected types are the types of such a path, before
+// change counts: its types, their supertypes that name a stored or new
+// type, or its fields and their visibility. The affected types are the types of such a path, before
 // and after, and the supertypes they name, with all their stored
 // ancestors. A file that refers to a field of an affected type is a
 // dependent. So is a file with an unresolved name that is the name of a
@@ -34,12 +34,24 @@ func ownerDependents(idx *storeIndex, results []goextract.FileResult, paths []st
 	for i := range results {
 		byPath[results[i].RelPath] = &results[i]
 	}
+	// known holds the names of the stored types and of the types of
+	// results. It is filled when the first path seems to change.
+	var known map[string]bool
 	for _, p := range paths {
 		before, err := storedOwnerFacts(idx.r0, p)
 		if err != nil {
 			return nil, err
 		}
 		after := newOwnerFacts(byPath[p])
+		if !before.equal(after) {
+			if known == nil {
+				if known, err = knownTypeNames(idx, results); err != nil {
+					return nil, err
+				}
+			}
+			before.keepKnownSupers(known)
+			after.keepKnownSupers(known)
+		}
 		if before.equal(after) {
 			continue
 		}
@@ -129,6 +141,31 @@ func (f *ownerFacts) add(n *schema.Node) {
 	case n.Kind == goextract.KindField:
 		f.fields[n.Id] = ownerFact{n.Name, n.Visibility}
 	}
+}
+
+// keepKnownSupers removes the supertypes whose names are not in known.
+// The store has an edge only to a supertype that resolves, and the
+// extraction names every supertype. A supertype that no indexed type
+// can be, such as a library base class, is left out of both sides.
+func (f *ownerFacts) keepKnownSupers(known map[string]bool) {
+	maps.DeleteFunc(f.supers, func(name string, _ bool) bool { return !known[name] })
+}
+
+// knownTypeNames returns the names of the stored types and of the types
+// of results, in the languages whose classes inherit members.
+func knownTypeNames(idx *storeIndex, results []goextract.FileResult) (map[string]bool, error) {
+	if err := idx.load(); err != nil {
+		return nil, err
+	}
+	known := make(map[string]bool, len(idx.types))
+	for name := range idx.types {
+		known[name] = true
+	}
+	for i := range results {
+		f := newOwnerFacts(&results[i])
+		maps.Copy(known, f.types)
+	}
+	return known, nil
 }
 
 func emptyOwnerFacts() ownerFacts {

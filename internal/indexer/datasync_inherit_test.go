@@ -1,6 +1,8 @@
 package indexer
 
 import (
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,4 +215,67 @@ func TestDataSymbolSyncEquivalence_Inheritance(t *testing.T) {
 			{"the base field is protected again", map[string]*string{"p/Base.java": text(base)}, nil},
 		}, nil)
 	})
+}
+
+// TestOwnerDependents_UnindexedSupertype edits a file that holds a class
+// whose supertype is not indexed. The store has no edge to that
+// supertype, so an edit of a method body is not an owner change and
+// reparses only its own file. A new shadowing field in the same file is
+// an owner change and reparses the reader too.
+func TestOwnerDependents_UnindexedSupertype(t *testing.T) {
+	cases := []struct {
+		name, derived, base string
+		files               map[string]string
+		// body is the derived file with a placeholder in a method body.
+		// field is the derived file with a shadowing field count.
+		body, field string
+		reader      countReader
+	}{
+		{
+			name:    "python",
+			derived: "derived.py",
+			base:    "base.py",
+			files: map[string]string{
+				"base.py":   "class Base:\n    count = 0\n",
+				"reader.py": "from derived import Derived\n\n\nclass Reader(Derived):\n    def use(self):\n        return self.count\n",
+			},
+			body:   "from base import Base\n\n\nclass Derived(Base):\n    def fire(self):\n        return %s\n\n\nclass Oops(Exception):\n    pass\n",
+			field:  "from base import Base\n\n\nclass Derived(Base):\n    count = 1\n\n    def fire(self):\n        return 1\n\n\nclass Oops(Exception):\n    pass\n",
+			reader: countReader{"reader.py", goextract.KindMethod, "use"},
+		},
+		{
+			name:    "typescript",
+			derived: "derived.ts",
+			base:    "base.ts",
+			files: map[string]string{
+				"base.ts":   "export class Base {\n  count = 0;\n}\n",
+				"reader.ts": "import { Derived } from './derived';\n\nexport function use(d: Derived) {\n  return d.count;\n}\n",
+			},
+			body:   "import { Base } from './base';\nimport { Unindexed } from 'unindexed';\n\nexport class Derived extends Base {\n  fire() {\n    return %s;\n  }\n}\n\nexport class Oops extends Unindexed {}\n",
+			field:  "import { Base } from './base';\nimport { Unindexed } from 'unindexed';\n\nexport class Derived extends Base {\n  count = 1;\n  fire() {\n    return 1;\n  }\n}\n\nexport class Oops extends Unindexed {}\n",
+			reader: countReader{"reader.ts", goextract.KindFunction, "use"},
+		},
+		{
+			name:    "java",
+			derived: "p/Derived.java",
+			base:    "p/Base.java",
+			files: map[string]string{
+				"p/Base.java":   "package p;\n\npublic class Base {\n    protected int count;\n}\n",
+				"p/Reader.java": "package p;\n\npublic class Reader {\n    int use(Derived d) {\n        return d.count;\n    }\n}\n",
+			},
+			body:   "package p;\n\npublic class Derived extends Base {\n    int fire() {\n        return %s;\n    }\n}\n\nclass Oops extends RuntimeException {\n}\n",
+			field:  "package p;\n\npublic class Derived extends Base {\n    protected int count;\n\n    int fire() {\n        return 1;\n    }\n}\n\nclass Oops extends RuntimeException {\n}\n",
+			reader: countReader{"p/Reader.java", goextract.KindMethod, "use"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			files := map[string]string{c.derived: fmt.Sprintf(c.body, "0")}
+			maps.Copy(files, c.files)
+			runInheritSteps(t, files, []inheritStep{
+				{"a method body changes", map[string]*string{c.derived: text(fmt.Sprintf(c.body, "1"))}, readsCount(c.reader, c.base, "Base")},
+				{"the subclass gains a shadowing field", map[string]*string{c.derived: text(c.field)}, readsCount(c.reader, c.derived, "Derived")},
+			}, map[string]int{"a method body changes": 1, "the subclass gains a shadowing field": 2})
+		})
+	}
 }
