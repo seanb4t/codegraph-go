@@ -7,7 +7,7 @@
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "destructuring, callable declarations, class fields, interfaces",
-  "status": "known-gap",
+  "status": "supported",
   "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-typescript definitions; reviewed span rules and call annotations",
   "scope": {
@@ -340,19 +340,5 @@
   ],
   "sources": [
     "a.ts"
-  ],
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration a.ts//constant/left@2:15",
-      "missing-declaration a.ts//constant/renamed@2:28",
-      "missing-declaration a.ts//variable/counter@4:11",
-      "missing-declaration a.ts/Box/field/doubled@8:11",
-      "missing-declaration a.ts/Box/field/field@6:2",
-      "missing-declaration a.ts/Box/field/label@7:9",
-      "missing-relationship Box.doubled calls arrow"
-    ]
-  }
+  ]
 }

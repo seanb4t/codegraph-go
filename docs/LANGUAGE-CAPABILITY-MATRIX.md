@@ -91,9 +91,9 @@ A `full` cell above and a construct below answer different questions. A `full` c
 | Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/grouped-bindings`, `go/lifecycle`, `go/public-queries`, `go/resolution` | No case holds a known gap. |
 | Java | `java/resolution`, `java/inherited-methods`, `java/lifecycle`, `java/public-queries` | `java/fields-and-owners` (#239), `TestSemanticCorpusSamples/java` (#263) |
 | Python | `python/same-file-resolution`, `python/malformed-input`, `python/lifecycle`, `python/public-queries`, `python/resolution` | `python/module-and-class-attributes` (#239) |
-| TypeScript | `typescript/class-hierarchy`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges`, `typescript/resolution` | `typescript/module-bindings-and-fields` (#239) |
+| TypeScript | `typescript/class-hierarchy`, `typescript/module-bindings-and-fields`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges`, `typescript/resolution` | No case holds a known gap. |
 | TSX | `tsx/components`, `tsx/nested-components` | No case evaluates lifecycle or public queries for TSX. |
-| JavaScript | `javascript/module-functions` | `javascript/callable-declarations` (#239). No case evaluates lifecycle or public queries for JavaScript. |
+| JavaScript | `javascript/module-functions`, `javascript/callable-declarations` | No case evaluates lifecycle or public queries for JavaScript. |
 
 Four groups of constructs are outside the target specification, so they have the `unsupported` status. These are Go interface dispatch, Java records and enum-specific declarations, Python decorators and dynamic attributes, and TypeScript decorators. Each group has an `unsupported` case that records what the graph emits.
 
@@ -128,20 +128,21 @@ No gap is known.
 
 ### `typescript`
 
-- Destructured bindings, module variables and class fields have no node, and a call in a class field has no `calls` edge. Case `typescript/module-bindings-and-fields` holds the exact differences (#239).
+- A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.
 - TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.
 
 ### `tsx`
 
+- A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.
 - TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.
 
 ### `javascript`
 
-- Constants, destructured bindings, function expressions and class fields have no node, and a call in or to a function expression has no `calls` edge. Case `javascript/callable-declarations` holds the exact differences (#239).
+- A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.
 - JavaScript's own grammar has no interface_declaration node and no implements clause — class heritage is extends-only, so RefKindEmbeds refs never resolve to an interface target and never promote to an implements edge for pure-JavaScript files.
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.

@@ -16,7 +16,7 @@
 
 - [x] 3.1 Extend `internal/indexer/tsextract` for module bindings, identifier destructuring, and static class field names. Cover TypeScript, JavaScript, TSX, and private fields in `TestTypeScriptDataDeclarations`.
 - [x] 3.2 Preserve callable identities and add scoped data references. Cover nonexported callables, callable fields, inherited fields, subclass shadowing, computed names, and block shadowing for TypeScript, JavaScript, and TSX in `TestTypeScriptDataReferences`.
-- [ ] 3.3 Update separate TypeScript, JavaScript, and TSX capability evidence. Run the corresponding #238 cases and document remaining dynamic forms.
+- [x] 3.3 Update separate TypeScript, JavaScript, and TSX capability evidence. Run the corresponding #238 cases and document remaining dynamic forms.
 
 ## 4. Python and Java data declarations
 

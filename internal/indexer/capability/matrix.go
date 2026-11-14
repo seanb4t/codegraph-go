@@ -149,7 +149,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Destructured bindings, module variables and class fields have no node, and a call in a class field has no `calls` edge. Case `typescript/module-bindings-and-fields` holds the exact differences (#239).",
+			"A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
 			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
@@ -161,6 +161,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
+			"A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
 			"TestCorpusBehavior_TSJS reads the JavaScript files of the Phase-1-locked hugo corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence. That corpus holds no cross-file JavaScript call, so TestSemanticTypeScriptCorpusEdges takes cross-file TypeScript evidence from the pinned zustand corpus.",
@@ -172,7 +173,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageNone,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"Constants, destructured bindings, function expressions and class fields have no node, and a call in or to a function expression has no `calls` edge. Case `javascript/callable-declarations` holds the exact differences (#239).",
+			"A class field with a computed or quoted name declares no field, and an assignment through `this` alone declares no field.",
 			"JavaScript's own grammar has no interface_declaration node and no implements clause — class heritage is extends-only, so RefKindEmbeds refs never resolve to an interface target and never promote to an implements edge for pure-JavaScript files.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
