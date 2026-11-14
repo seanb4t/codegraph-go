@@ -164,12 +164,20 @@ func (b bindings) open(n *schema.Node) bool {
 // holds in the call site's contexts. A Go call site outside a _test.go
 // file runs in both contexts, and one inside runs under go-test only. A
 // call site in another language counts every write and names no context.
-// It returns the edges and the number of calls it added.
+// A function that code writes to, as `let f = () => 1` then `f = g`,
+// holds its own value and every written one. A call into it stays a call
+// only when every write assigns the function itself, and is a read of it
+// otherwise. It returns the edges and the number of calls it added.
 func (b bindings) throughBindings(list []*schema.Edge) ([]*schema.Edge, int) {
 	var out []*schema.Edge
 	added := 0
 	for _, e := range list {
-		if e.Kind != goextract.RefKindCalls || !IsDataKind(b.view.Kind(e.Target)) {
+		if e.Kind != goextract.RefKindCalls {
+			out = append(out, e)
+			continue
+		}
+		data := IsDataKind(b.view.Kind(e.Target))
+		if !data && b.holdsOnlyItself(e.Target) {
 			out = append(out, e)
 			continue
 		}
@@ -178,12 +186,26 @@ func (b bindings) throughBindings(list []*schema.Edge) ([]*schema.Edge, int) {
 			Line: e.Line, Col: e.Col, Provenance: "ast",
 			Metadata: map[string]string{goextract.MetaAccess: goextract.AccessRead},
 		})
+		if !data {
+			continue
+		}
 		for _, d := range b.derive(e) {
 			out = append(out, d)
 			added++
 		}
 	}
 	return out, added
+}
+
+// holdsOnlyItself reports whether every write to the callable id assigns
+// id itself. A callable with no write holds only itself.
+func (b bindings) holdsOnlyItself(id string) bool {
+	for _, w := range b.writes[id] {
+		if w.value != id {
+			return false
+		}
+	}
+	return true
 }
 
 // derive returns the calls that the call e into a data symbol makes, one

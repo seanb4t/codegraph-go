@@ -56,6 +56,16 @@ function callsHandler() {
   handler();
   helper();
 }
+
+let swap = function () { return 1; };
+let steady = function () { return 2; };
+
+function setSwap() { swap = run; }
+
+function callSwap() {
+  swap();
+  steady();
+}
 `
 
 // TestTypeScriptDataReferences covers the TypeScript, JavaScript and TSX
@@ -69,7 +79,9 @@ function callsHandler() {
 // local in a function or block shadows the module binding of its name,
 // and reads and writes carry their access role. A callable field of a
 // class that another class extends establishes no call. A private TypeScript
-// field of a base class is no reference target from its subclass.
+// field of a base class is no reference target from its subclass. A
+// function in a let binding that another function reassigns is read,
+// not called, and one that nothing reassigns is called.
 func TestTypeScriptDataReferences(t *testing.T) {
 	for _, ext := range []string{"ts", "js", "tsx"} {
 		t.Run(ext, func(t *testing.T) {
@@ -111,6 +123,14 @@ class Thief extends Vault {
 			}
 			if got := dataEdges(t, r, data, goextract.KindFunction, "callsHandler", goextract.RefKindReferences)["constant handler"]; got != "read" {
 				t.Errorf("callsHandler -> handler access = %q, want read", got)
+			}
+
+			swapCalls := dataEdges(t, r, data, goextract.KindFunction, "callSwap", goextract.RefKindCalls)
+			if _, ok := swapCalls["function steady"]; !ok || len(swapCalls) != 1 {
+				t.Errorf("callSwap calls %v, want only steady: setSwap writes run to swap", swapCalls)
+			}
+			if got := dataEdges(t, r, data, goextract.KindFunction, "callSwap", goextract.RefKindReferences)["function swap"]; got != "read" {
+				t.Errorf("callSwap -> swap access = %q, want read", got)
 			}
 
 			bump := dataEdges(t, r, data, goextract.KindMethod, "Derived.bump", goextract.RefKindReferences)
