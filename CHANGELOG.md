@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.19.1](https://github.com/seanb4t/codegraph-go/releases/tag/v0.19.1) — 2026-11-14
+
+### Fixes
+
+- Rows of two definitions in one file now sort by line number, so a.py:5 comes before a.py:12.
+- One process now opens one store once when two paths to it differ only in letter case, as on the default macOS file system.
+- serve --mcp now answers a malformed or oversized stdin line with a JSON-RPC error and keeps the session open. Before, it exited and dropped the responses it owed, and a line with no newline grew memory without limit.
+
 ## [v0.19.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.19.0) — 2026-11-14
 
 ### Features
