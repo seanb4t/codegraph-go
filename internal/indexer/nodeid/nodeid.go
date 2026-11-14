@@ -41,16 +41,6 @@ func appendSegment(buf []byte, seg string) []byte {
 // The result is a pure function of its arguments: re-running NodeID on the
 // same tuple always yields the same id, which is how the resolver matches
 // a reference back to the symbol it points to (RES-01).
-// KindOf returns the kind that the node id starts with, or "" for an id
-// with no kind.
-func KindOf(id string) string {
-	kind, _, ok := strings.Cut(id, ":")
-	if !ok {
-		return ""
-	}
-	return kind
-}
-
 func NodeID(kind, qualifiedName, filePath string) string {
 	buf := make([]byte, 0, 3*binary.MaxVarintLen64+len(kind)+len(qualifiedName)+len(filePath))
 	buf = appendSegment(buf, kind)
@@ -59,4 +49,14 @@ func NodeID(kind, qualifiedName, filePath string) string {
 
 	sum := sha256.Sum256(buf)
 	return kind + ":" + hex.EncodeToString(sum[:])[:32]
+}
+
+// KindOf returns the kind that the node id starts with, or "" for an id
+// with no kind.
+func KindOf(id string) string {
+	kind, _, ok := strings.Cut(id, ":")
+	if !ok {
+		return ""
+	}
+	return kind
 }
