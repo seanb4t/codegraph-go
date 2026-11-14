@@ -89,8 +89,11 @@ func newBindings(view symbols.View, h symbols.Hierarchy, lists ...[]*schema.Edge
 				b.writes[e.Source] = append(b.writes[e.Source], bindingWrite{e.Target, test})
 				continue
 			}
+			// Every write records its values, or BindsUnknown, so a
+			// read_write edge that merged a read with a write keeps the
+			// write's values.
 			binds := e.Metadata[goextract.MetaBinds]
-			if e.Metadata[goextract.MetaAccess] != goextract.AccessWrite || binds == "" {
+			if binds == "" {
 				binds = goextract.BindsUnknown
 			}
 			for _, v := range strings.Split(binds, ",") {

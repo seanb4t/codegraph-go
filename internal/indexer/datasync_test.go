@@ -12,7 +12,8 @@ import (
 // the declarations of data symbols, while the files that call through
 // them stay unchanged. After each sync the store must equal a fresh index:
 // the derived calls of the unchanged call sites follow the writes, the
-// alias chain and the syntax errors of the package.
+// alias chain and the syntax errors of the package. A function in an
+// unchanged file that reads and writes the variable keeps its write.
 func TestDataSymbolSyncEquivalence(t *testing.T) {
 	root := writeFixture(t, map[string]string{
 		"go.mod":           "module example.com/m\n\ngo 1.22\n",
@@ -68,6 +69,12 @@ func TestDataSymbolSyncEquivalence(t *testing.T) {
 		{"fix the syntax error", func() { write("cli/broken.go", "package cli\n\nfunc broken() {}\n") }, true},
 		{"delete the target", func() { remove("daemon/daemon.go") }, false},
 		{"restore the target", func() { write("daemon/daemon.go", "package daemon\n\nfunc List() {}\n\nfunc Other() {}\n") }, true},
+		{"add a function that reads and writes the variable", func() {
+			write("cli/lazy.go", "package cli\n\nimport \"example.com/m/daemon\"\n\nfunc ensure() {\n\tif fn == nil {\n\t\tfn = daemon.List\n\t}\n}\n")
+		}, true},
+		{"edit only the caller", func() {
+			write("cli/call.go", "package cli\n\n// edited\nfunc run() { fn() }\n\nfunc runAlias() { alias() }\n")
+		}, true},
 		{"move the struct", func() {
 			remove("cli/point.go")
 			write("cli/point2.go", "package cli\n\ntype Point struct {\n\tY int\n\tX int\n}\n")
