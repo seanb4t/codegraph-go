@@ -185,6 +185,39 @@ func TestOpenSpellingsShareHandle(t *testing.T) {
 	})
 }
 
+// Two names that differ only in letter case reach one directory on a file
+// system that ignores case, so they must share one handle.
+func TestOpenLetterCasesShareHandle(t *testing.T) {
+	noRetrySleep(t)
+	base := realpathtest.TempDir(t)
+	if err := os.Mkdir(filepath.Join(base, "case"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lower, upper := filepath.Join(base, "case"), filepath.Join(base, "CASE")
+	lowerInfo, err := os.Stat(lower)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upperInfo, err := os.Stat(upper)
+	if err != nil || !os.SameFile(lowerInfo, upperInfo) {
+		t.Skipf("the file system under %s respects letter case", base)
+	}
+
+	first, err := open(filepath.Join(lower, "store"), false)
+	if err != nil {
+		t.Fatalf("Open(lower): %v", err)
+	}
+	defer mustClose(t, first)
+	second, err := open(filepath.Join(upper, "store"), false)
+	if err != nil {
+		t.Fatalf("Open(upper): %v", err)
+	}
+	defer mustClose(t, second)
+	if first.handle != second.handle {
+		t.Fatalf("Open(%q) and Open(%q) opened two handles for one directory", lower, upper)
+	}
+}
+
 func TestSharedHandleClose(t *testing.T) {
 	dir := t.TempDir()
 	first := mustOpen(t, dir)

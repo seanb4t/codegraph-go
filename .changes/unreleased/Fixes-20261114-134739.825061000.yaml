@@ -1,0 +1,3 @@
+kind: Fixes
+body: One process now opens one store once when two paths to it differ only in letter case, as on the default macOS file system.
+time: 2026-11-14T13:47:39.825061-05:00

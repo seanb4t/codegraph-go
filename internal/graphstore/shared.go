@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/cockroachdb/pebble/v2"
 
@@ -54,7 +55,7 @@ type dbHandle struct {
 }
 
 // sharedHandles is the table of shared handles of this process. The key is
-// the real location of the store (sharedKey).
+// the identity of the store directory (sharedKey).
 //
 // Pebble allows one open of a store directory at a time, also inside one
 // process. The table lets a tool call and a sync of one process use the
@@ -101,21 +102,42 @@ func openShared(dir string) (*dbHandle, error) {
 	return retryLocked(func() (*dbHandle, error) { return acquireShared(key, dir) }, alreadyClassified)
 }
 
-// sharedKey returns the key of the store at dir in the table: its real
-// location, with every symlink resolved. A store that does not exist yet
-// has a key too, because realpath.Resolve reads the links in the part of
-// the path that exists.
+// sharedKey returns the key of the store at dir in the table: the device
+// and inode of its parent directory, after every symlink is resolved, and
+// the base name of the store. It creates the parent if it is missing, as
+// the swap lock does.
 //
-// An absolute path alone is not enough. Pebble refuses a second open in
-// one process only for the same path text, and its file lock is a POSIX
-// record lock, which one process can take twice. Two names for one store
-// then give two databases over one directory with no error (#286).
+// A path alone is not enough. Pebble refuses a second open in one process
+// only for the same path text, and its file lock is a POSIX record lock,
+// which one process can take twice. Two names for one store then give two
+// databases over one directory with no error. Symlinks give two names, and
+// so does letter case on a file system that ignores it.
+//
+// The key uses the parent and not the store directory, because a store
+// that does not exist yet has no inode. Its key must not change when the
+// first open creates it. The base name keeps its letter case.
 func sharedKey(dir string) (string, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return "", err
 	}
-	return realpath.Resolve(abs)
+	resolved, err := realpath.Resolve(abs)
+	if err != nil {
+		return "", err
+	}
+	parent := filepath.Dir(resolved)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(parent)
+	if err != nil {
+		return "", err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", fmt.Errorf("graphstore: no device and inode for %s", parent)
+	}
+	return fmt.Sprintf("%d:%d/%s", st.Dev, st.Ino, filepath.Base(resolved)), nil
 }
 
 // acquireShared is one attempt of openShared.
