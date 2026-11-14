@@ -154,3 +154,55 @@ def call_handler():
 		t.Errorf("call_handler -> handler access = %q, want read", got)
 	}
 }
+
+// TestPythonInheritedFieldOwnership covers bounded inherited field
+// resolution. A read of an attribute that the class does not bind
+// reaches the one base class that supplies it, through a single chain or
+// through a diamond that reaches the same base twice. When two bases
+// supply the name from different classes, the read reaches neither.
+func TestPythonInheritedFieldOwnership(t *testing.T) {
+	r, _ := runAndSnapshot(t, testtree.Write(t, map[string]string{
+		"app.py": `class Root:
+    x = 1
+
+
+class A(Root):
+    pass
+
+
+class B:
+    x = 2
+
+
+class E(Root):
+    pass
+
+
+class Mixed(A, B):
+    def read(self):
+        return self.x
+
+
+class Single(A):
+    def read(self):
+        return self.x
+
+
+class Diamond(A, E):
+    def read(self):
+        return self.x
+`,
+	}))
+	refs := func(src string) map[string]string {
+		return dataEdges(t, r, "app.py", goextract.KindMethod, src, goextract.RefKindReferences)
+	}
+	if got := refs("Single.read")["field Root.x"]; got != "read" {
+		t.Errorf("Single.read -> Root.x access = %q, want read through the single chain", got)
+	}
+	if got := refs("Diamond.read")["field Root.x"]; got != "read" {
+		t.Errorf("Diamond.read -> Root.x access = %q, want read: both bases reach Root", got)
+	}
+	if m := refs("Mixed.read"); len(m) != 0 {
+		t.Errorf("Mixed.read references %v, want none: A and B supply x from different classes", m)
+	}
+}

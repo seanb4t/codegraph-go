@@ -435,34 +435,83 @@ func (rs *resolver) membersOf(lang, ownerID, name string) []symbols.Candidate {
 	if len(found) > 0 {
 		return found
 	}
-	for _, m := range rs.ownMembers(lang, ownerID, name) {
-		if m.Kind == goextract.KindField {
-			found = append(found, m)
-		}
-	}
-	return found
+	return fieldsOnly(rs.ownMembers(lang, ownerID, name))
 }
 
 // ownMembers returns the members named name of the type ownerID. In a
 // language with class inheritance, a type that declares none has the
-// members of the nearest supertype that declares the name, less the
-// private ones, which a subtype cannot reach. Go has no such step: an
-// embedded struct's fields are not the embedding type's members here.
+// members of the one supertype that supplies the name, less the private
+// ones, which a subtype cannot reach. When two supertype paths supply
+// the name from different types, the type has no member of that name
+// here. Go has no such step: an embedded struct's fields are not the
+// embedding type's members here.
 func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
 	ms := rs.view.Members(ownerID, name)
 	if len(ms) > 0 || !InheritsMembers(lang) {
 		return ms
 	}
-	rs.h.WalkSupertypes(ownerID, func(sup string) bool {
-		declared := rs.view.Members(sup, name)
-		for _, m := range declared {
-			if inheritable(lang, m.Node) {
-				ms = append(ms, m)
-			}
+	supplier, ok := rs.supplier(lang, ownerID, name, map[string]string{}, map[string]bool{ownerID: true})
+	if !ok || supplier == "" {
+		return nil
+	}
+	return inheritableMembers(lang, rs.view.Members(supplier, name))
+}
+
+// supplier returns the type that supplies the member name to typeID
+// through its supertypes. Each path from typeID ends at the nearest
+// type that declares the name, and that path supplies the name only
+// when a subtype can reach the declaration. It returns "" when no path
+// supplies the name, and false when two paths supply it from different
+// types. A diamond that reaches the same type through both paths has
+// one supplier. done holds the supplier of each type already settled,
+// and onPath the types on the current path, so a supertype cycle ends.
+func (rs *resolver) supplier(lang, typeID, name string, done map[string]string, onPath map[string]bool) (string, bool) {
+	found := ""
+	for _, sup := range rs.h.Supertypes(typeID) {
+		if onPath[sup] {
+			continue
 		}
-		return len(declared) > 0
-	})
-	return ms
+		var s string
+		switch declared := rs.view.Members(sup, name); {
+		case len(declared) > 0:
+			if len(inheritableMembers(lang, declared)) > 0 {
+				s = sup
+			}
+		default:
+			cached, settled := done[sup]
+			if !settled {
+				onPath[sup] = true
+				var ok bool
+				cached, ok = rs.supplier(lang, sup, name, done, onPath)
+				delete(onPath, sup)
+				if !ok {
+					return "", false
+				}
+				done[sup] = cached
+			}
+			s = cached
+		}
+		if s == "" {
+			continue
+		}
+		if found != "" && found != s {
+			return "", false
+		}
+		found = s
+	}
+	return found, true
+}
+
+// inheritableMembers returns the members of ms that a subclass written
+// in lang reaches.
+func inheritableMembers(lang string, ms []symbols.Candidate) []symbols.Candidate {
+	var kept []symbols.Candidate
+	for _, m := range ms {
+		if inheritable(lang, m.Node) {
+			kept = append(kept, m)
+		}
+	}
+	return kept
 }
 
 // InheritsMembers reports whether a class of lang has the data members of
@@ -485,6 +534,17 @@ func inheritable(lang string, n *schema.Node) bool {
 		return !strings.HasPrefix(name, "__") || strings.HasSuffix(name, "__")
 	}
 	return n.GetVisibility() != "private"
+}
+
+// fieldsOnly returns the fields of ms.
+func fieldsOnly(ms []symbols.Candidate) []symbols.Candidate {
+	var kept []symbols.Candidate
+	for _, m := range ms {
+		if m.Kind == goextract.KindField {
+			kept = append(kept, m)
+		}
+	}
+	return kept
 }
 
 // callMembers returns ms without its fields.

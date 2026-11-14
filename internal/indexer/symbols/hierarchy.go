@@ -267,6 +267,15 @@ func (h Hierarchy) OwnerOf(id string) (string, bool) {
 	return o, ok
 }
 
+// Supertypes returns the types that typeID directly embeds, extends or
+// implements. The zero Hierarchy has none.
+func (h Hierarchy) Supertypes(typeID string) []string {
+	if h.h == nil {
+		return nil
+	}
+	return h.h.typeSupertypes[typeID]
+}
+
 // WalkSupertypes visits the supertypes of typeID, breadth first; see
 // WalkSupertypes. The zero Hierarchy has no supertypes.
 func (h Hierarchy) WalkSupertypes(typeID string, visit func(supertypeID string) bool) bool {
