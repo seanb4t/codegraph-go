@@ -7,7 +7,7 @@
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "field lists, owners, interface constants, methods",
-  "status": "known-gap",
+  "status": "supported",
   "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "scip-javac definitions and enclosing ranges; reviewed call annotations",
   "scope": {
@@ -292,17 +292,5 @@
   "sources": [
     "p/Box.java",
     "p/Shape.java"
-  ],
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration p/Box.java/Box/field/NAME@6:22",
-      "missing-declaration p/Box.java/Box/field/height@5:13",
-      "missing-declaration p/Box.java/Box/field/size@7:6",
-      "missing-declaration p/Box.java/Box/field/width@5:6",
-      "missing-declaration p/Shape.java/Shape/field/SIDES@4:6"
-    ]
-  }
+  ]
 }

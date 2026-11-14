@@ -89,8 +89,8 @@ A `full` cell above and a construct below answer different questions. A `full` c
 | Language | Passing evidence | Exact limit |
 |---|---|---|
 | Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/grouped-bindings`, `go/lifecycle`, `go/public-queries`, `go/resolution` | No case holds a known gap. |
-| Java | `java/resolution`, `java/inherited-methods`, `java/lifecycle`, `java/public-queries` | `java/fields-and-owners` (#239), `TestSemanticCorpusSamples/java` (#263) |
-| Python | `python/same-file-resolution`, `python/malformed-input`, `python/lifecycle`, `python/public-queries`, `python/resolution` | `python/module-and-class-attributes` (#239) |
+| Java | `java/resolution`, `java/inherited-methods`, `java/fields-and-owners`, `java/lifecycle`, `java/public-queries` | `TestSemanticCorpusSamples/java` (#263) |
+| Python | `python/same-file-resolution`, `python/malformed-input`, `python/module-and-class-attributes`, `python/lifecycle`, `python/public-queries`, `python/resolution` | No case holds a known gap. |
 | TypeScript | `typescript/class-hierarchy`, `typescript/module-bindings-and-fields`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges`, `typescript/resolution` | No case holds a known gap. |
 | TSX | `tsx/components`, `tsx/nested-components` | No case evaluates lifecycle or public queries for TSX. |
 | JavaScript | `javascript/module-functions`, `javascript/callable-declarations` | No case evaluates lifecycle or public queries for JavaScript. |
@@ -105,7 +105,8 @@ No gap is known.
 
 ### `java`
 
-- Field declarations have no node. Case `java/fields-and-owners` holds the exact differences (#239).
+- A bare name of an inherited field does not resolve, because the extractor reads one file and does not see the fields of the base class. A read through `this` resolves.
+- Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.
 - When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).
 - A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.
 - TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.
@@ -119,7 +120,7 @@ No gap is known.
 
 ### `python`
 
-- Module bindings, class attributes and receiver attributes have no node. Case `python/module-and-class-attributes` holds the exact differences (#239).
+- Only the class body and the receiver of a method declare a field. An attribute that code sets on another object, or through `setattr`, declares no field. Case `python/decorators-and-dynamic-attributes` records what the graph emits.
 - pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.
 - A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.
 - Wildcard from-imports (`from x import *`) are not resolved.

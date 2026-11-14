@@ -7,7 +7,7 @@
   "labeling": "complete",
   "dimension": "declarations",
   "construct": "module bindings, class attributes, receiver attributes",
-  "status": "known-gap",
+  "status": "supported",
   "targetSpec": "openspec/changes/symbol-and-reference-completeness/specs/data-symbols/spec.md@a7b9050f",
   "evidence": "CPython ast and symtable; reviewed dynamic annotations",
   "scope": {
@@ -316,18 +316,5 @@
   ],
   "sources": [
     "models.py"
-  ],
-  "exception": {
-    "issue": "#239",
-    "owner": "seanb4t",
-    "reviewBy": "2027-02-01",
-    "mismatches": [
-      "missing-declaration models.py//variable/LIMIT@2:0",
-      "missing-declaration models.py//variable/OTHER@2:7",
-      "missing-declaration models.py//variable/value@3:0",
-      "missing-declaration models.py/Base/field/kind@11:4",
-      "missing-declaration models.py/Base/field/name@14:13",
-      "missing-declaration models.py/Child/field/value@22:13"
-    ]
-  }
+  ]
 }
