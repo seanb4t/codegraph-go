@@ -385,7 +385,7 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 // leaves it.
 func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.UnresolvedRef) bool {
 	recv := ref.ReceiverType
-	if ref.Kind != goextract.RefKindReferences || recv == "" || !inheritsMembers(r.Language) {
+	if ref.Kind != goextract.RefKindReferences || recv == "" || !InheritsMembers(r.Language) {
 		return false
 	}
 	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
@@ -452,7 +452,7 @@ func (rs *resolver) membersOf(lang, ownerID, name string) []symbols.Candidate {
 // embedded struct's fields are not the embedding type's members here.
 func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
 	ms := rs.view.Members(ownerID, name)
-	if len(ms) > 0 || !inheritsMembers(lang) {
+	if len(ms) > 0 || !InheritsMembers(lang) {
 		return ms
 	}
 	rs.h.WalkSupertypes(ownerID, func(sup string) bool {
@@ -467,9 +467,9 @@ func (rs *resolver) ownMembers(lang, ownerID, name string) []symbols.Candidate {
 	return ms
 }
 
-// inheritsMembers reports whether a class of lang has the data members of
+// InheritsMembers reports whether a class of lang has the data members of
 // the classes it extends.
-func inheritsMembers(lang string) bool {
+func InheritsMembers(lang string) bool {
 	switch lang {
 	case "typescript", "tsx", "javascript", "python", "java":
 		return true

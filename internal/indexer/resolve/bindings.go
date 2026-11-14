@@ -176,7 +176,7 @@ func (b bindings) target(id string, test bool) (string, []string, bool) {
 // writes through a subclass resolve only after the bindings are read, so
 // the field's writes are not all known.
 func (b bindings) open(n *schema.Node) bool {
-	if n.Kind != goextract.KindField || !inheritsMembers(n.Language) {
+	if n.Kind != goextract.KindField || !InheritsMembers(n.Language) {
 		return false
 	}
 	owner, ok := b.h.OwnerOf(n.Id)

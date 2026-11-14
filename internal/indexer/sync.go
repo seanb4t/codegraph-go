@@ -503,7 +503,15 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers)
+	// A file that refers to a field through a class whose owner chain the
+	// reparse can change is reparsed too, so the reference follows the
+	// fields and subclasses that the chain now has.
+	owners, err := ownerDependents(r0, results, reparsed, inBatch)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers), owners)
 	// The later waves. A file of a wave can emit a shared id that the
 	// cycle did not hold yet, or change the binding facts of a data
 	// symbol, and the files that emit that id or read that symbol then

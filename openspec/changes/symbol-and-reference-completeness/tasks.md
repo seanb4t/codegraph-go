@@ -35,6 +35,6 @@
 ## 6. Migration and integration acceptance
 
 - [x] 6.1 Add an additive rebuild marker through the existing metadata source and generator. Cover old indexes with unchanged sources in `TestDataSymbolRebuild`. Document the one-time rebuild behavior.
-- [ ] 6.2 Persist write contributions and binding/owner lookup dependencies through schema sources and generators. Re-resolve unchanged dependents after cross-file assignment or inheritance changes. Compare fresh and updated facts in `TestDataSymbolSyncEquivalence`, including conflict removal, shadowing additions, renames, deletion, restoration, and moved fields.
+- [x] 6.2 Persist write contributions and binding/owner lookup dependencies through schema sources and generators. Re-resolve unchanged dependents after cross-file assignment or inheritance changes. Compare fresh and updated facts in `TestDataSymbolSyncEquivalence`, including conflict removal, shadowing additions, renames, deletion, restoration, and moved fields.
 - [ ] 6.3 Run the implemented `index-invariants` tests and #238 semantic acceptance for all affected languages. Remove fixed known-failure entries and record remaining gaps without weakening supported cases.
 - [ ] 6.4 Add the release note with `task changie -- new --interactive=false -k Features -b "Index core-language variables and fields with scoped references and conservative callable bindings."`. Make sure that the generated fragment describes the shipped contract.
