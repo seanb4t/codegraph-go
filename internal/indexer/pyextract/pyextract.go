@@ -82,6 +82,7 @@ func Extract(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.
 		typeNodesByStart: make(map[uint]string),
 		ownPackage:       ownPackageFor(moduleKey, relPath),
 		fromImportOrigin: make(map[string]string),
+		descriptors:      descriptorClasses(root, src),
 	}
 
 	// Imports are collected first so calls and base-class references below
@@ -129,6 +130,10 @@ type extractor struct {
 	// the name the module declares: `from lib import helper as h` gives
 	// fromImportOrigin["h"] = "helper".
 	fromImportOrigin map[string]string
+
+	// descriptors holds the names of the classes of the file that define
+	// __get__, __set__ or __delete__.
+	descriptors map[string]bool
 }
 
 // ownPackageFor derives a file's enclosing dotted package from its own

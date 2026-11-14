@@ -12,7 +12,9 @@ import (
 // whatever its name. An instance write in a subclass establishes the
 // subclass's own field, which its reads then reach, and a read of an
 // attribute the subclass does not bind reaches the base class. A
-// property stays a method. An explicit classmethod's class parameter
+// property stays a method. A class attribute that holds an instance of a
+// descriptor class of the file declares no field, so its reads and writes
+// through an instance resolve to nothing. An explicit classmethod's class parameter
 // reaches the class, and a staticmethod's parameter named self reaches
 // nothing. A local, and a name the function assigns without a global
 // statement, shadows the module variable. A call through a module
@@ -71,6 +73,25 @@ class Shape:
     @staticmethod
     def util(self):
         return self.width
+
+
+class Typed:
+    def __get__(self, obj, owner):
+        return 0
+
+    def __set__(self, obj, value):
+        pass
+
+
+class Model:
+    label = Typed()
+    size = 3
+
+    def __init__(self):
+        self.label = "x"
+
+    def show(self):
+        return self.label + self.size
 
 
 def reads():
@@ -137,6 +158,31 @@ def call_handler():
 	if util := refs(goextract.KindMethod, "Shape.util"); len(util) != 0 {
 		t.Errorf("the static method util references %v through a parameter named self", util)
 	}
+
+	show := refs(goextract.KindMethod, "Model.show")
+	if show["field Model.size"] != "read" {
+		t.Errorf("Model.show references %v, want a read of Model.size", show)
+	}
+	if len(show) != 1 {
+		t.Errorf("Model.show references %v, want only Model.size: label holds a descriptor", show)
+	}
+	if init := refs(goextract.KindMethod, "Model.__init__"); len(init) != 0 {
+		t.Errorf("Model.__init__ references %v, want none: label holds a descriptor", init)
+	}
+	modelCalls := calls(goextract.KindStruct, "Model")
+	if _, ok := modelCalls["struct Typed"]; !ok || len(modelCalls) != 1 {
+		t.Errorf("Model calls %v, want only the descriptor class Typed", modelCalls)
+	}
+	it, err := r.IterateNodes()
+	if err != nil {
+		t.Fatalf("IterateNodes: %v", err)
+	}
+	for it.Next() {
+		if n := it.Node(); n.QualifiedName == "Model.label" {
+			t.Errorf("the descriptor attribute label became the %s %s", n.Kind, n.QualifiedName)
+		}
+	}
+	it.Close()
 
 	if got := refs(goextract.KindFunction, "reads")["variable total"]; got != "read" {
 		t.Errorf("reads -> total access = %q, want read", got)

@@ -215,7 +215,9 @@ type fieldDecl struct {
 // instance method through its first parameter, an explicit classmethod
 // through its class parameter. The earliest such place anchors the
 // field. A name the class declares as a method, such as a property, gets
-// no field. A class body binding holds the field's initializer, and each
+// no field, and so does a name the class body binds to an instance of a
+// descriptor class of the file: the class then reads and calls what the
+// initializer reads and calls. A class body binding holds the field's initializer, and each
 // later one is a write by the class.
 func (ex *extractor) emitFieldsForClass(classID, className string, body *tree_sitter.Node) {
 	methods := make(map[string]bool)
@@ -233,9 +235,17 @@ func (ex *extractor) emitFieldsForClass(classID, className string, body *tree_si
 			continue
 		}
 		if a := stmt.NamedChild(0); a.Kind() == "assignment" {
-			if left := a.ChildByFieldName("left"); left != nil && left.Kind() == "identifier" {
-				decls = append(decls, fieldDecl{name: left, stmt: a, inBody: true})
+			left, right := a.ChildByFieldName("left"), a.ChildByFieldName("right")
+			if left == nil || left.Kind() != "identifier" {
+				continue
 			}
+			if ex.isDescriptor(right) {
+				methods[left.Utf8Text(ex.src)] = true
+				ex.captureExprRead(classID, right)
+				ex.recordCall(classID, right)
+				continue
+			}
+			decls = append(decls, fieldDecl{name: left, stmt: a, inBody: true})
 		}
 	}
 	sort.SliceStable(decls, func(i, j int) bool { return decls[i].name.StartByte() < decls[j].name.StartByte() })
@@ -268,6 +278,45 @@ func (ex *extractor) emitFieldsForClass(classID, className string, body *tree_si
 			}
 		}
 	}
+}
+
+// descriptorClasses returns the names of the classes under root that
+// define __get__, __set__ or __delete__.
+func descriptorClasses(root *tree_sitter.Node, src []byte) map[string]bool {
+	out := make(map[string]bool)
+	walkDescendants(root, func(n *tree_sitter.Node) bool {
+		if n.Kind() != "class_definition" {
+			return true
+		}
+		name, body := n.ChildByFieldName("name"), n.ChildByFieldName("body")
+		if name == nil || body == nil {
+			return true
+		}
+		for i := uint(0); i < body.NamedChildCount(); i++ {
+			fn := unwrapDecorated(body.NamedChild(i))
+			if fn.Kind() != "function_definition" {
+				continue
+			}
+			if m := fn.ChildByFieldName("name"); m != nil {
+				switch m.Utf8Text(src) {
+				case "__get__", "__set__", "__delete__":
+					out[name.Utf8Text(src)] = true
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// isDescriptor reports whether value instantiates a descriptor class of
+// the file.
+func (ex *extractor) isDescriptor(value *tree_sitter.Node) bool {
+	if value == nil || value.Kind() != "call" {
+		return false
+	}
+	fn := value.ChildByFieldName("function")
+	return fn != nil && fn.Kind() == "identifier" && ex.descriptors[fn.Utf8Text(ex.src)]
 }
 
 // receiverWrites returns the attributes that the method fn assigns or
