@@ -121,7 +121,7 @@ The limits of each language are under Per-Language Gaps below. Record components
 
 ### `go`
 
-No gap is known.
+- A keyed composite-literal element is a read of its value, not a write to the field. A write through a receiver of unknown type leaves no binding edge, so neither withholds the function that a field holds.
 
 ### `java`
 
