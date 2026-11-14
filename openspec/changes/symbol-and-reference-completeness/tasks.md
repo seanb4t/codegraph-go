@@ -2,7 +2,7 @@
 
 ## 1. Shared data-symbol contract
 
-- [ ] 1.1 Integrate with the identity finalizer that PR #250 merged (`nodeid.Allocator.Finalize`, specified in `openspec/specs/graph-index`). Keep fields out of fresh and store-seeded bare-name call indexes. Cover identities, remapped references, and Java field/method name collisions in `TestDataSymbolIdentity`.
+- [x] 1.1 Integrate with the identity finalizer that PR #250 merged (`nodeid.Allocator.Finalize`, specified in `openspec/specs/graph-index`). Keep fields out of fresh and store-seeded bare-name call indexes. Cover identities, remapped references, and Java field/method name collisions in `TestDataSymbolIdentity`.
 - [ ] 1.2 Add the field kind and the design's per-language kind mapping. Merge read/write roles and direct/derived call evidence before collapse and storage. Cover modifiers, callable aliases, serialization, mixed call paths, and extraction order in `TestDataReferenceMetadata`.
 - [ ] 1.3 Add independently annotated cross-language fixtures to #238's evaluation inputs. Review the declaration and reference inventory against `specs/data-symbols/spec.md`.
 
