@@ -2,6 +2,7 @@ edge {"source":"file:1b05bee2ba9822c9d5a1d8702a0137b2","target":"struct:01194740
 edge {"source":"file:2210b27b96e135b9dfdf20927351079a","target":"function:e75c95f3f9fb5d299212a580ea856717","kind":"contains","provenance":"ast"}
 edge {"source":"file:4d80f6cfb550f6c0f9dfa9186b58dadc","target":"function:97d1957abd01ac79c7995c593af3ccbe","kind":"contains","provenance":"ast"}
 edge {"source":"file:e69b1870655e1f79e9b61f52512c827f","target":"function:aa3c50643dfdc74220c36d245bd9c32e","kind":"contains","provenance":"ast"}
+edge {"source":"method:3540fc5f6a30b5752ed14abb5e59a227","target":"field:566664a2a063e657215cc4447719bd08","kind":"references","line":6,"col":8,"provenance":"ast","metadata":{"access":"read"}}
 edge {"source":"struct:01194740ad4d098d45baade7e8e34259","target":"field:566664a2a063e657215cc4447719bd08","kind":"contains","provenance":"ast"}
 edge {"source":"struct:01194740ad4d098d45baade7e8e34259","target":"method:3540fc5f6a30b5752ed14abb5e59a227","kind":"contains","provenance":"ast"}
 edge {"source":"function:aa3c50643dfdc74220c36d245bd9c32e","target":"function:97d1957abd01ac79c7995c593af3ccbe","kind":"calls","line":7,"col":8,"provenance":"ast"}
@@ -9,7 +10,7 @@ file {"path":"pkg/a.go","contentHash":"0bdeb1b9043e82fa3eb6f564b00a7b75acf9da3b2
 file {"path":"pkg/b.go","contentHash":"b3d936793763cc27e9b24ff403a40ae8b09e7edf0ca7ff404721dac514f85c6d","language":"go","nodeCount":"2","edgeCount":"2","sizeBytes":"246"}
 file {"path":"pkg/types.go","contentHash":"b06ef2d8f35ed6b6618da78953cc968a68604106bb06fdbc602b55adadd7857a","language":"go","nodeCount":"3","edgeCount":"2","sizeBytes":"177"}
 file {"path":"pkg/caller.go","contentHash":"67d7dbd13dec6dc1b6811ac4716d37d52cab96f98fde43918274fe2f3427b798","language":"go","nodeCount":"2","edgeCount":"1","sizeBytes":"242","unresolvedNames":[{"moduleKey":"example.com/prunefixture/pkg","name":"Describe"}]}
-file {"path":"pkg/methods.go","contentHash":"254191823d0f9485f648ec5b4aabb806db10eb2cb656ea5e7e0f892331a24975","language":"go","nodeCount":"2","edgeCount":"1","sizeBytes":"165"}
+file {"path":"pkg/methods.go","contentHash":"254191823d0f9485f648ec5b4aabb806db10eb2cb656ea5e7e0f892331a24975","language":"go","nodeCount":"2","edgeCount":"2","sizeBytes":"165"}
 index pkg/a.go node file:4d80f6cfb550f6c0f9dfa9186b58dadc
 index pkg/a.go node function:97d1957abd01ac79c7995c593af3ccbe
 index pkg/a.go edge file:4d80f6cfb550f6c0f9dfa9186b58dadc contains function:97d1957abd01ac79c7995c593af3ccbe
@@ -22,6 +23,7 @@ index pkg/caller.go node function:e75c95f3f9fb5d299212a580ea856717
 index pkg/caller.go edge file:2210b27b96e135b9dfdf20927351079a contains function:e75c95f3f9fb5d299212a580ea856717
 index pkg/methods.go node file:072d8bd467bbde1166b3307f3fc57d7b
 index pkg/methods.go node method:3540fc5f6a30b5752ed14abb5e59a227
+index pkg/methods.go edge method:3540fc5f6a30b5752ed14abb5e59a227 references field:566664a2a063e657215cc4447719bd08
 index pkg/methods.go edge struct:01194740ad4d098d45baade7e8e34259 contains method:3540fc5f6a30b5752ed14abb5e59a227
 index pkg/types.go node file:1b05bee2ba9822c9d5a1d8702a0137b2
 index pkg/types.go node field:566664a2a063e657215cc4447719bd08

@@ -13,6 +13,7 @@ edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"function:1af4d8
 edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"function:2e8a75b4179d71a8cd296c2efaf13bac","kind":"contains","provenance":"ast"}
 edge {"source":"file:d0e5a2f297f37bb5e906990645e01c3c","target":"variable:637f980d55fb71074b3d4f0444f07a86","kind":"contains","provenance":"ast"}
 edge {"source":"method:521f5f70dd1874c9b10b22d4cf9cc92c","target":"field:d004675a73b172225c33c30ad09f90fb","kind":"references","line":35,"col":1,"provenance":"ast","metadata":{"access":"write","binds":"unknown"}}
+edge {"source":"method:c99691e068475be5252086dca803bb92","target":"field:d004675a73b172225c33c30ad09f90fb","kind":"references","line":30,"col":8,"provenance":"ast","metadata":{"access":"read"}}
 edge {"source":"struct:00114f364c25d1a8b4270b2abe5b631a","target":"struct:15623085aa6f28b31411bef4e3f2a756","kind":"extends","line":10,"col":1,"provenance":"heuristic","metadata":{"synthesizedBy":"declared-extends"}}
 edge {"source":"struct:00114f364c25d1a8b4270b2abe5b631a","target":"field:eafb508b0e31856053e22242f255b30d","kind":"contains","provenance":"ast"}
 edge {"source":"struct:15623085aa6f28b31411bef4e3f2a756","target":"field:92ac661c01f35d545411cf851e8a2e5b","kind":"contains","provenance":"ast"}
@@ -26,7 +27,7 @@ edge {"source":"function:2e8a75b4179d71a8cd296c2efaf13bac","target":"function:1a
 edge {"source":"function:fb80c63753a22c25348cc4917cb6fed8","target":"function:29be8ebf3ef41ff6e22cbf73b41a4891","kind":"calls","line":7,"col":1,"provenance":"ast","receiverType":"pkgb"}
 edge {"source":"interface:350e46ecc8bc131c6e77e1f0fd54e2b0","target":"interface:8a9692c92da6c6c4961a221225aef13c","kind":"embeds","line":21,"col":1,"provenance":"ast"}
 file {"path":"main.go","contentHash":"06ce91393b8889225547d10cb1cc41657b7324090bf6ccdab8f35713c3c0c940","language":"go","nodeCount":"2","edgeCount":"3","sizeBytes":"150"}
-file {"path":"pkga/pkga.go","contentHash":"c3718e8e3ed8ef1b8f3f15c2c1818006de775cd9fef544fbf3649a60d2bae815","language":"go","nodeCount":"9","edgeCount":"10","sizeBytes":"901"}
+file {"path":"pkga/pkga.go","contentHash":"c3718e8e3ed8ef1b8f3f15c2c1818006de775cd9fef544fbf3649a60d2bae815","language":"go","nodeCount":"9","edgeCount":"11","sizeBytes":"901"}
 file {"path":"pkgb/pkgb.go","contentHash":"e6fa0a21885fa6e75d9d4ea40ac5ca4a83224bdbc8742f3570957c5770098c73","language":"go","nodeCount":"2","edgeCount":"5","sizeBytes":"327"}
 file {"path":"pkga/embed.go","contentHash":"fffc62a2a58d5c7bb74eeeddca5be020b78debec52cab645b0788897c075982d","language":"go","nodeCount":"8","edgeCount":"9","sizeBytes":"587"}
 index main.go node file:4ef5c88464ea2408a807b6f557c13bb8
@@ -66,6 +67,7 @@ index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains function:
 index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains function:2e8a75b4179d71a8cd296c2efaf13bac
 index pkga/pkga.go edge file:d0e5a2f297f37bb5e906990645e01c3c contains variable:637f980d55fb71074b3d4f0444f07a86
 index pkga/pkga.go edge method:521f5f70dd1874c9b10b22d4cf9cc92c references field:d004675a73b172225c33c30ad09f90fb
+index pkga/pkga.go edge method:c99691e068475be5252086dca803bb92 references field:d004675a73b172225c33c30ad09f90fb
 index pkga/pkga.go edge struct:33e2a1222b69bc6ed1221d8771f09e8c contains field:d004675a73b172225c33c30ad09f90fb
 index pkga/pkga.go edge struct:33e2a1222b69bc6ed1221d8771f09e8c contains method:521f5f70dd1874c9b10b22d4cf9cc92c
 index pkga/pkga.go edge struct:33e2a1222b69bc6ed1221d8771f09e8c contains method:c99691e068475be5252086dca803bb92

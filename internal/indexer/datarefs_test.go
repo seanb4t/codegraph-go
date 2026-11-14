@@ -56,7 +56,7 @@ func dataEdges(t *testing.T, r graphstore.Reader, path, kind, src, edgeKind stri
 // invoked at initialization, a local that shadows a package variable is
 // not a reference to it, and reads and writes of package variables and
 // struct fields carry their access role, merged when one function does
-// both.
+// both. The values of a return statement are reads.
 func TestGoDataReferences(t *testing.T) {
 	root := testtree.Write(t, map[string]string{
 		"go.mod": "module example.com/m\n\ngo 1.22\n",
@@ -116,6 +116,10 @@ func (p *Point) Move() {
 	p.X = p.Y
 }
 
+func (p Point) Sum() (int, int) {
+	return p.X + counter, p.Y
+}
+
 func run() {
 	daemonList()
 }
@@ -157,5 +161,10 @@ func run() {
 	}
 	if _, ok := move["field Other.X"]; ok {
 		t.Errorf("Move references Other.X, a field of another owner: %v", move)
+	}
+
+	sum := dataEdges(t, r, cli, goextract.KindMethod, "Point.Sum", goextract.RefKindReferences)
+	if sum["field Point.X"] != "read" || sum["field Point.Y"] != "read" || sum["variable counter"] != "read" {
+		t.Errorf("Sum references %v, want reads of Point.X, Point.Y and counter in its return values", sum)
 	}
 }

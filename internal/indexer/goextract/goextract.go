@@ -1162,6 +1162,11 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 		if expr.NamedChildCount() > 0 {
 			ex.captureExprRead(fromID, expr.NamedChild(0))
 		}
+	case "expression_list":
+		// The values of a return statement.
+		for i := uint(0); i < expr.NamedChildCount(); i++ {
+			ex.captureExprRead(fromID, expr.NamedChild(i))
+		}
 	case "unary_expression":
 		if operand := expr.ChildByFieldName("operand"); operand != nil {
 			ex.captureExprRead(fromID, operand)
