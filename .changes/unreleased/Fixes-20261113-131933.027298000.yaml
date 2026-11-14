@@ -1,3 +1,0 @@
-kind: Fixes
-body: callers, callees and impact answer for every definition of a name and say which definitions exist. The new --file flag selects the definitions in one file.
-time: 2026-11-13T13:19:33.027298-05:00

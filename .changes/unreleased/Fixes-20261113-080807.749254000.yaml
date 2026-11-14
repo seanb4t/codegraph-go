@@ -1,3 +1,0 @@
-kind: Fixes
-body: An install or uninstall for Codex or Hermes stops with an error when it cannot read the existing configuration file, and no longer writes over it.
-time: 2026-11-13T08:08:07.749254-05:00

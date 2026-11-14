@@ -1,3 +1,0 @@
-kind: Fixes
-body: One process now uses one store handle when it reaches the index through a symbolic link and through the real path. It opened the store twice before, with no error.
-time: 2026-11-13T11:24:47.300568-05:00
