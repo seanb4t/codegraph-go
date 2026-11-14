@@ -590,7 +590,7 @@ func sortLocations(locs []Location) {
 		// Rows of one symbol for two start nodes tie above. These keys
 		// order them by what the row shows, never by a node id.
 		if locs[i].Definition != locs[j].Definition {
-			return locs[i].Definition < locs[j].Definition
+			return definitionLabelLess(locs[i].Definition, locs[j].Definition)
 		}
 		if locs[i].Signature != locs[j].Signature {
 			return locs[i].Signature < locs[j].Signature

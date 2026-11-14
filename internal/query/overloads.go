@@ -186,6 +186,36 @@ func DefinitionLabel(n *schema.Node) string {
 	return n.FilePath + ":" + strconv.Itoa(int(n.StartLine))
 }
 
+// definitionLabelLess orders two DefinitionLabel values by file and
+// then by line as a number, so "a.py:5" comes before "a.py:12". Labels
+// without a file and line come after them and compare as text.
+func definitionLabelLess(a, b string) bool {
+	aFile, aLine, aOK := splitDefinitionLabel(a)
+	bFile, bLine, bOK := splitDefinitionLabel(b)
+	switch {
+	case aOK != bOK:
+		return aOK
+	case !aOK:
+		return a < b
+	case aFile != bFile:
+		return aFile < bFile
+	default:
+		return aLine < bLine
+	}
+}
+
+func splitDefinitionLabel(label string) (string, int, bool) {
+	i := strings.LastIndexByte(label, ':')
+	if i < 0 {
+		return "", 0, false
+	}
+	line, err := strconv.Atoi(label[i+1:])
+	if err != nil {
+		return "", 0, false
+	}
+	return label[:i], line, true
+}
+
 // setMembers returns the overloads an overload_set node contains, by id.
 func (e *Engine) setMembers(set *schema.Node) ([]*schema.Node, error) {
 	it, err := e.reader.IterateEdges(set.Id)

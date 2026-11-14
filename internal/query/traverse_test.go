@@ -213,6 +213,30 @@ func TestCalleesSortedDeterministically(t *testing.T) {
 	}
 }
 
+// Rows that tie on file, name and line sort by the line in their
+// Definition label as a number (#327).
+func TestSortLocationsOrdersDefinitionLinesAsNumbers(t *testing.T) {
+	row := func(def string) Location {
+		return Location{Name: "run", FilePath: "main.py", StartLine: 30, Definition: def}
+	}
+	locs := []Location{
+		row("type pkg.Run"),
+		row("b.py:3"),
+		row("a.py:12"),
+		row("a.py:5"),
+	}
+	sortLocations(locs)
+
+	want := []string{"a.py:5", "a.py:12", "b.py:3", "type pkg.Run"}
+	got := make([]string, len(locs))
+	for i, l := range locs {
+		got[i] = l.Definition
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("sortLocations order = %q, want %q", got, want)
+	}
+}
+
 // TestCallersSkipsDanglingEdgeInsteadOfFailing mirrors
 // TestCalleesSkipsDanglingEdgeInsteadOfFailing for Callers (WR-04).
 func TestCallersSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
