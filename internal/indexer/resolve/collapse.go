@@ -76,7 +76,8 @@ func CollapseEdges(edges []*schema.Edge) []*schema.Edge {
 // that one candidate reads through and another writes through is
 // read_write. The values a write binds, the binding paths and the
 // contexts of a call merge as sets. A call that one candidate makes
-// directly and another through a data symbol is marked direct. The
+// directly and another through a data symbol is marked direct. The edge
+// keeps the initializer mark when any candidate carries it. The
 // representative is copied when its metadata changes, so no candidate is
 // modified.
 func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
@@ -97,6 +98,9 @@ func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
 		}
 		if c.Metadata[goextract.MetaDirect] == "true" {
 			direct = true
+		}
+		if c.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+			md[goextract.MetaBinding] = goextract.BindingInit
 		}
 		if i == 0 {
 			continue

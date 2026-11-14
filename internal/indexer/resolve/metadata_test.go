@@ -103,8 +103,8 @@ func TestDataReferenceMetadata_CallEvidence(t *testing.T) {
 }
 
 // TestCollapseEdges_MergeIsOrderFree draws candidate edges of one triple
-// with any access roles, values, binding paths, contexts and direct
-// marks, on lines that can tie. Every order of the candidates must merge
+// with any access roles, values, binding paths, contexts, direct marks
+// and initializer marks, on lines that can tie. Every order of the candidates must merge
 // to the same metadata.
 func TestCollapseEdges_MergeIsOrderFree(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
@@ -125,6 +125,9 @@ func TestCollapseEdges_MergeIsOrderFree(t *testing.T) {
 			put(goextract.MetaBinds, set("binds", []string{"f", "g", goextract.BindsUnknown}))
 			put(goextract.MetaVia, set("via", []string{"a@go-production", "a@go-test", "b>a"}))
 			put(goextract.MetaContext, set("context", []string{ContextGoProduction, ContextGoTest}))
+			if kind == goextract.RefKindReferences && rapid.Bool().Draw(t, "init") {
+				md[goextract.MetaBinding] = goextract.BindingInit
+			}
 			// Only a merged call edge with a binding path carries the
 			// direct mark.
 			if kind == goextract.RefKindCalls && md[goextract.MetaVia] != "" && rapid.Bool().Draw(t, "direct") {
@@ -132,7 +135,7 @@ func TestCollapseEdges_MergeIsOrderFree(t *testing.T) {
 			}
 			edges[i] = &schema.Edge{Source: "s", Target: "t", Kind: kind, Line: int32(rapid.IntRange(1, 2).Draw(t, "line")), Metadata: md}
 		}
-		keys := []string{goextract.MetaAccess, goextract.MetaBinds, goextract.MetaVia, goextract.MetaContext, goextract.MetaDirect}
+		keys := []string{goextract.MetaAccess, goextract.MetaBinds, goextract.MetaVia, goextract.MetaContext, goextract.MetaDirect, goextract.MetaBinding}
 		merged := func(order []*schema.Edge) map[string]string {
 			got := CollapseEdges(slices.Clone(order))
 			if len(got) != 1 {
