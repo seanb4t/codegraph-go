@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
@@ -233,9 +234,9 @@ type goSDKServer struct{ inner *mcp.Server }
 func (g *goSDKServer) ServeStdio() error {
 	var pending atomic.Int64
 	transport := &mcp.IOTransport{
-		Reader: newStdinLingerReader(os.Stdin, &pending),
 		Writer: &pendingWriter{w: os.Stdout, pending: &pending},
 	}
+	transport.Reader = newStdinLingerReader(os.Stdin, &pending, transport.Writer)
 	return g.inner.Run(context.Background(), transport)
 }
 
@@ -252,6 +253,20 @@ const stdinLingerGrace = 5 * time.Second
 // pending-response counter while waiting for it to drain.
 const stdinLingerPollInterval = 2 * time.Millisecond
 
+// maxInboundLine is the longest inbound line stdinLingerReader passes to
+// go-sdk, newline included. It equals go-sdk's DefaultMaxLineLength. A
+// longer line gets a parse-error reply, and the reader skips it without
+// buffering it.
+const maxInboundLine = 16 << 20
+
+// The replies stdinLingerReader writes for a line it does not pass to
+// go-sdk. go-sdk ends the session on such a line, so the reader answers it
+// as JSON-RPC 2.0 requires and drops it.
+var (
+	parseErrorReply     = []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"parse error"}}` + "\n")
+	invalidRequestReply = []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"invalid request"}}` + "\n")
+)
+
 // stdinLingerReader wraps a stdin-shaped io.ReadCloser as a line-buffering
 // proxy: it reads whole newline-delimited-JSON lines from the underlying
 // reader (matching the exact framing go-sdk's own StdioTransport/
@@ -267,33 +282,38 @@ type stdinLingerReader struct {
 	br      *bufio.Reader
 	closer  io.Closer
 	pending *atomic.Int64
-	// unparseable counts the increments this reader made for lines it
-	// could NOT parse (WR-06). Such a line is counted as a call by the
-	// conservative default in classifyInboundLine, but the reply go-sdk
-	// produces for it is a JSON-RPC parse-error response carrying
-	// `id: null`, which looksLikeJSONRPCResponse deliberately refuses to
-	// count — so nothing ever balances the increment and pending is
-	// stuck at >=1 for the rest of the session. waitForDrain subtracts
-	// this count from its target so a single malformed line (a partial
-	// write, a stray keepalive newline, a UTF-8 BOM prefix) cannot cost
-	// a full stdinLingerGrace hang at every subsequent exit.
+	// reply receives the error reply for a line the reader drops. It is
+	// the transport's writer, which serializes it with go-sdk's writes.
+	reply io.Writer
+	// unparseable counts the increments this reader made for lines that
+	// reach go-sdk but do not unmarshal into sniffedMessage, which is a
+	// batch (WR-06). Such a line is counted as a call by the conservative
+	// default in classifyInboundLine, but its reply is an array, which
+	// looksLikeJSONRPCResponse does not count. Nothing balances the
+	// increment, so waitForDrain subtracts this count from its target.
+	// A line that is not valid JSON never reaches go-sdk (rejectReply).
 	//
-	// Owned by this reader alone — unlike pending, which the outbound
-	// pendingWriter also mutates — so it is a value, not a shared
-	// pointer.
+	// Owned by this reader alone, unlike pending, which the outbound
+	// pendingWriter also mutates, so it is a value, not a shared pointer.
 	unparseable atomic.Int64
 	// unread holds the tail of a line already sniffed and buffered but not
 	// yet copied out to a caller-supplied Read(p) slice.
 	unread []byte
 }
 
-func newStdinLingerReader(r io.ReadCloser, pending *atomic.Int64) *stdinLingerReader {
-	return &stdinLingerReader{br: bufio.NewReader(r), closer: r, pending: pending}
+func newStdinLingerReader(r io.ReadCloser, pending *atomic.Int64, reply io.Writer) *stdinLingerReader {
+	return &stdinLingerReader{br: bufio.NewReader(r), closer: r, pending: pending, reply: reply}
 }
 
 func (s *stdinLingerReader) Read(p []byte) (int, error) {
-	if len(s.unread) == 0 {
-		line, readErr := s.br.ReadBytes('\n')
+	for len(s.unread) == 0 {
+		line, tooLong, readErr := s.readLine()
+		if errReply := rejectReply(line, tooLong); errReply != nil {
+			if _, err := s.reply.Write(errReply); err != nil {
+				return 0, err
+			}
+			line = nil
+		}
 		if len(line) > 0 {
 			if isCall, unparseable := classifyInboundLine(line); isCall {
 				s.pending.Add(1)
@@ -309,12 +329,9 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 			}
 			return 0, readErr
 		}
-		// A trailing partial line (readErr != nil but bytes were still
-		// returned, e.g. the stream ended without a final newline) is
-		// returned to the caller now; the error itself is reported on
-		// the NEXT call once unread is drained, matching bufio.Reader's
-		// own "data now, error later" contract — ReadBytes already
-		// followed that contract for us, so nothing extra to do here.
+		// A last line without a newline comes back with its error. The
+		// line is returned now, and the error on the next call, because
+		// bufio.Reader returns the error again once unread is drained.
 	}
 	n := copy(p, s.unread)
 	s.unread = s.unread[n:]
@@ -325,15 +342,9 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 // balanced has been, or stdinLingerGrace elapses.
 //
 // The target is pending MINUS unparseable, not zero (WR-06): an
-// increment made for a line that could not be parsed will never be
-// balanced by a response, because the only reply such a line receives is
-// a `null`-id parse-error response that looksLikeJSONRPCResponse
-// correctly refuses to count. Waiting for zero therefore burns the whole
-// grace period at EOF for the rest of the session, which to an agent
-// harness batching MCP invocations reads as a multi-second hang on every
-// exit rather than as the defensive upper bound it is meant to be — and
-// pendingUnderflows stays at zero throughout, so the counter built to
-// catch imbalance reports all-clear.
+// increment made for a batch line is never balanced, because its reply is
+// an array that looksLikeJSONRPCResponse does not count. Waiting for zero
+// would burn the whole grace period at every exit.
 //
 // This corrects the over-count rather than removing it: real in-flight
 // calls are still waited on, and the two sniffers' opposite conservative
@@ -347,6 +358,48 @@ func (s *stdinLingerReader) waitForDrain() {
 
 func (s *stdinLingerReader) Close() error { return s.closer.Close() }
 
+// readLine reads one line, newline included. A line longer than
+// maxInboundLine is read to its end but not kept: readLine returns no
+// bytes and tooLong.
+func (s *stdinLingerReader) readLine() (line []byte, tooLong bool, err error) {
+	for {
+		frag, err := s.br.ReadSlice('\n')
+		if !tooLong {
+			if len(line)+len(frag) > maxInboundLine {
+				tooLong, line = true, nil
+			} else {
+				line = append(line, frag...)
+			}
+		}
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return line, tooLong, err
+		}
+	}
+}
+
+// rejectReply returns the error reply for a line that go-sdk would end
+// the session on, or nil for a line to pass on. A blank line passes,
+// because go-sdk's decoder skips white space. A non-empty array passes as
+// a batch, which go-sdk decodes itself.
+func rejectReply(line []byte, tooLong bool) []byte {
+	trimmed := bytes.TrimSpace(line)
+	switch {
+	case tooLong, len(trimmed) > 0 && !json.Valid(trimmed):
+		return parseErrorReply
+	case len(trimmed) == 0:
+		return nil
+	case trimmed[0] == '[':
+		if bytes.Equal(bytes.Join(bytes.Fields(trimmed), nil), []byte("[]")) {
+			return invalidRequestReply
+		}
+		return nil
+	}
+	if _, err := jsonrpc.DecodeMessage(trimmed); err != nil {
+		return invalidRequestReply
+	}
+	return nil
+}
+
 // sniffedMessage extracts just enough of a JSON-RPC line to classify it —
 // never the full message, which go-sdk's own decoder owns.
 type sniffedMessage struct {
@@ -359,10 +412,9 @@ type sniffedMessage struct {
 // response). codegraph's stdio server never itself initiates client-bound
 // requests, so every line read here originates as a client request or
 // notification, never a response — no response-shaped line ever needs
-// classifying. On a parse failure, this conservatively reports true: an
-// unparseable line still gets SOME reply from go-sdk's own framing-error
-// handling, and over-counting pending only ever costs a bounded wait
-// against stdinLingerGrace, never incorrect behavior.
+// classifying. On a parse failure, this conservatively reports true.
+// Over-counting pending only ever costs a bounded wait against
+// stdinLingerGrace, never incorrect behavior.
 func looksLikeJSONRPCCall(line []byte) bool {
 	isCall, _ := classifyInboundLine(line)
 	return isCall
