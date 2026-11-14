@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -12,7 +13,9 @@ import (
 // whatever its name. An instance write in a subclass establishes the
 // subclass's own field, which its reads then reach, and a read of an
 // attribute the subclass does not bind reaches the base class. A
-// property stays a method. A class attribute that holds an instance of a
+// property stays a method. Two methods that write one instance attribute
+// write one field, apart from the same-named field of another class. A
+// class attribute that holds an instance of a
 // descriptor class of the file declares no field, so its reads and writes
 // through an instance resolve to nothing. An explicit classmethod's class parameter
 // reaches the class, and a staticmethod's parameter named self reaches
@@ -55,6 +58,9 @@ class Shape:
     def __init__(self, w):
         self.width = w
 
+    def resize(self, w):
+        self.width = w
+
     @property
     def area(self):
         return self.width
@@ -73,6 +79,14 @@ class Shape:
     @staticmethod
     def util(self):
         return self.width
+
+
+class Other:
+    def __init__(self):
+        self.width = 1
+
+    def stretch(self):
+        self.width = 2
 
 
 class Typed:
@@ -157,6 +171,28 @@ def call_handler():
 	}
 	if util := refs(goextract.KindMethod, "Shape.util"); len(util) != 0 {
 		t.Errorf("the static method util references %v through a parameter named self", util)
+	}
+
+	for _, m := range []string{"Shape.__init__", "Shape.resize", "Other.__init__", "Other.stretch"} {
+		owner, _, _ := strings.Cut(m, ".")
+		got := refs(goextract.KindMethod, m)
+		if got["field "+owner+".width"] != "write" || len(got) != 1 {
+			t.Errorf("%s references %v, want only a write of %s.width", m, got, owner)
+		}
+	}
+	widths := 0
+	wit, err := r.IterateNodes()
+	if err != nil {
+		t.Fatalf("IterateNodes: %v", err)
+	}
+	for wit.Next() {
+		if n := wit.Node(); n.Kind == goextract.KindField && n.QualifiedName == "Shape.width" {
+			widths++
+		}
+	}
+	wit.Close()
+	if widths != 1 {
+		t.Errorf("Shape has %d width fields, want one for both writing methods", widths)
 	}
 
 	show := refs(goextract.KindMethod, "Model.show")
