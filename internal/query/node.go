@@ -385,20 +385,9 @@ func (e *Engine) NodeSelected(sel Selector, file string, line *int) (string, err
 	case NodeDetailModeFile:
 		return renderNumberedSource(d.File.Source), nil
 	case NodeDetailModeSingleDef:
-		return RenderNode(d.Definition.Node, d.Definition.Calls, d.Definition.CalledBy), nil
+		return RenderNode(d.Definition), nil
 	default:
-		// NodeDetailModeMultiDef: adapt MultiDefDetail's lazy Definition
-		// method to RenderNodeMultiDef's nodeSectionFetch shape, without
-		// rebuilding the reverse adjacency a second time — d.Multi was
-		// already built once by buildNodeDetail above.
-		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-			dd, err := d.Multi.Definition(n)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			return dd.Source, dd.Calls, dd.CalledBy, nil
-		}
-		return RenderNodeMultiDef(d.Multi.Symbol, d.Multi.Matches, fetch)
+		return RenderNodeMultiDef(d.Multi.Symbol, d.Multi.Matches, d.Multi.Definition)
 	}
 }
 

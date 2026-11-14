@@ -106,9 +106,9 @@ func TestNodeDetailCoversAllThreeShapes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Node(Alpha): unexpected error: %v", err)
 		}
-		want := RenderNode(d.Definition.Node, d.Definition.Calls, d.Definition.CalledBy)
+		want := RenderNode(d.Definition)
 		if got != want {
-			t.Fatalf("Node(Alpha) = %q, want RenderNode(d.Definition.Node, d.Definition.Calls, d.Definition.CalledBy) = %q", got, want)
+			t.Fatalf("Node(Alpha) = %q, want RenderNode(d.Definition) = %q", got, want)
 		}
 	})
 
@@ -221,7 +221,7 @@ func TestNodeDetailPreservesFetcherNilness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Node(Solo): unexpected error: %v", err)
 	}
-	want := RenderNode(d.Definition.Node, d.Definition.Calls, d.Definition.CalledBy)
+	want := RenderNode(d.Definition)
 	if got != want {
 		t.Fatalf("Node(Solo) = %q, want RenderNode over the preserved-nil detail = %q", got, want)
 	}

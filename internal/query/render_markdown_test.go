@@ -279,8 +279,8 @@ func mkMultiDefNode(id, file string, startLine int32) *schema.Node {
 func TestRenderNodeMultiDef(t *testing.T) {
 	t.Run("two defs renders the two-line header and both full bodies with no overflow", func(t *testing.T) {
 		matches := []*schema.Node{mkMultiDefNode("a", "pkg/a.go", 10), mkMultiDefNode("b", "pkg/b.go", 20)}
-		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-			return []byte("func X() error {\n\treturn nil\n}\n"), nil, nil, nil
+		fetch := func(n *schema.Node) (*DefinitionDetail, error) {
+			return &DefinitionDetail{Node: n, Source: []byte("func X() error {\n\treturn nil\n}\n")}, nil
 		}
 
 		got, err := RenderNodeMultiDef("X", matches, fetch)
@@ -308,8 +308,8 @@ func TestRenderNodeMultiDef(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			matches = append(matches, mkMultiDefNode(fmt.Sprintf("n%02d", i), fmt.Sprintf("pkg/f%02d.go", i), int32(i+1)))
 		}
-		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-			return []byte("func X() {}\n"), nil, nil, nil
+		fetch := func(n *schema.Node) (*DefinitionDetail, error) {
+			return &DefinitionDetail{Node: n, Source: []byte("func X() {}\n")}, nil
 		}
 
 		got, err := RenderNodeMultiDef("X", matches, fetch)
@@ -344,8 +344,8 @@ func TestRenderNodeMultiDef(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			matches = append(matches, mkMultiDefNode(fmt.Sprintf("n%d", i), fmt.Sprintf("pkg/f%d.go", i), int32(i+1)))
 		}
-		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-			return []byte(big + "\n"), nil, nil, nil
+		fetch := func(n *schema.Node) (*DefinitionDetail, error) {
+			return &DefinitionDetail{Node: n, Source: []byte(big + "\n")}, nil
 		}
 
 		got, err := RenderNodeMultiDef("X", matches, fetch)
@@ -359,8 +359,8 @@ func TestRenderNodeMultiDef(t *testing.T) {
 
 	t.Run("a def with both empty Calls and CalledBy omits the Trail line entirely", func(t *testing.T) {
 		matches := []*schema.Node{mkMultiDefNode("a", "pkg/a.go", 10), mkMultiDefNode("b", "pkg/b.go", 20)}
-		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-			return []byte("func X() error {\n\treturn nil\n}\n"), nil, nil, nil
+		fetch := func(n *schema.Node) (*DefinitionDetail, error) {
+			return &DefinitionDetail{Node: n, Source: []byte("func X() error {\n\treturn nil\n}\n")}, nil
 		}
 
 		got, err := RenderNodeMultiDef("X", matches, fetch)
@@ -496,7 +496,7 @@ func TestRenderNodeSingleDefUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchCalledBy(Alpha): unexpected error: %v", err)
 	}
-	want := RenderNode(alpha, calls, calledBy)
+	want := RenderNode(&DefinitionDetail{Node: alpha, Calls: calls, CalledBy: calledBy})
 
 	got, err := engine.Node("Alpha", "", nil)
 	if err != nil {
