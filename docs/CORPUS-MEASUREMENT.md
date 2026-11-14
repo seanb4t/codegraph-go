@@ -20,15 +20,15 @@ Do NOT hand-edit this file.
 
 | Kind | Threshold | Supplying Repository | Measured Count |
 |------|-----------|---------------------|---------------|
-| calls | 29406 | google/guava | 90152 |
+| calls | 29406 | google/guava | 91193 |
 | extends | 1265 | google/guava | 2553 |
 | implements | 509 | gohugoio/hugo | 1018 |
 | imports | 1080 | gohugoio/hugo | 2160 |
-| instantiates | 938 | google/guava | 5709 |
+| instantiates | 938 | google/guava | 6270 |
 | overrides | 2329 | google/guava | 9847 |
-| references | 6531 | google/guava | 14673 |
+| references | 6531 | google/guava | 20257 |
 | returns | 2795 | google/guava | 6693 |
-| type_of | 5928 | google/guava | 11990 |
+| type_of | 5928 | google/guava | 12957 |
 
 ## Per-Language File Counts
 
@@ -65,15 +65,15 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 2547
 - **Edges by kind:**
-  - calls: 10736
-  - contains: 11159
+  - calls: 10780
+  - contains: 14853
   - embeds: 155
   - extends: 131
   - implements: 1018
   - imports: 2160
-  - instantiates: 644
+  - instantiates: 1124
   - overrides: 25
-  - references: 1524
+  - references: 6110
   - returns: 1096
   - type_of: 30
 - **Files by language:**
@@ -85,17 +85,17 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 3317
 - **Edges by kind:**
-  - calls: 90152
-  - contains: 62839
+  - calls: 91193
+  - contains: 72783
   - embeds: 139
   - extends: 2553
   - implements: 759
   - imports: 0
-  - instantiates: 5709
+  - instantiates: 6270
   - overrides: 9847
-  - references: 14673
+  - references: 20257
   - returns: 6693
-  - type_of: 11990
+  - type_of: 12957
 - **Files by language:**
   - java: 3229
   - javascript: 2
@@ -124,16 +124,16 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 130
 - **Edges by kind:**
-  - calls: 443
-  - contains: 766
+  - calls: 445
+  - contains: 1052
   - extends: 38
   - implements: 0
   - imports: 0
-  - instantiates: 124
+  - instantiates: 125
   - overrides: 11
-  - references: 21
+  - references: 316
   - returns: 6
-  - type_of: 2
+  - type_of: 3
 - **Files by language:**
   - python: 37
 ### pydantic/pydantic (02c5c975)

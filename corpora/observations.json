@@ -63,17 +63,17 @@
       "trackedFiles": 2547,
       "status": {
         "backend": "pebble",
-        "edgeCount": 28678,
+        "edgeCount": 37482,
         "edgesByKind": {
-          "calls": 10736,
-          "contains": 11159,
+          "calls": 10780,
+          "contains": 14853,
           "embeds": 155,
           "extends": 131,
           "implements": 1018,
           "imports": 2160,
-          "instantiates": 644,
+          "instantiates": 1124,
           "overrides": 25,
-          "references": 1524,
+          "references": 6110,
           "returns": 1096,
           "type_of": 30
         },
@@ -97,17 +97,18 @@
           "go",
           "javascript"
         ],
-        "nodeCount": 12260,
+        "nodeCount": 15954,
         "nodesByKind": {
-          "constant": 686,
+          "constant": 690,
+          "field": 3681,
           "file": 918,
-          "function": 4124,
+          "function": 4129,
           "interface": 326,
           "method": 4152,
           "package": 183,
           "struct": 974,
           "type_alias": 201,
-          "variable": 696
+          "variable": 700
         },
         "pendingChanges": {
           "added": 0,
@@ -125,19 +126,19 @@
       "trackedFiles": 3317,
       "status": {
         "backend": "pebble",
-        "edgeCount": 205354,
+        "edgeCount": 223451,
         "edgesByKind": {
-          "calls": 90152,
-          "contains": 62839,
+          "calls": 91193,
+          "contains": 72783,
           "embeds": 139,
           "extends": 2553,
           "implements": 759,
           "imports": 0,
-          "instantiates": 5709,
+          "instantiates": 6270,
           "overrides": 9847,
-          "references": 14673,
+          "references": 20257,
           "returns": 6693,
-          "type_of": 11990
+          "type_of": 12957
         },
         "fileCount": 3233,
         "filesByLanguage": {
@@ -159,12 +160,13 @@
           "javascript",
           "kotlin"
         ],
-        "nodeCount": 66072,
+        "nodeCount": 76016,
         "nodesByKind": {
+          "field": 9946,
           "file": 3233,
           "interface": 452,
           "method": 53732,
-          "overload_set": 2301,
+          "overload_set": 2299,
           "struct": 6354
         },
         "pendingChanges": {
@@ -242,18 +244,18 @@
       "trackedFiles": 130,
       "status": {
         "backend": "pebble",
-        "edgeCount": 1411,
+        "edgeCount": 1996,
         "edgesByKind": {
-          "calls": 443,
-          "contains": 766,
+          "calls": 445,
+          "contains": 1052,
           "extends": 38,
           "implements": 0,
           "imports": 0,
-          "instantiates": 124,
+          "instantiates": 125,
           "overrides": 11,
-          "references": 21,
+          "references": 316,
           "returns": 6,
-          "type_of": 2
+          "type_of": 3
         },
         "fileCount": 37,
         "filesByLanguage": {
@@ -271,12 +273,14 @@
         "languages": [
           "python"
         ],
-        "nodeCount": 803,
+        "nodeCount": 1089,
         "nodesByKind": {
+          "field": 137,
           "file": 37,
           "function": 146,
           "method": 524,
-          "struct": 96
+          "struct": 96,
+          "variable": 149
         },
         "pendingChanges": {
           "added": 0,
