@@ -230,6 +230,10 @@ type UnresolvedRef struct {
 	// for a read. The resolver records what it resolves to as "binds" on
 	// the edge.
 	Value *ValueRef
+	// ImplicitReceiver marks a bare name that may be a member of
+	// ReceiverType, the enclosing type, through its supertypes. When the
+	// type has no such member, the name resolves as a bare name.
+	ImplicitReceiver bool
 }
 
 // ValueRef is a name used as a value: Name, and PkgAlias and

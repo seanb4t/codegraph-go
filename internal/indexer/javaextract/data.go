@@ -87,7 +87,9 @@ func (ex *extractor) captureInitializer(fromID string, value *tree_sitter.Node) 
 
 // captureName records a reference with access to the bare name n. A
 // parameter or a local in scope is not a field. Any other name of a field
-// of the enclosing type reads it through the implicit receiver this.
+// of the enclosing type reads it through the implicit receiver this. Any
+// other name may be a field the enclosing type inherits, so it names a
+// member of the enclosing type when one exists.
 func (ex *extractor) captureName(fromID string, n *tree_sitter.Node, access string) {
 	name := n.Utf8Text(ex.src)
 	pos := n.StartPosition()
@@ -100,6 +102,8 @@ func (ex *extractor) captureName(fromID string, n *tree_sitter.Node, access stri
 		ref.PkgAlias = goextract.LocalAlias(name)
 	case field:
 		ref.ReceiverType = ex.owner
+	case ex.owner != "":
+		ref.ReceiverType, ref.ImplicitReceiver = ex.owner, true
 	}
 	ex.result.Unresolved = append(ex.result.Unresolved, ref)
 }

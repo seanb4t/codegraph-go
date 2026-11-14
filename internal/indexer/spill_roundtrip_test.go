@@ -123,6 +123,11 @@ func TestSpillRoundTrip(t *testing.T) {
 	writeFile(t, filepath.Join(bindings, "go.mod"), "module example.com/b\n\ngo 1.22\n")
 	writeFile(t, filepath.Join(bindings, "b.go"), "package b\n\nfunc f() {}\n\nvar g = f\n\nfunc broken() {\n\tg = (\n}\n")
 	trees = append(trees, fixtureTree{"bindings", bindings})
+	// No fixture reads a Java name that the enclosing class may inherit, so
+	// one small Java tree adds one.
+	inherited := t.TempDir()
+	writeFile(t, filepath.Join(inherited, "Derived.java"), "package p;\n\npublic class Derived extends Base {\n    int read() {\n        return count;\n    }\n}\n")
+	trees = append(trees, fixtureTree{"inherited", inherited})
 
 	set := make(map[string]bool)
 	results := 0

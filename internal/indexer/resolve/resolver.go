@@ -354,7 +354,9 @@ func (rs *resolver) resolveRef(r goextract.FileResult, ref goextract.UnresolvedR
 // cannot reach an unrelated declaration named X. A receiver that is both
 // an alias and a type name, as `Point.X` or `pkg.X`, names a member of
 // the type when one exists, and a module-level name of the module the
-// alias imports otherwise. Every other ref resolves as resolveRef does.
+// alias imports otherwise. A bare name with an implicit receiver names a
+// member of the enclosing type when one exists, and resolves as a bare
+// name otherwise. Every other ref resolves as resolveRef does.
 func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.UnresolvedRef) (string, bool) {
 	recv := ref.ReceiverType
 	if recv == "" {
@@ -362,7 +364,11 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 	}
 	moduleAlias := ref.PkgAlias != "" && ref.PkgAlias == recv
 	if owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col); ok {
-		switch ms := rs.ownMembers(r.Language, owner.ID, ref.Name); len(ms) {
+		ms := rs.ownMembers(r.Language, owner.ID, ref.Name)
+		if ref.ImplicitReceiver {
+			ms = fieldsOnly(ms)
+		}
+		switch len(ms) {
 		case 0:
 		case 1:
 			return ms[0].ID, true
@@ -370,7 +376,7 @@ func (rs *resolver) resolveDataRef(r goextract.FileResult, ref goextract.Unresol
 			return symbols.Pick(ms), true
 		}
 	}
-	if moduleAlias {
+	if moduleAlias || ref.ImplicitReceiver {
 		return rs.resolveRef(r, ref, false)
 	}
 	return "", false

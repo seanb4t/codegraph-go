@@ -12,7 +12,9 @@ import (
 // enclosing class, or of the nearest base class that declares it, and a
 // field that the subclass declares shadows the base field. A private
 // base field is out of reach. A bare field name reads the field through
-// the implicit receiver unless a local shadows it. A call of a method
+// the implicit receiver unless a local shadows it, and that field may be
+// one the class inherits from its base class or a constant of an
+// interface it implements. A call of a method
 // with a field's name reaches the method, and a bare call never reaches
 // a field of another class. A field initializer records
 // the calls it makes.
@@ -29,7 +31,7 @@ public class Base {
 `,
 		"p/Derived.java": `package p;
 
-public class Derived extends Base {
+public class Derived extends Base implements Limits {
     protected String label;
 
     void bump() {
@@ -40,6 +42,29 @@ public class Derived extends Base {
     int peek() {
         return this.secret;
     }
+
+    int bare() {
+        return count;
+    }
+
+    int bareSecret() {
+        return secret;
+    }
+
+    int bareShadow() {
+        int count = 2;
+        return count;
+    }
+
+    int max() {
+        return MAX;
+    }
+}
+`,
+		"p/Limits.java": `package p;
+
+public interface Limits {
+    int MAX = 5;
 }
 `,
 		"p/Helper.java": `package p;
@@ -113,6 +138,18 @@ class Other {
 	}
 	if peek := refs(derived, goextract.KindMethod, "Derived.peek"); len(peek) != 0 {
 		t.Errorf("peek references %v through the private Base.secret", peek)
+	}
+	if got := refs(derived, goextract.KindMethod, "Derived.bare")["field Base.count"]; got != "read" {
+		t.Errorf("bare -> Base.count access = %q, want read of the inherited field by its bare name", got)
+	}
+	if s := refs(derived, goextract.KindMethod, "Derived.bareSecret"); len(s) != 0 {
+		t.Errorf("bareSecret references %v through the private Base.secret", s)
+	}
+	if s := refs(derived, goextract.KindMethod, "Derived.bareShadow"); len(s) != 0 {
+		t.Errorf("bareShadow references %v through its local count", s)
+	}
+	if got := refs(derived, goextract.KindMethod, "Derived.max")["field Limits.MAX"]; got != "read" {
+		t.Errorf("max -> Limits.MAX access = %q, want read of the constant of the implemented interface", got)
 	}
 
 	if got := refs(box, goextract.KindMethod, "Box.size")["field Box.size"]; got != "read" {
