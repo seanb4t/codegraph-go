@@ -81,6 +81,26 @@ func (r *repeatReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// maxInboundLine counts the newline: a line of exactly that length passes,
+// and one byte more is answered.
+func TestStdinReaderLimitIncludesTheNewline(t *testing.T) {
+	line := func(n int) string {
+		prefix := `{"jsonrpc":"2.0","method":"notifications/initialized","params":{"pad":"`
+		suffix := `"}}` + "\n"
+		return prefix + strings.Repeat("a", n-len(prefix)-len(suffix)) + suffix
+	}
+	atLimit, overLimit := line(maxInboundLine), line(maxInboundLine+1)
+
+	passed, replies := readThrough(t, strings.NewReader(atLimit))
+	if passed != atLimit || replies != "" {
+		t.Errorf("a %d-byte line: passed %d bytes and replied %q, want it passed whole", len(atLimit), len(passed), replies)
+	}
+	passed, replies = readThrough(t, strings.NewReader(overLimit))
+	if passed != "" || replies != string(parseErrorReply) {
+		t.Errorf("a %d-byte line: passed %d bytes and replied %q, want one parse error", len(overLimit), len(passed), replies)
+	}
+}
+
 // The reader keeps at most maxInboundLine bytes of a line, so what it
 // allocates does not grow with the line. append grows the buffer by about
 // 1.25 times a step, which allocates about five times maxInboundLine in
