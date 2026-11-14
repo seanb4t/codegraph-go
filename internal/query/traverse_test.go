@@ -214,7 +214,7 @@ func TestCalleesSortedDeterministically(t *testing.T) {
 }
 
 // Rows that tie on file, name and line sort by the line in their
-// Definition label as a number (#327).
+// Definition label as a number.
 func TestSortLocationsOrdersDefinitionLinesAsNumbers(t *testing.T) {
 	row := func(def string) Location {
 		return Location{Name: "run", FilePath: "main.py", StartLine: 30, Definition: def}
