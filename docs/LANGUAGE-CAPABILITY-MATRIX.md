@@ -105,7 +105,7 @@ No gap is known.
 
 ### `java`
 
-- A bare name of an inherited field does not resolve, because the extractor reads one file and does not see the fields of the base class. A read through `this` resolves.
+- A bare name of an inherited field does not resolve. The extractor reads one file, so it does not see the fields of the base class. A read through `this` resolves.
 - Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.
 - When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).
 - A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.
