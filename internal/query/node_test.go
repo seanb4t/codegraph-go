@@ -240,6 +240,32 @@ func TestNarrowNeverEmpty(t *testing.T) {
 		}
 	})
 
+	t.Run("lineHint on a def's first line narrows to that def", func(t *testing.T) {
+		line := 30
+		got := narrowNodeMatches(matches, "", &line)
+		if len(got) != 1 || got[0] != b {
+			t.Fatalf("narrowNodeMatches(lineHint=30): got %d matches, want [b]", len(got))
+		}
+	})
+
+	t.Run("lineHint on a def's last line narrows to that def", func(t *testing.T) {
+		line := 40
+		got := narrowNodeMatches(matches, "", &line)
+		if len(got) != 1 || got[0] != b {
+			t.Fatalf("narrowNodeMatches(lineHint=40): got %d matches, want [b]", len(got))
+		}
+	})
+
+	t.Run("lineHint inside two defs keeps both", func(t *testing.T) {
+		outer := mk("outer", "pkg/x.go", 10, 20)
+		inner := mk("inner", "pkg/y.go", 12, 15)
+		line := 13
+		got := narrowNodeMatches([]*schema.Node{outer, inner, c}, "", &line)
+		if len(got) != 2 || got[0] != outer || got[1] != inner {
+			t.Fatalf("narrowNodeMatches(lineHint=13, two containing defs): got %d matches, want [outer inner]", len(got))
+		}
+	})
+
 	t.Run("both hints absent returns the full set unchanged", func(t *testing.T) {
 		got := narrowNodeMatches(matches, "", nil)
 		if len(got) != 3 {
