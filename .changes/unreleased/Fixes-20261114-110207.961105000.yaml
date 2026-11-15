@@ -1,3 +1,0 @@
-kind: Fixes
-body: Rows of two definitions in one file now sort by line number, so a.py:5 comes before a.py:12.
-time: 2026-11-14T11:02:07.961105-05:00

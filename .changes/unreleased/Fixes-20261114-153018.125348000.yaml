@@ -1,3 +1,0 @@
-kind: Fixes
-body: serve --mcp now answers a malformed or oversized stdin line with a JSON-RPC error and keeps the session open. Before, it exited and dropped the responses it owed, and a line with no newline grew memory without limit.
-time: 2026-11-14T15:30:18.125348-05:00
