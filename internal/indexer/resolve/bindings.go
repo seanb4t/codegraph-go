@@ -27,7 +27,7 @@ func IsBindingEdge(e *schema.Edge) bool {
 	if e.Kind != goextract.RefKindReferences {
 		return false
 	}
-	if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+	if goextract.IsInitBinding(e) {
 		return true
 	}
 	return goextract.IsWriteAccess(e.Metadata[goextract.MetaAccess])
@@ -43,16 +43,6 @@ func GlobalEdges(edges []*schema.Edge) []*schema.Edge {
 		}
 	}
 	return out
-}
-
-// IsDataKind reports whether a node of kind holds a value: a call
-// through it is a read, never a call of it.
-func IsDataKind(kind string) bool {
-	switch kind {
-	case goextract.KindVariable, goextract.KindConstant, goextract.KindField:
-		return true
-	}
-	return false
 }
 
 // isGoTestFile reports whether n is in a Go test file.
@@ -85,7 +75,7 @@ func newBindings(view symbols.View, h symbols.Hierarchy, lists ...[]*schema.Edge
 				continue
 			}
 			test := isGoTestFile(view.Node(e.Source))
-			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+			if goextract.IsInitBinding(e) {
 				b.writes[e.Source] = append(b.writes[e.Source], bindingWrite{e.Target, test})
 				continue
 			}
@@ -141,7 +131,7 @@ func (b bindings) target(id string, test bool) (string, []string, bool) {
 			return "", nil, false
 		case k == goextract.KindFunction || k == goextract.KindMethod:
 			return value, via, true
-		case IsDataKind(k):
+		case goextract.IsDataKind(k):
 			id = value
 		default:
 			return "", nil, false
@@ -178,7 +168,7 @@ func (b bindings) throughBindings(list []*schema.Edge) ([]*schema.Edge, int) {
 			out = append(out, e)
 			continue
 		}
-		data := IsDataKind(b.view.Kind(e.Target))
+		data := goextract.IsDataKind(b.view.Kind(e.Target))
 		if !data && b.holdsOnlyItself(e.Target) {
 			out = append(out, e)
 			continue

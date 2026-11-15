@@ -292,6 +292,22 @@ func IsWriteAccess(a string) bool {
 	return a == AccessWrite || a == AccessReadWrite
 }
 
+// IsInitBinding reports whether e goes from a data symbol to the name
+// that its initializer holds.
+func IsInitBinding(e *schema.Edge) bool {
+	return e.Metadata[MetaBinding] == BindingInit
+}
+
+// IsDataKind reports whether a node of kind holds a value: a call
+// through it is a read, never a call of it.
+func IsDataKind(kind string) bool {
+	switch kind {
+	case KindVariable, KindConstant, KindField:
+		return true
+	}
+	return false
+}
+
 // IsGoTestFile reports whether path is a Go test file.
 func IsGoTestFile(path string) bool {
 	return strings.HasSuffix(path, "_test.go")

@@ -691,7 +691,7 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		// A call through a data symbol is a read of it, which Assemble
 		// turns into the calls its bindings establish.
 		local := rs.sameFile(r, ref.Name, ref.Line, ref.Col, func(kind string) bool {
-			return callableKind(kind) || symbols.IsTypeKind(kind) || IsDataKind(kind)
+			return callableKind(kind) || symbols.IsTypeKind(kind) || goextract.IsDataKind(kind)
 		})
 		if len(local) > 0 && local[0].Node.Nested {
 			return rs.choose(r, ref, local, argTypes, r.ImportPath)
