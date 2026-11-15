@@ -21,7 +21,7 @@ A query can name a symbol by its bare name. When that name has an `overload_set`
 
 ### Requirement: A signature selects one overload
 
-`node`, `callers`, `callees` and `impact` SHALL accept `--signature <types>`, which selects one overload by its parameter types. They SHALL keep accepting `--line` for the same purpose. `callers` on one overload SHALL also list the set's ambiguous callers, marked ambiguous, and SHALL NOT list a caller that resolved to another overload.
+`node`, `callers`, `callees` and `impact` SHALL accept `--signature <types>`, which selects one overload by its parameter types. `callers` on one overload SHALL also list the set's ambiguous callers, marked ambiguous, and SHALL NOT list a caller that resolved to another overload.
 
 #### Scenario: Callers of one overload
 
@@ -224,3 +224,22 @@ The MCP tools `codegraph_callers`, `codegraph_callees` and `codegraph_impact` SH
 - **AND** `b.py` declares `def run()` whose body calls `save()`
 - **WHEN** an agent calls `codegraph_callees` with `symbol: "run"` and `file: "a.py"`
 - **THEN** the result lists `load` and does not list `save`
+
+### Requirement: A line narrows the definitions that node shows (NODE-03)
+
+`node` SHALL accept `--line <n>`, where `n` is a 1-based line number and `0` means no line. When the name has more than one definition, `node` SHALL keep the definitions whose lines contain `n`. When none contains `n`, it SHALL keep the one definition whose first line is nearest to `n`. The line SHALL never leave `node` with no definition. `callers`, `callees` and `impact` select by `--signature` and `--file` instead.
+
+#### Scenario: A line inside one overload
+
+- **WHEN** `Logger.java` declares `log(String msg)` on line 4 and `log(String msg, Throwable t)` on line 6, and a user runs `codegraph node log --line 6`
+- **THEN** the output shows only `log` at `Logger.java:6`, with the signature `(String msg, Throwable t)`
+
+#### Scenario: A line inside no definition
+
+- **WHEN** a user runs `codegraph node log --line 7` on the same file
+- **THEN** the output shows only `log` at `Logger.java:6`, the definition whose first line is nearest to line 7
+
+#### Scenario: Line zero selects nothing
+
+- **WHEN** a user runs `codegraph node log --line 0` on the same file
+- **THEN** the output reports both definitions of `log`, as it does with no `--line`
