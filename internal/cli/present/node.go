@@ -76,13 +76,35 @@ func writeSingleDef(b *strings.Builder, pal Palette, d *query.DefinitionDetail) 
 	b.WriteString(pal.Label.Render("Signature:") + " ")
 	b.WriteString(pal.Value.Render(sanitizeControl(n.Signature)))
 	b.WriteString("\n")
-	b.WriteString(pal.Header.Render("Trail — codegraph_node any of these to follow it (no Read needed)") + "\n")
-	b.WriteString(pal.Label.Render("Calls →") + " " + writeNodeRefs(pal, d.Calls, nil) + "\n")
-	b.WriteString(pal.Label.Render("Called by ←") + " " + writeNodeRefs(pal, d.CalledBy, nil) + "\n")
-	if goextract.IsDataKind(n.Kind) {
-		b.WriteString(pal.Label.Render("Accessed by ←") + " " + writeAccessRefs(pal, d.AccessedBy) + "\n")
-		b.WriteString(pal.Label.Render("Initialized to →") + " " + writeNodeRefs(pal, d.InitializedTo, nil) + "\n")
+	b.WriteString(pal.Header.Render(query.TrailHeader) + "\n")
+	for _, row := range trailRows(pal, d) {
+		b.WriteString(pal.Label.Render(row.label) + " " + row.refs() + "\n")
 	}
+}
+
+// trailRow is one styled trail line: its label, its number of entries and
+// a function that writes the entries.
+type trailRow struct {
+	label string
+	n     int
+	refs  func() string
+}
+
+// trailRows returns the styled trail lines of d in the order of the
+// markdown view: calls and callers, then the data lines for a variable, a
+// constant or a field.
+func trailRows(pal Palette, d *query.DefinitionDetail) []trailRow {
+	rows := []trailRow{
+		{"Calls →", len(d.Calls), func() string { return writeNodeRefs(pal, d.Calls, nil) }},
+		{"Called by ←", len(d.CalledBy), func() string { return writeNodeRefs(pal, d.CalledBy, nil) }},
+	}
+	if goextract.IsDataKind(d.Node.Kind) {
+		rows = append(rows,
+			trailRow{"Accessed by ←", len(d.AccessedBy), func() string { return writeAccessRefs(pal, d.AccessedBy) }},
+			trailRow{"Initialized to →", len(d.InitializedTo), func() string { return writeNodeRefs(pal, d.InitializedTo, nil) }},
+		)
+	}
+	return rows
 }
 
 // writeNodeRefs comma-joins "name (path:line)" references, mirroring
@@ -123,7 +145,7 @@ func writeAccessRefs(pal Palette, access []query.DataAccess) string {
 // trailing newline of its own). The data lines print only when their list
 // has an entry, and any non-empty list of the four prints the Trail line.
 func writeNodeSection(pal Palette, d *query.DefinitionDetail) string {
-	n, calls, calledBy := d.Node, d.Calls, d.CalledBy
+	n := d.Node
 	var b strings.Builder
 	b.WriteString(pal.Value.Render(sanitizeControl(n.Name)))
 	b.WriteString(" (")
@@ -140,24 +162,14 @@ func writeNodeSection(pal Palette, d *query.DefinitionDetail) string {
 	writeNumberedSourceRange(&rangeBuilder, pal, d.Source, n.StartLine, n.EndLine)
 	b.WriteString(strings.TrimSuffix(rangeBuilder.String(), "\n"))
 
-	rows := []struct {
-		label string
-		n     int
-		refs  func() string
-	}{
-		{"Calls →", len(calls), func() string { return writeNodeRefs(pal, calls, nil) }},
-		{"Called by ←", len(calledBy), func() string { return writeNodeRefs(pal, calledBy, nil) }},
-		{"Accessed by ←", len(d.AccessedBy), func() string { return writeAccessRefs(pal, d.AccessedBy) }},
-		{"Initialized to →", len(d.InitializedTo), func() string { return writeNodeRefs(pal, d.InitializedTo, nil) }},
-	}
 	header := false
-	for _, row := range rows {
+	for _, row := range trailRows(pal, d) {
 		if row.n == 0 {
 			continue
 		}
 		if !header {
 			b.WriteString("\n")
-			b.WriteString(pal.Header.Render("Trail — codegraph_node any of these to follow it (no Read needed)"))
+			b.WriteString(pal.Header.Render(query.TrailHeader))
 			header = true
 		}
 		b.WriteString("\n")

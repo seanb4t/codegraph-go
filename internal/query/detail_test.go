@@ -916,6 +916,23 @@ func TestNodeDataAccess(t *testing.T) {
 		}
 	})
 
+	t.Run("a calls edge with access is not an entry", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("x", goextract.KindVariable, "x", "main.go", 3)
+		g.fn("caller", "caller", "main.go", 5)
+		g.fn("reader", "reader", "main.go", 9)
+		g.edges = append(g.edges, &schema.Edge{Source: "caller", Target: "x", Kind: goextract.RefKindCalls,
+			Metadata: map[string]string{goextract.MetaAccess: goextract.AccessRead}})
+		g.ref("reader", "x", access(goextract.AccessRead)...)
+		d := singleDef(t, g.engine(), "x")
+		if got, want := accessRows(d.AccessedBy), []string{"reader main.go:9 read"}; !slices.Equal(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+		if got := nodeNames(d.CalledBy); !slices.Equal(got, []string{"caller"}) {
+			t.Fatalf("CalledBy = %v, want the calls edge from caller", got)
+		}
+	})
+
 	t.Run("a function candidate gets no data lines", func(t *testing.T) {
 		g := newDefGraph()
 		g.node("v", goextract.KindVariable, "run", "a.go", 3)
@@ -1023,6 +1040,21 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("run", "start", access(goextract.AccessRead)...)
 		if got := singleDef(t, g.engine(), "run").InitializedTo; len(got) != 0 {
 			t.Fatalf("InitializedTo = %v, want none", nodeNames(got))
+		}
+	})
+
+	t.Run("a calls edge with binding=init is no initializer", func(t *testing.T) {
+		g := newDefGraph()
+		g.fn("start", "start", "main.go", 3)
+		g.node("run", goextract.KindVariable, "run", "main.go", 7)
+		g.edges = append(g.edges, &schema.Edge{Source: "run", Target: "start", Kind: goextract.RefKindCalls,
+			Metadata: map[string]string{goextract.MetaBinding: goextract.BindingInit}})
+		d := singleDef(t, g.engine(), "run")
+		if got := d.InitializedTo; len(got) != 0 {
+			t.Fatalf("InitializedTo = %v, want none", nodeNames(got))
+		}
+		if got := nodeNames(d.Calls); !slices.Equal(got, []string{"start"}) {
+			t.Fatalf("Calls = %v, want the calls edge to start", got)
 		}
 	})
 

@@ -168,14 +168,39 @@ func RenderNode(d *DefinitionDetail) string {
 		b.WriteString(line + "\n")
 	}
 	fmt.Fprintf(&b, "**Signature:** `%s`\n", n.Signature)
-	b.WriteString("**Trail — codegraph_node any of these to follow it (no Read needed)**\n")
-	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(d.Calls, nil))
-	fmt.Fprintf(&b, "**Called by ←** %s\n", joinNodeRefs(d.CalledBy, nil))
-	if goextract.IsDataKind(n.Kind) {
-		fmt.Fprintf(&b, "**Accessed by ←** %s\n", joinAccessRefs(d.AccessedBy))
-		fmt.Fprintf(&b, "**Initialized to →** %s\n", joinNodeRefs(d.InitializedTo, nil))
+	fmt.Fprintf(&b, "**%s**\n", TrailHeader)
+	for _, row := range trailRows(d) {
+		fmt.Fprintf(&b, "**%s** %s\n", row.label, row.refs())
 	}
 	return b.String()
+}
+
+// TrailHeader heads the trail lines of a node view. The styled view of
+// internal/cli/present prints the same text.
+const TrailHeader = "Trail — codegraph_node any of these to follow it (no Read needed)"
+
+// trailRow is one trail line of a node view: its label, its number of
+// entries and a function that joins the entries.
+type trailRow struct {
+	label string
+	n     int
+	refs  func() string
+}
+
+// trailRows returns the trail lines of d in print order: calls and
+// callers, then the data lines for a variable, a constant or a field.
+func trailRows(d *DefinitionDetail) []trailRow {
+	rows := []trailRow{
+		{"Calls →", len(d.Calls), func() string { return joinNodeRefs(d.Calls, nil) }},
+		{"Called by ←", len(d.CalledBy), func() string { return joinNodeRefs(d.CalledBy, nil) }},
+	}
+	if goextract.IsDataKind(d.Node.Kind) {
+		rows = append(rows,
+			trailRow{"Accessed by ←", len(d.AccessedBy), func() string { return joinAccessRefs(d.AccessedBy) }},
+			trailRow{"Initialized to →", len(d.InitializedTo), func() string { return joinNodeRefs(d.InitializedTo, nil) }},
+		)
+	}
+	return rows
 }
 
 // nodeMultiDefHardCap, nodeMultiDefBodyBudget, and nodeMultiDefListCap
@@ -217,7 +242,7 @@ type nodeSectionFetch func(n *schema.Node) (*DefinitionDetail, error)
 // data kind follow the same rule: each prints only when its list has an
 // entry, and any non-empty list of the four prints the Trail line.
 func renderNodeSection(d *DefinitionDetail) string {
-	n, calls, calledBy := d.Node, d.Calls, d.CalledBy
+	n := d.Node
 	parts := []string{
 		fmt.Sprintf("**%s** (%s)", n.Name, n.Kind),
 		"",
@@ -229,23 +254,13 @@ func renderNodeSection(d *DefinitionDetail) string {
 		"",
 		strings.TrimSuffix(renderNumberedSourceRange(d.Source, n.StartLine, n.EndLine), "\n"),
 	)
-	rows := []struct {
-		label string
-		n     int
-		refs  func() string
-	}{
-		{"Calls →", len(calls), func() string { return joinNodeRefs(calls, nil) }},
-		{"Called by ←", len(calledBy), func() string { return joinNodeRefs(calledBy, nil) }},
-		{"Accessed by ←", len(d.AccessedBy), func() string { return joinAccessRefs(d.AccessedBy) }},
-		{"Initialized to →", len(d.InitializedTo), func() string { return joinNodeRefs(d.InitializedTo, nil) }},
-	}
 	header := false
-	for _, row := range rows {
+	for _, row := range trailRows(d) {
 		if row.n == 0 {
 			continue
 		}
 		if !header {
-			parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
+			parts = append(parts, "**"+TrailHeader+"**")
 			header = true
 		}
 		parts = append(parts, fmt.Sprintf("**%s** %s", row.label, row.refs()))
