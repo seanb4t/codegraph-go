@@ -98,7 +98,7 @@ var matrix = map[string]CapabilityEntry{
 		Dispatch:   CoverageFull,
 		Routing:    CoverageFull,
 		Gaps: []string{
-			"A keyed composite-literal element is a read of its value, not a write to the field. A write through a receiver of unknown type leaves no binding edge, so neither withholds the function that a field holds.",
+			"The value of a composite-literal element is not recorded as a read. A keyed element still records its write to the field.",
 		},
 	},
 

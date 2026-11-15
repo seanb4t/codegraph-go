@@ -65,7 +65,7 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 2547
 - **Edges by kind:**
-  - calls: 10780
+  - calls: 10786
   - contains: 14853
   - embeds: 155
   - extends: 131
@@ -73,7 +73,7 @@ Do NOT hand-edit this file.
   - imports: 2160
   - instantiates: 1124
   - overrides: 25
-  - references: 6110
+  - references: 11205
   - returns: 1096
   - type_of: 30
 - **Files by language:**
