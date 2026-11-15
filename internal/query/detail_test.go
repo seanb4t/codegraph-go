@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"pgregory.net/rapid"
 )
 
 // newDetailFixtureEngine builds a small, fully-controlled Engine over an
@@ -195,7 +197,7 @@ func TestNodeDetailSingleVsMultiBoundary(t *testing.T) {
 
 // TestNodeDetailPreservesFetcherNilness pins ENG-01's "the builders do
 // not normalise" property: for a symbol with no callers and no callees,
-// the gathered Calls/CalledBy are exactly what fetchCalls/fetchCalledBy
+// the gathered Calls/CalledBy are exactly what fetchCalls/fetchSources
 // returned (nil, not an empty non-nil slice), and Node()'s rendered bytes
 // are unchanged from what RenderNode produces over that exact detail.
 // This asserts the extraction does not normalise; it makes no claim
@@ -214,7 +216,7 @@ func TestNodeDetailPreservesFetcherNilness(t *testing.T) {
 		t.Fatalf("NodeDetail(Solo): Definition.Calls = %#v, want exactly nil (fetchCalls returned nil; must not be normalised to an empty slice)", d.Definition.Calls)
 	}
 	if d.Definition.CalledBy != nil {
-		t.Fatalf("NodeDetail(Solo): Definition.CalledBy = %#v, want exactly nil (fetchCalledBy returned nil; must not be normalised to an empty slice)", d.Definition.CalledBy)
+		t.Fatalf("NodeDetail(Solo): Definition.CalledBy = %#v, want exactly nil (fetchSources returned nil; must not be normalised to an empty slice)", d.Definition.CalledBy)
 	}
 
 	got, err := e.Node("Solo", "", nil)
@@ -786,4 +788,411 @@ func TestResolveNodeForDetailClassifiesNotFound(t *testing.T) {
 			t.Fatalf("resolveNodeForDetail(Alpha, alpha.go): id = %q, want %q", n.GetId(), "alpha1")
 		}
 	})
+}
+
+// engineWithFiles is g.engine with a temp repository root that holds a
+// file of twenty lines for each file path of g, so a multi-definition
+// candidate can read its source.
+func (g *defGraph) engineWithFiles(t *testing.T) *Engine {
+	t.Helper()
+	dir := t.TempDir()
+	body := bytes.Repeat([]byte("line\n"), 20)
+	for _, n := range g.nodes {
+		p := filepath.Join(dir, n.FilePath)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return NewWithRoot(&traverseFakeReader{nodes: g.nodes, edges: g.edges}, dir)
+}
+
+// singleDef returns the single-definition detail of symbol. It takes a
+// *testing.T or a *rapid.T.
+func singleDef(t interface {
+	Helper()
+	Fatalf(string, ...any)
+}, e *Engine, symbol string) *DefinitionDetail {
+	t.Helper()
+	d, err := e.NodeDetail(symbol, "", nil)
+	if err != nil {
+		t.Fatalf("NodeDetail(%s): %v", symbol, err)
+	}
+	if d.Mode != NodeDetailModeSingleDef {
+		t.Fatalf("NodeDetail(%s): mode %v, want single definition", symbol, d.Mode)
+	}
+	return d.Definition
+}
+
+// accessRows returns each access entry as "name path:line role".
+func accessRows(access []DataAccess) []string {
+	var out []string
+	for _, a := range access {
+		out = append(out, fmt.Sprintf("%s %s:%d %s", a.Node.Name, a.Node.FilePath, a.Node.StartLine, a.Access))
+	}
+	return out
+}
+
+func nodeNames(nodes []*schema.Node) []string {
+	var out []string
+	for _, n := range nodes {
+		out = append(out, n.Name)
+	}
+	return out
+}
+
+func equalRows(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestNodeDataAccess(t *testing.T) {
+	access := func(role string) []string { return []string{goextract.MetaAccess, role} }
+
+	t.Run("a read_write edge gives one entry with read_write", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("bal", goextract.KindField, "balance", "p/Account.java", 3)
+		g.node("dep", goextract.KindMethod, "deposit", "p/Account.java", 7)
+		g.ref("dep", "bal", access(goextract.AccessReadWrite)...)
+		got := accessRows(singleDef(t, g.engine(), "balance").AccessedBy)
+		if want := []string{"deposit p/Account.java:7 read_write"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an initializer that reads b lists a for b", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("a", goextract.KindVariable, "a", "main.go", 3)
+		g.node("b", goextract.KindVariable, "b", "main.go", 2)
+		g.ref("a", "b", goextract.MetaAccess, goextract.AccessRead, goextract.MetaBinding, goextract.BindingInit)
+		got := accessRows(singleDef(t, g.engine(), "b").AccessedBy)
+		if want := []string{"a main.go:3 read"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("module-level code is listed by the file path", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("file", goextract.KindFile, "main.go", "main.go", 1)
+		g.node("x", goextract.KindVariable, "x", "main.go", 3)
+		g.ref("file", "x", access(goextract.AccessWrite)...)
+		d := singleDef(t, g.engine(), "x")
+		if got, want := accessRows(d.AccessedBy), []string{"main.go main.go:1 write"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+		if !strings.Contains(RenderNode(d), "**Accessed by ←** main.go (main.go:1, write)\n") {
+			t.Fatalf("RenderNode lacks the file entry:\n%s", RenderNode(d))
+		}
+	})
+
+	t.Run("a missing source is skipped", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("x", goextract.KindVariable, "x", "main.go", 3)
+		g.fn("use", "use", "main.go", 5)
+		g.ref("ghost", "x", access(goextract.AccessRead)...)
+		g.ref("use", "x", access(goextract.AccessRead)...)
+		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
+		if want := []string{"use main.go:5 read"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("the file key sorts before the name key", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("count", goextract.KindVariable, "count", "c.go", 1)
+		g.fn("alpha", "alpha", "b.go", 1)
+		g.fn("zeta", "zeta", "a.go", 1)
+		g.ref("alpha", "count", access(goextract.AccessRead)...)
+		g.ref("zeta", "count", access(goextract.AccessRead)...)
+		got := accessRows(singleDef(t, g.engine(), "count").AccessedBy)
+		if want := []string{"zeta a.go:1 read", "alpha b.go:1 read"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a references edge without access is not an entry", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("x", goextract.KindVariable, "x", "main.go", 3)
+		g.fn("plain", "plain", "main.go", 5)
+		g.fn("reader", "reader", "main.go", 9)
+		g.ref("plain", "x")
+		g.ref("reader", "x", access(goextract.AccessRead)...)
+		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
+		if want := []string{"reader main.go:9 read"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a function candidate gets no data lines", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("v", goextract.KindVariable, "run", "a.go", 3)
+		fn := g.fn("f", "run", "b.go", 5)
+		g.ref("v", "f", goextract.MetaAccess, goextract.AccessRead, goextract.MetaBinding, goextract.BindingInit)
+		d, err := g.engineWithFiles(t).NodeDetail("run", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Mode != NodeDetailModeMultiDef {
+			t.Fatalf("mode %v, want multi-definition", d.Mode)
+		}
+		fd, err := d.Multi.Definition(fn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fd.AccessedBy != nil || fd.InitializedTo != nil {
+			t.Fatalf("function candidate: AccessedBy = %v, InitializedTo = %v, want both nil", fd.AccessedBy, fd.InitializedTo)
+		}
+		if s := renderNodeSection(fd); strings.Contains(s, "Accessed by") || strings.Contains(s, "Initialized to") {
+			t.Fatalf("function section has a data line:\n%s", s)
+		}
+		vd, err := d.Multi.Definition(g.nodes["v"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := nodeNames(vd.InitializedTo); !equalRows(got, []string{"run"}) {
+			t.Fatalf("variable InitializedTo = %v, want [run]", got)
+		}
+	})
+
+	t.Run("sources in one file come out by name", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("x", goextract.KindVariable, "x", "main.go", 1)
+		g.fn("b", "b", "main.go", 3)
+		g.fn("a", "a", "main.go", 9)
+		g.ref("b", "x", access(goextract.AccessRead)...)
+		g.ref("a", "x", access(goextract.AccessRead)...)
+		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
+		if want := []string{"a main.go:9 read", "b main.go:3 read"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("sources with one name in one file come out by line", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("x", goextract.KindVariable, "x", "main.go", 1)
+		g.fn("late", "use", "main.go", 9)
+		g.fn("early", "use", "main.go", 3)
+		g.ref("late", "x", access(goextract.AccessRead)...)
+		g.ref("early", "x", access(goextract.AccessRead)...)
+		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
+		if want := []string{"use main.go:3 read", "use main.go:9 read"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a tie on every location key sorts by role", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("x", goextract.KindVariable, "x", "main.go", 1)
+		g.fn("w", "use", "main.go", 3)
+		g.fn("r", "use", "main.go", 3)
+		g.ref("w", "x", access(goextract.AccessWrite)...)
+		g.ref("r", "x", access(goextract.AccessRead)...)
+		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
+		if want := []string{"use main.go:3 read", "use main.go:3 write"}; !equalRows(got, want) {
+			t.Fatalf("AccessedBy = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a tie on every key prints the same text in either edge order", func(t *testing.T) {
+		render := func(first, second string) string {
+			g := newDefGraph()
+			g.node("x", goextract.KindVariable, "x", "main.go", 1)
+			g.fn("s1", "use", "main.go", 3)
+			g.fn("s2", "use", "main.go", 3)
+			g.ref(first, "x", access(goextract.AccessRead)...)
+			g.ref(second, "x", access(goextract.AccessRead)...)
+			d := singleDef(t, g.engine(), "x")
+			if len(d.AccessedBy) != 2 {
+				t.Fatalf("AccessedBy has %d entries, want 2", len(d.AccessedBy))
+			}
+			return RenderNode(d)
+		}
+		if a, b := render("s1", "s2"), render("s2", "s1"); a != b {
+			t.Fatalf("output depends on edge order:\n%s\n---\n%s", a, b)
+		}
+	})
+
+	t.Run("a binding=init edge to a function gives that function", func(t *testing.T) {
+		g := newDefGraph()
+		g.fn("start", "start", "main.go", 3)
+		g.node("run", goextract.KindVariable, "run", "main.go", 7)
+		g.ref("run", "start", goextract.MetaAccess, goextract.AccessRead, goextract.MetaBinding, goextract.BindingInit)
+		got := nodeNames(singleDef(t, g.engine(), "run").InitializedTo)
+		if !equalRows(got, []string{"start"}) {
+			t.Fatalf("InitializedTo = %v, want [start]", got)
+		}
+	})
+
+	t.Run("a references edge without binding=init is no initializer", func(t *testing.T) {
+		g := newDefGraph()
+		g.fn("start", "start", "main.go", 3)
+		g.node("run", goextract.KindVariable, "run", "main.go", 7)
+		g.ref("run", "start", access(goextract.AccessRead)...)
+		if got := singleDef(t, g.engine(), "run").InitializedTo; len(got) != 0 {
+			t.Fatalf("InitializedTo = %v, want none", nodeNames(got))
+		}
+	})
+
+	t.Run("a binding=init edge to a missing node gives an empty list", func(t *testing.T) {
+		g := newDefGraph()
+		g.node("run", goextract.KindVariable, "run", "main.go", 7)
+		g.ref("run", "ghost", goextract.MetaAccess, goextract.AccessRead, goextract.MetaBinding, goextract.BindingInit)
+		if got := singleDef(t, g.engine(), "run").InitializedTo; len(got) != 0 {
+			t.Fatalf("InitializedTo = %v, want none", nodeNames(got))
+		}
+	})
+
+	t.Run("only a data symbol scans the access index", func(t *testing.T) {
+		count := func(t *testing.T, g *defGraph, symbol string) int {
+			t.Helper()
+			var n int
+			original := buildAccessIndex
+			buildAccessIndex = func(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+				n++
+				return original(r)
+			}
+			t.Cleanup(func() { buildAccessIndex = original })
+			d, err := g.engineWithFiles(t).NodeDetail(symbol, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.Multi != nil {
+				for _, m := range d.Multi.Matches {
+					if _, err := d.Multi.Definition(m); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			return n
+		}
+		cases := []struct {
+			name, symbol string
+			graph        func(g *defGraph)
+			want         int
+		}{
+			{"a function", "f", func(g *defGraph) { g.fn("f", "f", "a.go", 1) }, 0},
+			{"a single-definition variable", "v", func(g *defGraph) { g.node("v", goextract.KindVariable, "v", "a.go", 1) }, 1},
+			{"the size field and method pair", "size", func(g *defGraph) {
+				g.node("sf", goextract.KindField, "size", "p/Account.java", 4)
+				g.node("sm", goextract.KindMethod, "size", "p/Account.java", 12)
+			}, 1},
+			{"two data candidates", "x", func(g *defGraph) {
+				g.node("x1", goextract.KindVariable, "x", "a.go", 1)
+				g.node("x2", goextract.KindConstant, "x", "b.go", 1)
+			}, 1},
+			{"only functions", "f", func(g *defGraph) {
+				g.fn("f1", "f", "a.go", 1)
+				g.fn("f2", "f", "b.go", 1)
+			}, 0},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				g := newDefGraph()
+				c.graph(g)
+				if got := count(t, g, c.symbol); got != c.want {
+					t.Fatalf("buildAccessIndex calls = %d, want %d", got, c.want)
+				}
+			})
+		}
+	})
+}
+
+// TestAccessOrderIgnoresEdgeOrder checks that the access line and the
+// AccessedBy rows of a data symbol do not depend on the order of the
+// edges in its index entry, and that AccessedBy holds one entry for each
+// source that the reader has.
+func TestAccessOrderIgnoresEdgeOrder(t *testing.T) {
+	var sameRoleTwins, otherRoleTwins, dropped int
+	rapid.Check(t, func(t *rapid.T) {
+		type source struct {
+			name, file, sig, kind, role string
+			line                        int32
+		}
+		roles := []string{goextract.AccessRead, goextract.AccessWrite, goextract.AccessReadWrite}
+		var sources []source
+		for i := range rapid.IntRange(1, 8).Draw(t, "sources") {
+			if i > 0 && rapid.Bool().Draw(t, fmt.Sprintf("twin%d", i)) {
+				s := sources[rapid.IntRange(0, i-1).Draw(t, fmt.Sprintf("of%d", i))]
+				if rapid.Bool().Draw(t, fmt.Sprintf("sameRole%d", i)) {
+					sameRoleTwins++
+				} else {
+					s.role = rapid.SampledFrom(roles).Draw(t, fmt.Sprintf("twinRole%d", i))
+					otherRoleTwins++
+				}
+				sources = append(sources, s)
+				continue
+			}
+			sources = append(sources, source{
+				name: rapid.SampledFrom([]string{"a", "b", "c"}).Draw(t, fmt.Sprintf("name%d", i)),
+				file: rapid.SampledFrom([]string{"a.go", "b.go"}).Draw(t, fmt.Sprintf("file%d", i)),
+				line: rapid.Int32Range(1, 3).Draw(t, fmt.Sprintf("line%d", i)),
+				sig:  rapid.SampledFrom([]string{"", "func()"}).Draw(t, fmt.Sprintf("sig%d", i)),
+				kind: rapid.SampledFrom([]string{goextract.KindFunction, goextract.KindMethod}).Draw(t, fmt.Sprintf("kind%d", i)),
+				role: rapid.SampledFrom(roles).Draw(t, fmt.Sprintf("role%d", i)),
+			})
+		}
+		present := make([]bool, len(sources))
+		want := 0
+		for i := range sources {
+			present[i] = !rapid.Bool().Draw(t, fmt.Sprintf("drop%d", i))
+			if present[i] {
+				want++
+			} else {
+				dropped++
+			}
+		}
+		order := make([]int, len(sources))
+		for i := range order {
+			order[i] = i
+		}
+		permuted := rapid.Permutation(order).Draw(t, "order")
+
+		detail := func(order []int) *DefinitionDetail {
+			g := newDefGraph()
+			g.node("x", goextract.KindVariable, "x", "x.go", 1)
+			for _, i := range order {
+				s := sources[i]
+				id := fmt.Sprintf("s%d", i)
+				if present[i] {
+					g.node(id, s.kind, s.name, s.file, s.line).Signature = s.sig
+				}
+				g.ref(id, "x", goextract.MetaAccess, s.role)
+			}
+			return singleDef(t, g.engine(), "x")
+		}
+		accessLine := func(d *DefinitionDetail) string {
+			for line := range strings.SplitSeq(RenderNode(d), "\n") {
+				if strings.HasPrefix(line, "**Accessed by ←**") {
+					return line
+				}
+			}
+			t.Fatalf("RenderNode has no access line")
+			return ""
+		}
+
+		a, b := detail(order), detail(permuted)
+		if len(a.AccessedBy) != want {
+			t.Fatalf("AccessedBy has %d entries, want one for each of the %d present sources", len(a.AccessedBy), want)
+		}
+		if la, lb := accessLine(a), accessLine(b); la != lb {
+			t.Fatalf("access line depends on edge order:\n%s\n%s", la, lb)
+		}
+		if ra, rb := accessRows(a.AccessedBy), accessRows(b.AccessedBy); !equalRows(ra, rb) {
+			t.Fatalf("AccessedBy rows depend on edge order:\n%v\n%v", ra, rb)
+		}
+	})
+	// Positive assertion: the property ran over both kinds of tie and
+	// over a source that the reader does not have.
+	if sameRoleTwins == 0 || otherRoleTwins == 0 || dropped == 0 {
+		t.Fatalf("runs drew %d same-role ties, %d other-role ties and %d dropped sources, want each above 0", sameRoleTwins, otherRoleTwins, dropped)
+	}
 }

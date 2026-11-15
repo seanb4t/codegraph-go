@@ -59,19 +59,35 @@ type FileDetail struct {
 // a consumer that wants single-definition source asks for it explicitly
 // through (*Engine).SourceFor rather than finding it here.
 //
-// Calls and CalledBy are exactly what fetchCalls/fetchCalledBy returned —
+// Calls and CalledBy are exactly what fetchCalls/fetchSources returned —
 // nil stays nil, zero-length stays zero-length. The builders below never
 // normalise these values (ENG-01): this type is a transcription of the
 // fetchers' output, not a reinterpretation of it.
 //
 // Owner is the node that contains a field, found through its "contains"
 // edge. It is nil for every other kind and for a field with no owner.
+//
+// AccessedBy and InitializedTo are filled only for a data kind
+// (goextract.IsDataKind). AccessedBy has one entry per source of a
+// references edge with an access role, sorted by accessLess.
+// InitializedTo holds the targets of the node's binding=init edges.
 type DefinitionDetail struct {
-	Node     *schema.Node
-	Owner    *schema.Node
-	Source   []byte
-	Calls    []*schema.Node
-	CalledBy []*schema.Node
+	Node          *schema.Node
+	Owner         *schema.Node
+	Source        []byte
+	Calls         []*schema.Node
+	CalledBy      []*schema.Node
+	AccessedBy    []DataAccess
+	InitializedTo []*schema.Node
+}
+
+// DataAccess is one source that reads or writes a data symbol, with the
+// access role of its stored references edge: goextract.AccessRead,
+// AccessWrite or AccessReadWrite. Module-level code is a source of kind
+// goextract.KindFile.
+type DataAccess struct {
+	Node   *schema.Node
+	Access string
 }
 
 // MultiDefDetail is Node()'s multi-definition shape, modelled as what it
@@ -124,7 +140,7 @@ func (e *Engine) buildFileNodeDetail(file string) (*FileDetail, error) {
 
 // buildSingleDefDetail performs exactly the body the pre-extraction
 // single-def render path performed — fetchCalls, then the reverse
-// adjacency (via the buildReverseAdjacency seam), then fetchCalledBy —
+// adjacency (via the buildReverseAdjacency seam), then fetchSources —
 // and returns the populated struct with Source left nil. It returns
 // whatever the fetchers returned without normalising: nil stays nil,
 // zero-length stays zero-length (ENG-01).
@@ -137,7 +153,7 @@ func (e *Engine) buildSingleDefDetail(node *schema.Node) (*DefinitionDetail, err
 	if err != nil {
 		return nil, err
 	}
-	calledBy, err := e.fetchCalledBy(node, rev)
+	callers, err := e.fetchSources(node, rev)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +167,49 @@ func (e *Engine) buildSingleDefDetail(node *schema.Node) (*DefinitionDetail, err
 			return nil, err
 		}
 	}
-	return &DefinitionDetail{Node: node, Owner: owner, Calls: calls, CalledBy: calledBy}, nil
+	d := &DefinitionDetail{Node: node, Owner: owner, Calls: calls, CalledBy: sourceNodes(callers)}
+	if goextract.IsDataKind(node.Kind) {
+		access, err := buildAccessIndex(e.reader)
+		if err != nil {
+			return nil, err
+		}
+		if err := e.fillDataLines(d, access); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
+// fillDataLines sets the AccessedBy and InitializedTo of data symbol
+// d.Node from access, the reverse view of buildAccessIndex.
+func (e *Engine) fillDataLines(d *DefinitionDetail, access map[string][]*schema.Edge) error {
+	sources, err := e.fetchSources(d.Node, access)
+	if err != nil {
+		return err
+	}
+	for _, s := range sources {
+		d.AccessedBy = append(d.AccessedBy, DataAccess{Node: s.Node, Access: s.Edge.Metadata[goextract.MetaAccess]})
+	}
+	sort.SliceStable(d.AccessedBy, func(i, j int) bool { return accessLess(d.AccessedBy[i], d.AccessedBy[j]) })
+	d.InitializedTo, err = e.fetchTargets(d.Node, func(edge *schema.Edge) bool {
+		return edge.Kind == goextract.RefKindReferences && goextract.IsInitBinding(edge)
+	})
+	return err
+}
+
+// accessLess orders access entries by the location of the source, its
+// signature included, then by role. Every field that the access line
+// prints is a key, and no node id is one.
+func accessLess(a, b DataAccess) bool {
+	la, lb := nodeLocation(a.Node), nodeLocation(b.Node)
+	la.Signature, lb.Signature = a.Node.Signature, b.Node.Signature
+	if locationLess(la, lb) {
+		return true
+	}
+	if locationLess(lb, la) {
+		return false
+	}
+	return a.Access < b.Access
 }
 
 // fieldOwner returns the node that contains field n according to owners,
@@ -171,7 +229,7 @@ func (e *Engine) fieldOwner(n *schema.Node, owners map[string]string) (*schema.N
 
 // buildMultiDefDetail builds the reverse adjacency ONCE (via the
 // buildReverseAdjacency seam) and closes over it, exactly as the
-// pre-extraction multi-def render closure did — fetchCalledBy's own doc
+// pre-extraction multi-def render closure did — fetchSources's own doc
 // comment states why the map is shared: the multi-definition path fetches
 // trails for up to nodeMultiDefHardCap candidates, and rebuilding the
 // O(edges) map per candidate would multiply that scan. The returned
@@ -190,6 +248,12 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 			return nil, err
 		}
 	}
+	var access map[string][]*schema.Edge
+	if slices.ContainsFunc(matches, func(n *schema.Node) bool { return goextract.IsDataKind(n.Kind) }) {
+		if access, err = buildAccessIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
 
 	definition := func(n *schema.Node) (*DefinitionDetail, error) {
 		source, err := e.readSourceFile(n.FilePath)
@@ -200,7 +264,7 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 		if err != nil {
 			return nil, err
 		}
-		calledBy, err := e.fetchCalledBy(n, rev)
+		callers, err := e.fetchSources(n, rev)
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +274,13 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 				return nil, err
 			}
 		}
-		return &DefinitionDetail{Node: n, Owner: owner, Source: source, Calls: calls, CalledBy: calledBy}, nil
+		d := &DefinitionDetail{Node: n, Owner: owner, Source: source, Calls: calls, CalledBy: sourceNodes(callers)}
+		if goextract.IsDataKind(n.Kind) {
+			if err := e.fillDataLines(d, access); err != nil {
+				return nil, err
+			}
+		}
+		return d, nil
 	}
 
 	return NewMultiDefDetail(symbol, matches, definition), nil

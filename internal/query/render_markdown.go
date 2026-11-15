@@ -104,20 +104,38 @@ func pluralize(n int, s string) string {
 }
 
 // formatNodeRef renders a single "name (path:line)" reference — the
-// shared Calls →/Called by ← entry format (D-05b).
-func formatNodeRef(n *schema.Node) string {
+// shared Calls →/Called by ← entry format (D-05b). A non-empty suffix
+// goes inside the parentheses: "name (path:line, suffix)".
+func formatNodeRef(n *schema.Node, suffix string) string {
+	if suffix != "" {
+		return fmt.Sprintf("%s (%s:%d, %s)", n.Name, n.FilePath, n.StartLine, suffix)
+	}
 	return fmt.Sprintf("%s (%s:%d)", n.Name, n.FilePath, n.StartLine)
 }
 
 // joinNodeRefs comma-joins formatNodeRef entries, preserving the input
 // order (Calls → is forward IterateEdges order; Called by ← is the D-04
-// reverse-adjacency map's edge order).
-func joinNodeRefs(nodes []*schema.Node) string {
+// reverse-adjacency map's edge order). A non-nil suffix gives the suffix
+// of entry i.
+func joinNodeRefs(nodes []*schema.Node, suffix func(i int) string) string {
 	parts := make([]string, len(nodes))
 	for i, n := range nodes {
-		parts[i] = formatNodeRef(n)
+		s := ""
+		if suffix != nil {
+			s = suffix(i)
+		}
+		parts[i] = formatNodeRef(n, s)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// joinAccessRefs comma-joins access entries as "name (path:line, role)".
+func joinAccessRefs(access []DataAccess) string {
+	nodes := make([]*schema.Node, len(access))
+	for i, a := range access {
+		nodes[i] = a.Node
+	}
+	return joinNodeRefs(nodes, func(i int) string { return access[i].Access })
 }
 
 // fieldFacts returns the owner and language lines of a field's node
@@ -139,7 +157,8 @@ func fieldFacts(d *DefinitionDetail) []string {
 // "**Location:**", "**Signature:**", the fixed Trail line, "**Calls →**"
 // (forward edges), and "**Called by ←**" (reverse edges) — each entry
 // list comma-joined via joinNodeRefs. A field adds its owner and language
-// after the location (fieldFacts).
+// after the location (fieldFacts). A data kind adds "**Accessed by ←**"
+// and "**Initialized to →**", also for an empty list.
 func RenderNode(d *DefinitionDetail) string {
 	n := d.Node
 	var b strings.Builder
@@ -150,8 +169,12 @@ func RenderNode(d *DefinitionDetail) string {
 	}
 	fmt.Fprintf(&b, "**Signature:** `%s`\n", n.Signature)
 	b.WriteString("**Trail — codegraph_node any of these to follow it (no Read needed)**\n")
-	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(d.Calls))
-	fmt.Fprintf(&b, "**Called by ←** %s\n", joinNodeRefs(d.CalledBy))
+	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(d.Calls, nil))
+	fmt.Fprintf(&b, "**Called by ←** %s\n", joinNodeRefs(d.CalledBy, nil))
+	if goextract.IsDataKind(n.Kind) {
+		fmt.Fprintf(&b, "**Accessed by ←** %s\n", joinAccessRefs(d.AccessedBy))
+		fmt.Fprintf(&b, "**Initialized to →** %s\n", joinNodeRefs(d.InitializedTo, nil))
+	}
 	return b.String()
 }
 
@@ -190,7 +213,9 @@ type nodeSectionFetch func(n *schema.Node) (*DefinitionDetail, error)
 // (testdata/golden/corpus/*/node-multi.json; e.g. the behavioral corpus's
 // "Validate" case, where both definitions have zero callers and neither
 // section renders a "**Called by ←**" line at all, unlike the single-def
-// path which always renders it even when empty).
+// path which always renders it even when empty). The data lines of a
+// data kind follow the same rule: each prints only when its list has an
+// entry, and any non-empty list of the four prints the Trail line.
 func renderNodeSection(d *DefinitionDetail) string {
 	n, calls, calledBy := d.Node, d.Calls, d.CalledBy
 	parts := []string{
@@ -204,13 +229,19 @@ func renderNodeSection(d *DefinitionDetail) string {
 		"",
 		strings.TrimSuffix(renderNumberedSourceRange(d.Source, n.StartLine, n.EndLine), "\n"),
 	)
-	if len(calls) > 0 || len(calledBy) > 0 {
+	if len(calls) > 0 || len(calledBy) > 0 || len(d.AccessedBy) > 0 || len(d.InitializedTo) > 0 {
 		parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
 		if len(calls) > 0 {
-			parts = append(parts, fmt.Sprintf("**Calls →** %s", joinNodeRefs(calls)))
+			parts = append(parts, fmt.Sprintf("**Calls →** %s", joinNodeRefs(calls, nil)))
 		}
 		if len(calledBy) > 0 {
-			parts = append(parts, fmt.Sprintf("**Called by ←** %s", joinNodeRefs(calledBy)))
+			parts = append(parts, fmt.Sprintf("**Called by ←** %s", joinNodeRefs(calledBy, nil)))
+		}
+		if len(d.AccessedBy) > 0 {
+			parts = append(parts, fmt.Sprintf("**Accessed by ←** %s", joinAccessRefs(d.AccessedBy)))
+		}
+		if len(d.InitializedTo) > 0 {
+			parts = append(parts, fmt.Sprintf("**Initialized to →** %s", joinNodeRefs(d.InitializedTo, nil)))
 		}
 	}
 	return strings.Join(parts, "\n")
