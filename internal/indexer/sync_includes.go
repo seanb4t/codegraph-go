@@ -1,10 +1,6 @@
 package indexer
 
-import (
-	"sort"
-
-	"github.com/seanb4t/codegraph-go/internal/bfs"
-)
+import "github.com/seanb4t/codegraph-go/internal/bfs"
 
 // includeDependents returns the files outside inBatch that include one of
 // paths, directly or through other headers, in path order (design D6).
@@ -30,10 +26,5 @@ func includeDependents(idx *storeIndex, paths []string, inBatch map[string]bool)
 			return false
 		})
 	}
-	out := make([]string, 0, len(set))
-	for p := range set {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out, nil
+	return sortedBoolKeys(set), nil
 }

@@ -185,6 +185,13 @@ func LinksIncludes(lang string) bool {
 	return lang == "c" || lang == "cpp"
 }
 
+// IsCStructTag reports whether a node of kind in a file of lang is a C
+// struct tag. A tag has a namespace of its own, so it declares no name
+// for a call (design D3).
+func IsCStructTag(lang, kind string) bool {
+	return lang == "c" && kind == goextract.KindStruct
+}
+
 // duplicatesAreAlternatives reports whether two declarations with one
 // signature under one owner are alternatives under `#if` or a
 // `function_exists` guard in lang, since the language rejects a plain

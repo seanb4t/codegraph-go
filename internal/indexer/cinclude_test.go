@@ -10,21 +10,13 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/resolve"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
-
-// writeTree writes files under root, each path relative to it.
-func writeTree(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-	for rel, src := range files {
-		writeFixtureFile(t, root, rel, src)
-	}
-}
 
 // indexTree indexes files in a new directory and returns its graph.
 func indexTree(t *testing.T, files map[string]string) *overloadGraph {
 	t.Helper()
-	root, storeDir := t.TempDir(), t.TempDir()
-	writeTree(t, root, files)
+	root, storeDir := testtree.Write(t, files), t.TempDir()
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -70,26 +62,50 @@ func callsFrom(t *testing.T, g *overloadGraph, file, name string) []string {
 		if e.Kind != goextract.RefKindCalls || e.Source != src.Id {
 			continue
 		}
-		n := byID[e.Target]
-		desc := describeTarget(n)
-		if n != nil && n.Kind == goextract.KindFunction {
-			if n.Prototype {
-				desc += " prototype"
-			} else {
-				desc += " definition"
-			}
-		}
-		out = append(out, desc)
+		out = append(out, describeTarget(byID[e.Target]))
 	}
 	slices.Sort(out)
 	return out
 }
 
+// setMembers returns "file kind name" of each member of the nodes of
+// kind that the calls from the function caller target, sorted.
+func setMembers(g *overloadGraph, caller, kind string) []string {
+	byID := make(map[string]*schema.Node, len(g.nodes))
+	for _, n := range g.nodes {
+		byID[n.Id] = n
+	}
+	sets := make(map[string]bool)
+	for _, e := range g.edges {
+		src, dst := byID[e.Source], byID[e.Target]
+		if e.Kind == goextract.RefKindCalls && src != nil && src.Name == caller && dst != nil && dst.Kind == kind {
+			sets[e.Target] = true
+		}
+	}
+	var out []string
+	for _, e := range g.edges {
+		if e.Kind == goextract.RefKindContains && sets[e.Source] {
+			out = append(out, describeTarget(byID[e.Target]))
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// describeTarget returns "file kind name" of n, with " prototype" or
+// " definition" after a function.
 func describeTarget(n *schema.Node) string {
 	if n == nil {
 		return "<missing>"
 	}
-	return n.FilePath + " " + n.Kind + " " + n.Name
+	desc := n.FilePath + " " + n.Kind + " " + n.Name
+	if n.Kind == goextract.KindFunction {
+		if n.Prototype {
+			return desc + " prototype"
+		}
+		return desc + " definition"
+	}
+	return desc
 }
 
 func TestCIncludeLinks(t *testing.T) {
@@ -202,6 +218,9 @@ func TestCIncludeCalls(t *testing.T) {
 		files  map[string]string
 		caller [2]string
 		want   []string
+		// members are the members of the one overload set that want
+		// names, when it names one.
+		members []string
 	}{
 		// A C call resolves through the files its file includes.
 		{
@@ -353,6 +372,7 @@ func TestCIncludeCalls(t *testing.T) {
 			files: with(headerPrototypeTree(), "add.h",
 				"int add(int a, int b);\n#ifdef X\nint add(int a, int b) { return a + b; }\n#endif\n"),
 			caller: [2]string{"main.c", "run"}, want: []string{"add.h overload_set add"},
+			members: []string{"add.h function add definition", "add.h function add prototype"},
 		},
 		{
 			name: "A C++ method of the same name",
@@ -416,6 +436,11 @@ func TestCIncludeCalls(t *testing.T) {
 			g := indexTree(t, tc.files)
 			if got := callsFrom(t, g, tc.caller[0], tc.caller[1]); !slices.Equal(got, tc.want) {
 				t.Errorf("calls from %s = %q, want %q", tc.caller[1], got, tc.want)
+			}
+			if tc.members != nil {
+				if got := setMembers(g, tc.caller[1], goextract.KindOverloadSet); !slices.Equal(got, tc.members) {
+					t.Errorf("members of the overload set = %q, want %q", got, tc.members)
+				}
 			}
 		})
 	}

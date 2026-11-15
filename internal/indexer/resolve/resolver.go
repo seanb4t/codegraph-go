@@ -697,8 +697,7 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		// A call through a data symbol is a read of it, which Assemble
 		// turns into the calls its bindings establish.
 		local := rs.sameFile(r, ref.Name, ref.Line, ref.Col, func(kind string) bool {
-			if kind == goextract.KindStruct && r.Language == "c" {
-				// A C struct tag has a namespace of its own.
+			if symbols.IsCStructTag(r.Language, kind) {
 				return false
 			}
 			return callableKind(kind) || symbols.IsTypeKind(kind) || goextract.IsDataKind(kind)
@@ -733,7 +732,7 @@ func (rs *resolver) throughIncludes(r goextract.FileResult, ref goextract.Unreso
 		var out []symbols.Candidate
 		for _, f := range files {
 			for _, c := range rs.view.CandidatesIn(rs.view.ModuleOf(f), ref.Name) {
-				if r.Language == "c" && c.Kind == goextract.KindStruct {
+				if symbols.IsCStructTag(r.Language, c.Kind) {
 					continue
 				}
 				out = append(out, c)

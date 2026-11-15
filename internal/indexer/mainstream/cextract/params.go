@@ -101,12 +101,17 @@ func paramKey(decl *tree_sitter.Node, src []byte) string {
 		return ""
 	}
 	var keys []string
-	for i := uint(0); i < list.NamedChildCount(); i++ {
-		p := list.NamedChild(i)
-		if p.Kind() == "comment" {
-			continue
+	for i := uint(0); i < list.ChildCount(); i++ {
+		p := list.Child(i)
+		switch {
+		case p == nil || p.Kind() == "comment":
+		case p.IsNamed():
+			keys = append(keys, paramTokens(p, src))
+		case p.Kind() == "...":
+			// The C++ grammar leaves the ellipsis of a variadic
+			// function unnamed.
+			keys = append(keys, "...")
 		}
-		keys = append(keys, paramTokens(p, src))
 	}
 	if len(keys) == 1 && keys[0] == "void" {
 		return ""
@@ -114,24 +119,14 @@ func paramKey(decl *tree_sitter.Node, src []byte) string {
 	return strings.Join(keys, ",")
 }
 
-// nodeSpan names one node of a parse tree.
-type nodeSpan struct {
-	start, end uint
-	kind       string
-}
-
-func spanOf(n *tree_sitter.Node) nodeSpan {
-	return nodeSpan{n.StartByte(), n.EndByte(), n.Kind()}
-}
-
 // paramTokens joins the leaf tokens of the parameter p that paramKey
 // keeps. Each parameter declaration in p, an inner parameter of a
 // function-pointer type included, loses the name of its declarator.
 func paramTokens(p *tree_sitter.Node, src []byte) string {
-	skip := make(map[nodeSpan]bool)
+	skip := make(map[uintptr]bool)
 	var tokens []string
 	walkDescendants(p, func(n *tree_sitter.Node) bool {
-		if skip[spanOf(n)] {
+		if skip[n.Id()] {
 			return false
 		}
 		switch n.Kind() {
@@ -139,13 +134,13 @@ func paramTokens(p *tree_sitter.Node, src []byte) string {
 			return false
 		case "parameter_declaration", "optional_parameter_declaration":
 			if name := declaratorName(n.ChildByFieldName("declarator")); name != nil {
-				skip[spanOf(name)] = true
+				skip[name.Id()] = true
 			}
 			if v := n.ChildByFieldName("default_value"); v != nil {
-				skip[spanOf(v)] = true
+				skip[v.Id()] = true
 				for i := uint(0); i < n.ChildCount(); i++ {
 					if c := n.Child(i); c != nil && c.Kind() == "=" {
-						skip[spanOf(c)] = true
+						skip[c.Id()] = true
 					}
 				}
 			}

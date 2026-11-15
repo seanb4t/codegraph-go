@@ -20,6 +20,7 @@ func TestIsIncludeEdge(t *testing.T) {
 	}{
 		{"an imports edge with the mark", &schema.Edge{Kind: goextract.RefKindImports, Metadata: mark}, true},
 		{"an imports edge without the mark", &schema.Edge{Kind: goextract.RefKindImports}, false},
+		{"an imports edge with another include value", &schema.Edge{Kind: goextract.RefKindImports, Metadata: map[string]string{goextract.MetaInclude: "angle"}}, false},
 		{"an edge of another kind with the mark", &schema.Edge{Kind: goextract.RefKindReferences, Metadata: mark}, false},
 	}
 	for _, tc := range cases {

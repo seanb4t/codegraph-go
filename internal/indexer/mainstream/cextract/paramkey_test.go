@@ -64,6 +64,8 @@ func TestParamKey(t *testing.T) {
 		{C("void (**pp)(int)"), C("void (**)(int)")},
 		{C("void (*fp[3])(int)"), C("void (*[3])(int)")},
 		{C("void"), C("")},
+		{C("int a, ..."), C("int, ...")},
+		{X("int a, ..."), X("int, ...")},
 	}
 	for _, q := range []string{"const", "volatile", "restrict", "_Atomic", "_Nonnull"} {
 		equal = append(equal, [2]side{C("void (*" + q + " cb)(int)"), C("void (*" + q + ")(int)")})
@@ -83,6 +85,8 @@ func TestParamKey(t *testing.T) {
 		{C("const char *"), C("char *")},
 		{C("int[10]"), C("int[11]")},
 		{C("int"), C("const int x")},
+		{C("int, ..."), C("int")},
+		{X("int, ..."), X("int")},
 	}
 	for _, q := range []string{"const", "volatile", "restrict", "_Atomic", "_Nonnull"} {
 		unequal = append(unequal, [2]side{C("void (*" + q + " cb)(int)"), C("void (*)(int)")})
