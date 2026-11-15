@@ -188,6 +188,75 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 		}
 	})
 
+	singleDef := func(t *testing.T, def *query.DefinitionDetail) {
+		t.Helper()
+		d := query.NodeDetail{Mode: query.NodeDetailModeSingleDef, Definition: def}
+		var buf bytes.Buffer
+		if err := RenderNode(d, NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderNode: %v", err)
+		}
+		if got, want := stripANSI(buf.String()), markdownToPlainContract(query.RenderNode(def)); got != want {
+			t.Errorf("stripped =\n%q\nwant\n%q", got, want)
+		}
+	}
+	start := &schema.Node{Id: "s1", Name: "start", Kind: "function", FilePath: "main.go", StartLine: 3}
+	use := &schema.Node{Id: "u1", Name: "use", Kind: "function", FilePath: "main.go", StartLine: 9}
+
+	t.Run("SingleDef variable", func(t *testing.T) {
+		n := &schema.Node{Id: "v1", Name: "run", Kind: "variable", FilePath: "main.go", StartLine: 7, Signature: "var run = start"}
+		singleDef(t, &query.DefinitionDetail{
+			Node:          n,
+			AccessedBy:    []query.DataAccess{{Node: use, Access: "read"}, {Node: start, Access: "write"}},
+			InitializedTo: []*schema.Node{start},
+		})
+	})
+
+	t.Run("SingleDef constant", func(t *testing.T) {
+		n := &schema.Node{Id: "k1", Name: "limit", Kind: "constant", FilePath: "main.go", StartLine: 2, Signature: "const limit = 3"}
+		singleDef(t, &query.DefinitionDetail{Node: n})
+	})
+
+	// multiDef compares the stripped styled view of two variables named x
+	// with the plain one, after decorate fills the data lists.
+	multiDef := func(t *testing.T, decorate func(*query.DefinitionDetail)) {
+		t.Helper()
+		nodes := []*schema.Node{
+			{Id: "x1", Name: "x", Kind: "variable", FilePath: "a.go", StartLine: 1, EndLine: 1, Signature: "var x = start"},
+			{Id: "x2", Name: "x", Kind: "variable", FilePath: "b.go", StartLine: 1, EndLine: 1, Signature: "var x = 2"},
+		}
+		fetch := func(n *schema.Node) (*query.DefinitionDetail, error) {
+			d := &query.DefinitionDetail{Node: n, Source: []byte(n.Signature + "\n")}
+			if n.Id == "x1" {
+				decorate(d)
+			}
+			return d, nil
+		}
+		plainOut, err := query.RenderNodeMultiDef("x", nodes, fetch)
+		if err != nil {
+			t.Fatalf("query.RenderNodeMultiDef: %v", err)
+		}
+		d := query.NodeDetail{Mode: query.NodeDetailModeMultiDef, Multi: query.NewMultiDefDetail("x", nodes, fetch)}
+		var buf bytes.Buffer
+		if err := RenderNode(d, NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderNode: %v", err)
+		}
+		if got, want := stripANSI(buf.String()), markdownToPlainContract(plainOut); got != want {
+			t.Errorf("stripped =\n%q\nwant\n%q", got, want)
+		}
+	}
+
+	t.Run("MultiDef access only", func(t *testing.T) {
+		multiDef(t, func(d *query.DefinitionDetail) { d.AccessedBy = []query.DataAccess{{Node: use, Access: "read_write"}} })
+	})
+
+	t.Run("MultiDef initializer only", func(t *testing.T) {
+		multiDef(t, func(d *query.DefinitionDetail) { d.InitializedTo = []*schema.Node{start} })
+	})
+
+	t.Run("MultiDef empty data", func(t *testing.T) {
+		multiDef(t, func(*query.DefinitionDetail) {})
+	})
+
 	t.Run("MultiDef-2", func(t *testing.T) {
 		f := newMultiDefFixture(2, 2, false)
 		var plainCount, styledCount int

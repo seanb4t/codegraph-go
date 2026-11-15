@@ -7,10 +7,11 @@ import (
 
 // TestDataSymbolPublicQueries covers the MCP side of user-visible data
 // symbol access. codegraph_node names a field's owner, kind, language and
-// source location, and keeps a field apart from a method of the same
-// name. codegraph_search with the field kind returns the field and not
-// the method. codegraph_explore over the field and its reader lists both
-// with their kinds.
+// source location, lists its readers and writers with their roles, and
+// keeps a field apart from a method of the same name. codegraph_search
+// with the field kind returns the field and not the method.
+// codegraph_explore over the field and its reader lists both with their
+// kinds.
 func TestDataSymbolPublicQueries(t *testing.T) {
 	call := treeServer(t, map[string]string{
 		"p/Account.java": `package p;
@@ -36,6 +37,7 @@ public class Account {
 		"**Location:** p/Account.java:4\n",
 		"**Owner:** `Account`\n",
 		"**Language:** java\n",
+		"**Accessed by ←** deposit (p/Account.java:7, read_write)\n",
 	)
 	requireAll(t, call("codegraph_node", map[string]any{"symbol": "size"}),
 		"**size** (field)", "**size** (method)")
