@@ -59,19 +59,35 @@ type FileDetail struct {
 // a consumer that wants single-definition source asks for it explicitly
 // through (*Engine).SourceFor rather than finding it here.
 //
-// Calls and CalledBy are exactly what fetchCalls/fetchCalledBy returned —
+// Calls and CalledBy are exactly what fetchCalls/fetchSources returned —
 // nil stays nil, zero-length stays zero-length. The builders below never
 // normalise these values (ENG-01): this type is a transcription of the
 // fetchers' output, not a reinterpretation of it.
 //
 // Owner is the node that contains a field, found through its "contains"
 // edge. It is nil for every other kind and for a field with no owner.
+//
+// AccessedBy and InitializedTo are filled only for a data kind
+// (goextract.IsDataKind). AccessedBy has one entry per source of a
+// references edge with an access role, sorted by accessLess.
+// InitializedTo holds the targets of the node's binding=init edges.
 type DefinitionDetail struct {
-	Node     *schema.Node
-	Owner    *schema.Node
-	Source   []byte
-	Calls    []*schema.Node
-	CalledBy []*schema.Node
+	Node          *schema.Node
+	Owner         *schema.Node
+	Source        []byte
+	Calls         []*schema.Node
+	CalledBy      []*schema.Node
+	AccessedBy    []DataAccess
+	InitializedTo []*schema.Node
+}
+
+// DataAccess is one source that reads or writes a data symbol, with the
+// access role of its stored references edge: goextract.AccessRead,
+// AccessWrite or AccessReadWrite. Module-level code is a source of kind
+// goextract.KindFile.
+type DataAccess struct {
+	Node   *schema.Node
+	Access string
 }
 
 // MultiDefDetail is Node()'s multi-definition shape, modelled as what it
@@ -122,36 +138,91 @@ func (e *Engine) buildFileNodeDetail(file string) (*FileDetail, error) {
 	return &FileDetail{Path: file, Source: content}, nil
 }
 
-// buildSingleDefDetail performs exactly the body the pre-extraction
-// single-def render path performed — fetchCalls, then the reverse
-// adjacency (via the buildReverseAdjacency seam), then fetchCalledBy —
-// and returns the populated struct with Source left nil. It returns
-// whatever the fetchers returned without normalising: nil stays nil,
-// zero-length stays zero-length (ENG-01).
+// buildSingleDefDetail builds the indexes that node needs: the reverse
+// adjacency (via the buildReverseAdjacency seam), the contains index for
+// a field and the access index for a data kind. It returns the
+// gatherDefinition result with Source left nil. It returns whatever the
+// fetchers returned without normalising: nil stays nil, zero-length
+// stays zero-length (ENG-01).
 func (e *Engine) buildSingleDefDetail(node *schema.Node) (*DefinitionDetail, error) {
-	calls, err := e.fetchCalls(node)
-	if err != nil {
-		return nil, err
-	}
 	rev, err := buildReverseAdjacency(e.reader)
 	if err != nil {
 		return nil, err
 	}
-	calledBy, err := e.fetchCalledBy(node, rev)
+	var owners map[string]string
+	if node.Kind == goextract.KindField {
+		if _, owners, err = buildContainsIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
+	var access map[string][]*schema.Edge
+	if goextract.IsDataKind(node.Kind) {
+		if access, err = buildAccessIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
+	return e.gatherDefinition(node, rev, owners, access)
+}
+
+// gatherDefinition returns the trail of n from prebuilt indexes: its
+// calls, its callers from rev, the owner of a field from owners and the
+// data lines of a data kind from access. The single and the
+// multi-definition paths both gather through it, and the caller sets
+// Source.
+func (e *Engine) gatherDefinition(n *schema.Node, rev map[string][]*schema.Edge, owners map[string]string, access map[string][]*schema.Edge) (*DefinitionDetail, error) {
+	calls, err := e.fetchCalls(n)
+	if err != nil {
+		return nil, err
+	}
+	callers, err := e.fetchSources(n, rev)
 	if err != nil {
 		return nil, err
 	}
 	var owner *schema.Node
-	if node.Kind == goextract.KindField {
-		_, owners, err := buildContainsIndex(e.reader)
-		if err != nil {
-			return nil, err
-		}
-		if owner, err = e.fieldOwner(node, owners); err != nil {
+	if n.Kind == goextract.KindField {
+		if owner, err = e.fieldOwner(n, owners); err != nil {
 			return nil, err
 		}
 	}
-	return &DefinitionDetail{Node: node, Owner: owner, Calls: calls, CalledBy: calledBy}, nil
+	d := &DefinitionDetail{Node: n, Owner: owner, Calls: calls, CalledBy: sourceNodes(callers)}
+	if goextract.IsDataKind(n.Kind) {
+		if err := e.fillDataLines(d, access); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
+// fillDataLines sets the AccessedBy and InitializedTo of data symbol
+// d.Node from access, the reverse view of buildAccessIndex.
+func (e *Engine) fillDataLines(d *DefinitionDetail, access map[string][]*schema.Edge) error {
+	sources, err := e.fetchSources(d.Node, access)
+	if err != nil {
+		return err
+	}
+	for _, s := range sources {
+		d.AccessedBy = append(d.AccessedBy, DataAccess{Node: s.Node, Access: s.Edge.Metadata[goextract.MetaAccess]})
+	}
+	sort.SliceStable(d.AccessedBy, func(i, j int) bool { return accessLess(d.AccessedBy[i], d.AccessedBy[j]) })
+	d.InitializedTo, err = e.fetchTargets(d.Node, func(edge *schema.Edge) bool {
+		return edge.Kind == goextract.RefKindReferences && goextract.IsInitBinding(edge)
+	})
+	return err
+}
+
+// accessLess orders access entries by the location of the source, its
+// signature included, then by role. Every field that the access line
+// prints is a key, and no node id is one.
+func accessLess(a, b DataAccess) bool {
+	la, lb := nodeLocation(a.Node), nodeLocation(b.Node)
+	la.Signature, lb.Signature = a.Node.Signature, b.Node.Signature
+	if locationLess(la, lb) {
+		return true
+	}
+	if locationLess(lb, la) {
+		return false
+	}
+	return a.Access < b.Access
 }
 
 // fieldOwner returns the node that contains field n according to owners,
@@ -171,7 +242,7 @@ func (e *Engine) fieldOwner(n *schema.Node, owners map[string]string) (*schema.N
 
 // buildMultiDefDetail builds the reverse adjacency ONCE (via the
 // buildReverseAdjacency seam) and closes over it, exactly as the
-// pre-extraction multi-def render closure did — fetchCalledBy's own doc
+// pre-extraction multi-def render closure did — fetchSources's own doc
 // comment states why the map is shared: the multi-definition path fetches
 // trails for up to nodeMultiDefHardCap candidates, and rebuilding the
 // O(edges) map per candidate would multiply that scan. The returned
@@ -190,27 +261,24 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 			return nil, err
 		}
 	}
+	var access map[string][]*schema.Edge
+	if slices.ContainsFunc(matches, func(n *schema.Node) bool { return goextract.IsDataKind(n.Kind) }) {
+		if access, err = buildAccessIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
 
 	definition := func(n *schema.Node) (*DefinitionDetail, error) {
 		source, err := e.readSourceFile(n.FilePath)
 		if err != nil {
 			return nil, err
 		}
-		calls, err := e.fetchCalls(n)
+		d, err := e.gatherDefinition(n, rev, owners, access)
 		if err != nil {
 			return nil, err
 		}
-		calledBy, err := e.fetchCalledBy(n, rev)
-		if err != nil {
-			return nil, err
-		}
-		var owner *schema.Node
-		if n.Kind == goextract.KindField {
-			if owner, err = e.fieldOwner(n, owners); err != nil {
-				return nil, err
-			}
-		}
-		return &DefinitionDetail{Node: n, Owner: owner, Source: source, Calls: calls, CalledBy: calledBy}, nil
+		d.Source = source
+		return d, nil
 	}
 
 	return NewMultiDefDetail(symbol, matches, definition), nil

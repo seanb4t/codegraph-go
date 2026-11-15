@@ -29,24 +29,30 @@ import (
 // this package MUST follow the same fresh-per-call discipline: never
 // cache the result across a Sync() invocation.
 func BuildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+	return reverseEdgeIndex(r, func(e *schema.Edge) bool { return e.Kind == goextract.RefKindCalls })
+}
+
+// reverseEdgeIndex keys each edge that keep accepts by its target, from
+// one full IterateEdges("") scan, in iteration order.
+func reverseEdgeIndex(r graphstore.Reader, keep func(*schema.Edge) bool) (map[string][]*schema.Edge, error) {
 	it, err := r.IterateEdges("")
 	if err != nil {
 		return nil, err
 	}
 	defer it.Close()
 
-	rev := make(map[string][]*schema.Edge)
+	idx := make(map[string][]*schema.Edge)
 	for it.Next() {
 		e := it.Edge()
-		if e.Kind != goextract.RefKindCalls {
+		if !keep(e) {
 			continue
 		}
-		rev[e.Target] = append(rev[e.Target], e)
+		idx[e.Target] = append(idx[e.Target], e)
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
 	}
-	return rev, nil
+	return idx, nil
 }
 
 // buildReverseAdjacency is BuildReverseAdjacency behind an unexported
@@ -367,21 +373,8 @@ func (e *Engine) FileGraph() (FileGraphResult, error) {
 // -only filter is deliberately NOT widened to admit "implements" edges —
 // this is new, separate traversal code (per 05-PATTERNS.md).
 func BuildImplementsIndex(r graphstore.Reader) (map[string][]*schema.Edge, error) {
-	it, err := r.IterateEdges("")
+	idx, err := reverseEdgeIndex(r, func(e *schema.Edge) bool { return e.Kind == goextract.EdgeKindImplements })
 	if err != nil {
-		return nil, err
-	}
-	defer it.Close()
-
-	idx := make(map[string][]*schema.Edge)
-	for it.Next() {
-		e := it.Edge()
-		if e.Kind != goextract.EdgeKindImplements {
-			continue
-		}
-		idx[e.Target] = append(idx[e.Target], e)
-	}
-	if err := it.Err(); err != nil {
 		return nil, err
 	}
 	for _, edges := range idx {
@@ -565,6 +558,16 @@ func nodeLocation(n *schema.Node) Location {
 	}
 }
 
+// buildAccessIndex keys each references edge with an access role by its
+// target, the data symbol that the edge reads or writes. It sits behind
+// a package var, as buildReverseAdjacency does, so a test can count its
+// calls.
+var buildAccessIndex = func(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+	return reverseEdgeIndex(r, func(e *schema.Edge) bool {
+		return e.Kind == goextract.RefKindReferences && e.Metadata[goextract.MetaAccess] != ""
+	})
+}
+
 // sortLocations orders locs by FilePath, then Name, then StartLine
 // (WR-05, 08-REVIEW.md) — mirrors files.go's sortFileTree discipline
 // ("--json output must be reproducible", D-06). Impact/Callers/Affected's
@@ -577,26 +580,30 @@ func nodeLocation(n *schema.Node) Location {
 // is used so ties on the full (FilePath, Name, StartLine) key still
 // resolve deterministically across repeated calls.
 func sortLocations(locs []Location) {
-	sort.SliceStable(locs, func(i, j int) bool {
-		if locs[i].FilePath != locs[j].FilePath {
-			return locs[i].FilePath < locs[j].FilePath
-		}
-		if locs[i].Name != locs[j].Name {
-			return locs[i].Name < locs[j].Name
-		}
-		if locs[i].StartLine != locs[j].StartLine {
-			return locs[i].StartLine < locs[j].StartLine
-		}
-		// Rows of one symbol for two start nodes tie above. These keys
-		// order them by what the row shows, never by a node id.
-		if locs[i].Definition != locs[j].Definition {
-			return definitionLabelLess(locs[i].Definition, locs[j].Definition)
-		}
-		if locs[i].Signature != locs[j].Signature {
-			return locs[i].Signature < locs[j].Signature
-		}
-		return locs[i].Kind < locs[j].Kind
-	})
+	sort.SliceStable(locs, func(i, j int) bool { return locationLess(locs[i], locs[j]) })
+}
+
+// locationLess is the order of sortLocations: FilePath, Name, StartLine,
+// then the definition label, the signature and the kind.
+func locationLess(a, b Location) bool {
+	if a.FilePath != b.FilePath {
+		return a.FilePath < b.FilePath
+	}
+	if a.Name != b.Name {
+		return a.Name < b.Name
+	}
+	if a.StartLine != b.StartLine {
+		return a.StartLine < b.StartLine
+	}
+	// Rows of one symbol for two start nodes tie above. These keys
+	// order them by what the row shows, never by a node id.
+	if a.Definition != b.Definition {
+		return definitionLabelLess(a.Definition, b.Definition)
+	}
+	if a.Signature != b.Signature {
+		return a.Signature < b.Signature
+	}
+	return a.Kind < b.Kind
 }
 
 // sortAndCap sorts locs and then cuts them to limit (0 means no limit)

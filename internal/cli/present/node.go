@@ -61,7 +61,8 @@ func RenderNode(d query.NodeDetail, pal Palette, w io.Writer) error {
 // RenderNode minus markdown syntax (D-07): name/kind, blank, Location,
 // Signature, the fixed Trail line, Calls →, Called by ← — always
 // rendered, even when a list is empty (matching RenderNode's own
-// unconditional lines).
+// unconditional lines). A data kind adds Accessed by ← and
+// Initialized to →, also when empty.
 func writeSingleDef(b *strings.Builder, pal Palette, d *query.DefinitionDetail) {
 	n := d.Node
 	b.WriteString(pal.Value.Render(sanitizeControl(n.Name)))
@@ -74,19 +75,27 @@ func writeSingleDef(b *strings.Builder, pal Palette, d *query.DefinitionDetail) 
 	b.WriteString(pal.Label.Render("Signature:") + " ")
 	b.WriteString(pal.Value.Render(sanitizeControl(n.Signature)))
 	b.WriteString("\n")
-	b.WriteString(pal.Header.Render("Trail — codegraph_node any of these to follow it (no Read needed)") + "\n")
-	b.WriteString(pal.Label.Render("Calls →") + " " + writeNodeRefs(pal, d.Calls) + "\n")
-	b.WriteString(pal.Label.Render("Called by ←") + " " + writeNodeRefs(pal, d.CalledBy) + "\n")
+	b.WriteString(pal.Header.Render(query.TrailHeader) + "\n")
+	for _, row := range query.TrailRows(d) {
+		b.WriteString(pal.Label.Render(row.Label) + " " + writeNodeRefs(pal, row.Nodes, row.Suffix) + "\n")
+	}
 }
 
 // writeNodeRefs comma-joins "name (path:line)" references, mirroring
 // render_markdown.go's unexported joinNodeRefs/formatNodeRef minus
 // markdown syntax — preserves input order (Calls → forward, Called by ←
-// reverse-adjacency order), exactly as the plain renderer does.
-func writeNodeRefs(pal Palette, nodes []*schema.Node) string {
+// reverse-adjacency order), exactly as the plain renderer does. A non-nil
+// suffix gives the suffix of entry i, which goes inside the parentheses.
+func writeNodeRefs(pal Palette, nodes []*schema.Node, suffix func(i int) string) string {
 	parts := make([]string, len(nodes))
 	for i, n := range nodes {
-		parts[i] = pal.Value.Render(sanitizeControl(n.Name)) + " (" + pal.Path.Render(sanitizeControl(n.FilePath)+":"+strconv.Itoa(int(n.StartLine))) + ")"
+		tail := ""
+		if suffix != nil {
+			if s := suffix(i); s != "" {
+				tail = ", " + pal.Value.Render(sanitizeControl(s))
+			}
+		}
+		parts[i] = pal.Value.Render(sanitizeControl(n.Name)) + " (" + pal.Path.Render(sanitizeControl(n.FilePath)+":"+strconv.Itoa(int(n.StartLine))) + tail + ")"
 	}
 	return strings.Join(parts, ", ")
 }
@@ -98,8 +107,10 @@ func writeNodeRefs(pal Palette, nodes []*schema.Node) string {
 // (unlike writeSingleDef, which always renders it): name/kind, blank,
 // Location, Signature, blank, the numbered [StartLine,EndLine] range
 // (trailing newline trimmed, matching the plain "parts" join having no
-// trailing newline of its own).
-func writeNodeSection(pal Palette, n *schema.Node, source []byte, calls, calledBy []*schema.Node) string {
+// trailing newline of its own). The data lines print only when their list
+// has an entry, and any non-empty list of the four prints the Trail line.
+func writeNodeSection(pal Palette, d *query.DefinitionDetail) string {
+	n := d.Node
 	var b strings.Builder
 	b.WriteString(pal.Value.Render(sanitizeControl(n.Name)))
 	b.WriteString(" (")
@@ -113,20 +124,21 @@ func writeNodeSection(pal Palette, n *schema.Node, source []byte, calls, calledB
 	b.WriteString("\n\n")
 
 	var rangeBuilder strings.Builder
-	writeNumberedSourceRange(&rangeBuilder, pal, source, n.StartLine, n.EndLine)
+	writeNumberedSourceRange(&rangeBuilder, pal, d.Source, n.StartLine, n.EndLine)
 	b.WriteString(strings.TrimSuffix(rangeBuilder.String(), "\n"))
 
-	if len(calls) > 0 || len(calledBy) > 0 {
+	header := false
+	for _, row := range query.TrailRows(d) {
+		if len(row.Nodes) == 0 {
+			continue
+		}
+		if !header {
+			b.WriteString("\n")
+			b.WriteString(pal.Header.Render(query.TrailHeader))
+			header = true
+		}
 		b.WriteString("\n")
-		b.WriteString(pal.Header.Render("Trail — codegraph_node any of these to follow it (no Read needed)"))
-		if len(calls) > 0 {
-			b.WriteString("\n")
-			b.WriteString(pal.Label.Render("Calls →") + " " + writeNodeRefs(pal, calls))
-		}
-		if len(calledBy) > 0 {
-			b.WriteString("\n")
-			b.WriteString(pal.Label.Render("Called by ←") + " " + writeNodeRefs(pal, calledBy))
-		}
+		b.WriteString(pal.Label.Render(row.Label) + " " + writeNodeRefs(pal, row.Nodes, row.Suffix))
 	}
 	return b.String()
 }
@@ -150,7 +162,7 @@ func writeMultiDef(b *strings.Builder, pal Palette, m *query.MultiDefDetail) err
 		if err != nil {
 			return err
 		}
-		section := writeNodeSection(pal, n, dd.Source, dd.Calls, dd.CalledBy)
+		section := writeNodeSection(pal, dd)
 		if len(rendered) == 0 || used+strippedLen(section) <= nodeMultiDefBodyBudget {
 			rendered = append(rendered, section)
 			used += strippedLen(section)

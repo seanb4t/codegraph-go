@@ -13,7 +13,7 @@ import (
 
 // isDataID reports whether the node id names a data symbol.
 func isDataID(id string) bool {
-	return resolve.IsDataKind(nodeid.KindOf(id))
+	return goextract.IsDataKind(nodeid.KindOf(id))
 }
 
 // bindingDependents returns the files outside inBatch that read a data
@@ -95,7 +95,7 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 	}
 	for _, e := range idx.binding {
 		if inPaths[idx.pathOf[resolve.EdgeOwnerID(e)]] {
-			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+			if goextract.IsInitBinding(e) {
 				seeds[e.Source] = true
 			} else {
 				seeds[e.Target] = true
@@ -107,7 +107,7 @@ func bindingDependents(idx *storeIndex, results []goextract.FileResult, paths []
 		grew = false
 		for _, e := range idx.binding {
 			from, to := "", ""
-			if e.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+			if goextract.IsInitBinding(e) {
 				from, to = e.Target, e.Source
 			} else {
 				to = e.Target

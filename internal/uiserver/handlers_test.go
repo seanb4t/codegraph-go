@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
 )
@@ -768,7 +770,8 @@ func TestUIServiceNodeDetailCoversAllThreeModes(t *testing.T) {
 		if resp.Msg.GetPath() != "pkga/pkga.go" {
 			t.Fatalf("GetNodeDetail(file): path = %q, want %q", resp.Msg.GetPath(), "pkga/pkga.go")
 		}
-		if resp.Msg.GetNode() != nil || len(resp.Msg.GetCalls()) != 0 || len(resp.Msg.GetCalledBy()) != 0 {
+		if resp.Msg.GetNode() != nil || len(resp.Msg.GetCalls()) != 0 || len(resp.Msg.GetCalledBy()) != 0 ||
+			len(resp.Msg.GetAccessedBy()) != 0 || len(resp.Msg.GetInitializedTo()) != 0 {
 			t.Fatal("GetNodeDetail(file): single-def fields populated, want all empty for file mode")
 		}
 		if resp.Msg.GetSymbol() != "" || len(resp.Msg.GetDefinitions()) != 0 || resp.Msg.GetTotalCandidates() != 0 {
@@ -1379,4 +1382,135 @@ func TestLocationToProtoCarriesOverloadFields(t *testing.T) {
 	if got.Signature != "(String s)" || !got.Ambiguous {
 		t.Errorf("locationToProto = %+v, want signature (String s) and ambiguous", got)
 	}
+}
+
+// indexedTree writes files into a temp directory, indexes it and returns
+// a client of a server over it.
+func indexedTree(t *testing.T, files map[string]string) uiv1connect.UIServiceClient {
+	t.Helper()
+	dir := testtree.Write(t, files)
+	indexGofixture(t, dir)
+	return uiv1connect.NewUIServiceClient(http.DefaultClient, startedServer(t, dir).URL())
+}
+
+// accessRefs returns each entry as "name path:line role".
+func accessRefs(access []*uiv1.DataAccess) []string {
+	var out []string
+	for _, a := range access {
+		n := a.GetNode()
+		out = append(out, fmt.Sprintf("%s %s:%d %s", n.GetName(), n.GetFilePath(), n.GetStartLine(), a.GetAccess()))
+	}
+	return out
+}
+
+func TestGetNodeDetailDataAccess(t *testing.T) {
+	nodeDetail := func(t *testing.T, client uiv1connect.UIServiceClient, symbol string) *uiv1.GetNodeDetailResponse {
+		t.Helper()
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: symbol}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(%s): %v", symbol, err)
+		}
+		return resp.Msg
+	}
+	java := indexedTree(t, map[string]string{"p/Account.java": testtree.AccountJava})
+
+	t.Run("the graph UI asks for a field", func(t *testing.T) {
+		msg := nodeDetail(t, java, "balance")
+		if msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("mode = %v, want single definition", msg.GetMode())
+		}
+		if got, want := accessRefs(msg.GetAccessedBy()), []string{"deposit p/Account.java:7 read_write"}; fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("accessed_by = %v, want %v", got, want)
+		}
+		if len(msg.GetInitializedTo()) != 0 {
+			t.Fatalf("initialized_to = %v, want empty", msg.GetInitializedTo())
+		}
+	})
+
+	t.Run("a field and a method named size", func(t *testing.T) {
+		msg := nodeDetail(t, java, "size")
+		if len(msg.GetDefinitions()) != 2 {
+			t.Fatalf("got %d definitions, want 2", len(msg.GetDefinitions()))
+		}
+		if len(msg.GetAccessedBy()) != 0 || len(msg.GetInitializedTo()) != 0 {
+			t.Fatalf("multi-definition response has top-level data lists: accessed_by %v, initialized_to %v",
+				accessRefs(msg.GetAccessedBy()), msg.GetInitializedTo())
+		}
+		for _, def := range msg.GetDefinitions() {
+			if !def.GetDetailGathered() {
+				t.Fatalf("%s: detail not gathered", def.GetNode().GetKind())
+			}
+			got := accessRefs(def.GetAccessedBy())
+			switch def.GetNode().GetKind() {
+			case "field":
+				if want := []string{"size p/Account.java:12 read"}; fmt.Sprint(got) != fmt.Sprint(want) {
+					t.Errorf("field accessed_by = %v, want %v", got, want)
+				}
+			case "method":
+				if len(got) != 0 || len(def.GetInitializedTo()) != 0 {
+					t.Errorf("method has data lists: accessed_by %v, initialized_to %v", got, def.GetInitializedTo())
+				}
+			default:
+				t.Errorf("unexpected candidate kind %q", def.GetNode().GetKind())
+			}
+		}
+	})
+
+	t.Run("a variable holds a function", func(t *testing.T) {
+		client := indexedTree(t, map[string]string{
+			"go.mod":  "module example.com/m\n\ngo 1.26\n",
+			"main.go": "package main\n\nfunc start() {}\n\nvar run = start\n",
+			"a/a.go":  "package a\n\nfunc start() {}\n\nvar Hold = start\n",
+			"b/b.go":  "package b\n\nfunc start() {}\n\nvar Hold = start\n",
+		})
+		refs := func(nodes []*uiv1.Node) []string {
+			var out []string
+			for _, n := range nodes {
+				out = append(out, fmt.Sprintf("%s %s:%d", n.GetName(), n.GetFilePath(), n.GetStartLine()))
+			}
+			return out
+		}
+
+		single := nodeDetail(t, client, "run")
+		if single.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("run: mode = %v, want single definition", single.GetMode())
+		}
+		if got, want := refs(single.GetInitializedTo()), []string{"start main.go:3"}; fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("run: initialized_to = %v, want %v", got, want)
+		}
+
+		multi := nodeDetail(t, client, "Hold")
+		if len(multi.GetDefinitions()) != 2 {
+			t.Fatalf("Hold: got %d definitions, want 2", len(multi.GetDefinitions()))
+		}
+		for _, def := range multi.GetDefinitions() {
+			dir := path.Dir(def.GetNode().GetFilePath())
+			want := []string{fmt.Sprintf("start %s/%s.go:3", dir, dir)}
+			if got := refs(def.GetInitializedTo()); !def.GetDetailGathered() || fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("Hold in %s: gathered %v, initialized_to %v, want gathered with %v", dir, def.GetDetailGathered(), got, want)
+			}
+		}
+	})
+
+	t.Run("only gathered candidates carry their entries", func(t *testing.T) {
+		files := map[string]string{"go.mod": "module example.com/m\n\ngo 1.26\n"}
+		for i := range uiMultiDefCap + 1 {
+			files[fmt.Sprintf("pkg%02d/x.go", i)] = fmt.Sprintf("package pkg%02d\n\nvar Big = 1\n\nfunc use() int { return Big }\n", i)
+		}
+		msg := nodeDetail(t, indexedTree(t, files), "Big")
+		defs := msg.GetDefinitions()
+		if len(defs) != uiMultiDefCap+1 {
+			t.Fatalf("got %d definitions, want %d", len(defs), uiMultiDefCap+1)
+		}
+		last := defs[uiMultiDefCap-1]
+		want := []string{fmt.Sprintf("use %s:5 read", last.GetNode().GetFilePath())}
+		if got := accessRefs(last.GetAccessedBy()); !last.GetDetailGathered() || fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("candidate %d: gathered %v, accessed_by %v, want gathered with %v", uiMultiDefCap, last.GetDetailGathered(), got, want)
+		}
+		beyond := defs[uiMultiDefCap]
+		if beyond.GetDetailGathered() || len(beyond.GetAccessedBy()) != 0 || len(beyond.GetInitializedTo()) != 0 {
+			t.Fatalf("candidate %d: gathered %v, accessed_by %v, initialized_to %v, want listed with empty lists",
+				uiMultiDefCap+1, beyond.GetDetailGathered(), accessRefs(beyond.GetAccessedBy()), beyond.GetInitializedTo())
+		}
+	})
 }

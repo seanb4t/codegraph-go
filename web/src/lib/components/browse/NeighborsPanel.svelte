@@ -16,7 +16,11 @@
 	// Callees/Affected's shared, lighter projection. The two are named
 	// apart in these props rather than unified: plan 03-08's permalink
 	// logic depends on the distinction (a Location carries no end_line).
-	import type { Node, Location } from '$lib/gen/ui_pb';
+	//
+	// accessedBy/initializedTo are the data lines of a variable, a
+	// constant or a field. The server sets them only for those kinds, so
+	// each list shows only when it has an entry.
+	import type { DataAccess, Node, Location } from '$lib/gen/ui_pb';
 	import type { BlastRadiusState } from '$lib/browse-state';
 	import { NAV_INTENT, type BrowseNavDelta, type NavIntent } from '$lib/browse-nav';
 	import { isShapeInteger } from '$lib/browse-url';
@@ -24,12 +28,16 @@
 	let {
 		calls,
 		calledBy,
+		accessedBy,
+		initializedTo,
 		blastRadius,
 		depth,
 		onNavigate
 	}: {
 		calls: Node[];
 		calledBy: Node[];
+		accessedBy: DataAccess[];
+		initializedTo: Node[];
 		blastRadius: BlastRadiusState;
 		depth?: number;
 		onNavigate: (delta: BrowseNavDelta, intent: NavIntent) => void;
@@ -38,6 +46,30 @@
 	function entryKey(entry: Node | Location): string {
 		return `${entry.filePath}:${entry.startLine}:${entry.name}`;
 	}
+
+	// A data list keys by node id: two sources can share file, line and
+	// name, and Svelte rejects a keyed list with a duplicate key. The store
+	// holds one edge per source and target, so an id is unique in a list.
+	function idKey(entry: Node): string {
+		return entry.id;
+	}
+
+	// NeighborList is one labelled list for the neighborList snippet. id
+	// names the section and its empty text in test ids, and itemId names
+	// each entry. A list with hideWhenEmpty shows nothing when it is empty.
+	type NeighborList = {
+		id: string;
+		itemId: string;
+		heading: string;
+		emptyText: string;
+		hideWhenEmpty: boolean;
+		entries: { node: Node; role?: string }[];
+		key: (entry: Node) => string;
+	};
+
+	const nodeEntries = (nodes: Node[]) => nodes.map((node) => ({ node }));
+	const accessEntries = (access: DataAccess[]) =>
+		access.flatMap((a) => (a.node ? [{ node: a.node, role: a.access }] : []));
 
 	// A caller/callee/blast-radius click is a NAVIGATE intent — the
 	// developer wants to come back to wherever they clicked from
@@ -92,54 +124,77 @@
 	}
 </script>
 
-<div class="mt-4 grid gap-4 sm:grid-cols-3" data-testid="neighbors-panel">
-	<section data-testid="neighbors-callers">
-		<h2 class="text-sm font-semibold">Callers</h2>
-		{#if calledBy.length === 0}
-			<p class="text-sm text-muted-foreground" data-testid="neighbors-callers-empty">
-				No callers.
-			</p>
-		{:else}
-			<ul>
-				{#each calledBy as entry (entryKey(entry))}
-					<li>
-						<button
-							type="button"
-							data-testid={`neighbor-caller-${entryKey(entry)}`}
-							onclick={() => openEntry(entry)}
-						>
-							{entry.name}
-							<span class="text-muted-foreground">{entry.kind} · {entry.filePath}</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
+{#snippet neighborList(list: NeighborList)}
+	{#if !(list.hideWhenEmpty && list.entries.length === 0)}
+		<section data-testid={`neighbors-${list.id}`}>
+			<h2 class="text-sm font-semibold">{list.heading}</h2>
+			{#if list.entries.length === 0}
+				<p class="text-sm text-muted-foreground" data-testid={`neighbors-${list.id}-empty`}>
+					{list.emptyText}
+				</p>
+			{:else}
+				<ul>
+					{#each list.entries as entry (list.key(entry.node))}
+						<li>
+							<button
+								type="button"
+								data-testid={`neighbor-${list.itemId}-${list.key(entry.node)}`}
+								onclick={() => openEntry(entry.node)}
+							>
+								{entry.node.name}
+								<span class="text-muted-foreground"
+									>{entry.node.kind} · {entry.node.filePath}{#if entry.role}
+										· {entry.role}{/if}</span
+								>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	{/if}
+{/snippet}
 
-	<section data-testid="neighbors-callees">
-		<h2 class="text-sm font-semibold">Callees</h2>
-		{#if calls.length === 0}
-			<p class="text-sm text-muted-foreground" data-testid="neighbors-callees-empty">
-				No callees.
-			</p>
-		{:else}
-			<ul>
-				{#each calls as entry (entryKey(entry))}
-					<li>
-						<button
-							type="button"
-							data-testid={`neighbor-callee-${entryKey(entry)}`}
-							onclick={() => openEntry(entry)}
-						>
-							{entry.name}
-							<span class="text-muted-foreground">{entry.kind} · {entry.filePath}</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
+<div class="mt-4 grid gap-4 sm:grid-cols-3" data-testid="neighbors-panel">
+	{@render neighborList({
+		id: 'callers',
+		itemId: 'caller',
+		heading: 'Callers',
+		emptyText: 'No callers.',
+		hideWhenEmpty: false,
+		entries: nodeEntries(calledBy),
+		key: entryKey
+	})}
+
+	{@render neighborList({
+		id: 'callees',
+		itemId: 'callee',
+		heading: 'Callees',
+		emptyText: 'No callees.',
+		hideWhenEmpty: false,
+		entries: nodeEntries(calls),
+		key: entryKey
+	})}
+
+	{@render neighborList({
+		id: 'accessed-by',
+		itemId: 'accessor',
+		heading: 'Accessed by',
+		emptyText: '',
+		hideWhenEmpty: true,
+		entries: accessEntries(accessedBy),
+		key: idKey
+	})}
+
+	{@render neighborList({
+		id: 'initialized-to',
+		itemId: 'initializer',
+		heading: 'Initialized to',
+		emptyText: '',
+		hideWhenEmpty: true,
+		entries: nodeEntries(initializedTo),
+		key: idKey
+	})}
 
 	<section data-testid="neighbors-blast-radius">
 		<h2 class="text-sm font-semibold">Blast Radius</h2>

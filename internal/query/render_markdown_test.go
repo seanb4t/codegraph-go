@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -492,11 +493,11 @@ func TestRenderNodeSingleDefUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildReverseAdjacency: unexpected error: %v", err)
 	}
-	calledBy, err := engine.fetchCalledBy(alpha, rev)
+	callers, err := engine.fetchSources(alpha, rev)
 	if err != nil {
-		t.Fatalf("fetchCalledBy(Alpha): unexpected error: %v", err)
+		t.Fatalf("fetchSources(Alpha): unexpected error: %v", err)
 	}
-	want := RenderNode(&DefinitionDetail{Node: alpha, Calls: calls, CalledBy: calledBy})
+	want := RenderNode(&DefinitionDetail{Node: alpha, Calls: calls, CalledBy: sourceNodes(callers)})
 
 	got, err := engine.Node("Alpha", "", nil)
 	if err != nil {
@@ -640,4 +641,118 @@ func onlyNodeNamed(t *testing.T, engine *Engine, name string) *schema.Node {
 		t.Fatalf("nodes named %q = %d, want exactly 1", name, len(found))
 	}
 	return found[0]
+}
+
+// TestRenderNodeDataLines pins the full markdown of the data lines in the
+// single-definition and the multi-definition views.
+func TestRenderNodeDataLines(t *testing.T) {
+	node := func(name, kind, file string, line int32) *schema.Node {
+		return &schema.Node{Id: name + kind, Name: name, Kind: kind, FilePath: file, StartLine: line, EndLine: line}
+	}
+	trail := "**Trail — codegraph_node any of these to follow it (no Read needed)**\n"
+	variable := func() *DefinitionDetail {
+		n := node("x", goextract.KindVariable, "a.go", 1)
+		n.Signature = "var x = start"
+		return &DefinitionDetail{Node: n, Source: []byte("var x = start\n")}
+	}
+	variableHead := "**x** (variable)\n\n**Location:** a.go:1\n**Signature:** `var x = start`\n\n```go\n1\tvar x = start\n```"
+
+	t.Run("a single-definition field with entries", func(t *testing.T) {
+		n := node("balance", goextract.KindField, "p/Account.java", 3)
+		n.Signature, n.Language = "int balance", "java"
+		d := &DefinitionDetail{
+			Node:  n,
+			Owner: &schema.Node{QualifiedName: "p.Account"},
+			AccessedBy: []DataAccess{
+				{Node: node("deposit", goextract.KindMethod, "p/Account.java", 7), Access: goextract.AccessReadWrite},
+				{Node: node("size", goextract.KindMethod, "p/Account.java", 12), Access: goextract.AccessRead},
+			},
+			InitializedTo: []*schema.Node{node("zero", goextract.KindConstant, "p/Account.java", 2)},
+		}
+		want := "**balance** (field)\n\n**Location:** p/Account.java:3\n**Owner:** `p.Account`\n**Language:** java\n" +
+			"**Signature:** `int balance`\n" + trail + "**Calls →** \n**Called by ←** \n" +
+			"**Accessed by ←** deposit (p/Account.java:7, read_write), size (p/Account.java:12, read)\n" +
+			"**Initialized to →** zero (p/Account.java:2)\n"
+		if got := RenderNode(d); got != want {
+			t.Fatalf("RenderNode:\ngot:  %q\nwant: %q", got, want)
+		}
+	})
+
+	t.Run("a single-definition constant with two empty lists", func(t *testing.T) {
+		n := node("limit", goextract.KindConstant, "main.go", 3)
+		n.Signature = "const limit = 3"
+		want := "**limit** (constant)\n\n**Location:** main.go:3\n**Signature:** `const limit = 3`\n" + trail +
+			"**Calls →** \n**Called by ←** \n**Accessed by ←** \n**Initialized to →** \n"
+		if got := RenderNode(&DefinitionDetail{Node: n}); got != want {
+			t.Fatalf("RenderNode:\ngot:  %q\nwant: %q", got, want)
+		}
+	})
+
+	t.Run("a multi-definition section with only an access list", func(t *testing.T) {
+		d := variable()
+		d.AccessedBy = []DataAccess{{Node: node("use", goextract.KindFunction, "a.go", 5), Access: goextract.AccessRead}}
+		want := variableHead + "\n" + trail + "**Accessed by ←** use (a.go:5, read)"
+		if got := renderNodeSection(d); got != want {
+			t.Fatalf("renderNodeSection:\ngot:  %q\nwant: %q", got, want)
+		}
+	})
+
+	t.Run("a multi-definition variable section with only an initializer entry", func(t *testing.T) {
+		d := variable()
+		d.InitializedTo = []*schema.Node{node("start", goextract.KindFunction, "a.go", 3)}
+		want := variableHead + "\n" + trail + "**Initialized to →** start (a.go:3)"
+		if got := renderNodeSection(d); got != want {
+			t.Fatalf("renderNodeSection:\ngot:  %q\nwant: %q", got, want)
+		}
+	})
+
+	t.Run("a multi-definition data section with four empty lists", func(t *testing.T) {
+		if got := renderNodeSection(variable()); got != variableHead {
+			t.Fatalf("renderNodeSection:\ngot:  %q\nwant: %q", got, variableHead)
+		}
+	})
+
+	t.Run("data entries move a later section to the other definitions", func(t *testing.T) {
+		data := variable()
+		data.Node.Name = "size"
+		accessors := []DataAccess{{Node: node("use", goextract.KindFunction, "a.go", 5), Access: goextract.AccessRead}}
+		fn := node("size", goextract.KindFunction, "p/size.go", 12)
+		fn.Signature = "func size() int"
+		fnDetail := func(pad int) *DefinitionDetail {
+			src := strings.Repeat("\n", 11) + strings.Repeat("x", pad) + "\n"
+			return &DefinitionDetail{Node: fn, Source: []byte(src)}
+		}
+		// The function section fills the budget exactly next to the data
+		// section without its entries.
+		pad := nodeMultiDefBodyBudget - len(renderNodeSection(data)) - len(renderNodeSection(fnDetail(0)))
+		if pad < 0 {
+			t.Fatalf("pad = %d, want a function section that fits the budget", pad)
+		}
+		matches := []*schema.Node{data.Node, fn}
+		render := func(d *DefinitionDetail) string {
+			out, err := RenderNodeMultiDef("size", matches, func(n *schema.Node) (*DefinitionDetail, error) {
+				if n == fn {
+					return fnDetail(pad), nil
+				}
+				return d, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return out
+		}
+		if got := render(data); !strings.Contains(got, "Returning 2 in full —") {
+			t.Fatalf("without data entries both sections fit, got:\n%.300s", got)
+		}
+		withEntries := variable()
+		withEntries.Node = data.Node
+		withEntries.AccessedBy = accessors
+		section := strings.Replace(variableHead, "**x**", "**size**", 1) + "\n" + trail + "**Accessed by ←** use (a.go:5, read)"
+		want := "**2 definitions named \"size\"**\nReturning 1 in full; 1 more listed below — pick the one you need (no Read required).\n\n" +
+			section + "\n\n**Other definitions**\n- `size` (function) — p/size.go:12\n\n" +
+			"> Need one of these in full? Call codegraph_node again with `file` (e.g. `\"size.go\"`) or `line` — do NOT Read it.\n"
+		if got := render(withEntries); got != want {
+			t.Fatalf("RenderNodeMultiDef:\ngot:  %q\nwant: %q", got, want)
+		}
+	})
 }

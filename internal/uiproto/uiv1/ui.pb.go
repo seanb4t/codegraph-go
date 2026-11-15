@@ -1971,6 +1971,8 @@ func (x *SourceBlob) GetReturnedBytes() int32 {
 // per-candidate lookup that fetches calls/called_by also fetches source,
 // see internal/query.DefinitionDetail.Source); unset for a listed-only
 // candidate, the same discipline calls/called_by already follow.
+// accessed_by and initialized_to follow the same discipline, and are set
+// only for a data symbol (a variable, a constant or a field).
 type NodeDefinition struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Node           *Node                  `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
@@ -1978,6 +1980,8 @@ type NodeDefinition struct {
 	CalledBy       []*Node                `protobuf:"bytes,3,rep,name=called_by,json=calledBy,proto3" json:"called_by,omitempty"`
 	DetailGathered bool                   `protobuf:"varint,4,opt,name=detail_gathered,json=detailGathered,proto3" json:"detail_gathered,omitempty"`
 	Source         *SourceBlob            `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	AccessedBy     []*DataAccess          `protobuf:"bytes,6,rep,name=accessed_by,json=accessedBy,proto3" json:"accessed_by,omitempty"`
+	InitializedTo  []*Node                `protobuf:"bytes,7,rep,name=initialized_to,json=initializedTo,proto3" json:"initialized_to,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2047,6 +2051,75 @@ func (x *NodeDefinition) GetSource() *SourceBlob {
 	return nil
 }
 
+func (x *NodeDefinition) GetAccessedBy() []*DataAccess {
+	if x != nil {
+		return x.AccessedBy
+	}
+	return nil
+}
+
+func (x *NodeDefinition) GetInitializedTo() []*Node {
+	if x != nil {
+		return x.InitializedTo
+	}
+	return nil
+}
+
+// DataAccess is one source that reads or writes a data symbol, with the
+// stored access role: "read", "write" or "read_write". Module-level code
+// is a source of kind "file".
+type DataAccess struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Node          *Node                  `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
+	Access        string                 `protobuf:"bytes,2,opt,name=access,proto3" json:"access,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataAccess) Reset() {
+	*x = DataAccess{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataAccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataAccess) ProtoMessage() {}
+
+func (x *DataAccess) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataAccess.ProtoReflect.Descriptor instead.
+func (*DataAccess) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DataAccess) GetNode() *Node {
+	if x != nil {
+		return x.Node
+	}
+	return nil
+}
+
+func (x *DataAccess) GetAccess() string {
+	if x != nil {
+		return x.Access
+	}
+	return ""
+}
+
 // GetNodeDetailResponse is the discriminated wire projection of
 // internal/query.NodeDetail's three shapes (D-02): mode identifies which
 // group of fields below is populated; every field belonging to the other
@@ -2058,7 +2131,7 @@ func (x *NodeDefinition) GetSource() *SourceBlob {
 //	mode                      | populated fields
 //	--------------------------|--------------------------------------------
 //	NODE_DETAIL_MODE_FILE       | path, source
-//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by, source
+//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by, source, accessed_by, initialized_to
 //	NODE_DETAIL_MODE_MULTI_DEF  | symbol, definitions, total_candidates
 //
 // total_candidates is the TRUE total candidate count
@@ -2094,14 +2167,18 @@ type GetNodeDetailResponse struct {
 	// deliberate wire-layer read the CLI's single-definition path does not
 	// perform, going through the same repo-root confinement gate). Unset
 	// in NODE_DETAIL_MODE_MULTI_DEF.
-	Source        *SourceBlob `protobuf:"bytes,9,opt,name=source,proto3" json:"source,omitempty"`
+	Source *SourceBlob `protobuf:"bytes,9,opt,name=source,proto3" json:"source,omitempty"`
+	// accessed_by and initialized_to are populated only in
+	// NODE_DETAIL_MODE_SINGLE_DEF, and only for a data symbol.
+	AccessedBy    []*DataAccess `protobuf:"bytes,10,rep,name=accessed_by,json=accessedBy,proto3" json:"accessed_by,omitempty"`
+	InitializedTo []*Node       `protobuf:"bytes,11,rep,name=initialized_to,json=initializedTo,proto3" json:"initialized_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetNodeDetailResponse) Reset() {
 	*x = GetNodeDetailResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2113,7 +2190,7 @@ func (x *GetNodeDetailResponse) String() string {
 func (*GetNodeDetailResponse) ProtoMessage() {}
 
 func (x *GetNodeDetailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2126,7 +2203,7 @@ func (x *GetNodeDetailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNodeDetailResponse.ProtoReflect.Descriptor instead.
 func (*GetNodeDetailResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{21}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetNodeDetailResponse) GetMode() NodeDetailMode {
@@ -2192,6 +2269,20 @@ func (x *GetNodeDetailResponse) GetSource() *SourceBlob {
 	return nil
 }
 
+func (x *GetNodeDetailResponse) GetAccessedBy() []*DataAccess {
+	if x != nil {
+		return x.AccessedBy
+	}
+	return nil
+}
+
+func (x *GetNodeDetailResponse) GetInitializedTo() []*Node {
+	if x != nil {
+		return x.InitializedTo
+	}
+	return nil
+}
+
 // ExploreRequest carries internal/query.Engine.ExploreDetail's two
 // arguments unchanged. max_files is passed straight through:
 // Engine.ExploreDetail's own validateMaxFiles/clampMaxFiles/H21 adaptive
@@ -2207,7 +2298,7 @@ type ExploreRequest struct {
 
 func (x *ExploreRequest) Reset() {
 	*x = ExploreRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[22]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2219,7 +2310,7 @@ func (x *ExploreRequest) String() string {
 func (*ExploreRequest) ProtoMessage() {}
 
 func (x *ExploreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[22]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2232,7 +2323,7 @@ func (x *ExploreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExploreRequest.ProtoReflect.Descriptor instead.
 func (*ExploreRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{22}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ExploreRequest) GetQuery() string {
@@ -2272,7 +2363,7 @@ type ExploreGroup struct {
 
 func (x *ExploreGroup) Reset() {
 	*x = ExploreGroup{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[23]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2284,7 +2375,7 @@ func (x *ExploreGroup) String() string {
 func (*ExploreGroup) ProtoMessage() {}
 
 func (x *ExploreGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[23]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2297,7 +2388,7 @@ func (x *ExploreGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExploreGroup.ProtoReflect.Descriptor instead.
 func (*ExploreGroup) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{23}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ExploreGroup) GetPath() string {
@@ -2342,7 +2433,7 @@ type BlastEntry struct {
 
 func (x *BlastEntry) Reset() {
 	*x = BlastEntry{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[24]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2354,7 +2445,7 @@ func (x *BlastEntry) String() string {
 func (*BlastEntry) ProtoMessage() {}
 
 func (x *BlastEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[24]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2367,7 +2458,7 @@ func (x *BlastEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlastEntry.ProtoReflect.Descriptor instead.
 func (*BlastEntry) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{24}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *BlastEntry) GetSymbol() *Node {
@@ -2421,7 +2512,7 @@ type ExploreResponse struct {
 
 func (x *ExploreResponse) Reset() {
 	*x = ExploreResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[25]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2433,7 +2524,7 @@ func (x *ExploreResponse) String() string {
 func (*ExploreResponse) ProtoMessage() {}
 
 func (x *ExploreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[25]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2446,7 +2537,7 @@ func (x *ExploreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExploreResponse.ProtoReflect.Descriptor instead.
 func (*ExploreResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{25}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ExploreResponse) GetQuery() string {
@@ -2513,7 +2604,7 @@ type IndexingInProgress struct {
 
 func (x *IndexingInProgress) Reset() {
 	*x = IndexingInProgress{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[26]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2525,7 +2616,7 @@ func (x *IndexingInProgress) String() string {
 func (*IndexingInProgress) ProtoMessage() {}
 
 func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[26]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2538,7 +2629,7 @@ func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexingInProgress.ProtoReflect.Descriptor instead.
 func (*IndexingInProgress) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{26}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *IndexingInProgress) GetMessage() string {
@@ -2570,7 +2661,7 @@ type GetPermalinkRequest struct {
 
 func (x *GetPermalinkRequest) Reset() {
 	*x = GetPermalinkRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[27]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2582,7 +2673,7 @@ func (x *GetPermalinkRequest) String() string {
 func (*GetPermalinkRequest) ProtoMessage() {}
 
 func (x *GetPermalinkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[27]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2595,7 +2686,7 @@ func (x *GetPermalinkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPermalinkRequest.ProtoReflect.Descriptor instead.
 func (*GetPermalinkRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{27}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetPermalinkRequest) GetPath() string {
@@ -2645,7 +2736,7 @@ type GetPermalinkResponse struct {
 
 func (x *GetPermalinkResponse) Reset() {
 	*x = GetPermalinkResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[28]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2657,7 +2748,7 @@ func (x *GetPermalinkResponse) String() string {
 func (*GetPermalinkResponse) ProtoMessage() {}
 
 func (x *GetPermalinkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[28]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2670,7 +2761,7 @@ func (x *GetPermalinkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPermalinkResponse.ProtoReflect.Descriptor instead.
 func (*GetPermalinkResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{28}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetPermalinkResponse) GetUrl() string {
@@ -2711,7 +2802,7 @@ type GetHealthRequest struct {
 
 func (x *GetHealthRequest) Reset() {
 	*x = GetHealthRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[29]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2723,7 +2814,7 @@ func (x *GetHealthRequest) String() string {
 func (*GetHealthRequest) ProtoMessage() {}
 
 func (x *GetHealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[29]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2736,7 +2827,7 @@ func (x *GetHealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHealthRequest.ProtoReflect.Descriptor instead.
 func (*GetHealthRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{29}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetHealthRequest) GetPath() string {
@@ -2769,7 +2860,7 @@ type WorktreeMismatch struct {
 
 func (x *WorktreeMismatch) Reset() {
 	*x = WorktreeMismatch{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[30]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2781,7 +2872,7 @@ func (x *WorktreeMismatch) String() string {
 func (*WorktreeMismatch) ProtoMessage() {}
 
 func (x *WorktreeMismatch) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[30]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2794,7 +2885,7 @@ func (x *WorktreeMismatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorktreeMismatch.ProtoReflect.Descriptor instead.
 func (*WorktreeMismatch) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{30}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *WorktreeMismatch) GetWorktreeRoot() string {
@@ -2828,7 +2919,7 @@ type PendingChanges struct {
 
 func (x *PendingChanges) Reset() {
 	*x = PendingChanges{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[31]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2840,7 +2931,7 @@ func (x *PendingChanges) String() string {
 func (*PendingChanges) ProtoMessage() {}
 
 func (x *PendingChanges) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[31]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2853,7 +2944,7 @@ func (x *PendingChanges) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PendingChanges.ProtoReflect.Descriptor instead.
 func (*PendingChanges) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{31}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PendingChanges) GetAdded() int32 {
@@ -2895,7 +2986,7 @@ type IndexHealth struct {
 
 func (x *IndexHealth) Reset() {
 	*x = IndexHealth{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[32]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +2998,7 @@ func (x *IndexHealth) String() string {
 func (*IndexHealth) ProtoMessage() {}
 
 func (x *IndexHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[32]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +3011,7 @@ func (x *IndexHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexHealth.ProtoReflect.Descriptor instead.
 func (*IndexHealth) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{32}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *IndexHealth) GetBuiltWithVersion() string {
@@ -3050,7 +3141,7 @@ type GetHealthResponse struct {
 
 func (x *GetHealthResponse) Reset() {
 	*x = GetHealthResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[33]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3062,7 +3153,7 @@ func (x *GetHealthResponse) String() string {
 func (*GetHealthResponse) ProtoMessage() {}
 
 func (x *GetHealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[33]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3075,7 +3166,7 @@ func (x *GetHealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHealthResponse.ProtoReflect.Descriptor instead.
 func (*GetHealthResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{33}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetHealthResponse) GetInitialized() bool {
@@ -3214,7 +3305,7 @@ type FileGraphRequest struct {
 
 func (x *FileGraphRequest) Reset() {
 	*x = FileGraphRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[34]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3226,7 +3317,7 @@ func (x *FileGraphRequest) String() string {
 func (*FileGraphRequest) ProtoMessage() {}
 
 func (x *FileGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[34]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3239,7 +3330,7 @@ func (x *FileGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGraphRequest.ProtoReflect.Descriptor instead.
 func (*FileGraphRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{34}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *FileGraphRequest) GetPath() string {
@@ -3274,7 +3365,7 @@ type FileGraphNode struct {
 
 func (x *FileGraphNode) Reset() {
 	*x = FileGraphNode{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[35]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3286,7 +3377,7 @@ func (x *FileGraphNode) String() string {
 func (*FileGraphNode) ProtoMessage() {}
 
 func (x *FileGraphNode) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[35]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3299,7 +3390,7 @@ func (x *FileGraphNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGraphNode.ProtoReflect.Descriptor instead.
 func (*FileGraphNode) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{35}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *FileGraphNode) GetPath() string {
@@ -3366,7 +3457,7 @@ type FileGraphEdge struct {
 
 func (x *FileGraphEdge) Reset() {
 	*x = FileGraphEdge{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[36]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3378,7 +3469,7 @@ func (x *FileGraphEdge) String() string {
 func (*FileGraphEdge) ProtoMessage() {}
 
 func (x *FileGraphEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[36]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3391,7 +3482,7 @@ func (x *FileGraphEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGraphEdge.ProtoReflect.Descriptor instead.
 func (*FileGraphEdge) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{36}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *FileGraphEdge) GetSourceFile() string {
@@ -3469,7 +3560,7 @@ type FileGraphResponse struct {
 
 func (x *FileGraphResponse) Reset() {
 	*x = FileGraphResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[37]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3481,7 +3572,7 @@ func (x *FileGraphResponse) String() string {
 func (*FileGraphResponse) ProtoMessage() {}
 
 func (x *FileGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[37]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3494,7 +3585,7 @@ func (x *FileGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGraphResponse.ProtoReflect.Descriptor instead.
 func (*FileGraphResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{37}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *FileGraphResponse) GetNodes() []*FileGraphNode {
@@ -3563,7 +3654,7 @@ type FileSymbolsRequest struct {
 
 func (x *FileSymbolsRequest) Reset() {
 	*x = FileSymbolsRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[38]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3575,7 +3666,7 @@ func (x *FileSymbolsRequest) String() string {
 func (*FileSymbolsRequest) ProtoMessage() {}
 
 func (x *FileSymbolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[38]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3588,7 +3679,7 @@ func (x *FileSymbolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileSymbolsRequest.ProtoReflect.Descriptor instead.
 func (*FileSymbolsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{38}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *FileSymbolsRequest) GetPath() string {
@@ -3627,7 +3718,7 @@ type FileSymbolsResponse struct {
 
 func (x *FileSymbolsResponse) Reset() {
 	*x = FileSymbolsResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[39]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3639,7 +3730,7 @@ func (x *FileSymbolsResponse) String() string {
 func (*FileSymbolsResponse) ProtoMessage() {}
 
 func (x *FileSymbolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[39]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3652,7 +3743,7 @@ func (x *FileSymbolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileSymbolsResponse.ProtoReflect.Descriptor instead.
 func (*FileSymbolsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{39}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *FileSymbolsResponse) GetSymbols() []*Node {
@@ -3691,7 +3782,7 @@ type WatchGraphRequest struct {
 
 func (x *WatchGraphRequest) Reset() {
 	*x = WatchGraphRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[40]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3703,7 +3794,7 @@ func (x *WatchGraphRequest) String() string {
 func (*WatchGraphRequest) ProtoMessage() {}
 
 func (x *WatchGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[40]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3716,7 +3807,7 @@ func (x *WatchGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchGraphRequest.ProtoReflect.Descriptor instead.
 func (*WatchGraphRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{40}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *WatchGraphRequest) GetSinceGeneration() int64 {
@@ -3762,7 +3853,7 @@ type WatchGraphEvent struct {
 
 func (x *WatchGraphEvent) Reset() {
 	*x = WatchGraphEvent{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[41]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3774,7 +3865,7 @@ func (x *WatchGraphEvent) String() string {
 func (*WatchGraphEvent) ProtoMessage() {}
 
 func (x *WatchGraphEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[41]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3787,7 +3878,7 @@ func (x *WatchGraphEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchGraphEvent.ProtoReflect.Descriptor instead.
 func (*WatchGraphEvent) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{41}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *WatchGraphEvent) GetGeneration() int64 {
@@ -3856,7 +3947,7 @@ type GetEditorLinkRequest struct {
 
 func (x *GetEditorLinkRequest) Reset() {
 	*x = GetEditorLinkRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[42]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3868,7 +3959,7 @@ func (x *GetEditorLinkRequest) String() string {
 func (*GetEditorLinkRequest) ProtoMessage() {}
 
 func (x *GetEditorLinkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[42]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3881,7 +3972,7 @@ func (x *GetEditorLinkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEditorLinkRequest.ProtoReflect.Descriptor instead.
 func (*GetEditorLinkRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{42}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetEditorLinkRequest) GetPath() string {
@@ -3928,7 +4019,7 @@ type EditorPreset struct {
 
 func (x *EditorPreset) Reset() {
 	*x = EditorPreset{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[43]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3940,7 +4031,7 @@ func (x *EditorPreset) String() string {
 func (*EditorPreset) ProtoMessage() {}
 
 func (x *EditorPreset) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[43]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3953,7 +4044,7 @@ func (x *EditorPreset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditorPreset.ProtoReflect.Descriptor instead.
 func (*EditorPreset) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{43}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *EditorPreset) GetId() string {
@@ -4004,7 +4095,7 @@ type GetEditorLinkResponse struct {
 
 func (x *GetEditorLinkResponse) Reset() {
 	*x = GetEditorLinkResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[44]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4016,7 +4107,7 @@ func (x *GetEditorLinkResponse) String() string {
 func (*GetEditorLinkResponse) ProtoMessage() {}
 
 func (x *GetEditorLinkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[44]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4029,7 +4120,7 @@ func (x *GetEditorLinkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEditorLinkResponse.ProtoReflect.Descriptor instead.
 func (*GetEditorLinkResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{44}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetEditorLinkResponse) GetUrl() string {
@@ -4103,7 +4194,7 @@ type Coverage struct {
 
 func (x *Coverage) Reset() {
 	*x = Coverage{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[45]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4115,7 +4206,7 @@ func (x *Coverage) String() string {
 func (*Coverage) ProtoMessage() {}
 
 func (x *Coverage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[45]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4128,7 +4219,7 @@ func (x *Coverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Coverage.ProtoReflect.Descriptor instead.
 func (*Coverage) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{45}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *Coverage) GetKnown() bool {
@@ -4189,7 +4280,7 @@ type GetCoverageRequest struct {
 
 func (x *GetCoverageRequest) Reset() {
 	*x = GetCoverageRequest{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[46]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4201,7 +4292,7 @@ func (x *GetCoverageRequest) String() string {
 func (*GetCoverageRequest) ProtoMessage() {}
 
 func (x *GetCoverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[46]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4214,7 +4305,7 @@ func (x *GetCoverageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCoverageRequest.ProtoReflect.Descriptor instead.
 func (*GetCoverageRequest) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{46}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetCoverageRequest) GetPageSize() int32 {
@@ -4251,7 +4342,7 @@ type CoverageRow struct {
 
 func (x *CoverageRow) Reset() {
 	*x = CoverageRow{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[47]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4263,7 +4354,7 @@ func (x *CoverageRow) String() string {
 func (*CoverageRow) ProtoMessage() {}
 
 func (x *CoverageRow) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[47]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4276,7 +4367,7 @@ func (x *CoverageRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CoverageRow.ProtoReflect.Descriptor instead.
 func (*CoverageRow) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{47}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CoverageRow) GetPath() string {
@@ -4321,7 +4412,7 @@ type GetCoverageResponse struct {
 
 func (x *GetCoverageResponse) Reset() {
 	*x = GetCoverageResponse{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[48]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4333,7 +4424,7 @@ func (x *GetCoverageResponse) String() string {
 func (*GetCoverageResponse) ProtoMessage() {}
 
 func (x *GetCoverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[48]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4346,7 +4437,7 @@ func (x *GetCoverageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCoverageResponse.ProtoReflect.Descriptor instead.
 func (*GetCoverageResponse) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{48}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetCoverageResponse) GetRows() []*CoverageRow {
@@ -4493,13 +4584,20 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\vtotal_bytes\x18\x04 \x01(\x05R\n" +
 	"totalBytes\x12%\n" +
 	"\x0ereturned_lines\x18\x05 \x01(\x05R\rreturnedLines\x12%\n" +
-	"\x0ereturned_bytes\x18\x06 \x01(\x05R\rreturnedBytesJ\x04\b2\x10<\"\xfa\x01\n" +
+	"\x0ereturned_bytes\x18\x06 \x01(\x05R\rreturnedBytesJ\x04\b2\x10<\"\xf6\x02\n" +
 	"\x0eNodeDefinition\x12)\n" +
 	"\x04node\x18\x01 \x01(\v2\x15.codegraph.ui.v1.NodeR\x04node\x12+\n" +
 	"\x05calls\x18\x02 \x03(\v2\x15.codegraph.ui.v1.NodeR\x05calls\x122\n" +
 	"\tcalled_by\x18\x03 \x03(\v2\x15.codegraph.ui.v1.NodeR\bcalledBy\x12'\n" +
 	"\x0fdetail_gathered\x18\x04 \x01(\bR\x0edetailGathered\x123\n" +
-	"\x06source\x18\x05 \x01(\v2\x1b.codegraph.ui.v1.SourceBlobR\x06source\"\xa7\x03\n" +
+	"\x06source\x18\x05 \x01(\v2\x1b.codegraph.ui.v1.SourceBlobR\x06source\x12<\n" +
+	"\vaccessed_by\x18\x06 \x03(\v2\x1b.codegraph.ui.v1.DataAccessR\n" +
+	"accessedBy\x12<\n" +
+	"\x0einitialized_to\x18\a \x03(\v2\x15.codegraph.ui.v1.NodeR\rinitializedTo\"O\n" +
+	"\n" +
+	"DataAccess\x12)\n" +
+	"\x04node\x18\x01 \x01(\v2\x15.codegraph.ui.v1.NodeR\x04node\x12\x16\n" +
+	"\x06access\x18\x02 \x01(\tR\x06access\"\xa3\x04\n" +
 	"\x15GetNodeDetailResponse\x123\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1f.codegraph.ui.v1.NodeDetailModeR\x04mode\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12)\n" +
@@ -4509,7 +4607,11 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x06symbol\x18\x06 \x01(\tR\x06symbol\x12A\n" +
 	"\vdefinitions\x18\a \x03(\v2\x1f.codegraph.ui.v1.NodeDefinitionR\vdefinitions\x12)\n" +
 	"\x10total_candidates\x18\b \x01(\x05R\x0ftotalCandidates\x123\n" +
-	"\x06source\x18\t \x01(\v2\x1b.codegraph.ui.v1.SourceBlobR\x06source\"C\n" +
+	"\x06source\x18\t \x01(\v2\x1b.codegraph.ui.v1.SourceBlobR\x06source\x12<\n" +
+	"\vaccessed_by\x18\n" +
+	" \x03(\v2\x1b.codegraph.ui.v1.DataAccessR\n" +
+	"accessedBy\x12<\n" +
+	"\x0einitialized_to\x18\v \x03(\v2\x15.codegraph.ui.v1.NodeR\rinitializedTo\"C\n" +
 	"\x0eExploreRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tmax_files\x18\x02 \x01(\x05R\bmaxFiles\"\xac\x01\n" +
@@ -4753,7 +4855,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
 	(PermalinkAvailability)(0),    // 1: codegraph.ui.v1.PermalinkAvailability
@@ -4782,39 +4884,40 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*GetNodeDetailRequest)(nil),  // 24: codegraph.ui.v1.GetNodeDetailRequest
 	(*SourceBlob)(nil),            // 25: codegraph.ui.v1.SourceBlob
 	(*NodeDefinition)(nil),        // 26: codegraph.ui.v1.NodeDefinition
-	(*GetNodeDetailResponse)(nil), // 27: codegraph.ui.v1.GetNodeDetailResponse
-	(*ExploreRequest)(nil),        // 28: codegraph.ui.v1.ExploreRequest
-	(*ExploreGroup)(nil),          // 29: codegraph.ui.v1.ExploreGroup
-	(*BlastEntry)(nil),            // 30: codegraph.ui.v1.BlastEntry
-	(*ExploreResponse)(nil),       // 31: codegraph.ui.v1.ExploreResponse
-	(*IndexingInProgress)(nil),    // 32: codegraph.ui.v1.IndexingInProgress
-	(*GetPermalinkRequest)(nil),   // 33: codegraph.ui.v1.GetPermalinkRequest
-	(*GetPermalinkResponse)(nil),  // 34: codegraph.ui.v1.GetPermalinkResponse
-	(*GetHealthRequest)(nil),      // 35: codegraph.ui.v1.GetHealthRequest
-	(*WorktreeMismatch)(nil),      // 36: codegraph.ui.v1.WorktreeMismatch
-	(*PendingChanges)(nil),        // 37: codegraph.ui.v1.PendingChanges
-	(*IndexHealth)(nil),           // 38: codegraph.ui.v1.IndexHealth
-	(*GetHealthResponse)(nil),     // 39: codegraph.ui.v1.GetHealthResponse
-	(*FileGraphRequest)(nil),      // 40: codegraph.ui.v1.FileGraphRequest
-	(*FileGraphNode)(nil),         // 41: codegraph.ui.v1.FileGraphNode
-	(*FileGraphEdge)(nil),         // 42: codegraph.ui.v1.FileGraphEdge
-	(*FileGraphResponse)(nil),     // 43: codegraph.ui.v1.FileGraphResponse
-	(*FileSymbolsRequest)(nil),    // 44: codegraph.ui.v1.FileSymbolsRequest
-	(*FileSymbolsResponse)(nil),   // 45: codegraph.ui.v1.FileSymbolsResponse
-	(*WatchGraphRequest)(nil),     // 46: codegraph.ui.v1.WatchGraphRequest
-	(*WatchGraphEvent)(nil),       // 47: codegraph.ui.v1.WatchGraphEvent
-	(*GetEditorLinkRequest)(nil),  // 48: codegraph.ui.v1.GetEditorLinkRequest
-	(*EditorPreset)(nil),          // 49: codegraph.ui.v1.EditorPreset
-	(*GetEditorLinkResponse)(nil), // 50: codegraph.ui.v1.GetEditorLinkResponse
-	(*Coverage)(nil),              // 51: codegraph.ui.v1.Coverage
-	(*GetCoverageRequest)(nil),    // 52: codegraph.ui.v1.GetCoverageRequest
-	(*CoverageRow)(nil),           // 53: codegraph.ui.v1.CoverageRow
-	(*GetCoverageResponse)(nil),   // 54: codegraph.ui.v1.GetCoverageResponse
-	nil,                           // 55: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	nil,                           // 56: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	nil,                           // 57: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
-	nil,                           // 58: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
-	nil,                           // 59: codegraph.ui.v1.Coverage.ExcludedByReasonEntry
+	(*DataAccess)(nil),            // 27: codegraph.ui.v1.DataAccess
+	(*GetNodeDetailResponse)(nil), // 28: codegraph.ui.v1.GetNodeDetailResponse
+	(*ExploreRequest)(nil),        // 29: codegraph.ui.v1.ExploreRequest
+	(*ExploreGroup)(nil),          // 30: codegraph.ui.v1.ExploreGroup
+	(*BlastEntry)(nil),            // 31: codegraph.ui.v1.BlastEntry
+	(*ExploreResponse)(nil),       // 32: codegraph.ui.v1.ExploreResponse
+	(*IndexingInProgress)(nil),    // 33: codegraph.ui.v1.IndexingInProgress
+	(*GetPermalinkRequest)(nil),   // 34: codegraph.ui.v1.GetPermalinkRequest
+	(*GetPermalinkResponse)(nil),  // 35: codegraph.ui.v1.GetPermalinkResponse
+	(*GetHealthRequest)(nil),      // 36: codegraph.ui.v1.GetHealthRequest
+	(*WorktreeMismatch)(nil),      // 37: codegraph.ui.v1.WorktreeMismatch
+	(*PendingChanges)(nil),        // 38: codegraph.ui.v1.PendingChanges
+	(*IndexHealth)(nil),           // 39: codegraph.ui.v1.IndexHealth
+	(*GetHealthResponse)(nil),     // 40: codegraph.ui.v1.GetHealthResponse
+	(*FileGraphRequest)(nil),      // 41: codegraph.ui.v1.FileGraphRequest
+	(*FileGraphNode)(nil),         // 42: codegraph.ui.v1.FileGraphNode
+	(*FileGraphEdge)(nil),         // 43: codegraph.ui.v1.FileGraphEdge
+	(*FileGraphResponse)(nil),     // 44: codegraph.ui.v1.FileGraphResponse
+	(*FileSymbolsRequest)(nil),    // 45: codegraph.ui.v1.FileSymbolsRequest
+	(*FileSymbolsResponse)(nil),   // 46: codegraph.ui.v1.FileSymbolsResponse
+	(*WatchGraphRequest)(nil),     // 47: codegraph.ui.v1.WatchGraphRequest
+	(*WatchGraphEvent)(nil),       // 48: codegraph.ui.v1.WatchGraphEvent
+	(*GetEditorLinkRequest)(nil),  // 49: codegraph.ui.v1.GetEditorLinkRequest
+	(*EditorPreset)(nil),          // 50: codegraph.ui.v1.EditorPreset
+	(*GetEditorLinkResponse)(nil), // 51: codegraph.ui.v1.GetEditorLinkResponse
+	(*Coverage)(nil),              // 52: codegraph.ui.v1.Coverage
+	(*GetCoverageRequest)(nil),    // 53: codegraph.ui.v1.GetCoverageRequest
+	(*CoverageRow)(nil),           // 54: codegraph.ui.v1.CoverageRow
+	(*GetCoverageResponse)(nil),   // 55: codegraph.ui.v1.GetCoverageResponse
+	nil,                           // 56: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	nil,                           // 57: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	nil,                           // 58: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	nil,                           // 59: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	nil,                           // 60: codegraph.ui.v1.Coverage.ExcludedByReasonEntry
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	7,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
@@ -4829,74 +4932,79 @@ var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	6,  // 9: codegraph.ui.v1.NodeDefinition.calls:type_name -> codegraph.ui.v1.Node
 	6,  // 10: codegraph.ui.v1.NodeDefinition.called_by:type_name -> codegraph.ui.v1.Node
 	25, // 11: codegraph.ui.v1.NodeDefinition.source:type_name -> codegraph.ui.v1.SourceBlob
-	0,  // 12: codegraph.ui.v1.GetNodeDetailResponse.mode:type_name -> codegraph.ui.v1.NodeDetailMode
-	6,  // 13: codegraph.ui.v1.GetNodeDetailResponse.node:type_name -> codegraph.ui.v1.Node
-	6,  // 14: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
-	6,  // 15: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
-	26, // 16: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
-	25, // 17: codegraph.ui.v1.GetNodeDetailResponse.source:type_name -> codegraph.ui.v1.SourceBlob
-	6,  // 18: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
-	25, // 19: codegraph.ui.v1.ExploreGroup.source:type_name -> codegraph.ui.v1.SourceBlob
-	6,  // 20: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
-	29, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
-	30, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
-	1,  // 23: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
-	55, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	56, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	57, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
-	37, // 27: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
-	38, // 28: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
-	36, // 29: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
-	51, // 30: codegraph.ui.v1.GetHealthResponse.coverage:type_name -> codegraph.ui.v1.Coverage
-	58, // 31: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
-	41, // 32: codegraph.ui.v1.FileGraphResponse.nodes:type_name -> codegraph.ui.v1.FileGraphNode
-	42, // 33: codegraph.ui.v1.FileGraphResponse.edges:type_name -> codegraph.ui.v1.FileGraphEdge
-	6,  // 34: codegraph.ui.v1.FileSymbolsResponse.symbols:type_name -> codegraph.ui.v1.Node
-	2,  // 35: codegraph.ui.v1.GetEditorLinkResponse.availability:type_name -> codegraph.ui.v1.EditorLinkAvailability
-	3,  // 36: codegraph.ui.v1.GetEditorLinkResponse.default_source:type_name -> codegraph.ui.v1.EditorTemplateSource
-	49, // 37: codegraph.ui.v1.GetEditorLinkResponse.presets:type_name -> codegraph.ui.v1.EditorPreset
-	59, // 38: codegraph.ui.v1.Coverage.excluded_by_reason:type_name -> codegraph.ui.v1.Coverage.ExcludedByReasonEntry
-	4,  // 39: codegraph.ui.v1.GetCoverageRequest.reason:type_name -> codegraph.ui.v1.ExclusionReason
-	5,  // 40: codegraph.ui.v1.CoverageRow.kind:type_name -> codegraph.ui.v1.CoverageRowKind
-	4,  // 41: codegraph.ui.v1.CoverageRow.reason:type_name -> codegraph.ui.v1.ExclusionReason
-	53, // 42: codegraph.ui.v1.GetCoverageResponse.rows:type_name -> codegraph.ui.v1.CoverageRow
-	8,  // 43: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	10, // 44: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	14, // 45: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	16, // 46: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
-	18, // 47: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
-	20, // 48: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
-	22, // 49: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
-	24, // 50: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
-	28, // 51: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
-	33, // 52: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
-	35, // 53: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
-	40, // 54: codegraph.ui.v1.UIService.FileGraph:input_type -> codegraph.ui.v1.FileGraphRequest
-	44, // 55: codegraph.ui.v1.UIService.FileSymbols:input_type -> codegraph.ui.v1.FileSymbolsRequest
-	46, // 56: codegraph.ui.v1.UIService.WatchGraph:input_type -> codegraph.ui.v1.WatchGraphRequest
-	48, // 57: codegraph.ui.v1.UIService.GetEditorLink:input_type -> codegraph.ui.v1.GetEditorLinkRequest
-	52, // 58: codegraph.ui.v1.UIService.GetCoverage:input_type -> codegraph.ui.v1.GetCoverageRequest
-	9,  // 59: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	11, // 60: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	15, // 61: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	17, // 62: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	19, // 63: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	21, // 64: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	23, // 65: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	27, // 66: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	31, // 67: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
-	34, // 68: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
-	39, // 69: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
-	43, // 70: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
-	45, // 71: codegraph.ui.v1.UIService.FileSymbols:output_type -> codegraph.ui.v1.FileSymbolsResponse
-	47, // 72: codegraph.ui.v1.UIService.WatchGraph:output_type -> codegraph.ui.v1.WatchGraphEvent
-	50, // 73: codegraph.ui.v1.UIService.GetEditorLink:output_type -> codegraph.ui.v1.GetEditorLinkResponse
-	54, // 74: codegraph.ui.v1.UIService.GetCoverage:output_type -> codegraph.ui.v1.GetCoverageResponse
-	59, // [59:75] is the sub-list for method output_type
-	43, // [43:59] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	27, // 12: codegraph.ui.v1.NodeDefinition.accessed_by:type_name -> codegraph.ui.v1.DataAccess
+	6,  // 13: codegraph.ui.v1.NodeDefinition.initialized_to:type_name -> codegraph.ui.v1.Node
+	6,  // 14: codegraph.ui.v1.DataAccess.node:type_name -> codegraph.ui.v1.Node
+	0,  // 15: codegraph.ui.v1.GetNodeDetailResponse.mode:type_name -> codegraph.ui.v1.NodeDetailMode
+	6,  // 16: codegraph.ui.v1.GetNodeDetailResponse.node:type_name -> codegraph.ui.v1.Node
+	6,  // 17: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
+	6,  // 18: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
+	26, // 19: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
+	25, // 20: codegraph.ui.v1.GetNodeDetailResponse.source:type_name -> codegraph.ui.v1.SourceBlob
+	27, // 21: codegraph.ui.v1.GetNodeDetailResponse.accessed_by:type_name -> codegraph.ui.v1.DataAccess
+	6,  // 22: codegraph.ui.v1.GetNodeDetailResponse.initialized_to:type_name -> codegraph.ui.v1.Node
+	6,  // 23: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
+	25, // 24: codegraph.ui.v1.ExploreGroup.source:type_name -> codegraph.ui.v1.SourceBlob
+	6,  // 25: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
+	30, // 26: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
+	31, // 27: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
+	1,  // 28: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
+	56, // 29: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	57, // 30: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	58, // 31: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	38, // 32: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
+	39, // 33: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
+	37, // 34: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
+	52, // 35: codegraph.ui.v1.GetHealthResponse.coverage:type_name -> codegraph.ui.v1.Coverage
+	59, // 36: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	42, // 37: codegraph.ui.v1.FileGraphResponse.nodes:type_name -> codegraph.ui.v1.FileGraphNode
+	43, // 38: codegraph.ui.v1.FileGraphResponse.edges:type_name -> codegraph.ui.v1.FileGraphEdge
+	6,  // 39: codegraph.ui.v1.FileSymbolsResponse.symbols:type_name -> codegraph.ui.v1.Node
+	2,  // 40: codegraph.ui.v1.GetEditorLinkResponse.availability:type_name -> codegraph.ui.v1.EditorLinkAvailability
+	3,  // 41: codegraph.ui.v1.GetEditorLinkResponse.default_source:type_name -> codegraph.ui.v1.EditorTemplateSource
+	50, // 42: codegraph.ui.v1.GetEditorLinkResponse.presets:type_name -> codegraph.ui.v1.EditorPreset
+	60, // 43: codegraph.ui.v1.Coverage.excluded_by_reason:type_name -> codegraph.ui.v1.Coverage.ExcludedByReasonEntry
+	4,  // 44: codegraph.ui.v1.GetCoverageRequest.reason:type_name -> codegraph.ui.v1.ExclusionReason
+	5,  // 45: codegraph.ui.v1.CoverageRow.kind:type_name -> codegraph.ui.v1.CoverageRowKind
+	4,  // 46: codegraph.ui.v1.CoverageRow.reason:type_name -> codegraph.ui.v1.ExclusionReason
+	54, // 47: codegraph.ui.v1.GetCoverageResponse.rows:type_name -> codegraph.ui.v1.CoverageRow
+	8,  // 48: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	10, // 49: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	14, // 50: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	16, // 51: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	18, // 52: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	20, // 53: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	22, // 54: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	24, // 55: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
+	29, // 56: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
+	34, // 57: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
+	36, // 58: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
+	41, // 59: codegraph.ui.v1.UIService.FileGraph:input_type -> codegraph.ui.v1.FileGraphRequest
+	45, // 60: codegraph.ui.v1.UIService.FileSymbols:input_type -> codegraph.ui.v1.FileSymbolsRequest
+	47, // 61: codegraph.ui.v1.UIService.WatchGraph:input_type -> codegraph.ui.v1.WatchGraphRequest
+	49, // 62: codegraph.ui.v1.UIService.GetEditorLink:input_type -> codegraph.ui.v1.GetEditorLinkRequest
+	53, // 63: codegraph.ui.v1.UIService.GetCoverage:input_type -> codegraph.ui.v1.GetCoverageRequest
+	9,  // 64: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	11, // 65: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	15, // 66: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	17, // 67: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	19, // 68: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	21, // 69: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	23, // 70: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	28, // 71: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	32, // 72: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	35, // 73: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
+	40, // 74: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
+	44, // 75: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
+	46, // 76: codegraph.ui.v1.UIService.FileSymbols:output_type -> codegraph.ui.v1.FileSymbolsResponse
+	48, // 77: codegraph.ui.v1.UIService.WatchGraph:output_type -> codegraph.ui.v1.WatchGraphEvent
+	51, // 78: codegraph.ui.v1.UIService.GetEditorLink:output_type -> codegraph.ui.v1.GetEditorLinkResponse
+	55, // 79: codegraph.ui.v1.UIService.GetCoverage:output_type -> codegraph.ui.v1.GetCoverageResponse
+	64, // [64:80] is the sub-list for method output_type
+	48, // [48:64] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -4905,15 +5013,15 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 		return
 	}
 	file_internal_uiproto_uiv1_ui_proto_msgTypes[18].OneofWrappers = []any{}
-	file_internal_uiproto_uiv1_ui_proto_msgTypes[27].OneofWrappers = []any{}
-	file_internal_uiproto_uiv1_ui_proto_msgTypes[42].OneofWrappers = []any{}
+	file_internal_uiproto_uiv1_ui_proto_msgTypes[28].OneofWrappers = []any{}
+	file_internal_uiproto_uiv1_ui_proto_msgTypes[43].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   54,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

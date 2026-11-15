@@ -99,7 +99,7 @@ func withMergedAccess(candidates []*schema.Edge) *schema.Edge {
 		if c.Metadata[goextract.MetaDirect] == "true" {
 			direct = true
 		}
-		if c.Metadata[goextract.MetaBinding] == goextract.BindingInit {
+		if goextract.IsInitBinding(c) {
 			md[goextract.MetaBinding] = goextract.BindingInit
 		}
 		if i == 0 {

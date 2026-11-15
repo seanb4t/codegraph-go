@@ -143,6 +143,8 @@ function nodeDetailResponse(symbol: string, file: string): GetNodeDetailResponse
 		},
 		calls: [],
 		calledBy: [],
+		accessedBy: [],
+		initializedTo: [],
 		symbol: '',
 		definitions: [],
 		totalCandidates: 0,

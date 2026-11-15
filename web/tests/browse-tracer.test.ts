@@ -28,6 +28,8 @@ function fileModeResponse(path: string, source: string) {
 		node: undefined,
 		calls: [],
 		calledBy: [],
+		accessedBy: [],
+		initializedTo: [],
 		symbol: '',
 		definitions: [],
 		totalCandidates: 0,

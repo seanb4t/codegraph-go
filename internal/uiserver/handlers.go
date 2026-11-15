@@ -603,6 +603,16 @@ func nodesToProto(nodes []*schema.Node) []*uiv1.Node {
 	return out
 }
 
+// dataAccessToProto maps access entries onto their uiv1.DataAccess wire
+// projections, preserving order.
+func dataAccessToProto(access []query.DataAccess) []*uiv1.DataAccess {
+	out := make([]*uiv1.DataAccess, len(access))
+	for i, a := range access {
+		out[i] = &uiv1.DataAccess{Node: nodeToProto(a.Node), Access: a.Access}
+	}
+	return out
+}
+
 // nodeDetailModeToProto maps internal/query.NodeDetailMode onto its
 // uiv1.NodeDetailMode wire projection, one constant per constant.
 func nodeDetailModeToProto(m query.NodeDetailMode) uiv1.NodeDetailMode {
@@ -654,6 +664,8 @@ func nodeDefinitionToProto(n *schema.Node, dd *query.DefinitionDetail, gathered 
 		out.Calls = nodesToProto(dd.Calls)
 		out.CalledBy = nodesToProto(dd.CalledBy)
 		out.Source = sourceBlobToProto(truncateSource(dd.Source))
+		out.AccessedBy = dataAccessToProto(dd.AccessedBy)
+		out.InitializedTo = nodesToProto(dd.InitializedTo)
 	}
 	return out
 }
@@ -715,6 +727,8 @@ func nodeDetailToProto(eng *query.Engine, d query.NodeDetail) (*uiv1.GetNodeDeta
 		resp.Node = nodeToProto(d.Definition.Node)
 		resp.Calls = nodesToProto(d.Definition.Calls)
 		resp.CalledBy = nodesToProto(d.Definition.CalledBy)
+		resp.AccessedBy = dataAccessToProto(d.Definition.AccessedBy)
+		resp.InitializedTo = nodesToProto(d.Definition.InitializedTo)
 		// CR-02: the source blob is an OPTIONAL enrichment on this
 		// response, never the response's reason for existing — a
 		// definition whose source cannot be read is still a perfectly

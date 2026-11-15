@@ -27,3 +27,24 @@ func Write(t testing.TB, files map[string]string) string {
 	}
 	return root
 }
+
+// AccountJava is the file p/Account.java for a test of data symbols. The
+// class declares the field balance, which the method deposit at line 7
+// reads and writes. It also declares a field and a method named size. The
+// method at line 12 reads the field.
+const AccountJava = `package p;
+
+public class Account {
+    private int balance;
+    int size;
+
+    public int deposit(int amount) {
+        balance += amount;
+        return balance;
+    }
+
+    public int size() {
+        return size;
+    }
+}
+`

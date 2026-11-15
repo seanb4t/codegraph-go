@@ -396,44 +396,57 @@ func (e *Engine) NodeSelected(sel Selector, file string, line *int) (string, err
 // (WR-04) — shared by the single-def and multi-def render paths so the
 // edge-read logic exists in exactly one place.
 func (e *Engine) fetchCalls(node *schema.Node) ([]*schema.Node, error) {
+	return e.fetchTargets(node, func(edge *schema.Edge) bool { return edge.Kind == goextract.RefKindCalls })
+}
+
+// fetchTargets resolves the targets of node's outgoing edges that keep
+// accepts, in edge order, and skips a dangling target (WR-04).
+func (e *Engine) fetchTargets(node *schema.Node, keep func(*schema.Edge) bool) ([]*schema.Node, error) {
 	it, err := e.reader.IterateEdges(node.Id)
 	if err != nil {
 		return nil, err
 	}
 	defer it.Close()
 
-	var calls []*schema.Node
+	var targets []*schema.Node
 	for it.Next() {
 		edge := it.Edge()
-		if edge.Kind != goextract.RefKindCalls {
+		if !keep(edge) {
 			continue
 		}
 		target, err := e.reader.GetNode(edge.Target)
 		if err != nil {
-			// WR-04: a dangling calls-edge target is skipped rather than
-			// aborting the whole node detail render.
+			// WR-04: a dangling target is skipped rather than aborting
+			// the whole node detail render.
 			if errors.Is(err, graphstore.ErrNotFound) {
 				continue
 			}
 			return nil, err
 		}
-		calls = append(calls, target)
+		targets = append(targets, target)
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
 	}
-	return calls, nil
+	return targets, nil
 }
 
-// fetchCalledBy resolves node's reverse callers from a pre-built
-// reverse-adjacency map (BuildReverseAdjacency), skipping a dangling
-// source rather than aborting the render (WR-04). rev is passed in
-// (rather than rebuilt per call) so the multi-def path — which fetches
-// call trails for up to HARD_CAP candidates — builds it once and shares
-// it, instead of paying its O(edges) cost once per candidate.
-func (e *Engine) fetchCalledBy(node *schema.Node, rev map[string][]*schema.Edge) ([]*schema.Node, error) {
-	var calledBy []*schema.Node
-	for _, edge := range rev[node.Id] {
+// sourceEdge is one source node of a reverse index entry, with its edge.
+type sourceEdge struct {
+	Node *schema.Node
+	Edge *schema.Edge
+}
+
+// fetchSources resolves the sources of node's edges in a pre-built
+// reverse index (BuildReverseAdjacency or buildAccessIndex), in index
+// order, skipping a dangling source rather than aborting the render
+// (WR-04). idx is passed in (rather than rebuilt per call) so the
+// multi-def path, which fetches trails for up to HARD_CAP candidates,
+// builds it once and shares it, instead of paying its O(edges) cost once
+// per candidate.
+func (e *Engine) fetchSources(node *schema.Node, idx map[string][]*schema.Edge) ([]sourceEdge, error) {
+	var sources []sourceEdge
+	for _, edge := range idx[node.Id] {
 		src, err := e.reader.GetNode(edge.Source)
 		if err != nil {
 			// WR-04: skip a dangling reverse-edge source.
@@ -442,7 +455,16 @@ func (e *Engine) fetchCalledBy(node *schema.Node, rev map[string][]*schema.Edge)
 			}
 			return nil, err
 		}
-		calledBy = append(calledBy, src)
+		sources = append(sources, sourceEdge{Node: src, Edge: edge})
 	}
-	return calledBy, nil
+	return sources, nil
+}
+
+// sourceNodes returns the nodes of sources in order, and nil for none.
+func sourceNodes(sources []sourceEdge) []*schema.Node {
+	var nodes []*schema.Node
+	for _, s := range sources {
+		nodes = append(nodes, s.Node)
+	}
+	return nodes
 }

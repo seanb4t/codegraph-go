@@ -49,6 +49,19 @@ func (g *defGraph) call(src, dst string) {
 	g.edges = append(g.edges, &schema.Edge{Source: src, Target: dst, Kind: goextract.RefKindCalls})
 }
 
+// ref adds a references edge with the metadata pairs kv: key, value,
+// key, value. With no pairs the edge has no metadata.
+func (g *defGraph) ref(src, dst string, kv ...string) {
+	var md map[string]string
+	for i := 0; i+1 < len(kv); i += 2 {
+		if md == nil {
+			md = map[string]string{}
+		}
+		md[kv[i]] = kv[i+1]
+	}
+	g.edges = append(g.edges, &schema.Edge{Source: src, Target: dst, Kind: goextract.RefKindReferences, Metadata: md})
+}
+
 func (g *defGraph) engine() *Engine {
 	return New(&traverseFakeReader{nodes: g.nodes, edges: g.edges})
 }
