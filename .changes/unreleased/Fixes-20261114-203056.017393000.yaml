@@ -1,0 +1,3 @@
+kind: Fixes
+body: codegraph init no longer crashes with a stack overflow on a JavaScript or TypeScript destructuring assignment with a shorthand property, as ({ a } = obj). Each name in the pattern is now recorded as a write.
+time: 2026-11-14T20:30:56.017393-05:00
