@@ -259,7 +259,7 @@ func (ex *extractor) captureWrite(fromID string, expr *tree_sitter.Node, access 
 		return
 	}
 	switch expr.Kind() {
-	case "identifier":
+	case "identifier", "shorthand_property_identifier_pattern":
 		alias, name := ex.bareName(expr)
 		pos := expr.StartPosition()
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
@@ -280,8 +280,6 @@ func (ex *extractor) captureWrite(fromID string, expr *tree_sitter.Node, access 
 		for _, n := range patternIdentifiers(expr) {
 			ex.captureWrite(fromID, n, access, nil)
 		}
-	case "shorthand_property_identifier_pattern":
-		ex.captureWrite(fromID, expr, access, nil)
 	default:
 		ex.captureExprRead(fromID, expr)
 	}
