@@ -66,6 +66,8 @@ function singleDefState(
 		node: node('Foo'),
 		calls: [],
 		calledBy: [],
+		accessedBy: [],
+		initializedTo: [],
 		source: sourceRender(),
 		...overrides
 	} as BrowseTargetState;

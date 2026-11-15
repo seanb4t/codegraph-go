@@ -20,6 +20,7 @@ import type {
 	GetNodeDetailResponse,
 	ImpactRequestSchema,
 	ImpactResponse,
+	DataAccess,
 	Node,
 	NodeDefinition,
 	Location
@@ -58,6 +59,10 @@ export type BrowseTargetState =
 			node: Node;
 			calls: Node[];
 			calledBy: Node[];
+			// accessedBy and initializedTo are set by the server only for a
+			// data symbol (a variable, a constant or a field).
+			accessedBy: DataAccess[];
+			initializedTo: Node[];
 			source?: SourceRender;
 	  }
 	| {
@@ -120,6 +125,8 @@ export async function loadBrowseTarget(
 				node: response.node,
 				calls: response.calls,
 				calledBy: response.calledBy,
+				accessedBy: response.accessedBy,
+				initializedTo: response.initializedTo,
 				source: response.source
 					? {
 							content: response.source.content,

@@ -260,6 +260,8 @@
 		<NeighborsPanel
 			calls={targetState.calls}
 			calledBy={targetState.calledBy}
+			accessedBy={targetState.accessedBy}
+			initializedTo={targetState.initializedTo}
 			blastRadius={blastState}
 			depth={params.depth}
 			onNavigate={handleNeighborNavigate}

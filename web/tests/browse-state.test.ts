@@ -48,6 +48,8 @@ function singleDefResponse(overrides: Partial<GetNodeDetailResponse> = {}): GetN
 		node: node('Foo'),
 		calls: [],
 		calledBy: [],
+		accessedBy: [],
+		initializedTo: [],
 		symbol: '',
 		definitions: [],
 		totalCandidates: 0,
@@ -107,6 +109,20 @@ describe('loadBrowseTarget: mode discrimination (never inferred from field empti
 			expect(state.calls.map((n) => n.name)).toEqual(['Bar']);
 			expect(state.calledBy.map((n) => n.name)).toEqual(['Baz']);
 			expect(state.source?.totalLines).toBe(1);
+		}
+	});
+
+	it('a single-def response keeps the accessed-by and initialized-to lists', async () => {
+		const response = singleDefResponse({
+			node: node('run', { kind: 'variable' }),
+			accessedBy: [{ node: node('use'), access: 'read_write' }] as unknown as GetNodeDetailResponse['accessedBy'],
+			initializedTo: [node('start')]
+		});
+		const state = await loadBrowseTarget({ symbol: 'run', unknown: [] }, stubDetailClient(response));
+		expect(state.kind).toBe('single-def');
+		if (state.kind === 'single-def') {
+			expect(state.accessedBy.map((a) => [a.node?.name, a.access])).toEqual([['use', 'read_write']]);
+			expect(state.initializedTo.map((n) => n.name)).toEqual(['start']);
 		}
 	});
 

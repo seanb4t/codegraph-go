@@ -486,12 +486,24 @@ message SourceBlob {
 // per-candidate lookup that fetches calls/called_by also fetches source,
 // see internal/query.DefinitionDetail.Source); unset for a listed-only
 // candidate, the same discipline calls/called_by already follow.
+// accessed_by and initialized_to follow the same discipline, and are set
+// only for a data symbol (a variable, a constant or a field).
 message NodeDefinition {
   Node node = 1;
   repeated Node calls = 2;
   repeated Node called_by = 3;
   bool detail_gathered = 4;
   SourceBlob source = 5;
+  repeated DataAccess accessed_by = 6;
+  repeated Node initialized_to = 7;
+}
+
+// DataAccess is one source that reads or writes a data symbol, with the
+// stored access role: "read", "write" or "read_write". Module-level code
+// is a source of kind "file".
+message DataAccess {
+  Node node = 1;
+  string access = 2;
 }
 
 // GetNodeDetailResponse is the discriminated wire projection of
@@ -505,7 +517,7 @@ message NodeDefinition {
 //	mode                      | populated fields
 //	--------------------------|--------------------------------------------
 //	NODE_DETAIL_MODE_FILE       | path, source
-//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by, source
+//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by, source, accessed_by, initialized_to
 //	NODE_DETAIL_MODE_MULTI_DEF  | symbol, definitions, total_candidates
 //
 // total_candidates is the TRUE total candidate count
@@ -545,6 +557,11 @@ message GetNodeDetailResponse {
   // perform, going through the same repo-root confinement gate). Unset
   // in NODE_DETAIL_MODE_MULTI_DEF.
   SourceBlob source = 9;
+
+  // accessed_by and initialized_to are populated only in
+  // NODE_DETAIL_MODE_SINGLE_DEF, and only for a data symbol.
+  repeated DataAccess accessed_by = 10;
+  repeated Node initialized_to = 11;
 }
 
 // ExploreRequest carries internal/query.Engine.ExploreDetail's two

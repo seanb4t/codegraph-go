@@ -1380,3 +1380,123 @@ func TestLocationToProtoCarriesOverloadFields(t *testing.T) {
 		t.Errorf("locationToProto = %+v, want signature (String s) and ambiguous", got)
 	}
 }
+
+// accountJava is a Java class with a field balance that deposit reads
+// and writes at line 7, and a field and a method that share the name
+// size. The method at line 12 reads the field.
+const accountJava = `package p;
+
+public class Account {
+    private int balance;
+    int size;
+
+    public int deposit(int amount) {
+        balance += amount;
+        return balance;
+    }
+
+    public int size() {
+        return size;
+    }
+}
+`
+
+// indexedTree writes files into a temp directory, indexes it and returns
+// a client of a server over it.
+func indexedTree(t *testing.T, files map[string]string) uiv1connect.UIServiceClient {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	indexGofixture(t, dir)
+	return uiv1connect.NewUIServiceClient(http.DefaultClient, startedServer(t, dir).URL())
+}
+
+// accessRefs returns each entry as "name path:line role".
+func accessRefs(access []*uiv1.DataAccess) []string {
+	var out []string
+	for _, a := range access {
+		n := a.GetNode()
+		out = append(out, fmt.Sprintf("%s %s:%d %s", n.GetName(), n.GetFilePath(), n.GetStartLine(), a.GetAccess()))
+	}
+	return out
+}
+
+func TestGetNodeDetailDataAccess(t *testing.T) {
+	nodeDetail := func(t *testing.T, client uiv1connect.UIServiceClient, symbol string) *uiv1.GetNodeDetailResponse {
+		t.Helper()
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: symbol}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(%s): %v", symbol, err)
+		}
+		return resp.Msg
+	}
+	java := indexedTree(t, map[string]string{"p/Account.java": accountJava})
+
+	t.Run("the graph UI asks for a field", func(t *testing.T) {
+		msg := nodeDetail(t, java, "balance")
+		if msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("mode = %v, want single definition", msg.GetMode())
+		}
+		if got, want := accessRefs(msg.GetAccessedBy()), []string{"deposit p/Account.java:7 read_write"}; fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("accessed_by = %v, want %v", got, want)
+		}
+		if len(msg.GetInitializedTo()) != 0 {
+			t.Fatalf("initialized_to = %v, want empty", msg.GetInitializedTo())
+		}
+	})
+
+	t.Run("a field and a method named size", func(t *testing.T) {
+		msg := nodeDetail(t, java, "size")
+		if len(msg.GetDefinitions()) != 2 {
+			t.Fatalf("got %d definitions, want 2", len(msg.GetDefinitions()))
+		}
+		for _, def := range msg.GetDefinitions() {
+			if !def.GetDetailGathered() {
+				t.Fatalf("%s: detail not gathered", def.GetNode().GetKind())
+			}
+			got := accessRefs(def.GetAccessedBy())
+			switch def.GetNode().GetKind() {
+			case "field":
+				if want := []string{"size p/Account.java:12 read"}; fmt.Sprint(got) != fmt.Sprint(want) {
+					t.Errorf("field accessed_by = %v, want %v", got, want)
+				}
+			case "method":
+				if len(got) != 0 || len(def.GetInitializedTo()) != 0 {
+					t.Errorf("method has data lists: accessed_by %v, initialized_to %v", got, def.GetInitializedTo())
+				}
+			default:
+				t.Errorf("unexpected candidate kind %q", def.GetNode().GetKind())
+			}
+		}
+	})
+
+	t.Run("only gathered candidates carry their entries", func(t *testing.T) {
+		files := map[string]string{"go.mod": "module example.com/m\n\ngo 1.26\n"}
+		for i := range uiMultiDefCap + 1 {
+			files[fmt.Sprintf("pkg%02d/x.go", i)] = fmt.Sprintf("package pkg%02d\n\nvar Big = 1\n\nfunc use() int { return Big }\n", i)
+		}
+		msg := nodeDetail(t, indexedTree(t, files), "Big")
+		defs := msg.GetDefinitions()
+		if len(defs) != uiMultiDefCap+1 {
+			t.Fatalf("got %d definitions, want %d", len(defs), uiMultiDefCap+1)
+		}
+		last := defs[uiMultiDefCap-1]
+		want := []string{fmt.Sprintf("use %s:5 read", last.GetNode().GetFilePath())}
+		if got := accessRefs(last.GetAccessedBy()); !last.GetDetailGathered() || fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("candidate %d: gathered %v, accessed_by %v, want gathered with %v", uiMultiDefCap, last.GetDetailGathered(), got, want)
+		}
+		beyond := defs[uiMultiDefCap]
+		if beyond.GetDetailGathered() || len(beyond.GetAccessedBy()) != 0 || len(beyond.GetInitializedTo()) != 0 {
+			t.Fatalf("candidate %d: gathered %v, accessed_by %v, initialized_to %v, want listed with empty lists",
+				uiMultiDefCap+1, beyond.GetDetailGathered(), accessRefs(beyond.GetAccessedBy()), beyond.GetInitializedTo())
+		}
+	})
+}

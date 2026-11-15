@@ -46,6 +46,8 @@ function singleDefStateNoSource(): BrowseTargetState {
 		node: node('Foo'),
 		calls: [],
 		calledBy: [],
+		accessedBy: [],
+		initializedTo: [],
 		source: undefined
 	} as BrowseTargetState;
 }

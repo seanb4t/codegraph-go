@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import NeighborsPanel from '$lib/components/browse/NeighborsPanel.svelte';
 import { NAV_INTENT } from '$lib/browse-nav';
 import type { BlastRadiusState } from '$lib/browse-state';
-import type { Node, Location } from '$lib/gen/ui_pb';
+import type { DataAccess, Node, Location } from '$lib/gen/ui_pb';
 
 function node(name: string, overrides: Partial<Node> = {}): Node {
 	return {
@@ -238,5 +238,62 @@ describe('NeighborsPanel: empty and failed states are distinguishable, never an 
 		expect(emptyText).toBeTruthy();
 		expect(failedText).toBeTruthy();
 		expect(emptyText).not.toBe(failedText);
+	});
+});
+
+function access(entry: Node, role: string): DataAccess {
+	return { node: entry, access: role } as unknown as DataAccess;
+}
+
+describe('NeighborsPanel: the data lists of a variable, a constant or a field', () => {
+	it('a list with entries shows its heading and each role', () => {
+		render(NeighborsPanel, {
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [access(node('deposit'), 'read_write'), access(node('report'), 'read')],
+				initializedTo: [node('start')],
+				blastRadius: IDLE_BLAST,
+				onNavigate: vi.fn()
+			}
+		});
+
+		const accessed = screen.getByTestId('neighbors-accessed-by');
+		expect(accessed.querySelector('h2')?.textContent).toBe('Accessed by');
+		expect(screen.getByTestId('neighbor-accessor-deposit').textContent).toContain('read_write');
+		expect(screen.getByTestId('neighbor-accessor-report').textContent).toContain('read');
+		const initialized = screen.getByTestId('neighbors-initialized-to');
+		expect(initialized.querySelector('h2')?.textContent).toBe('Initialized to');
+		expect(screen.getByTestId('neighbor-initializer-start').textContent).toContain('start');
+	});
+
+	it('an empty data list shows no heading', () => {
+		render(NeighborsPanel, {
+			props: { calledBy: [], calls: [], accessedBy: [], initializedTo: [], blastRadius: IDLE_BLAST, onNavigate: vi.fn() }
+		});
+
+		expect(screen.queryByTestId('neighbors-accessed-by')).toBeNull();
+		expect(screen.queryByTestId('neighbors-initialized-to')).toBeNull();
+		expect(screen.queryByText('Accessed by')).toBeNull();
+		expect(screen.queryByText('Initialized to')).toBeNull();
+		// Positive assertion: the panel itself rendered.
+		expect(screen.getByTestId('neighbors-callers')).toBeInTheDocument();
+	});
+
+	it('two accessors that share file, line and name both render', () => {
+		const shared = { filePath: 'p/Account.java', startLine: 7, name: 'deposit' };
+		render(NeighborsPanel, {
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [access(node('a1', shared), 'read'), access(node('a2', shared), 'write')],
+				blastRadius: IDLE_BLAST,
+				onNavigate: vi.fn()
+			}
+		});
+
+		expect(screen.getByTestId('neighbor-accessor-a1').textContent).toContain('read');
+		expect(screen.getByTestId('neighbor-accessor-a2').textContent).toContain('write');
+		expect(screen.getByTestId('neighbors-accessed-by').querySelectorAll('li')).toHaveLength(2);
 	});
 });
