@@ -1,8 +1,8 @@
 ---
-verdict: approve-with-notes
+verdict: approve
 phase: implementation
-reviewed_at: 2026-11-15T17:26:37+00:00
-head: 335586acea00eb53d960a07abc35c40a82a9a353
+reviewed_at: 2026-11-15T17:41:13+00:00
+head: e07fed0dc6b893547b1124f1862605fb98b3696f
 lenses:
   spec-lint: not-applicable
   approach: ok
@@ -17,9 +17,8 @@ lenses:
 
 | id | lens | severity | scope | claim | evidence | action |
 |---|---|---|---|---|---|---|
-| inv-1 | invariants | should-fix | deviates-design | D1 moves IsDataKind to goextract to keep the rule that production internal/query reaches only goextract and nodeid among indexer packages, but the depclosure test forbids only the internal/indexer root, so an import of internal/indexer/resolve from internal/query would pass. | design.md > D1. Two new fields on DefinitionDetail — "The test enforces only the part of that rule that forbids the `internal/indexer` root."; scope basis: design.md > D1. Two new fields on DefinitionDetail — "This change does not extend the test." | In the T-01-18 production subtest, fail for any dependency under internal/indexer/ other than internal/indexer/goextract and internal/indexer/nodeid, and keep the root check. |
-| inv-2 | invariants | should-fix | in-change | The Accessed by block hides on the entry count after node-less entries are dropped, and no test passes a list whose only entries lack a node, the edge where the raw list is non-empty and the shown list is empty. | web/src/lib/components/browse/NeighborsPanel.svelte:72 — "access.flatMap((a) => (a.node ? [{ node: a.node, role: a.access }] : []));" | Add a case to web/tests/neighbors-panel.test.ts with accessedBy: [noNode] that expects queryByTestId('neighbors-accessed-by') to be null. |
-| fit-1 | fit | suggestion | deviates-design | Issue #274, the follow-up the proposal names, must move the new reverseEdgeIndex out of internal/query, where the indexer cannot reach it. | internal/query/traverse.go:37 — "func reverseEdgeIndex(r graphstore.Reader, keep func(*schema.Edge) bool) (map[string][]*schema.Edge, error) {"; scope basis: design.md > D2. One shared reverse index builder, one more scan only for a data symbol — "so issue #274 must move `reverseEdgeIndex` to a package that both import" | Either place reverseEdgeIndex now in a package that both internal/query and internal/indexer import, or leave it and keep the move on #274. |
+| fit-1 | fit | should-fix | beyond-scope | The new reverseEdgeIndex loop in internal/query is the same full-scan, key-by-target loop as the indexer's buildReverseAdjacency. design.md names the copy, and issue #274 tracks its collapse outside this change. | internal/query/traverse.go:37 — "func reverseEdgeIndex(r graphstore.Reader, keep func(*schema.Edge) bool) (map[string][]*schema.Edge, error) {"; scope basis: proposal.md > Out of scope — "The indexer's own copy of the reverse edge index in `internal/indexer/sync.go`, which issue #274 tracks." | Leave it to #274. That issue moves reverseEdgeIndex to a package both import, and the indexer then passes a kinds predicate. This change does nothing more. |
+| inv-1 | invariants | should-fix | deviates-design | D1 moves IsDataKind to goextract to keep production internal/query off every indexer package but goextract and nodeid; the depclosure test only forbids the internal/indexer root, so an import of internal/indexer/resolve from internal/query would pass. | design.md > D1. Two new fields on DefinitionDetail — "The test enforces only the part of that rule that forbids the `internal/indexer` root. This change keeps to the whole ru"; scope basis: design.md > D1. Two new fields on DefinitionDetail — "This change does not extend the test." | In the T-01-18 production subtest, fail for any dep under internal/indexer other than internal/indexer/goextract and internal/indexer/nodeid, and add a fixture check that the rule can match. |
 
 ## Coverage matrix
 
@@ -32,7 +31,7 @@ lenses:
 | Nothing accesses a constant | internal/cli/data_symbol_queries_test.go: TestNodeShowsDataAccess/nothing accesses a constant | covered | pass |
 | A field and a method share a name | internal/cli/data_symbol_queries_test.go: TestNodeShowsDataAccess/the data lines appear only for data symbols | covered | pass |
 | A function keeps its output | internal/cli/data_symbol_queries_test.go: TestNodeShowsDataAccess/a function keeps its output | covered | pass |
-| The graph UI asks for a field | internal/uiserver/handlers_test.go: TestGetNodeDetailDataAccess/the graph UI asks for a field | covered | pass |
+| The graph UI asks for a field | internal/uiserver/handlers_test.go: TestGetNodeDetailDataAccess | covered | pass |
 
 ### Not run
 
@@ -47,7 +46,7 @@ None.
 - exit 0: `go test -count=1 -v -run 'TestNodeShowsDataAccess/nothing accesses a constant' ./internal/cli`
 - exit 0: `go test -count=1 -v -run 'TestNodeShowsDataAccess/the data lines appear only for data symbols' ./internal/cli`
 - exit 0: `go test -count=1 -v -run 'TestNodeShowsDataAccess/a function keeps its output' ./internal/cli`
-- exit 0: `go test -count=1 -v -run 'TestGetNodeDetailDataAccess/the graph UI asks for a field' ./internal/uiserver`
+- exit 0: `go test -count=1 -v -run 'TestGetNodeDetailDataAccess' ./internal/uiserver`
 
 ## Dropped
 
@@ -55,42 +54,45 @@ None.
 
 ## Lens notes
 
-- approach: Requirement 'Node lists the readers and writers of a data symbol' is produced by D1, D2 and D3: buildAccessIndex in internal/query/traverse.go, fillDataLines and accessLess in internal/query/detail.go.
-- approach: Requirement 'Node lists the initializer value of a data symbol' is produced by D4: fetchTargets with goextract.IsInitBinding in internal/query/node.go and detail.go.
-- approach: Requirement 'The data lines appear only for data symbols' is produced by D5: TrailRows gates the data rows on goextract.IsDataKind, RenderNode prints every row, renderNodeSection and writeNodeSection skip empty rows.
-- approach: Requirement 'The graph UI carries the data lines' is produced by D6: ui.proto fields 6/7 and 10/11, dataAccessToProto in internal/uiserver/handlers.go, browse-state.ts and the neighborList snippet of NeighborsPanel.svelte.
-- approach: Cited facts checked at head: file nodes have Name = relPath and StartLine 1 in every extractor; UnknownWrite carries access=write; edgeKey is (source, kind, target); withMergedAccess merges roles; the five inline binding=init checks now call IsInitBinding; IsDataKind lives only in goextract; T-01-18 allows goextract and nodeid; internal/indexer/sync.go keeps its own reverse index for the test import cycle; uiMultiDefCap is 20; transportSendMaxBytes is 16 MiB; the Taskfile has proto:gen, proto:drift, golden:regen and test:golden.
-- approach: The D2 rejected alternative holds: the non-detail callers of BuildReverseAdjacency are callers, impact, affected (traverse.go), seeding.go, expand.go and explore (detail.go), and each reads calls edges only.
-- approach: D5's byte-for-byte claim for function sections holds against the unchanged serilog go-node-multi.json golden, where a multi-definition section with calls and no callers prints no Called by line.
-- approach: The design has no Open Questions and no migration plan, so the answered-open-question and no-rollback classes do not apply.
-- fit: The scan loop of reverseEdgeIndex (internal/query/traverse.go:37) and the indexer's buildReverseAdjacency (internal/indexer/sync.go:823) remain two copies. design.md D2 and proposal.md Out of scope name the copy, and issue #274 tracks its collapse, so it is not raised as a duplication finding.
-- fit: The inline binding=init checks are collapsed: goextract.IsInitBinding (internal/indexer/goextract/types.go:297) is the only remaining comparison of MetaBinding with BindingInit in production code. IsDataKind has one definition, in goextract, and internal/query imports no resolve or symbols package.
-- fit: TrailRows and TrailHeader are the one source of the trail labels, the data-kind check and the access suffix for both the markdown view and the styled view in internal/cli/present/node.go. The styled view holds no copy of them.
-- fit: NeighborsPanel.svelte renders callers, callees and the two data lists through one neighborList snippet. The blast radius section stays separate, as design.md D6 states.
-- fit: The codegraph_node tool description (internal/mcp/tools.go:398) and internal/mcp/resources/node.md still say that node shows a symbol's signature, calls, and callers, with no mention of the data lines. This is outside the fit lens and is recorded for the controller.
-- fit: Seven web test files each keep their own BrowseTargetState stub, and the change adds accessedBy and initializedTo to each one. These are per-file test fixtures that exist before the change, so they fall under the fixture exclusion of the rulebook.
-- fit: The repository adds no library-preference rows. The prompt named no path for them, so only the generic rows of the rulebook were applied.
-- invariants: I1: AccessedBy and InitializedTo are nil for every kind that IsDataKind rejects \| enforced at internal/query/detail.go gatherDefinition and render_markdown.go TrailRows \| boundary test internal/query/detail_test.go 'a function candidate gets no data lines', internal/cli/data_symbol_queries_test.go 'a function keeps its output'
-- invariants: I2: AccessedBy holds one entry per stored source \| enforced at internal/graphstore/keys.go edgeKey(src, kind, dst) \| boundary test TestAccessOrderIgnoresEdgeOrder (count equals present sources)
-- invariants: I3: AccessedBy is ordered by file, name, line, then signature, kind and role, never by node id \| enforced at internal/query/detail.go accessLess via locationLess \| boundary test detail_test.go file-before-name, by-name, by-line, by-role subtests and the rapid property test
-- invariants: I4: a module-level source prints at line 1 \| enforced at the extractors (file nodes set StartLine: 1) \| boundary test detail_test.go 'module-level code is listed by the file path' and the CLI subtest
-- invariants: I5: a dangling source or initializer target is skipped, never an error \| enforced at node.go fetchSources and fetchTargets (ErrNotFound) \| boundary test detail_test.go 'a missing source is skipped' and 'binding=init edge to a missing node'
-- invariants: I6: buildAccessIndex runs only when a data kind is present, at most once per request \| enforced at detail.go buildSingleDefDetail and buildMultiDefDetail \| boundary test 'only a data symbol scans the access index' (0 and 1 on both sides)
-- invariants: I7: proto field numbers stay unique and stable \| enforced at TestUIProtoFieldNumbersAreStableAndUnique (descriptor reflection) \| boundary test the six new rows
-- invariants: I8: the multi-definition body budget holds with data lines \| enforced at RenderNodeMultiDef \| boundary test TestRenderNodeDataLines exact-budget case on both sides
-- invariants: I9: gathered UI candidates carry data lists, others none \| enforced at handlers.go nodeDefinitionToProto \| boundary test TestGetNodeDetailDataAccess at uiMultiDefCap and uiMultiDefCap+1
-- invariants: I10: Svelte data list keys (node id) are unique within a list \| enforced at the store edge key and nodeToProto Id \| boundary test neighbors-panel.test.ts 'two accessors that share file, line and name'
-- invariants: I11: IsInitBinding is the same check as the inline binding=init comparisons it replaces \| enforced at goextract/types.go IsInitBinding \| boundary test existing resolve and sync tests; diff is a pure substitution, no check weakened
-- invariants: No enforcement point of this change is a script, so no probe run was made.
-- invariants: I12: a data list hides when it shows no entry, also after node-less entries are dropped \| enforced at NeighborsPanel.svelte neighborList snippet \| boundary test none for the all-node-less list (inv-2)
-- invariants: I13: production internal/query reaches only goextract and nodeid among indexer packages \| enforced at depclosure T-01-18 for the root only \| boundary test none for internal/indexer/resolve (inv-1)
-- invariants: The stored access role is not validated against read, write and read_write at query time; every writer found (resolver.go, collapse.go, bindings.go, goextract types.go:322) uses the goextract constants, so this is not raised.
-- test-coverage: Task 5.1 (changelog fragment) is unchecked in tasks.md, though an untracked fragment file exists; not a scenario matter.
-- test-coverage: The browse-view clause of the graph UI requirement is tested in web/tests/neighbors-panel.test.ts and browse-state.test.ts; the web suite was not run by this lens.
-- test-honesty: Read TestNodeDataAccess, TestAccessOrderIgnoresEdgeOrder, TestRenderNodeDataLines, TestRenderNodeDataLinesStrippedEqualsMarkdown, TestNodeShowsDataAccess, TestGetNodeDetailDataAccess, the MCP balance check and the new neighbors-panel and browse-state cases. Each asserts the spec's THEN against code under test.
-- test-honesty: The present test compares stripped styled output with query.RenderNode through an independent helper, and adds positive checks for the entry lines.
-- test-honesty: The skips in the test files are not on lines of this diff.
-- test-honesty: The golden JSON and web/build files, and the one-line stub field additions in web tests, were not read as tests.
+- approach: All four requirements have producing decisions: R1 by D1-D3 (internal/query/detail.go fillDataLines, traverse.go buildAccessIndex), R2 by D4 (node.go fetchTargets with goextract.IsInitBinding), R3 by D5 (render_markdown.go TrailRows, RenderNode, renderNodeSection), R4 by D6 (ui.proto fields 6, 7, 10, 11, handlers.go dataAccessToProto, browse-state.ts, NeighborsPanel.svelte).
+- approach: Every scenario THEN is producible at head: file nodes carry Name = relPath and StartLine 1 in every extractor, so a module-level write prints as main.go (main.go:1, write); UnknownWrite in goextract/types.go gives the write role; withMergedAccess in resolve/collapse.go gives read_write.
+- approach: Cited facts hold at head: T-01-18 in internal/depclosure/dependency_closure_test.go allows goextract and nodeid; IsDataKind and IsInitBinding live in goextract/types.go; the five inline binding=init checks in resolve/bindings.go, resolve/collapse.go and sync_bindings.go now call IsInitBinding; the indexer keeps buildReverseAdjacency(r, kinds...) in sync.go; transportSendMaxBytes is 16 MiB and uiMultiDefCap is 20.
+- approach: No code departs from a decision: BuildReverseAdjacency and BuildImplementsIndex route through reverseEdgeIndex, BuildImplementsIndex keeps its sort by source, fetchCalledBy is gone in favor of fetchSources, accessLess sorts by locationLess with the signature set and then by role, writeNodeSection takes *query.DefinitionDetail, and the styled loop keeps its own budget constants and strippedLen budget.
+- approach: The multi-definition browse view renders DefinitionPicker, which shows no neighbor list of any kind, so the data lists appear only after a definition is picked. D6 scopes the browse state to single-definition mode and the requirement text does not name the mode; this matches how Callers and Callees behave today, so it is recorded here and not as a finding.
+- approach: The design has no open questions and no migration plan, so the answered-open-question and no-rollback classes do not apply.
+- approach: Issue #335, cited by D5 for the rejected two-list option, was not read; the rejection reason was not checked against it.
+- fit: D1: IsDataKind now exists once, in internal/indexer/goextract/types.go:303. No copy is left in resolve, and internal/query reaches only goextract.
+- fit: D4: every binding=init check outside tests now goes through goextract.IsInitBinding (resolve/bindings.go:30 and :78, resolve/collapse.go:102, sync_bindings.go:98 and :110, query/detail.go:208). The remaining MetaBinding writes in resolver.go:469 and collapse.go:103 set the value and do not test it.
+- fit: D2: BuildReverseAdjacency, BuildImplementsIndex and buildAccessIndex all route through reverseEdgeIndex. buildAccessIndex follows the package-var seam pattern of buildReverseAdjacency (traverse.go:67).
+- fit: D3: accessLess reuses locationLess and nodeLocation instead of writing a new comparator. sourceEdge is the only node-plus-edge pair type in internal.
+- fit: D5: the markdown and styled views both loop over query.TrailRows and query.TrailHeader, so neither view keeps its own copy of the labels or the data-kind check. writeNodeRefs stays the sanctioned styled mirror of joinNodeRefs and formatNodeRef, and both put a non-empty suffix inside the parentheses the same way.
+- fit: D6: the DataAccess message follows the BlastEntry pattern of a Node plus annotation fields. dataAccessToProto reuses nodeToProto, as nodesToProto does. NeighborsPanel now draws callers, callees and both data lists through one snippet.
+- fit: The Account.java fixture is defined once, as testtree.AccountJava, and the cli, mcp and uiserver tests share it.
+- fit: Not a finding (pre-existing, and the change adds no copy): web/tests keeps separate singleDefState and node builders in source-pane, source-pane-breadcrumb, source-pane-editor-link and degrade-states. This change had to add accessedBy and initializedTo to each one, plus the inline states in browse-page, browse-tracer and live-route-refetch. A shared builder under web/tests/support would make the next field addition a single edit.
+- fit: Generated files (ui.pb.go, ui_pb.ts, web/build/**) and the hugo goldens were left out of the fit reading, as the exclusions direct.
+- fit: fit-1 is should-fix only because the gate allows note severity just for third-copy. The rulebook's tracked-ticket downgrade applies to third copies alone, so a tracked change-vs-repo copy stays should-fix, with scope beyond-scope.
+- invariants: I1: AccessedBy and InitializedTo are always nil for a kind that IsDataKind rejects \| enforced at internal/query/detail.go gatherDefinition (IsDataKind check) and render_markdown.go TrailRows \| boundary test TestNodeDataAccess 'a function candidate gets no data lines', TestGetNodeDetailDataAccess 'a field and a method named size'
+- invariants: I2: A data symbol always prints both data lines in the single-definition view, also when empty \| enforced at render_markdown.go RenderNode via TrailRows \| boundary test TestNodeShowsDataAccess 'nothing accesses a constant' (HasSuffix on both empty lines), styled 'SingleDef constant'
+- invariants: I3: A multi-definition section never prints an empty data line, and prints the trail header iff one of four lists has an entry \| enforced at renderNodeSection and writeNodeSection \| boundary test TestRenderNodeDataLines cases 3 to 5 and the styled MultiDef subtests
+- invariants: I4: AccessedBy holds one entry per present source and never depends on edge order or node id \| enforced at detail.go accessLess (locationLess then role) and graphstore keys.go edgeKey (one edge per source, kind, target) \| boundary test TestAccessOrderIgnoresEdgeOrder (rapid, twins with same and different roles, dropped sources) plus the file, name, line and role tie subtests
+- invariants: I5: Only a references edge with a non-empty access role enters the access index \| enforced at traverse.go buildAccessIndex \| boundary test 'a references edge without access is not an entry' and 'a calls edge with access is not an entry'
+- invariants: I6: Only a references edge with binding=init enters InitializedTo, and a dangling target is skipped \| enforced at detail.go fillDataLines with goextract.IsInitBinding, node.go fetchTargets (WR-04) \| boundary test the three binding=init subtests of TestNodeDataAccess
+- invariants: I7: A dangling access source is skipped, never an error \| enforced at node.go fetchSources \| boundary test 'a missing source is skipped' and the dropped sources of the rapid test
+- invariants: I8: The access index is built at most once per request, and never when no candidate is a data kind \| enforced at detail.go buildSingleDefDetail and buildMultiDefDetail (slices.ContainsFunc) \| boundary test 'only a data symbol scans the access index' with 0 and 1 on both sides
+- invariants: I9: Module-level code is listed as the file path at line 1 \| enforced at the extractors' file node (goextract.go StartLine: 1, Name: relPath) \| boundary test 'module-level code is listed by the file path' and the CLI scenario
+- invariants: I10: The IsInitBinding refactor keeps the indexer checks byte-equal \| enforced at goextract/types.go IsInitBinding, the same expression as the removed inline checks \| boundary test none needed; no inline MetaBinding check remains (rg)
+- invariants: I11: Production internal/query reaches no internal/indexer package but goextract and nodeid \| enforced at none for subpackages (depclosure checks only the root) \| boundary test none; holds at head, see inv-1
+- invariants: I12: UI proto field numbers are new and unique \| enforced at readonly_test.go uiProtoFieldNumbers with the +6 length constant \| boundary test TestUIProtoFieldNumbersAreStableAndUnique
+- invariants: I13: Only gathered multi-definition candidates carry data lists on the wire \| enforced at handlers.go nodeDefinitionToProto (gathered branch) \| boundary test 'only gathered candidates carry their entries' at uiMultiDefCap and uiMultiDefCap+1
+- invariants: I14: Svelte keys of a data list are unique \| enforced at NeighborsPanel.svelte idKey plus graphstore edgeKey uniqueness \| boundary test neighbors-panel 'two accessors that share file, line and name both render'
+- invariants: I15: A data section's entries count against the plain body budget \| enforced at RenderNodeMultiDef \| boundary test 'data entries move a later section to the other definitions' (fills the budget exactly, then one past)
+- invariants: No enforcement point of this change is a script, so no edge-input probe ran. A section-by-section comparison of the three hugo goldens against main showed that only field sections changed, each gaining the trail header and an Accessed by line.
+- invariants: InitializedTo keeps edge order (store key order, so by target id); resolver.go dataRefMetadata sets binding=init only when the ref is the whole initializer, so the list holds at most one entry and no ordering finding follows.
+- test-coverage: Assertions read at the CLI test and the uiserver handler test; query, render, present, MCP and web tests were located by name and grep counts only.
+- test-honesty: TestNodeDataAccess, TestAccessOrderIgnoresEdgeOrder, TestNodeShowsDataAccess, TestGetNodeDetailDataAccess and the stripped-equals-markdown property test assert specific values against the spec THEN clauses and can fail for the named reason.
+- test-honesty: web browse-state test passes a stub response through loadBrowseTarget and checks the lists survive; it is a thin pass-through but matches task 3.3 and does exercise the mapping, so not reported.
+- test-honesty gap: render_markdown_test.go TestRenderNodeDataLines, internal/mcp check, readonly_test.go and web tests other than neighbors-panel/browse-state were only grepped, not read in full
+- test-honesty gap: Skips found in the grep are in files outside this change's added tests and were not judged as new
 
 ## Plan review (2026-11-15)
 
