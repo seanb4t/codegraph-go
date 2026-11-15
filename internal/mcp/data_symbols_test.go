@@ -3,6 +3,8 @@ package mcp
 import (
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // TestDataSymbolPublicQueries covers the MCP side of user-visible data
@@ -14,22 +16,7 @@ import (
 // kinds.
 func TestDataSymbolPublicQueries(t *testing.T) {
 	call := treeServer(t, map[string]string{
-		"p/Account.java": `package p;
-
-public class Account {
-    private int balance;
-    int size;
-
-    public int deposit(int amount) {
-        balance += amount;
-        return balance;
-    }
-
-    public int size() {
-        return size;
-    }
-}
-`,
+		"p/Account.java": testtree.AccountJava,
 	}, "node", "search", "explore")
 
 	requireAll(t, call("codegraph_node", map[string]any{"symbol": "balance"}),

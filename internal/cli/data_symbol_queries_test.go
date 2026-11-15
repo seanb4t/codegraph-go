@@ -4,28 +4,15 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // dataSymbolFiles is a Java class with a field balance that deposit reads
 // and writes, and a field and a method that share the name size. Ledger
 // is a distractor whose method name contains "balance".
 var dataSymbolFiles = map[string]string{
-	"p/Account.java": `package p;
-
-public class Account {
-    private int balance;
-    int size;
-
-    public int deposit(int amount) {
-        balance += amount;
-        return balance;
-    }
-
-    public int size() {
-        return size;
-    }
-}
-`,
+	"p/Account.java": testtree.AccountJava,
 	"p/Ledger.java": `package p;
 
 public class Ledger {

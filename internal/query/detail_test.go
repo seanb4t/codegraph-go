@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 	"pgregory.net/rapid"
 )
 
@@ -795,17 +797,11 @@ func TestResolveNodeForDetailClassifiesNotFound(t *testing.T) {
 // candidate can read its source.
 func (g *defGraph) engineWithFiles(t *testing.T) *Engine {
 	t.Helper()
-	dir := t.TempDir()
-	body := bytes.Repeat([]byte("line\n"), 20)
+	files := make(map[string]string, len(g.nodes))
 	for _, n := range g.nodes {
-		p := filepath.Join(dir, n.FilePath)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, body, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		files[n.FilePath] = strings.Repeat("line\n", 20)
 	}
+	dir := testtree.Write(t, files)
 	return NewWithRoot(&traverseFakeReader{nodes: g.nodes, edges: g.edges}, dir)
 }
 
@@ -843,18 +839,6 @@ func nodeNames(nodes []*schema.Node) []string {
 	return out
 }
 
-func equalRows(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestNodeDataAccess(t *testing.T) {
 	access := func(role string) []string { return []string{goextract.MetaAccess, role} }
 
@@ -864,7 +848,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.node("dep", goextract.KindMethod, "deposit", "p/Account.java", 7)
 		g.ref("dep", "bal", access(goextract.AccessReadWrite)...)
 		got := accessRows(singleDef(t, g.engine(), "balance").AccessedBy)
-		if want := []string{"deposit p/Account.java:7 read_write"}; !equalRows(got, want) {
+		if want := []string{"deposit p/Account.java:7 read_write"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -875,7 +859,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.node("b", goextract.KindVariable, "b", "main.go", 2)
 		g.ref("a", "b", goextract.MetaAccess, goextract.AccessRead, goextract.MetaBinding, goextract.BindingInit)
 		got := accessRows(singleDef(t, g.engine(), "b").AccessedBy)
-		if want := []string{"a main.go:3 read"}; !equalRows(got, want) {
+		if want := []string{"a main.go:3 read"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -886,7 +870,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.node("x", goextract.KindVariable, "x", "main.go", 3)
 		g.ref("file", "x", access(goextract.AccessWrite)...)
 		d := singleDef(t, g.engine(), "x")
-		if got, want := accessRows(d.AccessedBy), []string{"main.go main.go:1 write"}; !equalRows(got, want) {
+		if got, want := accessRows(d.AccessedBy), []string{"main.go main.go:1 write"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 		if !strings.Contains(RenderNode(d), "**Accessed by ←** main.go (main.go:1, write)\n") {
@@ -901,7 +885,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("ghost", "x", access(goextract.AccessRead)...)
 		g.ref("use", "x", access(goextract.AccessRead)...)
 		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
-		if want := []string{"use main.go:5 read"}; !equalRows(got, want) {
+		if want := []string{"use main.go:5 read"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -914,7 +898,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("alpha", "count", access(goextract.AccessRead)...)
 		g.ref("zeta", "count", access(goextract.AccessRead)...)
 		got := accessRows(singleDef(t, g.engine(), "count").AccessedBy)
-		if want := []string{"zeta a.go:1 read", "alpha b.go:1 read"}; !equalRows(got, want) {
+		if want := []string{"zeta a.go:1 read", "alpha b.go:1 read"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -927,7 +911,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("plain", "x")
 		g.ref("reader", "x", access(goextract.AccessRead)...)
 		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
-		if want := []string{"reader main.go:9 read"}; !equalRows(got, want) {
+		if want := []string{"reader main.go:9 read"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -958,7 +942,7 @@ func TestNodeDataAccess(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := nodeNames(vd.InitializedTo); !equalRows(got, []string{"run"}) {
+		if got := nodeNames(vd.InitializedTo); !slices.Equal(got, []string{"run"}) {
 			t.Fatalf("variable InitializedTo = %v, want [run]", got)
 		}
 	})
@@ -971,7 +955,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("b", "x", access(goextract.AccessRead)...)
 		g.ref("a", "x", access(goextract.AccessRead)...)
 		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
-		if want := []string{"a main.go:9 read", "b main.go:3 read"}; !equalRows(got, want) {
+		if want := []string{"a main.go:9 read", "b main.go:3 read"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -984,7 +968,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("late", "x", access(goextract.AccessRead)...)
 		g.ref("early", "x", access(goextract.AccessRead)...)
 		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
-		if want := []string{"use main.go:3 read", "use main.go:9 read"}; !equalRows(got, want) {
+		if want := []string{"use main.go:3 read", "use main.go:9 read"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -997,7 +981,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.ref("w", "x", access(goextract.AccessWrite)...)
 		g.ref("r", "x", access(goextract.AccessRead)...)
 		got := accessRows(singleDef(t, g.engine(), "x").AccessedBy)
-		if want := []string{"use main.go:3 read", "use main.go:3 write"}; !equalRows(got, want) {
+		if want := []string{"use main.go:3 read", "use main.go:3 write"}; !slices.Equal(got, want) {
 			t.Fatalf("AccessedBy = %v, want %v", got, want)
 		}
 	})
@@ -1027,7 +1011,7 @@ func TestNodeDataAccess(t *testing.T) {
 		g.node("run", goextract.KindVariable, "run", "main.go", 7)
 		g.ref("run", "start", goextract.MetaAccess, goextract.AccessRead, goextract.MetaBinding, goextract.BindingInit)
 		got := nodeNames(singleDef(t, g.engine(), "run").InitializedTo)
-		if !equalRows(got, []string{"start"}) {
+		if !slices.Equal(got, []string{"start"}) {
 			t.Fatalf("InitializedTo = %v, want [start]", got)
 		}
 	})
@@ -1186,7 +1170,7 @@ func TestAccessOrderIgnoresEdgeOrder(t *testing.T) {
 		if la, lb := accessLine(a), accessLine(b); la != lb {
 			t.Fatalf("access line depends on edge order:\n%s\n%s", la, lb)
 		}
-		if ra, rb := accessRows(a.AccessedBy), accessRows(b.AccessedBy); !equalRows(ra, rb) {
+		if ra, rb := accessRows(a.AccessedBy), accessRows(b.AccessedBy); !slices.Equal(ra, rb) {
 			t.Fatalf("AccessedBy rows depend on edge order:\n%v\n%v", ra, rb)
 		}
 	})

@@ -18,6 +18,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
 )
@@ -1381,40 +1382,11 @@ func TestLocationToProtoCarriesOverloadFields(t *testing.T) {
 	}
 }
 
-// accountJava is a Java class with a field balance that deposit reads
-// and writes at line 7, and a field and a method that share the name
-// size. The method at line 12 reads the field.
-const accountJava = `package p;
-
-public class Account {
-    private int balance;
-    int size;
-
-    public int deposit(int amount) {
-        balance += amount;
-        return balance;
-    }
-
-    public int size() {
-        return size;
-    }
-}
-`
-
 // indexedTree writes files into a temp directory, indexes it and returns
 // a client of a server over it.
 func indexedTree(t *testing.T, files map[string]string) uiv1connect.UIServiceClient {
 	t.Helper()
-	dir := t.TempDir()
-	for name, body := range files {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	dir := testtree.Write(t, files)
 	indexGofixture(t, dir)
 	return uiv1connect.NewUIServiceClient(http.DefaultClient, startedServer(t, dir).URL())
 }
@@ -1438,7 +1410,7 @@ func TestGetNodeDetailDataAccess(t *testing.T) {
 		}
 		return resp.Msg
 	}
-	java := indexedTree(t, map[string]string{"p/Account.java": accountJava})
+	java := indexedTree(t, map[string]string{"p/Account.java": testtree.AccountJava})
 
 	t.Run("the graph UI asks for a field", func(t *testing.T) {
 		msg := nodeDetail(t, java, "balance")
