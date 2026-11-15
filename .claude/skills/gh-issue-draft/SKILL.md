@@ -45,8 +45,9 @@ example `chore(test): ...` or `chore(ci): ...`.
 3. Pick area labels from `gh label list`: `area:ci`, `area:indexer`,
    `area:query`, `area:mcp`, `area:agents` or `area:ui`, when the facts
    place the issue in one of those areas. `area:query` covers the query
-   engine and the output of the CLI commands. Do not add `needs-triage` (a workflow adds it), and do
-   not add a `priority:*` or `approved-*` label (the maintainer adds those).
+   engine and the output of the CLI commands. Do not add `needs-triage` (a
+   workflow adds it), and do not add a `priority:*` or `approved-*` label
+   (the maintainer adds those).
 4. Write the body to a file outside the repository, in the session
    scratchpad or a `mktemp` directory. Never write it inside the repository.
    Follow the writing rules below. If a lint hook reports violations after
