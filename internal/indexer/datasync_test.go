@@ -91,3 +91,81 @@ func TestDataSymbolSyncEquivalence(t *testing.T) {
 		})
 	}
 }
+
+// TestGoFieldWriteSyncEquivalence edits the Go field writes that withhold a
+// call through a field: a keyed composite literal, and writes through a
+// receiver of unknown type, in the package of the field and in another
+// package for an exported field. A field declaration also arrives after
+// a write that can reach it exists. After each sync the store must equal a fresh
+// index.
+func TestGoFieldWriteSyncEquivalence(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod":       "module example.com/m\n\ngo 1.22\n",
+		"p/call.go":    "package p\n\nfunc run() {}\n\nfunc setup(s *S) { s.fn = run }\n\nfunc caller(s *S) { s.fn() }\n\nfunc setupE(e *E) { e.Fn = run }\n\nfunc callerE(e *E) { e.Fn() }\n",
+		"p/types.go":   "package p\n\ntype S struct{ fn func() }\n",
+		"ext/ext.go":   "package ext\n\nfunc Lookup() int { return 0 }\n\nfunc All() []int { return nil }\n",
+		"q/unknown.go": "package q\n\nfunc poke() {}\n",
+		"q/keep.go":    "package q\n\nimport \"example.com/m/ext\"\n\nvar _ = ext.Lookup\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Run(root, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	write := func(path, content string) {
+		t.Helper()
+		writeFile(t, filepath.Join(root, path), content)
+	}
+	remove := func(path string) {
+		t.Helper()
+		if err := os.Remove(filepath.Join(root, path)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	callsRun := func(fn string, want bool) {
+		t.Helper()
+		r, closeFn := openSnapshot(t, storeDir)
+		defer closeFn()
+		nodes := declaredNodes(t, r, "p/call.go", goextract.KindFunction, fn)
+		got := len(nodes) == 1 && len(edgeTargets(t, r, nodes[0].Id, goextract.RefKindCalls)) > 0
+		if got != want {
+			t.Errorf("%s calls through its field: %v, want %v", fn, got, want)
+		}
+	}
+	steps := []struct {
+		name            string
+		edit            func()
+		caller, callerE bool
+	}{
+		{"add a keyed literal", func() { write("p/lit.go", "package p\n\nfunc build() S { return S{fn: nil} }\n") }, false, false},
+		{"remove the keyed literal", func() { remove("p/lit.go") }, true, false},
+		{"add the exported field", func() { write("p/e.go", "package p\n\ntype E struct{ Fn func() }\n") }, true, true},
+		{"add an unknown write in the package", func() {
+			write("p/poke.go", "package p\n\nimport \"example.com/m/ext\"\n\nfunc poke() { x := ext.Lookup(); x.fn = nil }\n")
+		}, false, true},
+		{"remove the unknown write", func() { remove("p/poke.go") }, true, true},
+		{"add an unknown write in another package", func() {
+			write("q/unknown.go", "package q\n\nimport \"example.com/m/ext\"\n\nfunc poke() { x := ext.Lookup(); x.fn = nil; x.Fn = nil }\n")
+		}, true, false},
+		{"remove the exported field", func() { remove("p/e.go") }, true, false},
+		{"add the exported field after the write", func() { write("p/e.go", "package p\n\ntype E struct{ Fn func() }\n") }, true, false},
+		{"remove the unexported field and add an unknown write", func() {
+			write("p/types.go", "package p\n\ntype S struct{ n int }\n")
+			write("p/poke.go", "package p\n\nimport \"example.com/m/ext\"\n\nfunc poke() {\n\tfor _, x := range ext.All() {\n\t\tx.fn = nil\n\t}\n}\n")
+		}, false, false},
+		{"add the unexported field after the write", func() {
+			remove("p/types.go")
+			write("p/types2.go", "package p\n\ntype S struct {\n\tn  int\n\tfn func()\n}\n")
+		}, false, false},
+	}
+	for _, s := range steps {
+		s.edit()
+		if _, err := Sync(root, storeDir, Options{}); err != nil {
+			t.Fatalf("Sync after %q: %v", s.name, err)
+		}
+		t.Run(s.name, func(t *testing.T) {
+			callsRun("caller", s.caller)
+			callsRun("callerE", s.callerE)
+			requireSyncEqualsRun(t, root, storeDir)
+		})
+	}
+}

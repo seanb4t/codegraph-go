@@ -1287,7 +1287,8 @@ func mergeSortedPaths(a, b []string) []string {
 
 // filesWaitingOn returns, sorted, the paths of r0's files that are in
 // neither changed nor dependents and whose unresolved names include one
-// of names.
+// of names. An unresolved name under resolve.AnyModule matches a name in
+// any module.
 func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, changed, dependents map[string]struct{}) ([]string, error) {
 	if len(names) == 0 {
 		return nil, nil
@@ -1297,7 +1298,14 @@ func filesWaitingOn(r0 graphstore.Reader, names map[unresolvedKey]struct{}, chan
 		_, inDependents := dependents[path]
 		return inChanged || inDependents
 	}
+	anyModule := make(map[string]bool, len(names))
+	for k := range names {
+		anyModule[k.name] = true
+	}
 	match := func(u *schema.UnresolvedName) bool {
+		if u.GetModuleKey() == resolve.AnyModule {
+			return anyModule[u.GetName()]
+		}
 		_, ok := names[unresolvedKey{moduleKey: u.GetModuleKey(), name: u.GetName()}]
 		return ok
 	}

@@ -62,6 +62,10 @@ type data struct {
 	// each name, for the subtype walk. Freeze fills both.
 	typeNames   map[string]bool
 	typesByName map[string][]string
+	// goFieldsByName holds the ids of the Go field nodes under each
+	// name, for a write through a receiver of unknown type. Freeze fills
+	// it.
+	goFieldsByName map[string][]string
 }
 
 // Builder collects the declarations of one resolution: the results of
@@ -263,6 +267,7 @@ func (b *Builder) Freeze() View {
 	b.frozen = true
 	d.typeNames = make(map[string]bool)
 	d.typesByName = make(map[string][]string)
+	d.goFieldsByName = make(map[string][]string)
 	for id, n := range d.nodes {
 		if len(n.InterfaceMethods) > 0 {
 			specs := make([]goextract.MethodSpec, len(n.InterfaceMethods))
@@ -275,8 +280,14 @@ func (b *Builder) Freeze() View {
 			d.typeNames[n.Name] = true
 			d.typesByName[n.Name] = append(d.typesByName[n.Name], id)
 		}
+		if n.Kind == goextract.KindField && n.Language == "go" {
+			d.goFieldsByName[n.Name] = append(d.goFieldsByName[n.Name], id)
+		}
 	}
 	for _, ids := range d.typesByName {
+		sort.Strings(ids)
+	}
+	for _, ids := range d.goFieldsByName {
 		sort.Strings(ids)
 	}
 	return View{d: d}

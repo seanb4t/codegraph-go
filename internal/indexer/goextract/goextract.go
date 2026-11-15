@@ -1184,9 +1184,7 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	case "composite_literal":
 		ex.recordInstantiate(fromID, expr)
 		if elemBody := expr.ChildByFieldName("body"); elemBody != nil {
-			for i := uint(0); i < elemBody.NamedChildCount(); i++ {
-				ex.captureCompositeElement(fromID, elemBody.NamedChild(i))
-			}
+			ex.captureCompositeElements(fromID, elemBody, ex.compositeOwnerOf(expr.ChildByFieldName("type")))
 		}
 	}
 	// Every other expression kind (literals, function_literal bodies,
@@ -1195,20 +1193,126 @@ func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
 	// error.
 }
 
-// captureCompositeElement handles one element of a composite_literal's
-// element_list: a bare value, or a keyed_element{key, value} pair — only
-// the VALUE side is a read (a keyed_element's key, when it names a
-// struct field, is a declaration-adjacent label, not a value reference).
-func (ex *extractor) captureCompositeElement(fromID string, elem *tree_sitter.Node) {
-	if elem.Kind() == "keyed_element" {
-		if v := elem.ChildByFieldName("value"); v != nil {
-			ex.captureExprRead(fromID, v)
-		} else if elem.NamedChildCount() > 1 {
-			ex.captureExprRead(fromID, elem.NamedChild(1))
+// compositeOwner describes the type of a composite literal: the type whose
+// fields the keys of a keyed element name, and the owner of the literals
+// whose type its elements leave out, as the `{...}` in `[]S{{...}}`.
+type compositeOwner struct {
+	pkgAlias, typ string
+	// fields is true when the keys are field names. typ is then the
+	// owner type, or "" when the extractor does not know it.
+	fields bool
+	elem   *compositeOwner
+}
+
+// unknownOwner is the owner of a literal whose type the extractor does
+// not know: its keys are fields of an unknown type.
+var unknownOwner = compositeOwner{pkgAlias: UnknownAlias("literal_value"), fields: true}
+
+// compositeOwnerOf returns the owner of a composite literal of type t. A
+// named type owns the fields its keys name. A slice, array or map passes
+// its element type to the literals that leave the type out. Any other
+// type, as an anonymous struct, names no field node.
+func (ex *extractor) compositeOwnerOf(t *tree_sitter.Node) compositeOwner {
+	if t == nil {
+		return unknownOwner
+	}
+	switch t.Kind() {
+	case "type_identifier":
+		return compositeOwner{typ: t.Utf8Text(ex.src), fields: true}
+	case "qualified_type":
+		pkg, name := t.ChildByFieldName("package"), t.ChildByFieldName("name")
+		if pkg == nil || name == nil {
+			return compositeOwner{}
 		}
+		return compositeOwner{pkgAlias: pkg.Utf8Text(ex.src), typ: name.Utf8Text(ex.src), fields: true}
+	case "generic_type":
+		return ex.compositeOwnerOf(t.ChildByFieldName("type"))
+	case "pointer_type":
+		if t.NamedChildCount() > 0 {
+			return ex.compositeOwnerOf(t.NamedChild(0))
+		}
+	case "slice_type", "array_type", "implicit_length_array_type":
+		elem := ex.compositeOwnerOf(t.ChildByFieldName("element"))
+		return compositeOwner{elem: &elem}
+	case "map_type":
+		elem := ex.compositeOwnerOf(t.ChildByFieldName("value"))
+		return compositeOwner{elem: &elem}
+	}
+	return compositeOwner{}
+}
+
+// captureCompositeElements handles the elements of the literal_value body
+// of a composite literal whose type owner describes. The key of a keyed
+// element is a write to its field when the keys are field names. When
+// the value is a name, it is the value the write binds. The extractor
+// does not record a read of an element value.
+func (ex *extractor) captureCompositeElements(fromID string, body *tree_sitter.Node, owner compositeOwner) {
+	for i := uint(0); i < body.NamedChildCount(); i++ {
+		elem := body.NamedChild(i)
+		if elem.Kind() != "keyed_element" {
+			ex.captureElementWrites(fromID, elem, owner.elem)
+			continue
+		}
+		key, value := elem.ChildByFieldName("key"), elem.ChildByFieldName("value")
+		if value == nil && elem.NamedChildCount() > 1 {
+			value = elem.NamedChild(1)
+		}
+		if owner.fields {
+			if name := literalIdentifier(key); name != nil {
+				pos := name.StartPosition()
+				ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
+					FromID: fromID, Name: name.Utf8Text(ex.src), PkgAlias: owner.pkgAlias, ReceiverType: owner.typ,
+					Kind: RefKindReferences, Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+					Access: AccessWrite, Value: ex.valueRef(literalInner(value)), Member: true,
+				})
+			}
+		}
+		ex.captureElementWrites(fromID, value, owner.elem)
+	}
+}
+
+// captureElementWrites records the field writes of a composite literal
+// that is an element value. A literal whose type is left out takes its
+// owner from elem, or an unknown owner.
+func (ex *extractor) captureElementWrites(fromID string, value *tree_sitter.Node, elem *compositeOwner) {
+	inner := literalInner(value)
+	if inner == nil {
 		return
 	}
-	ex.captureExprRead(fromID, elem)
+	switch inner.Kind() {
+	case "literal_value":
+		owner := unknownOwner
+		if elem != nil {
+			owner = *elem
+		}
+		ex.captureCompositeElements(fromID, inner, owner)
+	case "composite_literal", "unary_expression":
+		if inner.Kind() == "unary_expression" {
+			if inner = inner.ChildByFieldName("operand"); inner == nil || inner.Kind() != "composite_literal" {
+				return
+			}
+		}
+		if body := inner.ChildByFieldName("body"); body != nil {
+			ex.captureCompositeElements(fromID, body, ex.compositeOwnerOf(inner.ChildByFieldName("type")))
+		}
+	}
+}
+
+// literalInner returns what a literal_element holds, or n itself.
+func literalInner(n *tree_sitter.Node) *tree_sitter.Node {
+	if n != nil && n.Kind() == "literal_element" && n.NamedChildCount() > 0 {
+		return n.NamedChild(0)
+	}
+	return n
+}
+
+// literalIdentifier returns the identifier that the key of a keyed
+// element is, or nil.
+func literalIdentifier(key *tree_sitter.Node) *tree_sitter.Node {
+	if n := literalInner(key); n != nil && (n.Kind() == "identifier" || n.Kind() == "field_identifier") {
+		return n
+	}
+	return nil
 }
 
 // captureSelector handles a selector_expression that is read or written
@@ -1240,7 +1344,7 @@ func (ex *extractor) captureSelector(fromID string, sel *tree_sitter.Node, acces
 	ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindReferences,
 		Line: int32(pos.Row) + 1, Col: int32(pos.Column), EndLine: EndLine(sel), EndCol: EndCol(sel), ReceiverType: receiverType,
-		Access: access,
+		Access: access, Member: pkgAlias == "" || pkgAlias != receiverType,
 	})
 }
 

@@ -170,6 +170,16 @@ func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOut
 			if !ok {
 				out.unresolved++
 				wait(ref.PkgAlias, ref.Name)
+				if rs.isUnknownReceiverWrite(r, ref) {
+					out.edges = append(out.edges, rs.unknownReceiverWrites(r, ref)...)
+					// A field of this name that a later sync adds can
+					// take the write too.
+					if isExported(ref.Name) {
+						waiting = append(waiting, &schema.UnresolvedName{ModuleKey: AnyModule, Name: ref.Name})
+					} else {
+						wait("", ref.Name)
+					}
+				}
 				continue
 			}
 			metadata := rs.dataRefMetadata(r, ref)

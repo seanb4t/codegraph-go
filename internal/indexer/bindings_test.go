@@ -364,3 +364,139 @@ func TestBindingsWithheldBySyntaxErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestGoFieldWritesWithholdCalls covers the Go field writes that the
+// binding analysis cannot see as one value. A keyed composite-literal
+// element writes its field, and a write through a receiver of unknown
+// type is an unknown write to every field it can reach: a field of that
+// name in the same package, or an exported field of that name in any
+// package. Each withholds the call through the field.
+func TestGoFieldWritesWithholdCalls(t *testing.T) {
+	root := testtree.Write(t, map[string]string{
+		"go.mod": "module example.com/m\n\ngo 1.22\n",
+		"lit/lit.go": `package lit
+
+type S struct{ fn func() }
+
+type T struct{ fn func() }
+
+func run()   {}
+func other() {}
+
+func setup(s *S) { s.fn = run }
+
+func caller(s *S) { s.fn() }
+
+func build() S { return S{fn: other} }
+
+func setupT(t *T) { t.fn = run }
+
+func callerT(t *T) { t.fn() }
+
+func buildT() *T { return &T{fn: other} }
+
+type U struct{ fn func() }
+
+func setupU(u *U) { u.fn = run }
+
+func callerU(u *U) { u.fn() }
+
+func buildU() []U { return []U{{fn: other}} }
+`,
+		"only/only.go": `package only
+
+type S struct{ fn func() }
+
+type T struct{ fn func() }
+
+func run() {}
+
+func setup(s *S) { s.fn = run }
+
+func caller(s *S) { s.fn() }
+
+func build() T { return T{fn: run} }
+
+func setupT(t *T) { t.fn = run }
+
+func callerT(t *T) { t.fn() }
+`,
+		"unk/unk.go": `package unk
+
+import "example.com/ext"
+
+type S struct{ fn func() }
+
+func run()   {}
+func other() {}
+
+func setup(s *S) { s.fn = run }
+
+func caller(s *S) { s.fn() }
+
+func poke(a any) {
+	x := ext.Lookup()
+	x.fn = other
+	y := ext.Lookup()
+	y.Fn = other
+	w := a.(*ext.T)
+	w.Gn = other
+}
+`,
+		"asrt/asrt.go": `package asrt
+
+type A struct{ Gn func() }
+
+func run() {}
+
+func setup(a *A) { a.Gn = run }
+
+func caller(a *A) { a.Gn() }
+`,
+		"vis/vis.go": `package vis
+
+type S struct{ fn func() }
+
+func run() {}
+
+func setup(s *S) { s.fn = run }
+
+func caller(s *S) { s.fn() }
+`,
+		"exp/exp.go": `package exp
+
+type E struct{ Fn func() }
+
+func run() {}
+
+func setup(e *E) { e.Fn = run }
+
+func caller(e *E) { e.Fn() }
+`,
+	})
+	r, _ := runAndSnapshot(t, root)
+
+	calls := func(path, fn string) bool {
+		t.Helper()
+		return bindingEdges(t, r, path, goextract.KindFunction, fn, goextract.RefKindCalls)["function run"] != nil
+	}
+	for _, c := range []struct {
+		path, fn string
+		want     bool
+		why      string
+	}{
+		{"lit/lit.go", "caller", false, "S{fn: other} competes with s.fn = run"},
+		{"lit/lit.go", "callerT", false, "&T{fn: other} competes with t.fn = run"},
+		{"lit/lit.go", "callerU", false, "[]U{{fn: other}} competes with u.fn = run"},
+		{"only/only.go", "caller", true, "s.fn = run is the only write"},
+		{"only/only.go", "callerT", true, "T{fn: run} writes the same value as t.fn = run"},
+		{"unk/unk.go", "caller", false, "x.fn = other has a receiver of unknown type in the same package"},
+		{"exp/exp.go", "caller", false, "y.Fn = other has a receiver of unknown type and Fn is exported"},
+		{"vis/vis.go", "caller", true, "x.fn = other in package unk cannot write the unexported field of package vis"},
+		{"asrt/asrt.go", "caller", true, "w.Gn = other writes a field of ext.T, a type of another package"},
+	} {
+		if got := calls(c.path, c.fn); got != c.want {
+			t.Errorf("%s %s calls run = %v, want %v: %s", c.path, c.fn, got, c.want, c.why)
+		}
+	}
+}
