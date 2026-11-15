@@ -138,41 +138,54 @@ func (e *Engine) buildFileNodeDetail(file string) (*FileDetail, error) {
 	return &FileDetail{Path: file, Source: content}, nil
 }
 
-// buildSingleDefDetail performs exactly the body the pre-extraction
-// single-def render path performed — fetchCalls, then the reverse
-// adjacency (via the buildReverseAdjacency seam), then fetchSources —
-// and returns the populated struct with Source left nil. It returns
-// whatever the fetchers returned without normalising: nil stays nil,
-// zero-length stays zero-length (ENG-01).
+// buildSingleDefDetail builds the indexes that node needs: the reverse
+// adjacency (via the buildReverseAdjacency seam), the contains index for
+// a field and the access index for a data kind. It returns the
+// gatherDefinition result with Source left nil. It returns whatever the
+// fetchers returned without normalising: nil stays nil, zero-length
+// stays zero-length (ENG-01).
 func (e *Engine) buildSingleDefDetail(node *schema.Node) (*DefinitionDetail, error) {
-	calls, err := e.fetchCalls(node)
-	if err != nil {
-		return nil, err
-	}
 	rev, err := buildReverseAdjacency(e.reader)
 	if err != nil {
 		return nil, err
 	}
-	callers, err := e.fetchSources(node, rev)
+	var owners map[string]string
+	if node.Kind == goextract.KindField {
+		if _, owners, err = buildContainsIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
+	var access map[string][]*schema.Edge
+	if goextract.IsDataKind(node.Kind) {
+		if access, err = buildAccessIndex(e.reader); err != nil {
+			return nil, err
+		}
+	}
+	return e.gatherDefinition(node, rev, owners, access)
+}
+
+// gatherDefinition returns the trail of n from prebuilt indexes: its
+// calls, its callers from rev, the owner of a field from owners and the
+// data lines of a data kind from access. The single and the
+// multi-definition paths both gather through it, and the caller sets
+// Source.
+func (e *Engine) gatherDefinition(n *schema.Node, rev map[string][]*schema.Edge, owners map[string]string, access map[string][]*schema.Edge) (*DefinitionDetail, error) {
+	calls, err := e.fetchCalls(n)
+	if err != nil {
+		return nil, err
+	}
+	callers, err := e.fetchSources(n, rev)
 	if err != nil {
 		return nil, err
 	}
 	var owner *schema.Node
-	if node.Kind == goextract.KindField {
-		_, owners, err := buildContainsIndex(e.reader)
-		if err != nil {
-			return nil, err
-		}
-		if owner, err = e.fieldOwner(node, owners); err != nil {
+	if n.Kind == goextract.KindField {
+		if owner, err = e.fieldOwner(n, owners); err != nil {
 			return nil, err
 		}
 	}
-	d := &DefinitionDetail{Node: node, Owner: owner, Calls: calls, CalledBy: sourceNodes(callers)}
-	if goextract.IsDataKind(node.Kind) {
-		access, err := buildAccessIndex(e.reader)
-		if err != nil {
-			return nil, err
-		}
+	d := &DefinitionDetail{Node: n, Owner: owner, Calls: calls, CalledBy: sourceNodes(callers)}
+	if goextract.IsDataKind(n.Kind) {
 		if err := e.fillDataLines(d, access); err != nil {
 			return nil, err
 		}
@@ -260,26 +273,11 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 		if err != nil {
 			return nil, err
 		}
-		calls, err := e.fetchCalls(n)
+		d, err := e.gatherDefinition(n, rev, owners, access)
 		if err != nil {
 			return nil, err
 		}
-		callers, err := e.fetchSources(n, rev)
-		if err != nil {
-			return nil, err
-		}
-		var owner *schema.Node
-		if n.Kind == goextract.KindField {
-			if owner, err = e.fieldOwner(n, owners); err != nil {
-				return nil, err
-			}
-		}
-		d := &DefinitionDetail{Node: n, Owner: owner, Source: source, Calls: calls, CalledBy: sourceNodes(callers)}
-		if goextract.IsDataKind(n.Kind) {
-			if err := e.fillDataLines(d, access); err != nil {
-				return nil, err
-			}
-		}
+		d.Source = source
 		return d, nil
 	}
 
