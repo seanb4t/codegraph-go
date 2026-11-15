@@ -81,6 +81,10 @@ func (v View) IsTypeName(name string) bool { return v.d.typeNames[name] }
 // TypesNamed returns the ids of the type nodes named name, in id order.
 func (v View) TypesNamed(name string) []string { return v.d.typesByName[name] }
 
+// GoFieldsNamed returns the ids of the Go field nodes named name, in id
+// order.
+func (v View) GoFieldsNamed(name string) []string { return v.d.goFieldsByName[name] }
+
 // StoredSet returns the stored overload set id.
 func (v View) StoredSet(id string) (StoredSet, bool) {
 	s, ok := v.d.storedSets[id]

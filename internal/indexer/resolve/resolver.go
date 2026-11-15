@@ -1,8 +1,11 @@
 package resolve
 
 import (
+	"path"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -394,6 +397,61 @@ func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.Unresolve
 	}
 	owner, _, ok := rs.findType(r, ref.PkgAlias, recv, "", ref.Line, ref.Col)
 	return ok && len(rs.view.Members(owner.ID, ref.Name)) == 0
+}
+
+// AnyModule is the module key of an unresolved name that a symbol of
+// that name in any module can resolve: the exported field that a write
+// through a receiver of unknown type can reach.
+const AnyModule = "*"
+
+// isUnknownReceiverWrite reports whether ref is a Go write to a member of
+// a receiver of unknown type. A receiver is unknown when it has no type,
+// when its type is the deferred type of a call, or when it is a bare name
+// that names no type, as a package variable does. A receiver of a type
+// of another package, as http.Client, is known.
+func (rs *resolver) isUnknownReceiverWrite(r goextract.FileResult, ref goextract.UnresolvedRef) bool {
+	if r.Language != "go" || !ref.Member || !goextract.IsWriteAccess(ref.Access) {
+		return false
+	}
+	recv := ref.ReceiverType
+	switch {
+	case recv == "" || isDeferred(recv):
+		return true
+	case ref.PkgAlias != "" || strings.Contains(recv, "."):
+		return false
+	}
+	return !rs.view.IsTypeName(recv)
+}
+
+// unknownReceiverWrites returns the edges of an unknown-receiver write
+// that did not resolve: a write of an unknown value to each field the
+// write can reach. That is a Go field of the same name in the directory
+// of the write, or an exported Go field of that name anywhere.
+func (rs *resolver) unknownReceiverWrites(r goextract.FileResult, ref goextract.UnresolvedRef) []*schema.Edge {
+	exported := isExported(ref.Name)
+	dir := path.Dir(r.RelPath)
+	var out []*schema.Edge
+	for _, id := range rs.view.GoFieldsNamed(ref.Name) {
+		if n := rs.view.Node(id); n == nil || (!exported && path.Dir(n.FilePath) != dir) {
+			continue
+		}
+		out = append(out, &schema.Edge{
+			Source: ref.FromID, Target: id, Kind: goextract.RefKindReferences,
+			Line: ref.Line, Col: ref.Col, Provenance: "ast",
+			Metadata: map[string]string{
+				goextract.MetaAccess:   ref.Access,
+				goextract.MetaBinds:    goextract.BindsUnknown,
+				goextract.MetaReceiver: goextract.ReceiverUnknown,
+			},
+		})
+	}
+	return out
+}
+
+// isExported reports whether a Go name is exported.
+func isExported(name string) bool {
+	first, _ := utf8.DecodeRuneInString(name)
+	return unicode.IsUpper(first)
 }
 
 // dataRefMetadata returns the metadata of the references edge of ref:

@@ -234,6 +234,11 @@ type UnresolvedRef struct {
 	// ReceiverType, the enclosing type, through its supertypes. When the
 	// type has no such member, the name resolves as a bare name.
 	ImplicitReceiver bool
+	// Member marks a Go ref to a member of a value, as `x.f` or the key
+	// of a keyed composite-literal element, and not to a name of a
+	// package. ReceiverType is the value's type, or "" when the
+	// extractor does not know it.
+	Member bool
 }
 
 // ValueRef is a name used as a value: Name, and PkgAlias and
@@ -268,6 +273,11 @@ const (
 	// MetaDirect is "true" on a call that is both direct and through a
 	// data symbol.
 	MetaDirect = "direct"
+	// MetaReceiver is ReceiverUnknown on a Go write through a receiver
+	// of unknown type. Such a write goes to every field it can reach, so
+	// the edge says that the source may write the field.
+	MetaReceiver    = "receiver"
+	ReceiverUnknown = "unknown"
 )
 
 // The access roles of a references edge, in its MetaAccess metadata.

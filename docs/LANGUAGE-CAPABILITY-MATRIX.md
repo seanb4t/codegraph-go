@@ -112,6 +112,7 @@ A call through a data symbol becomes a read of that symbol. It also becomes a ca
 - A function that code reassigns, as `let f = function () {}` and then `f = g`, holds every value written to it. A call into it is a read of it until every write assigns the function itself.
 - A field that two base classes supply from different declaring types does not resolve.
 - In Go, a call outside a `_test.go` file uses only the writes outside test files. A call inside a test file also uses the writes of test files. A test that replaces a function variable therefore does not change the production callers.
+- In Go, a keyed composite-literal element writes its field. A write through a receiver of unknown type writes every field it can reach. That is a field of that name in the same package, or an exported field of that name in any package. Its value is unknown, so it withholds a call through the field.
 
 The read reference stays when the call is withheld. A data read never makes a caller. `callers`, `callees` and `impact` follow only calls, so they do not list a function that only reads a symbol. `explore` can list a field and shows it inside the source of its owner. A field that matches a query only through the name of its owner does not take the place of a function.
 
@@ -121,7 +122,7 @@ The limits of each language are under Per-Language Gaps below. Record components
 
 ### `go`
 
-- A keyed composite-literal element is a read of its value, not a write to the field. A write through a receiver of unknown type leaves no binding edge, so neither withholds the function that a field holds.
+- The value of a composite-literal element is not recorded as a read. A keyed element still records its write to the field.
 
 ### `java`
 
