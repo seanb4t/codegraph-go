@@ -32,4 +32,4 @@ None.
 
 - A `--line` flag on `callers`, `callees` or `impact`. Issue #323 lists it as the other option. `--signature` already selects an overload on these commands, and `--file` selects a definition in another file.
 - The short form `-l`, which stays `--limit` on `callers` and `callees` and `--line` on `node`.
-- Which definition `node --line` keeps when two first lines are equally near, and a line number above the range of a 32-bit integer. Both are current behavior that this change does not specify.
+- Which definition `node --line` keeps when two first lines are equally near, a negative line number, and a line number above the range of a 32-bit integer. All three are current behavior that this change does not specify.

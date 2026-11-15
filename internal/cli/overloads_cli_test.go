@@ -17,6 +17,48 @@ func overloadCLIFixture(t *testing.T) string {
 	})
 }
 
+// TestLineFlagNarrowsNode checks node --line on the two overloads of
+// Logger.log: a line inside one keeps it, a line inside none keeps the
+// nearest by first line, and line 0 selects nothing.
+func TestLineFlagNarrowsNode(t *testing.T) {
+	dir := overloadCLIFixture(t)
+	for _, line := range []string{"6", "7"} {
+		t.Run("line "+line, func(t *testing.T) {
+			out, _, err := execCmd("node", "log", "-p", dir, "--line", line)
+			if err != nil {
+				t.Fatalf("node log --line %s: %v", line, err)
+			}
+			if !strings.Contains(out, "Logger.java:6") || !strings.Contains(out, "(String msg, Throwable t)") || strings.Contains(out, "2 definitions") {
+				t.Errorf("node log --line %s did not keep the overload at Logger.java:6:\n%s", line, out)
+			}
+		})
+	}
+	t.Run("line 0", func(t *testing.T) {
+		out, _, err := execCmd("node", "log", "-p", dir, "--line", "0")
+		if err != nil {
+			t.Fatalf("node log --line 0: %v", err)
+		}
+		if !strings.Contains(out, `2 definitions named "log"`) {
+			t.Errorf("node log --line 0 narrowed the definitions:\n%s", out)
+		}
+	})
+}
+
+// TestLineFlagOnlyOnNode checks that node registers --line and callers,
+// callees and impact do not.
+func TestLineFlagOnlyOnNode(t *testing.T) {
+	root := newRootCmd()
+	for _, name := range []string{"node", "callers", "callees", "impact"} {
+		cmd, _, err := root.Find([]string{name})
+		if err != nil || cmd.Name() != name {
+			t.Fatalf("command %s not found: %v", name, err)
+		}
+		if got, want := cmd.Flags().Lookup("line") != nil, name == "node"; got != want {
+			t.Errorf("%s has --line = %v, want %v", name, got, want)
+		}
+	}
+}
+
 // TestSignatureFlagSelectsOneOverload checks --signature on the four
 // commands that take it: each one narrows to the named overload, and the
 // plain output of callers carries the overload of each row without it.
