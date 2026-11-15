@@ -140,25 +140,28 @@ func writeNodeSection(pal Palette, d *query.DefinitionDetail) string {
 	writeNumberedSourceRange(&rangeBuilder, pal, d.Source, n.StartLine, n.EndLine)
 	b.WriteString(strings.TrimSuffix(rangeBuilder.String(), "\n"))
 
-	if len(calls) > 0 || len(calledBy) > 0 || len(d.AccessedBy) > 0 || len(d.InitializedTo) > 0 {
+	rows := []struct {
+		label string
+		n     int
+		refs  func() string
+	}{
+		{"Calls →", len(calls), func() string { return writeNodeRefs(pal, calls, nil) }},
+		{"Called by ←", len(calledBy), func() string { return writeNodeRefs(pal, calledBy, nil) }},
+		{"Accessed by ←", len(d.AccessedBy), func() string { return writeAccessRefs(pal, d.AccessedBy) }},
+		{"Initialized to →", len(d.InitializedTo), func() string { return writeNodeRefs(pal, d.InitializedTo, nil) }},
+	}
+	header := false
+	for _, row := range rows {
+		if row.n == 0 {
+			continue
+		}
+		if !header {
+			b.WriteString("\n")
+			b.WriteString(pal.Header.Render("Trail — codegraph_node any of these to follow it (no Read needed)"))
+			header = true
+		}
 		b.WriteString("\n")
-		b.WriteString(pal.Header.Render("Trail — codegraph_node any of these to follow it (no Read needed)"))
-		if len(calls) > 0 {
-			b.WriteString("\n")
-			b.WriteString(pal.Label.Render("Calls →") + " " + writeNodeRefs(pal, calls, nil))
-		}
-		if len(calledBy) > 0 {
-			b.WriteString("\n")
-			b.WriteString(pal.Label.Render("Called by ←") + " " + writeNodeRefs(pal, calledBy, nil))
-		}
-		if len(d.AccessedBy) > 0 {
-			b.WriteString("\n")
-			b.WriteString(pal.Label.Render("Accessed by ←") + " " + writeAccessRefs(pal, d.AccessedBy))
-		}
-		if len(d.InitializedTo) > 0 {
-			b.WriteString("\n")
-			b.WriteString(pal.Label.Render("Initialized to →") + " " + writeNodeRefs(pal, d.InitializedTo, nil))
-		}
+		b.WriteString(pal.Label.Render(row.label) + " " + row.refs())
 	}
 	return b.String()
 }

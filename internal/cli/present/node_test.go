@@ -9,6 +9,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"pgregory.net/rapid"
 )
 
 // plainNumbered mirrors internal/query/render_markdown.go's unexported
@@ -365,6 +366,81 @@ func TestRenderNodeStrippedEqualsMarkdownContract(t *testing.T) {
 		got := stripANSI(buf.String())
 		if strings.ContainsRune(got, 0x1b) {
 			t.Errorf("stripped output still contains a raw control byte: %q", got)
+		}
+	})
+}
+
+// TestRenderNodeDataLinesStrippedEqualsMarkdown draws the data lists of a
+// variable or a constant and checks that the styled view
+// without ANSI equals the markdown view, for a single definition and for
+// a section of a multi-definition view. Each draw with an entry must also
+// print that entry's line, so the check cannot pass with both lines gone.
+// A field is left out: the styled view does not print the owner and
+// language lines that the markdown view prints for a field.
+func TestRenderNodeDataLinesStrippedEqualsMarkdown(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		kind := rapid.SampledFrom([]string{"variable", "constant"}).Draw(t, "kind")
+		name := rapid.StringMatching(`[a-z][a-zA-Z0-9_]{0,8}`)
+		path := rapid.SampledFrom([]string{"a.go", "b/c.go", "p/Account.java"})
+		ref := func(t *rapid.T, label string, i int) *schema.Node {
+			return &schema.Node{
+				Id:        fmt.Sprintf("%s%d", label, i),
+				Name:      name.Draw(t, label+"Name"),
+				Kind:      "function",
+				FilePath:  path.Draw(t, label+"Path"),
+				StartLine: rapid.Int32Range(1, 50).Draw(t, label+"Line"),
+			}
+		}
+		var access []query.DataAccess
+		for i := range rapid.IntRange(0, 8).Draw(t, "accessors") {
+			role := rapid.SampledFrom([]string{"read", "write", "read_write"}).Draw(t, "role")
+			access = append(access, query.DataAccess{Node: ref(t, "a", i), Access: role})
+		}
+		var init []*schema.Node
+		if rapid.Bool().Draw(t, "initializer") {
+			init = []*schema.Node{ref(t, "i", 0)}
+		}
+		decorate := func(d *query.DefinitionDetail) { d.AccessedBy, d.InitializedTo = access, init }
+
+		n := &schema.Node{Id: "x1", Name: "x", Kind: kind, FilePath: "a.go", StartLine: 1, EndLine: 1, Signature: "x = 1"}
+		def := &query.DefinitionDetail{Node: n, Source: []byte("x = 1\n")}
+		decorate(def)
+		var buf bytes.Buffer
+		if err := RenderNode(query.NodeDetail{Mode: query.NodeDetailModeSingleDef, Definition: def}, NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderNode: %v", err)
+		}
+		plain := query.RenderNode(def)
+		if got, want := stripANSI(buf.String()), markdownToPlainContract(plain); got != want {
+			t.Fatalf("single definition stripped =\n%q\nwant\n%q", got, want)
+		}
+		if len(access) > 0 && !strings.Contains(plain, "**Accessed by ←** "+access[0].Node.Name) {
+			t.Fatalf("single definition has no Accessed by entry:\n%s", plain)
+		}
+		if len(init) > 0 && !strings.Contains(plain, "**Initialized to →** "+init[0].Name) {
+			t.Fatalf("single definition has no Initialized to entry:\n%s", plain)
+		}
+
+		nodes := []*schema.Node{n, {Id: "x2", Name: "x", Kind: kind, FilePath: "b.go", StartLine: 1, EndLine: 1, Signature: "x = 2"}}
+		fetch := func(c *schema.Node) (*query.DefinitionDetail, error) {
+			d := &query.DefinitionDetail{Node: c, Source: []byte(c.Signature + "\n")}
+			if c.Id == "x1" {
+				decorate(d)
+			}
+			return d, nil
+		}
+		multi, err := query.RenderNodeMultiDef("x", nodes, fetch)
+		if err != nil {
+			t.Fatalf("query.RenderNodeMultiDef: %v", err)
+		}
+		buf.Reset()
+		if err := RenderNode(query.NodeDetail{Mode: query.NodeDetailModeMultiDef, Multi: query.NewMultiDefDetail("x", nodes, fetch)}, NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderNode: %v", err)
+		}
+		if got, want := stripANSI(buf.String()), markdownToPlainContract(multi); got != want {
+			t.Fatalf("multi-definition stripped =\n%q\nwant\n%q", got, want)
+		}
+		if len(access) > 0 && !strings.Contains(multi, "**Accessed by ←** "+access[0].Node.Name) {
+			t.Fatalf("multi-definition has no Accessed by entry:\n%s", multi)
 		}
 	})
 }

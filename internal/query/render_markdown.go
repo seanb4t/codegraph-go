@@ -229,20 +229,26 @@ func renderNodeSection(d *DefinitionDetail) string {
 		"",
 		strings.TrimSuffix(renderNumberedSourceRange(d.Source, n.StartLine, n.EndLine), "\n"),
 	)
-	if len(calls) > 0 || len(calledBy) > 0 || len(d.AccessedBy) > 0 || len(d.InitializedTo) > 0 {
-		parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
-		if len(calls) > 0 {
-			parts = append(parts, fmt.Sprintf("**Calls →** %s", joinNodeRefs(calls, nil)))
+	rows := []struct {
+		label string
+		n     int
+		refs  func() string
+	}{
+		{"Calls →", len(calls), func() string { return joinNodeRefs(calls, nil) }},
+		{"Called by ←", len(calledBy), func() string { return joinNodeRefs(calledBy, nil) }},
+		{"Accessed by ←", len(d.AccessedBy), func() string { return joinAccessRefs(d.AccessedBy) }},
+		{"Initialized to →", len(d.InitializedTo), func() string { return joinNodeRefs(d.InitializedTo, nil) }},
+	}
+	header := false
+	for _, row := range rows {
+		if row.n == 0 {
+			continue
 		}
-		if len(calledBy) > 0 {
-			parts = append(parts, fmt.Sprintf("**Called by ←** %s", joinNodeRefs(calledBy, nil)))
+		if !header {
+			parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
+			header = true
 		}
-		if len(d.AccessedBy) > 0 {
-			parts = append(parts, fmt.Sprintf("**Accessed by ←** %s", joinAccessRefs(d.AccessedBy)))
-		}
-		if len(d.InitializedTo) > 0 {
-			parts = append(parts, fmt.Sprintf("**Initialized to →** %s", joinNodeRefs(d.InitializedTo, nil)))
-		}
+		parts = append(parts, fmt.Sprintf("**%s** %s", row.label, row.refs()))
 	}
 	return strings.Join(parts, "\n")
 }
