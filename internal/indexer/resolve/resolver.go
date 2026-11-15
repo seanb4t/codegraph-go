@@ -222,7 +222,7 @@ func (rs *resolver) findType(r goextract.FileResult, alias, typ, writtenIn strin
 	waitModule := r.ImportPath
 	if writtenIn != "" {
 		waitModule = writtenIn
-		if c, ok := rs.view.TypeIn(writtenIn, base); ok {
+		if c, ok := rs.typeIn(r, writtenIn, base); ok {
 			return c, writtenIn, true
 		}
 	}
@@ -239,25 +239,25 @@ func (rs *resolver) findType(r goextract.FileResult, alias, typ, writtenIn strin
 	if alias != "" {
 		if mod, ok := r.Imports[alias]; ok {
 			waitModule = mod
-			if c, ok := rs.view.TypeIn(mod, base); ok {
+			if c, ok := rs.typeIn(r, mod, base); ok {
 				return c, mod, true
 			}
 		}
 	}
 	if mod, ok := r.Imports[base]; ok {
 		waitModule = mod
-		if c, ok := rs.view.TypeIn(mod, base); ok {
+		if c, ok := rs.typeIn(r, mod, base); ok {
 			return c, mod, true
 		}
 	}
-	if c, ok := rs.view.TypeIn(r.ImportPath, base); ok {
+	if c, ok := rs.typeIn(r, r.ImportPath, base); ok {
 		return c, r.ImportPath, true
 	}
 	if i := strings.LastIndexAny(goextract.TypeName(typ), ".:"); i > 0 {
 		qualifier := strings.TrimRight(goextract.TypeName(typ)[:i], ":")
 		if mod, ok := r.Imports[qualifier]; ok {
 			waitModule = mod
-			if c, ok := rs.view.TypeIn(mod, base); ok {
+			if c, ok := rs.typeIn(r, mod, base); ok {
 				return c, mod, true
 			}
 		}
@@ -720,6 +720,7 @@ func (rs *resolver) choose(r goextract.FileResult, ref goextract.UnresolvedRef, 
 	if len(cands) == 0 {
 		return waitOn(module, ref.Name)
 	}
+	cands = rs.inCallerRoot(r, cands)
 	callables := make([]symbols.Candidate, 0, len(cands))
 	others := make([]symbols.Candidate, 0, len(cands))
 	for _, c := range cands {
@@ -758,6 +759,73 @@ func (rs *resolver) choose(r goextract.FileResult, ref goextract.UnresolvedRef, 
 		return callOutcome{target: last}
 	}
 	return callOutcome{target: symbols.Pick(remaining)}
+}
+
+// inCallerRoot keeps the candidates in the source root of the file of r,
+// when one or more are there. A Java source root is the directory that
+// holds the package directories, as guava/src beside android/guava/src.
+// Two roots can declare the same package, so its module key holds the
+// declarations of both, and only the root tells them apart. For any
+// other language, or when no candidate is in that root, cands is
+// returned unchanged.
+func (rs *resolver) inCallerRoot(r goextract.FileResult, cands []symbols.Candidate) []symbols.Candidate {
+	if r.Language != "java" || len(cands) < 2 {
+		return cands
+	}
+	root, ok := javaSourceRoot(r.RelPath, r.ImportPath)
+	if !ok {
+		return cands
+	}
+	var out []symbols.Candidate
+	for _, c := range cands {
+		if cr, ok := javaSourceRoot(c.FilePath, rs.view.ModuleOf(c.FilePath)); ok && cr == root {
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return cands
+	}
+	return out
+}
+
+// javaSourceRoot returns the directory of file without the directories
+// of its package, pkg. It returns false when the directory does not end
+// in the package path.
+func javaSourceRoot(file, pkg string) (string, bool) {
+	dir := path.Dir(file)
+	if pkg == "" {
+		return dir, true
+	}
+	suffix := strings.ReplaceAll(pkg, ".", "/")
+	switch {
+	case dir == suffix:
+		return ".", true
+	case strings.HasSuffix(dir, "/"+suffix):
+		return strings.TrimSuffix(dir, "/"+suffix), true
+	}
+	return "", false
+}
+
+// typeIn returns the type named name in moduleKey, as View.TypeIn does,
+// from the source root of the file of r when that root has one.
+func (rs *resolver) typeIn(r goextract.FileResult, moduleKey, name string) (symbols.Candidate, bool) {
+	var types []symbols.Candidate
+	for _, c := range rs.view.CandidatesIn(moduleKey, name) {
+		if symbols.IsTypeKind(c.Kind) {
+			types = append(types, c)
+		}
+	}
+	types = rs.inCallerRoot(r, types)
+	if len(types) == 0 {
+		return symbols.Candidate{}, false
+	}
+	winner := symbols.Pick(types)
+	for _, c := range types {
+		if c.ID == winner {
+			return c, true
+		}
+	}
+	return symbols.Candidate{}, false
 }
 
 // lastPerFile keeps, per file, the candidate that is last in source

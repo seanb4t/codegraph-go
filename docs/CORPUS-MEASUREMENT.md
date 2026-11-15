@@ -20,13 +20,13 @@ Do NOT hand-edit this file.
 
 | Kind | Threshold | Supplying Repository | Measured Count |
 |------|-----------|---------------------|---------------|
-| calls | 29406 | google/guava | 91193 |
+| calls | 29406 | google/guava | 91445 |
 | extends | 1265 | google/guava | 2553 |
 | implements | 509 | gohugoio/hugo | 1018 |
 | imports | 1080 | gohugoio/hugo | 2160 |
 | instantiates | 938 | google/guava | 6270 |
 | overrides | 2329 | google/guava | 9847 |
-| references | 6531 | google/guava | 20257 |
+| references | 6531 | google/guava | 20262 |
 | returns | 2795 | google/guava | 6693 |
 | type_of | 5928 | google/guava | 12957 |
 
@@ -85,7 +85,7 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 3317
 - **Edges by kind:**
-  - calls: 91193
+  - calls: 91445
   - contains: 72783
   - embeds: 139
   - extends: 2553
@@ -93,7 +93,7 @@ Do NOT hand-edit this file.
   - imports: 0
   - instantiates: 6270
   - overrides: 9847
-  - references: 20257
+  - references: 20262
   - returns: 6693
   - type_of: 12957
 - **Files by language:**
