@@ -296,4 +296,36 @@ describe('NeighborsPanel: the data lists of a variable, a constant or a field', 
 		expect(screen.getByTestId('neighbor-accessor-a2').textContent).toContain('write');
 		expect(screen.getByTestId('neighbors-accessed-by').querySelectorAll('li')).toHaveLength(2);
 	});
+
+	it('an access entry without a node is left out', () => {
+		const noNode = { access: 'read' } as unknown as DataAccess;
+		render(NeighborsPanel, {
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [noNode, access(node('deposit'), 'write')],
+				blastRadius: IDLE_BLAST,
+				onNavigate: vi.fn()
+			}
+		});
+
+		const items = screen.getByTestId('neighbors-accessed-by').querySelectorAll('li');
+		expect(items).toHaveLength(1);
+		expect(items[0].textContent).toContain('deposit');
+	});
+
+	it('a list whose only entry has no node shows no heading', () => {
+		render(NeighborsPanel, {
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [{ access: 'read' } as unknown as DataAccess],
+				blastRadius: IDLE_BLAST,
+				onNavigate: vi.fn()
+			}
+		});
+
+		expect(screen.queryByTestId('neighbors-accessed-by')).toBeNull();
+		expect(screen.getByTestId('neighbors-callers')).toBeInTheDocument();
+	});
 });
