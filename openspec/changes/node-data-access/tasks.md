@@ -2,13 +2,14 @@
 
 ## 1. Query detail
 
-- [ ] 1.1 Move `IsDataKind` from `internal/indexer/resolve` to `internal/indexer/goextract`, and call it from `resolve` (D1). Add `goextract.IsInitBinding`, and call it in `resolve/bindings.go`, `resolve/collapse.go` and `internal/indexer/sync_bindings.go` (D4). `go test ./internal/depclosure ./internal/indexer/...` passes. Add `reverseEdgeIndex` to `internal/query/traverse.go`, and route `BuildReverseAdjacency` and `BuildImplementsIndex` through it (D2). The existing tests of callers, impact and dispatch pass unchanged.
-- [ ] 1.2 Add `DataAccess` and the fields `AccessedBy` and `InitializedTo` to `DefinitionDetail` in `internal/query/detail.go` (D1). Add `buildAccessIndex` behind a package variable (D2). Turn `fetchCalledBy` into `fetchSources`, move the comparator of `sortLocations` into `locationLess`, and fill `AccessedBy` in `buildSingleDefDetail` and `buildMultiDefDetail` (D3). `TestNodeDataAccess` in `internal/query/detail_test.go` covers these cases:
+- [ ] 1.1 Move `IsDataKind` from `internal/indexer/resolve` to `internal/indexer/goextract`, and call it from `resolve` (D1). Add `goextract.IsInitBinding`, and call it in `resolve/bindings.go`, `resolve/collapse.go` and `internal/indexer/sync_bindings.go` (D4). Extend the subtest "T-01-18 production query reaches no indexer root" in `internal/depclosure/dependency_closure_test.go`. It fails when production `internal/query` depends on any `internal/indexer` package other than `goextract` and `nodeid`, and it keeps its check that it inspected at least one package. `go test ./internal/depclosure ./internal/indexer/...` passes. Add `reverseEdgeIndex` to `internal/query/traverse.go`, and route `BuildReverseAdjacency` and `BuildImplementsIndex` through it (D2). The existing tests of callers, impact and dispatch pass unchanged.
+- [ ] 1.2 Add `DataAccess` and the fields `AccessedBy` and `InitializedTo` to `DefinitionDetail` in `internal/query/detail.go` (D1). Add `buildAccessIndex` behind a package variable (D2). Turn `fetchCalledBy` into `fetchSources`, and update its caller in `internal/query/render_markdown_test.go`, move the comparator of `sortLocations` into `locationLess`, and fill `AccessedBy` in `buildSingleDefDetail` and `buildMultiDefDetail` (D3). `TestNodeDataAccess` in `internal/query/detail_test.go` covers these cases:
   - a source with a `read_write` edge, which gives one entry with `read_write`
   - a data symbol `a` whose initializer reads the variable `b`, which lists `a` with `read` for `b`
   - a source of kind `file` (`var x = f()`), which gives the file's path with `write`
   - a missing source, which is skipped
-  - two sources in `b.go` and `a.go`, which come out `a.go` first
+  - the source `alpha` in `b.go` and the source `zeta` in `a.go`, which come out `a.go` first, so the file key sorts before the name key
+  - a `references` edge without access metadata to the symbol, next to a `read` edge from another source, which gives only the `read` entry
   - two sources in one file whose names sort in the reverse of their lines, which come out by name
   - two sources with one name in one file at lines 9 and 3, which come out line 3 first
   - two sources that tie on file, name, line, signature and kind, with the roles `write` and `read`, which come out `read` first
