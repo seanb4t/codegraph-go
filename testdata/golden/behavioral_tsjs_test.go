@@ -190,14 +190,12 @@ var corpusSamples = []corpusSample{
 		Repo:     "google/guava",
 		Language: "java",
 		Reviewed: []string{
+			"guava/src/com/google/common/base/Joiner.java:Joiner -> guava/src/com/google/common/base/Preconditions.java:checkNotNull",
 			"guava/src/com/google/common/base/Joiner.java:appendTo -> guava/src/com/google/common/base/Joiner.java:iterable",
 			"guava/src/com/google/common/base/Splitter.java:computeNext -> guava/src/com/google/common/base/AbstractIterator.java:endOfData",
 			"guava/src/com/google/common/base/Splitter.java:computeNext -> guava/src/com/google/common/base/Splitter.java:separatorEnd",
 			"guava/src/com/google/common/base/Splitter.java:fixedLength -> guava/src/com/google/common/base/Preconditions.java:checkArgument",
-		},
-		KnownMissing: map[string]string{
-			"guava/src/com/google/common/base/Joiner.java:Joiner -> guava/src/com/google/common/base/Preconditions.java:checkNotNull":   "#263",
-			"guava/src/com/google/common/base/Splitter.java:limit -> guava/src/com/google/common/base/Preconditions.java:checkArgument": "#263",
+			"guava/src/com/google/common/base/Splitter.java:limit -> guava/src/com/google/common/base/Preconditions.java:checkArgument",
 		},
 	},
 }

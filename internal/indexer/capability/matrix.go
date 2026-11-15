@@ -116,7 +116,6 @@ var matrix = map[string]CapabilityEntry{
 		Gaps: []string{
 			"A bare name that is not a local, a parameter or a field of the enclosing class resolves as a read through `this` does. Inside an anonymous or local class, the receiver is the enclosing named class. A method of the class with the same name as the field stops this lookup.",
 			"Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.",
-			"When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).",
 			"A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.",
 			"TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.",
 		},

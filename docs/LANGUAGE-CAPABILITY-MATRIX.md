@@ -89,7 +89,7 @@ A `full` cell above and a construct below answer different questions. A `full` c
 | Language | Passing evidence | Exact limit |
 |---|---|---|
 | Go | `go/source-boundaries`, `go/nested-owners-and-aliases`, `go/grouped-bindings`, `go/lifecycle`, `go/public-queries`, `go/resolution` | No case holds a known gap. |
-| Java | `java/resolution`, `java/inherited-methods`, `java/fields-and-owners`, `java/lifecycle`, `java/public-queries` | `TestSemanticCorpusSamples/java` (#263) |
+| Java | `java/resolution`, `java/inherited-methods`, `java/fields-and-owners`, `java/lifecycle`, `java/public-queries` | `TestSemanticCorpusSamples/java` |
 | Python | `python/same-file-resolution`, `python/malformed-input`, `python/module-and-class-attributes`, `python/lifecycle`, `python/public-queries`, `python/resolution` | No case holds a known gap. |
 | TypeScript | `typescript/class-hierarchy`, `typescript/module-bindings-and-fields`, `typescript/lifecycle`, `typescript/public-queries`, `TestSemanticTypeScriptCorpusEdges`, `typescript/resolution` | No case holds a known gap. |
 | TSX | `tsx/components`, `tsx/nested-components` | No case evaluates lifecycle or public queries for TSX. |
@@ -112,6 +112,7 @@ A call through a data symbol becomes a read of that symbol. It also becomes a ca
 - A function that code reassigns, as `let f = function () {}` and then `f = g`, holds every value written to it. A call into it is a read of it until every write assigns the function itself.
 - A field that two base classes supply from different declaring types does not resolve.
 - In Go, a call outside a `_test.go` file uses only the writes outside test files. A call inside a test file also uses the writes of test files. A test that replaces a function variable therefore does not change the production callers.
+- In Java, two source roots can declare one package, as `guava/src` beside `android/guava/src`. A call or a type name then resolves in the source root of the calling file.
 - In Go, a keyed composite-literal element writes its field. A write through a receiver of unknown type writes every field it can reach. That is a field of that name in the same package, or an exported field of that name in any package. Its value is unknown, so it withholds a call through the field.
 
 The read reference stays when the call is withheld. A data read never makes a caller. `callers`, `callees` and `impact` follow only calls, so they do not list a function that only reads a symbol. `explore` can list a field and shows it inside the source of its owner. A field that matches a query only through the name of its owner does not take the place of a function.
@@ -128,7 +129,6 @@ The limits of each language are under Per-Language Gaps below. Record components
 
 - A bare name that is not a local, a parameter or a field of the enclosing class resolves as a read through `this` does. Inside an anonymous or local class, the receiver is the enclosing named class. A method of the class with the same name as the field stops this lookup.
 - Record components and enum constants declare no field. Case `java/records-and-enums` records what the graph emits.
-- When two source roots declare one package, a call can resolve to the copy in the other root. See `TestSemanticCorpusSamples/java` (#263).
 - A call through a parameter, a local or a field resolves through the declared type of that name. A static import of a method from another package does not resolve.
 - TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.
 
