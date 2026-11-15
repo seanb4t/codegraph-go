@@ -30,7 +30,7 @@ None.
 
 ## Impact
 
-- Go code: `internal/query` (`detail.go`, `node.go`, `traverse.go`, `render_markdown.go`), `internal/cli/present/node.go` and `internal/uiserver/handlers.go`. `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`, which also gains `IsInitBinding`.
+- Go code: `internal/query` (`detail.go`, `node.go`, `traverse.go`, `render_markdown.go`), `internal/cli/present/node.go` and `internal/uiserver/handlers.go`. `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`, which also gains `IsInitBinding`. The inline `binding=init` checks in `internal/indexer/resolve/bindings.go`, `internal/indexer/resolve/collapse.go` and `internal/indexer/sync_bindings.go` call `IsInitBinding` instead, so the indexer and the query engine share one check.
 - Wire: `internal/uiproto/uiv1/ui.proto` and its generated Go and TypeScript code.
 - Web code: `web/src/lib/browse-state.ts`, `web/src/routes/browse/+page.svelte` and `web/src/lib/components/browse/NeighborsPanel.svelte`.
 - Output: additive lines in CLI and MCP markdown for data symbols, and additive fields on the UI wire. Field names, types and the order of existing lines do not change.
