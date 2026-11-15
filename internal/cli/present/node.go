@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -77,34 +76,9 @@ func writeSingleDef(b *strings.Builder, pal Palette, d *query.DefinitionDetail) 
 	b.WriteString(pal.Value.Render(sanitizeControl(n.Signature)))
 	b.WriteString("\n")
 	b.WriteString(pal.Header.Render(query.TrailHeader) + "\n")
-	for _, row := range trailRows(pal, d) {
-		b.WriteString(pal.Label.Render(row.label) + " " + row.refs() + "\n")
+	for _, row := range query.TrailRows(d) {
+		b.WriteString(pal.Label.Render(row.Label) + " " + writeNodeRefs(pal, row.Nodes, row.Suffix) + "\n")
 	}
-}
-
-// trailRow is one styled trail line: its label, its number of entries and
-// a function that writes the entries.
-type trailRow struct {
-	label string
-	n     int
-	refs  func() string
-}
-
-// trailRows returns the styled trail lines of d in the order of the
-// markdown view: calls and callers, then the data lines for a variable, a
-// constant or a field.
-func trailRows(pal Palette, d *query.DefinitionDetail) []trailRow {
-	rows := []trailRow{
-		{"Calls →", len(d.Calls), func() string { return writeNodeRefs(pal, d.Calls, nil) }},
-		{"Called by ←", len(d.CalledBy), func() string { return writeNodeRefs(pal, d.CalledBy, nil) }},
-	}
-	if goextract.IsDataKind(d.Node.Kind) {
-		rows = append(rows,
-			trailRow{"Accessed by ←", len(d.AccessedBy), func() string { return writeAccessRefs(pal, d.AccessedBy) }},
-			trailRow{"Initialized to →", len(d.InitializedTo), func() string { return writeNodeRefs(pal, d.InitializedTo, nil) }},
-		)
-	}
-	return rows
 }
 
 // writeNodeRefs comma-joins "name (path:line)" references, mirroring
@@ -124,15 +98,6 @@ func writeNodeRefs(pal Palette, nodes []*schema.Node, suffix func(i int) string)
 		parts[i] = pal.Value.Render(sanitizeControl(n.Name)) + " (" + pal.Path.Render(sanitizeControl(n.FilePath)+":"+strconv.Itoa(int(n.StartLine))) + tail + ")"
 	}
 	return strings.Join(parts, ", ")
-}
-
-// writeAccessRefs writes access entries as "name (path:line, role)".
-func writeAccessRefs(pal Palette, access []query.DataAccess) string {
-	nodes := make([]*schema.Node, len(access))
-	for i, a := range access {
-		nodes[i] = a.Node
-	}
-	return writeNodeRefs(pal, nodes, func(i int) string { return access[i].Access })
 }
 
 // writeNodeSection renders one multi-def candidate's full detail as a
@@ -163,8 +128,8 @@ func writeNodeSection(pal Palette, d *query.DefinitionDetail) string {
 	b.WriteString(strings.TrimSuffix(rangeBuilder.String(), "\n"))
 
 	header := false
-	for _, row := range trailRows(pal, d) {
-		if row.n == 0 {
+	for _, row := range query.TrailRows(d) {
+		if len(row.Nodes) == 0 {
 			continue
 		}
 		if !header {
@@ -173,7 +138,7 @@ func writeNodeSection(pal Palette, d *query.DefinitionDetail) string {
 			header = true
 		}
 		b.WriteString("\n")
-		b.WriteString(pal.Label.Render(row.label) + " " + row.refs())
+		b.WriteString(pal.Label.Render(row.Label) + " " + writeNodeRefs(pal, row.Nodes, row.Suffix))
 	}
 	return b.String()
 }

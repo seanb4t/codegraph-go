@@ -769,7 +769,8 @@ func TestUIServiceNodeDetailCoversAllThreeModes(t *testing.T) {
 		if resp.Msg.GetPath() != "pkga/pkga.go" {
 			t.Fatalf("GetNodeDetail(file): path = %q, want %q", resp.Msg.GetPath(), "pkga/pkga.go")
 		}
-		if resp.Msg.GetNode() != nil || len(resp.Msg.GetCalls()) != 0 || len(resp.Msg.GetCalledBy()) != 0 {
+		if resp.Msg.GetNode() != nil || len(resp.Msg.GetCalls()) != 0 || len(resp.Msg.GetCalledBy()) != 0 ||
+			len(resp.Msg.GetAccessedBy()) != 0 || len(resp.Msg.GetInitializedTo()) != 0 {
 			t.Fatal("GetNodeDetail(file): single-def fields populated, want all empty for file mode")
 		}
 		if resp.Msg.GetSymbol() != "" || len(resp.Msg.GetDefinitions()) != 0 || resp.Msg.GetTotalCandidates() != 0 {
@@ -1429,6 +1430,10 @@ func TestGetNodeDetailDataAccess(t *testing.T) {
 		msg := nodeDetail(t, java, "size")
 		if len(msg.GetDefinitions()) != 2 {
 			t.Fatalf("got %d definitions, want 2", len(msg.GetDefinitions()))
+		}
+		if len(msg.GetAccessedBy()) != 0 || len(msg.GetInitializedTo()) != 0 {
+			t.Fatalf("multi-definition response has top-level data lists: accessed_by %v, initialized_to %v",
+				accessRefs(msg.GetAccessedBy()), msg.GetInitializedTo())
 		}
 		for _, def := range msg.GetDefinitions() {
 			if !def.GetDetailGathered() {

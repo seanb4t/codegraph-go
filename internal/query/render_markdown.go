@@ -129,15 +129,6 @@ func joinNodeRefs(nodes []*schema.Node, suffix func(i int) string) string {
 	return strings.Join(parts, ", ")
 }
 
-// joinAccessRefs comma-joins access entries as "name (path:line, role)".
-func joinAccessRefs(access []DataAccess) string {
-	nodes := make([]*schema.Node, len(access))
-	for i, a := range access {
-		nodes[i] = a.Node
-	}
-	return joinNodeRefs(nodes, func(i int) string { return access[i].Access })
-}
-
 // fieldFacts returns the owner and language lines of a field's node
 // detail, and nothing for any other kind. The owner line names the
 // qualified name of the node that contains the field.
@@ -169,8 +160,8 @@ func RenderNode(d *DefinitionDetail) string {
 	}
 	fmt.Fprintf(&b, "**Signature:** `%s`\n", n.Signature)
 	fmt.Fprintf(&b, "**%s**\n", TrailHeader)
-	for _, row := range trailRows(d) {
-		fmt.Fprintf(&b, "**%s** %s\n", row.label, row.refs())
+	for _, row := range TrailRows(d) {
+		fmt.Fprintf(&b, "**%s** %s\n", row.Label, joinNodeRefs(row.Nodes, row.Suffix))
 	}
 	return b.String()
 }
@@ -179,28 +170,35 @@ func RenderNode(d *DefinitionDetail) string {
 // internal/cli/present prints the same text.
 const TrailHeader = "Trail — codegraph_node any of these to follow it (no Read needed)"
 
-// trailRow is one trail line of a node view: its label, its number of
-// entries and a function that joins the entries.
-type trailRow struct {
-	label string
-	n     int
-	refs  func() string
+// TrailRow is one trail line of a node view: its label, its entries and,
+// when not nil, the suffix of entry i, which goes inside its parentheses.
+// The markdown view and the styled view of internal/cli/present print the
+// same rows.
+type TrailRow struct {
+	Label  string
+	Nodes  []*schema.Node
+	Suffix func(i int) string
 }
 
-// trailRows returns the trail lines of d in print order: calls and
-// callers, then the data lines for a variable, a constant or a field.
-func trailRows(d *DefinitionDetail) []trailRow {
-	rows := []trailRow{
-		{"Calls →", len(d.Calls), func() string { return joinNodeRefs(d.Calls, nil) }},
-		{"Called by ←", len(d.CalledBy), func() string { return joinNodeRefs(d.CalledBy, nil) }},
+// TrailRows returns the trail lines of d in print order: calls and
+// callers, then the data lines for a variable, a constant or a field. An
+// access entry has its role as its suffix.
+func TrailRows(d *DefinitionDetail) []TrailRow {
+	rows := []TrailRow{
+		{Label: "Calls →", Nodes: d.Calls},
+		{Label: "Called by ←", Nodes: d.CalledBy},
 	}
-	if goextract.IsDataKind(d.Node.Kind) {
-		rows = append(rows,
-			trailRow{"Accessed by ←", len(d.AccessedBy), func() string { return joinAccessRefs(d.AccessedBy) }},
-			trailRow{"Initialized to →", len(d.InitializedTo), func() string { return joinNodeRefs(d.InitializedTo, nil) }},
-		)
+	if !goextract.IsDataKind(d.Node.Kind) {
+		return rows
 	}
-	return rows
+	accessors := make([]*schema.Node, len(d.AccessedBy))
+	for i, a := range d.AccessedBy {
+		accessors[i] = a.Node
+	}
+	return append(rows,
+		TrailRow{Label: "Accessed by ←", Nodes: accessors, Suffix: func(i int) string { return d.AccessedBy[i].Access }},
+		TrailRow{Label: "Initialized to →", Nodes: d.InitializedTo},
+	)
 }
 
 // nodeMultiDefHardCap, nodeMultiDefBodyBudget, and nodeMultiDefListCap
@@ -255,15 +253,15 @@ func renderNodeSection(d *DefinitionDetail) string {
 		strings.TrimSuffix(renderNumberedSourceRange(d.Source, n.StartLine, n.EndLine), "\n"),
 	)
 	header := false
-	for _, row := range trailRows(d) {
-		if row.n == 0 {
+	for _, row := range TrailRows(d) {
+		if len(row.Nodes) == 0 {
 			continue
 		}
 		if !header {
 			parts = append(parts, "**"+TrailHeader+"**")
 			header = true
 		}
-		parts = append(parts, fmt.Sprintf("**%s** %s", row.label, row.refs()))
+		parts = append(parts, fmt.Sprintf("**%s** %s", row.Label, joinNodeRefs(row.Nodes, row.Suffix)))
 	}
 	return strings.Join(parts, "\n")
 }
