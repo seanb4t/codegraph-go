@@ -115,9 +115,15 @@ func languageForExt(relPath string) string {
 // extractor carries the per-file state threaded through the tree-walk
 // helpers below, mirroring goextract/rustextract's extractor shape.
 type extractor struct {
-	// definedKeys holds name|signature of every function the file
-	// defines, so that a prototype of one of them gets no node.
+	// definedKeys holds name|key of every function the file defines,
+	// where key is the parameter key plus the conditional block, so that
+	// a prototype of one of them gets no node.
 	definedKeys map[string]bool
+
+	// staticKeys holds the free functions that an earlier declaration in
+	// the file gives internal linkage: the name in C, and the name and
+	// parameter key in C++ (design D4).
+	staticKeys map[string]bool
 
 	src             []byte
 	relPath         string
@@ -189,6 +195,7 @@ func (ex *extractor) emitInclude(decl *tree_sitter.Node) {
 	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
 		FromID: ex.fileID, Name: trimmed, Kind: goextract.RefKindImports,
 		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		Quoted: pathNode.Kind() == "string_literal",
 	})
 }
 
@@ -367,10 +374,11 @@ func (ex *extractor) collectFunctions(decls []*tree_sitter.Node) {
 	// D16): it gets no node, so a call
 	// reaches the definition and never an ambiguous pair.
 	ex.definedKeys = make(map[string]bool)
+	ex.staticKeys = make(map[string]bool)
 	for _, d := range decls {
 		if d.Kind() == "function_definition" {
 			if name, ok := ex.freeFunctionName(d); ok {
-				ex.definedKeys[name+"|"+ex.sigKey(d)] = true
+				ex.definedKeys[ex.definedKey(name, d)] = true
 			}
 		}
 	}
@@ -380,6 +388,32 @@ func (ex *extractor) collectFunctions(decls []*tree_sitter.Node) {
 			ex.emitFreeFunctionLike(d)
 		}
 	}
+}
+
+// definedKey is the key under which definedKeys holds the function name
+// that decl declares or defines.
+func (ex *extractor) definedKey(name string, decl *tree_sitter.Node) string {
+	return name + "|" + paramKey(decl, ex.src) + goextract.ConditionalBlockKey(decl, ex.src)
+}
+
+// staticKey is the key under which staticKeys holds the function name
+// that decl declares or defines.
+func (ex *extractor) staticKey(name string, decl *tree_sitter.Node) string {
+	if ex.language == "c" {
+		return name
+	}
+	return name + "|" + paramKey(decl, ex.src)
+}
+
+// isStatic reports whether decl has the storage class static.
+func (ex *extractor) isStatic(decl *tree_sitter.Node) bool {
+	for i := uint(0); i < decl.NamedChildCount(); i++ {
+		c := decl.NamedChild(i)
+		if c.Kind() == "storage_class_specifier" && c.Utf8Text(ex.src) == "static" {
+			return true
+		}
+	}
+	return false
 }
 
 // freeFunctionName returns the name of the free function that decl
@@ -422,10 +456,14 @@ func (ex *extractor) emitFreeFunctionLike(decl *tree_sitter.Node) {
 	switch nameDeclarator.Kind() {
 	case "identifier":
 		name := nameDeclarator.Utf8Text(ex.src)
-		if decl.Kind() == "declaration" && ex.definedKeys[name+"|"+ex.sigKey(decl)] {
+		key := ex.staticKey(name, decl)
+		if ex.isStatic(decl) {
+			ex.staticKeys[key] = true
+		}
+		if decl.Kind() == "declaration" && ex.definedKeys[ex.definedKey(name, decl)] {
 			return
 		}
-		ex.emitFunction(decl, name)
+		ex.emitFunction(decl, name, ex.staticKeys[key])
 	case "qualified_identifier":
 		if scope, name, ok := splitQualifiedMethod(nameDeclarator, ex.src); ok {
 			ex.emitOutOfLineMethod(decl, scope, name)
@@ -436,9 +474,18 @@ func (ex *extractor) emitFreeFunctionLike(decl *tree_sitter.Node) {
 	}
 }
 
-func (ex *extractor) emitFunction(decl *tree_sitter.Node, name string) {
+// emitFunction emits the free function that decl declares or defines. A
+// declaration with no body is a prototype. A function with internal
+// linkage is local to its file: module visibility, and not exported.
+func (ex *extractor) emitFunction(decl *tree_sitter.Node, name string, internal bool) {
 	id := ex.alloc.Declare(goextract.KindFunction, name, ex.sigKey(decl), decl.StartByte())
-	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)})
+	n := ex.buildFuncNode(goextract.KindFunction, id, name, name, decl)
+	n.Prototype = decl.Kind() == "declaration"
+	if internal {
+		n.Visibility = "module"
+		n.IsExported = false
+	}
+	ex.result.Nodes = append(ex.result.Nodes, goextract.ExtractedNode{Node: n})
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
@@ -496,6 +543,7 @@ func (ex *extractor) buildFuncNode(kind, id, name, qualifiedName string, decl *t
 		IsExported:    true,
 		Signature:     goextract.SignatureKeyOf(params),
 		ReturnType:    ret,
+		CParamKey:     paramKey(decl, ex.src),
 	}
 	goextract.FillSignature(n, params, ret)
 	return n

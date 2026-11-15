@@ -69,4 +69,7 @@ func stampCapabilities(meta *schema.Meta) {
 	// The extractors emit fields and data references with their binding
 	// facts, and the resolver derives the calls through data symbols.
 	meta.HasDataSymbols = true
+	// The C and C++ extractor marks prototypes, their parameter keys and
+	// the internal linkage of a static function.
+	meta.HasCPrototypes = true
 }

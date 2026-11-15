@@ -151,7 +151,16 @@ type Node struct {
 	// nested is true for a declaration inside a function body or another
 	// local scope. A nested declaration is visible only in that scope and
 	// never enters the cross-file index.
-	Nested        bool `protobuf:"varint,20,opt,name=nested,proto3" json:"nested,omitempty"`
+	Nested bool `protobuf:"varint,20,opt,name=nested,proto3" json:"nested,omitempty"`
+	// prototype is true for a C or C++ function declaration with no body.
+	// The resolver reads it to send a call through a header prototype to
+	// the one definition in another file. No output shows it.
+	Prototype bool `protobuf:"varint,21,opt,name=prototype,proto3" json:"prototype,omitempty"`
+	// c_param_key is the parameter types of a C or C++ function, without
+	// parameter names, comments, spacing or default arguments. A prototype
+	// matches a definition when the two keys are equal. It is empty for
+	// every other language.
+	CParamKey     string `protobuf:"bytes,22,opt,name=c_param_key,json=cParamKey,proto3" json:"c_param_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -324,6 +333,20 @@ func (x *Node) GetNested() bool {
 		return x.Nested
 	}
 	return false
+}
+
+func (x *Node) GetPrototype() bool {
+	if x != nil {
+		return x.Prototype
+	}
+	return false
+}
+
+func (x *Node) GetCParamKey() string {
+	if x != nil {
+		return x.CParamKey
+	}
+	return ""
 }
 
 // Param is one parameter of a function or method, as the source writes
@@ -997,6 +1020,12 @@ type Meta struct {
 	// scratch once, since it does not reparse the unchanged files that
 	// lack them.
 	HasDataSymbols bool `protobuf:"varint,16,opt,name=has_data_symbols,json=hasDataSymbols,proto3" json:"has_data_symbols,omitempty"`
+	// has_c_prototypes reports whether this graph marks C and C++ function
+	// prototypes, their parameter keys and the internal linkage of a static
+	// function. Absent or false means a graph written before them: `sync`
+	// then rebuilds it from scratch once, since it does not reparse the
+	// unchanged files that lack them.
+	HasCPrototypes bool `protobuf:"varint,17,opt,name=has_c_prototypes,json=hasCPrototypes,proto3" json:"has_c_prototypes,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1143,11 +1172,18 @@ func (x *Meta) GetHasDataSymbols() bool {
 	return false
 }
 
+func (x *Meta) GetHasCPrototypes() bool {
+	if x != nil {
+		return x.HasCPrototypes
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
 	"\n" +
-	"\x1binternal/schema/graph.proto\x12\fcodegraph.v1\"\xfe\x04\n" +
+	"\x1binternal/schema/graph.proto\x12\fcodegraph.v1\"\xbc\x05\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -1174,7 +1210,9 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x11interface_methods\x18\x11 \x03(\v2\x18.codegraph.v1.MethodSpecR\x10interfaceMethods\x12+\n" +
 	"\x06params\x18\x12 \x03(\v2\x13.codegraph.v1.ParamR\x06params\x12(\n" +
 	"\x10return_type_name\x18\x13 \x01(\tR\x0ereturnTypeName\x12\x16\n" +
-	"\x06nested\x18\x14 \x01(\bR\x06nestedJ\x04\b2\x10<\"\x88\x01\n" +
+	"\x06nested\x18\x14 \x01(\bR\x06nested\x12\x1c\n" +
+	"\tprototype\x18\x15 \x01(\bR\tprototype\x12\x1e\n" +
+	"\vc_param_key\x18\x16 \x01(\tR\tcParamKeyJ\x04\b2\x10<\"\x88\x01\n" +
 	"\x05Param\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
@@ -1232,7 +1270,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x1d.codegraph.v1.ExclusionReasonR\x06reason\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\x8e\x05\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\"\xb8\x05\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -1253,7 +1291,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\x10has_method_specs\x18\r \x01(\bR\x0ehasMethodSpecs\x12(\n" +
 	"\x10has_grouped_vars\x18\x0e \x01(\bR\x0ehasGroupedVars\x12-\n" +
 	"\x13has_unique_decl_ids\x18\x0f \x01(\bR\x10hasUniqueDeclIds\x12(\n" +
-	"\x10has_data_symbols\x18\x10 \x01(\bR\x0ehasDataSymbolsJ\x04\b2\x10<*\xe5\x01\n" +
+	"\x10has_data_symbols\x18\x10 \x01(\bR\x0ehasDataSymbols\x12(\n" +
+	"\x10has_c_prototypes\x18\x11 \x01(\bR\x0ehasCPrototypesJ\x04\b2\x10<*\xe5\x01\n" +
 	"\x0fExclusionReason\x12 \n" +
 	"\x1cEXCLUSION_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEXCLUSION_REASON_DIR_VENDOR\x10\x01\x12\"\n" +

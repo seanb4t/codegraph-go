@@ -81,6 +81,17 @@ message Node {
   // never enters the cross-file index.
   bool nested = 20;
 
+  // prototype is true for a C or C++ function declaration with no body.
+  // The resolver reads it to send a call through a header prototype to
+  // the one definition in another file. No output shows it.
+  bool prototype = 21;
+
+  // c_param_key is the parameter types of a C or C++ function, without
+  // parameter names, comments, spacing or default arguments. A prototype
+  // matches a definition when the two keys are equal. It is empty for
+  // every other language.
+  string c_param_key = 22;
+
   // Reserved now, before any consumer exists, so a future embedding-vector
   // or community/cluster-assignment field lands at a pre-agreed number
   // instead of colliding with whatever the next organic field would be.
@@ -346,6 +357,13 @@ message Meta {
   // scratch once, since it does not reparse the unchanged files that
   // lack them.
   bool has_data_symbols = 16;
+
+  // has_c_prototypes reports whether this graph marks C and C++ function
+  // prototypes, their parameter keys and the internal linkage of a static
+  // function. Absent or false means a graph written before them: `sync`
+  // then rebuilds it from scratch once, since it does not reparse the
+  // unchanged files that lack them.
+  bool has_c_prototypes = 17;
 
   // Reserved now, for future graph-level provenance (a central server,
   // CI-distributed indexes) so it lands at a pre-agreed number instead of

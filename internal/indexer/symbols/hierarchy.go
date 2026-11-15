@@ -4,6 +4,8 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/seanb4t/codegraph-go/internal/bfs"
+
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -176,6 +178,13 @@ func LastWins(lang string) bool {
 	return false
 }
 
+// LinksIncludes reports whether a quoted include in a file of lang links
+// it to the included file, and whether a bare call there looks through
+// the files it includes (design D1): true for C and C++.
+func LinksIncludes(lang string) bool {
+	return lang == "c" || lang == "cpp"
+}
+
 // duplicatesAreAlternatives reports whether two declarations with one
 // signature under one owner are alternatives under `#if` or a
 // `function_exists` guard in lang, since the language rejects a plain
@@ -336,19 +345,7 @@ func (h Hierarchy) SetNodes() []*schema.Node {
 // supertype graph reaches, so a cycle in malformed embeds, extends or
 // implements data ends it.
 func WalkSupertypes(typeID string, typeSupertypes map[string][]string, visit func(supertypeID string) bool) bool {
-	visited := map[string]bool{typeID: true}
-	queue := append([]string(nil), typeSupertypes[typeID]...)
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		if visited[cur] {
-			continue
-		}
-		visited[cur] = true
-		if visit(cur) {
-			return true
-		}
-		queue = append(queue, typeSupertypes[cur]...)
-	}
-	return false
+	return bfs.Levels(typeID, func(id string) []string { return typeSupertypes[id] }, func(level []string) bool {
+		return slices.ContainsFunc(level, visit)
+	})
 }

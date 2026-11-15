@@ -21,8 +21,10 @@ package query
 
 import (
 	"errors"
+	"slices"
 	"sort"
 
+	"github.com/seanb4t/codegraph-go/internal/bfs"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -126,23 +128,11 @@ func buildTypeHierarchyIndex(r graphstore.Reader) (parents, children map[string]
 // is sorted before it is walked or used to build the next level
 // (mirrors traverse.go's Impact BFS discipline).
 func transitiveWalk(root string, index map[string][]string) []string {
-	visited := map[string]bool{root: true}
 	var out []string
-	frontier := append([]string(nil), index[root]...)
-	sort.Strings(frontier)
-	for len(frontier) > 0 {
-		var next []string
-		for _, id := range frontier {
-			if visited[id] {
-				continue
-			}
-			visited[id] = true
-			out = append(out, id)
-			next = append(next, index[id]...)
-		}
-		sort.Strings(next)
-		frontier = next
-	}
+	bfs.Levels(root, func(id string) []string { return index[id] }, func(level []string) bool {
+		out = append(out, slices.Sorted(slices.Values(level))...)
+		return false
+	})
 	return out
 }
 

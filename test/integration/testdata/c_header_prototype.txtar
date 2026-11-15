@@ -1,0 +1,23 @@
+# A C call through a header prototype reaches its one definition in
+# another file, and a call to a function that a header defines reaches it
+# (#259). main.c includes add.h, which declares add, and util.h, which
+# defines twice.
+
+exec codegraph init $WORK/repo
+cd repo
+exec codegraph callers add
+stdout 'run \(function\) main\.c:3 \(definition add\.c:2\)'
+exec codegraph callers twice
+stdout 'run \(function\) main\.c:3'
+
+-- repo/add.h --
+int add(int a, int b);
+-- repo/add.c --
+#include "add.h"
+int add(int a, int b) { return a + b; }
+-- repo/main.c --
+#include "add.h"
+#include "util.h"
+int run(void) { return add(1, 2) + twice(2); }
+-- repo/util.h --
+static inline int twice(int x) { return x * 2; }

@@ -80,3 +80,114 @@ func (ex *extractor) sigKey(decl *tree_sitter.Node) string {
 	params, _ := collectParams(decl, ex.src)
 	return goextract.SignatureKeyOf(params) + goextract.ConditionalBlockKey(decl, ex.src)
 }
+
+// paramKey is the match key of the parameter types of a C or C++
+// function (design D5): for each parameter, its leaf tokens joined by
+// single spaces, without comments, default values and declarator names;
+// the parameters joined by ",". A list of `(void)` keys as empty. Two
+// declarations of one function have equal keys whatever their spacing
+// and parameter names.
+func paramKey(decl *tree_sitter.Node, src []byte) string {
+	declarator := decl.ChildByFieldName("declarator")
+	if declarator == nil {
+		return ""
+	}
+	fd := findFunctionDeclarator(declarator)
+	if fd == nil {
+		return ""
+	}
+	list := fd.ChildByFieldName("parameters")
+	if list == nil {
+		return ""
+	}
+	var keys []string
+	for i := uint(0); i < list.NamedChildCount(); i++ {
+		p := list.NamedChild(i)
+		if p.Kind() == "comment" {
+			continue
+		}
+		keys = append(keys, paramTokens(p, src))
+	}
+	if len(keys) == 1 && keys[0] == "void" {
+		return ""
+	}
+	return strings.Join(keys, ",")
+}
+
+// nodeSpan names one node of a parse tree.
+type nodeSpan struct {
+	start, end uint
+	kind       string
+}
+
+func spanOf(n *tree_sitter.Node) nodeSpan {
+	return nodeSpan{n.StartByte(), n.EndByte(), n.Kind()}
+}
+
+// paramTokens joins the leaf tokens of the parameter p that paramKey
+// keeps. Each parameter declaration in p, an inner parameter of a
+// function-pointer type included, loses the name of its declarator.
+func paramTokens(p *tree_sitter.Node, src []byte) string {
+	skip := make(map[nodeSpan]bool)
+	var tokens []string
+	walkDescendants(p, func(n *tree_sitter.Node) bool {
+		if skip[spanOf(n)] {
+			return false
+		}
+		switch n.Kind() {
+		case "comment":
+			return false
+		case "parameter_declaration", "optional_parameter_declaration":
+			if name := declaratorName(n.ChildByFieldName("declarator")); name != nil {
+				skip[spanOf(name)] = true
+			}
+			if v := n.ChildByFieldName("default_value"); v != nil {
+				skip[spanOf(v)] = true
+				for i := uint(0); i < n.ChildCount(); i++ {
+					if c := n.Child(i); c != nil && c.Kind() == "=" {
+						skip[spanOf(c)] = true
+					}
+				}
+			}
+		}
+		if n.ChildCount() == 0 {
+			tokens = append(tokens, n.Utf8Text(src))
+		}
+		return true
+	})
+	return strings.Join(tokens, " ")
+}
+
+// declaratorName returns the identifier that the declarator d names, or
+// nil for an abstract declarator. It follows the declarator field of a
+// pointer, array or function declarator, and the one named child of a
+// parenthesized or reference declarator. It never takes another child,
+// so the size N of `a[N]` is no name.
+func declaratorName(d *tree_sitter.Node) *tree_sitter.Node {
+	for d != nil {
+		switch d.Kind() {
+		case "identifier", "field_identifier":
+			return d
+		case "pointer_declarator", "array_declarator", "function_declarator":
+			d = d.ChildByFieldName("declarator")
+		case "parenthesized_declarator", "reference_declarator":
+			d = lastNamedDeclarator(d)
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
+// lastNamedDeclarator returns the named child of a parenthesized or
+// reference declarator that is not a comment or a qualifier.
+func lastNamedDeclarator(d *tree_sitter.Node) *tree_sitter.Node {
+	for i := int(d.NamedChildCount()) - 1; i >= 0; i-- {
+		switch c := d.NamedChild(uint(i)); c.Kind() {
+		case "comment", "type_qualifier", "ms_call_modifier", "attribute_declaration":
+		default:
+			return c
+		}
+	}
+	return nil
+}

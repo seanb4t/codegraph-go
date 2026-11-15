@@ -28,7 +28,13 @@ type propDecl struct {
 	// Overload gives a Java method a String parameter, so that it is an
 	// overload of the method of the same name with none (design.md D7).
 	Overload bool
-	Calls    []propCall
+	// Include makes the declaration a quoted #include of that path in a C
+	// file. Static and Prototype mark a C function, Prototype as one
+	// with no body.
+	Include   string
+	Static    bool
+	Prototype bool
+	Calls     []propCall
 }
 
 // propCall is one call in a declaration body. Args is the argument text,
@@ -48,10 +54,25 @@ type propModel struct {
 }
 
 var (
-	propPaths = []string{"a.go", "b.go", "sub/c.go", "x.ts", "y.ts", "sub/z.ts", "App.java", "Util.java", "sub/Deep.java", "PartA.cs", "PartB.cs", "sub/PartC.cs"}
-	propExts  = []string{".go", ".ts", ".java", ".cs"}
+	propPaths = []string{"a.go", "b.go", "sub/c.go", "x.ts", "y.ts", "sub/z.ts", "App.java", "Util.java", "sub/Deep.java", "PartA.cs", "PartB.cs", "sub/PartC.cs", "main.c", "lib.h", "sub/s.c", "sub/lib.h"}
+	propExts  = []string{".go", ".ts", ".java", ".cs", ".c", ".h"}
 	propNames = []string{"alpha", "beta", "gamma"}
+	// propIncludes are the include paths of the C files. From sub/, each
+	// one matches the file beside the includer or the file under the
+	// root.
+	propIncludes = []string{"lib.h", "sub/lib.h"}
 )
+
+// cPaths returns the model's C files and headers.
+func (m *propModel) cPaths() []string {
+	var out []string
+	for _, p := range m.paths() {
+		if ext := filepath.Ext(p); ext == ".c" || ext == ".h" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 // javaPaths returns the model's Java files.
 func (m *propModel) javaPaths() []string {
@@ -181,8 +202,39 @@ func renderCS(path string, decls []propDecl) string {
 	return b.String()
 }
 
+// renderC writes a C file: each include, a struct for a class, and each
+// function as a prototype or as a definition with its calls.
+func renderC(decls []propDecl) string {
+	var b strings.Builder
+	for _, d := range decls {
+		switch {
+		case d.Include != "":
+			fmt.Fprintf(&b, "#include %q\n", d.Include)
+		case d.Class:
+			fmt.Fprintf(&b, "struct %s { int x; };\n", d.Name)
+		default:
+			if d.Static {
+				b.WriteString("static ")
+			}
+			fmt.Fprintf(&b, "void %s(void)", d.Name)
+			if d.Prototype {
+				b.WriteString(";\n")
+				continue
+			}
+			b.WriteString(" {\n")
+			for _, c := range d.Calls {
+				fmt.Fprintf(&b, "\t%s();\n", c.Callee)
+			}
+			b.WriteString("}\n")
+		}
+	}
+	return b.String()
+}
+
 func (m *propModel) render(path string) string {
 	switch filepath.Ext(path) {
+	case ".c", ".h":
+		return renderC(m.files[path])
 	case ".cs":
 		return renderCS(path, m.files[path])
 	case ".go":
@@ -193,9 +245,10 @@ func (m *propModel) render(path string) string {
 	return renderTS(m.files[path])
 }
 
-// propOps are the eleven operations of design.md D7: three change files,
-// eight change declarations. Each returns a description for the log, or
-// "" when it does not apply to the current model.
+// propOps are the operations of design.md D7, and three that edit C
+// files: add an include, add or remove static, and add or remove a
+// function body. Each returns a description for the log, or "" when it
+// does not apply to the current model.
 var propOps = []func(t *rapid.T, m *propModel) string{
 	func(t *rapid.T, m *propModel) string { // add a file
 		free := m.unused(rapid.SampledFrom(propExts).Draw(t, "ext"))
@@ -338,10 +391,59 @@ var propOps = []func(t *rapid.T, m *propModel) string{
 		m.files[p][i].Calls = append(m.files[p][i].Calls, propCall{Callee: callee, Receiver: javaClass(q)})
 		return fmt.Sprintf("add call to %s through a local of %s in %s of %s", callee, javaClass(q), m.files[p][i].Name, p)
 	},
+	func(t *rapid.T, m *propModel) string { // add an include to a C file
+		c := m.cPaths()
+		if len(c) == 0 {
+			return ""
+		}
+		p := rapid.SampledFrom(c).Draw(t, "path")
+		inc := rapid.SampledFrom(propIncludes).Draw(t, "include")
+		m.files[p] = append([]propDecl{{Include: inc}}, m.files[p]...)
+		return "include " + inc + " in " + p
+	},
+	func(t *rapid.T, m *propModel) string { // add or remove static on a C function
+		p, i, ok := drawCFunction(t, m)
+		if !ok {
+			return ""
+		}
+		d := &m.files[p][i]
+		d.Static = !d.Static
+		return fmt.Sprintf("set static to %v on %s in %s", d.Static, d.Name, p)
+	},
+	func(t *rapid.T, m *propModel) string { // add or remove a C function body
+		p, i, ok := drawCFunction(t, m)
+		if !ok {
+			return ""
+		}
+		d := &m.files[p][i]
+		d.Prototype = !d.Prototype
+		return fmt.Sprintf("set prototype to %v on %s in %s", d.Prototype, d.Name, p)
+	},
+}
+
+// drawCFunction draws a function of a C file of the model.
+func drawCFunction(t *rapid.T, m *propModel) (string, int, bool) {
+	type ref struct {
+		path string
+		i    int
+	}
+	var refs []ref
+	for _, p := range m.cPaths() {
+		for i, d := range m.files[p] {
+			if !d.Class && d.Include == "" {
+				refs = append(refs, ref{p, i})
+			}
+		}
+	}
+	if len(refs) == 0 {
+		return "", 0, false
+	}
+	r := refs[rapid.IntRange(0, len(refs)-1).Draw(t, "cfunction")]
+	return r.path, r.i, true
 }
 
 // drawDecl draws a declaration of the model, a function only when
-// functions is true.
+// functions is true. An include is no function.
 func drawDecl(t *rapid.T, m *propModel, functions bool) (string, int, bool) {
 	type ref struct {
 		path string
@@ -350,7 +452,7 @@ func drawDecl(t *rapid.T, m *propModel, functions bool) (string, int, bool) {
 	var refs []ref
 	for _, p := range m.paths() {
 		for i, d := range m.files[p] {
-			if !functions || !d.Class {
+			if !functions || (!d.Class && d.Include == "") {
 				refs = append(refs, ref{p, i})
 			}
 		}
@@ -456,6 +558,13 @@ func TestSyncEqualsFreshIndex(t *testing.T) {
 		if rapid.Bool().Draw(t, "partialType") {
 			m.files["PartA.cs"] = []propDecl{{Name: "alpha"}}
 			m.files["PartB.cs"] = []propDecl{{Name: "beta"}, {Name: "gamma"}}
+		}
+		// In half of the draws the tree starts with a C call through a
+		// header prototype to its definition in another file.
+		if rapid.Bool().Draw(t, "cTree") {
+			m.files["main.c"] = []propDecl{{Include: "lib.h"}, {Name: "alpha", Calls: []propCall{{Callee: "beta"}}}}
+			m.files["lib.h"] = []propDecl{{Name: "beta", Prototype: true}}
+			m.files["sub/s.c"] = []propDecl{{Name: "beta"}}
 		}
 		written := make(map[string]string)
 		writeModel(t, root, m, written)

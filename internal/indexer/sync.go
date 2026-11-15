@@ -513,7 +513,15 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers), owners)
+	// A file that includes a reparsed, added or deleted C or C++ file,
+	// directly or not, is reparsed too, so its bare calls look through
+	// the include graph that the sync leaves.
+	includers, err := includeDependents(deps, reparsed, inBatch)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers), owners), includers)
 	// The later waves. A file of a wave can emit a shared id that the
 	// cycle did not hold yet, or change the binding facts of a data
 	// symbol, and the files that emit that id or read that symbol then
@@ -557,6 +565,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			w.Close()
 			return Stats{}, err
 		}
+		includers, err := includeDependents(deps, wavePaths, inBatch)
+		if err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+		waiting = mergeSortedPaths(waiting, includers)
 		if len(shared) != before {
 			more, err := emitters()
 			if err != nil {
@@ -970,8 +984,8 @@ func sortedBoolKeys(m map[string]bool) []string {
 // needsFileIndexBackfill reports whether the store at storeDir has no
 // Meta record yet, or a Meta record whose has_file_index,
 // has_unresolved_names, has_declared_module_keys, has_method_specs,
-// has_grouped_vars, has_unique_decl_ids or has_data_symbols flag is
-// false (D-02b). It reads
+// has_grouped_vars, has_unique_decl_ids, has_data_symbols or
+// has_c_prototypes flag is false (D-02b). It reads
 // the metadata through readStoreMeta, which opens and closes the store on
 // its own and never creates one, so a check of a missing store leaves no
 // empty store behind.
@@ -985,7 +999,7 @@ func needsFileIndexBackfill(storeDir string) (bool, error) {
 	}
 	return !meta.GetHasFileIndex() || !meta.GetHasUnresolvedNames() || !meta.GetHasDeclaredModuleKeys() ||
 		!meta.GetHasMethodSpecs() || !meta.GetHasGroupedVars() || !meta.GetHasUniqueDeclIds() ||
-		!meta.GetHasDataSymbols(), nil
+		!meta.GetHasDataSymbols() || !meta.GetHasCPrototypes(), nil
 }
 
 // NeedsFullIndex reports whether Sync on the store at storeDir would build
@@ -1070,7 +1084,8 @@ type unresolvedKey struct {
 }
 
 // newNames returns the (module key, name) pairs results declare under a
-// node id r0 does not hold: the symbols this sync adds.
+// node id r0 does not hold: the symbols this sync adds, and under
+// resolve.IncludeModule the path of each C or C++ file it adds.
 func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresolvedKey]struct{}, error) {
 	names := make(map[unresolvedKey]struct{})
 	for _, r := range results {
@@ -1078,7 +1093,7 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 			continue
 		}
 		for _, en := range r.Nodes {
-			if en.Node.Kind == goextract.KindFile {
+			if en.Node.Kind == goextract.KindFile && !symbols.LinksIncludes(r.Language) {
 				continue
 			}
 			_, err := r0.GetNode(en.Node.Id)
@@ -1087,6 +1102,12 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 			}
 			if err != graphstore.ErrNotFound {
 				return nil, err
+			}
+			if en.Node.Kind == goextract.KindFile {
+				// An include waits on the path of a file that can
+				// appear (design D2).
+				names[unresolvedKey{moduleKey: resolve.IncludeModule, name: r.RelPath}] = struct{}{}
+				continue
 			}
 			names[unresolvedKey{moduleKey: r.ImportPath, name: en.Node.Name}] = struct{}{}
 		}
@@ -1126,6 +1147,20 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 	before := make(map[unresolvedKey]map[string]struct{})
 	after := make(map[unresolvedKey]map[string]struct{})
 	touched := make(map[unresolvedKey]struct{})
+	// A C or C++ function is a candidate of a call in any file that
+	// includes it, and a prototype reaches the definitions of its name in
+	// every file (design D6), so its set is keyed by its name alone.
+	// facts are the stored resolution facts of each such function, and
+	// refacted the sets with a function whose facts the reparse changes
+	// under the same id.
+	facts := make(map[string]cFunctionFacts)
+	refacted := make(map[unresolvedKey]struct{})
+	setKey := func(n *schema.Node, moduleKey string) unresolvedKey {
+		if n.Kind == goextract.KindFunction && symbols.LinksIncludes(n.Language) {
+			return unresolvedKey{moduleKey: resolve.AnyModule, name: n.Name}
+		}
+		return unresolvedKey{moduleKey: moduleKey, name: n.Name}
+	}
 	setsByName := make(map[string][]string)
 	fileOf := make(map[string]string)
 	record := func(m map[unresolvedKey]map[string]struct{}, key unresolvedKey, id string) {
@@ -1180,11 +1215,16 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 			}
 			continue
 		}
+		// A deleted file has no module key unless its File record declares
+		// one, but the set of a C or C++ function needs none.
 		moduleKey, ok := moduleKeyOf(n.FilePath)
-		if !ok {
+		key := setKey(n, moduleKey)
+		if !ok && key.moduleKey != resolve.AnyModule {
 			continue
 		}
-		key := unresolvedKey{moduleKey: moduleKey, name: n.Name}
+		if key.moduleKey == resolve.AnyModule {
+			facts[n.Id] = factsOf(n)
+		}
 		record(before, key, n.Id)
 		if _, ok := changed[n.FilePath]; ok {
 			touched[key] = struct{}{}
@@ -1205,15 +1245,18 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 			if en.Node.Kind == goextract.KindFile || en.Node.Kind == goextract.KindOverloadSet {
 				continue
 			}
-			key := unresolvedKey{moduleKey: r.ImportPath, name: en.Node.Name}
+			key := setKey(en.Node, r.ImportPath)
 			record(after, key, en.Node.Id)
 			touched[key] = struct{}{}
+			if stored, ok := facts[en.Node.Id]; ok && stored != factsOf(en.Node) {
+				refacted[key] = struct{}{}
+			}
 		}
 	}
 
 	targets := make(map[string]struct{})
 	for key := range touched {
-		if maps.Equal(before[key], after[key]) {
+		if _, ok := refacted[key]; !ok && maps.Equal(before[key], after[key]) {
 			continue
 		}
 		for id := range before[key] {
@@ -1271,6 +1314,17 @@ func filesResolvingToChangedSets(r0 graphstore.Reader, discovered map[string]dis
 		return nil, err
 	}
 	return sortedKeys(set), nil
+}
+
+// cFunctionFacts are the fields of a C or C++ function that decide
+// whether a call through a prototype reaches it.
+type cFunctionFacts struct {
+	exported, prototype bool
+	paramKey            string
+}
+
+func factsOf(n *schema.Node) cFunctionFacts {
+	return cFunctionFacts{n.GetIsExported(), n.GetPrototype(), n.GetCParamKey()}
 }
 
 // mergeSortedPaths returns the sorted union of a and b.
