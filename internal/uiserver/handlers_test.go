@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -1451,6 +1452,42 @@ func TestGetNodeDetailDataAccess(t *testing.T) {
 				}
 			default:
 				t.Errorf("unexpected candidate kind %q", def.GetNode().GetKind())
+			}
+		}
+	})
+
+	t.Run("a variable holds a function", func(t *testing.T) {
+		client := indexedTree(t, map[string]string{
+			"go.mod":  "module example.com/m\n\ngo 1.26\n",
+			"main.go": "package main\n\nfunc start() {}\n\nvar run = start\n",
+			"a/a.go":  "package a\n\nfunc start() {}\n\nvar Hold = start\n",
+			"b/b.go":  "package b\n\nfunc start() {}\n\nvar Hold = start\n",
+		})
+		refs := func(nodes []*uiv1.Node) []string {
+			var out []string
+			for _, n := range nodes {
+				out = append(out, fmt.Sprintf("%s %s:%d", n.GetName(), n.GetFilePath(), n.GetStartLine()))
+			}
+			return out
+		}
+
+		single := nodeDetail(t, client, "run")
+		if single.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("run: mode = %v, want single definition", single.GetMode())
+		}
+		if got, want := refs(single.GetInitializedTo()), []string{"start main.go:3"}; fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("run: initialized_to = %v, want %v", got, want)
+		}
+
+		multi := nodeDetail(t, client, "Hold")
+		if len(multi.GetDefinitions()) != 2 {
+			t.Fatalf("Hold: got %d definitions, want 2", len(multi.GetDefinitions()))
+		}
+		for _, def := range multi.GetDefinitions() {
+			dir := path.Dir(def.GetNode().GetFilePath())
+			want := []string{fmt.Sprintf("start %s/%s.go:3", dir, dir)}
+			if got := refs(def.GetInitializedTo()); !def.GetDetailGathered() || fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("Hold in %s: gathered %v, initialized_to %v, want gathered with %v", dir, def.GetDetailGathered(), got, want)
 			}
 		}
 	})
