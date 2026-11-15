@@ -1,3 +1,0 @@
-kind: Fixes
-body: A Go call through a struct field no longer resolves to one function when a keyed composite literal or a write through a receiver of unknown type can also set that field. The call now keeps only its read of the field.
-time: 2026-11-14T19:37:26.204873-05:00

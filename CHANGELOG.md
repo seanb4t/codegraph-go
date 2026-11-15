@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.19.1](https://github.com/seanb4t/codegraph-go/releases/tag/v0.19.1) — 2026-11-15
+
+### Fixes
+
+- Rows of two definitions in one file now sort by line number, so a.py:5 comes before a.py:12.
+- One process now opens one store once when two paths to it differ only in letter case, as on the default macOS file system.
+- serve --mcp now answers a malformed or oversized stdin line with a JSON-RPC error and keeps the session open. Before, it exited and dropped the responses it owed, and a line with no newline grew memory without limit.
+- A Go call through a struct field no longer resolves to one function when a keyed composite literal or a write through a receiver of unknown type can also set that field. The call now keeps only its read of the field.
+- codegraph init no longer crashes with a stack overflow on a JavaScript or TypeScript destructuring assignment with a shorthand property, as ({ a } = obj). Each name in the pattern is now recorded as a write.
+
 ## [v0.19.0](https://github.com/seanb4t/codegraph-go/releases/tag/v0.19.0) — 2026-11-14
 
 ### Features
