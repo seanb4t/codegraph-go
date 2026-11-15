@@ -44,6 +44,21 @@ func TestLineFlagNarrowsNode(t *testing.T) {
 	})
 }
 
+// TestLineFlagOnlyOnNode checks that node registers --line and callers,
+// callees and impact do not.
+func TestLineFlagOnlyOnNode(t *testing.T) {
+	root := newRootCmd()
+	for _, name := range []string{"node", "callers", "callees", "impact"} {
+		cmd, _, err := root.Find([]string{name})
+		if err != nil || cmd.Name() != name {
+			t.Fatalf("command %s not found: %v", name, err)
+		}
+		if got, want := cmd.Flags().Lookup("line") != nil, name == "node"; got != want {
+			t.Errorf("%s has --line = %v, want %v", name, got, want)
+		}
+	}
+}
+
 // TestSignatureFlagSelectsOneOverload checks --signature on the four
 // commands that take it: each one narrows to the named overload, and the
 // plain output of callers carries the overload of each row without it.

@@ -249,10 +249,33 @@ func TestNarrowNeverEmpty(t *testing.T) {
 	})
 
 	t.Run("lineHint on a def's last line narrows to that def", func(t *testing.T) {
-		line := 40
+		first := mk("first", "pkg/x.go", 10, 20)
+		next := mk("next", "pkg/y.go", 22, 30)
+		line := 20 // contained by first; by nearest start, next (|22-20|=2) would win
+		got := narrowNodeMatches([]*schema.Node{first, next}, "", &line)
+		if len(got) != 1 || got[0] != first {
+			t.Fatalf("narrowNodeMatches(lineHint=20): got %d matches, want [first]", len(got))
+		}
+	})
+
+	t.Run("lineHint one past a def's last line falls back to nearest start", func(t *testing.T) {
+		line := 21 // past a's end at 20; |30-21|=9 beats |10-21|=11
 		got := narrowNodeMatches(matches, "", &line)
 		if len(got) != 1 || got[0] != b {
-			t.Fatalf("narrowNodeMatches(lineHint=40): got %d matches, want [b]", len(got))
+			t.Fatalf("narrowNodeMatches(lineHint=21): got %d matches, want [b]", len(got))
+		}
+	})
+
+	t.Run("a def with no end line spans only its first line", func(t *testing.T) {
+		single := mk("single", "pkg/x.go", 30, 0)
+		span := mk("span", "pkg/y.go", 30, 40)
+		at := 30
+		if got := narrowNodeMatches([]*schema.Node{single, span}, "", &at); len(got) != 2 {
+			t.Fatalf("narrowNodeMatches(lineHint=30): got %d matches, want [single span]", len(got))
+		}
+		after := 31
+		if got := narrowNodeMatches([]*schema.Node{single, span}, "", &after); len(got) != 1 || got[0] != span {
+			t.Fatalf("narrowNodeMatches(lineHint=31): got %d matches, want [span]", len(got))
 		}
 	})
 
