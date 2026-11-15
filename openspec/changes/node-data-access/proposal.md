@@ -14,7 +14,7 @@ Issue: #335
 - The single-definition view always prints both lines for a data symbol, as it always prints `**Calls →**` and `**Called by ←**`. In a section of the multi-definition view, an empty list prints no line. If all four lists of a section are empty, the section prints no trail header.
 - Entries of `**Accessed by ←**` are ordered by file, then name, then line, the order that `callers` uses.
 - Module-level code reads or writes a symbol with the file node as its source. Such an access is listed with the file's path as its name: `main.py (main.py:1, read)`. An empty line then means that no stored code reads or writes the symbol.
-- The styled terminal view of `codegraph node` shows the same two lines. It also starts to show the owner and language lines of a field, which the plain view already shows.
+- The styled terminal view of `codegraph node` shows the same two lines.
 - The graph UI gets the same facts. `NodeDefinition` and `GetNodeDetailResponse` in `ui.proto` gain the fields `accessed_by` and `initialized_to`. The browse state carries them, and the neighbors panel shows each list that has an entry.
 - The section of every other kind does not change.
 
@@ -30,7 +30,7 @@ None.
 
 ## Impact
 
-- Go code: `internal/query` (`detail.go`, `node.go`, `traverse.go`, `render_markdown.go`), `internal/cli/present/node.go` and `internal/uiserver/handlers.go`. `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`.
+- Go code: `internal/query` (`detail.go`, `node.go`, `traverse.go`, `render_markdown.go`), `internal/cli/present/node.go` and `internal/uiserver/handlers.go`. `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`, which also gains `IsInitBinding`.
 - Wire: `internal/uiproto/uiv1/ui.proto` and its generated Go and TypeScript code.
 - Web code: `web/src/lib/browse-state.ts`, `web/src/routes/browse/+page.svelte` and `web/src/lib/components/browse/NeighborsPanel.svelte`.
 - Output: additive lines in CLI and MCP markdown for data symbols, and additive fields on the UI wire. Field names, types and the order of existing lines do not change.

@@ -30,7 +30,7 @@ The stored facts:
 
 ### D1. Two new fields on DefinitionDetail
 
-`DefinitionDetail` gains `AccessedBy []DataAccess` and `InitializedTo []*schema.Node`, after `CalledBy`. `DataAccess` is `{Node *schema.Node; Access string}`. Both stay nil for any kind that `IsDataKind` rejects. This follows `Owner`, which only a field fills. The dependency closure test (T-01-18, `internal/depclosure`) lets `internal/query` reach only `goextract` and `nodeid` in the indexer. So `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`, next to `IsWriteAccess` and the kind constants, and `resolve` calls `goextract.IsDataKind`.
+`DefinitionDetail` gains `AccessedBy []DataAccess` and `InitializedTo []*schema.Node`, after `CalledBy`. `DataAccess` is `{Node *schema.Node; Access string}`. Both stay nil for any kind that `IsDataKind` rejects. This follows `Owner`, which only a field fills. The rule T-01-18 in `internal/depclosure/dependency_closure_test.go` names `goextract` and `nodeid` as the only indexer packages that production `internal/query` may reach. The test enforces only the part of that rule that forbids the `internal/indexer` root. This change keeps to the whole rule, so `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`, next to `IsWriteAccess` and the kind constants, and `resolve` calls `goextract.IsDataKind`.
 
 ### D2. One shared reverse index builder, one more scan only for a data symbol
 
@@ -50,7 +50,7 @@ The less function of `sortLocations` moves into `locationLess(a, b Location) boo
 
 ### D4. Initialized to: the initializer edges of the node itself
 
-`fetchCalls` in `internal/query/node.go` becomes `fetchTargets(node, keep func(*schema.Edge) bool)`, the one place that reads a node's outgoing edges and their targets. `fetchCalls` calls it with the `calls` filter. `InitializedTo` calls it with a filter for `references` edges with `binding=init`. A missing target is skipped, as it is for `calls`. The list keeps edge order. An initializer holds one name, so the list has at most one entry in practice.
+`fetchCalls` in `internal/query/node.go` becomes `fetchTargets(node, keep func(*schema.Edge) bool)`, the one place that reads a node's outgoing edges and their targets. `fetchCalls` calls it with the `calls` filter. `InitializedTo` calls it with a filter for `references` edges that `goextract.IsInitBinding` accepts. `IsInitBinding(e *schema.Edge) bool` is new, next to `IsWriteAccess`. It holds the check `e.Metadata[MetaBinding] == BindingInit`, which `resolve/bindings.go`, `resolve/collapse.go` and `internal/indexer/sync_bindings.go` now write inline, and those places call it instead. A missing target is skipped, as it is for `calls`. The list keeps edge order. An initializer holds one name, so the list has at most one entry in practice.
 
 ### D5. Markdown and styled lines
 
@@ -58,9 +58,9 @@ For a data kind only, `RenderNode` adds `**Accessed by ←** <entries>` and `**I
 
 The label says "Initialized to" and not "Binds". The line shows the stored initializer value. It is not the call target that `callers` shows. If another write competes, that call target is absent.
 
-`writeSingleDef` and `writeNodeSection` print the same lines with the label and path styles, and `writeNodeRefs` takes the same suffix. Today they leave out the owner and language lines that `fieldFacts` gives the plain view. They start to print those lines too, so the styled view of a field mirrors the plain view.
+`writeSingleDef` and `writeNodeSection` print the same lines with the label and path styles, and `writeNodeRefs` takes the same suffix. They do not change otherwise. In particular, they keep leaving out the owner and language lines of a field, which only the plain view prints today. So `TestRenderNodeStrippedEqualsMarkdownContract` gets its new subtests for a variable and a constant, which have no such lines.
 
-The plain and the styled multi-definition loops both compare a section's length with `nodeMultiDefBodyBudget`. The plain loop counts the markdown markers, and the styled loop counts the stripped text. A section near the budget can then fit in one view and not in the other. The new lines add markers, which widens that gap. So the styled loop budgets on the plain length: `query.NodeSectionLen(d)` returns `len(renderNodeSection(d))`, and `writeMultiDef` uses it. Both views then put the same sections in full. `TestRenderNodeStrippedEqualsMarkdownContract` gets subtests for a field, for a variable, and for data sections at the budget.
+The styled multi-definition loop keeps its own copy of the budget constants, and it budgets on the stripped length. The plain loop budgets on the markdown length. This change does not unify the two loops, because a shared length would also move function sections near the budget in the terminal view. The plain view is the one that agents and MCP read, so its budget decides the contract.
 
 The issue offered two lists, one for reads and one for writes. One list with a role keeps a `read_write` source on one line, the same as the stored edge.
 
@@ -78,4 +78,4 @@ The panel repeats one labeled list block for callers, callees and blast radius t
 - The hugo goldens change. `task golden:regen` regenerates them. In the diff, each field section that gains an entry also gains the trail header line. If a longer data section pushes a later section past the body budget, that section moves to the list of other definitions, and the diff shows that move.
 - The UI wire has no cap on the entries of a list. `called_by` has none either. A `Node` message holds a name, a path and a signature. The 16 MiB send limit then allows tens of thousands of entries across the 20 gathered definitions, next to their source blobs. A cap for every neighbor list is a separate change.
 - A reader that has no stored node, for example a source from a file that sync removed, is skipped. The list can then be shorter than the stored edges.
-- The styled view of a field gains its owner and language lines. That changes the terminal output of `codegraph node` for a field. The styled view is only for a terminal. The plain view, which agents and MCP read, does not change for this.
+- The data lines add bytes to both multi-definition loops. Near the budget, the styled view can then put a data section in full while the plain view lists it, or the reverse. The loops already differ in the same way for the markdown markers. The styled view is only for a terminal.
