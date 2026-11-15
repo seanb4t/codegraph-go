@@ -28,16 +28,16 @@
 	let {
 		calls,
 		calledBy,
-		accessedBy = [],
-		initializedTo = [],
+		accessedBy,
+		initializedTo,
 		blastRadius,
 		depth,
 		onNavigate
 	}: {
 		calls: Node[];
 		calledBy: Node[];
-		accessedBy?: DataAccess[];
-		initializedTo?: Node[];
+		accessedBy: DataAccess[];
+		initializedTo: Node[];
 		blastRadius: BlastRadiusState;
 		depth?: number;
 		onNavigate: (delta: BrowseNavDelta, intent: NavIntent) => void;

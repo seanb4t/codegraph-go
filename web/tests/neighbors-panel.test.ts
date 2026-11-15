@@ -43,6 +43,8 @@ describe('NeighborsPanel: three labelled regions, entries in supplied order', ()
 			props: {
 				calledBy: [node('CallerA'), node('CallerB')],
 				calls: [node('CalleeA')],
+				accessedBy: [],
+				initializedTo: [],
 				blastRadius: {
 					kind: 'loaded',
 					depth: 2,
@@ -89,6 +91,8 @@ describe('NeighborsPanel: three labelled regions, entries in supplied order', ()
 			props: {
 				calledBy: [],
 				calls: [shared],
+				accessedBy: [],
+				initializedTo: [],
 				blastRadius: {
 					kind: 'loaded',
 					depth: 1,
@@ -118,6 +122,8 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 			props: {
 				calledBy: [node('CallerA')],
 				calls: [],
+				accessedBy: [],
+				initializedTo: [],
 				blastRadius: IDLE_BLAST,
 				depth: undefined,
 				onNavigate
@@ -137,7 +143,15 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 	it('changing the depth control invokes onNavigate with the REFINE intent', async () => {
 		const onNavigate = vi.fn();
 		render(NeighborsPanel, {
-			props: { calledBy: [], calls: [], blastRadius: IDLE_BLAST, depth: 2, onNavigate }
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [],
+				initializedTo: [],
+				blastRadius: IDLE_BLAST,
+				depth: 2,
+				onNavigate
+			}
 		});
 		const input = screen.getByTestId('neighbors-depth-input');
 		await fireEvent.change(input, { target: { value: '4' } });
@@ -158,7 +172,15 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 		// depth the app itself then silently discards on the next read.
 		const onNavigate = vi.fn();
 		render(NeighborsPanel, {
-			props: { calledBy: [], calls: [], blastRadius: IDLE_BLAST, depth: 2, onNavigate }
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [],
+				initializedTo: [],
+				blastRadius: IDLE_BLAST,
+				depth: 2,
+				onNavigate
+			}
 		});
 		const input = screen.getByTestId('neighbors-depth-input');
 
@@ -181,7 +203,15 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 	it('IN-08: a non-conforming committed value surfaces aria-invalid, cleared once a conforming value is committed', async () => {
 		const onNavigate = vi.fn();
 		render(NeighborsPanel, {
-			props: { calledBy: [], calls: [], blastRadius: IDLE_BLAST, depth: 2, onNavigate }
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [],
+				initializedTo: [],
+				blastRadius: IDLE_BLAST,
+				depth: 2,
+				onNavigate
+			}
 		});
 		const input = screen.getByTestId('neighbors-depth-input');
 
@@ -202,6 +232,8 @@ describe('NeighborsPanel: empty and failed states are distinguishable, never an 
 			props: {
 				calledBy: [],
 				calls: [node('X')],
+				accessedBy: [],
+				initializedTo: [],
 				blastRadius: IDLE_BLAST,
 				depth: undefined,
 				onNavigate: vi.fn()
@@ -216,6 +248,8 @@ describe('NeighborsPanel: empty and failed states are distinguishable, never an 
 			props: {
 				calledBy: [],
 				calls: [],
+				accessedBy: [],
+				initializedTo: [],
 				blastRadius: { kind: 'loaded', depth: 2, nodeCount: 0, edgeCount: 0, affected: [] },
 				depth: 2,
 				onNavigate: vi.fn()
@@ -228,6 +262,8 @@ describe('NeighborsPanel: empty and failed states are distinguishable, never an 
 			props: {
 				calledBy: [],
 				calls: [],
+				accessedBy: [],
+				initializedTo: [],
 				blastRadius: { kind: 'failed', failure: { kind: 'unknown', message: 'boom' } },
 				depth: 2,
 				onNavigate: vi.fn()
@@ -269,7 +305,14 @@ describe('NeighborsPanel: the data lists of a variable, a constant or a field', 
 
 	it('an empty data list shows no heading', () => {
 		render(NeighborsPanel, {
-			props: { calledBy: [], calls: [], accessedBy: [], initializedTo: [], blastRadius: IDLE_BLAST, onNavigate: vi.fn() }
+			props: {
+				calledBy: [],
+				calls: [],
+				accessedBy: [],
+				initializedTo: [],
+				blastRadius: IDLE_BLAST,
+				onNavigate: vi.fn()
+			}
 		});
 
 		expect(screen.queryByTestId('neighbors-accessed-by')).toBeNull();
@@ -286,6 +329,7 @@ describe('NeighborsPanel: the data lists of a variable, a constant or a field', 
 			props: {
 				calledBy: [],
 				calls: [],
+				initializedTo: [],
 				accessedBy: [access(node('a1', shared), 'read'), access(node('a2', shared), 'write')],
 				blastRadius: IDLE_BLAST,
 				onNavigate: vi.fn()
@@ -303,6 +347,7 @@ describe('NeighborsPanel: the data lists of a variable, a constant or a field', 
 			props: {
 				calledBy: [],
 				calls: [],
+				initializedTo: [],
 				accessedBy: [noNode, access(node('deposit'), 'write')],
 				blastRadius: IDLE_BLAST,
 				onNavigate: vi.fn()
@@ -319,6 +364,7 @@ describe('NeighborsPanel: the data lists of a variable, a constant or a field', 
 			props: {
 				calledBy: [],
 				calls: [],
+				initializedTo: [],
 				accessedBy: [{ access: 'read' } as unknown as DataAccess],
 				blastRadius: IDLE_BLAST,
 				onNavigate: vi.fn()
