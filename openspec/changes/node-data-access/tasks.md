@@ -2,7 +2,7 @@
 
 ## 1. Query detail
 
-- [ ] 1.1 Move `IsDataKind` from `internal/indexer/resolve` to `internal/indexer/goextract`, and call it from `resolve` (D1). Add `goextract.IsInitBinding`, and call it in `resolve/bindings.go`, `resolve/collapse.go` and `internal/indexer/sync_bindings.go` (D4). Extend the subtest "T-01-18 production query reaches no indexer root" in `internal/depclosure/dependency_closure_test.go`. It fails when production `internal/query` depends on any `internal/indexer` package other than `goextract` and `nodeid`, and it keeps its check that it inspected at least one package. `go test ./internal/depclosure ./internal/indexer/...` passes. Add `reverseEdgeIndex` to `internal/query/traverse.go`, and route `BuildReverseAdjacency` and `BuildImplementsIndex` through it (D2). The existing tests of callers, impact and dispatch pass unchanged.
+- [ ] 1.1 Move `IsDataKind` from `internal/indexer/resolve` to `internal/indexer/goextract`, and call it from `resolve` (D1). Add `goextract.IsInitBinding`, and call it in `resolve/bindings.go`, `resolve/collapse.go` and `internal/indexer/sync_bindings.go` (D4). `go test ./internal/depclosure ./internal/indexer/...` passes. Add `reverseEdgeIndex` to `internal/query/traverse.go`, and route `BuildReverseAdjacency` and `BuildImplementsIndex` through it (D2). The existing tests of callers, impact and dispatch pass unchanged.
 - [ ] 1.2 Add `DataAccess` and the fields `AccessedBy` and `InitializedTo` to `DefinitionDetail` in `internal/query/detail.go` (D1). Add `buildAccessIndex` behind a package variable (D2). Turn `fetchCalledBy` into `fetchSources`, and update its caller in `internal/query/render_markdown_test.go`, move the comparator of `sortLocations` into `locationLess`, and fill `AccessedBy` in `buildSingleDefDetail` and `buildMultiDefDetail` (D3). `TestNodeDataAccess` in `internal/query/detail_test.go` covers these cases:
   - a source with a `read_write` edge, which gives one entry with `read_write`
   - a data symbol `a` whose initializer reads the variable `b`, which lists `a` with `read` for `b`
@@ -10,6 +10,7 @@
   - a missing source, which is skipped
   - the source `alpha` in `b.go` and the source `zeta` in `a.go`, which come out `a.go` first, so the file key sorts before the name key
   - a `references` edge without access metadata to the symbol, next to a `read` edge from another source, which gives only the `read` entry
+  - a multi-definition name with a variable candidate and a function candidate, where the variable's `binding=init` edge gives the function an incoming `read` edge. The function gets a nil `AccessedBy` and a nil `InitializedTo`, and its rendered section has no data lines
   - two sources in one file whose names sort in the reverse of their lines, which come out by name
   - two sources with one name in one file at lines 9 and 3, which come out line 3 first
   - two sources that tie on file, name, line, signature and kind, with the roles `write` and `read`, which come out `read` first
@@ -37,7 +38,7 @@
 
 ## 2. CLI and MCP
 
-- [ ] 2.1 Give `formatNodeRef`, `joinNodeRefs` and `writeNodeRefs` the optional suffix (D5). Print the two data lines in `writeSingleDef` and `writeNodeSection` in `internal/cli/present/node.go`. `TestRenderNodeStrippedEqualsMarkdownContract` gets the subtests "SingleDef variable", "SingleDef constant" and "MultiDef data", which use no field. They compare the stripped styled output with `query.RenderNode` and `query.RenderNodeMultiDef`.
+- [ ] 2.1 Give `formatNodeRef`, `joinNodeRefs` and `writeNodeRefs` the optional suffix (D5). Print the two data lines in `writeSingleDef` and `writeNodeSection` in `internal/cli/present/node.go`. `TestRenderNodeStrippedEqualsMarkdownContract` gets the subtests "SingleDef variable", "SingleDef constant", "MultiDef access only", "MultiDef initializer only" and "MultiDef empty data", which use no field. The last three mirror cases 3 to 5 of task 1.6. They compare the stripped styled output with `query.RenderNode` and `query.RenderNodeMultiDef`.
 - [ ] 2.2 Add `TestNodeShowsDataAccess` to `internal/cli/data_symbol_queries_test.go`. It runs `codegraph node` on the `p/Account.java` fixture and on Go fixtures. It has one subtest for each scenario of the spec delta, except the graph UI scenario:
   - a method reads and writes a field
   - readers in two files
@@ -50,7 +51,7 @@
 
 ## 3. Graph UI
 
-- [ ] 3.1 Add `DataAccess`, `NodeDefinition.accessed_by` (6), `NodeDefinition.initialized_to` (7), `GetNodeDetailResponse.accessed_by` (10) and `GetNodeDetailResponse.initialized_to` (11) to `internal/uiproto/uiv1/ui.proto` (D6). Run `task proto:gen`. `task proto:drift` passes.
+- [ ] 3.1 Add `DataAccess`, `NodeDefinition.accessed_by` (6), `NodeDefinition.initialized_to` (7), `GetNodeDetailResponse.accessed_by` (10) and `GetNodeDetailResponse.initialized_to` (11) to `internal/uiproto/uiv1/ui.proto` (D6). Run `task proto:gen`. `task proto:drift` passes. Add the six new fields to `uiProtoFieldNumbers` in `internal/uiserver/readonly_test.go`, with a new length constant that is the previous one plus 6. `TestUIProtoFieldNumbersAreStableAndUnique` passes.
 - [ ] 3.2 Map the new fields in `nodeDefinitionToProto` and `nodeDetailToProto` in `internal/uiserver/handlers.go`. `TestGetNodeDetailDataAccess` in `internal/uiserver/handlers_test.go` has three cases:
   - the scenario "The graph UI asks for a field", with one `accessed_by` entry for `deposit` with `read_write` and an empty `initialized_to`
   - `size` as a multi-definition name on the `p/Account.java` fixture, where both candidates are gathered and the field definition carries its entry
