@@ -20,7 +20,7 @@
   - 1 for the `size` field and method pair
   - 1 for a multi-definition name with two data candidates
   - 0 for a multi-definition name with only functions
-- [ ] 1.4 Add the property test `TestAccessOrderIgnoresEdgeOrder` with `pgregory.net/rapid`, after the pattern of `internal/indexer/spill_roundtrip_test.go`. Its generator also makes sources that tie on file, name, line, signature and kind, with the same role or with different roles. It permutes the edges of one index entry. It asserts the same rendered `**Accessed by ←**` line, and the same list of (name, path, line, role) of `AccessedBy` (D3).
+- [ ] 1.4 Add the property test `TestAccessOrderIgnoresEdgeOrder` with `pgregory.net/rapid`, after the pattern of `TestQueryResultDoesNotDependOnNodeIDs` in `internal/query/definitions_test.go`. It builds the sources with `defGraph.node` and a new `references` edge helper next to `defGraph.call`. Its generator also makes sources that tie on file, name, line, signature and kind, with the same role or with different roles. It permutes the edges of one index entry, and it drops some source nodes from the reader. It asserts the same rendered `**Accessed by ←**` line, and the same list of (name, path, line, role) of `AccessedBy`. `AccessedBy` holds one entry for each source that is present (D3).
 - [ ] 1.5 Turn `fetchCalls` into `fetchTargets` with an edge filter, and fill `InitializedTo` with it through `goextract.IsInitBinding` (D4). For the requirement "Node lists the initializer value of a data symbol", `TestNodeDataAccess` adds three cases:
   - a variable whose `binding=init` edge targets a function, which gives that function
   - a variable with a `references` edge without `binding=init`, which gives no entry
@@ -56,7 +56,7 @@
   - `size` as a multi-definition name on the `p/Account.java` fixture, where both candidates are gathered and the field definition carries its entry
   - a name with `uiMultiDefCap` + 1 data candidates that each have an accessor, where candidate `uiMultiDefCap` carries its entry and the last candidate carries empty lists
 - [ ] 3.3 Carry `accessedBy` and `initializedTo` through `BrowseTargetState` in `web/src/lib/browse-state.ts` and the props in `web/src/routes/browse/+page.svelte`. `web/tests/browse-state.test.ts` checks that `loadBrowseTarget` keeps both lists of a single-definition response.
-- [ ] 3.4 Add one snippet for a labeled neighbor list to `NeighborsPanel.svelte` (D6). Render callers, callees, blast radius, "Accessed by" and "Initialized to" through it. The two data lists key their entries by node id. `web/tests/neighbors-panel.test.ts` checks three cases:
+- [ ] 3.4 Add one snippet for a labeled neighbor list to `NeighborsPanel.svelte` (D6). Render callers, callees, "Accessed by" and "Initialized to" through it. The blast radius section does not change. The two data lists key their entries by node id. `web/tests/neighbors-panel.test.ts` checks three cases:
   - a list with entries shows its heading and each role
   - an empty data list shows no heading
   - two accessors that share file, line and name both render
