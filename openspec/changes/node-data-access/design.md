@@ -30,11 +30,11 @@ The stored facts:
 
 ### D1. Two new fields on DefinitionDetail
 
-`DefinitionDetail` gains `AccessedBy []DataAccess` and `InitializedTo []*schema.Node`, after `CalledBy`. `DataAccess` is `{Node *schema.Node; Access string}`. Both stay nil for any kind that `resolve.IsDataKind` rejects. This follows `Owner`, which only a field fills. `internal/query` can import `internal/indexer/resolve`, because neither package depends on the other.
+`DefinitionDetail` gains `AccessedBy []DataAccess` and `InitializedTo []*schema.Node`, after `CalledBy`. `DataAccess` is `{Node *schema.Node; Access string}`. Both stay nil for any kind that `IsDataKind` rejects. This follows `Owner`, which only a field fills. The dependency closure test (T-01-18, `internal/depclosure`) lets `internal/query` reach only `goextract` and `nodeid` in the indexer. So `IsDataKind` moves from `internal/indexer/resolve` to `internal/indexer/goextract`, next to `IsWriteAccess` and the kind constants, and `resolve` calls `goextract.IsDataKind`.
 
 ### D2. One shared reverse index builder, one more scan only for a data symbol
 
-A new unexported `reverseEdgeIndex(r graphstore.Reader, keep func(*schema.Edge) bool)` in `traverse.go` holds the scan loop: it keys each kept edge by its target. `BuildReverseAdjacency` and `BuildImplementsIndex` call it with their kind filters, and `BuildImplementsIndex` keeps its sort by source. A new `buildAccessIndex` calls it and keeps each `references` edge whose `access` metadata is not empty. `buildAccessIndex` sits behind a package variable, as `buildReverseAdjacency` does, so a test can count its calls.
+A new unexported `reverseEdgeIndex(r graphstore.Reader, keep func(*schema.Edge) bool)` in `traverse.go` holds the scan loop: it keys each kept edge by its target. `BuildReverseAdjacency` and `BuildImplementsIndex` call it with their kind filters, and `BuildImplementsIndex` keeps its sort by source. A new `buildAccessIndex` calls it and keeps each `references` edge whose `access` metadata is not empty. `buildAccessIndex` sits behind a package variable, as `buildReverseAdjacency` does, so a test can count its calls. `internal/indexer` cannot import `internal/query`, so issue #274 must move `reverseEdgeIndex` to a package that both import.
 
 If the node is a data kind, `buildSingleDefDetail` calls `buildAccessIndex`. If any candidate is a data kind, `buildMultiDefDetail` calls it once and shares it across candidates, as it does with the contains index. Otherwise neither calls it.
 
@@ -42,9 +42,11 @@ The alternative was to widen `BuildReverseAdjacency` to collect `calls` and `ref
 
 ### D3. Accessed by: one entry per source, stored role, stable order
 
-For each edge in the index entry of the node, the source node is read with `GetNode`. A missing source is skipped, as `fetchCalledBy` skips one. A source of kind `goextract.KindFile` is skipped, because module-level code is not a definition. The store holds one edge per source and target, so each source gives one entry with the role of its edge.
+`fetchCalledBy` becomes `fetchSources(node, idx)`, the one place that reads the sources of a node from a reverse index. It returns each source node with its edge, and skips a missing source as `fetchCalledBy` does today. `CalledBy` takes the source nodes from the calls index. `AccessedBy` takes the source nodes and the roles of the edges from the access index.
 
-The entries are sorted by file, then name, then line, then signature, then kind, with `sort.SliceStable`. These are the keys of `sortLocations` that a node carries. Like `sortLocations`, the sort never uses a node id. Two entries that tie on every key print the same text, so their order does not change the output. `**Called by ←**` keeps its current order.
+A source of kind `goextract.KindFile` is module-level code. It is kept, and prints as the file's path at line 1, because file nodes have the path as their name. An empty line then means that no stored code reads or writes the symbol. The store holds one edge per source and target, so each source gives one entry with the role of its edge.
+
+The less function of `sortLocations` moves into `locationLess(a, b Location) bool`, and `sortLocations` calls it. `AccessedBy` is sorted with `sort.SliceStable` by `locationLess` over `nodeLocation` of each source with its signature set, then by role. Every field that the line prints is then a sort key, and no node id is one. Two entries that tie on every key print the same text, so their order does not change the output. `**Called by ←**` keeps its current order.
 
 ### D4. Initialized to: the initializer edges of the node itself
 
@@ -52,11 +54,13 @@ The entries are sorted by file, then name, then line, then signature, then kind,
 
 ### D5. Markdown and styled lines
 
-For a data kind only, `RenderNode` adds `**Accessed by ←** <entries>` and `**Initialized to →** <refs>` after `**Called by ←**`. An access entry is `name (path:line, role)`. It starts with the same `name (path:line` as the existing references, so a reader that parses `**Called by ←**` can parse it. `**Initialized to →**` uses `joinNodeRefs`. In `renderNodeSection`, an empty list prints no line. If any of the four lists is not empty, the section prints the trail header.
+For a data kind only, `RenderNode` adds `**Accessed by ←** <entries>` and `**Initialized to →** <refs>` after `**Called by ←**`. `formatNodeRef` and `joinNodeRefs` take an optional suffix that goes inside the parentheses, so an access entry is `name (path:line, role)`. It starts with the same `name (path:line` as the existing references, so a reader that parses `**Called by ←**` can parse it. `**Initialized to →**` has no suffix. In `renderNodeSection`, an empty list prints no line. If any of the four lists is not empty, the section prints the trail header.
 
 The label says "Initialized to" and not "Binds". The line shows the stored initializer value. It is not the call target that `callers` shows. If another write competes, that call target is absent.
 
-`writeSingleDef` and `writeNodeSection` print the same lines with the label and path styles. Today they leave out the owner and language lines that `fieldFacts` gives the plain view. They start to print those lines too, so the styled view of a field mirrors the plain view. `TestRenderNodeStrippedEqualsMarkdownContract` gets subtests for a field and for a variable.
+`writeSingleDef` and `writeNodeSection` print the same lines with the label and path styles, and `writeNodeRefs` takes the same suffix. Today they leave out the owner and language lines that `fieldFacts` gives the plain view. They start to print those lines too, so the styled view of a field mirrors the plain view.
+
+The plain and the styled multi-definition loops both compare a section's length with `nodeMultiDefBodyBudget`. The plain loop counts the markdown markers, and the styled loop counts the stripped text. A section near the budget can then fit in one view and not in the other. The new lines add markers, which widens that gap. So the styled loop budgets on the plain length: `query.NodeSectionLen(d)` returns `len(renderNodeSection(d))`, and `writeMultiDef` uses it. Both views then put the same sections in full. `TestRenderNodeStrippedEqualsMarkdownContract` gets subtests for a field, for a variable, and for data sections at the budget.
 
 The issue offered two lists, one for reads and one for writes. One list with a role keeps a `read_write` source on one line, the same as the stored edge.
 
@@ -64,11 +68,14 @@ The issue offered two lists, one for reads and one for writes. One list with a r
 
 `ui.proto` gains `message DataAccess { Node node = 1; string access = 2; }`. `NodeDefinition` gains `repeated DataAccess accessed_by = 6; repeated Node initialized_to = 7;`. As `calls` and `called_by` are, they are set only for a candidate whose detail was gathered. `GetNodeDetailResponse` gains `repeated DataAccess accessed_by = 10; repeated Node initialized_to = 11;`, set only in `NODE_DETAIL_MODE_SINGLE_DEF`. The numbers are new, so an old client ignores them. `task proto:gen` regenerates the Go and TypeScript code, and `task proto:drift` checks it.
 
-`loadBrowseTarget` copies `accessedBy` and `initializedTo` into the single-definition `BrowseTargetState`, next to `calledBy`. `+page.svelte` passes them to `NeighborsPanel.svelte`. If a list has an entry, the panel shows it: "Accessed by" with each role, and "Initialized to". The server sets the lists only for a data kind, so the panel needs no list of data kinds. One Svelte snippet renders a labeled neighbor list: the heading, the empty text, the entry buttons and an optional suffix for the role. Callers, callees, blast radius and the two new lists all use it. The existing `web/tests/neighbors-panel.test.ts` and `web/tests/browse-state.test.ts` get the new cases.
+`loadBrowseTarget` copies `accessedBy` and `initializedTo` into the single-definition `BrowseTargetState`, next to `calledBy`. `+page.svelte` passes them to `NeighborsPanel.svelte`. If a list has an entry, the panel shows it: "Accessed by" with each role, and "Initialized to". The server sets the lists only for a data kind, so the panel needs no list of data kinds.
+
+The panel repeats one labeled list block for callers, callees and blast radius today, and the two new lists would add two more copies. So one Svelte snippet renders a labeled neighbor list: the heading, the empty text, the entry buttons, an optional suffix for the role, and a key function. Callers, callees and blast radius keep their current keys. The two data lists key by node id, because two sources can share file, line and name, and Svelte rejects a keyed list with a duplicate key. The store holds one edge per source and target, so a node id is unique within a data list. The existing `web/tests/neighbors-panel.test.ts` and `web/tests/browse-state.test.ts` get the new cases.
 
 ## Risks / Trade-offs
 
 - A data symbol with many readers gives a long line. `**Called by ←**` has the same property today, and the multi-definition budget still bounds the full output.
-- The hugo goldens change. `task golden:regen` regenerates them. In the diff, each field section that gains an entry also gains the trail header line, and nothing else changes.
+- The hugo goldens change. `task golden:regen` regenerates them. In the diff, each field section that gains an entry also gains the trail header line. If a longer data section pushes a later section past the body budget, that section moves to the list of other definitions, and the diff shows that move.
+- The UI wire has no cap on the entries of a list. `called_by` has none either. A `Node` message holds a name, a path and a signature. The 16 MiB send limit then allows tens of thousands of entries across the 20 gathered definitions, next to their source blobs. A cap for every neighbor list is a separate change.
 - A reader that has no stored node, for example a source from a file that sync removed, is skipped. The list can then be shorter than the stored edges.
 - The styled view of a field gains its owner and language lines. That changes the terminal output of `codegraph node` for a field. The styled view is only for a terminal. The plain view, which agents and MCP read, does not change for this.

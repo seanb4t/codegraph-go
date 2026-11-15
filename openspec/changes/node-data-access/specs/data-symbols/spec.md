@@ -2,7 +2,7 @@
 
 ### Requirement: Node lists the readers and writers of a data symbol
 
-For a variable, a constant or a field, `node` and `codegraph_node` MUST print the line `**Accessed by ←**` after `**Called by ←**`. The line MUST list each definition that has a `references` edge with an access role to the symbol, once, as `name (path:line, role)`. The role MUST be the stored `read`, `write` or `read_write`. A file node is not a definition, and its edges MUST NOT give an entry. The entries MUST be ordered by file, then name, then line.
+For a variable, a constant or a field, `node` and `codegraph_node` MUST print the line `**Accessed by ←**` after `**Called by ←**`. The line MUST list each source of a `references` edge with an access role to the symbol, once, as `name (path:line, role)`. A source is a definition, or the file of module-level code, whose name is its path. The role MUST be the stored `read`, `write` or `read_write`. The entries MUST be ordered by file, then name, then line.
 
 #### Scenario: A method reads and writes a field
 
@@ -17,7 +17,7 @@ For a variable, a constant or a field, `node` and `codegraph_node` MUST print th
 #### Scenario: Module-level code writes a variable
 
 - **WHEN** `main.go` declares `var x = f()`, no function reads or writes `x`, and a user runs `codegraph node x`
-- **THEN** the output contains the line `**Accessed by ←** ` with an empty list
+- **THEN** the output contains the line `**Accessed by ←** main.go (main.go:1, write)`
 
 ### Requirement: Node lists the initializer value of a data symbol
 
@@ -30,7 +30,7 @@ For a variable, a constant or a field, `node` and `codegraph_node` MUST print th
 
 ### Requirement: The data lines appear only for data symbols
 
-The single-definition view of a data symbol MUST print `**Accessed by ←**` and `**Initialized to →**`, also for an empty list. If a list is empty, a section of the multi-definition view MUST NOT print its line. The output for any kind other than a variable, a constant or a field MUST NOT change.
+The single-definition view of a data symbol MUST print `**Accessed by ←**` and `**Initialized to →**`, also for an empty list. If a list is empty, a section of the multi-definition view MUST NOT print its line. The section of any kind other than a variable, a constant or a field MUST NOT change. In the multi-definition view, a data section with entries uses more of the body budget, so a later section can move to the list of other definitions.
 
 #### Scenario: Nothing accesses a constant
 
@@ -39,8 +39,8 @@ The single-definition view of a data symbol MUST print `**Accessed by ←**` and
 
 #### Scenario: A field and a method share a name
 
-- **WHEN** `p/Account.java` declares the field `size` and the method `size()` at line 11, the method returns the field, and a user runs `codegraph node size`
-- **THEN** the field's section contains the line `**Accessed by ←** size (p/Account.java:11, read)`
+- **WHEN** `p/Account.java` declares the field `size` and the method `size()` at line 12, the method returns the field, and a user runs `codegraph node size`
+- **THEN** the field's section contains the line `**Accessed by ←** size (p/Account.java:12, read)`
 - **AND** the method's section contains no `**Accessed by ←**` line and no `**Initialized to →**` line
 
 #### Scenario: A function keeps its output
