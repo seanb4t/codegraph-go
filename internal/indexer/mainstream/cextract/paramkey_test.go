@@ -8,16 +8,11 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
-// fataler is the part of testing.T and rapid.T that keyOf uses.
-type fataler interface {
-	Helper()
-	Fatalf(format string, args ...any)
-}
-
 // keyOf extracts `int f(<params>);` and returns the parameter key of f.
-func keyOf(t fataler, p parser.Parser, file, params string) string {
+func keyOf(t testtree.T, p parser.Parser, file, params string) string {
 	t.Helper()
 	res, err := Extract(p, file, file, []byte("int f("+params+");\n"))
 	if err != nil || res.Err != nil {

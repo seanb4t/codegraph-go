@@ -16,10 +16,11 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
 	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // commitNode commits one node with the given id through s.
-func commitNode(t fataler, s GraphStore, id string) {
+func commitNode(t testtree.T, s GraphStore, id string) {
 	t.Helper()
 	w, err := s.NewWriter()
 	if err != nil {
@@ -34,7 +35,7 @@ func commitNode(t fataler, s GraphStore, id string) {
 }
 
 // nodeVisible reports whether a new snapshot of s holds the node id.
-func nodeVisible(t fataler, s GraphStore, id string) bool {
+func nodeVisible(t testtree.T, s GraphStore, id string) bool {
 	t.Helper()
 	r, err := s.Snapshot()
 	if err != nil {
@@ -49,7 +50,7 @@ func nodeVisible(t fataler, s GraphStore, id string) bool {
 }
 
 // mustOpen opens the store at dir.
-func mustOpen(t fataler, dir string) *pebbleStore {
+func mustOpen(t testtree.T, dir string) *pebbleStore {
 	t.Helper()
 	s, err := open(dir, false)
 	if err != nil {
@@ -59,7 +60,7 @@ func mustOpen(t fataler, dir string) *pebbleStore {
 }
 
 // mustClose closes s.
-func mustClose(t fataler, s GraphStore) {
+func mustClose(t testtree.T, s GraphStore) {
 	t.Helper()
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -74,7 +75,7 @@ func sharedHandleCount() int {
 }
 
 // requireNoSharedHandle fails the test if the table still holds a handle.
-func requireNoSharedHandle(t fataler) {
+func requireNoSharedHandle(t testtree.T) {
 	t.Helper()
 	if n := sharedHandleCount(); n != 0 {
 		t.Fatalf("the table holds %d handles, want none", n)

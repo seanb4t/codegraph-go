@@ -19,6 +19,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/spill"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // spillCompare is the equality of a FileResult before and after the spill.
@@ -38,10 +39,7 @@ var spillCompare = cmp.Options{
 }
 
 // spillRoundTrip encodes and decodes r, and fails the test on a difference.
-func spillRoundTrip(t interface {
-	Helper()
-	Fatalf(string, ...any)
-}, r goextract.FileResult) goextract.FileResult {
+func spillRoundTrip(t testtree.T, r goextract.FileResult) goextract.FileResult {
 	t.Helper()
 	data, err := spill.Encode(&r)
 	if err != nil {

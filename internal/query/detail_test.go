@@ -807,10 +807,7 @@ func (g *defGraph) engineWithFiles(t *testing.T) *Engine {
 
 // singleDef returns the single-definition detail of symbol. It takes a
 // *testing.T or a *rapid.T.
-func singleDef(t interface {
-	Helper()
-	Fatalf(string, ...any)
-}, e *Engine, symbol string) *DefinitionDetail {
+func singleDef(t testtree.T, e *Engine, symbol string) *DefinitionDetail {
 	t.Helper()
 	d, err := e.NodeDetail(symbol, "", nil)
 	if err != nil {
