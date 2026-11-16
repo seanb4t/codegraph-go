@@ -521,7 +521,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	waiting = mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(mergeSortedPaths(waiting, outbid), more), readers), owners), includers)
+	waiting = mergeSortedPaths(waiting, outbid, more, readers, owners, includers)
 	// The later waves. A file of a wave can emit a shared id that the
 	// cycle did not hold yet, or change the binding facts of a data
 	// symbol, and the files that emit that id or read that symbol then
@@ -1327,14 +1327,24 @@ func factsOf(n *schema.Node) cFunctionFacts {
 	return cFunctionFacts{n.GetIsExported(), n.GetPrototype(), n.GetCParamKey()}
 }
 
-// mergeSortedPaths returns the sorted union of a and b.
-func mergeSortedPaths(a, b []string) []string {
-	if len(b) == 0 {
+// mergeSortedPaths returns the sorted union of a and each slice of
+// more. a is sorted and holds no path twice.
+func mergeSortedPaths(a []string, more ...[]string) []string {
+	n := len(a)
+	for _, b := range more {
+		n += len(b)
+	}
+	if n == len(a) {
 		return a
 	}
-	set := make(map[string]struct{}, len(a)+len(b))
-	for _, p := range append(a, b...) {
+	set := make(map[string]struct{}, n)
+	for _, p := range a {
 		set[p] = struct{}{}
+	}
+	for _, b := range more {
+		for _, p := range b {
+			set[p] = struct{}{}
+		}
 	}
 	return sortedKeys(set)
 }

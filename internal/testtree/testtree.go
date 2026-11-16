@@ -9,7 +9,8 @@ import (
 	"testing"
 )
 
-// T is the part of testing.TB and rapid.T that WriteAt uses.
+// T is the part of testing.TB and rapid.T that a test helper uses to
+// report a failure: WriteAt, and the helpers of other packages' tests.
 type T interface {
 	Helper()
 	Fatalf(format string, args ...any)

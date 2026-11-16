@@ -120,13 +120,11 @@ func buildTypeHierarchyIndex(r graphstore.Reader) (parents, children map[string]
 	return parents, children, nil
 }
 
-// transitiveWalk BFS-walks index (parents or children) starting from
-// root's DIRECT neighbors, following the SAME direction repeatedly — so
-// calling it with the parents index yields every TRANSITIVE ancestor of
-// root, and with the children index, every TRANSITIVE descendant.
-// Cycle-safe (a visited set) and deterministic: each BFS frontier level
-// is sorted before it is walked or used to build the next level
-// (mirrors traverse.go's Impact BFS discipline).
+// transitiveWalk returns every node that index (parents or children)
+// reaches from root, in one direction: with the parents index, every
+// transitive ancestor of root, and with the children index, every
+// transitive descendant. bfs.Levels walks it depth by depth and gives
+// each node once, at its least depth. The nodes of each depth are sorted.
 func transitiveWalk(root string, index map[string][]string) []string {
 	var out []string
 	bfs.Levels(root, func(id string) []string { return index[id] }, func(level []string) bool {
