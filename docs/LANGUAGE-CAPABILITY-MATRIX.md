@@ -193,7 +193,7 @@ The limits of each language are under Per-Language Gaps below. Record components
 
 ### `c`
 
-- #include never populates Imports — there is no cross-file call resolution for C; only same-file (unqualified) calls resolve.
+- A quoted `#include` links the file to the header beside it, or else to that path from the repository root. An angle-bracket include and the include directories of build files link nothing. A bare call resolves in its own file, then in the included files, one include depth at a time. A call through a prototype goes to the one definition in another file with the same name and parameter types. A `static` function stays internal to its file. Macros, calls through function pointers, implicit declarations, and structs or globals across headers stay unresolved. A top-level qualifier of a parameter stays in the match key, so `int f(int);` does not match `int f(const int x)`.
 - A prototype whose definition is in the same file gets no node. Two definitions under the branches of one `#if` are alternatives, and a call to them is ambiguous.
 - Anonymous structs, preprocessor-macro-generated symbols, and multi-declarator declaration lines (only the first declarator is considered) are not extracted.
 - C has no interface/dispatch construct — not applicable to a procedural language; no implements synthesis is attempted.
@@ -202,7 +202,7 @@ The limits of each language are under Per-Language Gaps below. Record components
 
 ### `cpp`
 
-- #include never populates Imports; an out-of-line method whose qualifying type lives in a different file resolves via the same cross-file RefKindContains fallback rustextract's impl blocks use, but namespace-qualified name disambiguation does not work since namespace bodies are transparently flattened.
+- Includes and calls across files follow the C rules, and the prototype match also ignores default arguments. The index reads every `.h` header as C. An out-of-line method whose qualifying type lives in a different file resolves through the cross-file RefKindContains fallback of rustextract's impl blocks. Namespace-qualified names do not disambiguate, because the index flattens namespace bodies. So a prototype can match a definition with the same name in another namespace.
 - Template declarations/instantiations, pure-virtual/bodyless method prototypes, operator overloads, and qualified-identifier base classes (`class A : ns::Base`) are not extracted/resolved.
 - cextract never emits KindInterface for C++ (no interface/pure-virtual distinction) — base_class_clause embeds edges never promote to an implements edge.
 - No framework route detector exists for C++ — LANG-07 covers only the five priority frameworks.

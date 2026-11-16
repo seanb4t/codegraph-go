@@ -29,6 +29,34 @@ type TypeOutput struct {
 // symbols.NewHierarchy.
 func (o TypeOutput) Edges() []*schema.Edge { return o.edges }
 
+// IsIncludeEdge reports whether e is the imports edge of a C or C++
+// include, from its mark.
+func IsIncludeEdge(e *schema.Edge) bool {
+	return e.Kind == goextract.RefKindImports && e.Metadata[goextract.MetaInclude] == goextract.IncludeQuoted
+}
+
+// includeEdge returns the edge of the C or C++ include ref from the file
+// node of r to the file node it names, or nil (design D1). It adds to
+// waiting a wait under IncludeModule on each path where a new file would
+// change the match (design D2). Only a quoted include links.
+func includeEdge(view symbols.View, r goextract.FileResult, ref goextract.UnresolvedRef, waiting *[]*schema.UnresolvedName) *schema.Edge {
+	if !ref.Quoted {
+		return nil
+	}
+	target := view.IncludeTarget(r.RelPath, ref.Name)
+	for _, p := range symbols.IncludeWaits(r.RelPath, ref.Name, target) {
+		*waiting = append(*waiting, &schema.UnresolvedName{ModuleKey: IncludeModule, Name: p})
+	}
+	if target == "" {
+		return nil
+	}
+	return &schema.Edge{
+		Source: ref.FromID, Target: nodeid.NodeID(goextract.KindFile, target, target), Kind: goextract.RefKindImports,
+		Line: ref.Line, Col: ref.Col, Provenance: "ast",
+		Metadata: map[string]string{goextract.MetaInclude: goextract.IncludeQuoted},
+	}
+}
+
 // Types resolves every reference of r that is not a call against view:
 // embeds, contains, imports, references, instantiates, returns and
 // type-of. modulePath is the repo's own module path (from Discover); it
@@ -136,6 +164,13 @@ func Types(view symbols.View, modulePath string, r goextract.FileResult) TypeOut
 			out.resolved++
 
 		case goextract.RefKindImports:
+			if symbols.LinksIncludes(r.Language) {
+				if edge := includeEdge(view, r, ref, &waiting); edge != nil {
+					out.edges = append(out.edges, edge)
+					out.resolved++
+				}
+				continue
+			}
 			if !isIntraModule(modulePath, ref.Name) {
 				// External/stdlib import: no in-repo node to target,
 				// and D-03a forbids inventing edges beyond ground

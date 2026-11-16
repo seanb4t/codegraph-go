@@ -8,6 +8,7 @@ edge {"source":"file:4b17a774441e50c779311dfd28d7e845","target":"interface:6ab7f
 edge {"source":"file:a24192d37cc9e64c1013bbc9265fef35","target":"struct:e7d88d75d39aab7a2af6cf7cefa8b0f2","kind":"contains","provenance":"ast"}
 edge {"source":"file:a24192d37cc9e64c1013bbc9265fef35","target":"function:6bdaf8e73ec6a1aaacaad31764c29bb7","kind":"contains","provenance":"ast"}
 edge {"source":"file:a24192d37cc9e64c1013bbc9265fef35","target":"function:e26a2943062eaa4b56684d501143e699","kind":"contains","provenance":"ast"}
+edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"file:a24192d37cc9e64c1013bbc9265fef35","kind":"imports","line":1,"provenance":"ast","metadata":{"include":"quoted"}}
 edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"struct:bc99c6d6631c9da323f311ed7c859804","kind":"contains","provenance":"ast"}
 edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"function:5ae5b3e78c6def87a5a67b52cf82ee02","kind":"contains","provenance":"ast"}
 edge {"source":"file:b4b77abd4ea010299beed6983ccf6937","target":"function:abfc249deb433c65f1276078ada93a23","kind":"contains","provenance":"ast"}
@@ -45,13 +46,14 @@ edge {"source":"struct:f8be2c65759b97978385848ff19f6ec5","target":"interface:98c
 edge {"source":"function:5ae5b3e78c6def87a5a67b52cf82ee02","target":"function:abfc249deb433c65f1276078ada93a23","kind":"calls","line":15,"col":36,"provenance":"ast","argCount":1,"argTypes":[""]}
 edge {"source":"function:70367b7546ff9f0c1d1cd63155fda396","target":"method:99c5ba4f0ac22435cc3ceb5d41ef3f0b","kind":"calls","line":24,"col":2,"provenance":"ast","receiverType":"Circle"}
 edge {"source":"function:e3a16174ea1383051fa897464bb9b529","target":"function:5ae5b3e78c6def87a5a67b52cf82ee02","kind":"calls","line":23,"col":43,"provenance":"ast","argCount":1,"argTypes":["const point_t"]}
+edge {"source":"function:e3a16174ea1383051fa897464bb9b529","target":"function:e26a2943062eaa4b56684d501143e699","kind":"calls","line":23,"col":54,"provenance":"ast","argCount":1,"argTypes":["int"]}
 edge {"source":"function:e3a16174ea1383051fa897464bb9b529","target":"overload_set:bae3c6143d0a33d4480482db20185353","kind":"calls","line":23,"col":37,"provenance":"ast","metadata":{"ambiguous":"true"},"argCount":1,"argTypes":["@call 23:50"]}
 edge {"source":"interface:79cfacb8bda03ed20b62a1bda737db39","target":"method:1829003d984a3d66312f188415ad2464","kind":"contains","provenance":"ast"}
 edge {"source":"interface:98c4db7eb78266c0aa14d19d2b8cfdd8","target":"method:6bad32492ad5415a8c7e96263b5e6022","kind":"contains","provenance":"ast"}
 edge {"source":"overload_set:bae3c6143d0a33d4480482db20185353","target":"function:568c8e4c7e3e3ed6a7b174380224b6a7","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
 edge {"source":"overload_set:bae3c6143d0a33d4480482db20185353","target":"function:ebf877f25b8de95408b5bae5794cc15e","kind":"contains","provenance":"ast","metadata":{"synthesizedBy":"overload-set"}}
 file {"path":"kt/shapes.kt","contentHash":"03f43c8b03c5af603a3829d29c00a3e9f69dea788e192dbfaefb984ec517e5d8","language":"kotlin","nodeCount":"7","edgeCount":"7","sizeBytes":"438","unresolvedNames":[{"moduleKey":"shapes","name":"local"}],"declaredModuleKey":"shapes"}
-file {"path":"src/shapes.c","contentHash":"e3abdbb9500a09bb7524f16a8ba5c66f456e506665abb76e695d5d53b389e5da","language":"c","nodeCount":"8","edgeCount":"11","sizeBytes":"444","unresolvedNames":[{"moduleKey":"src/shapes.c","name":"unused_decl"}]}
+file {"path":"src/shapes.c","contentHash":"e3abdbb9500a09bb7524f16a8ba5c66f456e506665abb76e695d5d53b389e5da","language":"c","nodeCount":"8","edgeCount":"13","sizeBytes":"444"}
 file {"path":"src/shapes.h","contentHash":"d7a199c3dae4fba9e5b89df2631eb015beae80504e55109ab4adca15349f74e7","language":"c","nodeCount":"4","edgeCount":"3","sizeBytes":"115"}
 file {"path":"lib/shapes.rb","contentHash":"4cbd84faa0a8ee2713a5731be999c9e06eec00c93e21917c5ec9c5f677116d62","language":"ruby","nodeCount":"8","edgeCount":"8","sizeBytes":"285"}
 file {"path":"php/shapes.php","contentHash":"46d52a1077444a708dbc79ca399370e1f1188b2efc7616fe0946332b5f7fd718","language":"php","nodeCount":"9","edgeCount":"9","sizeBytes":"561","unresolvedNames":[{"moduleKey":"Shapes","name":"nested"}],"declaredModuleKey":"Shapes"}
@@ -130,6 +132,7 @@ index src/shapes.c node function:e3a16174ea1383051fa897464bb9b529
 index src/shapes.c node function:ebf877f25b8de95408b5bae5794cc15e
 index src/shapes.c node type_alias:424819e80015f67a407642b3453a1a00
 index src/shapes.c node overload_set:bae3c6143d0a33d4480482db20185353
+index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 imports file:a24192d37cc9e64c1013bbc9265fef35
 index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains struct:bc99c6d6631c9da323f311ed7c859804
 index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains function:5ae5b3e78c6def87a5a67b52cf82ee02
 index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains function:abfc249deb433c65f1276078ada93a23
@@ -138,6 +141,7 @@ index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains type_alia
 index src/shapes.c edge file:b4b77abd4ea010299beed6983ccf6937 contains overload_set:bae3c6143d0a33d4480482db20185353
 index src/shapes.c edge function:5ae5b3e78c6def87a5a67b52cf82ee02 calls function:abfc249deb433c65f1276078ada93a23
 index src/shapes.c edge function:e3a16174ea1383051fa897464bb9b529 calls function:5ae5b3e78c6def87a5a67b52cf82ee02
+index src/shapes.c edge function:e3a16174ea1383051fa897464bb9b529 calls function:e26a2943062eaa4b56684d501143e699
 index src/shapes.c edge function:e3a16174ea1383051fa897464bb9b529 calls overload_set:bae3c6143d0a33d4480482db20185353
 index src/shapes.c edge overload_set:bae3c6143d0a33d4480482db20185353 contains function:568c8e4c7e3e3ed6a7b174380224b6a7
 index src/shapes.c edge overload_set:bae3c6143d0a33d4480482db20185353 contains function:ebf877f25b8de95408b5bae5794cc15e

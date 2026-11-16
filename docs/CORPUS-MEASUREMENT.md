@@ -23,7 +23,7 @@ Do NOT hand-edit this file.
 | calls | 29406 | google/guava | 91445 |
 | extends | 1265 | google/guava | 2553 |
 | implements | 509 | gohugoio/hugo | 1018 |
-| imports | 1080 | gohugoio/hugo | 2160 |
+| imports | 1080 | gohugoio/hugo | 2163 |
 | instantiates | 938 | google/guava | 6270 |
 | overrides | 2329 | google/guava | 9847 |
 | references | 6531 | google/guava | 20262 |
@@ -70,7 +70,7 @@ Do NOT hand-edit this file.
   - embeds: 155
   - extends: 131
   - implements: 1018
-  - imports: 2160
+  - imports: 2163
   - instantiates: 1124
   - overrides: 25
   - references: 11205

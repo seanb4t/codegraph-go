@@ -53,3 +53,11 @@ func writeExactSizeGoFile(t *testing.T, path string, size int64) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+// removeAt deletes one file of root.
+func removeAt(t *testing.T, root, rel string) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(root, rel)); err != nil {
+		t.Fatal(err)
+	}
+}

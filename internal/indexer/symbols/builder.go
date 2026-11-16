@@ -66,6 +66,22 @@ type data struct {
 	// name, for a write through a receiver of unknown type. Freeze fills
 	// it.
 	goFieldsByName map[string][]string
+	// cDefinitionsByName holds the ids of the C and C++ free function
+	// definitions with external linkage under each name, the targets of
+	// a call through a prototype (design D5). Freeze fills it.
+	cDefinitionsByName map[string][]string
+
+	// writtenIncludes are the quoted include paths of each C or C++ file
+	// whose declarations the Builder received, as written, and
+	// storedIncludes the stored include edges of the files a sync does
+	// not reparse. failedFiles are the files whose result has an error.
+	// Freeze resolves them into includeTargets, by file and written path,
+	// and includes, the files that each file includes.
+	writtenIncludes map[string][]string
+	storedIncludes  []*schema.Edge
+	failedFiles     map[string]bool
+	includeTargets  map[string]map[string]string
+	includes        map[string][]string
 }
 
 // Builder collects the declarations of one resolution: the results of
@@ -90,6 +106,8 @@ func NewBuilder() *Builder {
 		interfaceMethods: make(map[string][]goextract.MethodSpec),
 		moduleOf:         make(map[string]string),
 		storedSets:       make(map[string]StoredSet),
+		writtenIncludes:  make(map[string][]string),
+		failedFiles:      make(map[string]bool),
 	}}
 }
 
@@ -210,6 +228,11 @@ func (b *Builder) AddResults(decls []Declarations) {
 		if decl.SyntaxErrors {
 			b.MarkSyntaxErrors(decl.RelPath)
 		}
+		if decl.Err != nil {
+			d.failedFiles[decl.RelPath] = true
+		} else if len(decl.Includes) > 0 {
+			d.writtenIncludes[decl.RelPath] = decl.Includes
+		}
 	}
 	for _, decl := range decls {
 		if decl.Err == nil {
@@ -268,6 +291,7 @@ func (b *Builder) Freeze() View {
 	d.typeNames = make(map[string]bool)
 	d.typesByName = make(map[string][]string)
 	d.goFieldsByName = make(map[string][]string)
+	d.cDefinitionsByName = make(map[string][]string)
 	for id, n := range d.nodes {
 		if len(n.InterfaceMethods) > 0 {
 			specs := make([]goextract.MethodSpec, len(n.InterfaceMethods))
@@ -283,6 +307,9 @@ func (b *Builder) Freeze() View {
 		if n.Kind == goextract.KindField && n.Language == "go" {
 			d.goFieldsByName[n.Name] = append(d.goFieldsByName[n.Name], id)
 		}
+		if n.Kind == goextract.KindFunction && LinksIncludes(n.Language) && !n.Prototype && n.IsExported {
+			d.cDefinitionsByName[n.Name] = append(d.cDefinitionsByName[n.Name], id)
+		}
 	}
 	for _, ids := range d.typesByName {
 		sort.Strings(ids)
@@ -290,5 +317,9 @@ func (b *Builder) Freeze() View {
 	for _, ids := range d.goFieldsByName {
 		sort.Strings(ids)
 	}
+	for _, ids := range d.cDefinitionsByName {
+		sort.Strings(ids)
+	}
+	d.freezeIncludes()
 	return View{d: d}
 }

@@ -7,8 +7,9 @@ import (
 
 // Declarations is what a Builder reads from the extraction result of one
 // file. A full index keeps one value for each file for the whole run, and
-// it holds much less than the result itself: no reference, no import and
-// no edge except the contains edges inside the file.
+// it holds much less than the result itself: no reference, no edge except
+// the contains edges inside the file, and no import except the quoted
+// includes of a C or C++ file.
 type Declarations struct {
 	ImportPath, RelPath string
 
@@ -32,6 +33,10 @@ type Declarations struct {
 
 	// Contains are the contains edges among the IntraEdges of the result.
 	Contains []*schema.Edge
+
+	// Includes are the quoted include paths of a C or C++ file, as
+	// written, in the order of the file.
+	Includes []string
 
 	// DefaultVisibility is the visibility that the language gives a type
 	// with no access modifier, or "" for a language without one. The merge
@@ -60,6 +65,13 @@ func DeclarationsOf(r goextract.FileResult, defaultVisibility string) Declaratio
 	for _, ie := range r.IntraEdges {
 		if ie.Edge.Kind == goextract.RefKindContains {
 			d.Contains = append(d.Contains, ie.Edge)
+		}
+	}
+	if LinksIncludes(r.Language) {
+		for _, ref := range r.Unresolved {
+			if ref.Kind == goextract.RefKindImports && ref.Quoted {
+				d.Includes = append(d.Includes, ref.Name)
+			}
 		}
 	}
 	return d

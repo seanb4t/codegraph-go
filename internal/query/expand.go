@@ -21,8 +21,10 @@ package query
 
 import (
 	"errors"
+	"slices"
 	"sort"
 
+	"github.com/seanb4t/codegraph-go/internal/bfs"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -118,31 +120,18 @@ func buildTypeHierarchyIndex(r graphstore.Reader) (parents, children map[string]
 	return parents, children, nil
 }
 
-// transitiveWalk BFS-walks index (parents or children) starting from
-// root's DIRECT neighbors, following the SAME direction repeatedly — so
-// calling it with the parents index yields every TRANSITIVE ancestor of
-// root, and with the children index, every TRANSITIVE descendant.
-// Cycle-safe (a visited set) and deterministic: each BFS frontier level
-// is sorted before it is walked or used to build the next level
-// (mirrors traverse.go's Impact BFS discipline).
+// transitiveWalk returns every node that index (parents or children)
+// reaches from root, in one direction: with the parents index, every
+// transitive ancestor of root, and with the children index, every
+// transitive descendant, but never root itself. bfs.Levels walks it
+// depth by depth and gives each node once, at its least depth. The nodes
+// of each depth are sorted.
 func transitiveWalk(root string, index map[string][]string) []string {
-	visited := map[string]bool{root: true}
 	var out []string
-	frontier := append([]string(nil), index[root]...)
-	sort.Strings(frontier)
-	for len(frontier) > 0 {
-		var next []string
-		for _, id := range frontier {
-			if visited[id] {
-				continue
-			}
-			visited[id] = true
-			out = append(out, id)
-			next = append(next, index[id]...)
-		}
-		sort.Strings(next)
-		frontier = next
-	}
+	bfs.Levels(root, func(id string) []string { return index[id] }, func(level []string) bool {
+		out = append(out, slices.Sorted(slices.Values(level))...)
+		return false
+	})
 	return out
 }
 

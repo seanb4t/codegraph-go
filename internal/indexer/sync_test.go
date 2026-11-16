@@ -48,8 +48,11 @@ var writeFileSeq atomic.Int64
 // writeFile overwrites path's content and forces a distinct mtime, so
 // Sync's stat pre-filter (mtime/size compare) always sees a change before
 // falling through to the content-hash confirm.
-func writeFile(t *testing.T, path, content string) {
+func writeFile(t testtree.T, path, content string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(%s): %v", filepath.Dir(path), err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("os.WriteFile(%s): %v", path, err)
 	}
@@ -634,11 +637,7 @@ func TestSyncResolvesSymbolAddedAfterCaller(t *testing.T) {
 				t.Fatalf("Sync (caller): %v", err)
 			}
 
-			calleePath := filepath.Join(repoRoot, tc.calleeRel)
-			if err := os.MkdirAll(filepath.Dir(calleePath), 0o755); err != nil {
-				t.Fatalf("mkdir: %v", err)
-			}
-			writeFile(t, calleePath, tc.callee)
+			writeFile(t, filepath.Join(repoRoot, tc.calleeRel), tc.callee)
 			stats, err := Sync(repoRoot, storeDir, Options{})
 			if err != nil {
 				t.Fatalf("Sync (callee): %v", err)

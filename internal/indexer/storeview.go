@@ -138,6 +138,8 @@ func loadStoreView(r graphstore.Reader, discovered map[string]discover.Discovere
 			}
 		case resolve.IsBindingEdge(e):
 			b.AddStoredEdge(e)
+		case resolve.IsIncludeEdge(e):
+			b.AddStoredInclude(e)
 		case e.Kind == "contains", e.Kind == "embeds", e.Kind == goextract.EdgeKindExtends, e.Kind == goextract.EdgeKindImplements:
 			b.AddStoredEdge(e)
 			if e.Kind == "contains" {

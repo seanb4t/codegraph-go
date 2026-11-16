@@ -10,10 +10,11 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// storeIndex holds what bindingDependents and ownerDependents read from
-// every stored file, node and edge of the sync snapshot r0. One scan of
-// each fills it on first use. r0 is a point-in-time
-// snapshot that a sync never writes, so one index serves every wave.
+// storeIndex holds what bindingDependents, ownerDependents and
+// includeDependents read from every stored file, node and edge of the
+// sync snapshot r0. One scan of each fills it on first use. r0 is a
+// point-in-time snapshot that a sync never writes, so one index serves
+// every wave.
 type storeIndex struct {
 	r0         graphstore.Reader
 	discovered map[string]discover.DiscoveredFile
@@ -36,6 +37,9 @@ type storeIndex struct {
 	supers map[string][]string
 	// members maps a type id to the ids of the fields it contains.
 	members map[string][]string
+	// includers maps a C or C++ file to the paths of the files that
+	// include it, one entry per include edge.
+	includers map[string][]string
 }
 
 // dataNode is one stored data symbol and the module key of its file.
@@ -67,6 +71,7 @@ func (x *storeIndex) load() error {
 	x.readers = make(map[string][]string)
 	x.supers = make(map[string][]string)
 	x.members = make(map[string][]string)
+	x.includers = make(map[string][]string)
 
 	declared := make(map[string]string)
 	fit, err := x.r0.IterateFiles()
@@ -116,6 +121,10 @@ func (x *storeIndex) load() error {
 		case goextract.RefKindContains:
 			if nodeid.KindOf(e.Target) == goextract.KindField {
 				x.members[e.Source] = append(x.members[e.Source], e.Target)
+			}
+		case goextract.RefKindImports:
+			if resolve.IsIncludeEdge(e) {
+				x.includers[x.pathOf[e.Target]] = append(x.includers[x.pathOf[e.Target]], x.pathOf[e.Source])
 			}
 		case goextract.RefKindReferences:
 			if resolve.IsBindingEdge(e) {

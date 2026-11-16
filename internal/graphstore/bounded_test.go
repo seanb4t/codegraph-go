@@ -11,29 +11,23 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // emptyBatchLen is the length of a Pebble batch with no record: its header.
 const emptyBatchLen = 12
-
-// fataler is what the helpers below need of a test: *testing.T has it, and
-// so has *rapid.T.
-type fataler interface {
-	Helper()
-	Fatalf(format string, args ...any)
-}
 
 // sizedNode returns the node number i, whose record grows with size.
 func sizedNode(i, size int) *schema.Node {
 	return &schema.Node{Id: fmt.Sprintf("n%05d", i), Name: strings.Repeat("x", size)}
 }
 
-func hasNode(t fataler, s GraphStore, i int) bool {
+func hasNode(t testtree.T, s GraphStore, i int) bool {
 	t.Helper()
 	return nodeVisible(t, s, fmt.Sprintf("n%05d", i))
 }
 
-func hasMeta(t fataler, s GraphStore) bool {
+func hasMeta(t testtree.T, s GraphStore) bool {
 	t.Helper()
 	r, err := s.Snapshot()
 	if err != nil {
@@ -57,7 +51,7 @@ type boundedRun struct {
 	nodes   int
 }
 
-func runBounded(t fataler, s GraphStore, cap int, sizes []int, withMeta, commit bool) boundedRun {
+func runBounded(t testtree.T, s GraphStore, cap int, sizes []int, withMeta, commit bool) boundedRun {
 	t.Helper()
 	var run boundedRun
 	committed := 0

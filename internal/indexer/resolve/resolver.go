@@ -7,6 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/seanb4t/codegraph-go/internal/bfs"
 	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
@@ -404,6 +405,11 @@ func (rs *resolver) inheritedRef(r goextract.FileResult, ref goextract.Unresolve
 // through a receiver of unknown type can reach.
 const AnyModule = "*"
 
+// IncludeModule is the module key of the wait of a C or C++ include on a
+// path where a new file changes its match (design D2). No path holds a
+// NUL byte, so no module key of a symbol equals it.
+const IncludeModule = "\x00include"
+
 // isUnknownReceiverWrite reports whether ref is a Go write to a member of
 // a receiver of unknown type. A receiver is unknown when it has no type,
 // when its type is the deferred type of a call, or when it is a bare name
@@ -691,6 +697,9 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 		// A call through a data symbol is a read of it, which Assemble
 		// turns into the calls its bindings establish.
 		local := rs.sameFile(r, ref.Name, ref.Line, ref.Col, func(kind string) bool {
+			if symbols.IsCStructTag(r.Language, kind) {
+				return false
+			}
 			return callableKind(kind) || symbols.IsTypeKind(kind) || goextract.IsDataKind(kind)
 		})
 		if len(local) > 0 && local[0].Node.Nested {
@@ -704,10 +713,67 @@ func (rs *resolver) resolveCall(r goextract.FileResult, ref goextract.Unresolved
 			}
 		}
 		if len(local) > 0 {
-			return rs.choose(r, ref, local, argTypes, r.ImportPath)
+			return rs.definitionOf(rs.choose(r, ref, local, argTypes, r.ImportPath))
+		}
+		if symbols.LinksIncludes(r.Language) {
+			return rs.definitionOf(rs.throughIncludes(r, ref, argTypes))
 		}
 		return rs.choose(r, ref, rs.view.CandidatesIn(r.ImportPath, ref.Name), argTypes, r.ImportPath)
 	}
+}
+
+// throughIncludes resolves the bare C or C++ call ref of file r in the
+// file, then in the files it includes, one depth at a time (design D3).
+// The first depth that declares the name decides, and the candidates of
+// all its files go to choose together. In C a struct tag declares no
+// name for a call.
+func (rs *resolver) throughIncludes(r goextract.FileResult, ref goextract.UnresolvedRef, argTypes []string) callOutcome {
+	candidatesIn := func(files []string) []symbols.Candidate {
+		var out []symbols.Candidate
+		for _, f := range files {
+			for _, c := range rs.view.CandidatesIn(rs.view.ModuleOf(f), ref.Name) {
+				if symbols.IsCStructTag(r.Language, c.Kind) {
+					continue
+				}
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	cands := candidatesIn([]string{r.RelPath})
+	if len(cands) == 0 {
+		bfs.Levels(r.RelPath, rs.view.IncludesOf, func(level []string) bool {
+			cands = candidatesIn(level)
+			return len(cands) > 0
+		})
+	}
+	return rs.choose(r, ref, cands, argTypes, r.ImportPath)
+}
+
+// definitionOf sends a call that reaches one C or C++ prototype with
+// external linkage to its definition in another file, when exactly one
+// definition there has the same name and parameter key (design D5).
+// Any other outcome comes back unchanged.
+func (rs *resolver) definitionOf(out callOutcome) callOutcome {
+	p := rs.view.Node(out.target)
+	if out.target == "" || p == nil || !p.GetPrototype() || !p.GetIsExported() {
+		return out
+	}
+	match := ""
+	for _, id := range rs.view.CDefinitionsNamed(p.GetName()) {
+		d := rs.view.Node(id)
+		if d.GetFilePath() == p.GetFilePath() || d.GetCParamKey() != p.GetCParamKey() {
+			continue
+		}
+		if match != "" {
+			return out
+		}
+		match = id
+	}
+	if match == "" {
+		return out
+	}
+	return callOutcome{target: match}
 }
 
 // choose picks among cands as the language does: in a last-wins

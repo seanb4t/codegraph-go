@@ -85,6 +85,10 @@ func (v View) TypesNamed(name string) []string { return v.d.typesByName[name] }
 // order.
 func (v View) GoFieldsNamed(name string) []string { return v.d.goFieldsByName[name] }
 
+// CDefinitionsNamed returns the ids of the C and C++ free function
+// definitions named name that are not static, in id order.
+func (v View) CDefinitionsNamed(name string) []string { return v.d.cDefinitionsByName[name] }
+
 // StoredSet returns the stored overload set id.
 func (v View) StoredSet(id string) (StoredSet, bool) {
 	s, ok := v.d.storedSets[id]
