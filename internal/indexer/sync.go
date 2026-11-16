@@ -498,9 +498,12 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	for _, p := range deleted {
 		inBatch[p] = true
 	}
-	// One scan of r0 serves both dependency passes and every later wave.
+	// One scan of r0 serves every dependency pass of every wave.
 	deps := newStoreIndex(r0, discovered)
-	readers, err := bindingDependents(deps, results, reparsed, inBatch)
+	// A file that reads a data symbol the reparse binds anew, or that
+	// includes a reparsed, added or deleted C or C++ file, directly or
+	// not, is reparsed too.
+	readers, err := waveDependents(deps, results, reparsed, inBatch)
 	if err != nil {
 		w.Close()
 		return Stats{}, err
@@ -513,15 +516,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		w.Close()
 		return Stats{}, err
 	}
-	// A file that includes a reparsed, added or deleted C or C++ file,
-	// directly or not, is reparsed too, so its bare calls look through
-	// the include graph that the sync leaves.
-	includers, err := includeDependents(deps, reparsed, inBatch)
-	if err != nil {
-		w.Close()
-		return Stats{}, err
-	}
-	waiting = mergeSortedPaths(waiting, outbid, more, readers, owners, includers)
+	waiting = mergeSortedPaths(waiting, outbid, more, readers, owners)
 	// The later waves. A file of a wave can emit a shared id that the
 	// cycle did not hold yet, or change the binding facts of a data
 	// symbol, and the files that emit that id or read that symbol then
@@ -561,16 +556,10 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		for _, f := range waitingFiles {
 			wavePaths = append(wavePaths, f.RelPath)
 		}
-		if waiting, err = bindingDependents(deps, wave, wavePaths, inBatch); err != nil {
+		if waiting, err = waveDependents(deps, wave, wavePaths, inBatch); err != nil {
 			w.Close()
 			return Stats{}, err
 		}
-		includers, err := includeDependents(deps, wavePaths, inBatch)
-		if err != nil {
-			w.Close()
-			return Stats{}, err
-		}
-		waiting = mergeSortedPaths(waiting, includers)
 		if len(shared) != before {
 			more, err := emitters()
 			if err != nil {
@@ -1325,6 +1314,23 @@ type cFunctionFacts struct {
 
 func factsOf(n *schema.Node) cFunctionFacts {
 	return cFunctionFacts{n.GetIsExported(), n.GetPrototype(), n.GetCParamKey()}
+}
+
+// waveDependents returns, sorted, the files outside inBatch that a wave
+// of paths, with their results, makes wait: the readers of the data
+// symbols the wave binds, and the files that include one of the paths,
+// directly or not, so their bare calls look through the include graph
+// that the sync leaves.
+func waveDependents(idx *storeIndex, results []goextract.FileResult, paths []string, inBatch map[string]bool) ([]string, error) {
+	readers, err := bindingDependents(idx, results, paths, inBatch)
+	if err != nil {
+		return nil, err
+	}
+	includers, err := includeDependents(idx, paths, inBatch)
+	if err != nil {
+		return nil, err
+	}
+	return mergeSortedPaths(readers, includers), nil
 }
 
 // mergeSortedPaths returns the sorted union of a and each slice of

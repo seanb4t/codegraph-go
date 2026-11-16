@@ -123,8 +123,9 @@ func buildTypeHierarchyIndex(r graphstore.Reader) (parents, children map[string]
 // transitiveWalk returns every node that index (parents or children)
 // reaches from root, in one direction: with the parents index, every
 // transitive ancestor of root, and with the children index, every
-// transitive descendant. bfs.Levels walks it depth by depth and gives
-// each node once, at its least depth. The nodes of each depth are sorted.
+// transitive descendant, but never root itself. bfs.Levels walks it
+// depth by depth and gives each node once, at its least depth. The nodes
+// of each depth are sorted.
 func transitiveWalk(root string, index map[string][]string) []string {
 	var out []string
 	bfs.Levels(root, func(id string) []string { return index[id] }, func(level []string) bool {
