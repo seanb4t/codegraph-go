@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
+	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
 
 // TestCIncludeOrder resolves the same C files twice: with the include
@@ -73,20 +73,16 @@ func TestCIncludeOrder(t *testing.T) {
 				t.Fatalf("MkdirTemp: %v", err)
 			}
 			t.Cleanup(func() { os.RemoveAll(dir) })
+			tree := make(map[string]string, len(files))
 			for p, f := range files {
 				var src strings.Builder
 				for _, inc := range includeOrder(f.includes) {
 					fmt.Fprintf(&src, "#include %q\n", inc)
 				}
 				src.WriteString(f.body)
-				full := filepath.Join(dir, p)
-				if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-					t.Fatalf("mkdir: %v", err)
-				}
-				if err := os.WriteFile(full, []byte(src.String()), 0o644); err != nil {
-					t.Fatalf("write %s: %v", p, err)
-				}
+				tree[p] = src.String()
 			}
+			testtree.WriteAt(t, dir, tree)
 			found, modulePath, err := discover.Discover(dir)
 			if err != nil {
 				t.Fatalf("Discover: %v", err)

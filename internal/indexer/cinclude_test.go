@@ -2,8 +2,6 @@ package indexer
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -26,10 +24,7 @@ func indexTree(t *testing.T, files map[string]string) *overloadGraph {
 // includesFrom maps each file to the files its imports edges target,
 // one entry per edge.
 func includesFrom(g *overloadGraph) map[string][]string {
-	byID := make(map[string]*schema.Node, len(g.nodes))
-	for _, n := range g.nodes {
-		byID[n.Id] = n
-	}
+	byID := g.byID()
 	out := make(map[string][]string)
 	for _, e := range g.edges {
 		if e.Kind != goextract.RefKindImports {
@@ -53,10 +48,7 @@ func includesFrom(g *overloadGraph) map[string][]string {
 func callsFrom(t *testing.T, g *overloadGraph, file, name string) []string {
 	t.Helper()
 	src := g.node(t, file, goextract.KindFunction, name, "")
-	byID := make(map[string]*schema.Node, len(g.nodes))
-	for _, n := range g.nodes {
-		byID[n.Id] = n
-	}
+	byID := g.byID()
 	var out []string
 	for _, e := range g.edges {
 		if e.Kind != goextract.RefKindCalls || e.Source != src.Id {
@@ -71,10 +63,7 @@ func callsFrom(t *testing.T, g *overloadGraph, file, name string) []string {
 // setMembers returns "file kind name" of each member of the nodes of
 // kind that the calls from the function caller target, sorted.
 func setMembers(g *overloadGraph, caller, kind string) []string {
-	byID := make(map[string]*schema.Node, len(g.nodes))
-	for _, n := range g.nodes {
-		byID[n.Id] = n
-	}
+	byID := g.byID()
 	sets := make(map[string]bool)
 	for _, e := range g.edges {
 		src, dst := byID[e.Source], byID[e.Target]
@@ -184,14 +173,6 @@ func TestCIncludeLinks(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// removeAt deletes one file of root.
-func removeAt(t *testing.T, root, rel string) {
-	t.Helper()
-	if err := os.Remove(filepath.Join(root, rel)); err != nil {
-		t.Fatal(err)
 	}
 }
 

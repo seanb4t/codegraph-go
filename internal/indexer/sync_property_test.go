@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"pgregory.net/rapid"
 
@@ -481,19 +480,9 @@ func writeModel(t *rapid.T, root string, m *propModel, written map[string]string
 		if prev, ok := written[p]; ok && prev == src {
 			continue
 		}
-		full := filepath.Join(root, p)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir for %s: %v", p, err)
-		}
-		if err := os.WriteFile(full, []byte(src), 0o644); err != nil {
-			t.Fatalf("write %s: %v", p, err)
-		}
-		// Sync's stat pre-filter compares mtime and size: a distinct
-		// mtime makes it read every rewritten file.
-		stamp := time.Now().Add(time.Duration(writeFileSeq.Add(1)) * time.Second)
-		if err := os.Chtimes(full, stamp, stamp); err != nil {
-			t.Fatalf("chtimes %s: %v", p, err)
-		}
+		// writeFile gives each write a distinct mtime, so Sync's stat
+		// pre-filter reads every rewritten file.
+		writeFile(t, filepath.Join(root, p), src)
 		written[p] = src
 	}
 }

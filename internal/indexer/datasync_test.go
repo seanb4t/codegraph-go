@@ -1,7 +1,6 @@
 package indexer
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -31,12 +30,6 @@ func TestDataSymbolSyncEquivalence(t *testing.T) {
 		t.Helper()
 		writeFile(t, filepath.Join(root, path), content)
 	}
-	remove := func(path string) {
-		t.Helper()
-		if err := os.Remove(filepath.Join(root, path)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	runCalls := func(want bool) {
 		t.Helper()
 		r, closeFn := openSnapshot(t, storeDir)
@@ -55,7 +48,7 @@ func TestDataSymbolSyncEquivalence(t *testing.T) {
 		{"add a competing write", func() {
 			write("cli/conflict.go", "package cli\n\nimport \"example.com/m/daemon\"\n\nfunc init() { fn = daemon.Other }\n")
 		}, false},
-		{"remove the competing write", func() { remove("cli/conflict.go") }, true},
+		{"remove the competing write", func() { removeAt(t, root, "cli/conflict.go") }, true},
 		{"change the initializer", func() {
 			write("cli/bind.go", "package cli\n\nimport \"example.com/m/daemon\"\n\nvar fn = daemon.Other\n\nvar alias = fn\n")
 		}, true},
@@ -67,7 +60,7 @@ func TestDataSymbolSyncEquivalence(t *testing.T) {
 		}, true},
 		{"add a syntax error to the package", func() { write("cli/broken.go", "package cli\n\nfunc broken() {\n\tfn = (\n}\n") }, false},
 		{"fix the syntax error", func() { write("cli/broken.go", "package cli\n\nfunc broken() {}\n") }, true},
-		{"delete the target", func() { remove("daemon/daemon.go") }, false},
+		{"delete the target", func() { removeAt(t, root, "daemon/daemon.go") }, false},
 		{"restore the target", func() { write("daemon/daemon.go", "package daemon\n\nfunc List() {}\n\nfunc Other() {}\n") }, true},
 		{"add a function that reads and writes the variable", func() {
 			write("cli/lazy.go", "package cli\n\nimport \"example.com/m/daemon\"\n\nfunc ensure() {\n\tif fn == nil {\n\t\tfn = daemon.List\n\t}\n}\n")
@@ -76,7 +69,7 @@ func TestDataSymbolSyncEquivalence(t *testing.T) {
 			write("cli/call.go", "package cli\n\n// edited\nfunc run() { fn() }\n\nfunc runAlias() { alias() }\n")
 		}, true},
 		{"move the struct", func() {
-			remove("cli/point.go")
+			removeAt(t, root, "cli/point.go")
 			write("cli/point2.go", "package cli\n\ntype Point struct {\n\tY int\n\tX int\n}\n")
 		}, true},
 	}
@@ -115,12 +108,6 @@ func TestGoFieldWriteSyncEquivalence(t *testing.T) {
 		t.Helper()
 		writeFile(t, filepath.Join(root, path), content)
 	}
-	remove := func(path string) {
-		t.Helper()
-		if err := os.Remove(filepath.Join(root, path)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	callsRun := func(fn string, want bool) {
 		t.Helper()
 		r, closeFn := openSnapshot(t, storeDir)
@@ -137,23 +124,23 @@ func TestGoFieldWriteSyncEquivalence(t *testing.T) {
 		caller, callerE bool
 	}{
 		{"add a keyed literal", func() { write("p/lit.go", "package p\n\nfunc build() S { return S{fn: nil} }\n") }, false, false},
-		{"remove the keyed literal", func() { remove("p/lit.go") }, true, false},
+		{"remove the keyed literal", func() { removeAt(t, root, "p/lit.go") }, true, false},
 		{"add the exported field", func() { write("p/e.go", "package p\n\ntype E struct{ Fn func() }\n") }, true, true},
 		{"add an unknown write in the package", func() {
 			write("p/poke.go", "package p\n\nimport \"example.com/m/ext\"\n\nfunc poke() { x := ext.Lookup(); x.fn = nil }\n")
 		}, false, true},
-		{"remove the unknown write", func() { remove("p/poke.go") }, true, true},
+		{"remove the unknown write", func() { removeAt(t, root, "p/poke.go") }, true, true},
 		{"add an unknown write in another package", func() {
 			write("q/unknown.go", "package q\n\nimport \"example.com/m/ext\"\n\nfunc poke() { x := ext.Lookup(); x.fn = nil; x.Fn = nil }\n")
 		}, true, false},
-		{"remove the exported field", func() { remove("p/e.go") }, true, false},
+		{"remove the exported field", func() { removeAt(t, root, "p/e.go") }, true, false},
 		{"add the exported field after the write", func() { write("p/e.go", "package p\n\ntype E struct{ Fn func() }\n") }, true, false},
 		{"remove the unexported field and add an unknown write", func() {
 			write("p/types.go", "package p\n\ntype S struct{ n int }\n")
 			write("p/poke.go", "package p\n\nimport \"example.com/m/ext\"\n\nfunc poke() {\n\tfor _, x := range ext.All() {\n\t\tx.fn = nil\n\t}\n}\n")
 		}, false, false},
 		{"add the unexported field after the write", func() {
-			remove("p/types.go")
+			removeAt(t, root, "p/types.go")
 			write("p/types2.go", "package p\n\ntype S struct {\n\tn  int\n\tfn func()\n}\n")
 		}, false, false},
 	}

@@ -1,23 +1,12 @@
 package indexer
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/testtree"
 )
-
-// put writes src to root/rel with a new mtime, so a sync sees the change.
-func put(t *testing.T, root, rel, src string) {
-	t.Helper()
-	full := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, full, src)
-}
 
 // syncStep is one edit of a tree: src written to path, or path deleted
 // when src is nil.
@@ -193,7 +182,7 @@ func TestCIncludeSyncEquivalence(t *testing.T) {
 				if s.src == nil {
 					removeAt(t, root, s.path)
 				} else {
-					put(t, root, s.path, *s.src)
+					writeFile(t, filepath.Join(root, s.path), *s.src)
 				}
 			}
 			if _, err := Sync(root, storeDir, Options{}); err != nil {

@@ -68,10 +68,7 @@ public class Factory {
 // files: one set, with the type's sentinel location.
 func TestOverloadSetExistsOnlyForTwoOrMore(t *testing.T) {
 	g := loadOverloadGraph(t)
-	byID := make(map[string]*schema.Node, len(g.nodes))
-	for _, n := range g.nodes {
-		byID[n.Id] = n
-	}
+	byID := g.byID()
 	parents := make(map[string][]*schema.Node)
 	for _, e := range g.edges {
 		if e.Kind == goextract.RefKindContains {

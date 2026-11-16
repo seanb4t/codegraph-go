@@ -16,6 +16,15 @@ type overloadGraph struct {
 	edges []*schema.Edge
 }
 
+// byID maps each node id of g to its node.
+func (g *overloadGraph) byID() map[string]*schema.Node {
+	out := make(map[string]*schema.Node, len(g.nodes))
+	for _, n := range g.nodes {
+		out[n.Id] = n
+	}
+	return out
+}
+
 func loadOverloadGraph(t *testing.T) *overloadGraph {
 	t.Helper()
 	storeDir := t.TempDir()

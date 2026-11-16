@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -11,7 +12,8 @@ import (
 // marks: its Meta record lacks has_c_prototypes. The first sync rebuilds
 // every file, and the later syncs reparse only what changed.
 func TestCPrototypeRebuildOnce(t *testing.T) {
-	root, storeDir := testtree.Write(t, headerPrototypeTree()), t.TempDir()
+	files := with(headerPrototypeTree(), "log.c", "void log_msg(void) {}\n")
+	root, storeDir := testtree.Write(t, files), t.TempDir()
 	if _, err := Run(root, storeDir, Options{}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -21,8 +23,8 @@ func TestCPrototypeRebuildOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
-	if stats.FilesReparsed != stats.Files || stats.Files != 3 {
-		t.Errorf("Sync reparsed %d of %d files, want a full rebuild of 3", stats.FilesReparsed, stats.Files)
+	if stats.FilesReparsed != stats.Files || stats.Files != 4 {
+		t.Errorf("Sync reparsed %d of %d files, want a full rebuild of 4", stats.FilesReparsed, stats.Files)
 	}
 	requireSyncEqualsRun(t, root, storeDir)
 	if got := callsFrom(t, readGraph(t, storeDir), "main.c", "run"); len(got) != 1 || got[0] != "add.c function add definition" {
@@ -30,10 +32,10 @@ func TestCPrototypeRebuildOnce(t *testing.T) {
 	}
 
 	for i, src := range []string{
-		"#include \"add.h\"\nint run(void) { return add(1, 2) + 0; }\n",
-		"#include \"add.h\"\nint run(void) { return add(2, 1); }\n",
+		"void log_msg(void) { int x = 1; }\n",
+		"void log_msg(void) { int x = 2; }\n",
 	} {
-		put(t, root, "main.c", src)
+		writeFile(t, filepath.Join(root, "log.c"), src)
 		stats, err := Sync(root, storeDir, Options{})
 		if err != nil {
 			t.Fatalf("Sync %d: %v", i+2, err)
