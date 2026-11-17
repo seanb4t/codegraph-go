@@ -2,6 +2,7 @@ package cextract
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -434,7 +435,7 @@ func TestExtract_ExternC(t *testing.T) {
 		call    string
 	}{
 		{
-			name:    "C header under a header guard",
+			name:    "C header with the cplusplus wrapper",
 			relPath: "api.h",
 			src:     block,
 			kinds: map[string]string{
@@ -447,7 +448,7 @@ func TestExtract_ExternC(t *testing.T) {
 			call:    "add",
 		},
 		{
-			name:    "block form under a header guard",
+			name:    "C++ header with the cplusplus wrapper",
 			cpp:     true,
 			relPath: "api.hpp",
 			src:     block,
@@ -507,8 +508,8 @@ func TestExtract_ExternC(t *testing.T) {
 				t.Fatalf("Extract: %v / %v", err, result.Err)
 			}
 			for name, kind := range tt.kinds {
-				if findNode(result, kind, name) == nil {
-					t.Errorf("no %s node named %q in %+v", kind, name, result.Nodes)
+				if got := countNodes(result, kind, name); got != 1 {
+					t.Errorf("got %d %s nodes named %q, want 1, in %+v", got, kind, name, result.Nodes)
 				}
 			}
 			if tt.include != "" {
@@ -527,4 +528,49 @@ func TestExtract_ExternC(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtract_ExternCPrototypeDedupe proves a prototype inside the
+// `#ifdef __cplusplus` extern "C" wrapper dedupes against its definition,
+// while a prototype under any other conditional block stays an alternative.
+func TestExtract_ExternCPrototypeDedupe(t *testing.T) {
+	const wrapped = "#ifdef __cplusplus\nextern \"C\" {\n#endif\nint f(int a);\n#ifdef __cplusplus\n}\n#endif\n"
+	const definition = "int f(int x) { return x; }\n"
+	tests := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"ifdef wrapper", wrapped + definition, 1},
+		{"if defined wrapper", "#if defined(__cplusplus)\nextern \"C\" {\n#endif\nint f(int a);\n#if defined(__cplusplus)\n}\n#endif\n" + definition, 1},
+		{"wrapper inside an include guard", "#ifndef API_H\n#define API_H\n" + wrapped + definition + "#endif\n", 1},
+		{"extern C under another condition", "#ifdef FOO\nextern \"C\" {\nint f(int a);\n}\n#endif\n" + definition, 2},
+	}
+	for _, tt := range tests {
+		for _, cpp := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/cpp=%v", tt.name, cpp), func(t *testing.T) {
+				p, relPath := newCTestParser(t), "api.c"
+				if cpp {
+					p, relPath = newCppTestParser(t), "api.cpp"
+				}
+				result, err := Extract(p, "mymodule", relPath, []byte(tt.src))
+				if err != nil || result.Err != nil {
+					t.Fatalf("Extract: %v / %v", err, result.Err)
+				}
+				if got := countNodes(result, goextract.KindFunction, "f"); got != tt.want {
+					t.Errorf("got %d function nodes named f, want %d, in %+v", got, tt.want, result.Nodes)
+				}
+			})
+		}
+	}
+}
+
+func countNodes(result goextract.FileResult, kind, name string) int {
+	n := 0
+	for i := range result.Nodes {
+		if result.Nodes[i].Node.Kind == kind && result.Nodes[i].Node.Name == name {
+			n++
+		}
+	}
+	return n
 }

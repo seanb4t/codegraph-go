@@ -656,7 +656,7 @@ func rubyDecls(c *declCollector, root *tree_sitter.Node) {
 }
 
 // cTopLevel mirrors cextract.topLevelDecls: the root's children, with
-// namespace bodies and preprocessor branches flattened.
+// namespace bodies, extern "C" bodies and preprocessor branches flattened.
 func cTopLevel(root *tree_sitter.Node) []*tree_sitter.Node {
 	var decls []*tree_sitter.Node
 	var walk func(n *tree_sitter.Node)
@@ -666,6 +666,16 @@ func cTopLevel(root *tree_sitter.Node) []*tree_sitter.Node {
 			if child.Kind() == "namespace_definition" {
 				if body := child.ChildByFieldName("body"); body != nil {
 					walk(body)
+				}
+				continue
+			}
+			if child.Kind() == "linkage_specification" {
+				if body := child.ChildByFieldName("body"); body != nil {
+					if body.Kind() == "declaration_list" {
+						walk(body)
+					} else {
+						decls = append(decls, body)
+					}
 				}
 				continue
 			}
