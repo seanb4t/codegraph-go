@@ -1273,6 +1273,103 @@ func TestSyncMaxChanged(t *testing.T) {
 	}
 }
 
+// TestSyncFollowsExportChange proves that a Sync which changes only
+// whether a declaration is reachable from another file, by adding or
+// removing an export, leaves the edges a fresh index has.
+func TestSyncFollowsExportChange(t *testing.T) {
+	cases := []struct {
+		name     string
+		files    map[string]string
+		edit     string
+		edited   string
+		wantEdge bool
+	}{
+		{"typescript gains export", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export function helper(): number {\n  return 1;\n}\n", true},
+		{"tsx gains export", map[string]string{
+			"web/a.tsx": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.tsx": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.tsx", "export function helper(): number {\n  return 1;\n}\n", true},
+		{"typescript loses export", map[string]string{
+			"web/a.ts": "export function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "function helper(): number {\n  return 1;\n}\n", false},
+		{"javascript loses its last export", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n", true},
+		{"javascript gains its first export", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n", false},
+		{"typescript gains export through a clause", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "function helper(): number {\n  return 1;\n}\n\nexport { helper };\n", true},
+		{"javascript gains its first export through a clause", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n\nexport { other };\n", false},
+		{"typescript gains default export", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import helper from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export default function helper(): number {\n  return 1;\n}\n", true},
+		{"typescript class gains export", map[string]string{
+			"web/a.ts": "class Helper {}\n",
+			"web/b.ts": "import { Helper } from './a';\n\nexport function caller(): Helper {\n  return new Helper();\n}\n",
+		}, "web/a.ts", "export class Helper {}\n", true},
+		{"typescript arrow function gains export", map[string]string{
+			"web/a.ts": "const helper = (): number => 1;\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export const helper = (): number => 1;\n", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := writeFixture(t, tc.files)
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+
+			writeFile(t, filepath.Join(repoRoot, tc.edit), tc.edited)
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (edit): %v", err)
+			}
+
+			freshDir := requireSyncEqualsRun(t, repoRoot, storeDir)
+			if got := crossFileEdgeCount(t, freshDir) > 0; got != tc.wantEdge {
+				t.Fatalf("a fresh index has a cross-file edge: %v, want %v", got, tc.wantEdge)
+			}
+		})
+	}
+}
+
+// TestSyncKeepsJavaScriptReachability proves that a Sync which edits a
+// JavaScript file without exports, and so leaves every declaration in it
+// reachable, does not reparse a file waiting on one of those names.
+func TestSyncKeepsJavaScriptReachability(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"web/a.js": "function helper() {\n  return 1;\n}\n",
+		"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return new helper();\n}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	writeFile(t, filepath.Join(repoRoot, "web/a.js"), "function helper() {\n  return 2;\n}\n")
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (edit): %v", err)
+	}
+	if stats.FilesReparsed != 1 {
+		t.Errorf("Stats.FilesReparsed = %d, want 1: only the edited file", stats.FilesReparsed)
+	}
+	requireSyncEqualsRun(t, repoRoot, storeDir)
+}
+
 // TestSyncPrunesPackageNodeWithNoImporter proves that Sync deletes the
 // package node of an intra-module import when the last file that imports
 // the package is deleted or stops importing it, keeps it while another
