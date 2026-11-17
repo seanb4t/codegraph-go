@@ -1,0 +1,3 @@
+kind: Fixes
+body: codegraph sync now adds the call edges into a TypeScript or JavaScript function that becomes reachable from other files when it gains an export, or when a JavaScript file loses its last export, as a fresh index does.
+time: 2026-11-16T21:46:10.122702-05:00

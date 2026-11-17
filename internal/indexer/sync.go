@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -1073,20 +1074,34 @@ type unresolvedKey struct {
 }
 
 // newNames returns the (module key, name) pairs results declare under a
-// node id r0 does not hold: the symbols this sync adds, and under
-// resolve.IncludeModule the path of each C or C++ file it adds.
+// node id r0 does not hold, or under one that another file could not
+// reach in r0 and can reach now (design D15): the symbols this sync adds
+// or exports, and under resolve.IncludeModule the path of each C or C++
+// file it adds.
 func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresolvedKey]struct{}, error) {
 	names := make(map[unresolvedKey]struct{})
 	for _, r := range results {
 		if r.Err != nil {
 			continue
 		}
+		fileExports := false
+		for _, en := range r.Nodes {
+			fileExports = fileExports || en.Node.IsExported
+		}
+		storedExports := sync.OnceValues(func() (bool, error) { return storedFileExports(r0, r.RelPath) })
 		for _, en := range r.Nodes {
 			if en.Node.Kind == goextract.KindFile && !symbols.LinksIncludes(r.Language) {
 				continue
 			}
-			_, err := r0.GetNode(en.Node.Id)
+			stored, err := r0.GetNode(en.Node.Id)
 			if err == nil {
+				exposed, err := becameReachable(stored, en.Node, fileExports, storedExports)
+				if err != nil {
+					return nil, err
+				}
+				if exposed {
+					names[unresolvedKey{moduleKey: r.ImportPath, name: en.Node.Name}] = struct{}{}
+				}
 				continue
 			}
 			if err != graphstore.ErrNotFound {
@@ -1102,6 +1117,55 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 		}
 	}
 	return names, nil
+}
+
+// becameReachable reports whether n, a bare-name candidate that r0
+// stores as stored, is reachable from another file after the sync and
+// was not before. fileExports tells whether n's file exports anything
+// after the sync; storedExports, called only when the answer depends on
+// it, tells the same of the stored file.
+func becameReachable(stored, n *schema.Node, fileExports bool, storedExports func() (bool, error)) (bool, error) {
+	if !symbols.BareNameCandidate(n.Kind) || !symbols.Reachable(n, fileExports) {
+		return false, nil
+	}
+	if !symbols.Reachable(stored, true) {
+		return true, nil
+	}
+	if symbols.Reachable(stored, false) {
+		return false, nil
+	}
+	exports, err := storedExports()
+	if err != nil {
+		return false, err
+	}
+	return exports, nil
+}
+
+// storedFileExports reports whether a node r0 stores for path is
+// exported.
+func storedFileExports(r0 graphstore.Reader, path string) (bool, error) {
+	it, err := r0.IterateFileIndex(path)
+	if err != nil {
+		return false, err
+	}
+	defer it.Close()
+	for it.Next() {
+		entry := it.Entry()
+		if !entry.IsNode {
+			continue
+		}
+		n, err := r0.GetNode(entry.NodeID)
+		if err == graphstore.ErrNotFound {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if n.IsExported {
+			return true, nil
+		}
+	}
+	return false, it.Err()
 }
 
 // filesResolvingToChangedSets returns, sorted, the paths of r0's

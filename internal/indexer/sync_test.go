@@ -1272,3 +1272,56 @@ func TestSyncMaxChanged(t *testing.T) {
 		t.Errorf("after the sync at the limit: Old present = %v, New present = %v; want false, true", hasNode(oldID), hasNode(newID))
 	}
 }
+
+// TestSyncFollowsExportChange proves that a Sync which changes only
+// whether a declaration is reachable from another file, by adding or
+// removing an export, leaves the edges a fresh index has.
+func TestSyncFollowsExportChange(t *testing.T) {
+	cases := []struct {
+		name     string
+		files    map[string]string
+		edit     string
+		edited   string
+		wantEdge bool
+	}{
+		{"typescript gains export", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export function helper(): number {\n  return 1;\n}\n", true},
+		{"tsx gains export", map[string]string{
+			"web/a.tsx": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.tsx": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.tsx", "export function helper(): number {\n  return 1;\n}\n", true},
+		{"typescript loses export", map[string]string{
+			"web/a.ts": "export function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "function helper(): number {\n  return 1;\n}\n", false},
+		{"javascript loses its last export", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n", true},
+		{"javascript gains its first export", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := writeFixture(t, tc.files)
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+
+			writeFile(t, filepath.Join(repoRoot, tc.edit), tc.edited)
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (edit): %v", err)
+			}
+
+			freshDir := requireSyncEqualsRun(t, repoRoot, storeDir)
+			if got := crossFileEdgeCount(t, freshDir) > 0; got != tc.wantEdge {
+				t.Fatalf("a fresh index has a cross-file edge: %v, want %v", got, tc.wantEdge)
+			}
+		})
+	}
+}
