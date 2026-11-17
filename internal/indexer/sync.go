@@ -1076,8 +1076,9 @@ type unresolvedKey struct {
 // newNames returns the (module key, name) pairs results declare under a
 // node id r0 does not hold, or under one that another file could not
 // reach in r0 and can reach now (design D15): the symbols this sync adds
-// or exports, and under resolve.IncludeModule the path of each C or C++
-// file it adds.
+// or exports, the declarations of a JavaScript file that loses its last
+// export, and under resolve.IncludeModule the path of each C or C++ file
+// it adds.
 func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresolvedKey]struct{}, error) {
 	names := make(map[unresolvedKey]struct{})
 	for _, r := range results {
@@ -1119,30 +1120,26 @@ func newNames(r0 graphstore.Reader, results []goextract.FileResult) (map[unresol
 	return names, nil
 }
 
-// becameReachable reports whether n, a bare-name candidate that r0
-// stores as stored, is reachable from another file after the sync and
-// was not before. fileExports tells whether n's file exports anything
-// after the sync; storedExports, called only when the answer depends on
-// it, tells the same of the stored file.
+// becameReachable reports whether n, which r0 stores as stored, is a
+// bare-name candidate that is reachable from another file after the
+// sync and was not before. fileExports tells whether n's file exports
+// anything after the sync; storedExports, called only when the answer
+// depends on it, tells the same of the stored file.
 func becameReachable(stored, n *schema.Node, fileExports bool, storedExports func() (bool, error)) (bool, error) {
 	if !symbols.BareNameCandidate(n.Kind) || !symbols.Reachable(n, fileExports) {
 		return false, nil
 	}
-	if !symbols.Reachable(stored, true) {
-		return true, nil
-	}
-	if symbols.Reachable(stored, false) {
+	if symbols.Reachable(stored, true) {
 		return false, nil
 	}
-	exports, err := storedExports()
-	if err != nil {
-		return false, err
+	if !symbols.Reachable(stored, false) {
+		return true, nil
 	}
-	return exports, nil
+	return storedExports()
 }
 
 // storedFileExports reports whether a node r0 stores for path is
-// exported.
+// exported. It skips an index entry whose node r0 does not hold.
 func storedFileExports(r0 graphstore.Reader, path string) (bool, error) {
 	it, err := r0.IterateFileIndex(path)
 	if err != nil {

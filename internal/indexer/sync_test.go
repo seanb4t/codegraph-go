@@ -1304,6 +1304,26 @@ func TestSyncFollowsExportChange(t *testing.T) {
 			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
 			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
 		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n", false},
+		{"typescript gains export through a clause", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "function helper(): number {\n  return 1;\n}\n\nexport { helper };\n", true},
+		{"javascript gains its first export through a clause", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n\nexport { other };\n", false},
+		{"typescript gains default export", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import helper from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export default function helper(): number {\n  return 1;\n}\n", true},
+		{"typescript class gains export", map[string]string{
+			"web/a.ts": "class Helper {}\n",
+			"web/b.ts": "import { Helper } from './a';\n\nexport function caller(): Helper {\n  return new Helper();\n}\n",
+		}, "web/a.ts", "export class Helper {}\n", true},
+		{"typescript arrow function gains export", map[string]string{
+			"web/a.ts": "const helper = (): number => 1;\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export const helper = (): number => 1;\n", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1324,4 +1344,28 @@ func TestSyncFollowsExportChange(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSyncKeepsJavaScriptReachability proves that a Sync which edits a
+// JavaScript file without exports, and so leaves every declaration in it
+// reachable, does not reparse a file waiting on one of those names.
+func TestSyncKeepsJavaScriptReachability(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"web/a.js": "function helper() {\n  return 1;\n}\n",
+		"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return new helper();\n}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	writeFile(t, filepath.Join(repoRoot, "web/a.js"), "function helper() {\n  return 2;\n}\n")
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (edit): %v", err)
+	}
+	if stats.FilesReparsed != 1 {
+		t.Errorf("Stats.FilesReparsed = %d, want 1: only the edited file", stats.FilesReparsed)
+	}
+	requireSyncEqualsRun(t, repoRoot, storeDir)
 }
