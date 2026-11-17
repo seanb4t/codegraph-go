@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/pebble/v2"
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
-	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
@@ -206,8 +205,10 @@ func acquireShared(key, resolved string) (*dbHandle, error) {
 
 // open takes the shared swap lock of the store at resolved, a path that
 // resolveStorePath returned, and opens Pebble at that path, one time each.
-// It classifies a held lock as ErrStoreLocked. It refuses a store that
-// holds a symbolic link with a *nofollow.SymlinkError.
+// It classifies a held lock as ErrStoreLocked. Before pebble.Open it runs
+// CheckLiveStore on resolved and returns its error, so it does not open a
+// store whose entries hold a symbolic link, nor a directory that holds
+// files but no store.
 //
 // The swap lock comes first, before pebble.Open and before any directory
 // of the store exists: ReplaceStore looks for the store under the
@@ -221,7 +222,7 @@ func (h *dbHandle) open(resolved string) error {
 	if sharedOpenHook != nil && h.key != "" {
 		sharedOpenHook()
 	}
-	if err := nofollow.CheckDir(resolved); err != nil {
+	if err := CheckLiveStore(resolved); err != nil {
 		return errors.Join(err, swap.Close())
 	}
 	db, err := pebble.Open(resolved, &pebble.Options{Logger: quietLogger{}, DisableWAL: h.staging})

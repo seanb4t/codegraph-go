@@ -99,7 +99,10 @@ kept fresh automatically — by an in-process watcher, or by git hooks
 (`codegraph githooks install`) where a watcher isn't viable.
 `.codegraph/` and its `store` can be symlinks, but only to a place inside
 the directory that holds `.codegraph/`. If one leads outside it, commands
-that read or build the index stop with an error that names the link.
+that read or build the index stop with an error that names the link. They
+also stop when the store holds a symlink, and the error names the link.
+`index`, `sync` and the watcher do not build a store in a directory that
+holds other files: they stop with an error that names that directory.
 
 ## Use it from an agent
 
