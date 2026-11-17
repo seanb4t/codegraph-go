@@ -184,3 +184,13 @@ const indexOutsideRootMessage = "The index is a link that leads outside the repo
 type indexOutsideRootError struct{}
 
 func (indexOutsideRootError) Error() string { return indexOutsideRootMessage }
+
+// symlinkInIndexMessage is the fixed, path-free text a browser caller gets
+// when a file in the index is a symbolic link (nofollow.ErrSymlink). The
+// full error, with paths, goes to the server's diagnostic stream.
+const symlinkInIndexMessage = "A file in the index is a symbolic link. Remove the link."
+
+// symlinkInIndexError carries symlinkInIndexMessage as its Error() text.
+type symlinkInIndexError struct{}
+
+func (symlinkInIndexError) Error() string { return symlinkInIndexMessage }

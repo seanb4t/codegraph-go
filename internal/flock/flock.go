@@ -3,6 +3,10 @@
 // Package flock takes advisory flock(2) locks on lock files. The kernel
 // releases a lock when its file handle closes, and so when the process
 // exits, however it exits.
+//
+// Open, OpenExisting and Create open the lock file through
+// nofollow.OpenFile, so a lock file that is a symbolic link gives a
+// *nofollow.SymlinkError and the link is not followed.
 package flock
 
 import (
@@ -27,8 +31,6 @@ const (
 
 // Open opens the lock file at path, creating it if needed, and takes a
 // lock on it without waiting. Close the returned file to release the lock.
-// Every open in this package refuses a lock file that is a symbolic link
-// with a *nofollow.SymlinkError.
 func Open(path string, mode Mode) (*os.File, error) {
 	return open(path, os.O_RDWR|os.O_CREATE, mode)
 }

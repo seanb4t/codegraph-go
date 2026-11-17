@@ -1,6 +1,7 @@
 package graphstore
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -82,11 +83,13 @@ func TestReplaceStoreRefusesSymlinkInLiveStore(t *testing.T) {
 	outside, data := outsideFile(t)
 	parent := t.TempDir()
 	live, staging := filepath.Join(parent, "store"), filepath.Join(parent, "staging")
-	buildStore(t, staging, "new")
-	if err := os.Mkdir(live, 0o755); err != nil {
+	stagingExport := buildStore(t, staging, "new")
+	buildStore(t, live, "old")
+	lockFile := filepath.Join(live, "LOCK")
+	if err := os.Remove(lockFile); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(live, "LOCK")); err != nil {
+	if err := os.Symlink(outside, lockFile); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,6 +98,50 @@ func TestReplaceStoreRefusesSymlinkInLiveStore(t *testing.T) {
 	if !errors.Is(err, nofollow.ErrSymlink) {
 		t.Fatalf("ReplaceStore = %v, want nofollow.ErrSymlink", err)
 	}
+	if info, err := os.Lstat(lockFile); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("Lstat(%s) = %v, %v, want the link left in place", lockFile, info, err)
+	}
+	if !bytes.Equal(exportAt(t, staging), stagingExport) {
+		t.Fatalf("the staging store changed in a ReplaceStore that failed")
+	}
+
+	if err := os.Remove(lockFile); err != nil {
+		t.Fatal(err)
+	}
+	requireUsable(t, live)
+	if err := ReplaceStore(staging, live); err != nil {
+		t.Fatalf("ReplaceStore after the link is gone: %v", err)
+	}
+}
+
+func TestRefusedOpenReleasesLocksAndHandle(t *testing.T) {
+	outside, _ := outsideFile(t)
+	dir := filepath.Join(t.TempDir(), "store")
+	buildStore(t, dir, "n")
+	lockFile := filepath.Join(dir, "LOCK")
+	if err := os.Remove(lockFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, lockFile); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(dir); !errors.Is(err, nofollow.ErrSymlink) {
+		t.Fatalf("Open = %v, want nofollow.ErrSymlink", err)
+	}
+	requireNoSharedHandle(t)
+	if err := os.Remove(lockFile); err != nil {
+		t.Fatal(err)
+	}
+	requireUsable(t, dir)
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open after the link is gone: %v", err)
+	}
+	if !nodeVisible(t, s, "n") {
+		t.Fatalf("the store lost its node")
+	}
+	mustClose(t, s)
 }
 
 func TestLockFilesBesideStoreRefuseSymlink(t *testing.T) {

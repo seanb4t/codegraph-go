@@ -208,3 +208,36 @@ func TestPrefixMustEndInDash(t *testing.T) {
 		t.Errorf("Sweep left the unlocked directory %s: %v", d.Path(), err)
 	}
 }
+
+func TestSweepRemovesDirectoryWithLinkedLock(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	dirs := []struct{ name, target string }{
+		{testPrefix + "file", outside},
+		{PendingPrefix(testPrefix) + "file", outside},
+		{testPrefix + "dangling", filepath.Join(parent, "missing")},
+	}
+	for _, d := range dirs {
+		dir := filepath.Join(parent, d.name)
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(d.target, filepath.Join(dir, LockName)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	Sweep(parent, testPrefix)
+
+	for _, d := range dirs {
+		if exists(t, filepath.Join(parent, d.name)) {
+			t.Errorf("Sweep left %s, whose lock file is a link", d.name)
+		}
+	}
+	if got, err := os.ReadFile(outside); err != nil || string(got) != "keep me\n" {
+		t.Fatalf("outside file = %q, %v, want it unchanged", got, err)
+	}
+}

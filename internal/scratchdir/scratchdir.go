@@ -15,6 +15,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 const (
@@ -125,6 +126,8 @@ func (d *Dir) Unlock() error {
 //   - A directory whose lock file Sweep can lock goes away. Its owner
 //     stopped.
 //   - A directory whose lock another handle holds stays.
+//   - A directory whose lock file is a symbolic link goes away, and the
+//     link goes with it. New never makes the lock file a link.
 //   - A finished directory with no lock file goes away. New names the lock
 //     file before the directory, so this is an owner that a kill stopped
 //     during its own Remove.
@@ -150,6 +153,8 @@ func Sweep(parent, prefix string) {
 		switch {
 		case err == nil:
 			_ = (&Dir{path: path, lock: lock}).Remove()
+		case errors.Is(err, nofollow.ErrSymlink):
+			_ = os.RemoveAll(path)
 		case !errors.Is(err, os.ErrNotExist):
 			// Another handle holds the lock, or the file cannot be read.
 		case !pending:

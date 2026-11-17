@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
@@ -83,5 +84,31 @@ func TestOpenRefusesSymlink(t *testing.T) {
 		if !errors.Is(err, nofollow.ErrSymlink) {
 			t.Fatalf("%s = %v, want nofollow.ErrSymlink", name, err)
 		}
+	}
+	for name, target := range map[string]string{"to a file": outside, "dangling": filepath.Join(dir, "missing")} {
+		link := filepath.Join(dir, "create-"+strings.ReplaceAll(name, " ", "-"))
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		f, err := Create(link, Exclusive)
+		if err == nil {
+			f.Close()
+		}
+		if !errors.Is(err, nofollow.ErrSymlink) {
+			t.Fatalf("Create %s = %v, want nofollow.ErrSymlink", name, err)
+		}
+	}
+	if got, err := os.ReadFile(outside); err != nil || string(got) != "keep me\n" {
+		t.Fatalf("outside file = %q, %v, want it unchanged", got, err)
+	}
+}
+
+func TestCreateKeepsExistError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(path, Exclusive); !errors.Is(err, fs.ErrExist) || errors.Is(err, nofollow.ErrSymlink) {
+		t.Fatalf("Create = %v, want fs.ErrExist", err)
 	}
 }

@@ -101,3 +101,25 @@ func TestCheckDir(t *testing.T) {
 		t.Fatalf("CheckDir = %v, want a *SymlinkError for %s", err, link)
 	}
 }
+
+func TestOpenFileReportsLinkLoopAsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	loop := filepath.Join(dir, "loop")
+	if err := os.Symlink("loop", loop); err != nil {
+		t.Fatal(err)
+	}
+	_, err := OpenFile(filepath.Join(loop, "file"), os.O_RDONLY, 0)
+	if !errors.Is(err, ErrSymlink) {
+		t.Fatalf("OpenFile = %v, want ErrSymlink", err)
+	}
+}
+
+func TestCheckDirWrapsNothingForARegularFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDir(path); err == nil || errors.Is(err, ErrSymlink) {
+		t.Fatalf("CheckDir(file) = %v, want a non-symlink error", err)
+	}
+}
