@@ -202,8 +202,12 @@ func open(dir string, staging bool) (*pebbleStore, error) {
 	)
 	if staging {
 		h, err = retryLocked(func() (*dbHandle, error) {
+			resolved, err := resolveStorePath(dir)
+			if err != nil {
+				return nil, fmt.Errorf("graphstore: resolve %s to open the staging store: %w", dir, err)
+			}
 			h := &dbHandle{staging: true}
-			if err := h.open(dir); err != nil {
+			if err := h.open(resolved); err != nil {
 				return nil, err
 			}
 			return h, nil

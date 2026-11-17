@@ -319,6 +319,12 @@ func TestCIncludeCalls(t *testing.T) {
 			caller: [2]string{"main.c", "run"}, want: []string{"add.c function add definition"},
 		},
 		{
+			name: "A prototype in the cplusplus wrapper",
+			files: with(headerPrototypeTree(), "add.h",
+				"#ifndef ADD_H\n#define ADD_H\n#ifdef __cplusplus\nextern \"C\" {\n#endif\nint add(int a, int b);\n#ifdef __cplusplus\n}\n#endif\n#endif\n"),
+			caller: [2]string{"main.c", "run"}, want: []string{"add.c function add definition"},
+		},
+		{
 			name: "Pointer spacing and unnamed parameters",
 			files: map[string]string{
 				"str.h": "int count(const char *);\n", "str.c": "int count(const char* s) { return s[0]; }\n",
@@ -429,6 +435,7 @@ func TestCIncludeCalls(t *testing.T) {
 	oneNode := []struct{ name, file, src, fn string }{
 		{"Pointer spacing in one file", "str.c", "int count(const char *);\nint count(const char* s) { return s[0]; }\n", "count"},
 		{"A default argument in one file", "s.cpp", "int f(int a, int b = 0);\nint f(int a, int b) { return a + b; }\n", "f"},
+		{"A prototype in the cplusplus wrapper in one file", "w.c", "#ifdef __cplusplus\nextern \"C\" {\n#endif\nint f(int a);\n#ifdef __cplusplus\n}\n#endif\nint f(int a) { return a; }\n", "f"},
 	}
 	for _, tc := range oneNode {
 		t.Run(tc.name, func(t *testing.T) {

@@ -656,7 +656,7 @@ func rubyDecls(c *declCollector, root *tree_sitter.Node) {
 }
 
 // cTopLevel mirrors cextract.topLevelDecls: the root's children, with
-// namespace bodies and preprocessor branches flattened.
+// namespace bodies, extern "C" bodies and preprocessor branches flattened.
 func cTopLevel(root *tree_sitter.Node) []*tree_sitter.Node {
 	var decls []*tree_sitter.Node
 	var walk func(n *tree_sitter.Node)
@@ -666,6 +666,16 @@ func cTopLevel(root *tree_sitter.Node) []*tree_sitter.Node {
 			if child.Kind() == "namespace_definition" {
 				if body := child.ChildByFieldName("body"); body != nil {
 					walk(body)
+				}
+				continue
+			}
+			if child.Kind() == "linkage_specification" {
+				if body := child.ChildByFieldName("body"); body != nil {
+					if body.Kind() == "declaration_list" {
+						walk(body)
+					} else {
+						decls = append(decls, body)
+					}
 				}
 				continue
 			}
@@ -708,20 +718,27 @@ func cFunctionName(c *declCollector, decl *tree_sitter.Node) (string, bool) {
 }
 
 // cPlainName mirrors cextract.cDeclaratorName: the name under pointer,
-// array and parenthesized declarators, and none under a function
-// declarator.
+// array, reference, parenthesized and init declarators, and none under a
+// function declarator. Under a reference or parenthesized declarator it
+// follows the last named child that is not a comment, a type qualifier, a
+// call modifier or an attribute.
 func cPlainName(c *declCollector, d *tree_sitter.Node) (string, bool) {
 	for d != nil {
 		switch d.Kind() {
 		case "identifier", "field_identifier", "type_identifier":
 			return c.text(d), true
-		case "pointer_declarator", "array_declarator", "reference_declarator", "init_declarator":
+		case "pointer_declarator", "array_declarator", "init_declarator":
 			d = d.ChildByFieldName("declarator")
-		case "parenthesized_declarator":
-			if d.NamedChildCount() == 0 {
-				return "", false
+		case "parenthesized_declarator", "reference_declarator":
+			var next *tree_sitter.Node
+			for i := int(d.NamedChildCount()) - 1; i >= 0 && next == nil; i-- {
+				switch k := d.NamedChild(uint(i)); k.Kind() {
+				case "comment", "type_qualifier", "ms_call_modifier", "attribute_declaration":
+				default:
+					next = k
+				}
 			}
-			d = d.NamedChild(0)
+			d = next
 		default:
 			return "", false
 		}
