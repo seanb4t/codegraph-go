@@ -1,3 +1,3 @@
 kind: Fixes
-body: A store reached through a symlink now uses the same swap and writer lock files as the store's real path, so two processes that name one store differently exclude each other.
+body: A store reached through a symlinked directory now uses the same swap and writer lock files as the store's real path, so two processes of this release that name one store differently exclude each other. A process from an older release and one from this release do not exclude each other on such a store until both run this release.
 time: 2026-11-16T21:45:53.159743-05:00

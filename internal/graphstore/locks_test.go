@@ -148,7 +148,11 @@ func TestReplaceStoreRenamesFirstStore(t *testing.T) {
 // are both free, so no lock of the failed call is left in this process.
 func requireUsable(t *testing.T, live string) {
 	t.Helper()
-	swap, err := flock.Open(filepath.Clean(live)+swapLockSuffix, flock.Exclusive)
+	resolved, err := resolveStorePath(live)
+	if err != nil {
+		t.Fatalf("resolveStorePath(%s): %v", live, err)
+	}
+	swap, err := flock.Open(resolved+swapLockSuffix, flock.Exclusive)
 	if err != nil {
 		t.Fatalf("the swap lock of %s is not free after the failed ReplaceStore: %v", live, err)
 	}
@@ -359,7 +363,7 @@ func TestReplaceStoreWaitsForHandleOpenedThroughLink(t *testing.T) {
 	real, link := linkedStore(t)
 	staging := filepath.Join(t.TempDir(), "store")
 	oldExport := buildStore(t, real, "old")
-	buildStore(t, staging, "new")
+	newExport := buildStore(t, staging, "new")
 
 	s, err := Open(link)
 	if err != nil {
@@ -373,6 +377,14 @@ func TestReplaceStoreWaitsForHandleOpenedThroughLink(t *testing.T) {
 	if !bytes.Equal(exportAt(t, real), oldExport) {
 		t.Fatalf("the live store changed in a ReplaceStore that failed")
 	}
+
+	// Positive assertion: the replace goes through once the handle is closed.
+	if err := ReplaceStore(staging, real); err != nil {
+		t.Fatalf("ReplaceStore after the handle closed: %v", err)
+	}
+	if !bytes.Equal(exportAt(t, real), newExport) {
+		t.Errorf("the live store does not hold the staging store after the replace")
+	}
 }
 
 func TestOpenWaitsForSwapLockTakenThroughOtherName(t *testing.T) {
@@ -384,7 +396,11 @@ func TestOpenWaitsForSwapLockTakenThroughOtherName(t *testing.T) {
 	}
 	defer lock.Close()
 
-	if _, err := Open(link); !errors.Is(err, ErrStoreLocked) {
+	s, err := Open(link)
+	if err == nil {
+		t.Cleanup(func() { s.Close() })
+	}
+	if !errors.Is(err, ErrStoreLocked) {
 		t.Fatalf("Open by the link under a swap lock taken by the real path: %v, want ErrStoreLocked", err)
 	}
 }
@@ -398,7 +414,45 @@ func TestLockWriterExcludesSecondWriterThroughOtherName(t *testing.T) {
 		t.Fatalf("LockWriter: %v", err)
 	}
 	defer first.Close()
-	if _, err := LockWriter(real); !errors.Is(err, ErrStoreLocked) {
+	second, err := LockWriter(real)
+	if err == nil {
+		t.Cleanup(func() { second.Close() })
+	}
+	if !errors.Is(err, ErrStoreLocked) {
 		t.Fatalf("LockWriter by the real path with the lock held by the link: %v, want ErrStoreLocked", err)
+	}
+
+	// Positive assertion: the lock is free once its holder closes.
+	if err := first.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	third, err := LockWriter(real)
+	if err != nil {
+		t.Fatalf("LockWriter by the real path after the first holder closed: %v", err)
+	}
+	third.Close()
+}
+
+func TestLockWriterFailsOnSymlinkLoopWithoutRetry(t *testing.T) {
+	sleeps := countRetrySleeps(t)
+	root := t.TempDir()
+	a, b := filepath.Join(root, "a"), filepath.Join(root, "b")
+	if err := os.Symlink(b, a); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	if err := os.Symlink(a, b); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	l, err := LockWriter(filepath.Join(a, "store"))
+	if err == nil {
+		l.Close()
+		t.Fatalf("LockWriter through a symlink loop succeeded, want an error")
+	}
+	if errors.Is(err, ErrStoreLocked) {
+		t.Errorf("LockWriter through a symlink loop: %v, want an error that is not ErrStoreLocked", err)
+	}
+	if n := sleeps.Load(); n != 0 {
+		t.Errorf("LockWriter retried %d times on a resolution error, want one attempt", n)
 	}
 }
