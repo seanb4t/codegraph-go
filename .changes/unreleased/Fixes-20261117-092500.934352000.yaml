@@ -1,0 +1,3 @@
+kind: Fixes
+body: codegraph now refuses to open a store that contains a symbolic link, and never follows a symbolic link when it creates, locks or writes a file in the index directory, so it cannot change a file outside the index.
+time: 2026-11-17T09:25:00.934352-05:00

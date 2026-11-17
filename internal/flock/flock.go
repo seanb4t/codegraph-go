@@ -10,6 +10,8 @@ import (
 	"os"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 // Mode says whether a lock excludes every other holder or only the
@@ -25,6 +27,8 @@ const (
 
 // Open opens the lock file at path, creating it if needed, and takes a
 // lock on it without waiting. Close the returned file to release the lock.
+// Every open in this package refuses a lock file that is a symbolic link
+// with a *nofollow.SymlinkError.
 func Open(path string, mode Mode) (*os.File, error) {
 	return open(path, os.O_RDWR|os.O_CREATE, mode)
 }
@@ -42,7 +46,7 @@ func Create(path string, mode Mode) (*os.File, error) {
 }
 
 func open(path string, flag int, mode Mode) (*os.File, error) {
-	f, err := os.OpenFile(path, flag, 0o644)
+	f, err := nofollow.OpenFile(path, flag, 0o644)
 	if err != nil {
 		return nil, err
 	}

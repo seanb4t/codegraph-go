@@ -5,8 +5,11 @@ package flock
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 func TestModesExclude(t *testing.T) {
@@ -59,5 +62,26 @@ func TestOpenExistingAndCreate(t *testing.T) {
 	}
 	if _, err := OpenExisting(path, Exclusive); !IsHeld(err) {
 		t.Fatalf("OpenExisting on a held lock: %v, want held", err)
+	}
+}
+
+func TestOpenRefusesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "outside")
+	if err := os.WriteFile(outside, []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "lock")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, open := range map[string]func(string, Mode) (*os.File, error){"Open": Open, "OpenExisting": OpenExisting} {
+		f, err := open(link, Exclusive)
+		if err == nil {
+			f.Close()
+		}
+		if !errors.Is(err, nofollow.ErrSymlink) {
+			t.Fatalf("%s = %v, want nofollow.ErrSymlink", name, err)
+		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
@@ -147,7 +148,7 @@ func targetRoot(args []string) (string, error) {
 // .gitignore — init never risks corrupting a file it doesn't own (A4,
 // executor's discretion).
 func writeGitignoreHint(codegraphDir string) error {
-	return os.WriteFile(filepath.Join(codegraphDir, ".gitignore"), []byte("*\n"), 0o644)
+	return nofollow.WriteFile(filepath.Join(codegraphDir, ".gitignore"), []byte("*\n"), 0o644)
 }
 
 // printSummary prints the concise end-of-run summary (files, nodes,

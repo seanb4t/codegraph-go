@@ -12,6 +12,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 // Two lock files sit beside each store, in its parent directory. Both are
@@ -93,6 +94,9 @@ func LockWriter(dir string) (io.Closer, error) {
 // releases both locks on every return path: Pebble keeps its directory
 // locks in a registry of the process, and a lock that leaks there blocks
 // every later open of the store until the process ends.
+//
+// A live store that holds a symbolic link gives a *nofollow.SymlinkError
+// and stays as it was.
 func ReplaceStore(staging, live string) (err error) {
 	// replaced turns true once staging is in the place of live. An error
 	// after that moment, also one of the deferred releases below, tells
@@ -115,6 +119,9 @@ func ReplaceStore(staging, live string) (err error) {
 		}
 		err = fsatomic.RenameDir(staging, live)
 		replaced = err == nil || errors.Is(err, fsatomic.ErrNotDurable)
+		return err
+	}
+	if err := nofollow.CheckDir(live); err != nil {
 		return err
 	}
 	lock, err := retryLocked(func() (*pebble.Lock, error) { return pebble.LockDirectory(live, vfs.Default) }, classifyOpenError)
