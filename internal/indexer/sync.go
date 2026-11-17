@@ -1023,6 +1023,9 @@ func prunePackageNodes(r0 graphstore.Reader, w graphstore.Writer, pruned map[str
 	for _, id := range sortedKeys(candidates) {
 		imported := false
 		for _, e := range rev[id] {
+			if e.Kind != goextract.RefKindImports {
+				continue
+			}
 			src, err := r0.GetNode(e.Source)
 			if errors.Is(err, graphstore.ErrNotFound) {
 				continue
