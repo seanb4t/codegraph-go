@@ -112,8 +112,9 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 		workers = DefaultWorkers()
 	}
 
-	// The lock files and the scratch directory live in the parent of the
-	// store, so that parent must exist before any of them.
+	// The scratch directory lives in the parent of the store, so that parent
+	// must exist before it. The lock files sit in the parent of the
+	// resolved store.
 	storeDir = filepath.Clean(storeDir)
 	parent := filepath.Dir(storeDir)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
