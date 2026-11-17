@@ -41,11 +41,17 @@ var ErrAfterReplace = errors.New("graphstore: the store was replaced, but a late
 var exchangeDirs = fsatomic.ExchangeDirs
 
 // lockBesideOnce takes the flock of the lock file beside dir, in one
-// attempt. A lock that another handle holds gives ErrStoreLocked. The lock
-// file lives in the parent of dir, and lockBesideOnce creates that parent
-// if it is missing.
+// attempt. The file sits beside the store that dir reaches after every
+// symlink is resolved, so every name of a store gives one lock file. A
+// lock that another handle holds gives ErrStoreLocked. The lock file lives
+// in the parent of the resolved store, and lockBesideOnce creates that
+// parent if it is missing.
 func lockBesideOnce(dir, suffix string, mode flock.Mode) (*os.File, error) {
-	path := filepath.Clean(dir) + suffix
+	resolved, err := resolveStorePath(dir)
+	if err != nil {
+		return nil, err
+	}
+	path := resolved + suffix
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}

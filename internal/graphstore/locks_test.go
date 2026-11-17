@@ -338,3 +338,67 @@ func TestLockWriterExcludesSecondWriter(t *testing.T) {
 	}
 	second.Close()
 }
+
+// linkedStore returns the path of a store directory and a symlink to it,
+// two names for one store.
+func linkedStore(t *testing.T) (real, link string) {
+	t.Helper()
+	root := t.TempDir()
+	real, link = filepath.Join(root, "store"), filepath.Join(root, "link")
+	if err := os.Mkdir(real, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	return real, link
+}
+
+func TestReplaceStoreWaitsForHandleOpenedThroughLink(t *testing.T) {
+	noRetrySleep(t)
+	real, link := linkedStore(t)
+	staging := filepath.Join(t.TempDir(), "store")
+	oldExport := buildStore(t, real, "old")
+	buildStore(t, staging, "new")
+
+	s, err := Open(link)
+	if err != nil {
+		t.Fatalf("Open through the link: %v", err)
+	}
+	if err := ReplaceStore(staging, real); !errors.Is(err, ErrStoreLocked) {
+		s.Close()
+		t.Fatalf("ReplaceStore by the real path with a handle open by the link: %v, want ErrStoreLocked", err)
+	}
+	s.Close()
+	if !bytes.Equal(exportAt(t, real), oldExport) {
+		t.Fatalf("the live store changed in a ReplaceStore that failed")
+	}
+}
+
+func TestOpenWaitsForSwapLockTakenThroughOtherName(t *testing.T) {
+	noRetrySleep(t)
+	real, link := linkedStore(t)
+	lock, err := flock.Open(real+swapLockSuffix, flock.Exclusive)
+	if err != nil {
+		t.Fatalf("flock.Open: %v", err)
+	}
+	defer lock.Close()
+
+	if _, err := Open(link); !errors.Is(err, ErrStoreLocked) {
+		t.Fatalf("Open by the link under a swap lock taken by the real path: %v, want ErrStoreLocked", err)
+	}
+}
+
+func TestLockWriterExcludesSecondWriterThroughOtherName(t *testing.T) {
+	noRetrySleep(t)
+	real, link := linkedStore(t)
+
+	first, err := LockWriter(link)
+	if err != nil {
+		t.Fatalf("LockWriter: %v", err)
+	}
+	defer first.Close()
+	if _, err := LockWriter(real); !errors.Is(err, ErrStoreLocked) {
+		t.Fatalf("LockWriter by the real path with the lock held by the link: %v, want ErrStoreLocked", err)
+	}
+}

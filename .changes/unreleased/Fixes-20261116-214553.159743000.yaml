@@ -1,0 +1,3 @@
+kind: Fixes
+body: A store reached through a symlink now uses the same swap and writer lock files as the store's real path, so two processes that name one store differently exclude each other.
+time: 2026-11-16T21:45:53.159743-05:00

@@ -102,6 +102,16 @@ func openShared(dir string) (*dbHandle, error) {
 	return retryLocked(func() (*dbHandle, error) { return acquireShared(key, dir) }, alreadyClassified)
 }
 
+// resolveStorePath returns the absolute path of the store at dir, with
+// every symlink resolved, also when the store does not exist yet.
+func resolveStorePath(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return realpath.Resolve(abs)
+}
+
 // sharedKey returns the key of the store at dir in the table: the device
 // and inode of its parent directory, after every symlink is resolved, and
 // the base name of the store. It creates the parent if it is missing, as
@@ -117,11 +127,7 @@ func openShared(dir string) (*dbHandle, error) {
 // that does not exist yet has no inode. Its key must not change when the
 // first open creates it. The base name keeps its letter case.
 func sharedKey(dir string) (string, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	resolved, err := realpath.Resolve(abs)
+	resolved, err := resolveStorePath(dir)
 	if err != nil {
 		return "", err
 	}
