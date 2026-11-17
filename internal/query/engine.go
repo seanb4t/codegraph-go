@@ -12,12 +12,9 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// storeSubdir is the Pebble store's subdirectory under .codegraph/,
-// matching internal/cli's storeDirName constant (D-01b). It is
-// re-declared here (not imported from internal/cli) so internal/query has
-// no dependency on internal/cli — commands import query, not the other
-// way around.
-const storeSubdir = "store"
+// StoreDirName is the Pebble store's subdirectory under IndexDirName
+// (D-01b).
+const StoreDirName = "store"
 
 // Engine is the read-only query engine over a single graphstore.Reader
 // snapshot (D-02), plus (03-06) the repo root Node (file mode) and Explore
@@ -191,7 +188,7 @@ func OpenAt(start string) (*Engine, io.Closer, error) {
 		return nil, nil, err
 	}
 
-	store, err := graphstore.Open(filepath.Join(dir, codegraphDirName, storeSubdir))
+	store, err := graphstore.Open(filepath.Join(dir, IndexDirName, StoreDirName))
 	if err != nil {
 		return nil, nil, err
 	}

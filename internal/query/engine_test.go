@@ -58,7 +58,7 @@ func copyFixture(t *testing.T) string {
 func indexFixture(t *testing.T, dir string) {
 	t.Helper()
 
-	storeDir := filepath.Join(dir, codegraphDirName, storeSubdir)
+	storeDir := filepath.Join(dir, IndexDirName, StoreDirName)
 	if err := os.MkdirAll(storeDir, 0o755); err != nil {
 		t.Fatalf("mkdir store dir: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestResolveCodegraphDir(t *testing.T) {
 		t.Helper()
 		home := t.TempDir()
 		t.Setenv("HOME", home)
-		if err := os.MkdirAll(filepath.Join(home, codegraphDirName, "daemons"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(home, IndexDirName, "daemons"), 0o755); err != nil {
 			t.Fatalf("mkdir fake ~/.codegraph/daemons: %v", err)
 		}
 		return home
@@ -167,7 +167,7 @@ func TestResolveCodegraphDir(t *testing.T) {
 		home := homeWithCodegraph(t)
 		repo := filepath.Join(home, "x", "repo")
 		pkg := filepath.Join(repo, "pkg")
-		if err := os.MkdirAll(filepath.Join(repo, codegraphDirName), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(repo, IndexDirName), 0o755); err != nil {
 			t.Fatalf("mkdir repo .codegraph: %v", err)
 		}
 		if err := os.MkdirAll(pkg, 0o755); err != nil {

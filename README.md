@@ -97,6 +97,9 @@ codegraph impact internal/store/pebble.go
 `init` indexes the repo and writes to `.codegraph/`. From then on the graph is
 kept fresh automatically — by an in-process watcher, or by git hooks
 (`codegraph githooks install`) where a watcher isn't viable.
+`.codegraph/` and its `store` can be symlinks, but only to a place inside
+the directory that holds `.codegraph/`. If one leads outside it, commands
+that read or build the index stop with an error that names the link.
 
 ## Use it from an agent
 

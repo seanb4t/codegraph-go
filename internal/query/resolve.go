@@ -7,6 +7,7 @@ package query
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -20,10 +21,9 @@ import (
 // sentinel via errors.Is/errors.As, not string matching.
 var ErrNotInitialized = errors.New("query: not initialized")
 
-// codegraphDirName is the directory ResolveCodegraphDir looks for at each
-// level of the upward walk — kept in lockstep with internal/cli's constant
-// of the same name and value (D-01b layout).
-const codegraphDirName = ".codegraph"
+// IndexDirName is the directory ResolveCodegraphDir looks for at each
+// level of the upward walk (D-01b layout).
+const IndexDirName = ".codegraph"
 
 // Resolution is where an index was found for a start directory.
 // IndexRoot holds the .codegraph directory. ConfineRoot is the tree a
@@ -67,6 +67,12 @@ func ResolveCodegraphDir(start string) (string, error) {
 // file cannot point the fallback at an unrelated repository's index. Any
 // git failure, an unrecorded or bare worktree, or a main worktree that is
 // the home directory or holds no .codegraph returns ErrNotInitialized.
+//
+// A .codegraph that is a directory or a symlink, at the walk's directory
+// or at the main worktree, must resolve inside the directory that holds
+// it, and so must its store (IndexDirs). Otherwise ResolveIndex returns
+// an *IndexOutsideRootError and does not walk further. A symlink whose
+// missing target is inside that directory is walked past.
 func ResolveIndex(start string) (Resolution, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
@@ -76,8 +82,14 @@ func ResolveIndex(start string) (Resolution, error) {
 	worktree := ""
 	sawGit := false
 	for {
-		if dir != home && isDir(filepath.Join(dir, codegraphDirName)) {
-			return Resolution{IndexRoot: dir, ConfineRoot: dir}, nil
+		if dir != home {
+			found, err := indexAt(dir)
+			if err != nil {
+				return Resolution{}, err
+			}
+			if found {
+				return Resolution{IndexRoot: dir, ConfineRoot: dir}, nil
+			}
 		}
 		if !sawGit {
 			if info, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil {
@@ -94,7 +106,11 @@ func ResolveIndex(start string) (Resolution, error) {
 		dir = parent
 	}
 	if worktree != "" {
-		if main := mainWorktreeIndex(worktree, home); main != "" {
+		main, err := mainWorktreeIndex(worktree, home)
+		if err != nil {
+			return Resolution{}, err
+		}
+		if main != "" {
 			return Resolution{IndexRoot: main, ConfineRoot: worktree}, nil
 		}
 	}
@@ -104,38 +120,69 @@ func ResolveIndex(start string) (Resolution, error) {
 // ProjectIndexed reports whether a hook running in project directory dir
 // should treat it as indexed: dir holds .codegraph, or dir is the root of
 // a linked worktree whose main worktree holds one and is not the home
-// directory. Unlike ResolveIndex it does not walk upward; the hooks check
-// the project directory only (NUDGE-01, D-22).
+// directory. An index that ResolveIndex would refuse does not count.
+// Unlike ResolveIndex it does not walk upward; the hooks check the project
+// directory only (NUDGE-01, D-22).
 func ProjectIndexed(dir string) bool {
-	if isDir(filepath.Join(dir, codegraphDirName)) {
+	found, err := indexAt(dir)
+	if err != nil {
+		return false
+	}
+	if found {
 		return true
 	}
 	info, err := os.Stat(filepath.Join(dir, ".git"))
 	if err != nil || !info.Mode().IsRegular() {
 		return false
 	}
-	return mainWorktreeIndex(dir, homeDir()) != ""
+	main, err := mainWorktreeIndex(dir, homeDir())
+	return err == nil && main != ""
+}
+
+// indexAt reports whether dir holds a .codegraph directory. When dir's
+// .codegraph is a directory or a symlink, it first returns IndexDirs's
+// error, if any.
+func indexAt(dir string) (bool, error) {
+	index := filepath.Join(dir, IndexDirName)
+	info, err := os.Lstat(index)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() && info.Mode()&fs.ModeSymlink == 0 {
+		return false, nil
+	}
+	if _, err := IndexDirs(dir); err != nil {
+		return false, err
+	}
+	return isDir(index), nil
 }
 
 // mainWorktreeIndex returns the main worktree of the repository that
 // worktree is a recorded linked worktree of, when it holds a .codegraph
-// directory and is not the home directory, and "" otherwise.
-// LinkedWorktreeMain resolves symlinks, so the home directory is compared
-// both as given and resolved.
-func mainWorktreeIndex(worktree, home string) string {
+// directory and is not the home directory, and "" otherwise. It returns
+// indexAt's error for the main worktree. LinkedWorktreeMain resolves
+// symlinks, so the home directory is compared both as given and resolved.
+func mainWorktreeIndex(worktree, home string) (string, error) {
 	main := gitmeta.LinkedWorktreeMain(context.Background(), worktree)
-	if main == "" || !isDir(filepath.Join(main, codegraphDirName)) {
-		return ""
+	if main == "" {
+		return "", nil
 	}
 	if home != "" {
 		if main == home {
-			return ""
+			return "", nil
 		}
 		if resolved, err := filepath.EvalSymlinks(home); err == nil && main == resolved {
-			return ""
+			return "", nil
 		}
 	}
-	return main
+	found, err := indexAt(main)
+	if err != nil || !found {
+		return "", err
+	}
+	return main, nil
 }
 
 func homeDir() string {

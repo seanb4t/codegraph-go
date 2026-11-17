@@ -14,7 +14,7 @@ import (
 func TestStalenessSidecarPresent(t *testing.T) {
 	engine, dir := filesStatusFixture(t)
 
-	sidecar := filepath.Join(dir, codegraphDirName, staleSidecarName)
+	sidecar := filepath.Join(dir, IndexDirName, staleSidecarName)
 	if err := os.WriteFile(sidecar, nil, 0o644); err != nil {
 		t.Fatalf("write sidecar: %v", err)
 	}

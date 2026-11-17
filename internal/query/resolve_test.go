@@ -26,7 +26,7 @@ func gitRepo(t *testing.T, dir string) string {
 // directory, so no index is built.
 func markIndexed(t *testing.T, dir string) {
 	t.Helper()
-	mkdirAll(t, filepath.Join(dir, codegraphDirName))
+	mkdirAll(t, filepath.Join(dir, IndexDirName))
 }
 
 func mkdirAll(t *testing.T, dir string) string {

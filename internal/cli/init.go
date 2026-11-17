@@ -14,18 +14,29 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // codegraphDirName is the directory (D-01b) created at the target repo
 // root by init and removed wholesale by uninit.
-const codegraphDirName = ".codegraph"
+const codegraphDirName = query.IndexDirName
 
 // storeDirName is the Pebble store's subdirectory under codegraphDirName
 // (D-01b: layout is executor's discretion; the store lives in a subdir
 // alongside room for future non-store state without a separate on-disk
 // config file).
-const storeDirName = "store"
+const storeDirName = query.StoreDirName
+
+// indexDirs returns root's .codegraph directory as written, for messages,
+// and the resolved paths of it and its store, to open (query.IndexDirs).
+func indexDirs(root string) (codegraphDir string, paths query.IndexPaths, err error) {
+	paths, err = query.IndexDirs(root)
+	if err != nil {
+		return "", query.IndexPaths{}, err
+	}
+	return filepath.Join(root, codegraphDirName), paths, nil
+}
 
 // newInitCmd builds the `codegraph init` command: creates .codegraph/
 // (with its Pebble store subdirectory, D-01b) and runs a full
@@ -47,18 +58,21 @@ func newInitCmd() *cobra.Command {
 				return err
 			}
 
-			codegraphDir := filepath.Join(root, codegraphDirName)
-			if _, err := os.Stat(codegraphDir); err == nil {
+			codegraphDir, paths, err := indexDirs(root)
+			if err != nil {
+				return err
+			}
+			if _, err := os.Stat(paths.Dir); err == nil {
 				return fmt.Errorf("%w: %s already exists — use `codegraph index --force` to rebuild", ErrAlreadyInitialized, codegraphDir)
 			} else if !os.IsNotExist(err) {
 				return err
 			}
 
-			storeDir := filepath.Join(codegraphDir, storeDirName)
+			storeDir := paths.Store
 			if err := os.MkdirAll(storeDir, 0o755); err != nil {
 				return err
 			}
-			if err := writeGitignoreHint(codegraphDir); err != nil {
+			if err := writeGitignoreHint(paths.Dir); err != nil {
 				return err
 			}
 

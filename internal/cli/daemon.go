@@ -386,7 +386,12 @@ func newDaemonUnlockCmd() *cobra.Command {
 				return err
 			}
 
-			codegraphDir := filepath.Join(root, codegraphDirName)
+			codegraphDir, _, err := indexDirs(root)
+			if err != nil {
+				return err
+			}
+			// Unlock prints the path it is given, so it gets the path as
+			// written.
 			msg, err := daemon.Unlock(codegraphDir)
 			if err != nil {
 				return err

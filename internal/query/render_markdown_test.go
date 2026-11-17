@@ -246,7 +246,7 @@ func TestExplore(t *testing.T) {
 	t.Run("staleness banner prepended when a sync is pending", func(t *testing.T) {
 		engine, dir := nodeExploreFixture(t)
 
-		sidecar := filepath.Join(dir, codegraphDirName, staleSidecarName)
+		sidecar := filepath.Join(dir, IndexDirName, staleSidecarName)
 		if err := os.WriteFile(sidecar, nil, 0o644); err != nil {
 			t.Fatalf("write sidecar: %v", err)
 		}

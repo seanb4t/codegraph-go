@@ -14,19 +14,15 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
-// codegraphDirName / storeDirName mirror internal/cli's constants of the
-// same name (internal/cli/init.go) — duplicated locally rather than
-// imported to avoid an internal/daemon -> internal/cli dependency edge:
-// cli is the outermost layer that will depend on daemon (Plan 04-08's
-// `codegraph daemon` command), not the other way around. This is the same
-// cross-package-duplication precedent internal/query set for its own
-// codegraphDirName (Phase 3) and internal/indexer/discover.ShouldSkipDir.
+// codegraphDirName and storeDirName are the index layout internal/query
+// defines.
 const (
-	codegraphDirName = ".codegraph"
-	storeDirName     = "store"
+	codegraphDirName = query.IndexDirName
+	storeDirName     = query.StoreDirName
 )
 
 // staleSidecarName mirrors internal/query/status.go's staleSidecarName
@@ -209,23 +205,29 @@ func openWatch(root string) (watcher, error) {
 // init` first). opts (WR-04) is threaded through to every debounced
 // indexer.Sync call this Daemon drives (flush, below) — e.g. Workers to
 // bound the daemon's own extraction pool independently of the CLI's
-// one-shot `codegraph sync`/`index` invocations.
+// one-shot `codegraph sync`/`index` invocations. New returns
+// query.IndexDirs's error when the .codegraph/ or its store resolves
+// outside repoRoot, and the Daemon uses the resolved paths IndexDirs
+// returns.
 func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, error) {
 	abs, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return nil, err
 	}
-	codegraphDir := filepath.Join(abs, codegraphDirName)
-	if _, err := os.Stat(codegraphDir); err != nil {
+	paths, err := query.IndexDirs(abs)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(paths.Dir); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w: %s does not exist — run `codegraph init` first", ErrNotInitialized, codegraphDir)
+			return nil, fmt.Errorf("%w: %s does not exist — run `codegraph init` first", ErrNotInitialized, filepath.Join(abs, codegraphDirName))
 		}
 		return nil, err
 	}
 	d := &Daemon{
 		repoRoot:     abs,
-		codegraphDir: codegraphDir,
-		storeDir:     filepath.Join(codegraphDir, storeDirName),
+		codegraphDir: paths.Dir,
+		storeDir:     paths.Store,
 		opts:         opts,
 	}
 	for _, opt := range options {
