@@ -593,9 +593,9 @@ func findFunctionDeclarator(n *tree_sitter.Node) *tree_sitter.Node {
 	return nil
 }
 
-// cDeclaratorName walks n through the same wrapping shapes as
-// findFunctionDeclarator, but resolves to a plain identifier/type name
-// (used for typedef declarators, which never wrap a function_declarator).
+// cDeclaratorName walks n through init declarators and the wrapping shapes
+// that unwrapDeclarator unwraps, to the plain identifier or type name of a
+// typedef declarator. It gives no name under a function declarator.
 func cDeclaratorName(n *tree_sitter.Node, src []byte) (string, bool) {
 	for n != nil {
 		switch n.Kind() {

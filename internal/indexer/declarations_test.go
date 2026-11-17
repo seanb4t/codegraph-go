@@ -708,20 +708,27 @@ func cFunctionName(c *declCollector, decl *tree_sitter.Node) (string, bool) {
 }
 
 // cPlainName mirrors cextract.cDeclaratorName: the name under pointer,
-// array and parenthesized declarators, and none under a function
-// declarator.
+// array, reference, parenthesized and init declarators, and none under a
+// function declarator. Under a reference or parenthesized declarator it
+// follows the last named child that is not a comment, a type qualifier, a
+// call modifier or an attribute.
 func cPlainName(c *declCollector, d *tree_sitter.Node) (string, bool) {
 	for d != nil {
 		switch d.Kind() {
 		case "identifier", "field_identifier", "type_identifier":
 			return c.text(d), true
-		case "pointer_declarator", "array_declarator", "reference_declarator", "init_declarator":
+		case "pointer_declarator", "array_declarator", "init_declarator":
 			d = d.ChildByFieldName("declarator")
-		case "parenthesized_declarator":
-			if d.NamedChildCount() == 0 {
-				return "", false
+		case "parenthesized_declarator", "reference_declarator":
+			var next *tree_sitter.Node
+			for i := int(d.NamedChildCount()) - 1; i >= 0 && next == nil; i-- {
+				switch k := d.NamedChild(uint(i)); k.Kind() {
+				case "comment", "type_qualifier", "ms_call_modifier", "attribute_declaration":
+				default:
+					next = k
+				}
 			}
-			d = d.NamedChild(0)
+			d = next
 		default:
 			return "", false
 		}

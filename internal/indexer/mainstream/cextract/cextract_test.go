@@ -182,20 +182,52 @@ func TestExtract_NodeKinds(t *testing.T) {
 	}
 }
 
-// TestExtract_ReferenceReturningFunctions proves a C++ free function that
-// returns an lvalue or rvalue reference gets a function node, from its
-// declaration and from its definition, as a plain function does.
+// countNodes returns how many nodes of kind are named name.
+func countNodes(result goextract.FileResult, kind, name string) int {
+	n := 0
+	for _, en := range result.Nodes {
+		if en.Node.Kind == kind && en.Node.Name == name {
+			n++
+		}
+	}
+	return n
+}
+
+// checkOneIntParam checks that n takes one parameter `int i` and returns
+// wantRet.
+func checkOneIntParam(t *testing.T, n *goextract.ExtractedNode, wantRet string) {
+	t.Helper()
+	if n.Node.Signature != "(int)" || n.Node.Arity != 1 {
+		t.Errorf("%s: signature %q arity %d, want (int) and 1", n.Node.Name, n.Node.Signature, n.Node.Arity)
+	}
+	if len(n.Node.Params) != 1 || n.Node.Params[0].Name != "i" || n.Node.Params[0].Type != "int" {
+		t.Errorf("%s: params %+v, want one param i of type int", n.Node.Name, n.Node.Params)
+	}
+	if n.Node.ReturnType != wantRet || n.Node.ReturnTypeName != "int" {
+		t.Errorf("%s: return type %q (name %q), want %q (name int)", n.Node.Name, n.Node.ReturnType, n.Node.ReturnTypeName, wantRet)
+	}
+}
+
+// TestExtract_ReferenceReturningFunctions checks that a C++ free function
+// that returns an lvalue or rvalue reference gets exactly one function
+// node with its parameters, arity, signature and return type, as a
+// function that returns a pointer does. The last two rows put a
+// prototype and its definition in one file.
 func TestExtract_ReferenceReturningFunctions(t *testing.T) {
 	tests := []struct {
-		name string
-		src  string
-		want string
+		name    string
+		src     string
+		want    string
+		wantRet string
 	}{
-		{"plain declaration", "int plain(int i);\n", "plain"},
-		{"lvalue reference declaration", "int &lref(int i);\n", "lref"},
-		{"lvalue reference definition", "int &lrefdef(int i) { static int x; return x; }\n", "lrefdef"},
-		{"rvalue reference declaration", "int &&rref(int i);\n", "rref"},
-		{"rvalue reference definition", "int &&rrefdef(int i) { static int x; return static_cast<int &&>(x); }\n", "rrefdef"},
+		{"plain declaration", "int plain(int i);\n", "plain", "int"},
+		{"pointer declaration", "int *ptr(int i);\n", "ptr", "int*"},
+		{"lvalue reference declaration", "int &lref(int i);\n", "lref", "int&"},
+		{"lvalue reference definition", "int &lrefdef(int i) { static int x; return x; }\n", "lrefdef", "int&"},
+		{"rvalue reference declaration", "int &&rref(int i);\n", "rref", "int&&"},
+		{"rvalue reference definition", "int &&rrefdef(int i) { static int x; return static_cast<int &&>(x); }\n", "rrefdef", "int&&"},
+		{"lvalue reference prototype and definition", "int &at(int i);\nint &at(int i) { static int x; return x; }\n", "at", "int&"},
+		{"rvalue reference prototype and definition", "int &&mv(int i);\nint &&mv(int i) { static int x; return static_cast<int &&>(x); }\n", "mv", "int&&"},
 	}
 
 	for _, tt := range tests {
@@ -204,11 +236,98 @@ func TestExtract_ReferenceReturningFunctions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Extract returned error: %v", err)
 			}
-			if findNode(result, goextract.KindFunction, tt.want) == nil {
-				t.Errorf("no function node named %q in %+v", tt.want, result.Nodes)
+			if got := countNodes(result, goextract.KindFunction, tt.want); got != 1 {
+				t.Fatalf("%d function nodes named %q, want 1, in %+v", got, tt.want, result.Nodes)
 			}
+			checkOneIntParam(t, findNode(result, goextract.KindFunction, tt.want), tt.wantRet)
 		})
 	}
+}
+
+// TestExtract_ReferenceReturningMethods checks that an inline and an
+// out-of-line C++ method that return a reference each get a method node
+// with their parameters and a contains edge from their class.
+func TestExtract_ReferenceReturningMethods(t *testing.T) {
+	src := "class S {\npublic:\n    int &get(int i) { static int x; return x; }\n};\n" +
+		"class T {\npublic:\n    int &at(int i);\n};\n" +
+		"int &T::at(int i) { static int x; return x; }\n"
+	result, err := Extract(newCppTestParser(t), "mymodule", "m.cpp", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	for _, tc := range []struct{ class, method string }{{"S", "get"}, {"T", "at"}} {
+		class := findNode(result, goextract.KindStruct, tc.class)
+		if class == nil {
+			t.Fatalf("no struct node %s in %+v", tc.class, result.Nodes)
+		}
+		if got := countNodes(result, goextract.KindMethod, tc.method); got != 1 {
+			t.Fatalf("%d method nodes named %q, want 1, in %+v", got, tc.method, result.Nodes)
+		}
+		m := findNode(result, goextract.KindMethod, tc.method)
+		if m.Node.QualifiedName != tc.class+"."+tc.method {
+			t.Errorf("qualified name %q, want %s.%s", m.Node.QualifiedName, tc.class, tc.method)
+		}
+		if !hasIntraEdge(result, class.Node.Id, m.Node.Id, "contains") {
+			t.Errorf("no %s->%s contains edge in %+v", tc.class, tc.method, result.IntraEdges)
+		}
+		checkOneIntParam(t, m, "int&")
+	}
+}
+
+// TestExtract_ReferenceReturningOverloads checks that two overloads that
+// return a reference stay two nodes with their own parameter keys, and
+// that the definition of one replaces only its own prototype.
+func TestExtract_ReferenceReturningOverloads(t *testing.T) {
+	src := "int &f(int);\nint &f(double);\nint &f(int i) { static int x; return x; }\n"
+	result, err := Extract(newCppTestParser(t), "mymodule", "f.cpp", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	keys := map[string]int32{}
+	for _, en := range result.Nodes {
+		if en.Node.Kind == goextract.KindFunction && en.Node.Name == "f" {
+			keys[en.Node.CParamKey] = en.Node.StartLine
+		}
+	}
+	want := map[string]int32{"int": 3, "double": 2}
+	if len(keys) != len(want) || keys["int"] != want["int"] || keys["double"] != want["double"] {
+		t.Errorf("function nodes f by param key and line = %v, want %v", keys, want)
+	}
+}
+
+// TestExtract_ReferenceDeclaratorsThatAreNotFunctions checks that a
+// reference typedef gets a type_alias node and that a reference variable
+// gets no function node.
+func TestExtract_ReferenceDeclaratorsThatAreNotFunctions(t *testing.T) {
+	src := "typedef int &IntRef;\nint x;\nint &r = x;\nextern int &er;\n"
+	result, err := Extract(newCppTestParser(t), "mymodule", "r.cpp", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	if findNode(result, goextract.KindTypeAlias, "IntRef") == nil {
+		t.Errorf("no type_alias node IntRef in %+v", result.Nodes)
+	}
+	for _, name := range []string{"r", "er"} {
+		if findNode(result, goextract.KindFunction, name) != nil {
+			t.Errorf("reference variable %s got a function node", name)
+		}
+	}
+}
+
+// TestExtract_ParenthesizedFunctionDeclarator checks that a function
+// declarator in parentheses, with a comment before it, gets a function
+// node with its parameters.
+func TestExtract_ParenthesizedFunctionDeclarator(t *testing.T) {
+	src := "int (/* c */ pf(int i));\n"
+	result, err := Extract(newCTestParser(t), "mymodule", "p.c", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	n := findNode(result, goextract.KindFunction, "pf")
+	if n == nil {
+		t.Fatalf("no function node pf in %+v", result.Nodes)
+	}
+	checkOneIntParam(t, n, "int")
 }
 
 // TestExtract_OutOfLineMethodContainsEdge proves a C++ out-of-line method

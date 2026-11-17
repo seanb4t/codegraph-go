@@ -45,7 +45,8 @@ func (ex *extractor) fieldsOf(class *tree_sitter.Node) *goextract.TypeEnv {
 }
 
 // declareDeclarators declares each declarator of a declaration or field
-// with the declaration's type text, plus a `*` per pointer declarator.
+// with the declaration's type text, plus a `*` per pointer declarator. A
+// reference declarator adds nothing, so `Foo &f` declares f as `Foo`.
 func (ex *extractor) declareDeclarators(env *goextract.TypeEnv, d *tree_sitter.Node) {
 	typ := ""
 	if t := d.ChildByFieldName("type"); t != nil {
@@ -61,18 +62,16 @@ func (ex *extractor) declareDeclarators(env *goextract.TypeEnv, d *tree_sitter.N
 			case "init_declarator":
 				init = n.ChildByFieldName("value")
 				n = n.ChildByFieldName("declarator")
-			case "pointer_declarator", "reference_declarator":
-				if n.Kind() == "pointer_declarator" {
-					stars++
-				}
-				n = n.ChildByFieldName("declarator")
+			case "pointer_declarator":
+				stars++
+				n = unwrapDeclarator(n)
 			case "identifier", "field_identifier":
 				name = n.Utf8Text(ex.src)
 				n = nil
-			case "array_declarator", "function_declarator", "parenthesized_declarator":
+			case "function_declarator":
 				n = n.ChildByFieldName("declarator")
 			default:
-				n = nil
+				n = unwrapDeclarator(n)
 			}
 		}
 		if name == "" {
@@ -122,12 +121,9 @@ func (ex *extractor) bodyEnv(decl *tree_sitter.Node) *goextract.TypeEnv {
 }
 
 // outOfLineScope returns the class name of an out-of-line method
-// definition, `void Foo::bar() {}`, or "".
+// definition, `void Foo::bar() {}` or `int &Foo::get() {}`, or "".
 func outOfLineScope(decl *tree_sitter.Node, src []byte) string {
-	d := decl.ChildByFieldName("declarator")
-	for d != nil && d.Kind() != "function_declarator" {
-		d = d.ChildByFieldName("declarator")
-	}
+	d := findFunctionDeclarator(decl.ChildByFieldName("declarator"))
 	if d == nil {
 		return ""
 	}
