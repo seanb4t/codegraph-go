@@ -30,7 +30,9 @@ type propDecl struct {
 	// Include makes the declaration a quoted #include of that path in a C
 	// file. Static and Prototype mark a C function, Prototype as one
 	// with no body.
-	Include   string
+	Include string
+	// Import makes the declaration an import of that path in a Go file.
+	Import    string
 	Static    bool
 	Prototype bool
 	Calls     []propCall
@@ -60,6 +62,8 @@ var (
 	// one matches the file beside the includer or the file under the
 	// root.
 	propIncludes = []string{"lib.h", "sub/lib.h"}
+	// propImports are the intra-module import paths of the Go files.
+	propImports = []string{"example.com/prop", "example.com/prop/sub"}
 )
 
 // cPaths returns the model's C files and headers.
@@ -112,6 +116,14 @@ func renderGo(decls []propDecl) string {
 	var b strings.Builder
 	b.WriteString("package prop\n")
 	for _, d := range decls {
+		if d.Import != "" {
+			fmt.Fprintf(&b, "\nimport _ %q\n", d.Import)
+		}
+	}
+	for _, d := range decls {
+		if d.Import != "" {
+			continue
+		}
 		if d.Class {
 			fmt.Fprintf(&b, "\ntype %s struct{}\n\nfunc (%s) run() {}\n", d.Name, d.Name)
 			continue
@@ -418,6 +430,27 @@ var propOps = []func(t *rapid.T, m *propModel) string{
 		d.Prototype = !d.Prototype
 		return fmt.Sprintf("set prototype to %v on %s in %s", d.Prototype, d.Name, p)
 	},
+	func(t *rapid.T, m *propModel) string { // add an intra-module import to a Go file
+		g := m.goPaths()
+		if len(g) == 0 {
+			return ""
+		}
+		p := rapid.SampledFrom(g).Draw(t, "path")
+		imp := rapid.SampledFrom(propImports).Draw(t, "import")
+		m.files[p] = append(m.files[p], propDecl{Import: imp})
+		return "import " + imp + " in " + p
+	},
+}
+
+// goPaths returns the model's Go files.
+func (m *propModel) goPaths() []string {
+	var out []string
+	for _, p := range m.paths() {
+		if strings.HasSuffix(p, ".go") {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // drawCFunction draws a function of a C file of the model.
@@ -442,7 +475,7 @@ func drawCFunction(t *rapid.T, m *propModel) (string, int, bool) {
 }
 
 // drawDecl draws a declaration of the model, a function only when
-// functions is true. An include is no function.
+// functions is true. An include or an import is no function.
 func drawDecl(t *rapid.T, m *propModel, functions bool) (string, int, bool) {
 	type ref struct {
 		path string
@@ -451,7 +484,7 @@ func drawDecl(t *rapid.T, m *propModel, functions bool) (string, int, bool) {
 	var refs []ref
 	for _, p := range m.paths() {
 		for i, d := range m.files[p] {
-			if !functions || (!d.Class && d.Include == "") {
+			if !functions || (!d.Class && d.Include == "" && d.Import == "") {
 				refs = append(refs, ref{p, i})
 			}
 		}
