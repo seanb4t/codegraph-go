@@ -628,6 +628,20 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			nodesRemoved++
 		}
 	}
+	// A package node has no file either. A stored one that a pruned file
+	// imported, that this resolve does not mint and that no other file
+	// imports is deleted here, as a fresh index would not make it.
+	pruned := make(map[string]struct{}, len(prunePaths)+len(dependentPaths))
+	for _, p := range prunePaths {
+		pruned[p] = struct{}{}
+	}
+	maps.Copy(pruned, dependentPaths)
+	removedPackages, err := prunePackageNodes(r0, w, pruned, packageNodes)
+	if err != nil {
+		w.Close()
+		return Stats{}, err
+	}
+	nodesRemoved += removedPackages
 	// Link collapsed the edges in each unit, and a triple has all its
 	// candidates in one unit, so no triple repeats here.
 	collapsedEdges := edges
@@ -958,6 +972,74 @@ func deleteNoFileEdges(r0 graphstore.Reader, w graphstore.Writer, rev map[string
 		}
 	}
 	return len(owned), nil
+}
+
+// prunePackageNodes stages the delete of each package node that an
+// imports edge of a file in pruned targets in r0, that minted does not
+// hold and that no imports edge from a file outside pruned targets. It
+// returns their number.
+func prunePackageNodes(r0 graphstore.Reader, w graphstore.Writer, pruned map[string]struct{}, minted []*schema.Node) (int, error) {
+	candidates := make(map[string]struct{})
+	for _, path := range sortedKeys(pruned) {
+		it, err := r0.IterateFileIndex(path)
+		if err != nil {
+			return 0, err
+		}
+		for it.Next() {
+			if e := it.Entry(); !e.IsNode && e.Kind == goextract.RefKindImports {
+				candidates[e.Target] = struct{}{}
+			}
+		}
+		err = it.Err()
+		it.Close()
+		if err != nil {
+			return 0, err
+		}
+	}
+	for _, n := range minted {
+		delete(candidates, n.Id)
+	}
+	for id := range candidates {
+		n, err := r0.GetNode(id)
+		if errors.Is(err, graphstore.ErrNotFound) || (err == nil && n.Kind != resolve.KindPackage) {
+			delete(candidates, id)
+		} else if err != nil {
+			return 0, err
+		}
+	}
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+
+	rev, err := buildReverseAdjacency(r0, goextract.RefKindImports)
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, id := range sortedKeys(candidates) {
+		imported := false
+		for _, e := range rev[id] {
+			src, err := r0.GetNode(e.Source)
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return 0, err
+			}
+			if _, gone := pruned[src.GetFilePath()]; !gone {
+				imported = true
+				break
+			}
+		}
+		if imported {
+			continue
+		}
+		if err := w.DeleteNode(id); err != nil {
+			return 0, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 // sortedBoolKeys returns the keys of m in order.

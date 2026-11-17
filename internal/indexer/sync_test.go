@@ -1272,3 +1272,70 @@ func TestSyncMaxChanged(t *testing.T) {
 		t.Errorf("after the sync at the limit: Old present = %v, New present = %v; want false, true", hasNode(oldID), hasNode(newID))
 	}
 }
+
+// TestSyncPrunesPackageNodeWithNoImporter proves that Sync deletes the
+// package node of an intra-module import when the last file that imports
+// the package is deleted or stops importing it, keeps it while another
+// file still imports it, and leaves the store equal to a fresh index.
+func TestSyncPrunesPackageNodeWithNoImporter(t *testing.T) {
+	const importer = "package b\n\nimport _ \"example.com/m/a\"\n"
+	cases := []struct {
+		name   string
+		files  map[string]string
+		edit   func(t *testing.T, root string)
+		wantPk bool
+	}{
+		{"delete the only importer", map[string]string{
+			"b/b.go": importer,
+		}, func(t *testing.T, root string) {
+			if err := os.Remove(filepath.Join(root, "b/b.go")); err != nil {
+				t.Fatalf("remove: %v", err)
+			}
+		}, false},
+		{"drop the only import", map[string]string{
+			"b/b.go": importer,
+		}, func(t *testing.T, root string) {
+			writeFile(t, filepath.Join(root, "b/b.go"), "package b\n")
+		}, false},
+		{"delete one of two importers", map[string]string{
+			"b/b.go": importer,
+			"c/c.go": "package c\n\nimport _ \"example.com/m/a\"\n",
+		}, func(t *testing.T, root string) {
+			if err := os.Remove(filepath.Join(root, "b/b.go")); err != nil {
+				t.Fatalf("remove: %v", err)
+			}
+		}, true},
+	}
+	pkgID := nodeid.NodeID(resolve.KindPackage, "example.com/m/a", "example.com/m/a")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{
+				"go.mod": "module example.com/m\n\ngo 1.26\n",
+				"a/a.go": "package a\n\nfunc A() {}\n",
+			}
+			maps.Copy(files, tc.files)
+			root := writeFixture(t, files)
+			storeDir := t.TempDir()
+			if _, err := Run(root, storeDir, Options{}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			tc.edit(t, root)
+			if _, err := Sync(root, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync: %v", err)
+			}
+			requireSyncEqualsRun(t, root, storeDir)
+
+			r, closeAll := openSnapshot(t, storeDir)
+			defer closeAll()
+			_, err := r.GetNode(pkgID)
+			switch {
+			case err == nil && !tc.wantPk:
+				t.Fatalf("package node %s remains after Sync", pkgID)
+			case errors.Is(err, graphstore.ErrNotFound) && tc.wantPk:
+				t.Fatalf("package node %s is gone after Sync, but c/c.go still imports it", pkgID)
+			case err != nil && !errors.Is(err, graphstore.ErrNotFound):
+				t.Fatalf("GetNode: %v", err)
+			}
+		})
+	}
+}
