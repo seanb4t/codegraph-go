@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -31,14 +30,15 @@ func newSyncCmd() *cobra.Command {
 				return err
 			}
 
-			codegraphDir := filepath.Join(root, codegraphDirName)
+			codegraphDir, storeDir, err := indexDirs(root)
+			if err != nil {
+				return err
+			}
 			if _, err := os.Stat(codegraphDir); os.IsNotExist(err) {
 				return fmt.Errorf("%w: %s does not exist — run `codegraph init` first", ErrNotInitialized, codegraphDir)
 			} else if err != nil {
 				return err
 			}
-
-			storeDir := filepath.Join(codegraphDir, storeDirName)
 
 			// TUI-05/D-07/D-08: same TTY-gated spinner as init.go/index.go,
 			// via the shared helper (WR-04 06-REVIEW.md, see

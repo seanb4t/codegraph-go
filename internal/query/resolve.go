@@ -67,6 +67,10 @@ func ResolveCodegraphDir(start string) (string, error) {
 // file cannot point the fallback at an unrelated repository's index. Any
 // git failure, an unrecorded or bare worktree, or a main worktree that is
 // the home directory or holds no .codegraph returns ErrNotInitialized.
+//
+// The index found, at the walk's directory or at the main worktree, must
+// resolve inside that directory (CheckIndexInside). Otherwise ResolveIndex
+// returns an *IndexOutsideRootError and does not walk further.
 func ResolveIndex(start string) (Resolution, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
@@ -77,6 +81,9 @@ func ResolveIndex(start string) (Resolution, error) {
 	sawGit := false
 	for {
 		if dir != home && isDir(filepath.Join(dir, codegraphDirName)) {
+			if err := CheckIndexInside(dir); err != nil {
+				return Resolution{}, err
+			}
 			return Resolution{IndexRoot: dir, ConfineRoot: dir}, nil
 		}
 		if !sawGit {
@@ -95,6 +102,9 @@ func ResolveIndex(start string) (Resolution, error) {
 	}
 	if worktree != "" {
 		if main := mainWorktreeIndex(worktree, home); main != "" {
+			if err := CheckIndexInside(main); err != nil {
+				return Resolution{}, err
+			}
 			return Resolution{IndexRoot: main, ConfineRoot: worktree}, nil
 		}
 	}

@@ -347,8 +347,10 @@ func TestOpenEnginePathSymlinkCannotLeaveRepoRoot(t *testing.T) {
 // TestOpenEngineIndexSymlinkCannotLeaveRepoRoot holds the second half of
 // the path confinement in issue #297: the path can be a real directory
 // inside the repo root while the .codegraph in it is a symlink to another
-// project's index, and that index is what the call would open. The
-// control is a .codegraph symlink that leads to an index inside the root.
+// project's index, and that index is what the call would open. A
+// .codegraph symlink to the repo root's own index leads outside the
+// directory that holds it and is refused too (#372). The control is a
+// .codegraph symlink that leads to an index inside its own directory.
 func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
@@ -368,7 +370,19 @@ func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
 		return sub
 	}
 	borrowed := link("borrowed", outside)
-	own := link("own", dir)
+	parent := link("parent", dir)
+
+	own := filepath.Join(dir, "own")
+	if err := os.Mkdir(own, 0o755); err != nil {
+		t.Fatalf("mkdir own: %v", err)
+	}
+	indexFixture(t, own)
+	if err := os.Rename(filepath.Join(own, ".codegraph"), filepath.Join(own, "cg-real")); err != nil {
+		t.Fatalf("move the index of own: %v", err)
+	}
+	if err := os.Symlink("cg-real", filepath.Join(own, ".codegraph")); err != nil {
+		t.Fatalf("symlink the index of own: %v", err)
+	}
 
 	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
 
@@ -382,8 +396,12 @@ func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
 		}
 	}
 
+	if result := callTool(t, s, "codegraph_status", map[string]any{"path": parent}); !result.IsError {
+		t.Fatalf("codegraph_status with path %q, whose index is the repo root's: expected an error result, got success", parent)
+	}
+
 	if result := callTool(t, s, "codegraph_status", map[string]any{"path": own}); result.IsError {
-		t.Fatalf("an index symlink that stays inside the repo root was rejected: %q", resultText(t, result))
+		t.Fatalf("an index symlink that stays inside its own directory was rejected: %q", resultText(t, result))
 	}
 }
 
@@ -621,5 +639,38 @@ func TestSessionLineReflectsPostAppearanceToolCount(t *testing.T) {
 	wantTools := strconv.Itoa(len(allToolNames()))
 	if second["tools"] != wantTools {
 		t.Fatalf("second session line tools = %q, want %q (post-appearance, not the construction-time 0)", second["tools"], wantTools)
+	}
+}
+
+// TestOpenEngineRootIndexLinkedOutsideIsRejected covers issue #372: the
+// repo root's own .codegraph, or its store, is a symlink that leads
+// outside the root.
+func TestOpenEngineRootIndexLinkedOutsideIsRejected(t *testing.T) {
+	for _, name := range []string{".codegraph", filepath.Join(".codegraph", "store")} {
+		t.Run(name, func(t *testing.T) {
+			dir := copyFixture(t)
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			outside := t.TempDir()
+			if err := os.Symlink(outside, filepath.Join(dir, name)); err != nil {
+				t.Fatalf("symlink %s: %v", name, err)
+			}
+
+			s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+			for _, path := range []string{"", dir} {
+				result := callTool(t, s, "codegraph_status", map[string]any{"path": path})
+				if !result.IsError {
+					t.Fatalf("codegraph_status with path %q: expected an error result, got success", path)
+				}
+				if text := resultText(t, result); !strings.Contains(text, "outside the server's configured repo root") {
+					t.Fatalf("error for path %q = %q, want the outside-the-repo-root message", path, text)
+				}
+			}
+			entries, err := os.ReadDir(outside)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("outside directory holds %d entries (err %v), want none", len(entries), err)
+			}
+		})
 	}
 }

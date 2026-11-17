@@ -386,7 +386,10 @@ func newDaemonUnlockCmd() *cobra.Command {
 				return err
 			}
 
-			codegraphDir := filepath.Join(root, codegraphDirName)
+			codegraphDir, _, err := indexDirs(root)
+			if err != nil {
+				return err
+			}
 			msg, err := daemon.Unlock(codegraphDir)
 			if err != nil {
 				return err

@@ -14,6 +14,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
@@ -26,6 +27,17 @@ const codegraphDirName = ".codegraph"
 // alongside room for future non-store state without a separate on-disk
 // config file).
 const storeDirName = "store"
+
+// indexDirs returns root's .codegraph directory and the store inside it.
+// It returns query.CheckIndexInside's error when either resolves outside
+// root.
+func indexDirs(root string) (codegraphDir, storeDir string, err error) {
+	if err := query.CheckIndexInside(root); err != nil {
+		return "", "", err
+	}
+	codegraphDir = filepath.Join(root, codegraphDirName)
+	return codegraphDir, filepath.Join(codegraphDir, storeDirName), nil
+}
 
 // newInitCmd builds the `codegraph init` command: creates .codegraph/
 // (with its Pebble store subdirectory, D-01b) and runs a full
@@ -47,14 +59,16 @@ func newInitCmd() *cobra.Command {
 				return err
 			}
 
-			codegraphDir := filepath.Join(root, codegraphDirName)
+			codegraphDir, storeDir, err := indexDirs(root)
+			if err != nil {
+				return err
+			}
 			if _, err := os.Stat(codegraphDir); err == nil {
 				return fmt.Errorf("%w: %s already exists — use `codegraph index --force` to rebuild", ErrAlreadyInitialized, codegraphDir)
 			} else if !os.IsNotExist(err) {
 				return err
 			}
 
-			storeDir := filepath.Join(codegraphDir, storeDirName)
 			if err := os.MkdirAll(storeDir, 0o755); err != nil {
 				return err
 			}

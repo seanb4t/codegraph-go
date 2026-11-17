@@ -14,6 +14,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
@@ -209,10 +210,15 @@ func openWatch(root string) (watcher, error) {
 // init` first). opts (WR-04) is threaded through to every debounced
 // indexer.Sync call this Daemon drives (flush, below) — e.g. Workers to
 // bound the daemon's own extraction pool independently of the CLI's
-// one-shot `codegraph sync`/`index` invocations.
+// one-shot `codegraph sync`/`index` invocations. New returns
+// query.CheckIndexInside's error when the .codegraph/ or its store
+// resolves outside repoRoot.
 func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, error) {
 	abs, err := filepath.Abs(repoRoot)
 	if err != nil {
+		return nil, err
+	}
+	if err := query.CheckIndexInside(abs); err != nil {
 		return nil, err
 	}
 	codegraphDir := filepath.Join(abs, codegraphDirName)

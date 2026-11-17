@@ -63,11 +63,12 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 
 	// query.OpenAt walks up from the path and opens the first .codegraph
 	// it meets, so the directory that is opened is not the path that was
-	// checked. A .codegraph below the repo root that is a symlink to
-	// another project's index would be opened from a path that is itself
-	// inside the root. The repo root's own .codegraph is the one the
-	// server was started on and is not checked here.
-	for dir := pathAbs; dir != repoAbs && realpath.Within(repoAbs, dir); dir = filepath.Dir(dir) {
+	// checked. A .codegraph at or below the repo root that is a symlink
+	// to another project's index would be opened from a path that is
+	// itself inside the root. The repo root's own .codegraph is checked
+	// too.
+	for dir, done := pathAbs, false; !done && realpath.Within(repoAbs, dir); dir = filepath.Dir(dir) {
+		done = dir == repoAbs
 		// The resolver accepts a .codegraph that is a directory after
 		// symlinks, whether or not it holds a store yet, and the open
 		// then creates the store. Check the directory first, and then
