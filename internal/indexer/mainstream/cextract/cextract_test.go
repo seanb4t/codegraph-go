@@ -413,3 +413,118 @@ func TestExtract_OversizedFileSkippedNotFatal(t *testing.T) {
 		t.Errorf("expected no nodes for a skipped file, got %+v", result.Nodes)
 	}
 }
+
+// TestExtract_ExternC proves every declaration inside an `extern "C"` block,
+// and the single-declaration form, is extracted the same as one outside it.
+func TestExtract_ExternC(t *testing.T) {
+	const block = "#ifdef __cplusplus\nextern \"C\" {\n#endif\n" +
+		"#include \"inner.h\"\n" +
+		"struct Point { int x; };\n" +
+		"typedef struct Point PointAlias;\n" +
+		"int add(int a, int b);\n" +
+		"int twice(int a) { return add(a, a); }\n" +
+		"#ifdef __cplusplus\n}\n#endif\n"
+	tests := []struct {
+		name    string
+		cpp     bool
+		relPath string
+		src     string
+		kinds   map[string]string
+		include string
+		call    string
+	}{
+		{
+			name:    "C header under a header guard",
+			relPath: "api.h",
+			src:     block,
+			kinds: map[string]string{
+				"add":        goextract.KindFunction,
+				"twice":      goextract.KindFunction,
+				"Point":      goextract.KindStruct,
+				"PointAlias": goextract.KindTypeAlias,
+			},
+			include: "inner.h",
+			call:    "add",
+		},
+		{
+			name:    "block form under a header guard",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     block,
+			kinds: map[string]string{
+				"add":        goextract.KindFunction,
+				"twice":      goextract.KindFunction,
+				"Point":      goextract.KindStruct,
+				"PointAlias": goextract.KindTypeAlias,
+			},
+			include: "inner.h",
+			call:    "add",
+		},
+		{
+			name:    "block form",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "extern \"C\" {\nint add(int a, int b);\n}\n",
+			kinds:   map[string]string{"add": goextract.KindFunction},
+		},
+		{
+			name:    "single declaration form",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "extern \"C\" int mul(int a, int b);\n",
+			kinds:   map[string]string{"mul": goextract.KindFunction},
+		},
+		{
+			name:    "single definition form",
+			cpp:     true,
+			relPath: "api.cpp",
+			src:     "extern \"C\" int mul(int a, int b) { return a * b; }\n",
+			kinds:   map[string]string{"mul": goextract.KindFunction},
+		},
+		{
+			name:    "inside a namespace",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "namespace ns {\nextern \"C\" {\nint add(int a, int b);\n}\n}\n",
+			kinds:   map[string]string{"add": goextract.KindFunction},
+		},
+		{
+			name:    "nested blocks",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "extern \"C\" {\nextern \"C++\" {\nint add(int a, int b);\n}\n}\n",
+			kinds:   map[string]string{"add": goextract.KindFunction},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newCTestParser(t)
+			if tt.cpp {
+				p = newCppTestParser(t)
+			}
+			result, err := Extract(p, "mymodule", tt.relPath, []byte(tt.src))
+			if err != nil || result.Err != nil {
+				t.Fatalf("Extract: %v / %v", err, result.Err)
+			}
+			for name, kind := range tt.kinds {
+				if findNode(result, kind, name) == nil {
+					t.Errorf("no %s node named %q in %+v", kind, name, result.Nodes)
+				}
+			}
+			if tt.include != "" {
+				var quoted bool
+				for _, u := range result.Unresolved {
+					if u.Kind == goextract.RefKindImports && u.Name == tt.include {
+						quoted = u.Quoted
+					}
+				}
+				if !quoted {
+					t.Errorf("want a quoted imports ref to %s, got %+v", tt.include, result.Unresolved)
+				}
+			}
+			if tt.call != "" && !hasUnresolved(result, goextract.RefKindCalls, tt.call, "") {
+				t.Errorf("want a calls ref to %s, got %+v", tt.call, result.Unresolved)
+			}
+		})
+	}
+}

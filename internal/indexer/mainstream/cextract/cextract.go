@@ -145,7 +145,8 @@ type extractor struct {
 // topLevelDecls returns the effective list of "top-level" declaration nodes
 // to walk: root's own direct named children, with a C++ namespace_definition
 // TRANSPARENTLY expanded (recursively, so nested namespaces flatten fully)
-// in its place — see types.go for why no namespace node is ever emitted.
+// in its place — see types.go for why no namespace node is ever emitted. A
+// linkage_specification (`extern "C"`) is expanded the same way.
 func topLevelDecls(root *tree_sitter.Node) []*tree_sitter.Node {
 	var decls []*tree_sitter.Node
 	var walk func(n *tree_sitter.Node)
@@ -155,6 +156,17 @@ func topLevelDecls(root *tree_sitter.Node) []*tree_sitter.Node {
 			if c.Kind() == "namespace_definition" {
 				if body := c.ChildByFieldName("body"); body != nil {
 					walk(body)
+				}
+				continue
+			}
+			if c.Kind() == "linkage_specification" {
+				// `extern "C" { ... }` and `extern "C" decl;` add no scope.
+				if body := c.ChildByFieldName("body"); body != nil {
+					if body.Kind() == "declaration_list" {
+						walk(body)
+					} else {
+						decls = append(decls, body)
+					}
 				}
 				continue
 			}
