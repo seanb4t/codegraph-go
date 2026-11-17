@@ -600,44 +600,28 @@ func findFunctionDeclarator(n *tree_sitter.Node) *tree_sitter.Node {
 		if n.Kind() == "function_declarator" {
 			return n
 		}
-		switch n.Kind() {
-		case "pointer_declarator", "array_declarator", "reference_declarator":
-			n = n.ChildByFieldName("declarator")
-		case "parenthesized_declarator":
-			n = firstNamedChild(n)
-		default:
-			return nil
-		}
+		n = unwrapDeclarator(n)
 	}
 	return nil
 }
 
-// cDeclaratorName walks n through the same wrapping shapes as
-// findFunctionDeclarator, but resolves to a plain identifier/type name
-// (used for typedef declarators, which never wrap a function_declarator).
+// cDeclaratorName walks n through init declarators and the wrapping shapes
+// that unwrapDeclarator unwraps, to the plain identifier or type name of a
+// typedef declarator. It gives no name under a function declarator.
 func cDeclaratorName(n *tree_sitter.Node, src []byte) (string, bool) {
 	for n != nil {
 		switch n.Kind() {
 		case "identifier", "field_identifier", "type_identifier":
 			return n.Utf8Text(src), true
-		case "pointer_declarator", "array_declarator", "reference_declarator":
-			n = n.ChildByFieldName("declarator")
-		case "parenthesized_declarator":
-			n = firstNamedChild(n)
 		case "init_declarator":
 			n = n.ChildByFieldName("declarator")
 		default:
-			return "", false
+			if n = unwrapDeclarator(n); n == nil {
+				return "", false
+			}
 		}
 	}
 	return "", false
-}
-
-func firstNamedChild(n *tree_sitter.Node) *tree_sitter.Node {
-	if n.NamedChildCount() == 0 {
-		return nil
-	}
-	return n.NamedChild(0)
 }
 
 // --- calls ---
