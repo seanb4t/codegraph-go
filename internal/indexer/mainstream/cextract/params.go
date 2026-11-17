@@ -163,13 +163,25 @@ func declaratorName(d *tree_sitter.Node) *tree_sitter.Node {
 		switch d.Kind() {
 		case "identifier", "field_identifier":
 			return d
-		case "pointer_declarator", "array_declarator", "function_declarator":
+		case "function_declarator":
 			d = d.ChildByFieldName("declarator")
-		case "parenthesized_declarator", "reference_declarator":
-			d = lastNamedDeclarator(d)
 		default:
-			return nil
+			d = unwrapDeclarator(d)
 		}
+	}
+	return nil
+}
+
+// unwrapDeclarator returns the declarator that a pointer, array, reference
+// or parenthesized declarator d wraps, or nil when d is none of those. A
+// reference declarator has no declarator field, so it yields its last named
+// child.
+func unwrapDeclarator(d *tree_sitter.Node) *tree_sitter.Node {
+	switch d.Kind() {
+	case "pointer_declarator", "array_declarator":
+		return d.ChildByFieldName("declarator")
+	case "parenthesized_declarator", "reference_declarator":
+		return lastNamedDeclarator(d)
 	}
 	return nil
 }

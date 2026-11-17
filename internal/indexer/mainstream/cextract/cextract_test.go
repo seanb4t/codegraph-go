@@ -182,6 +182,35 @@ func TestExtract_NodeKinds(t *testing.T) {
 	}
 }
 
+// TestExtract_ReferenceReturningFunctions proves a C++ free function that
+// returns an lvalue or rvalue reference gets a function node, from its
+// declaration and from its definition, as a plain function does.
+func TestExtract_ReferenceReturningFunctions(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"plain declaration", "int plain(int i);\n", "plain"},
+		{"lvalue reference declaration", "int &lref(int i);\n", "lref"},
+		{"lvalue reference definition", "int &lrefdef(int i) { static int x; return x; }\n", "lrefdef"},
+		{"rvalue reference declaration", "int &&rref(int i);\n", "rref"},
+		{"rvalue reference definition", "int &&rrefdef(int i) { static int x; return static_cast<int &&>(x); }\n", "rrefdef"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Extract(newCppTestParser(t), "mymodule", "f.cpp", []byte(tt.src))
+			if err != nil {
+				t.Fatalf("Extract returned error: %v", err)
+			}
+			if findNode(result, goextract.KindFunction, tt.want) == nil {
+				t.Errorf("no function node named %q in %+v", tt.want, result.Nodes)
+			}
+		})
+	}
+}
+
 // TestExtract_OutOfLineMethodContainsEdge proves a C++ out-of-line method
 // definition (`RetType Type::method() {}`) produces a same-file
 // type->method contains IntraEdge when the qualifying type is declared in
