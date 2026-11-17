@@ -5,8 +5,12 @@ package flock
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 func TestModesExclude(t *testing.T) {
@@ -59,5 +63,52 @@ func TestOpenExistingAndCreate(t *testing.T) {
 	}
 	if _, err := OpenExisting(path, Exclusive); !IsHeld(err) {
 		t.Fatalf("OpenExisting on a held lock: %v, want held", err)
+	}
+}
+
+func TestOpenRefusesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "outside")
+	if err := os.WriteFile(outside, []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "lock")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, open := range map[string]func(string, Mode) (*os.File, error){"Open": Open, "OpenExisting": OpenExisting} {
+		f, err := open(link, Exclusive)
+		if err == nil {
+			f.Close()
+		}
+		if !errors.Is(err, nofollow.ErrSymlink) {
+			t.Fatalf("%s = %v, want nofollow.ErrSymlink", name, err)
+		}
+	}
+	for name, target := range map[string]string{"to a file": outside, "dangling": filepath.Join(dir, "missing")} {
+		link := filepath.Join(dir, "create-"+strings.ReplaceAll(name, " ", "-"))
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		f, err := Create(link, Exclusive)
+		if err == nil {
+			f.Close()
+		}
+		if !errors.Is(err, nofollow.ErrSymlink) {
+			t.Fatalf("Create %s = %v, want nofollow.ErrSymlink", name, err)
+		}
+	}
+	if got, err := os.ReadFile(outside); err != nil || string(got) != "keep me\n" {
+		t.Fatalf("outside file = %q, %v, want it unchanged", got, err)
+	}
+}
+
+func TestCreateKeepsExistError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(path, Exclusive); !errors.Is(err, fs.ErrExist) || errors.Is(err, nofollow.ErrSymlink) {
+		t.Fatalf("Create = %v, want fs.ErrExist", err)
 	}
 }

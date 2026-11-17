@@ -14,6 +14,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
@@ -528,7 +529,7 @@ func (d *Daemon) flush(_ map[string]struct{}) error {
 }
 
 func (d *Daemon) touchPending() error {
-	return os.WriteFile(filepath.Join(d.codegraphDir, staleSidecarName), nil, 0o644)
+	return nofollow.WriteFile(filepath.Join(d.codegraphDir, staleSidecarName), nil, 0o644)
 }
 
 func (d *Daemon) clearPending() error {

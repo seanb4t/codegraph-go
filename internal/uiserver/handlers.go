@@ -8,6 +8,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
@@ -99,6 +100,9 @@ func mapContextError(err error) error {
 //   - query.ErrIndexOutsideRoot -> connect.CodeFailedPrecondition with
 //     the fixed, path-free indexOutsideRootMessage; the full error goes to
 //     the diagnostic stream
+//   - nofollow.ErrSymlink -> connect.CodeFailedPrecondition with the
+//     fixed, path-free symlinkInIndexMessage; the full error goes to the
+//     diagnostic stream
 //   - anything else -> connect.CodeInternal, with a FIXED generic
 //     message; the real error goes to the server-side diagnostic stream
 //     instead of onto the wire (WR-01)
@@ -123,6 +127,9 @@ func mapEngineError(err error) error {
 	case errors.Is(err, query.ErrIndexOutsideRoot):
 		writeDiagLine("%v", err)
 		return connect.NewError(connect.CodeFailedPrecondition, indexOutsideRootError{})
+	case errors.Is(err, nofollow.ErrSymlink):
+		writeDiagLine("%v", err)
+		return connect.NewError(connect.CodeFailedPrecondition, symlinkInIndexError{})
 	default:
 		// WR-01: everything reaching this arm is by definition an error
 		// this package could NOT classify, so nothing is known about

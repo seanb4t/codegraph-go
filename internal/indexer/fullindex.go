@@ -20,6 +20,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer/routes"
 	"github.com/seanb4t/codegraph-go/internal/indexer/spill"
 	"github.com/seanb4t/codegraph-go/internal/indexer/symbols"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 	"github.com/seanb4t/codegraph-go/internal/scratchdir"
 )
@@ -116,6 +117,11 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 	// must exist before it. The lock files sit in the parent of the
 	// resolved store.
 	storeDir = filepath.Clean(storeDir)
+	// ReplaceStore checks the live store again under its lock. This check
+	// refuses the store before the build and before any lock file exists.
+	if err := graphstore.CheckLiveStore(storeDir); err != nil {
+		return stats, err
+	}
 	parent := filepath.Dir(storeDir)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return stats, err
@@ -135,7 +141,7 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 	switch meta, metaErr := readStoreMeta(storeDir); {
 	case metaErr == nil:
 		priorGeneration = meta.GetCoverageGeneration()
-	case errors.Is(metaErr, graphstore.ErrStoreLocked):
+	case errors.Is(metaErr, graphstore.ErrStoreLocked), errors.Is(metaErr, nofollow.ErrSymlink), errors.Is(metaErr, graphstore.ErrNotStore):
 		return stats, metaErr
 	case errors.Is(metaErr, graphstore.ErrNotFound):
 	default:

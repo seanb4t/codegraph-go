@@ -104,6 +104,10 @@ func LockWriter(dir string) (io.Closer, error) {
 // releases both locks on every return path: Pebble keeps its directory
 // locks in a registry of the process, and a lock that leaks there blocks
 // every later open of the store until the process ends.
+//
+// Before it locks live, ReplaceStore runs CheckLiveStore on it and returns
+// its error. So a live directory that holds a symbolic link, or files but
+// no store, is not replaced.
 func ReplaceStore(staging, live string) (err error) {
 	// replaced turns true once staging is in the place of live. An error
 	// after that moment, also one of the deferred releases below, tells
@@ -126,6 +130,9 @@ func ReplaceStore(staging, live string) (err error) {
 		}
 		err = fsatomic.RenameDir(staging, live)
 		replaced = err == nil || errors.Is(err, fsatomic.ErrNotDurable)
+		return err
+	}
+	if err := CheckLiveStore(live); err != nil {
 		return err
 	}
 	lock, err := retryLocked(func() (*pebble.Lock, error) { return pebble.LockDirectory(live, vfs.Default) }, classifyOpenError)
