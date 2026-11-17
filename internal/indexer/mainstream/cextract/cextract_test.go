@@ -2,6 +2,7 @@ package cextract
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -412,4 +413,164 @@ func TestExtract_OversizedFileSkippedNotFatal(t *testing.T) {
 	if len(result.Nodes) != 0 {
 		t.Errorf("expected no nodes for a skipped file, got %+v", result.Nodes)
 	}
+}
+
+// TestExtract_ExternC proves every declaration inside an `extern "C"` block,
+// and the single-declaration form, is extracted the same as one outside it.
+func TestExtract_ExternC(t *testing.T) {
+	const block = "#ifdef __cplusplus\nextern \"C\" {\n#endif\n" +
+		"#include \"inner.h\"\n" +
+		"struct Point { int x; };\n" +
+		"typedef struct Point PointAlias;\n" +
+		"int add(int a, int b);\n" +
+		"int twice(int a) { return add(a, a); }\n" +
+		"#ifdef __cplusplus\n}\n#endif\n"
+	tests := []struct {
+		name    string
+		cpp     bool
+		relPath string
+		src     string
+		kinds   map[string]string
+		include string
+		call    string
+	}{
+		{
+			name:    "C header with the cplusplus wrapper",
+			relPath: "api.h",
+			src:     block,
+			kinds: map[string]string{
+				"add":        goextract.KindFunction,
+				"twice":      goextract.KindFunction,
+				"Point":      goextract.KindStruct,
+				"PointAlias": goextract.KindTypeAlias,
+			},
+			include: "inner.h",
+			call:    "add",
+		},
+		{
+			name:    "C++ header with the cplusplus wrapper",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     block,
+			kinds: map[string]string{
+				"add":        goextract.KindFunction,
+				"twice":      goextract.KindFunction,
+				"Point":      goextract.KindStruct,
+				"PointAlias": goextract.KindTypeAlias,
+			},
+			include: "inner.h",
+			call:    "add",
+		},
+		{
+			name:    "block form",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "extern \"C\" {\nint add(int a, int b);\n}\n",
+			kinds:   map[string]string{"add": goextract.KindFunction},
+		},
+		{
+			name:    "single declaration form",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "extern \"C\" int mul(int a, int b);\n",
+			kinds:   map[string]string{"mul": goextract.KindFunction},
+		},
+		{
+			name:    "single definition form",
+			cpp:     true,
+			relPath: "api.cpp",
+			src:     "extern \"C\" int mul(int a, int b) { return a * b; }\n",
+			kinds:   map[string]string{"mul": goextract.KindFunction},
+		},
+		{
+			name:    "inside a namespace",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "namespace ns {\nextern \"C\" {\nint add(int a, int b);\n}\n}\n",
+			kinds:   map[string]string{"add": goextract.KindFunction},
+		},
+		{
+			name:    "nested blocks",
+			cpp:     true,
+			relPath: "api.hpp",
+			src:     "extern \"C\" {\nextern \"C++\" {\nint add(int a, int b);\n}\n}\n",
+			kinds:   map[string]string{"add": goextract.KindFunction},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newCTestParser(t)
+			if tt.cpp {
+				p = newCppTestParser(t)
+			}
+			result, err := Extract(p, "mymodule", tt.relPath, []byte(tt.src))
+			if err != nil || result.Err != nil {
+				t.Fatalf("Extract: %v / %v", err, result.Err)
+			}
+			for name, kind := range tt.kinds {
+				if got := countNodes(result, kind, name); got != 1 {
+					t.Errorf("got %d %s nodes named %q, want 1, in %+v", got, kind, name, result.Nodes)
+				}
+			}
+			if tt.include != "" {
+				var quoted bool
+				for _, u := range result.Unresolved {
+					if u.Kind == goextract.RefKindImports && u.Name == tt.include {
+						quoted = u.Quoted
+					}
+				}
+				if !quoted {
+					t.Errorf("want a quoted imports ref to %s, got %+v", tt.include, result.Unresolved)
+				}
+			}
+			if tt.call != "" && !hasUnresolved(result, goextract.RefKindCalls, tt.call, "") {
+				t.Errorf("want a calls ref to %s, got %+v", tt.call, result.Unresolved)
+			}
+		})
+	}
+}
+
+// TestExtract_ExternCPrototypeDedupe proves a prototype inside the
+// `#ifdef __cplusplus` extern "C" wrapper dedupes against its definition,
+// while a prototype under any other conditional block stays an alternative.
+func TestExtract_ExternCPrototypeDedupe(t *testing.T) {
+	const wrapped = "#ifdef __cplusplus\nextern \"C\" {\n#endif\nint f(int a);\n#ifdef __cplusplus\n}\n#endif\n"
+	const definition = "int f(int x) { return x; }\n"
+	tests := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"ifdef wrapper", wrapped + definition, 1},
+		{"if defined wrapper", "#if defined(__cplusplus)\nextern \"C\" {\n#endif\nint f(int a);\n#if defined(__cplusplus)\n}\n#endif\n" + definition, 1},
+		{"wrapper inside an include guard", "#ifndef API_H\n#define API_H\n" + wrapped + definition + "#endif\n", 1},
+		{"extern C under another condition", "#ifdef FOO\nextern \"C\" {\nint f(int a);\n}\n#endif\n" + definition, 2},
+	}
+	for _, tt := range tests {
+		for _, cpp := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/cpp=%v", tt.name, cpp), func(t *testing.T) {
+				p, relPath := newCTestParser(t), "api.c"
+				if cpp {
+					p, relPath = newCppTestParser(t), "api.cpp"
+				}
+				result, err := Extract(p, "mymodule", relPath, []byte(tt.src))
+				if err != nil || result.Err != nil {
+					t.Fatalf("Extract: %v / %v", err, result.Err)
+				}
+				if got := countNodes(result, goextract.KindFunction, "f"); got != tt.want {
+					t.Errorf("got %d function nodes named f, want %d, in %+v", got, tt.want, result.Nodes)
+				}
+			})
+		}
+	}
+}
+
+func countNodes(result goextract.FileResult, kind, name string) int {
+	n := 0
+	for i := range result.Nodes {
+		if result.Nodes[i].Node.Kind == kind && result.Nodes[i].Node.Name == name {
+			n++
+		}
+	}
+	return n
 }
