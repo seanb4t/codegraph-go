@@ -96,6 +96,9 @@ func mapContextError(err error) error {
 //     IndexingInProgress detail (SRV-04's degrade path, D-14/D-15) —
 //     errIndexingInProgress() builds the one shape every non-GetStatus
 //     handler's degraded response uses
+//   - query.ErrIndexOutsideRoot -> connect.CodeFailedPrecondition with
+//     the fixed, path-free indexOutsideRootMessage; the full error goes to
+//     the diagnostic stream
 //   - anything else -> connect.CodeInternal, with a FIXED generic
 //     message; the real error goes to the server-side diagnostic stream
 //     instead of onto the wire (WR-01)
@@ -117,6 +120,9 @@ func mapEngineError(err error) error {
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, graphstore.ErrStoreLocked):
 		return errIndexingInProgress()
+	case errors.Is(err, query.ErrIndexOutsideRoot):
+		writeDiagLine("%v", err)
+		return connect.NewError(connect.CodeFailedPrecondition, indexOutsideRootError{})
 	default:
 		// WR-01: everything reaching this arm is by definition an error
 		// this package could NOT classify, so nothing is known about

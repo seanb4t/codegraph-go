@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -63,40 +64,22 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 
 	// query.OpenAt walks up from the path and opens the first .codegraph
 	// it meets, so the directory that is opened is not the path that was
-	// checked. A .codegraph at or below the repo root that is a symlink
-	// to another project's index would be opened from a path that is
-	// itself inside the root. The repo root's own .codegraph is checked
-	// too.
+	// checked. Every .codegraph from the path up to and including the repo
+	// root must pass query.IndexDirs, as the resolver requires.
 	for dir, done := pathAbs, false; !done && realpath.Within(repoAbs, dir); dir = filepath.Dir(dir) {
 		done = dir == repoAbs
-		// The resolver accepts a .codegraph that is a directory after
-		// symlinks, whether or not it holds a store yet, and the open
-		// then creates the store. Check the directory first, and then
-		// the store, which can be a symlink of its own.
-		index := filepath.Join(dir, indexDirName)
-		indexReal, err := filepath.EvalSymlinks(index)
-		if errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Lstat(filepath.Join(dir, query.IndexDirName)); errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if err != nil {
+		if _, err := query.IndexDirs(dir); err != nil {
+			if errors.Is(err, query.ErrIndexOutsideRoot) {
+				return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: %w", path, err)
+			}
 			return "", err
-		}
-		storeReal, err := resolveExistingPrefix(filepath.Join(index, indexStoreSubdir))
-		if err != nil {
-			return "", err
-		}
-		if !realpath.Within(repoReal, indexReal) || !realpath.Within(repoReal, storeReal) {
-			return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: the index at %q leads outside it", path, index)
 		}
 	}
 	return pathAbs, nil
 }
-
-// The index directory and its store, as internal/query lays them out.
-const (
-	indexDirName     = ".codegraph"
-	indexStoreSubdir = "store"
-)
 
 // resolveExistingPrefix resolves the symlinks of the longest part of abs
 // that exists and joins the rest back on. A path that does not exist yet

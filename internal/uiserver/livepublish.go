@@ -95,10 +95,12 @@ type liveSignature struct {
 // classifyOpenError's own discipline) — a re-index in flight is exactly
 // when the store is locked, and escalating that into an event would
 // defeat the point of live push at the one moment it matters most.
+// query.ErrIndexOutsideRoot is the other exception: publishing "not
+// initialized" would hide the refusal, which GetStatus reports.
 func computeChange(ctx context.Context, repoPath string, prev liveSignature, prevValid bool) (liveSignature, *uiv1.WatchGraphEvent, bool) {
 	eng, closer, err := openEngine(repoPath)
 	if err != nil {
-		if errors.Is(err, graphstore.ErrStoreLocked) {
+		if errors.Is(err, graphstore.ErrStoreLocked) || errors.Is(err, query.ErrIndexOutsideRoot) {
 			// T-06-12: soft outcome, never a crash, never a publish. The
 			// caller (changeDetector.check) treats changed=false as
 			// "leave my retained state exactly as it was" — returning
@@ -444,16 +446,11 @@ func (r *liveRegistry) Current() *uiv1.WatchGraphEvent {
 
 // --- Task 3: the store watcher ------------------------------------------
 
-// liveCodegraphDirName and liveStoreSubdir are local re-declarations of
-// internal/query's unexported codegraphDirName/storeSubdir constants
-// (".codegraph" / "store") — internal/query does not export them, and
-// internal/uiserver has no reason to reach into that package's internals
-// for two literal path-segment names it can just as well declare itself,
-// matching the values internal/query/resolve.go:23 and
-// internal/query/engine.go:20 already fix.
+// liveCodegraphDirName and liveStoreSubdir are the index layout
+// internal/query defines.
 const (
-	liveCodegraphDirName = ".codegraph"
-	liveStoreSubdir      = "store"
+	liveCodegraphDirName = query.IndexDirName
+	liveStoreSubdir      = query.StoreDirName
 )
 
 // livePublisherPathChain computes the three-element watch chain, shallow

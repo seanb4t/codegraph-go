@@ -34,11 +34,12 @@ func newIndexCmd() *cobra.Command {
 				return err
 			}
 
-			codegraphDir, storeDir, err := indexDirs(root)
+			codegraphDir, paths, err := indexDirs(root)
 			if err != nil {
 				return err
 			}
-			if _, err := os.Stat(codegraphDir); os.IsNotExist(err) {
+			storeDir := paths.Store
+			if _, err := os.Stat(paths.Dir); os.IsNotExist(err) {
 				return fmt.Errorf("%w: %s does not exist — run `codegraph init` first", ErrNotInitialized, codegraphDir)
 			} else if err != nil {
 				return err

@@ -98,8 +98,8 @@ codegraph impact internal/store/pebble.go
 kept fresh automatically — by an in-process watcher, or by git hooks
 (`codegraph githooks install`) where a watcher isn't viable.
 `.codegraph/` and its `store` can be symlinks, but only to a place inside
-the repository. If a link leads outside it, every command stops with an
-error that names the link.
+the directory that holds `.codegraph/`. If one leads outside it, commands
+that read or build the index stop with an error that names the link.
 
 ## Use it from an agent
 

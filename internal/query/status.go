@@ -145,7 +145,7 @@ func (e *Engine) computeStale(meta *schema.Meta) (bool, error) {
 		return false, nil
 	}
 
-	sidecar := filepath.Join(e.repoRoot, codegraphDirName, staleSidecarName)
+	sidecar := filepath.Join(e.repoRoot, IndexDirName, staleSidecarName)
 	if _, err := os.Stat(sidecar); err == nil {
 		return true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -338,7 +338,7 @@ func (e *Engine) Status(ctx context.Context) (StatusResult, error) {
 	// than failing the whole status call (T-02-07).
 	var dbSize int64
 	if e.repoRoot != "" {
-		if size, err := dbSizeBytes(filepath.Join(e.repoRoot, codegraphDirName, storeSubdir)); err == nil {
+		if size, err := dbSizeBytes(filepath.Join(e.repoRoot, IndexDirName, StoreDirName)); err == nil {
 			dbSize = size
 		}
 	}

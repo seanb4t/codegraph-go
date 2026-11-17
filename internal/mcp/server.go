@@ -817,6 +817,9 @@ func BuildServer(hasIndex bool, companions map[string]bool, repoPath, startPath 
 	// (TestRepeatedListsDoNotDuplicateTools' flip-guard).
 	var catalogMu sync.Mutex
 	hasCatalog := hasIndex
+	// reportedOutside is set once the session log has named an index
+	// that leads outside its directory. catalogMu guards it.
+	reportedOutside := false
 
 	if hasIndex {
 		toolCount.Store(int64(registerTools(s, companions, repoPath, startPath, detector)))
@@ -882,6 +885,13 @@ func BuildServer(hasIndex bool, companions map[string]bool, repoPath, startPath 
 				unregisterTools(s)
 				toolCount.Store(0)
 				hasCatalog = false
+			}
+		case errors.Is(err, query.ErrIndexOutsideRoot):
+			// Permanent until the link changes. The catalog stays as it
+			// is, so each tool call returns the refusal.
+			if !reportedOutside && cfg.sessionLog != nil {
+				fmt.Fprintf(cfg.sessionLog, "codegraph: %v\n", err)
+				reportedOutside = true
 			}
 		default:
 			// A transient stat failure is "state unknown, leave the

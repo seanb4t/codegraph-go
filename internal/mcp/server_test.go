@@ -344,14 +344,14 @@ func TestOpenEnginePathSymlinkCannotLeaveRepoRoot(t *testing.T) {
 	}
 }
 
-// TestOpenEngineIndexSymlinkCannotLeaveRepoRoot holds the second half of
+// TestOpenEngineSubdirIndexSymlinkMustStayInItsDirectory holds the second half of
 // the path confinement in issue #297: the path can be a real directory
 // inside the repo root while the .codegraph in it is a symlink to another
 // project's index, and that index is what the call would open. A
 // .codegraph symlink to the repo root's own index leads outside the
-// directory that holds it and is refused too (#372). The control is a
+// directory that holds it and is refused too. The control is a
 // .codegraph symlink that leads to an index inside its own directory.
-func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
+func TestOpenEngineSubdirIndexSymlinkMustStayInItsDirectory(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
@@ -377,10 +377,10 @@ func TestOpenEngineIndexSymlinkCannotLeaveRepoRoot(t *testing.T) {
 		t.Fatalf("mkdir own: %v", err)
 	}
 	indexFixture(t, own)
-	if err := os.Rename(filepath.Join(own, ".codegraph"), filepath.Join(own, "cg-real")); err != nil {
+	if err := os.Rename(filepath.Join(own, ".codegraph"), filepath.Join(own, ".cg-real")); err != nil {
 		t.Fatalf("move the index of own: %v", err)
 	}
-	if err := os.Symlink("cg-real", filepath.Join(own, ".codegraph")); err != nil {
+	if err := os.Symlink(".cg-real", filepath.Join(own, ".codegraph")); err != nil {
 		t.Fatalf("symlink the index of own: %v", err)
 	}
 
@@ -642,19 +642,33 @@ func TestSessionLineReflectsPostAppearanceToolCount(t *testing.T) {
 	}
 }
 
-// TestOpenEngineRootIndexLinkedOutsideIsRejected covers issue #372: the
-// repo root's own .codegraph, or its store, is a symlink that leads
-// outside the root.
+// TestOpenEngineRootIndexLinkedOutsideIsRejected: the repo root's own
+// .codegraph, or its store, is a symlink that leads outside the root. The
+// path check refuses it before the index is opened, also when the link's
+// target does not exist.
 func TestOpenEngineRootIndexLinkedOutsideIsRejected(t *testing.T) {
-	for _, name := range []string{".codegraph", filepath.Join(".codegraph", "store")} {
-		t.Run(name, func(t *testing.T) {
+	cases := []struct {
+		name, link string
+		dangling   bool
+	}{
+		{"index", ".codegraph", false},
+		{"store", filepath.Join(".codegraph", "store"), false},
+		{"dangling index", ".codegraph", true},
+		{"dangling store", filepath.Join(".codegraph", "store"), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			dir := copyFixture(t)
-			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, tc.link)), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			outside := t.TempDir()
-			if err := os.Symlink(outside, filepath.Join(dir, name)); err != nil {
-				t.Fatalf("symlink %s: %v", name, err)
+			target := outside
+			if tc.dangling {
+				target = filepath.Join(outside, "missing")
+			}
+			if err := os.Symlink(target, filepath.Join(dir, tc.link)); err != nil {
+				t.Fatalf("symlink %s: %v", tc.link, err)
 			}
 
 			s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
@@ -672,5 +686,31 @@ func TestOpenEngineRootIndexLinkedOutsideIsRejected(t *testing.T) {
 				t.Fatalf("outside directory holds %d entries (err %v), want none", len(entries), err)
 			}
 		})
+	}
+}
+
+// TestRecheckCatalogLogsIndexOutsideRootOnce: an index that comes to lead
+// outside the repo root mid-session is reported once on the session log,
+// and the tools stay registered so each call returns the refusal.
+func TestRecheckCatalogLogsIndexOutsideRootOnce(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+	var log strings.Builder
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir, WithSessionLog(&log))
+
+	if err := os.RemoveAll(filepath.Join(dir, ".codegraph")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(dir, ".codegraph")); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if result := callTool(t, s, "codegraph_status", map[string]any{}); !result.IsError {
+			t.Fatal("codegraph_status: expected an error result, got success")
+		}
+	}
+	if got := strings.Count(log.String(), "leads to"); got != 1 {
+		t.Fatalf("session log names the refusal %d times, want 1:\n%s", got, log.String())
 	}
 }

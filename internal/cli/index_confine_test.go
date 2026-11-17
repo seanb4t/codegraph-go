@@ -74,14 +74,42 @@ func TestIndexCommandsAcceptIndexLinkedInside(t *testing.T) {
 	if _, _, err := execCmd("init", dir); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	if err := os.Rename(filepath.Join(dir, codegraphDirName), filepath.Join(dir, "cg-real")); err != nil {
+	if err := os.Rename(filepath.Join(dir, codegraphDirName), filepath.Join(dir, ".cg-real")); err != nil {
 		t.Fatal(err)
 	}
-	symlinkT(t, "cg-real", filepath.Join(dir, codegraphDirName))
+	symlinkT(t, ".cg-real", filepath.Join(dir, codegraphDirName))
 
 	for _, args := range [][]string{{"sync", dir}, {"index", "--force", dir}, {"status", "-p", dir}} {
 		if _, _, err := execCmd(args...); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
+	}
+}
+
+func TestInitKeepsAlreadyExistsForIndexThatIsARegularFile(t *testing.T) {
+	dir := copyFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, codegraphDirName), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := execCmd("init", dir)
+	if !errors.Is(err, ErrAlreadyInitialized) {
+		t.Fatalf("init = %v, want ErrAlreadyInitialized", err)
+	}
+}
+
+func TestDaemonUnlockRefusesIndexLinkedOutside(t *testing.T) {
+	dir := copyFixture(t)
+	outside := t.TempDir()
+	lock := filepath.Join(outside, "daemon.lock")
+	if err := os.WriteFile(lock, []byte("1 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	symlinkT(t, outside, filepath.Join(dir, codegraphDirName))
+
+	_, _, err := execCmd("daemon", "unlock", dir)
+	wantIndexOutsideRoot(t, err)
+	if _, statErr := os.Stat(lock); statErr != nil {
+		t.Fatalf("the lock outside the repository is gone: %v", statErr)
 	}
 }

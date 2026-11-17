@@ -14,7 +14,7 @@ import (
 func TestOpenAtDuringSync(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
-	storeDir := filepath.Join(dir, codegraphDirName, storeSubdir)
+	storeDir := filepath.Join(dir, IndexDirName, StoreDirName)
 
 	held, err := graphstore.Open(storeDir)
 	if err != nil {
