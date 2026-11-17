@@ -712,13 +712,3 @@ func TestExtract_ExternCPrototypeDedupe(t *testing.T) {
 		}
 	}
 }
-
-func countNodes(result goextract.FileResult, kind, name string) int {
-	n := 0
-	for i := range result.Nodes {
-		if result.Nodes[i].Node.Kind == kind && result.Nodes[i].Node.Name == name {
-			n++
-		}
-	}
-	return n
-}
