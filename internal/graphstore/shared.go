@@ -96,17 +96,31 @@ func alreadyClassified(err error) error { return err }
 // lock that the open can meet: the swap lock, the Pebble lock of another
 // holder, and a handle of this process in the closing state.
 func openShared(dir string) (*dbHandle, error) {
-	key, err := sharedKey(dir)
+	resolved, err := resolveStorePath(dir)
+	if err != nil {
+		return nil, fmt.Errorf("graphstore: resolve %s to open the store: %w", dir, err)
+	}
+	key, err := sharedKey(resolved)
 	if err != nil {
 		return nil, err
 	}
-	return retryLocked(func() (*dbHandle, error) { return acquireShared(key, dir) }, alreadyClassified)
+	return retryLocked(func() (*dbHandle, error) { return acquireShared(key, resolved) }, alreadyClassified)
 }
 
-// sharedKey returns the key of the store at dir in the table: the device
-// and inode of its parent directory, after every symlink is resolved, and
-// the base name of the store. It creates the parent if it is missing, as
-// the swap lock does.
+// resolveStorePath returns the absolute path of the store at dir, with
+// every symlink resolved, also when the store does not exist yet.
+func resolveStorePath(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return realpath.Resolve(abs)
+}
+
+// sharedKey returns the key in the table of the store at resolved, a path
+// that resolveStorePath returned: the device and inode of its parent
+// directory and the base name of the store. It creates the parent if it is
+// missing, as the swap lock does.
 //
 // A path alone is not enough. Pebble refuses a second open in one process
 // only for the same path text, and its file lock is a POSIX record lock,
@@ -117,15 +131,7 @@ func openShared(dir string) (*dbHandle, error) {
 // The key uses the parent and not the store directory, because a store
 // that does not exist yet has no inode. Its key must not change when the
 // first open creates it. The base name keeps its letter case.
-func sharedKey(dir string) (string, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	resolved, err := realpath.Resolve(abs)
-	if err != nil {
-		return "", err
-	}
+func sharedKey(resolved string) (string, error) {
 	parent := filepath.Dir(resolved)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return "", err
@@ -141,8 +147,9 @@ func sharedKey(dir string) (string, error) {
 	return fmt.Sprintf("%d:%d/%s", st.Dev, st.Ino, filepath.Base(resolved)), nil
 }
 
-// acquireShared is one attempt of openShared.
-func acquireShared(key, dir string) (*dbHandle, error) {
+// acquireShared is one attempt of openShared. resolved is the store path
+// that openShared resolved.
+func acquireShared(key, resolved string) (*dbHandle, error) {
 	sharedHandles.mu.Lock()
 	h := sharedHandles.entries[key]
 	if h == nil {
@@ -155,7 +162,7 @@ func acquireShared(key, dir string) (*dbHandle, error) {
 
 		// The table lock does not cover the open, so an open of another
 		// store does not wait for this one.
-		err := h.open(dir)
+		err := h.open(resolved)
 
 		sharedHandles.mu.Lock()
 		if err != nil {
@@ -197,26 +204,27 @@ func acquireShared(key, dir string) (*dbHandle, error) {
 	return h, nil
 }
 
-// open takes the shared swap lock of the store at dir and opens Pebble, one
-// time each. It classifies a held lock as ErrStoreLocked. It refuses a
-// store that holds a symbolic link with a *nofollow.SymlinkError.
+// open takes the shared swap lock of the store at resolved, a path that
+// resolveStorePath returned, and opens Pebble at that path, one time each.
+// It classifies a held lock as ErrStoreLocked. It refuses a store that
+// holds a symbolic link with a *nofollow.SymlinkError.
 //
 // The swap lock comes first, before pebble.Open and before any directory
 // of the store exists: ReplaceStore looks for the store under the
 // exclusive swap lock, and that look is only right if no open can create
 // the store meanwhile.
-func (h *dbHandle) open(dir string) error {
-	swap, err := lockBesideOnce(dir, swapLockSuffix, flock.Shared)
+func (h *dbHandle) open(resolved string) error {
+	swap, err := lockResolvedOnce(resolved, swapLockSuffix, flock.Shared)
 	if err != nil {
 		return err
 	}
 	if sharedOpenHook != nil && h.key != "" {
 		sharedOpenHook()
 	}
-	if err := nofollow.CheckDir(dir); err != nil {
+	if err := nofollow.CheckDir(resolved); err != nil {
 		return errors.Join(err, swap.Close())
 	}
-	db, err := pebble.Open(dir, &pebble.Options{Logger: quietLogger{}, DisableWAL: h.staging})
+	db, err := pebble.Open(resolved, &pebble.Options{Logger: quietLogger{}, DisableWAL: h.staging})
 	if err != nil {
 		return errors.Join(classifyOpenError(err), swap.Close())
 	}

@@ -1272,3 +1272,179 @@ func TestSyncMaxChanged(t *testing.T) {
 		t.Errorf("after the sync at the limit: Old present = %v, New present = %v; want false, true", hasNode(oldID), hasNode(newID))
 	}
 }
+
+// TestSyncFollowsExportChange proves that a Sync which changes only
+// whether a declaration is reachable from another file, by adding or
+// removing an export, leaves the edges a fresh index has.
+func TestSyncFollowsExportChange(t *testing.T) {
+	cases := []struct {
+		name     string
+		files    map[string]string
+		edit     string
+		edited   string
+		wantEdge bool
+	}{
+		{"typescript gains export", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export function helper(): number {\n  return 1;\n}\n", true},
+		{"tsx gains export", map[string]string{
+			"web/a.tsx": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.tsx": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.tsx", "export function helper(): number {\n  return 1;\n}\n", true},
+		{"typescript loses export", map[string]string{
+			"web/a.ts": "export function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "function helper(): number {\n  return 1;\n}\n", false},
+		{"javascript loses its last export", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n", true},
+		{"javascript gains its first export", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nexport function other() {\n  return 2;\n}\n", false},
+		{"typescript gains export through a clause", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "function helper(): number {\n  return 1;\n}\n\nexport { helper };\n", true},
+		{"javascript gains its first export through a clause", map[string]string{
+			"web/a.js": "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n",
+			"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return helper();\n}\n",
+		}, "web/a.js", "function helper() {\n  return 1;\n}\n\nfunction other() {\n  return 2;\n}\n\nexport { other };\n", false},
+		{"typescript gains default export", map[string]string{
+			"web/a.ts": "function helper(): number {\n  return 1;\n}\n",
+			"web/b.ts": "import helper from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export default function helper(): number {\n  return 1;\n}\n", true},
+		{"typescript class gains export", map[string]string{
+			"web/a.ts": "class Helper {}\n",
+			"web/b.ts": "import { Helper } from './a';\n\nexport function caller(): Helper {\n  return new Helper();\n}\n",
+		}, "web/a.ts", "export class Helper {}\n", true},
+		{"typescript arrow function gains export", map[string]string{
+			"web/a.ts": "const helper = (): number => 1;\n",
+			"web/b.ts": "import { helper } from './a';\n\nexport function caller(): number {\n  return helper();\n}\n",
+		}, "web/a.ts", "export const helper = (): number => 1;\n", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := writeFixture(t, tc.files)
+			storeDir := t.TempDir()
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (seed): %v", err)
+			}
+
+			writeFile(t, filepath.Join(repoRoot, tc.edit), tc.edited)
+			if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync (edit): %v", err)
+			}
+
+			freshDir := requireSyncEqualsRun(t, repoRoot, storeDir)
+			if got := crossFileEdgeCount(t, freshDir) > 0; got != tc.wantEdge {
+				t.Fatalf("a fresh index has a cross-file edge: %v, want %v", got, tc.wantEdge)
+			}
+		})
+	}
+}
+
+// TestSyncKeepsJavaScriptReachability proves that a Sync which edits a
+// JavaScript file without exports, and so leaves every declaration in it
+// reachable, does not reparse a file waiting on one of those names.
+func TestSyncKeepsJavaScriptReachability(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"web/a.js": "function helper() {\n  return 1;\n}\n",
+		"web/b.js": "import { helper } from './a.js';\n\nexport function caller() {\n  return new helper();\n}\n",
+	})
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	writeFile(t, filepath.Join(repoRoot, "web/a.js"), "function helper() {\n  return 2;\n}\n")
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (edit): %v", err)
+	}
+	if stats.FilesReparsed != 1 {
+		t.Errorf("Stats.FilesReparsed = %d, want 1: only the edited file", stats.FilesReparsed)
+	}
+	requireSyncEqualsRun(t, repoRoot, storeDir)
+}
+
+// TestSyncPrunesPackageNodeWithNoImporter proves that Sync deletes the
+// package node of an intra-module import when the last file that imports
+// the package is deleted or stops importing it, keeps it while another
+// file still imports it or the one importer keeps the import, keeps the
+// file node that a C include reaches, and leaves the store equal to a
+// fresh index.
+func TestSyncPrunesPackageNodeWithNoImporter(t *testing.T) {
+	const importer = "package b\n\nimport _ \"example.com/m/a\"\n"
+	pkgID := nodeid.NodeID(resolve.KindPackage, "example.com/m/a", "example.com/m/a")
+	headerID := nodeid.NodeID(goextract.KindFile, "add.h", "add.h")
+	removeFile := func(path string) func(t *testing.T, root string) {
+		return func(t *testing.T, root string) {
+			if err := os.Remove(filepath.Join(root, path)); err != nil {
+				t.Fatalf("remove: %v", err)
+			}
+		}
+	}
+	cases := []struct {
+		name   string
+		files  map[string]string
+		edit   func(t *testing.T, root string)
+		nodeID string
+		keep   bool
+	}{
+		{"delete the only importer", map[string]string{
+			"b/b.go": importer,
+		}, removeFile("b/b.go"), pkgID, false},
+		{"drop the only import", map[string]string{
+			"b/b.go": importer,
+		}, func(t *testing.T, root string) {
+			writeFile(t, filepath.Join(root, "b/b.go"), "package b\n")
+		}, pkgID, false},
+		{"delete one of two importers", map[string]string{
+			"b/b.go": importer,
+			"c/c.go": "package c\n\nimport _ \"example.com/m/a\"\n",
+		}, removeFile("b/b.go"), pkgID, true},
+		{"edit the only importer and keep the import", map[string]string{
+			"b/b.go": importer,
+		}, func(t *testing.T, root string) {
+			writeFile(t, filepath.Join(root, "b/b.go"), importer+"\nfunc F() {}\n")
+		}, pkgID, true},
+		{"delete the only includer of a header", map[string]string{
+			"main.c": "#include \"add.h\"\nint run(void) { return add(1, 2); }\n",
+			"add.h":  "int add(int a, int b);\n",
+		}, removeFile("main.c"), headerID, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{
+				"go.mod": "module example.com/m\n\ngo 1.26\n",
+				"a/a.go": "package a\n\nfunc A() {}\n",
+			}
+			maps.Copy(files, tc.files)
+			root := writeFixture(t, files)
+			storeDir := t.TempDir()
+			if _, err := Run(root, storeDir, Options{}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			tc.edit(t, root)
+			if _, err := Sync(root, storeDir, Options{}); err != nil {
+				t.Fatalf("Sync: %v", err)
+			}
+			requireSyncEqualsRun(t, root, storeDir)
+
+			r, closeAll := openSnapshot(t, storeDir)
+			defer closeAll()
+			_, err := r.GetNode(tc.nodeID)
+			switch {
+			case err == nil && !tc.keep:
+				t.Fatalf("node %s remains after Sync", tc.nodeID)
+			case errors.Is(err, graphstore.ErrNotFound) && tc.keep:
+				t.Fatalf("node %s is gone after Sync, but the case keeps it", tc.nodeID)
+			case err != nil && !errors.Is(err, graphstore.ErrNotFound):
+				t.Fatalf("GetNode: %v", err)
+			}
+		})
+	}
+}

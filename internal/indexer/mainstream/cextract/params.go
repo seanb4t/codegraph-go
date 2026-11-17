@@ -10,21 +10,29 @@ import (
 
 // collectParams lists the parameters of a C or C++ function definition
 // and its return type text. The parameter list hangs off the
-// function_declarator, which pointer declarators can wrap: `char *f()`.
-// A parameter's type is its text without its name, so `const char *b`
-// gives `const char *`. A lone `void` is no parameter.
+// function_declarator, which pointer, reference, array and parenthesized
+// declarators can wrap: `char *f()`, `int &f()`. The return type is the
+// type text plus a `*`, `&` or `&&` per wrapping pointer or reference
+// declarator, outermost first, so `int &f()` gives `int&`. A parameter's
+// type is its text without its name, so `const char *b` gives
+// `const char *`. A lone `void` is no parameter.
 func collectParams(decl *tree_sitter.Node, src []byte) ([]goextract.Param, string) {
-	stars := 0
+	suffix := ""
 	d := decl.ChildByFieldName("declarator")
 	for d != nil && d.Kind() != "function_declarator" {
-		if d.Kind() == "pointer_declarator" {
-			stars++
+		switch d.Kind() {
+		case "pointer_declarator":
+			suffix += "*"
+		case "reference_declarator":
+			if op := d.Child(0); op != nil {
+				suffix += op.Kind()
+			}
 		}
-		d = d.ChildByFieldName("declarator")
+		d = unwrapDeclarator(d)
 	}
 	ret := ""
 	if t := decl.ChildByFieldName("type"); t != nil {
-		ret = t.Utf8Text(src) + strings.Repeat("*", stars)
+		ret = t.Utf8Text(src) + suffix
 	}
 	if d == nil {
 		return nil, ret
@@ -155,27 +163,41 @@ func paramTokens(p *tree_sitter.Node, src []byte) string {
 
 // declaratorName returns the identifier that the declarator d names, or
 // nil for an abstract declarator. It follows the declarator field of a
-// pointer, array or function declarator, and the one named child of a
-// parenthesized or reference declarator. It never takes another child,
-// so the size N of `a[N]` is no name.
+// function declarator and unwraps the other declarators with
+// unwrapDeclarator. It never takes another child, so the size N of
+// `a[N]` is no name.
 func declaratorName(d *tree_sitter.Node) *tree_sitter.Node {
 	for d != nil {
 		switch d.Kind() {
 		case "identifier", "field_identifier":
 			return d
-		case "pointer_declarator", "array_declarator", "function_declarator":
+		case "function_declarator":
 			d = d.ChildByFieldName("declarator")
-		case "parenthesized_declarator", "reference_declarator":
-			d = lastNamedDeclarator(d)
 		default:
-			return nil
+			d = unwrapDeclarator(d)
 		}
 	}
 	return nil
 }
 
-// lastNamedDeclarator returns the named child of a parenthesized or
-// reference declarator that is not a comment or a qualifier.
+// unwrapDeclarator returns the declarator that a pointer, array, reference
+// or parenthesized declarator d wraps, or nil when d is none of those. For
+// a pointer or array declarator it is the declarator field. A reference or
+// parenthesized declarator has no declarator field, so it is the last named
+// child that lastNamedDeclarator keeps.
+func unwrapDeclarator(d *tree_sitter.Node) *tree_sitter.Node {
+	switch d.Kind() {
+	case "pointer_declarator", "array_declarator":
+		return d.ChildByFieldName("declarator")
+	case "parenthesized_declarator", "reference_declarator":
+		return lastNamedDeclarator(d)
+	}
+	return nil
+}
+
+// lastNamedDeclarator returns the last named child of a parenthesized or
+// reference declarator that is not a comment, a type qualifier, a call
+// modifier or an attribute.
 func lastNamedDeclarator(d *tree_sitter.Node) *tree_sitter.Node {
 	for i := int(d.NamedChildCount()) - 1; i >= 0; i-- {
 		switch c := d.NamedChild(uint(i)); c.Kind() {

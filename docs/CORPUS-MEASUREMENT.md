@@ -65,8 +65,8 @@ Do NOT hand-edit this file.
 - **License:** Apache-2.0
 - **Tracked files:** 2547
 - **Edges by kind:**
-  - calls: 10786
-  - contains: 14853
+  - calls: 10829
+  - contains: 14961
   - embeds: 155
   - extends: 131
   - implements: 1018
