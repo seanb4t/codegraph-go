@@ -1276,37 +1276,49 @@ func TestSyncMaxChanged(t *testing.T) {
 // TestSyncPrunesPackageNodeWithNoImporter proves that Sync deletes the
 // package node of an intra-module import when the last file that imports
 // the package is deleted or stops importing it, keeps it while another
-// file still imports it, and leaves the store equal to a fresh index.
+// file still imports it or the one importer keeps the import, keeps the
+// file node that a C include reaches, and leaves the store equal to a
+// fresh index.
 func TestSyncPrunesPackageNodeWithNoImporter(t *testing.T) {
 	const importer = "package b\n\nimport _ \"example.com/m/a\"\n"
+	pkgID := nodeid.NodeID(resolve.KindPackage, "example.com/m/a", "example.com/m/a")
+	headerID := nodeid.NodeID(goextract.KindFile, "add.h", "add.h")
+	removeFile := func(path string) func(t *testing.T, root string) {
+		return func(t *testing.T, root string) {
+			if err := os.Remove(filepath.Join(root, path)); err != nil {
+				t.Fatalf("remove: %v", err)
+			}
+		}
+	}
 	cases := []struct {
 		name   string
 		files  map[string]string
 		edit   func(t *testing.T, root string)
-		wantPk bool
+		nodeID string
+		keep   bool
 	}{
 		{"delete the only importer", map[string]string{
 			"b/b.go": importer,
-		}, func(t *testing.T, root string) {
-			if err := os.Remove(filepath.Join(root, "b/b.go")); err != nil {
-				t.Fatalf("remove: %v", err)
-			}
-		}, false},
+		}, removeFile("b/b.go"), pkgID, false},
 		{"drop the only import", map[string]string{
 			"b/b.go": importer,
 		}, func(t *testing.T, root string) {
 			writeFile(t, filepath.Join(root, "b/b.go"), "package b\n")
-		}, false},
+		}, pkgID, false},
 		{"delete one of two importers", map[string]string{
 			"b/b.go": importer,
 			"c/c.go": "package c\n\nimport _ \"example.com/m/a\"\n",
+		}, removeFile("b/b.go"), pkgID, true},
+		{"edit the only importer and keep the import", map[string]string{
+			"b/b.go": importer,
 		}, func(t *testing.T, root string) {
-			if err := os.Remove(filepath.Join(root, "b/b.go")); err != nil {
-				t.Fatalf("remove: %v", err)
-			}
-		}, true},
+			writeFile(t, filepath.Join(root, "b/b.go"), importer+"\nfunc F() {}\n")
+		}, pkgID, true},
+		{"delete the only includer of a header", map[string]string{
+			"main.c": "#include \"add.h\"\nint run(void) { return add(1, 2); }\n",
+			"add.h":  "int add(int a, int b);\n",
+		}, removeFile("main.c"), headerID, true},
 	}
-	pkgID := nodeid.NodeID(resolve.KindPackage, "example.com/m/a", "example.com/m/a")
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			files := map[string]string{
@@ -1327,12 +1339,12 @@ func TestSyncPrunesPackageNodeWithNoImporter(t *testing.T) {
 
 			r, closeAll := openSnapshot(t, storeDir)
 			defer closeAll()
-			_, err := r.GetNode(pkgID)
+			_, err := r.GetNode(tc.nodeID)
 			switch {
-			case err == nil && !tc.wantPk:
-				t.Fatalf("package node %s remains after Sync", pkgID)
-			case errors.Is(err, graphstore.ErrNotFound) && tc.wantPk:
-				t.Fatalf("package node %s is gone after Sync, but c/c.go still imports it", pkgID)
+			case err == nil && !tc.keep:
+				t.Fatalf("node %s remains after Sync", tc.nodeID)
+			case errors.Is(err, graphstore.ErrNotFound) && tc.keep:
+				t.Fatalf("node %s is gone after Sync, but the case keeps it", tc.nodeID)
 			case err != nil && !errors.Is(err, graphstore.ErrNotFound):
 				t.Fatalf("GetNode: %v", err)
 			}
