@@ -80,7 +80,7 @@ A watcher SHALL resolve `.codegraph` and its store again before it takes its loc
 - **WHEN** a watcher runs in `<repo>` with a real `<repo>/.codegraph` directory
 - **AND** `<repo>/.codegraph` is then replaced by a link to `<repo>/.cg-real`, and a source file in `<repo>` changes
 - **THEN** the watcher stops with an error that names the path at start and the new path
-- **AND** the error tells the user to restart the watcher, and nothing under `<repo>/.cg-real` changes
+- **AND** the error tells the user to restart the watcher, and no index or store file under `<repo>/.cg-real` changes
 
 #### Scenario: The store moves inside the repository
 
@@ -118,7 +118,7 @@ A watcher SHALL resolve `.codegraph` and its store again before it takes its loc
 
 ### Requirement: A stopping watcher removes only its own lock file
 
-When a watcher stops for any reason, it SHALL remove its lock file only if `.codegraph` still resolves to the directory it had at start and the lock file names the watcher's own process. Otherwise, the watcher SHALL leave the lock file in place.
+When a watcher stops for any reason, it SHALL check two things before it removes its lock file: `.codegraph` still resolves inside the repository, and the lock file names the watcher's own process. If either check fails, the watcher SHALL leave the lock file in place.
 
 #### Scenario: Shutdown after .codegraph became a link to another project
 
@@ -129,8 +129,14 @@ When a watcher stops for any reason, it SHALL remove its lock file only if `.cod
 #### Scenario: Shutdown after only the store changed
 
 - **WHEN** a watcher runs in `<repo>`, and `<repo>/.codegraph/store` is then replaced by a link to `<outside>`
-- **AND** the watcher stops
+- **AND** the watcher receives SIGTERM
 - **THEN** the watcher removes its own `<repo>/.codegraph/daemon.lock`
+
+#### Scenario: Shutdown after the index moved inside the repository
+
+- **WHEN** a watcher runs in `<repo>`, and `<repo>/.codegraph` is then renamed to `<repo>/.cg-real` and replaced by a link to it
+- **AND** the watcher receives SIGTERM
+- **THEN** the watcher removes its own `<repo>/.cg-real/daemon.lock`
 
 #### Scenario: Shutdown with the index unchanged
 

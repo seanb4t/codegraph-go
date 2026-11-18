@@ -57,19 +57,19 @@ Alternative: switch to the new paths and continue. Rejected, because the switch 
 
 ### D3. A typed error and one stop path in `Run`
 
-`internal/daemon` adds `IndexChangedError{Was, Now query.IndexPaths}` and the sentinel `ErrIndexChanged`. Its message names both paths and says `restart the watcher`.
+`internal/daemon` adds `IndexChangedError{Was, Now query.IndexPaths}` and the sentinel `ErrIndexChanged`. Its message names each path that differs, `Dir`, `Store` or both, at start and now, and says `restart the watcher`.
 
-`Run` declares one closure, `stopWith(err)`. It stores the first error it gets and calls the `cancel` of the child context that `Run` already makes. `Run` then joins as it does on a cancel and returns the stored error in place of `nil`. The debounce callback calls `stopWith` today. A later watch on `.codegraph` can call it without a move of code.
+`Run` makes its child context with `context.WithCancelCause` in place of `context.WithCancel`. A stop calls `cancel(err)`, and the first cause wins. The debounce callback calls `cancel(err)` on a failed `checkIndex`. The branch where the watch loop exits on its own calls `cancel(ErrWatcherClosed)`, so the `runErr` variable goes away and `Run` has one stop path. `startWatchdog` gets a function that calls `cancel(nil)`. After the join, `Run` returns `context.Cause(ctx)`, or `nil` when the cause is `context.Canceled`. A later watch on `.codegraph` can call the same `cancel` without a move of code.
 
 A requeue for `ErrStoreLocked` stays as it is. Any other `Sync` error stays a logged error, and the watcher continues.
 
-### D4. Remove the lock only when it is this process's lock in the start directory
+### D4. Remove the lock only when it is this process's lock inside the repository
 
-The deferred release in `Run` calls a new `releaseOwnLock`. It resolves `<repoRoot>/.codegraph` alone with `realpath.Resolve` and compares it with `d.start.Dir`. When they are equal, it reads the lock with `readLock`. Only when `lockInfo.PID` equals `os.Getpid()` does it remove the file. In every other case, it logs both paths and leaves the file.
+The deferred release in `Run` calls a new `releaseOwnLock`. It resolves `<repoRoot>/.codegraph` alone with `realpath.Resolve`, and checks with `realpath.Within` that the result is inside the resolved repository root. When it is, it reads the lock with `readLock`. Only when `lockInfo.PID` equals `os.Getpid()` does it remove the file. In every other case, it logs the path and leaves the file.
 
-The decision uses `.codegraph` alone, because the lock lives there. After a change of the store alone, the lock is still the watcher's own, and leaving it is wrong: under `serve`, it names the live `serve` pid, so `isStale` keeps it, and `daemon start` and `daemon unlock` refuse it until `serve` exits.
+The decision uses `.codegraph` alone, because the lock lives there. It accepts any directory inside the repository, not only the start directory. When the user moves `.codegraph` to `.cg-real` and links it, the watcher's own lock moves too. Leaving it would be wrong: under `serve`, it names the live `serve` pid, so `isStale` keeps it, and `daemon start` and `daemon unlock` refuse it until `serve` exits. A change of the store alone leaves `.codegraph` in place, so the own lock is removed in that case too.
 
-The owner check matches `Unlock`, which also reads the lock before it removes it. The path check alone is not enough. After the watcher stops, another process can take a stale lock in the same directory and rewrite it. The owner check refuses that lock.
+The path check refuses a `.codegraph` that now leads to another project, even when the lock there names this pid by chance. The owner check matches `Unlock`, which also reads the lock before it removes it. It guards this sequence: someone removes the watcher's lock from outside while the watcher runs, for example by hand or through `uninit` and `init`, and another daemon then takes a new lock in the same directory.
 
 `Deregister` removes the registry record under the user's state directory, not under `.codegraph`, so it does not change.
 
@@ -92,7 +92,7 @@ D2 stops the watcher on any inequality, so `IndexDirs` must return equal results
 
 - [The check and the open are not atomic] A link can appear after the check and before `Sync` opens the store. It can also appear while `Sync` runs. → The window shrinks from the life of the watcher to one sync, usually milliseconds. If a real attack needs it, `openat` from D1 can close the window.
 - [`clearPending` runs after `Sync`] It removes `.sync-pending` through the start path. A link that appears during `Sync` makes it remove that file in the target. → Same window as above. The file is an empty marker.
-- [`acquire` after the check] The same window exists between `checkIndex` and `acquire` in `Run`. → It is one system call long.
+- [`acquire` after the check] The same window exists between `checkIndex` and the writes of `acquire`. It covers all of `acquire`: a read of the process start time, a temporary file, a hard link and, for a stale lock, a read and a removal. → It is a few system calls long. A check inside `acquire` before each write can shorten it if needed.
 - [A stopped watcher in `serve`] The MCP server keeps running with no auto-sync until a restart. → The stderr line says why. Tool calls already refuse a link that leads outside, so no tool reads the other index.
 - [Behavior change for a move inside the repository] A user who moves the index on purpose while a watcher runs now sees the watcher stop. → The error says to restart it.
 
