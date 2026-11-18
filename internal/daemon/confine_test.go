@@ -165,8 +165,8 @@ func TestCheckIndexReportsEveryChange(t *testing.T) {
 		{storeLinkedOutside, wantOutside},
 		{indexMovedInside, func(t *testing.T, err error) {
 			changed := wantChanged(t, err)
-			if changed.Was.Dir == changed.Now.Dir {
-				t.Fatalf("Dir did not change: %+v", changed)
+			if changed.Was.Dir == changed.Now.Dir || changed.Was.Store == changed.Now.Store {
+				t.Fatalf("Dir and Store did not both change: %+v", changed)
 			}
 		}},
 		{storeMovedInside, func(t *testing.T, err error) {

@@ -6,15 +6,19 @@ import (
 	"testing"
 )
 
-// indexEntryStates are the states a pull can leave .codegraph or its store
-// in.
-var indexEntryStates = []string{"absent", "dir", "inside", "outside", "dangling", "self"}
+// indexEntryStates are the shapes IndexDirs resolves for .codegraph or its
+// store: no entry, a directory, a file, absolute and relative links inside
+// and outside root, a chain of two links, a dangling link and a loop.
+var indexEntryStates = []string{
+	"absent", "dir", "file", "inside", "relative", "chain",
+	"outside", "dotdot", "dangling", "self",
+}
 
 // TestIndexDirsIsStableOnAnUnchangedTree is the property the watcher's
 // index check depends on (#375, design D6): on a tree that does not
 // change, two calls of IndexDirs agree. If they did not, a watcher would
-// stop on an index that no pull changed. The states are few, so the test
-// builds every pair of them.
+// stop on an index that no pull changed. The test builds every pair of
+// states.
 func TestIndexDirsIsStableOnAnUnchangedTree(t *testing.T) {
 	resolved, refused := 0, 0
 	for _, index := range indexEntryStates {
@@ -65,10 +69,21 @@ func makeIndexEntry(t *testing.T, state, path, root, outside string) {
 	case "absent":
 	case "dir":
 		err = os.MkdirAll(path, 0o755)
+	case "file":
+		err = os.WriteFile(path, nil, 0o644)
 	case "inside":
 		err = os.Symlink(filepath.Join(root, ".cg-real"), path)
+	case "relative":
+		err = os.Symlink(relTo(t, path, filepath.Join(root, ".cg-real")), path)
+	case "chain":
+		hop := filepath.Join(root, ".chain-"+filepath.Base(path))
+		if err = os.Symlink(filepath.Join(root, ".cg-real"), hop); err == nil {
+			err = os.Symlink(hop, path)
+		}
 	case "outside":
 		err = os.Symlink(outside, path)
+	case "dotdot":
+		err = os.Symlink(relTo(t, path, outside), path)
 	case "dangling":
 		err = os.Symlink(filepath.Join(outside, "missing"), path)
 	case "self":
@@ -79,4 +94,14 @@ func makeIndexEntry(t *testing.T, state, path, root, outside string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// relTo returns target relative to the directory that holds link.
+func relTo(t *testing.T, link, target string) string {
+	t.Helper()
+	rel, err := filepath.Rel(filepath.Dir(link), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rel
 }

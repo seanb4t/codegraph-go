@@ -316,10 +316,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	//
 	// The cancel carries a cause, and the first cause wins: a changed
 	// index (checkIndex in the flush callback) and a watch loop that closed
-	// on its own each stop Run through this one cancel, and Run returns
-	// that cause.
-	parent := ctx
+	// on its own each stop Run through stopWith, and Run returns that
+	// cause.
 	ctx, cancel := context.WithCancelCause(ctx)
+	stopWith := func(err error) { cancel(&runStop{err}) }
 	ppid := d.getppid
 	if ppid == nil {
 		ppid = os.Getppid
@@ -367,7 +367,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		// #375: flush writes the sidecar and the store through d.start, so
 		// a changed index stops Run before it writes anything.
 		if err := d.checkIndex(); err != nil {
-			cancel(err)
+			stopWith(err)
 			return
 		}
 		err := d.flush(paths)
@@ -416,7 +416,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	case <-ctx.Done():
 	case <-loopExited:
 		// A no-op when ctx is already done: the first cause wins.
-		cancel(ErrWatcherClosed)
+		stopWith(ErrWatcherClosed)
 	}
 	wg.Wait()
 	// IN-04 belt-and-suspenders: watchLoop's own deb.Stop() ran inside
@@ -428,7 +428,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	//
 	// IN-01 (round 5): both of those defenses are ctx gates. Every path
 	// that reaches this point has cancelled ctx, the loopExited path
-	// included (cancel(ErrWatcherClosed) above), so both gates hold on
+	// included (stopWith(ErrWatcherClosed) above), so both gates hold on
 	// every teardown.
 	deb.Stop()
 	// CR-01: wg.Wait() only joins the tracked watcher goroutine — it does
@@ -441,13 +441,21 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// Sync was still mid-commit against the single coordinated Writer
 	// (INDX-05, D-07, SYNC-06).
 	deb.Wait()
-	// A cancel of the parent or a watchdog cancel is a clean shutdown.
-	cause := context.Cause(ctx)
-	if errors.Is(cause, context.Canceled) || cause == context.Cause(parent) {
-		return nil
+	// Run returns a cause only when Run itself stopped. The end of the
+	// parent, whatever its cause, and a watchdog cancel are a clean
+	// shutdown.
+	if s, ok := errors.AsType[*runStop](context.Cause(ctx)); ok {
+		return s.err
 	}
-	return cause
+	return nil
 }
+
+// runStop marks a cause that Run set itself, so Run can tell it from a
+// cause of the parent context without comparing the two.
+type runStop struct{ err error }
+
+func (s *runStop) Error() string { return s.err.Error() }
+func (s *runStop) Unwrap() error { return s.err }
 
 // RunWithRetry drives d.Run(ctx) in a loop, converging concurrent
 // serve --mcp sessions on a single writer (WATCH-04/D-14): defer-and-retry

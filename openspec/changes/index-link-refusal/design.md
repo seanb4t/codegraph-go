@@ -53,13 +53,13 @@ Alternatives:
 
 A link that now resolves inside the repository passes `IndexDirs`. The watcher still stops. The paths the watcher holds are the resolved paths of its start. After a change, they no longer name the index that commands open: a path such as `<repo>/.codegraph/store` now passes through the new link. A write through them goes where the change points. Stopping keeps one writer for each index, and a restart costs one command. A change of the store alone counts as a change.
 
-Alternative: switch to the new paths and continue. Rejected, because the switch must move the lock and the sidecar while another process can start.
+Alternative: switch to the new paths and continue. Rejected, because a switch is a second start path for a rare event. `Run` would have to swap its paths between two flushes, and take the lock again when `.codegraph` moved. A restart does the same with the start path that already exists.
 
 ### D3. A typed error and one stop path in `Run`
 
 `internal/daemon` adds `IndexChangedError{Was, Now query.IndexPaths}` and the sentinel `ErrIndexChanged`. Its message names each path that differs, `Dir`, `Store` or both, at start and now, and says `restart the watcher`.
 
-`Run` makes its child context with `context.WithCancelCause` in place of `context.WithCancel`. A stop calls `cancel(err)`, and the first cause wins. The debounce callback calls `cancel(err)` on a failed `checkIndex`. The branch where the watch loop exits on its own calls `cancel(ErrWatcherClosed)`, so the `runErr` variable goes away and `Run` has one stop path. `startWatchdog` gets a function that calls `cancel(nil)`. After the join, `Run` returns `context.Cause(ctx)`, or `nil` when the cause is `context.Canceled`. `Run` also returns `nil` when the cause is the cause of the parent context, for example `context.DeadlineExceeded` or a cause that the caller set. Before this change, `Run` returned `nil` whenever its parent ended, and a stop that the caller asked for is not an error. A later watch on `.codegraph` can call the same `cancel` without a move of code.
+`Run` makes its child context with `context.WithCancelCause` in place of `context.WithCancel`, and the first cause wins. `stopWith(err)` stops `Run` with `err` wrapped in the private type `runStop`. The debounce callback calls `stopWith` on a failed `checkIndex`. The branch where the watch loop exits on its own calls `stopWith(ErrWatcherClosed)`, so the `runErr` variable goes away and `Run` has one stop path. `startWatchdog` gets a function that calls `cancel(nil)`. After the join, `Run` returns the error inside a `runStop` cause, and `nil` for any other cause. So the end of the parent context, with any cause, is a clean stop: `context.Canceled`, `context.DeadlineExceeded` or a cause that the caller set. Before this change, `Run` returned `nil` whenever its parent ended, and a stop that the caller asked for is not an error. `Run` does not compare its cause with the parent's cause, because `==` panics on an error type that cannot be compared. A later watch on `.codegraph` can call the same `stopWith` without a move of code.
 
 A requeue for `ErrStoreLocked` stays as it is. Any other `Sync` error stays a logged error, and the watcher continues.
 
@@ -84,9 +84,9 @@ The daemon tests use `newFakeDaemon` with a `fakeWatcher` (`internal/daemon/fake
 
 A test sets either one to return an error. It does not need a real watcher.
 
-### D6. A property for D2
+### D6. A stability test for D2
 
-D2 stops the watcher on any inequality, so `IndexDirs` must return equal results for a tree that did not change. A table test in `internal/query` checks this for every pair of states that a pull can leave `.codegraph` and `store` in: absent, a real directory, a link inside, a link outside, a dangling link and a link to itself. That is 36 trees at most, so a table covers each one, and a random generator adds nothing.
+D2 stops the watcher on any inequality, so `IndexDirs` must return equal results for a tree that did not change. A table test in `internal/query` checks this for every pair of ten shapes of `.codegraph` and `store`: absent, a directory, a file, an absolute link inside, a relative link inside, a chain of two links, an absolute link outside, a relative `..` link outside, a dangling link and a link to itself. Each shape takes its own path through `IndexDirs`. Longer chains and other targets take the same paths, and `TestResolve_AgreesWithTheOperatingSystem` in `internal/realpath` already tests random link trees against the operating system. So a random generator here adds no path that the table misses.
 
 ## Risks / Trade-offs
 

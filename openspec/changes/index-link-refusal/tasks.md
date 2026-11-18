@@ -69,6 +69,13 @@
 - [x] 6.2 Add `TestRunReturnsNilWhenParentEnds` in `internal/daemon` (design D3). Rows: the parent is cancelled, the parent passes its deadline, and the parent is cancelled with a cause of its own. Each row asserts that `Run` returns `nil`.
 - [x] 6.3 In the `dir` row of `TestIndexChangedErrorText`, also assert both `Store` values.
 
+## 7. Fixes from the second implementation review
+
+- [x] 7.1 Add `startCaughtUpFakeRun` in `internal/daemon/fakewatcher_test.go`, and use it in `TestRunUsesInjectedWatcher`, the flush-hold test and the three fake-run tests of `confine_run_test.go`.
+- [x] 7.2 Wrap each cause that `Run` sets in `runStop`, and return only those (design D3). Add the row `cause that == cannot compare` to `TestRunReturnsNilWhenParentEnds`.
+- [x] 7.3 In the index-moved rows of `TestCheckIndexReportsEveryChange` and `TestRunStopsWhenIndexChanges`, also assert that `Store` changed.
+- [x] 7.4 Add the shapes file, relative link, chain and relative `..` link to `TestIndexDirsIsStableOnAnUnchangedTree` (design D6).
+
 ## Workflow follow-up
 
 - The implementation PR says `Closes #375` and `Closes #377`, and carries the `openspec archive index-link-refusal` result.

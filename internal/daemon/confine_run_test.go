@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -136,24 +136,13 @@ func TestRunReleasesOnlyItsOwnLock(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := mkIndexDirs(t)
 			synctest.Test(t, func(t *testing.T) {
-				fw := newFakeWatcher()
-				d := newFakeDaemon(t, root, fw)
-				d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
-					return indexer.Stats{}, nil
-				}
-				synced := make(chan error, 4)
-				d.onSync = func(_ indexer.Stats, err error) { synced <- err }
-
 				ctx, cancel := context.WithCancel(context.Background())
-				runErr := startFakeRun(t, ctx, cancel, d)
-				if err := waitCatchUpSync(t, synced); err != nil {
-					t.Fatalf("catch-up sync: %v", err)
-				}
+				r := startCaughtUpFakeRun(t, root, ctx, cancel, nil)
 
 				lockDir := tc.apply(t, root)
 				before, _ := os.ReadFile(lockPath(lockDir))
 				cancel()
-				if err := receive(t, runErr, "Run to return after cancel"); err != nil {
+				if err := receive(t, r.runErr, "Run to return after cancel"); err != nil {
 					t.Fatalf("Run: %v", err)
 				}
 
@@ -168,6 +157,12 @@ func TestRunReleasesOnlyItsOwnLock(t *testing.T) {
 		})
 	}
 }
+
+// pathsError is an error value that == cannot compare: comparing two of
+// them panics at run time.
+type pathsError struct{ paths []string }
+
+func (e pathsError) Error() string { return fmt.Sprintf("stopped for %v", e.paths) }
 
 // TestRunReturnsNilWhenParentEnds covers the clean-stop rule of design D3:
 // whatever cause ends the parent context, Run returns nil, because a stop
@@ -191,25 +186,18 @@ func TestRunReturnsNilWhenParentEnds(t *testing.T) {
 			ctx, cancel := context.WithCancelCause(context.Background())
 			return ctx, func() { cancel(errors.New("the caller stopped")) }, func() { cancel(nil) }
 		}},
+		{"cause that == cannot compare", func() (context.Context, func(), context.CancelFunc) {
+			ctx, cancel := context.WithCancelCause(context.Background())
+			return ctx, func() { cancel(pathsError{paths: []string{"a"}}) }, func() { cancel(nil) }
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := mkIndexDirs(t)
 			synctest.Test(t, func(t *testing.T) {
-				fw := newFakeWatcher()
-				d := newFakeDaemon(t, root, fw)
-				d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
-					return indexer.Stats{}, nil
-				}
-				synced := make(chan error, 4)
-				d.onSync = func(_ indexer.Stats, err error) { synced <- err }
-
 				ctx, end, cancel := tc.start()
-				runErr := startFakeRun(t, ctx, cancel, d)
-				if err := waitCatchUpSync(t, synced); err != nil {
-					t.Fatalf("catch-up sync: %v", err)
-				}
+				r := startCaughtUpFakeRun(t, root, ctx, cancel, nil)
 				end()
-				if err := receive(t, runErr, "Run to return after its parent ended"); err != nil {
+				if err := receive(t, r.runErr, "Run to return after its parent ended"); err != nil {
 					t.Fatalf("Run = %v, want nil", err)
 				}
 			})
@@ -236,8 +224,8 @@ func TestRunStopsWhenIndexChanges(t *testing.T) {
 			}
 		}},
 		{indexMovedInside, false, func(t *testing.T, err error) {
-			if changed := wantChanged(t, err); changed.Was.Dir == changed.Now.Dir {
-				t.Fatalf("Dir did not change: %+v", changed)
+			if changed := wantChanged(t, err); changed.Was.Dir == changed.Now.Dir || changed.Was.Store == changed.Now.Store {
+				t.Fatalf("Dir and Store did not both change: %+v", changed)
 			}
 		}},
 		{storeMovedInside, true, func(t *testing.T, err error) {
@@ -252,27 +240,14 @@ func TestRunStopsWhenIndexChanges(t *testing.T) {
 		t.Run(tc.change.name, func(t *testing.T) {
 			root := mkIndexDirs(t)
 			synctest.Test(t, func(t *testing.T) {
-				fw := newFakeWatcher()
-				d := newFakeDaemon(t, root, fw)
-				var syncs atomic.Int32
-				d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
-					syncs.Add(1)
-					return indexer.Stats{}, nil
-				}
-				synced := make(chan error, 4)
-				d.onSync = func(_ indexer.Stats, err error) { synced <- err }
-
 				ctx, cancel := context.WithCancel(context.Background())
-				runErr := startFakeRun(t, ctx, cancel, d)
-				if err := waitCatchUpSync(t, synced); err != nil {
-					t.Fatalf("catch-up sync: %v", err)
-				}
+				r := startCaughtUpFakeRun(t, root, ctx, cancel, nil)
 
 				target := tc.change.apply(t, root)
-				fw.events <- "main.go"
-				tc.check(t, receive(t, runErr, "Run to stop after the index changed"))
+				r.fw.events <- "main.go"
+				tc.check(t, receive(t, r.runErr, "Run to stop after the index changed"))
 
-				if got := syncs.Load(); got != 1 {
+				if got := r.syncs.Load(); got != 1 {
 					t.Fatalf("syncFn ran %d times, want 1: only the catch-up sync", got)
 				}
 				if target == "" {
