@@ -31,6 +31,7 @@ const droppedFlags = fsevents.UserDropped | fsevents.KernelDropped
 type Watcher struct {
 	es     *fsevents.EventStream
 	root   string
+	skip   func(path string) bool
 	done   chan struct{}
 	closed atomic.Bool
 }
@@ -47,6 +48,10 @@ func Open(root string) (*Watcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("watch: resolving %s: %w", root, err)
 	}
+	filter, err := discover.NewDirFilter(real)
+	if err != nil {
+		return nil, fmt.Errorf("watch: %w", err)
+	}
 	es := &fsevents.EventStream{
 		Paths:   []string{real},
 		Flags:   fsevents.FileEvents | fsevents.NoDefer,
@@ -56,7 +61,7 @@ func Open(root string) (*Watcher, error) {
 	if err := es.Start(); err != nil {
 		return nil, fmt.Errorf("watch: starting FSEvents stream for %s: %w", real, err)
 	}
-	return &Watcher{es: es, root: real, done: make(chan struct{})}, nil
+	return &Watcher{es: es, root: real, skip: filter.SkipDir, done: make(chan struct{})}, nil
 }
 
 // Run consumes FSEvents batches until ctx is cancelled or Close is called,
@@ -71,7 +76,7 @@ func (w *Watcher) Run(ctx context.Context, deb *Debouncer) {
 		case <-w.done:
 			return
 		case batch := <-w.es.Events:
-			for _, p := range batchPaths(w.root, batch) {
+			for _, p := range batchPaths(w.root, w.skip, batch) {
 				deb.Add(p)
 			}
 		}
@@ -81,13 +86,14 @@ func (w *Watcher) Run(ctx context.Context, deb *Debouncer) {
 // batchPaths returns the paths in one FSEvents batch that can change the
 // index. A batch that lost events yields root: the daemon's sync re-diffs
 // the whole repository, so any path is enough to trigger the full check.
-func batchPaths(root string, batch []fsevents.Event) []string {
+// skip is the DirFilter rule of root.
+func batchPaths(root string, skip func(path string) bool, batch []fsevents.Event) []string {
 	var paths []string
 	for _, ev := range batch {
 		switch {
 		case ev.Flags&droppedFlags != 0:
 			paths = append(paths, root)
-		case relevant(root, ev.Path, ev.Flags&(fsevents.ItemIsDir|fsevents.MustScanSubDirs) != 0):
+		case relevant(root, skip, ev.Path, ev.Flags&(fsevents.ItemIsDir|fsevents.MustScanSubDirs) != 0):
 			paths = append(paths, ev.Path)
 		}
 	}
@@ -95,11 +101,11 @@ func batchPaths(root string, batch []fsevents.Event) []string {
 }
 
 // relevant reports whether path is root or lies under it with no directory
-// on the way that discover.ShouldSkipDir excludes, the same rule the indexer
-// and the fsnotify backend apply. When isDir is true, path's own name is
-// checked too. The prefix comparison ignores case because APFS volumes are
+// on the way that skip excludes, the DirFilter rule that the indexer and
+// the fsnotify backend apply. When isDir is true, path itself is checked
+// too. The prefix comparison ignores case because APFS volumes are
 // case-insensitive by default and FSEvents reports the on-disk case.
-func relevant(root, path string, isDir bool) bool {
+func relevant(root string, skip func(path string) bool, path string, isDir bool) bool {
 	if len(path) < len(root) || !strings.EqualFold(path[:len(root)], root) {
 		return false
 	}
@@ -114,8 +120,10 @@ func relevant(root, path string, isDir bool) bool {
 	if !isDir {
 		names = names[:len(names)-1]
 	}
+	dir := root
 	for _, name := range names {
-		if discover.ShouldSkipDir(name) {
+		dir = filepath.Join(dir, name)
+		if skip(dir) {
 			return false
 		}
 	}

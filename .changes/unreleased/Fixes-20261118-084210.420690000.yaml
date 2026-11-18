@@ -1,0 +1,3 @@
+kind: Fixes
+body: Indexing and the file watcher skip the index and its store when .codegraph or its store is a link to a directory with a plain name, so discovery no longer reads the live store and can no longer fail or index store files.
+time: 2026-11-18T08:42:10.42069-05:00

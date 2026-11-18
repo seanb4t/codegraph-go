@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsevents"
+	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 )
 
 func TestBatchPaths(t *testing.T) {
@@ -29,8 +30,36 @@ func TestBatchPaths(t *testing.T) {
 		{Path: "/other/main.go", Flags: fsevents.ItemModified},
 		{Path: "/", Flags: fsevents.MustScanSubDirs | fsevents.KernelDropped},
 	}
-	got := batchPaths(root, batch)
+	got := batchPaths(root, discover.DirFilter{}.SkipDir, batch)
 	want := []string{"/repo/main.go", "/repo/.gitignore", "/repo/pkg", "/REPO/Pkg/b.go", root}
+	if !slices.Equal(got, want) {
+		t.Fatalf("batchPaths =\n  %q\nwant\n  %q", got, want)
+	}
+}
+
+func TestBatchPathsSkipsTheIndexBehindALink(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "cg-real", "store"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink("cg-real", filepath.Join(root, ".codegraph")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	filter, err := discover.NewDirFilter(root)
+	if err != nil {
+		t.Fatalf("NewDirFilter: %v", err)
+	}
+	batch := []fsevents.Event{
+		{Path: filepath.Join(root, "main.go"), Flags: fsevents.ItemModified},
+		{Path: filepath.Join(root, "cg-real"), Flags: fsevents.ItemCreated | fsevents.ItemIsDir},
+		{Path: filepath.Join(root, "cg-real", "store", "000001.log"), Flags: fsevents.ItemModified},
+		{Path: filepath.Join(root, "cg-real", "store.swap"), Flags: fsevents.ItemCreated},
+	}
+	got := batchPaths(root, filter.SkipDir, batch)
+	want := []string{filepath.Join(root, "main.go")}
 	if !slices.Equal(got, want) {
 		t.Fatalf("batchPaths =\n  %q\nwant\n  %q", got, want)
 	}

@@ -111,10 +111,11 @@ func sizeLimitDetail(sizeBytes int64) string {
 //
 // Four decision points in the walk each record their own exclusion
 // reason, in this order: (1) a pruned directory — vendor/ or any
-// dot-prefixed directory (.git, .codegraph, etc.), via ShouldSkipDir,
-// shared verbatim with the Phase-4 watcher — gets ONE directory-level
-// record (DIR_VENDOR / DIR_DOTPREFIX, D-02); its contents are never
-// visited, so they contribute nothing to the discovered count. (2) a file
+// dot-prefixed directory (.git, .codegraph, etc.), via the DirFilter that
+// the watchers share — gets ONE directory-level record (DIR_VENDOR /
+// DIR_DOTPREFIX, D-02); its contents are never visited, so they
+// contribute nothing to the discovered count. A directory that holds the
+// index under another name is pruned too, with no record. (2) a file
 // whose extension is not registered in the extension->language registry
 // (languages.go) gets an UNSUPPORTED_EXTENSION record (D-03). (3) a Go
 // source file that go/build.Context.MatchFile reports does not belong to
@@ -144,16 +145,20 @@ func DiscoverAll(root string) (Discovery, error) {
 	var pending []pendingFile
 	var excluded []*schema.ExcludedFile
 
+	filter, err := NewDirFilter(root)
+	if err != nil {
+		return Discovery{}, err
+	}
 	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			// Decision point 1: ShouldSkipDir remains the single prune
-			// authority (shared verbatim with the fsnotify watcher,
-			// Phase 4 D-04) — dirExclusionReason only classifies WHICH
-			// reason a prune gets, never re-decides the prune itself.
-			if p != root && ShouldSkipDir(d.Name()) {
+			// Decision point 1: DirFilter is the single prune authority,
+			// shared with both watchers. dirExclusionReason only
+			// classifies which reason a prune by name gets. A directory
+			// that holds the index is pruned with no record.
+			if p != root && filter.SkipDir(p) {
 				relPath, relErr := filepath.Rel(root, p)
 				if relErr != nil {
 					return relErr

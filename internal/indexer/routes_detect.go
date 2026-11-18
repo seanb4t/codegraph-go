@@ -225,12 +225,15 @@ func readFileOrEmpty(path string) string {
 // bounded by the same walk discipline Discover itself uses.
 func csprojManifestText(root string) string {
 	var sb strings.Builder
+	// A filter that cannot resolve the index is the zero DirFilter, which
+	// skips by name only: this scan is best effort.
+	filter, _ := discover.NewDirFilter(root)
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // best-effort manifest scan, never fails the caller
 		}
 		if d.IsDir() {
-			if p != root && discover.ShouldSkipDir(d.Name()) {
+			if p != root && filter.SkipDir(p) {
 				return fs.SkipDir
 			}
 			return nil

@@ -31,20 +31,27 @@ type Watcher struct {
 	// Remove event of a file costs no scan of the watch list. Open fills
 	// it, and only the Run loop changes it after that.
 	dirs map[string]bool
+	// skip is the DirFilter rule of the root: it names the directories
+	// that the watcher never watches.
+	skip func(path string) bool
 }
 
 // Open opens a native fsnotify watcher rooted at root and walks the tree,
-// adding every directory not excluded by discover.ShouldSkipDir to the
-// watch set (so .codegraph/, vendor/, and other dot-prefixed directories
-// are never watched — the same exclusion discover.go applies, per D-04's
-// "watcher and indexer agree on the file set").
+// adding every directory that the root's discover.DirFilter does not skip
+// to the watch set. So vendor/, dot-prefixed directories and the
+// directories that hold the index are never watched, the same exclusion
+// that discovery applies.
 func Open(root string) (*Watcher, error) {
+	filter, err := discover.NewDirFilter(root)
+	if err != nil {
+		return nil, fmt.Errorf("watch: %w", err)
+	}
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("watch: creating fsnotify watcher: %w", err)
 	}
-	w := &Watcher{fsw: fsw, dirs: make(map[string]bool)}
-	if err := addRecursive(w, root, discover.ShouldSkipDir); err != nil {
+	w := &Watcher{fsw: fsw, dirs: make(map[string]bool), skip: filter.SkipDir}
+	if err := addRecursive(w, root, w.skip); err != nil {
 		_ = fsw.Close()
 		return nil, fmt.Errorf("watch: walking %s: %w", root, err)
 	}
@@ -56,7 +63,7 @@ func Open(root string) (*Watcher, error) {
 // (RESEARCH Pattern 3) — recursive coverage requires this explicit walk at
 // startup, plus a re-addRecursive call on any subdirectory discovered
 // later via a Create event (see watchLoop).
-func addRecursive(w *Watcher, root string, skip func(name string) bool) error {
+func addRecursive(w *Watcher, root string, skip func(path string) bool) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -64,7 +71,7 @@ func addRecursive(w *Watcher, root string, skip func(name string) bool) error {
 		if !d.IsDir() {
 			return nil
 		}
-		if p != root && skip(d.Name()) {
+		if p != root && skip(p) {
 			return filepath.SkipDir
 		}
 		if err := w.fsw.Add(p); err != nil {
@@ -76,13 +83,13 @@ func addRecursive(w *Watcher, root string, skip func(name string) bool) error {
 }
 
 // addCreatedDir watches a directory that appeared after Open. addRecursive
-// never applies skip to its own root, so the created directory's name is
-// checked here first: without that check, a new .venv/ or node_modules/
-// sibling of a watched directory is walked in full, and kqueue holds one
-// file descriptor for every file in it. A path that is not a directory is
+// never applies skip to its own root, so the created directory is checked
+// here first: without that check, a new .venv/ or node_modules/ sibling of
+// a watched directory is walked in full, and kqueue holds one file
+// descriptor for every file in it. A path that is not a directory is
 // ignored.
-func addCreatedDir(w *Watcher, path string, skip func(name string) bool) error {
-	if skip(filepath.Base(path)) {
+func addCreatedDir(w *Watcher, path string, skip func(path string) bool) error {
+	if skip(path) {
 		return nil
 	}
 	info, err := os.Stat(path)
@@ -156,7 +163,7 @@ func watchLoop(ctx context.Context, w *Watcher, deb *Debouncer) {
 				// A directory that is not watched yet: created, moved in,
 				// or seen through another event when its create event was
 				// not delivered. A file or a gone path costs one stat.
-				if err := addCreatedDir(w, ev.Name, discover.ShouldSkipDir); err != nil {
+				if err := addCreatedDir(w, ev.Name, w.skip); err != nil {
 					log.Printf("watch: adding new directory %s: %v", ev.Name, err)
 				}
 			}
