@@ -78,7 +78,10 @@ func TestReplaceStoreRefusesDirectoryThatIsNotAStore(t *testing.T) {
 
 				err := ReplaceStore(staging, live)
 				var notStore *NotStoreError
-				if !errors.Is(err, ErrNotStore) || !errors.As(err, &notStore) {
+				switch {
+				case viaLink && !errors.Is(err, nofollow.ErrSymlink):
+					t.Fatalf("ReplaceStore = %v, want nofollow.ErrSymlink", err)
+				case !viaLink && (!errors.Is(err, ErrNotStore) || !errors.As(err, &notStore)):
 					t.Fatalf("ReplaceStore = %v, want a *NotStoreError", err)
 				}
 				if after := treeOf(t, target); !slices.Equal(before, after) {

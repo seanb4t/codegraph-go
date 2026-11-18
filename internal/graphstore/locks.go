@@ -12,6 +12,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 // Two lock files sit beside each store, in its parent directory. Both are
@@ -109,8 +110,10 @@ func LockWriter(dir string) (io.Closer, error) {
 // its error. So a live directory that holds a symbolic link, or files but
 // no store, is not replaced.
 //
-// ReplaceStore resolves every symlink of live first and replaces the store
-// at the resolved path. A link at live stays as it is.
+// A symbolic link at live gives a *nofollow.SymlinkError, and live stays as
+// it was. ReplaceStore looks at live under the swap lock, so it also
+// refuses a link that appears at live while a full index builds. Pass the
+// resolved store path that indexdir.Resolve returns.
 func ReplaceStore(staging, live string) (err error) {
 	// replaced turns true once staging is in the place of live. An error
 	// after that moment, also one of the deferred releases below, tells
@@ -121,24 +124,24 @@ func ReplaceStore(staging, live string) (err error) {
 			err = fmt.Errorf("%w: %w", ErrAfterReplace, err)
 		}
 	}()
-	resolved, err := resolveStorePath(live)
-	if err != nil {
-		return fmt.Errorf("graphstore: resolve the store %s: %w", live, err)
-	}
-	live = resolved
 	swap, err := lockBeside(live, swapLockSuffix, flock.Exclusive)
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, swap.Close()) }()
 
-	if _, statErr := os.Lstat(live); statErr != nil {
+	info, statErr := os.Lstat(live)
+	if statErr != nil {
 		if !errors.Is(statErr, os.ErrNotExist) {
 			return statErr
 		}
 		err = fsatomic.RenameDir(staging, live)
 		replaced = err == nil || errors.Is(err, fsatomic.ErrNotDurable)
 		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, _ := os.Readlink(live)
+		return &nofollow.SymlinkError{Link: live, Target: target}
 	}
 	if err := CheckLiveStore(live); err != nil {
 		return err

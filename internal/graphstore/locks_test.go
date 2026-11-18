@@ -13,6 +13,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
 	"github.com/seanb4t/codegraph-go/internal/graphstore/locktest"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -387,7 +388,7 @@ func TestReplaceStoreWaitsForHandleOpenedThroughLink(t *testing.T) {
 	}
 }
 
-func TestReplaceStoreThroughLinkReplacesTarget(t *testing.T) {
+func TestReplaceStoreRefusesALinkAtLive(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		oldStore bool
@@ -397,22 +398,30 @@ func TestReplaceStoreThroughLinkReplacesTarget(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			real, link := linkedStore(t)
+			var oldExport []byte
 			if tc.oldStore {
-				buildStore(t, real, "old")
+				oldExport = buildStore(t, real, "old")
 			} else if err := os.Remove(real); err != nil {
 				t.Fatalf("remove: %v", err)
 			}
 			staging := filepath.Join(t.TempDir(), "store")
 			newExport := buildStore(t, staging, "new")
 
-			if err := ReplaceStore(staging, link); err != nil {
-				t.Fatalf("ReplaceStore through the link: %v", err)
+			err := ReplaceStore(staging, link)
+			if !errors.Is(err, nofollow.ErrSymlink) {
+				t.Fatalf("ReplaceStore through a link = %v, want nofollow.ErrSymlink", err)
 			}
 			if target, err := os.Readlink(link); err != nil || target != real {
-				t.Fatalf("the link reads %q, %v after the replace, want %q", target, err, real)
+				t.Fatalf("the link reads %q, %v after the refusal, want %q", target, err, real)
 			}
-			if !bytes.Equal(exportAt(t, real), newExport) {
-				t.Errorf("the store behind the link does not hold the staging store")
+			if tc.oldStore && !bytes.Equal(exportAt(t, real), oldExport) {
+				t.Errorf("the store behind the link changed")
+			}
+			if _, err := os.Stat(real); !tc.oldStore && !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("the missing target of the link exists after the refusal: %v", err)
+			}
+			if !bytes.Equal(exportAt(t, staging), newExport) {
+				t.Errorf("staging does not hold the new store after the refusal")
 			}
 		})
 	}
