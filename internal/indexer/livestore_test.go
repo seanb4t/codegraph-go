@@ -47,6 +47,24 @@ func TestIndexRefusesLiveStoreBeforeBuilding(t *testing.T) {
 				}
 			}
 		}, nofollow.ErrSymlink},
+		{"a link at the store", func(t *testing.T, root string) (string, func(*testing.T)) {
+			storeDir := filepath.Join(root, ".codegraph", "store")
+			target := filepath.Join(root, "store-real")
+			if err := os.MkdirAll(filepath.Dir(storeDir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, storeDir); err != nil {
+				t.Fatal(err)
+			}
+			return storeDir, func(t *testing.T) {
+				if got, err := os.Readlink(storeDir); err != nil || got != target {
+					t.Fatalf("the store link reads %q, %v, want %q", got, err, target)
+				}
+				if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("the link target exists after the refusal: %v", err)
+				}
+			}
+		}, nofollow.ErrSymlink},
 	} {
 		for name, index := range map[string]func(root, storeDir string) (Stats, error){
 			"Run":  func(root, storeDir string) (Stats, error) { return Run(root, storeDir, Options{}) },

@@ -117,8 +117,12 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 	// must exist before it. The lock files sit in the parent of the
 	// resolved store.
 	storeDir = filepath.Clean(storeDir)
-	// ReplaceStore checks the live store again under its lock. This check
-	// refuses the store before the build and before any lock file exists.
+	// ReplaceStore checks the live store again under its lock. These checks
+	// refuse the store before the build and before any lock file exists.
+	if info, err := os.Lstat(storeDir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		target, _ := os.Readlink(storeDir)
+		return stats, &nofollow.SymlinkError{Link: storeDir, Target: target}
+	}
 	if err := graphstore.CheckLiveStore(storeDir); err != nil {
 		return stats, err
 	}
