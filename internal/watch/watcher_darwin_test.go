@@ -91,6 +91,84 @@ func TestBatchPathsSkipsTheIndexBehindALink(t *testing.T) {
 	}
 }
 
+func TestBatchPathsSkipsTheIndexWhenTheRootDiffersInCase(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	disk := filepath.Join(base, "repo")
+	mkdirs(t, filepath.Join(disk, ".codegraph"), filepath.Join(disk, "store-real"))
+	symlinkT(t, filepath.Join("..", "store-real"), filepath.Join(disk, ".codegraph", "store"))
+	root := filepath.Join(base, "REPO")
+	if _, err := os.Stat(root); err != nil {
+		t.Skipf("the volume is case-sensitive: %v", err)
+	}
+	filter, err := discover.NewDirFilter(root)
+	if err != nil {
+		t.Fatalf("NewDirFilter: %v", err)
+	}
+
+	var batch []fsevents.Event
+	for _, name := range []string{"main.go", "store-real.swap", "store-real.write", filepath.Join("store-real", "000001.log")} {
+		batch = append(batch, fsevents.Event{Path: filepath.Join(disk, name), Flags: fsevents.ItemModified})
+	}
+	got := batchPaths(root, filter, batch)
+	want := []string{filepath.Join(disk, "main.go")}
+	if !slices.Equal(got, want) {
+		t.Fatalf("batchPaths =\n  %q\nwant\n  %q", got, want)
+	}
+}
+
+func TestOpenSkipsTheIndexBehindAStoreLink(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+
+	root := t.TempDir()
+	mkdirs(t, filepath.Join(root, ".codegraph"), filepath.Join(root, "store-real"))
+	symlinkT(t, filepath.Join("..", "store-real"), filepath.Join(root, ".codegraph", "store"))
+	w, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer w.Close()
+
+	flushed := make(chan map[string]struct{}, 8)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deb := NewDebouncer(ctx, DebounceDuration(), func(paths map[string]struct{}) {
+		flushed <- paths
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Run(ctx, deb)
+	}()
+
+	lock := filepath.Join(w.root, "store-real.swap")
+	source := filepath.Join(w.root, "main.go")
+	for _, p := range []string{lock, source} {
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+	deadline := time.After(5 * time.Second)
+	for seen := false; !seen; {
+		select {
+		case paths := <-flushed:
+			if _, ok := paths[lock]; ok {
+				t.Fatalf("the event of %s reached the debouncer", lock)
+			}
+			_, seen = paths[source]
+		case <-deadline:
+			t.Fatalf("no flush reported %s", source)
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	<-done
+}
+
 func mkdirs(t *testing.T, dirs ...string) {
 	t.Helper()
 	for _, d := range dirs {

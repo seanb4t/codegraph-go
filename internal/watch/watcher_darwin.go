@@ -107,7 +107,8 @@ func batchPaths(root string, filter discover.DirFilter, batch []fsevents.Event) 
 // backend apply. Path itself is checked too: with SkipDir when isDir is
 // true, and with SkipFile otherwise. The prefix comparison ignores case
 // because APFS volumes are case-insensitive by default and FSEvents
-// reports the on-disk case.
+// reports the on-disk case. Every path given to filter starts with root as
+// it is spelled, because filter compares paths to root as text.
 func relevant(root string, filter discover.DirFilter, path string, isDir bool) bool {
 	if len(path) < len(root) || !strings.EqualFold(path[:len(root)], root) {
 		return false
@@ -121,7 +122,7 @@ func relevant(root string, filter discover.DirFilter, path string, isDir bool) b
 	}
 	names := strings.Split(rest[1:], string(filepath.Separator))
 	if !isDir {
-		if filter.SkipFile(path) {
+		if filter.SkipFile(root + rest) {
 			return false
 		}
 		names = names[:len(names)-1]
