@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
@@ -92,18 +91,10 @@ type IndexHealth struct {
 // commit, which removes it.
 const staleSidecarName = ".sync-pending"
 
-// shouldSkipStaleDir is the directory name rule of
-// internal/indexer/discover.ShouldSkipDir: vendor/ and every dot-prefixed
-// directory. internal/query does not import internal/indexer, so the rule
-// is copied here. Keep the two the same.
-func shouldSkipStaleDir(name string) bool {
-	return name == "vendor" || strings.HasPrefix(name, ".")
-}
-
 // newestSourceMtime walks root and returns the newest modification time of
-// a file, the raw signal of the no-daemon staleness fallback (D-04a). It
-// skips the directories that shouldSkipStaleDir names and every part of
-// the index of root that indexdir.Filter names: the store writes its own
+// a file. It is the raw signal of the staleness check when no daemon runs.
+// It skips the directories that indexdir.SkipDirName names and every part
+// of the index of root that indexdir.Filter names: the store writes its own
 // files after each sync, and they are not sources.
 func newestSourceMtime(root string) (time.Time, error) {
 	filter, err := indexdir.NewFilter(root)
@@ -116,7 +107,7 @@ func newestSourceMtime(root string) (time.Time, error) {
 			return err
 		}
 		if d.IsDir() {
-			if p != root && (shouldSkipStaleDir(d.Name()) || filter.Skip(p)) {
+			if p != root && (indexdir.SkipDirName(d.Name()) || filter.Skip(p)) {
 				return fs.SkipDir
 			}
 			return nil

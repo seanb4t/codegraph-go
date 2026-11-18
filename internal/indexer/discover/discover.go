@@ -1,7 +1,7 @@
 package discover
 
 import (
-	"strings"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 // DiscoveredFile is one discovered source file of any registered language,
@@ -35,12 +35,11 @@ type DiscoveredFile struct {
 	SizeBytes   int64
 }
 
-// ShouldSkipDir is the name rule of DirFilter: it reports whether a walk
-// skips a directory named name. It skips vendor/ and every dot-prefixed
-// directory (.git, .codegraph and so on). Discovery and both watchers
-// apply it through DirFilter.SkipDir.
+// ShouldSkipDir is the name rule of DirFilter, indexdir.SkipDirName: it
+// reports whether a walk skips a directory named name. Discovery and both
+// watchers apply it through DirFilter.SkipDir.
 func ShouldSkipDir(name string) bool {
-	return name == "vendor" || strings.HasPrefix(name, ".")
+	return indexdir.SkipDirName(name)
 }
 
 // pendingFile is Discover's own walk-time intermediate, before each

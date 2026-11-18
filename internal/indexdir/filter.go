@@ -18,10 +18,19 @@ const (
 	// WriterLockSuffix names the writer lock file, <store>.write.
 	WriterLockSuffix = ".write"
 	// ScratchSuffix starts the names of the scratch directories of a full
-	// index, <store>.scratch-<random>. It ends in "-", as scratchdir
+	// index, <store>.scratch-<random>. A scratch directory that is still
+	// being made is named <store>.scratch.pending-<random>, after
+	// scratchdir.PendingPrefix. The suffix ends in "-", as scratchdir
 	// requires of a prefix.
 	ScratchSuffix = ".scratch-"
 )
+
+// SkipDirName is the name rule of every walk of a repository: it reports
+// whether the walk skips a directory named name. It skips vendor/ and every
+// dot-prefixed directory, such as .git and .codegraph.
+func SkipDirName(name string) bool {
+	return name == "vendor" || strings.HasPrefix(name, ".")
+}
 
 // Filter tells a walk under one repository root which paths belong to the
 // index of that root: the .codegraph directory, the store, and the lock
@@ -38,8 +47,10 @@ type Filter struct {
 	parent, store string
 }
 
-// NewFilter returns the Filter of root. It resolves the index of root with
-// Resolve and returns its error.
+// NewFilter returns the Filter of root. Pass root as the walk will spell
+// it: Skip compares the paths of the walk to root as text. The error wraps
+// the error of Resolve, such as an *OutsideRootError, or the error of
+// resolving root itself.
 func NewFilter(root string) (Filter, error) {
 	paths, err := Resolve(root)
 	if err != nil {
@@ -61,9 +72,12 @@ func NewFilter(root string) (Filter, error) {
 	return f, nil
 }
 
-// Skip reports whether path, a path under the root of f, is a part of the
-// index. A name that differs from the index only in letter case matches
-// when both name the same file, as on a case-insensitive file system.
+// Skip reports whether path, a path under the root of f, is the top path of
+// a part of the index: the .codegraph directory, the store, or an entry
+// beside the store. It does not match a path below one of them, so a walk
+// must prune each path that Skip matches. A name that differs from the
+// index only in letter case matches when both name the same file, as on a
+// case-insensitive file system.
 func (f Filter) Skip(path string) bool {
 	if f.root == "" {
 		return false
