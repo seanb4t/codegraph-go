@@ -12,6 +12,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
@@ -29,8 +30,8 @@ import (
 // not take it, so a query reads the previous graph while a full index
 // builds the next one.
 const (
-	swapLockSuffix   = ".swap"
-	writerLockSuffix = ".write"
+	swapLockSuffix   = indexdir.SwapLockSuffix
+	writerLockSuffix = indexdir.WriterLockSuffix
 )
 
 // ErrAfterReplace reports that ReplaceStore put the new store in place and
@@ -86,8 +87,9 @@ func LockWriter(dir string) (io.Closer, error) {
 // live, in one atomic step. A reader of live sees the old store or the new
 // one, never a part of either, and a crash leaves one of the two.
 //
-// If live exists, whatever it holds, ReplaceStore exchanges the two
-// directories, and staging then holds what live held. If live does not
+// If live exists, ReplaceStore exchanges the two directories, and staging
+// then holds what live held. The last two paragraphs name the live
+// directories that it refuses instead. If live does not
 // exist, it renames staging to live. Both paths must be on one
 // filesystem. A filesystem that cannot exchange two directories gives an
 // error that wraps fsatomic.ErrExchangeUnsupported, and live stays as it

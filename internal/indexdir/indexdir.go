@@ -1,6 +1,8 @@
 // Package indexdir locates a repository's index: the .codegraph directory
-// below a root and the store inside it, with every symlink resolved. Both
-// the query engine and the indexer use it, so it imports neither.
+// below a root and the store inside it, with every symlink resolved. It
+// also names the parts of the index that a walk of the repository skips.
+// The query engine and the discovery of the indexer both use it, so it
+// imports neither.
 package indexdir
 
 import (

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -27,8 +28,9 @@ import (
 
 const (
 	// scratchSuffix follows the name of the store directory in the prefix
-	// of the scratch directories of that store.
-	scratchSuffix = ".scratch-"
+	// of the scratch directories of that store. Walks skip those
+	// directories by this name.
+	scratchSuffix = indexdir.ScratchSuffix
 	// stagingName is the name of the staging store inside a scratch
 	// directory, and spillName that of the spill file.
 	stagingName = "store"

@@ -31,16 +31,18 @@ type Watcher struct {
 	// Remove event of a file costs no scan of the watch list. Open fills
 	// it, and only the Run loop changes it after that.
 	dirs map[string]bool
-	// skip is the DirFilter rule of the root: it names the directories
-	// that the watcher never watches.
-	skip func(path string) bool
+	// filter is the DirFilter of the root: it names the directories that
+	// the watcher never watches and the paths whose events it drops.
+	filter discover.DirFilter
 }
 
 // Open opens a native fsnotify watcher rooted at root and walks the tree,
 // adding every directory that the root's discover.DirFilter does not skip
-// to the watch set. So vendor/, dot-prefixed directories and the
-// directories that hold the index are never watched, the same exclusion
-// that discovery applies.
+// to the watch set. So vendor/, dot-prefixed directories and the parts of
+// the index are never watched, the same exclusion that discovery applies.
+// Run drops the events of the other parts of the index, such as the lock
+// files beside the store. An index of root that leads outside root gives
+// an error that wraps indexdir.ErrOutsideRoot.
 func Open(root string) (*Watcher, error) {
 	filter, err := discover.NewDirFilter(root)
 	if err != nil {
@@ -50,20 +52,20 @@ func Open(root string) (*Watcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("watch: creating fsnotify watcher: %w", err)
 	}
-	w := &Watcher{fsw: fsw, dirs: make(map[string]bool), skip: filter.SkipDir}
-	if err := addRecursive(w, root, w.skip); err != nil {
+	w := &Watcher{fsw: fsw, dirs: make(map[string]bool), filter: filter}
+	if err := addRecursive(w, root); err != nil {
 		_ = fsw.Close()
 		return nil, fmt.Errorf("watch: walking %s: %w", root, err)
 	}
 	return w, nil
 }
 
-// addRecursive walks root and calls w.Add on every directory not excluded
-// by skip. fsnotify.Add only watches a directory's direct children
+// addRecursive walks root and calls w.Add on every directory that w.filter
+// does not skip. fsnotify.Add only watches a directory's direct children
 // (RESEARCH Pattern 3) — recursive coverage requires this explicit walk at
 // startup, plus a re-addRecursive call on any subdirectory discovered
 // later via a Create event (see watchLoop).
-func addRecursive(w *Watcher, root string, skip func(path string) bool) error {
+func addRecursive(w *Watcher, root string) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -71,7 +73,7 @@ func addRecursive(w *Watcher, root string, skip func(path string) bool) error {
 		if !d.IsDir() {
 			return nil
 		}
-		if p != root && skip(p) {
+		if p != root && w.filter.SkipDir(p) {
 			return filepath.SkipDir
 		}
 		if err := w.fsw.Add(p); err != nil {
@@ -83,13 +85,13 @@ func addRecursive(w *Watcher, root string, skip func(path string) bool) error {
 }
 
 // addCreatedDir watches a directory that appeared after Open. addRecursive
-// never applies skip to its own root, so the created directory is checked
+// never applies w.filter to its own root, so the created directory is checked
 // here first: without that check, a new .venv/ or node_modules/ sibling of
 // a watched directory is walked in full, and kqueue holds one file
 // descriptor for every file in it. A path that is not a directory is
 // ignored.
-func addCreatedDir(w *Watcher, path string, skip func(path string) bool) error {
-	if skip(path) {
+func addCreatedDir(w *Watcher, path string) error {
+	if w.filter.SkipDir(path) {
 		return nil
 	}
 	info, err := os.Stat(path)
@@ -103,7 +105,7 @@ func addCreatedDir(w *Watcher, path string, skip func(path string) bool) error {
 	if !info.IsDir() {
 		return nil
 	}
-	return addRecursive(w, path, skip)
+	return addRecursive(w, path)
 }
 
 // removeMoved drops the watch of a directory that moved away from path
@@ -159,11 +161,14 @@ func watchLoop(ctx context.Context, w *Watcher, deb *Debouncer) {
 				// the same name is handled: see removeMoved.
 				removeMoved(w, ev.Name)
 			}
+			if w.filter.SkipFile(ev.Name) {
+				continue
+			}
 			if !ev.Has(fsnotify.Remove) && !w.dirs[ev.Name] {
 				// A directory that is not watched yet: created, moved in,
 				// or seen through another event when its create event was
 				// not delivered. A file or a gone path costs one stat.
-				if err := addCreatedDir(w, ev.Name, w.skip); err != nil {
+				if err := addCreatedDir(w, ev.Name); err != nil {
 					log.Printf("watch: adding new directory %s: %v", ev.Name, err)
 				}
 			}

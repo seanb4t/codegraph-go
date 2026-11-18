@@ -43,18 +43,13 @@ func buildTagDetail(ctx build.Context) string {
 	return ctx.GOOS + "/" + ctx.GOARCH
 }
 
-// dirExclusionReason classifies a pruned directory name into a Phase 10
-// D-02 exclusion reason. It re-inspects exactly the two branches
-// ShouldSkipDir ORs together — name == "vendor" or a dot-prefixed name —
-// and MUST NOT call ShouldSkipDir itself: discoverexclusion_test.go's
-// TestDirExclusionReasonAgreesWithShouldSkipDir is the guard that pins the
-// two never diverging, and that guard would be a tautology if this
-// function simply delegated to the predicate it is supposed to agree
-// with. The walk callback below keeps calling ShouldSkipDir as the actual
-// prune authority (shared verbatim with the fsnotify watcher, Phase 4
-// D-04) — this helper only decides which reason a prune gets. ok is false
-// for any name neither branch covers (the directory is not pruned at
-// all).
+// dirExclusionReason returns the exclusion reason of a directory that a
+// name rule prunes. It checks the two branches of ShouldSkipDir, a name of
+// "vendor" or a dot-prefixed name, and must not call ShouldSkipDir:
+// TestDirExclusionReasonAgreesWithShouldSkipDir keeps the two in step, and
+// it would prove nothing if this function called the predicate it checks.
+// DirFilter decides the prune; this function only names its reason. ok is
+// false for a name that neither branch covers.
 func dirExclusionReason(name string) (schema.ExclusionReason, bool) {
 	switch {
 	case name == "vendor":
@@ -103,9 +98,10 @@ func sizeLimitDetail(sizeBytes int64) string {
 // DiscoverAll walks root and returns every file whose extension is
 // claimed by a registered LanguageSpec (D-03), sorted by RelPath in
 // ascending byte order, PLUS one ExcludedFile record per path or pruned
-// directory the walker visited but did not index — the same walk result
-// feeds both (Phase 10 D-01), so the discovered-count denominator and the
-// per-file reason list can never disagree. This stable order is
+// directory the walker visited but did not index, except the parts of the
+// index — the same walk result feeds both (Phase 10 D-01), so the
+// discovered-count denominator and the per-file reason list can never
+// disagree. This stable order is
 // determinism's first line of defense: the same input tree always yields
 // the same output order, regardless of filesystem walk order.
 //
@@ -113,9 +109,10 @@ func sizeLimitDetail(sizeBytes int64) string {
 // reason, in this order: (1) a pruned directory — vendor/ or any
 // dot-prefixed directory (.git, .codegraph, etc.), via the DirFilter that
 // the watchers share — gets ONE directory-level record (DIR_VENDOR /
-// DIR_DOTPREFIX, D-02); its contents are never visited, so they
-// contribute nothing to the discovered count. A directory that holds the
-// index under another name is pruned too, with no record. (2) a file
+// DIR_DOTPREFIX); its contents are never visited, so they
+// contribute nothing to the discovered count. A part of the index under
+// another name, such as a store directory, its lock files or its scratch
+// directories, is skipped too, with no record. (2) a file
 // whose extension is not registered in the extension->language registry
 // (languages.go) gets an UNSUPPORTED_EXTENSION record (D-03). (3) a Go
 // source file that go/build.Context.MatchFile reports does not belong to
@@ -140,6 +137,9 @@ func sizeLimitDetail(sizeBytes int64) string {
 // repo's Go module path specifically (as resolved by the "go"
 // LanguageSpec's own descriptor, if any); it is "" when no go.mod was
 // found.
+//
+// DiscoverAll returns the error of NewDirFilter before it walks, such as
+// one that wraps indexdir.ErrOutsideRoot for an index outside root.
 func DiscoverAll(root string) (Discovery, error) {
 	ctx := build.Default
 	var pending []pendingFile
@@ -156,8 +156,8 @@ func DiscoverAll(root string) (Discovery, error) {
 		if d.IsDir() {
 			// Decision point 1: DirFilter is the single prune authority,
 			// shared with both watchers. dirExclusionReason only
-			// classifies which reason a prune by name gets. A directory
-			// that holds the index is pruned with no record.
+			// classifies which reason a prune by name gets. A part of the
+			// index that no name rule skips is pruned with no record.
 			if p != root && filter.SkipDir(p) {
 				relPath, relErr := filepath.Rel(root, p)
 				if relErr != nil {
@@ -169,6 +169,9 @@ func DiscoverAll(root string) (Discovery, error) {
 				}
 				return fs.SkipDir
 			}
+			return nil
+		}
+		if filter.SkipFile(p) {
 			return nil
 		}
 

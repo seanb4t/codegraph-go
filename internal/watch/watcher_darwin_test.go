@@ -30,7 +30,7 @@ func TestBatchPaths(t *testing.T) {
 		{Path: "/other/main.go", Flags: fsevents.ItemModified},
 		{Path: "/", Flags: fsevents.MustScanSubDirs | fsevents.KernelDropped},
 	}
-	got := batchPaths(root, discover.DirFilter{}.SkipDir, batch)
+	got := batchPaths(root, discover.DirFilter{}, batch)
 	want := []string{"/repo/main.go", "/repo/.gitignore", "/repo/pkg", "/REPO/Pkg/b.go", root}
 	if !slices.Equal(got, want) {
 		t.Fatalf("batchPaths =\n  %q\nwant\n  %q", got, want)
@@ -38,30 +38,72 @@ func TestBatchPaths(t *testing.T) {
 }
 
 func TestBatchPathsSkipsTheIndexBehindALink(t *testing.T) {
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
+	for _, tc := range []struct {
+		name   string
+		layout func(t *testing.T, root string)
+		index  []fsevents.Event
+	}{
+		{"a .codegraph link", func(t *testing.T, root string) {
+			mkdirs(t, filepath.Join(root, "cg-real", "store"))
+			symlinkT(t, "cg-real", filepath.Join(root, ".codegraph"))
+		}, []fsevents.Event{
+			{Path: "cg-real", Flags: fsevents.ItemCreated | fsevents.ItemIsDir},
+			{Path: "cg-real/store/000001.log", Flags: fsevents.ItemModified},
+			{Path: "cg-real/store.swap", Flags: fsevents.ItemCreated},
+		}},
+		{"a store link", func(t *testing.T, root string) {
+			mkdirs(t, filepath.Join(root, ".codegraph"), filepath.Join(root, "store-real"))
+			symlinkT(t, filepath.Join("..", "store-real"), filepath.Join(root, ".codegraph", "store"))
+		}, []fsevents.Event{
+			{Path: "store-real", Flags: fsevents.ItemCreated | fsevents.ItemIsDir},
+			{Path: "store-real/000001.log", Flags: fsevents.ItemModified},
+			{Path: "store-real.swap", Flags: fsevents.ItemCreated},
+			{Path: "store-real.write", Flags: fsevents.ItemModified},
+			{Path: "store-real.scratch-abc", Flags: fsevents.ItemCreated | fsevents.ItemIsDir},
+			{Path: "store-real.scratch-abc/store/000002.sst", Flags: fsevents.ItemCreated},
+			{Path: "store-real.scratch.pending-abc", Flags: fsevents.ItemCreated | fsevents.ItemIsDir},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			tc.layout(t, root)
+			filter, err := discover.NewDirFilter(root)
+			if err != nil {
+				t.Fatalf("NewDirFilter: %v", err)
+			}
+			batch := []fsevents.Event{
+				{Path: filepath.Join(root, "main.go"), Flags: fsevents.ItemModified},
+				{Path: filepath.Join(root, "store-real2.swap"), Flags: fsevents.ItemCreated},
+			}
+			for _, ev := range tc.index {
+				ev.Path = filepath.Join(root, ev.Path)
+				batch = append(batch, ev)
+			}
+			got := batchPaths(root, filter, batch)
+			want := []string{filepath.Join(root, "main.go"), filepath.Join(root, "store-real2.swap")}
+			if !slices.Equal(got, want) {
+				t.Fatalf("batchPaths =\n  %q\nwant\n  %q", got, want)
+			}
+		})
 	}
-	if err := os.MkdirAll(filepath.Join(root, "cg-real", "store"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+}
+
+func mkdirs(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
 	}
-	if err := os.Symlink("cg-real", filepath.Join(root, ".codegraph")); err != nil {
+}
+
+func symlinkT(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
 		t.Fatalf("symlink: %v", err)
-	}
-	filter, err := discover.NewDirFilter(root)
-	if err != nil {
-		t.Fatalf("NewDirFilter: %v", err)
-	}
-	batch := []fsevents.Event{
-		{Path: filepath.Join(root, "main.go"), Flags: fsevents.ItemModified},
-		{Path: filepath.Join(root, "cg-real"), Flags: fsevents.ItemCreated | fsevents.ItemIsDir},
-		{Path: filepath.Join(root, "cg-real", "store", "000001.log"), Flags: fsevents.ItemModified},
-		{Path: filepath.Join(root, "cg-real", "store.swap"), Flags: fsevents.ItemCreated},
-	}
-	got := batchPaths(root, filter.SkipDir, batch)
-	want := []string{filepath.Join(root, "main.go")}
-	if !slices.Equal(got, want) {
-		t.Fatalf("batchPaths =\n  %q\nwant\n  %q", got, want)
 	}
 }
 
