@@ -60,7 +60,7 @@
 ## 5. Review and changelog
 
 - [x] 5.1 Run `mise exec -- task test` and `mise exec -- task lint`. Verify that both pass with no new lint findings.
-- [ ] 5.2 Run `/sb:openspec-review index-link-refusal implementation` and resolve every `changes-requested` finding.
+- [x] 5.2 Run `/sb:openspec-review index-link-refusal implementation` and resolve every `changes-requested` finding.
 - [x] 5.3 Add the changelog fragment: `task changie -- new --interactive=false -k Fixes -b "A running watcher stops, and writes nothing, when a pull turns .codegraph or its store into a link that leads elsewhere."`
 
 ## 6. Fixes from the implementation review
