@@ -186,6 +186,10 @@ func unionPaths(first, second []string) []string {
 	return all
 }
 
+// runDaemon is (*daemon.Daemon).Run. A test replaces it to make
+// `daemon start` see a chosen error from the watcher.
+var runDaemon = (*daemon.Daemon).Run
+
 // newDaemonStartCmd builds `daemon start` (D-01/D-02): the explicit
 // foreground blocking watch/index server multiple agent sessions share —
 // reuses daemon.New/Run/RunWithRetry + the .codegraph/daemon.lock
@@ -219,7 +223,7 @@ func newDaemonStartCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			err = d.Run(ctx)
+			err = runDaemon(d, ctx)
 			// WR-01 (03-REVIEW.md): daemon.Run's shared policy gate
 			// (WATCH-03/D-11) returns a watch.ErrWatchDisabled-matching
 			// error on a WSL2 /mnt/<drive> repo or with CODEGRAPH_NO_WATCH=1
