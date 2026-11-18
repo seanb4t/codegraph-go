@@ -8,6 +8,7 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -97,7 +98,7 @@ func mapContextError(err error) error {
 //     IndexingInProgress detail (SRV-04's degrade path, D-14/D-15) —
 //     errIndexingInProgress() builds the one shape every non-GetStatus
 //     handler's degraded response uses
-//   - query.ErrIndexOutsideRoot -> connect.CodeFailedPrecondition with
+//   - indexdir.ErrOutsideRoot -> connect.CodeFailedPrecondition with
 //     the fixed, path-free indexOutsideRootMessage; the full error goes to
 //     the diagnostic stream
 //   - nofollow.ErrSymlink -> connect.CodeFailedPrecondition with the
@@ -124,7 +125,7 @@ func mapEngineError(err error) error {
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, graphstore.ErrStoreLocked):
 		return errIndexingInProgress()
-	case errors.Is(err, query.ErrIndexOutsideRoot):
+	case errors.Is(err, indexdir.ErrOutsideRoot):
 		writeDiagLine("%v", err)
 		return connect.NewError(connect.CodeFailedPrecondition, indexOutsideRootError{})
 	case errors.Is(err, nofollow.ErrSymlink):

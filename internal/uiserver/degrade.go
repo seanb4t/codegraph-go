@@ -175,7 +175,7 @@ func degradedStatus(repoPath string, openErr error) (*uiv1.GetStatusResponse, er
 
 // indexOutsideRootMessage is the fixed, path-free text a browser caller
 // gets when the index leads outside the directory that holds it
-// (query.ErrIndexOutsideRoot). The full error, with paths, goes to the
+// (indexdir.ErrOutsideRoot). The full error, with paths, goes to the
 // server's diagnostic stream.
 const indexOutsideRootMessage = "The index is a link that leads outside the repository. Remove the link or point it inside the repository."
 

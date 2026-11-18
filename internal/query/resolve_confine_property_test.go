@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
-// indexEntryStates are the shapes IndexDirs resolves for .codegraph or its
+// indexEntryStates are the shapes indexdir.Resolve resolves for .codegraph or its
 // store: no entry, a directory, a file, absolute and relative links inside
 // and outside root, a chain of two links, a dangling link and a loop.
 var indexEntryStates = []string{
@@ -16,7 +18,7 @@ var indexEntryStates = []string{
 
 // TestIndexDirsIsStableOnAnUnchangedTree is the property the watcher's
 // index check depends on (#375, design D6): on a tree that does not
-// change, two calls of IndexDirs agree. If they did not, a watcher would
+// change, two calls of indexdir.Resolve agree. If they did not, a watcher would
 // stop on an index that no pull changed. The test builds every pair of
 // states.
 func TestIndexDirsIsStableOnAnUnchangedTree(t *testing.T) {
@@ -32,21 +34,21 @@ func TestIndexDirsIsStableOnAnUnchangedTree(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				indexPath := filepath.Join(root, IndexDirName)
+				indexPath := filepath.Join(root, indexdir.Name)
 				makeIndexEntry(t, index, indexPath, root, outside)
 				if info, err := os.Stat(indexPath); err == nil && info.IsDir() {
-					makeIndexEntry(t, store, filepath.Join(indexPath, StoreDirName), root, outside)
+					makeIndexEntry(t, store, filepath.Join(indexPath, indexdir.StoreName), root, outside)
 				}
 
-				first, err1 := IndexDirs(root)
-				second, err2 := IndexDirs(root)
+				first, err1 := indexdir.Resolve(root)
+				second, err2 := indexdir.Resolve(root)
 				switch {
 				case (err1 == nil) != (err2 == nil):
-					t.Fatalf("IndexDirs = %v then %v", err1, err2)
+					t.Fatalf("indexdir.Resolve = %v then %v", err1, err2)
 				case err1 != nil && err1.Error() != err2.Error():
-					t.Fatalf("IndexDirs errors differ: %q then %q", err1, err2)
+					t.Fatalf("indexdir.Resolve errors differ: %q then %q", err1, err2)
 				case first != second:
-					t.Fatalf("IndexDirs = %+v then %+v", first, second)
+					t.Fatalf("indexdir.Resolve = %+v then %+v", first, second)
 				}
 				if err1 == nil {
 					resolved++

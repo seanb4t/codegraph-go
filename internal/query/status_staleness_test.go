@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 // TestStalenessSidecarPresent pins the D-04a watcher/daemon signal: a
@@ -14,7 +16,7 @@ import (
 func TestStalenessSidecarPresent(t *testing.T) {
 	engine, dir := filesStatusFixture(t)
 
-	sidecar := filepath.Join(dir, IndexDirName, staleSidecarName)
+	sidecar := filepath.Join(dir, indexdir.Name, staleSidecarName)
 	if err := os.WriteFile(sidecar, nil, 0o644); err != nil {
 		t.Fatalf("write sidecar: %v", err)
 	}

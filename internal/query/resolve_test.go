@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 // gitRepo creates dir as a git repository with one commit, so worktrees
@@ -26,7 +28,7 @@ func gitRepo(t *testing.T, dir string) string {
 // directory, so no index is built.
 func markIndexed(t *testing.T, dir string) {
 	t.Helper()
-	mkdirAll(t, filepath.Join(dir, IndexDirName))
+	mkdirAll(t, filepath.Join(dir, indexdir.Name))
 }
 
 func mkdirAll(t *testing.T, dir string) string {

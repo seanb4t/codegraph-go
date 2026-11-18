@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
-	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 func TestTouchPendingRefusesSymlink(t *testing.T) {
@@ -21,7 +21,7 @@ func TestTouchPendingRefusesSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	d := &Daemon{start: query.IndexPaths{Dir: dir}}
+	d := &Daemon{start: indexdir.Paths{Dir: dir}}
 	if err := d.touchPending(); !errors.Is(err, nofollow.ErrSymlink) {
 		t.Fatalf("touchPending = %v, want nofollow.ErrSymlink", err)
 	}
@@ -36,7 +36,7 @@ func TestTouchPendingRefusesSymlink(t *testing.T) {
 
 func TestTouchPendingCreatesSidecar(t *testing.T) {
 	dir := t.TempDir()
-	d := &Daemon{start: query.IndexPaths{Dir: dir}}
+	d := &Daemon{start: indexdir.Paths{Dir: dir}}
 	if err := d.touchPending(); err != nil {
 		t.Fatalf("touchPending: %v", err)
 	}

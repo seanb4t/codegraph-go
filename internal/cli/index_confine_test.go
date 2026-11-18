@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 func symlinkT(t *testing.T, target, link string) {
@@ -18,9 +18,9 @@ func symlinkT(t *testing.T, target, link string) {
 
 func wantIndexOutsideRoot(t *testing.T, err error) {
 	t.Helper()
-	var outside *query.IndexOutsideRootError
+	var outside *indexdir.OutsideRootError
 	if !errors.As(err, &outside) {
-		t.Fatalf("err = %v, want an *query.IndexOutsideRootError", err)
+		t.Fatalf("err = %v, want an *indexdir.OutsideRootError", err)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -246,7 +247,7 @@ func TestExplore(t *testing.T) {
 	t.Run("staleness banner prepended when a sync is pending", func(t *testing.T) {
 		engine, dir := nodeExploreFixture(t)
 
-		sidecar := filepath.Join(dir, IndexDirName, staleSidecarName)
+		sidecar := filepath.Join(dir, indexdir.Name, staleSidecarName)
 		if err := os.WriteFile(sidecar, nil, 0o644); err != nil {
 			t.Fatalf("write sidecar: %v", err)
 		}

@@ -13,17 +13,17 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
-	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // codegraphDirName and storeDirName are the index layout internal/query
 // defines.
 const (
-	codegraphDirName = query.IndexDirName
-	storeDirName     = query.StoreDirName
+	codegraphDirName = indexdir.Name
+	storeDirName     = indexdir.StoreName
 )
 
 // staleSidecarName mirrors internal/query/status.go's staleSidecarName
@@ -79,7 +79,7 @@ type Daemon struct {
 	repoRoot string
 	// start holds the resolved index paths of New. checkIndex compares
 	// every later resolution with it.
-	start query.IndexPaths
+	start indexdir.Paths
 	opts  indexer.Options
 
 	// syncMu serializes indexer.Sync invocations. The debouncer already
@@ -208,15 +208,15 @@ func openWatch(root string) (watcher, error) {
 // indexer.Sync call this Daemon drives (flush, below) — e.g. Workers to
 // bound the daemon's own extraction pool independently of the CLI's
 // one-shot `codegraph sync`/`index` invocations. New returns
-// query.IndexDirs's error when the .codegraph/ or its store resolves
-// outside repoRoot, and the Daemon uses the resolved paths IndexDirs
+// indexdir.Resolve's error when the .codegraph/ or its store resolves
+// outside repoRoot, and the Daemon uses the resolved paths indexdir.Resolve
 // returns.
 func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, error) {
 	abs, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return nil, err
 	}
-	paths, err := query.IndexDirs(abs)
+	paths, err := indexdir.Resolve(abs)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // Run checks the index (checkIndex) before acquire and before each flush
 // (#375). If .codegraph or its store no longer resolves to the paths New
 // resolved, Run writes nothing more, stops through the same join path and
-// returns the error of checkIndex: a query.ErrIndexOutsideRoot refusal, an
+// returns the error of checkIndex: a indexdir.ErrOutsideRoot refusal, an
 // *IndexChangedError, or the resolve error.
 //
 // Before any of the above, Run enforces watch.WatchDisabledReason as its

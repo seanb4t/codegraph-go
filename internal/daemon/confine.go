@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 // ErrIndexChanged is the sentinel an *IndexChangedError matches with
@@ -16,7 +16,7 @@ var ErrIndexChanged = errors.New("the index resolves to other paths than when th
 // IndexChangedError reports that the index directory or its store now
 // resolves to other paths than Was, the paths the watcher started with.
 type IndexChangedError struct {
-	Was, Now query.IndexPaths
+	Was, Now indexdir.Paths
 }
 
 func (e *IndexChangedError) Error() string {
@@ -43,7 +43,7 @@ func (e *IndexChangedError) Is(target error) bool {
 // other than the start one is accepted: when .codegraph moved to a link
 // inside the repository, the watcher's own lock moved with it.
 func (d *Daemon) releaseOwnLock() error {
-	dir, err := query.IndexDir(d.repoRoot)
+	dir, err := indexdir.ResolveDir(d.repoRoot)
 	if err != nil {
 		return fmt.Errorf("left the lock file in place: %w", err)
 	}
@@ -58,10 +58,10 @@ func (d *Daemon) releaseOwnLock() error {
 }
 
 // checkIndex resolves the index paths again. It returns the error of
-// query.IndexDirs unchanged, an *IndexChangedError when the paths differ
+// indexdir.Resolve unchanged, an *IndexChangedError when the paths differ
 // from d.start, or nil.
 func (d *Daemon) checkIndex() error {
-	now, err := query.IndexDirs(d.repoRoot)
+	now, err := indexdir.Resolve(d.repoRoot)
 	if err != nil {
 		return err
 	}

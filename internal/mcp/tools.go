@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
@@ -65,14 +66,14 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 	// query.OpenAt walks up from the path and opens the first .codegraph
 	// it meets, so the directory that is opened is not the path that was
 	// checked. Every .codegraph from the path up to and including the repo
-	// root must pass query.IndexDirs, as the resolver requires.
+	// root must pass indexdir.Resolve, as the resolver requires.
 	for dir, done := pathAbs, false; !done && realpath.Within(repoAbs, dir); dir = filepath.Dir(dir) {
 		done = dir == repoAbs
-		if _, err := os.Lstat(filepath.Join(dir, query.IndexDirName)); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Lstat(filepath.Join(dir, indexdir.Name)); errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if _, err := query.IndexDirs(dir); err != nil {
-			if errors.Is(err, query.ErrIndexOutsideRoot) {
+		if _, err := indexdir.Resolve(dir); err != nil {
+			if errors.Is(err, indexdir.ErrOutsideRoot) {
 				return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root: %w", path, err)
 			}
 			return "", err

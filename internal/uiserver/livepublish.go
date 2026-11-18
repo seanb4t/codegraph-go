@@ -22,6 +22,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -96,13 +97,13 @@ type liveSignature struct {
 // classifyOpenError's own discipline) — a re-index in flight is exactly
 // when the store is locked, and escalating that into an event would
 // defeat the point of live push at the one moment it matters most.
-// query.ErrIndexOutsideRoot and nofollow.ErrSymlink are the other
+// indexdir.ErrOutsideRoot and nofollow.ErrSymlink are the other
 // exceptions: publishing "not initialized" would hide the refusal, which
 // GetStatus reports.
 func computeChange(ctx context.Context, repoPath string, prev liveSignature, prevValid bool) (liveSignature, *uiv1.WatchGraphEvent, bool) {
 	eng, closer, err := openEngine(repoPath)
 	if err != nil {
-		if errors.Is(err, graphstore.ErrStoreLocked) || errors.Is(err, query.ErrIndexOutsideRoot) || errors.Is(err, nofollow.ErrSymlink) {
+		if errors.Is(err, graphstore.ErrStoreLocked) || errors.Is(err, indexdir.ErrOutsideRoot) || errors.Is(err, nofollow.ErrSymlink) {
 			// T-06-12: soft outcome, never a crash, never a publish. The
 			// caller (changeDetector.check) treats changed=false as
 			// "leave my retained state exactly as it was" — returning
@@ -451,8 +452,8 @@ func (r *liveRegistry) Current() *uiv1.WatchGraphEvent {
 // liveCodegraphDirName and liveStoreSubdir are the index layout
 // internal/query defines.
 const (
-	liveCodegraphDirName = query.IndexDirName
-	liveStoreSubdir      = query.StoreDirName
+	liveCodegraphDirName = indexdir.Name
+	liveStoreSubdir      = indexdir.StoreName
 )
 
 // livePublisherPathChain computes the three-element watch chain, shallow

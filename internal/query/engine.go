@@ -9,12 +9,9 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
-
-// StoreDirName is the Pebble store's subdirectory under IndexDirName
-// (D-01b).
-const StoreDirName = "store"
 
 // Engine is the read-only query engine over a single graphstore.Reader
 // snapshot (D-02), plus (03-06) the repo root Node (file mode) and Explore
@@ -188,7 +185,7 @@ func OpenAt(start string) (*Engine, io.Closer, error) {
 		return nil, nil, err
 	}
 
-	store, err := graphstore.Open(filepath.Join(dir, IndexDirName, StoreDirName))
+	store, err := graphstore.Open(filepath.Join(dir, indexdir.Name, indexdir.StoreName))
 	if err != nil {
 		return nil, nil, err
 	}

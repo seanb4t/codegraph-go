@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 func symlinkT(t *testing.T, target, link string) {
@@ -18,12 +20,12 @@ func symlinkT(t *testing.T, target, link string) {
 
 func wantOutsideRoot(t *testing.T, err error, link string) {
 	t.Helper()
-	var outside *IndexOutsideRootError
+	var outside *indexdir.OutsideRootError
 	if !errors.As(err, &outside) {
-		t.Fatalf("err = %v, want an *IndexOutsideRootError", err)
+		t.Fatalf("err = %v, want an *indexdir.OutsideRootError", err)
 	}
-	if !errors.Is(err, ErrIndexOutsideRoot) {
-		t.Fatalf("errors.Is(%v, ErrIndexOutsideRoot) = false", err)
+	if !errors.Is(err, indexdir.ErrOutsideRoot) {
+		t.Fatalf("errors.Is(%v, indexdir.ErrOutsideRoot) = false", err)
 	}
 	if outside.Link != link {
 		t.Fatalf("Link = %q, want %q", outside.Link, link)
@@ -45,7 +47,7 @@ func TestResolveIndexRefusesRootIndexLinkedOutside(t *testing.T) {
 	tmp := t.TempDir()
 	repo := mkdirAll(t, filepath.Join(tmp, "repo"))
 	outside := mkdirAll(t, filepath.Join(tmp, "outside"))
-	link := filepath.Join(repo, IndexDirName)
+	link := filepath.Join(repo, indexdir.Name)
 	symlinkT(t, outside, link)
 
 	_, err := ResolveIndex(repo)
@@ -62,7 +64,7 @@ func TestResolveIndexRefusesRootStoreLinkedOutside(t *testing.T) {
 	repo := mkdirAll(t, filepath.Join(tmp, "repo"))
 	outside := mkdirAll(t, filepath.Join(tmp, "outside"))
 	markIndexed(t, repo)
-	link := filepath.Join(repo, IndexDirName, StoreDirName)
+	link := filepath.Join(repo, indexdir.Name, indexdir.StoreName)
 	symlinkT(t, outside, link)
 
 	_, err := ResolveIndex(repo)
@@ -79,7 +81,7 @@ func TestResolveIndexRefusesDanglingIndexLinkOutside(t *testing.T) {
 	parent := mkdirAll(t, filepath.Join(tmp, "parent"))
 	markIndexed(t, parent)
 	repo := mkdirAll(t, filepath.Join(parent, "repo"))
-	link := filepath.Join(repo, IndexDirName)
+	link := filepath.Join(repo, indexdir.Name)
 	symlinkT(t, filepath.Join(tmp, "victim"), link)
 
 	_, err := ResolveIndex(repo)
@@ -90,8 +92,8 @@ func TestResolveIndexRefusesSubdirectoryIndexLinkedToAncestorIndex(t *testing.T)
 	repo := t.TempDir()
 	markIndexed(t, repo)
 	sub := mkdirAll(t, filepath.Join(repo, "sub"))
-	link := filepath.Join(sub, IndexDirName)
-	symlinkT(t, filepath.Join("..", IndexDirName), link)
+	link := filepath.Join(sub, indexdir.Name)
+	symlinkT(t, filepath.Join("..", indexdir.Name), link)
 
 	_, err := ResolveIndex(sub)
 	wantOutsideRoot(t, err, link)
@@ -100,7 +102,7 @@ func TestResolveIndexRefusesSubdirectoryIndexLinkedToAncestorIndex(t *testing.T)
 func TestResolveIndexAcceptsIndexLinkedInside(t *testing.T) {
 	repo := t.TempDir()
 	mkdirAll(t, filepath.Join(repo, ".cg-real"))
-	symlinkT(t, ".cg-real", filepath.Join(repo, IndexDirName))
+	symlinkT(t, ".cg-real", filepath.Join(repo, indexdir.Name))
 
 	got, err := ResolveIndex(repo)
 	if err != nil {
@@ -115,7 +117,7 @@ func TestResolveIndexAcceptsStoreLinkedInside(t *testing.T) {
 	repo := t.TempDir()
 	markIndexed(t, repo)
 	mkdirAll(t, filepath.Join(repo, ".store-real"))
-	symlinkT(t, filepath.Join("..", ".store-real"), filepath.Join(repo, IndexDirName, StoreDirName))
+	symlinkT(t, filepath.Join("..", ".store-real"), filepath.Join(repo, indexdir.Name, indexdir.StoreName))
 
 	if _, err := ResolveIndex(repo); err != nil {
 		t.Fatalf("ResolveIndex: %v", err)
@@ -139,15 +141,15 @@ func TestResolveIndexAcceptsPlainIndexDirectory(t *testing.T) {
 func TestResolveIndexRefusesMainWorktreeIndexLinkedOutside(t *testing.T) {
 	main, wt := siblingWorktree(t)
 	outside := t.TempDir()
-	symlinkT(t, outside, filepath.Join(main, IndexDirName))
+	symlinkT(t, outside, filepath.Join(main, indexdir.Name))
 
 	_, err := ResolveIndex(wt)
-	wantOutsideRoot(t, err, filepath.Join(realpathT(t, main), IndexDirName))
+	wantOutsideRoot(t, err, filepath.Join(realpathT(t, main), indexdir.Name))
 }
 
 func TestProjectIndexedFalseForIndexLinkedOutside(t *testing.T) {
 	repo := t.TempDir()
-	symlinkT(t, t.TempDir(), filepath.Join(repo, IndexDirName))
+	symlinkT(t, t.TempDir(), filepath.Join(repo, indexdir.Name))
 
 	if ProjectIndexed(repo) {
 		t.Fatal("ProjectIndexed = true for a .codegraph that leads outside the project")
@@ -158,12 +160,12 @@ func TestIndexDirsRefusesDanglingLink(t *testing.T) {
 	tmp := t.TempDir()
 	repo := mkdirAll(t, filepath.Join(tmp, "repo"))
 	target := filepath.Join(tmp, "victim")
-	link := filepath.Join(repo, IndexDirName)
+	link := filepath.Join(repo, indexdir.Name)
 	symlinkT(t, target, link)
 
-	_, err := IndexDirs(repo)
+	_, err := indexdir.Resolve(repo)
 	wantOutsideRoot(t, err, link)
-	var outside *IndexOutsideRootError
+	var outside *indexdir.OutsideRootError
 	errors.As(err, &outside)
 	if want := filepath.Join(realpathT(t, tmp), "victim"); outside.Target != want {
 		t.Fatalf("Target = %q, want %q", outside.Target, want)
@@ -182,27 +184,27 @@ func TestIndexDirsRefusesDanglingLink(t *testing.T) {
 func TestIndexDirsReturnsResolvedPaths(t *testing.T) {
 	repo := t.TempDir()
 	mkdirAll(t, filepath.Join(repo, ".cg-real"))
-	symlinkT(t, ".cg-real", filepath.Join(repo, IndexDirName))
+	symlinkT(t, ".cg-real", filepath.Join(repo, indexdir.Name))
 
-	got, err := IndexDirs(repo)
+	got, err := indexdir.Resolve(repo)
 	if err != nil {
-		t.Fatalf("IndexDirs: %v", err)
+		t.Fatalf("indexdir.Resolve: %v", err)
 	}
-	want := IndexPaths{
+	want := indexdir.Paths{
 		Dir:   filepath.Join(realpathT(t, repo), ".cg-real"),
-		Store: filepath.Join(realpathT(t, repo), ".cg-real", StoreDirName),
+		Store: filepath.Join(realpathT(t, repo), ".cg-real", indexdir.StoreName),
 	}
 	if got != want {
-		t.Fatalf("IndexDirs = %+v, want %+v", got, want)
+		t.Fatalf("indexdir.Resolve = %+v, want %+v", got, want)
 	}
 }
 
 func TestIndexDirsAcceptsIndexThatIsARegularFile(t *testing.T) {
 	repo := t.TempDir()
-	if err := os.WriteFile(filepath.Join(repo, IndexDirName), nil, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, indexdir.Name), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := IndexDirs(repo); err != nil {
-		t.Fatalf("IndexDirs: %v", err)
+	if _, err := indexdir.Resolve(repo); err != nil {
+		t.Fatalf("indexdir.Resolve: %v", err)
 	}
 }
