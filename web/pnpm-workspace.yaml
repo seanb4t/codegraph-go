@@ -23,32 +23,9 @@
 strictDepBuilds: true
 allowBuilds: {}
 
-# 02-07 (BLD-06): forces the `cookie` transitive dependency pulled in by
-# @sveltejs/kit@2.70.3 past GHSA-pxg6-pf52-xh8x (cookie <0.7.0 accepts
-# out-of-bounds characters in cookie name/path/domain — advisory 1103907,
-# severity low, dev-only). @sveltejs/kit's own published dependency range
-# is still `cookie: ^0.6.0` as of this writing (verified against
-# @sveltejs/kit@latest 02-07) — upstream has not bumped it — so a plain
-# `pnpm update` cannot reach the patched line; this override forces
-# resolution to >=0.7.2 without waiting on that upstream bump. Verified:
-# `pnpm audit` reports zero advisories after this override, and `pnpm
-# build` / `svelte-check` are unaffected — cookie 0.6->0.7 is a
-# parsing-strictness fix, not an API change SvelteKit's usage depends on.
-# Revisit (loosen or drop) once @sveltejs/kit ships its own bump past
-# cookie@0.7.0.
-overrides:
-  cookie@<0.7.0: ^0.7.2
-
-# Advisories accepted because this SPA build cannot reach them: +layout.ts
-# sets ssr = false and prerender = false, and the UI has no form actions,
-# no use:enhance, no setHeaders and no server files. The two @sveltejs/kit
-# ones are fixed only in kit 3; drop them when the UI moves to kit 3.
+# Advisories accepted because this UI cannot reach them.
 audit:
   ignore:
-    # @sveltejs/kit <3: URL redirection through an enhanced form submission.
-    - GHSA-pfhg-q3qv-9q6r
-    # @sveltejs/kit <3: XSS through a cache-control header on a prerendered page.
-    - GHSA-27mw-82g8-phjj
     # deepmerge <=4.3.1: prototype poisoning through mergeObject(). Only
     # @sveltejs/vite-plugin-svelte uses it, to merge this repository's own
     # Svelte and Vite config at build time; it is not in the built UI. No
