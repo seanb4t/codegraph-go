@@ -1,16 +1,16 @@
 ---
 verdict: approve-with-notes
-phase: plan
-reviewed_at: 2026-11-18T01:30:08+00:00
-head: 3db18d4fc400a91adcf8bf6ee0fab3979483e166
-round: 2
-next_id: 33
+phase: implementation
+reviewed_at: 2026-11-18T02:05:40+00:00
+head: 890a0ac647b20bcca7f13a60abab837c9550ef3c
+round: 3
+next_id: 54
 lenses:
-  spec-lint: ok
+  spec-lint: not-applicable
   approach: ok
   fit: ok
   test-coverage: ok
-  test-honesty: not-applicable
+  test-honesty: ok
   invariants: ok
 ---
 # Review
@@ -19,21 +19,27 @@ lenses:
 
 | id | lens | severity | scope | claim | evidence | action | mark | judge |
 |---|---|---|---|---|---|---|---|---|
-| R-20 | approach | should-fix | in-change | The risk row says the window between checkIndex and acquire is one system call long. At head, acquire reads the process start time before its first write and then writes through codegraphDir in several calls: CreateTemp, Write, Close and Link, and on a stale lock also ReadFile, Remove and a second CreateTemp and Link. The window covers all of acquire, not one call. | design.md > Risks / Trade-offs — "The same window exists between `checkIndex` and `acquire` in `Run`. → It is one system call long." | State the window as the length of acquire (a start-time read, then the temp file, the link and, on a stale lock, the removal), or move the check into acquire before each write. |  |  |
-| R-21 | approach | should-fix | in-change | D4 motivates the owner check with another process that takes a stale lock after the watcher stops. Until releaseOwnLock runs, the lock names this live process with its own start time, so isStale returns false, acquire returns ErrLockLive and Unlock refuses. No process can take that lock as stale. The case the owner check does cover is a lock removed from outside, for example by hand or by uninit and init, and then taken by a new daemon. | design.md > D4. Remove the lock only when it is this process's lock in the start directory — "After the watcher stops, another process can take a stale lock in the same directory and rewrite it." | Name the sequence the owner check guards: the watcher's lock is removed from outside while its process runs, and another daemon then acquires a new lock in the same directory. |  |  |
-| R-22 | fit | should-fix | in-change | D3's stopWith closure stores the first error and cancels the child context. The standard library already does this with context.WithCancelCause and context.Cause, where the first cause wins. Run already makes that child context with context.WithCancel, and D3 does not name WithCancelCause or give a reason to write the store-once logic by hand. | design.md > D3. A typed error and one stop path in `Run` — "`Run` declares one closure, `stopWith(err)`. It stores the first error it gets and calls the `cancel` of the child conte" | In D3, make the child context with context.WithCancelCause, stop with cancel(err), and after the join return context.Cause(ctx) unless it is context.Canceled. Pass startWatchdog a func that calls cancel(nil). If you keep the hand-written closure, name WithCancelCause in D3 and say why you did not use it. |  |  |
-| R-23 | fit | should-fix | in-change | D3 calls stopWith the one stop path in Run, but the existing ErrWatcherClosed path stays separate. That path sets runErr in the select and does not cancel ctx. Run then has two ways to carry the error it returns: runErr and the error that stopWith stores. The comment at the join already says the ErrWatcherClosed path would be fixed by cancelling an internal context, which is what stopWith does. | design.md > D3. A typed error and one stop path in `Run` — "`Run` then joins as it does on a cancel and returns the stored error in place of `nil`." | In D3 and task 2.4, route the loopExited branch through stopWith(ErrWatcherClosed), or through cancel(ErrWatcherClosed) if fit-1 is taken. Then remove runErr, so Run has one stored stop error and one stop path. |  |  |
-| R-3 | invariants | should-fix | in-change | D4 says leaving the watcher's own lock is wrong under serve because it names the live serve pid. When the user renames .codegraph to .cg-real and links it (the BREAKING move-inside case), the own lock moves along, the path check fails, and releaseOwnLock leaves a lock naming the live serve pid; daemon start then gets ErrLockLive. | design.md > D4. Remove the lock only when it is this process's lock in the start directory — "leaving it is wrong: under `serve`, it names the live `serve` pid, so `isStale` keeps it, and `daemon start` and `daemon" | In releaseOwnLock, remove the lock when .codegraph still resolves inside the repository (not refused) and the lock names this pid; leave it when refused, unresolvable or owned by another pid. Add a 3.1 row that renames .codegraph to .cg-real, links it, and asserts the lock is gone, and adjust the move-inside scenario's 'nothing under .cg-real changes'. | regression | severity? blocker 0.78 |
-| R-24 | invariants | should-fix | in-change | The check before acquire must run on every Run call of RunWithRetry. Task 2.5 links .codegraph before the first Run, so a check placed once before the retry loop, or only on the first call, passes it. No test passes the edge of a retry after ErrLockLive. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Assert that it returns an error that matches `query.ErrIndexOutsideRoot` after one call to `Run`" | Add a row to 2.5: write a live lock (this pid, selfStartedAt) in <repo>/.codegraph so the first Run returns ErrLockLive, swap .codegraph to a link to <outside> holding a stale daemon.lock inside the onDeferred callback, and assert the refusal from the second Run and unchanged bytes of <outside>/daemon.lock. |  |  |
-| R-25 | invariants | should-fix | in-change | The spec requires a check before each flush, but every row of 2.4 changes the index before the first flush (syncFn never ran). A check that runs only on the first flush, or is cached after one pass, passes every row; no row checks a flush that follows a passed one. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Each row asserts that `Run` returns the error of `checkIndex` and that `syncFn` never ran." | Add a row to TestRunStopsWhenIndexChanges that lets the catch-up sync finish with the index unchanged, then links .codegraph outside, sends one event, and asserts syncFn ran exactly once and the target is unchanged. |  |  |
-| R-26 | invariants | should-fix | in-change | The store-only scenario requires the message to name both store paths. TestIndexChangedErrorText asserts only 'both paths'; with Was.Dir equal to Now.Dir a message that prints only Dir values passes it, and 2.3 row 4 checks the struct, not the text. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Verify with `TestIndexChangedErrorText`, which asserts both paths, the phrase and `errors.Is(err, ErrIndexChanged)`." | Make TestIndexChangedErrorText a table with a Dir-change row and a store-only row (equal Dir, different Store), and assert both Store strings appear in the store-only message. |  |  |
-| R-27 | invariants | should-fix | in-change | releaseOwnLock removes only when both the path and the owner match. Row 1 of 3.1 does not say the lock in <other> names this pid; with a foreign or dead pid the owner check alone refuses it, so an implementation without the path check passes every row. | tasks.md > 3. A stopping watcher removes only its own lock (#375) — "`<repo>/.codegraph` linked to `<other>/.codegraph`, which holds a `daemon.lock`: the bytes of that file are unchanged af" | In row 1, write <other>/.codegraph/daemon.lock with os.Getpid() and selfStartedAt(), so only the path check keeps it; keep row 4 for the owner check with the path unchanged. |  |  |
-| R-28 | spec-lint | should-fix | in-change | The WHEN of the scenario 'Shutdown after only the store changed' names the stop only as 'the watcher stops', with no input such as SIGTERM, a cancel or a refusal. | specs/index-resolution/spec.md > Scenario: Shutdown after only the store changed — "- **AND** the watcher stops" | Name the concrete stop in the WHEN, for example the SIGTERM the other scenarios use, so the lock rule has one input to test. |  |  |
-| R-17 | test-coverage | should-fix | in-change | Scenario requires stderr output and exit 1; 4.2 asserts only a returned error, and main.go is untested. | tasks.md > 4. Caller output — "`cmd/codegraph/main.go` prints that error on stderr and exits 1." | Add a test of main's error path (or a built-binary run with the seam) that asserts the stderr text and exit code 1. | regression |  |
-| R-29 | test-coverage | should-fix | in-change | No Run-level row moves .codegraph inside the repo; spec says nothing under the new target changes. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Rows: `.codegraph` linked outside, the store linked outside, and `.codegraph` linked to itself." | Add a row to TestRunStopsWhenIndexChanges: .codegraph moved to an inside link; assert Run returns *IndexChangedError and <repo>/.cg-real is unchanged. |  |  |
-| R-30 | test-coverage | should-fix | in-change | No Run-level row moves the store inside the repo; only checkIndex is tested for it. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "only the store moved to `<repo>/.store-real`: `*IndexChangedError` with equal `Dir` values and different `Store` values." | Add a store-moved-inside row to TestRunStopsWhenIndexChanges asserting the error names both store paths, syncFn never ran and <repo>/.store-real is unchanged. |  |  |
-| R-31 | test-coverage | should-fix | in-change | Deferred-watcher scenario waits on a live daemon lock; task 2.5 uses a stale lock and stops on the first Run. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "It writes a stale `daemon.lock` (a dead pid) into `<outside>`" | Extend 2.5: first Run returns ErrLockLive (live lock), then link .codegraph outside, and assert the retry Run returns ErrIndexOutsideRoot with the outside lock bytes unchanged. |  |  |
-| R-32 | test-coverage | should-fix | in-change | Unchanged-index scenario THEN is that search finds the function; 2.6 asserts only that syncFn ran. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "asserts that `syncFn` ran once and that `Run` returns `nil` after a cancel." | In 2.6 add an assertion that the index holds the function `added` after the flush, or name a recorded fixture run of search. |  |  |
+| R-33 | approach,invariants | should-fix | in-change | app-1: D3 says Run returns nil only when the cause is context.Canceled. The code also returns nil when the cause equals the parent context's own cause, such as a deadline or a cause the caller set. design.md records no such deviation.; inv-1: Run must return nil whenever its parent context ends. A cause that does not match context.Canceled, such as DeadlineExceeded or a custom WithCancelCause cause, is handled only by the second operand. No test runs Run past acquire with such a parent: the two WithTimeout tests in daemon_test.go use a NoWatch probe and return at the policy gate. If that operand is removed, Run returns DeadlineExceeded on a timed-out parent, and no test fails. Before this change, Run returned nil on any ctx.Done. | internal/daemon/daemon.go:446 — "if errors.Is(cause, context.Canceled) \|\| cause == context.Cause(parent) {" | app-1: State in D3 that Run also returns nil when the cause is the parent's cause, and say why (a parent stop is a clean shutdown). Or drop the second clause from the code.; inv-1: Add a test on newFakeDaemon in which the parent comes from context.WithTimeout, or from context.WithCancelCause and is cancelled with a custom error. Let the parent end after the catch-up sync and assert that Run returns nil. Verify that the test fails when `\|\| cause == context.Cause(parent)` is removed. |  |  |
+| R-34 | approach | should-fix | in-change | The proposal says the shutdown check requires .codegraph to resolve to its start directory. releaseOwnLock, D4 and the spec require only that it resolve inside the repository, and the code removes the lock from a moved directory such as .cg-real. | proposal.md > What Changes — "`.codegraph` still resolves to its start directory, and the lock names its own process" | Change the proposal bullet to say that .codegraph still resolves inside the repository, as D4 and the requirement 'A stopping watcher removes only its own lock file' say. |  |  |
+| R-35 | approach | should-fix | in-change | D2 gives as its reason that the lock and the sidecar stay in the old directory, so a second daemon on the new path does not see the lock. When .codegraph is renamed and linked, D4 and the code show that the lock moves with it, so in that case the reason does not hold. | design.md > D2. Stop on any change, not only on a refusal — "Its lock file and its pending sidecar are in the old directory. A second daemon started on the new path does not see tha" | Limit the D2 reason to a link that points at a different directory. Give the reason to stop in the rename-and-link case too, where the lock and the sidecar move with the directory. |  |  |
+| R-36 | fit | should-fix | in-change | releaseOwnLock repeats the first half of query.IndexDirs: it resolves the root, resolves <root>/.codegraph and tests realpath.Within, which is what resolveInside in internal/query/confine.go already does. The copy also builds its own 'now leads outside' error text in place of *IndexOutsideRootError, so a .codegraph that leads outside gets two error shapes. D4 names the approach but not the existing helper. | internal/daemon/confine.go:52 — "dir, err := realpath.Resolve(filepath.Join(d.repoRoot, codegraphDirName))" | Split the .codegraph half of IndexDirs into an exported query.IndexDir(root) (string, error) that resolves the root and calls resolveInside. Have IndexDirs and releaseOwnLock both call it, and log its *IndexOutsideRootError in releaseOwnLock. Name the helper in D4. |  |  |
+| R-37 | fit | should-fix | in-change | D6 says the property follows TestResolve_AgreesWithTheOperatingSystem, but that test draws its trees with the shared generator realpathtest.Draw. The new property writes its own drawIndexEntry with six fixed one-hop states. It has no link chains, no relative or '..' targets and no trailing separator, and Draw already generates all of these. The design names neither the helper nor a reason to skip it. | internal/query/resolve_confine_property_test.go:60 — "switch rapid.SampledFrom([]string{"absent", "dir", "inside", "outside", "dangling", "self"}).Draw(rt, label) {" | Draw a tree with realpathtest.Draw(rt, root, outside). Then make .codegraph and store a directory, nothing, or a link to a drawn path (absolute or relative), and keep drawIndexEntry's self link as an extra state. Otherwise, state in D6 why the six fixed states are enough. |  |  |
+| R-38 | invariants | should-fix | in-change | D3 says the IndexChangedError message names each path that differs: Dir, Store or both. The 'dir' row of TestIndexChangedErrorText changes both Dir and Store, but it asserts only the two Dir values. The 'store only' row keeps Dir equal. So an Error() that writes the Store clause only when Dir is unchanged (an else-if) passes every row. The indexMovedInside rows of TestCheckIndexReportsEveryChange and TestRunStopsWhenIndexChanges check only Dir. | internal/daemon/confine_test.go:71 — "want: []string{`"/r/.codegraph"`, `"/r/.cg-real"`}," | Rename the 'dir' row to 'both' and add the two Store values, "/r/.codegraph/store" and "/r/.cg-real/store", to its want list. Optionally add a Dir-only row where Store is equal and assert that the message does not hold the word 'store'. |  |  |
+| R-40 | test-coverage | should-fix | in-change | covered row 'A .codegraph link that leads outside' has no verification run | review > not-run — "A .codegraph link that leads outside" | run the covering test and record it in verification-runs.txt |  |  |
+| R-41 | test-coverage | should-fix | in-change | covered row 'A store link that leads outside' has no verification run | review > not-run — "A store link that leads outside" | run the covering test and record it in verification-runs.txt |  |  |
+| R-42 | test-coverage | should-fix | in-change | covered row 'A .codegraph link that stays inside' has no verification run | review > not-run — "A .codegraph link that stays inside" | run the covering test and record it in verification-runs.txt |  |  |
+| R-43 | test-coverage | should-fix | in-change | covered row 'A pull turns .codegraph into a link that leads outside' has no verification run | review > not-run — "A pull turns .codegraph into a link that leads outside" | run the covering test and record it in verification-runs.txt |  |  |
+| R-44 | test-coverage | should-fix | in-change | covered row 'A pull turns the store into a link that leads outside' has no verification run | review > not-run — "A pull turns the store into a link that leads outside" | run the covering test and record it in verification-runs.txt |  |  |
+| R-45 | test-coverage | should-fix | in-change | covered row 'The index moves inside the repository' has no verification run | review > not-run — "The index moves inside the repository" | run the covering test and record it in verification-runs.txt |  |  |
+| R-46 | test-coverage | should-fix | in-change | covered row 'The store moves inside the repository' has no verification run | review > not-run — "The store moves inside the repository" | run the covering test and record it in verification-runs.txt |  |  |
+| R-47 | test-coverage | should-fix | in-change | covered row 'The index can no longer be resolved' has no verification run | review > not-run — "The index can no longer be resolved" | run the covering test and record it in verification-runs.txt |  |  |
+| R-48 | test-coverage | should-fix | in-change | covered row 'A deferred watcher retries after a pull' has no verification run | review > not-run — "A deferred watcher retries after a pull" | run the covering test and record it in verification-runs.txt |  |  |
+| R-49 | test-coverage | should-fix | in-change | covered row 'daemon start reports the stop' has no verification run | review > not-run — "daemon start reports the stop" | run the covering test and record it in verification-runs.txt |  |  |
+| R-50 | test-coverage | should-fix | in-change | covered row 'Shutdown after .codegraph became a link to another project' has no verification run | review > not-run — "Shutdown after .codegraph became a link to another project" | run the covering test and record it in verification-runs.txt |  |  |
+| R-51 | test-coverage | should-fix | in-change | covered row 'Shutdown after only the store changed' has no verification run | review > not-run — "Shutdown after only the store changed" | run the covering test and record it in verification-runs.txt |  |  |
+| R-52 | test-coverage | should-fix | in-change | covered row 'Shutdown after the index moved inside the repository' has no verification run | review > not-run — "Shutdown after the index moved inside the repository" | run the covering test and record it in verification-runs.txt |  |  |
+| R-53 | test-coverage | should-fix | in-change | covered row 'Shutdown with the index unchanged' has no verification run | review > not-run — "Shutdown with the index unchanged" | run the covering test and record it in verification-runs.txt |  |  |
+| R-39 | test-honesty | should-fix | in-change | TestDaemonStartReturnsIndexChange stubs runDaemon to return the refusal and asserts errors.Is on it; the command passes the error through, and the spec's stderr and exit 1 are not touched. | internal/cli/watcher_stop_test.go:74 — "runDaemon = func(*daemon.Daemon, context.Context) error { return refusal }" | Assert the printed stderr text and exit status (for example through a txtar script or the main error path), or assert a transformation the command does on that error. |  |  |
 
 ## Repeats
 
@@ -53,45 +59,78 @@ None.
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | plan | full | 2a7f7f6b90f55f2d34dae338d3b84c07bc5ec2c3 | bc5d38efe21bf70ed03346096c5021ec0e529bb13449e1106a7d119e67728ed2 | changes-requested | 19 | 0 | 0 | 0 |  |
 | 2 | plan | follow-up | 3db18d4fc400a91adcf8bf6ee0fab3979483e166 | 25092bd66479eaa851616891a7d670fb99fe937378c2d767a342a6c12e546083 | approve-with-notes | 13 | 0 | 2 | 0 |  |
+| 3 | implementation | full | 890a0ac647b20bcca7f13a60abab837c9550ef3c | af67c9b0628a1a5cb04dacd9526d7ed3322de6a25574bb9f97ef0437f76d83a4 | approve-with-notes | 21 | 0 | 0 | 0 |  |
 
 ## Judge
 
-judge: 30 questions, 0.001 USD
+judge: 14 questions, 0.001 USD
 
 ## Coverage matrix
 
 | scenario | covered by | status | verified |
 |---|---|---|---|
-| A .codegraph link that leads outside | 1.1 | covered |  |
-| A store link that leads outside | 1.1 | covered |  |
-| init through a link that leads outside | 1.1 | covered |  |
-| A dangling link is refused, not skipped | 1.1 | covered |  |
-| A subdirectory link to an ancestor's index | 1.1 | covered |  |
-| The main worktree's index leads outside | 1.1 | covered |  |
-| serve refuses to start | 1.4 | covered |  |
-| A .codegraph link that stays inside | 1.1 | covered |  |
-| A store link that stays inside | 1.1 | covered |  |
-| The text of the refusal | 1.3 | covered |  |
-| A pull turns .codegraph into a link that leads outside | 2.4 | covered |  |
-| A pull turns the store into a link that leads outside | 2.4 | covered |  |
-| The index moves inside the repository | 2.3 | partial |  |
-| The store moves inside the repository | 2.3 | partial |  |
-| The index can no longer be resolved | 2.4 | covered |  |
-| A deferred watcher retries after a pull | 2.5 | partial |  |
-| The index is unchanged | 2.6 | partial |  |
-| daemon start reports the stop | 4.2 | partial |  |
-| serve keeps serving after its watcher stops | 4.1 | covered |  |
-| Shutdown after .codegraph became a link to another project | 3.1 | covered |  |
-| Shutdown after only the store changed | 3.1 | covered |  |
-| Shutdown with the index unchanged | 3.1 | covered |  |
+| A .codegraph link that leads outside | internal/query/resolve_confine_test.go: TestResolveIndexRefusesRootIndexLinkedOutside; internal/cli/index_confine_test.go: TestIndexCommandsRefuseIndexLinkedOutside | covered | not-run |
+| A store link that leads outside | internal/query/resolve_confine_test.go: TestResolveIndexRefusesRootStoreLinkedOutside; internal/cli/index_confine_test.go: TestIndexCommandsRefuseIndexLinkedOutside | covered | not-run |
+| init through a link that leads outside | internal/cli/index_confine_test.go: TestInitRefusesIndexLinkedOutside | covered | pass |
+| A dangling link is refused, not skipped | internal/query/resolve_confine_test.go: TestResolveIndexRefusesDanglingIndexLinkOutside | covered | pass |
+| A subdirectory link to an ancestor's index | internal/query/resolve_confine_test.go: TestResolveIndexRefusesSubdirectoryIndexLinkedToAncestorIndex | covered | pass |
+| The main worktree's index leads outside | internal/query/resolve_confine_test.go: TestResolveIndexRefusesMainWorktreeIndexLinkedOutside | covered | pass |
+| serve refuses to start | internal/cli/serve_test.go: TestServeServerPathsRefusesIndexLinkedOutside | covered | pass |
+| A .codegraph link that stays inside | internal/query/resolve_confine_test.go: TestResolveIndexAcceptsIndexLinkedInside; internal/cli/index_confine_test.go: TestIndexCommandsAcceptIndexLinkedInside | covered | not-run |
+| A store link that stays inside | internal/query/resolve_confine_test.go: TestResolveIndexAcceptsStoreLinkedInside | covered | pass |
+| The text of the refusal | internal/query/resolve_confine_test.go: TestIndexDirsRefusesDanglingLink | covered | pass |
+| A pull turns .codegraph into a link that leads outside | internal/daemon/confine_run_test.go: TestRunStopsWhenIndexChanges (indexLinkedOutside row) | covered | not-run |
+| A pull turns the store into a link that leads outside | internal/daemon/confine_run_test.go: TestRunStopsWhenIndexChanges (storeLinkedOutside row) | covered | not-run |
+| The index moves inside the repository | internal/daemon/confine_run_test.go: TestRunStopsWhenIndexChanges (indexMovedInside row) | covered | not-run |
+| The store moves inside the repository | internal/daemon/confine_run_test.go: TestRunStopsWhenIndexChanges (storeMovedInside row) | covered | not-run |
+| The index can no longer be resolved | internal/daemon/confine_run_test.go: TestRunStopsWhenIndexChanges (indexLinkedToItself row) | covered | not-run |
+| A deferred watcher retries after a pull | internal/daemon/confine_run_test.go: TestRunChecksIndexBeforeLock (retry row) | covered | not-run |
+| The index is unchanged | internal/daemon/confine_test.go: TestRunSyncsWhenIndexUnchanged | covered | pass |
+| daemon start reports the stop | internal/cli/watcher_stop_test.go: TestDaemonStartReturnsIndexChange; test/integration/testdata/index_link_outside.txtar | covered | not-run |
+| serve keeps serving after its watcher stops | internal/cli/watcher_stop_test.go: TestServeWatchStartPrintsIndexChange | covered | pass |
+| Shutdown after .codegraph became a link to another project | internal/daemon/confine_run_test.go: TestRunReleasesOnlyItsOwnLock (index linked to another project row) | covered | not-run |
+| Shutdown after only the store changed | internal/daemon/confine_run_test.go: TestRunReleasesOnlyItsOwnLock (storeLinkedOutside row) | covered | not-run |
+| Shutdown after the index moved inside the repository | internal/daemon/confine_run_test.go: TestRunReleasesOnlyItsOwnLock (indexMovedInside row) | covered | not-run |
+| Shutdown with the index unchanged | internal/daemon/confine_run_test.go: TestRunReleasesOnlyItsOwnLock (indexUnchanged row) | covered | not-run |
 
 ### Not run
 
-Plan phase: no verification runs.
+- A .codegraph link that leads outside: no verification run names this row
+- A store link that leads outside: no verification run names this row
+- A .codegraph link that stays inside: no verification run names this row
+- A pull turns .codegraph into a link that leads outside: no verification run names this row
+- A pull turns the store into a link that leads outside: no verification run names this row
+- The index moves inside the repository: no verification run names this row
+- The store moves inside the repository: no verification run names this row
+- The index can no longer be resolved: no verification run names this row
+- A deferred watcher retries after a pull: no verification run names this row
+- daemon start reports the stop: The unit test asserts the returned error; the stderr and exit path of main is proven by the txtar on status.
+- Shutdown after .codegraph became a link to another project: no verification run names this row
+- Shutdown after only the store changed: no verification run names this row
+- Shutdown after the index moved inside the repository: no verification run names this row
+- Shutdown with the index unchanged: no verification run names this row
 
 ## Verification runs
 
-None.
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexRefusesRootIndexLinkedOutside$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexRefusesRootStoreLinkedOutside$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexRefusesDanglingIndexLinkOutside$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexRefusesSubdirectoryIndexLinkedToAncestorIndex$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexRefusesMainWorktreeIndexLinkedOutside$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexAcceptsIndexLinkedInside$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestResolveIndexAcceptsStoreLinkedInside$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestIndexDirsRefusesDanglingLink$' ./internal/query`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestIndexCommandsRefuseIndexLinkedOutside$' ./internal/cli`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestInitRefusesIndexLinkedOutside$' ./internal/cli`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestServeServerPathsRefusesIndexLinkedOutside$' ./internal/cli`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestIndexCommandsAcceptIndexLinkedInside$' ./internal/cli`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestDaemonStartReturnsIndexChange$' ./internal/cli`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestServeWatchStartPrintsIndexChange$' ./internal/cli`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestRunStopsWhenIndexChanges$' ./internal/daemon`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestRunChecksIndexBeforeLock$' ./internal/daemon`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestRunSyncsWhenIndexUnchanged$' ./internal/daemon`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestRunReleasesOnlyItsOwnLock$' ./internal/daemon`
+- exit 0: `mise exec -- go test -count=1 -v -run '^TestScripts/index_link_outside$' ./test/integration`
 
 ## Dropped
 
@@ -99,36 +138,32 @@ None.
 
 ## Lens notes
 
-- approach: Follow-up round: the whole change directory is new since the base 2a7f7f6b, so every artifact heading is inside the bound.
-- approach: Every fixed row of prior.json was checked at head. R-1/R-7 (checkIndex before acquire), R-2 (any resolve error stops), R-3 (store-only change releases), R-4 (named seams runDaemonWithRetry and runDaemon, no name collision in internal/cli), R-5 (one checkIndex), R-6 (owner check), R-8/R-15 (store rows), R-9 (BREAKING in the spec), R-10 to R-13 (concrete WHEN/THEN), R-14 (named tests, all present at head), R-16/R-17, R-18 (stopWith) and R-19 (D6 property) do not recur.
-- approach: Cited facts that hold at head: query.IndexDirs and IndexOutsideRootError text (internal/query/confine.go), realpath.Resolve returns an error on a self-link (EvalSymlinks ELOOP is not ErrNotExist), Daemon.codegraphDir/storeDir, the child ctx and cancel in Run, RunWithRetry retrying only on ErrLockLive, serveWatchStart's stderr line, daemon start calling d.Run, main.go exiting 1, readLock/lockInfo.PID/Unlock, indexer.Sync never calling ReplaceStore, the watcher skipping dot directories, pgregory.net/rapid v1.3.0 and TestResolve_AgreesWithTheOperatingSystem, newFakeDaemon in fakewatcher_test.go.
-- approach: D3 says the IndexChangedError message names both paths, and task 2.1 asserts both paths. The scenario 'The store moves inside the repository' needs the two Store values in the message. D3 does not say whether the message prints Dir, Store or both fields of Was and Now; stating that the message prints every differing field would make the store scenario unambiguous.
-- approach: The two refusal-at-start requirements are existing behavior from #374. design.md covers them in Context and in the non-goal 'No change to the check that commands run at start', with no decision of their own.
-- fit: The prompt names no path for repository rows of the library-preference table, so only the generic rows were used.
-- fit: D5 names daemonStopMatching as its pattern, but the proposed names runDaemonWithRetry and runDaemon do not follow that convention. The existing daemon-package seams in internal/cli are named daemon<Func> (daemonList, daemonStopMatching, daemonStopAll), so the matching names are daemonRunWithRetry and daemonRun. Because D5 names the pattern, this is not filed as an unjustified-deviation.
-- fit: D4 resolves <repoRoot>/.codegraph with realpath.Resolve outside query.IndexDirs. D4 explains why it uses .codegraph alone (IndexDirs fails when only the store is refused), so this is not filed as a copy.
-- fit: IndexChangedError plus ErrIndexChanged follows the existing typed-error-with-Is pattern (watch.DisabledError, query.IndexOutsideRootError). The D6 rapid property follows TestResolve_AgreesWithTheOperatingSystem, and pgregory.net/rapid is already in go.mod.
-- invariants: I1: A watcher writes nothing through index paths that resolve differently from its start \| enforced at checkIndex before acquire and in the debounce callback (planned, D1) \| boundary test 2.3, 2.4, 2.5 (first Run and first flush only, see inv-1, inv-2)
-- invariants: I2: IndexDirs returns equal IndexPaths for an unchanged tree, so D2 struct equality never stops a watcher spuriously \| enforced at IndexDirs (internal/query/confine.go) \| boundary test 2.7 rapid property (planned)
-- invariants: I3: checkIndex returns the IndexDirs error unchanged, so errors.Is(err, query.ErrIndexOutsideRoot) still matches \| enforced at checkIndex (planned) \| boundary test 2.3 rows 1, 2, 5
-- invariants: I4: RunWithRetry retries only on ErrLockLive; a refusal or IndexChangedError returns at once \| enforced at internal/daemon/daemon.go:460 \| boundary test 2.5
-- invariants: I5: releaseOwnLock removes daemon.lock iff .codegraph resolves to start.Dir and lockInfo.PID == os.Getpid() \| enforced at releaseOwnLock (planned, D4) \| boundary test 3.1 (path conjunct not isolated, see inv-5; move-inside case, see inv-4)
-- invariants: I6: IndexChangedError text names Was and Now and says restart the watcher \| enforced at IndexChangedError.Error (planned) \| boundary test 2.1 (store-only edge missing, see inv-3)
-- invariants: I7: The refusal error names the link, the resolved target, the resolved root and the fixed phrase \| enforced at internal/query/confine.go IndexOutsideRootError.Error \| boundary test TestIndexDirsRefusesDanglingLink extended in 1.3
-- invariants: I8: Within(root, root) is true, so an index that resolves to its root is not refused \| enforced at internal/realpath/realpath.go:21 \| boundary test internal/realpath/realpath_test.go:58
-- invariants: I9: Run returns the first stored stop error in place of nil after the join \| enforced at stopWith (planned, D3) \| boundary test 2.4
-- invariants: No enforcement point of this change is a script, so no edge-input probe was run; IndexDirs and the planned checks are Go code in internal packages.
-- invariants: When .codegraph is replaced by a regular file, IndexDirs returns the start paths (non-directory branch), checkIndex passes, and each flush fails and logs while the watcher keeps running; the spec's stop conditions do not cover it, and the Non-Goals treat a vanished .codegraph the same way.
-- invariants: Task 2.2 says TestNewUsesResolvedIndexPaths still passes, but it reads d.codegraphDir and d.storeDir (internal/daemon/confine_test.go:49-53), as does internal/daemon/fakewatcher_test.go:87; those lines must move to d.start in the same task.
-- invariants: I10: A refusal or IndexChangedError from Run reaches the caller unfiltered: serveWatchStart filters only nil, context.Canceled and *watch.DisabledError, and daemon start returns any non-DisabledError from d.Run \| enforced at internal/cli/serve.go:205 and internal/cli/daemon.go:222 \| boundary test 4.1, 4.2
-- invariants: Prior rows R-1, R-2, R-3 (store-only case), R-7, R-8 and R-19 are addressed at head by D1, D4, task 2.3 row 4 and D6.
-- spec-lint: Every requirement has at least one scenario, and every scenario has WHEN or GIVEN and THEN lines.
-- spec-lint: Every requirement heading has matching task lines in tasks.md.
-- spec-lint: BREAKING appears in proposal.md and in the delta spec's watcher requirement; both sides match.
-- spec-lint: Build targets test, lint and changie named in tasks.md exist in Taskfile.yml.
-- spec-lint: design.md has no open-questions section, so the assumed-answer check has nothing to test.
-- spec-lint: Prior rows R-9 to R-13 concern the same spec and were fixed; the defect of spe-1 is new and not a re-raise.
-- test-coverage: Tasks 2.3 to 4.2 give no run command of their own; they are graded covered through the named test and the package command of 2.2 and 5.1.
+- approach: The Context section of design.md describes the code before the change (Daemon.codegraphDir, Daemon.storeDir, the deferred release). D1 and D4 name what replaces them, so these citations are not counted as stale.
+- approach: The Goal 'A watcher writes no byte of ... a lock file through a path that resolves differently from its start' is wider than D4. D4 removes <repo>/.cg-real/daemon.lock after a rename and link, and that path resolves differently from the start path.
+- approach: Every test named in tasks.md exists at head. The Context citations checked at head: IndexDirs and its error types, acquire, release, Unlock, readLock, ReplaceStore only in fullindex, the serve stderr line, and main.go exit 1.
+- approach: Every prior row is fixed, and none of their defects shows again at head.
+- fit: The prompt names no path for repository library-preference rows. Only the generic rows of the rulebook were applied.
+- fit: Prior fit-related rows R-5 (one shared check: checkIndex), R-6 (owner check like Unlock), R-18, R-22 (context.WithCancelCause) and R-23 (one stop path) are fixed at head, and this round does not raise them again.
+- fit: The new seams runDaemonWithRetry and runDaemon follow the package-level func-var pattern of daemonStopMatching and runDaemonPicker. IndexChangedError and ErrIndexChanged follow the shape of query.IndexOutsideRootError, with a sentinel and an Is method.
+- invariants: I1: Run resolves the index (checkIndex) before acquire on every call, including each retry of RunWithRetry \| enforced at internal/daemon/daemon.go:280 (checkIndex before acquire(d.start.Dir)) \| boundary test TestRunChecksIndexBeforeLock rows 'first call' (onDeferred 0 times) and 'retry' (link appears in onDeferred after ErrLockLive)
+- invariants: I2: flush, touchPending, Sync and clearPending run only after a passed check, before every flush, the ErrStoreLocked requeue included \| enforced at internal/daemon/daemon.go:369 (checkIndex at the top of the debounce callback; flush has no other caller) \| boundary test TestRunStopsWhenIndexChanges (one passed catch-up flush, then a failed one; syncFn ran exactly once)
+- invariants: I3: checkIndex returns the IndexDirs error unchanged, an *IndexChangedError on any struct inequality (Store alone counts), else nil \| enforced at internal/daemon/confine.go:72-81 \| boundary test TestCheckIndexReportsEveryChange (6 rows: outside x2, self-link, Dir moved, Store-only moved, unchanged)
+- invariants: I4: A failed check stops Run, and RunWithRetry returns that error without a retry \| enforced at daemon.go:370 cancel(err) and daemon.go:476 (only ErrLockLive retries) \| boundary test TestRunChecksIndexBeforeLock (wantDeferred 0) and TestRunStopsWhenIndexChanges
+- invariants: I5: The first cause wins: a stop by checkIndex or ErrWatcherClosed survives a later parent cancel; any parent cancel or watchdog cancel returns nil \| enforced at daemon.go:322 WithCancelCause, daemon.go:419, daemon.go:445-449 \| boundary test TestRunReleasesOnlyItsOwnLock (parent cancel returns nil), TestRunReturnsErrWatcherClosedAndReleasesLock; no test for a parent cause that does not match context.Canceled (inv-1)
+- invariants: I6: The lock is removed only when .codegraph resolves inside the repository (realpath.Within) AND lockInfo.PID == os.Getpid() \| enforced at internal/daemon/confine.go:47-67 \| boundary test TestRunReleasesOnlyItsOwnLock: path outside with own pid (kept), path inside with another pid (kept), store-only change, moved-inside and unchanged (removed). Both sides of each check are covered.
+- invariants: I7: IndexDirs gives equal results on an unchanged tree (D2 depends on it) \| enforced by the deterministic realpath.Resolve in internal/query/confine.go:44 \| test TestIndexDirsIsStableOnAnUnchangedTree (rapid). Its generator draws from a bounded enumeration: 7 states for .codegraph, 7 for store under 4 directory-like states, about 31 trees, so a table over every tree would cover all of them with certainty where 100 random draws may miss some. Not raised as a finding because no category of this lens fits.
+- invariants: I8: The IndexChangedError message names each changed path and 'restart the watcher' \| enforced at internal/daemon/confine.go:24-33 \| boundary test TestIndexChangedErrorText; the both-changed edge is not asserted (inv-2). Was == Now yields a message that starts with ': ', but checkIndex never builds that value.
+- invariants: I9: The scripts in test/integration/testdata number at least minScripts \| enforced at test/integration/main_test.go:69 \| 14 .txtar files at head and minScripts = 14, so the loss of one script fails
+- invariants: I10: cmd/codegraph/main.go exits 1 on any returned error; os.Exit(1) is its only exit call, so `! exec` in index_link_outside.txtar and the returned error in TestDaemonStartReturnsIndexChange cover 'exits 1'.
+- invariants: The clean-shutdown test `cause == context.Cause(parent)` compares two interface values with ==. It panics when both hold the same non-comparable dynamic type. No caller in the repository passes such a cause: serve uses WithCancel, and daemon start uses signal.NotifyContext, whose signalError is a string type that matches context.Canceled through Is (Go 1.26.11 os/signal/signal.go:340-346).
+- invariants: releaseOwnLock returns the readLock error and leaves a lock that does not decode. Before this change, release removed any lock unconditionally. acquire and Unlock both fail on that decode error, so a corrupted lock now needs manual removal. Only an external write can produce one. This is consistent with the spec ('If either check fails, ... leave the lock file').
+- invariants: No probe ran: every enforcement point is Go code inside the module (checkIndex, releaseOwnLock, Run). None is a standalone script that inputs written under the handoff directory could drive without running the test suite.
+- invariants: prior.json: R-24 (retry edge), R-25 (flush after a passed one), R-26 (store-only text) and R-27 (path-only row with own pid) are each closed at head by the rows named in I1, I2, I8 and I6. No fixed row came back.
+- test-coverage: Tests stop Run with a context cancel, not SIGTERM; the spec WHEN says SIGTERM, which the cancel stands for.
+- test-coverage: Not read: TestIndexChangedErrorText rows and TestIndexDirsIsStableOnAnUnchangedTree bodies; graded from task text.
+- test-honesty: Run-level tests (TestRunStopsWhenIndexChanges, TestRunChecksIndexBeforeLock, TestRunReleasesOnlyItsOwnLock) assert real filesystem effects and the syncFn count; no skip or no-assertion found.
+- test-honesty: TestServeWatchStartPrintsIndexChange stubs the error but asserts the prefix the code adds, so it is not a pure echo.
+- test-honesty gap: resolve_confine_test.go, serve_test.go beyond the new test, fakewatcher_test.go and daemon/serve.go bodies not read
 
 ## Ledger
 
@@ -166,3 +201,105 @@ None.
 | R-30 | 2 | 2 | should-fix | in-change | ["artifact",["tasks.md","2. A watcher checks the index again before its lock and each flush (#375)"],"only the store moved to `<repo>/.store-real`: `*IndexChangedError` with equal `Dir` values and different `Store` values."] | fixed | deba442661266eb033af496e4bceacdf5294eb21 |  | No Run-level row moves the store inside the repo; only checkIndex is tested for it. |
 | R-31 | 2 | 2 | should-fix | in-change | ["artifact",["tasks.md","2. A watcher checks the index again before its lock and each flush (#375)"],"It writes a stale `daemon.lock` (a dead pid) into `<outside>`"] | fixed | deba442661266eb033af496e4bceacdf5294eb21 |  | Deferred-watcher scenario waits on a live daemon lock; task 2.5 uses a stale lock and stops on the first Run. |
 | R-32 | 2 | 2 | should-fix | in-change | ["artifact",["tasks.md","2. A watcher checks the index again before its lock and each flush (#375)"],"asserts that `syncFn` ran once and that `Run` returns `nil` after a cancel."] | fixed | deba442661266eb033af496e4bceacdf5294eb21 |  | Unchanged-index scenario THEN is that search finds the function; 2.6 asserts only that syncFn ran. |
+| R-33 | 3 | 3 | should-fix | in-change | ["path","internal/daemon/daemon.go",446] |  |  |  | app-1: D3 says Run returns nil only when the cause is context.Canceled. The code also returns nil when the cause equals the parent context's own cause, such as a deadline or a cause the caller set. design.md records no such deviation.; inv-1: Run must return nil whenever its parent context ends. A cause that does not match context.Canceled, such as DeadlineExceeded or a custom WithCancelCause cause, is handled only by the second operand. No test runs Run past acquire with such a parent: the two WithTimeout tests in daemon_test.go use a NoWatch probe and return at the policy gate. If that operand is removed, Run returns DeadlineExceeded on a timed-out parent, and no test fails. Before this change, Run returned nil on any ctx.Done. |
+| R-34 | 3 | 3 | should-fix | in-change | ["artifact",["proposal.md","What Changes"],"`.codegraph` still resolves to its start directory, and the lock names its own process"] |  |  |  | The proposal says the shutdown check requires .codegraph to resolve to its start directory. releaseOwnLock, D4 and the spec require only that it resolve inside the repository, and the code removes the lock from a moved directory such as .cg-real. |
+| R-35 | 3 | 3 | should-fix | in-change | ["artifact",["design.md","D2. Stop on any change, not only on a refusal"],"Its lock file and its pending sidecar are in the old directory. A second daemon started on the new path does not see that lock."] |  |  |  | D2 gives as its reason that the lock and the sidecar stay in the old directory, so a second daemon on the new path does not see the lock. When .codegraph is renamed and linked, D4 and the code show that the lock moves with it, so in that case the reason does not hold. |
+| R-36 | 3 | 3 | should-fix | in-change | ["path","internal/daemon/confine.go",52] |  |  |  | releaseOwnLock repeats the first half of query.IndexDirs: it resolves the root, resolves <root>/.codegraph and tests realpath.Within, which is what resolveInside in internal/query/confine.go already does. The copy also builds its own 'now leads outside' error text in place of *IndexOutsideRootError, so a .codegraph that leads outside gets two error shapes. D4 names the approach but not the existing helper. |
+| R-37 | 3 | 3 | should-fix | in-change | ["path","internal/query/resolve_confine_property_test.go",60] |  |  |  | D6 says the property follows TestResolve_AgreesWithTheOperatingSystem, but that test draws its trees with the shared generator realpathtest.Draw. The new property writes its own drawIndexEntry with six fixed one-hop states. It has no link chains, no relative or '..' targets and no trailing separator, and Draw already generates all of these. The design names neither the helper nor a reason to skip it. |
+| R-38 | 3 | 3 | should-fix | in-change | ["path","internal/daemon/confine_test.go",71] |  |  |  | D3 says the IndexChangedError message names each path that differs: Dir, Store or both. The 'dir' row of TestIndexChangedErrorText changes both Dir and Store, but it asserts only the two Dir values. The 'store only' row keeps Dir equal. So an Error() that writes the Store clause only when Dir is unchanged (an else-if) passes every row. The indexMovedInside rows of TestCheckIndexReportsEveryChange and TestRunStopsWhenIndexChanges check only Dir. |
+| R-39 | 3 | 3 | should-fix | in-change | ["path","internal/cli/watcher_stop_test.go",74] | refuted | The command's only job here is to pass the watcher's error on: replacing 'return err' with 'return nil' in daemon start made this test fail. main's print and exit status are covered by test/integration/testdata/index_link_outside.txtar. |  | TestDaemonStartReturnsIndexChange stubs runDaemon to return the refusal and asserts errors.Is on it; the command passes the error through, and the spec's stderr and exit 1 are not touched. |
+| R-40 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"A .codegraph link that leads outside"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'A .codegraph link that leads outside' has no verification run |
+| R-41 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"A store link that leads outside"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'A store link that leads outside' has no verification run |
+| R-42 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"A .codegraph link that stays inside"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'A .codegraph link that stays inside' has no verification run |
+| R-43 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"A pull turns .codegraph into a link that leads outside"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'A pull turns .codegraph into a link that leads outside' has no verification run |
+| R-44 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"A pull turns the store into a link that leads outside"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'A pull turns the store into a link that leads outside' has no verification run |
+| R-45 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"The index moves inside the repository"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'The index moves inside the repository' has no verification run |
+| R-46 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"The store moves inside the repository"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'The store moves inside the repository' has no verification run |
+| R-47 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"The index can no longer be resolved"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'The index can no longer be resolved' has no verification run |
+| R-48 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"A deferred watcher retries after a pull"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'A deferred watcher retries after a pull' has no verification run |
+| R-49 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"daemon start reports the stop"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'daemon start reports the stop' has no verification run |
+| R-50 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"Shutdown after .codegraph became a link to another project"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'Shutdown after .codegraph became a link to another project' has no verification run |
+| R-51 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"Shutdown after only the store changed"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'Shutdown after only the store changed' has no verification run |
+| R-52 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"Shutdown after the index moved inside the repository"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'Shutdown after the index moved inside the repository' has no verification run |
+| R-53 | 3 | 3 | should-fix | in-change | ["artifact",["review","not-run"],"Shutdown with the index unchanged"] | refuted | The covering test ran alone at head and passed; see verification-runs.txt. The merge matches a run only on the whole covered_by text, and this row names a table row or two tests, which no command can contain. |  | covered row 'Shutdown with the index unchanged' has no verification run |
+
+## Reviewed files
+
+| path | content |
+|---|---|
+| .changes/unreleased/Fixes-20261117-210050.312211000.yaml | dba548d9dc794c896b2410bd4a6ad4d9c741f9e6 |
+| internal/cli/daemon.go | 3a6f3ca32f0cbd3caabd508c17d87c22430b6729 |
+| internal/cli/index_confine_test.go | 51b2124128f07a2429c5f4c8f2dae1388d64b681 |
+| internal/cli/serve.go | d647a581b0880d83dd87968d7fb1f3527984822c |
+| internal/cli/serve_test.go | 5dc8f74be7ad107913d5a9b82b9fc2567987e6bb |
+| internal/cli/watcher_stop_test.go | 42bf346db2f6caf9b6a7ad51aabaa29a81e316da |
+| internal/daemon/confine.go | e27912f46297b0a4a3c20320828e8b14caaddc46 |
+| internal/daemon/confine_run_test.go | f123863890bd08ce69e560690cc9ec87b3dfb019 |
+| internal/daemon/confine_test.go | b3b338601322537c21c7266b482110321a23b87b |
+| internal/daemon/daemon.go | c992ee706c0f95bda4d7c6509371db26acf0b010 |
+| internal/daemon/fakewatcher_test.go | 6b997e609be0d68efdbf5430a2353bab4d54db24 |
+| internal/daemon/nofollow_test.go | d0284b4050cd37d81d7d96b998fa8a64fe549681 |
+| internal/query/resolve_confine_property_test.go | 4a064ef65c1b1e906a1a9810583c939342bf5d86 |
+| internal/query/resolve_confine_test.go | a4d9e3738e2e62aacea7a2b224dde185fc9734e2 |
+| openspec/changes/index-link-refusal/.openspec.yaml | 578c89ac91eda0589930783c384ddbe6201a0568 |
+| openspec/changes/index-link-refusal/design.md | d66c072126ca1c5ae6c1e597f085a51e68eb2902 |
+| openspec/changes/index-link-refusal/proposal.md | a6c8b7597eab0c162c7294a79bf99883eab5e376 |
+| openspec/changes/index-link-refusal/specs/index-resolution/spec.md | d3683adee5339f3b12d6307af6e55ba6949dd66e |
+| openspec/changes/index-link-refusal/tasks.md | sha256:09a24d2c30d53c4c365334be82bd552657c839e7fc8f0c88c585283f13d7f126 |
+| test/integration/main_test.go | ec86e05d7adc42d7c5b9ffdf2a67297ff790fa29 |
+| test/integration/testdata/index_link_outside.txtar | b0f017724a0af9f54771eecdc38b84e53c0803b5 |
+
+## Plan review (2026-11-18)
+
+Verdict approve-with-notes at head 3db18d4fc400a91adcf8bf6ee0fab3979483e166.
+
+### Findings
+
+| id | lens | severity | scope | claim | evidence | action | mark | judge |
+|---|---|---|---|---|---|---|---|---|
+| R-20 | approach | should-fix | in-change | The risk row says the window between checkIndex and acquire is one system call long. At head, acquire reads the process start time before its first write and then writes through codegraphDir in several calls: CreateTemp, Write, Close and Link, and on a stale lock also ReadFile, Remove and a second CreateTemp and Link. The window covers all of acquire, not one call. | design.md > Risks / Trade-offs — "The same window exists between `checkIndex` and `acquire` in `Run`. → It is one system call long." | State the window as the length of acquire (a start-time read, then the temp file, the link and, on a stale lock, the removal), or move the check into acquire before each write. |  |  |
+| R-21 | approach | should-fix | in-change | D4 motivates the owner check with another process that takes a stale lock after the watcher stops. Until releaseOwnLock runs, the lock names this live process with its own start time, so isStale returns false, acquire returns ErrLockLive and Unlock refuses. No process can take that lock as stale. The case the owner check does cover is a lock removed from outside, for example by hand or by uninit and init, and then taken by a new daemon. | design.md > D4. Remove the lock only when it is this process's lock in the start directory — "After the watcher stops, another process can take a stale lock in the same directory and rewrite it." | Name the sequence the owner check guards: the watcher's lock is removed from outside while its process runs, and another daemon then acquires a new lock in the same directory. |  |  |
+| R-22 | fit | should-fix | in-change | D3's stopWith closure stores the first error and cancels the child context. The standard library already does this with context.WithCancelCause and context.Cause, where the first cause wins. Run already makes that child context with context.WithCancel, and D3 does not name WithCancelCause or give a reason to write the store-once logic by hand. | design.md > D3. A typed error and one stop path in `Run` — "`Run` declares one closure, `stopWith(err)`. It stores the first error it gets and calls the `cancel` of the child conte" | In D3, make the child context with context.WithCancelCause, stop with cancel(err), and after the join return context.Cause(ctx) unless it is context.Canceled. Pass startWatchdog a func that calls cancel(nil). If you keep the hand-written closure, name WithCancelCause in D3 and say why you did not use it. |  |  |
+| R-23 | fit | should-fix | in-change | D3 calls stopWith the one stop path in Run, but the existing ErrWatcherClosed path stays separate. That path sets runErr in the select and does not cancel ctx. Run then has two ways to carry the error it returns: runErr and the error that stopWith stores. The comment at the join already says the ErrWatcherClosed path would be fixed by cancelling an internal context, which is what stopWith does. | design.md > D3. A typed error and one stop path in `Run` — "`Run` then joins as it does on a cancel and returns the stored error in place of `nil`." | In D3 and task 2.4, route the loopExited branch through stopWith(ErrWatcherClosed), or through cancel(ErrWatcherClosed) if fit-1 is taken. Then remove runErr, so Run has one stored stop error and one stop path. |  |  |
+| R-3 | invariants | should-fix | in-change | D4 says leaving the watcher's own lock is wrong under serve because it names the live serve pid. When the user renames .codegraph to .cg-real and links it (the BREAKING move-inside case), the own lock moves along, the path check fails, and releaseOwnLock leaves a lock naming the live serve pid; daemon start then gets ErrLockLive. | design.md > D4. Remove the lock only when it is this process's lock in the start directory — "leaving it is wrong: under `serve`, it names the live `serve` pid, so `isStale` keeps it, and `daemon start` and `daemon" | In releaseOwnLock, remove the lock when .codegraph still resolves inside the repository (not refused) and the lock names this pid; leave it when refused, unresolvable or owned by another pid. Add a 3.1 row that renames .codegraph to .cg-real, links it, and asserts the lock is gone, and adjust the move-inside scenario's 'nothing under .cg-real changes'. | regression | severity? blocker 0.78 |
+| R-24 | invariants | should-fix | in-change | The check before acquire must run on every Run call of RunWithRetry. Task 2.5 links .codegraph before the first Run, so a check placed once before the retry loop, or only on the first call, passes it. No test passes the edge of a retry after ErrLockLive. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Assert that it returns an error that matches `query.ErrIndexOutsideRoot` after one call to `Run`" | Add a row to 2.5: write a live lock (this pid, selfStartedAt) in <repo>/.codegraph so the first Run returns ErrLockLive, swap .codegraph to a link to <outside> holding a stale daemon.lock inside the onDeferred callback, and assert the refusal from the second Run and unchanged bytes of <outside>/daemon.lock. |  |  |
+| R-25 | invariants | should-fix | in-change | The spec requires a check before each flush, but every row of 2.4 changes the index before the first flush (syncFn never ran). A check that runs only on the first flush, or is cached after one pass, passes every row; no row checks a flush that follows a passed one. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Each row asserts that `Run` returns the error of `checkIndex` and that `syncFn` never ran." | Add a row to TestRunStopsWhenIndexChanges that lets the catch-up sync finish with the index unchanged, then links .codegraph outside, sends one event, and asserts syncFn ran exactly once and the target is unchanged. |  |  |
+| R-26 | invariants | should-fix | in-change | The store-only scenario requires the message to name both store paths. TestIndexChangedErrorText asserts only 'both paths'; with Was.Dir equal to Now.Dir a message that prints only Dir values passes it, and 2.3 row 4 checks the struct, not the text. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Verify with `TestIndexChangedErrorText`, which asserts both paths, the phrase and `errors.Is(err, ErrIndexChanged)`." | Make TestIndexChangedErrorText a table with a Dir-change row and a store-only row (equal Dir, different Store), and assert both Store strings appear in the store-only message. |  |  |
+| R-27 | invariants | should-fix | in-change | releaseOwnLock removes only when both the path and the owner match. Row 1 of 3.1 does not say the lock in <other> names this pid; with a foreign or dead pid the owner check alone refuses it, so an implementation without the path check passes every row. | tasks.md > 3. A stopping watcher removes only its own lock (#375) — "`<repo>/.codegraph` linked to `<other>/.codegraph`, which holds a `daemon.lock`: the bytes of that file are unchanged af" | In row 1, write <other>/.codegraph/daemon.lock with os.Getpid() and selfStartedAt(), so only the path check keeps it; keep row 4 for the owner check with the path unchanged. |  |  |
+| R-28 | spec-lint | should-fix | in-change | The WHEN of the scenario 'Shutdown after only the store changed' names the stop only as 'the watcher stops', with no input such as SIGTERM, a cancel or a refusal. | specs/index-resolution/spec.md > Scenario: Shutdown after only the store changed — "- **AND** the watcher stops" | Name the concrete stop in the WHEN, for example the SIGTERM the other scenarios use, so the lock rule has one input to test. |  |  |
+| R-17 | test-coverage | should-fix | in-change | Scenario requires stderr output and exit 1; 4.2 asserts only a returned error, and main.go is untested. | tasks.md > 4. Caller output — "`cmd/codegraph/main.go` prints that error on stderr and exits 1." | Add a test of main's error path (or a built-binary run with the seam) that asserts the stderr text and exit code 1. | regression |  |
+| R-29 | test-coverage | should-fix | in-change | No Run-level row moves .codegraph inside the repo; spec says nothing under the new target changes. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "Rows: `.codegraph` linked outside, the store linked outside, and `.codegraph` linked to itself." | Add a row to TestRunStopsWhenIndexChanges: .codegraph moved to an inside link; assert Run returns *IndexChangedError and <repo>/.cg-real is unchanged. |  |  |
+| R-30 | test-coverage | should-fix | in-change | No Run-level row moves the store inside the repo; only checkIndex is tested for it. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "only the store moved to `<repo>/.store-real`: `*IndexChangedError` with equal `Dir` values and different `Store` values." | Add a store-moved-inside row to TestRunStopsWhenIndexChanges asserting the error names both store paths, syncFn never ran and <repo>/.store-real is unchanged. |  |  |
+| R-31 | test-coverage | should-fix | in-change | Deferred-watcher scenario waits on a live daemon lock; task 2.5 uses a stale lock and stops on the first Run. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "It writes a stale `daemon.lock` (a dead pid) into `<outside>`" | Extend 2.5: first Run returns ErrLockLive (live lock), then link .codegraph outside, and assert the retry Run returns ErrIndexOutsideRoot with the outside lock bytes unchanged. |  |  |
+| R-32 | test-coverage | should-fix | in-change | Unchanged-index scenario THEN is that search finds the function; 2.6 asserts only that syncFn ran. | tasks.md > 2. A watcher checks the index again before its lock and each flush (#375) — "asserts that `syncFn` ran once and that `Run` returns `nil` after a cancel." | In 2.6 add an assertion that the index holds the function `added` after the flush, or name a recorded fixture run of search. |  |  |
+
+### Coverage matrix
+
+| scenario | covered by | status | verified |
+|---|---|---|---|
+| A .codegraph link that leads outside | 1.1 | covered |  |
+| A store link that leads outside | 1.1 | covered |  |
+| init through a link that leads outside | 1.1 | covered |  |
+| A dangling link is refused, not skipped | 1.1 | covered |  |
+| A subdirectory link to an ancestor's index | 1.1 | covered |  |
+| The main worktree's index leads outside | 1.1 | covered |  |
+| serve refuses to start | 1.4 | covered |  |
+| A .codegraph link that stays inside | 1.1 | covered |  |
+| A store link that stays inside | 1.1 | covered |  |
+| The text of the refusal | 1.3 | covered |  |
+| A pull turns .codegraph into a link that leads outside | 2.4 | covered |  |
+| A pull turns the store into a link that leads outside | 2.4 | covered |  |
+| The index moves inside the repository | 2.3 | partial |  |
+| The store moves inside the repository | 2.3 | partial |  |
+| The index can no longer be resolved | 2.4 | covered |  |
+| A deferred watcher retries after a pull | 2.5 | partial |  |
+| The index is unchanged | 2.6 | partial |  |
+| daemon start reports the stop | 4.2 | partial |  |
+| serve keeps serving after its watcher stops | 4.1 | covered |  |
+| Shutdown after .codegraph became a link to another project | 3.1 | covered |  |
+| Shutdown after only the store changed | 3.1 | covered |  |
+| Shutdown with the index unchanged | 3.1 | covered |  |
+
+### Not run
+
+Plan phase: no verification runs.

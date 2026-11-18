@@ -14,7 +14,7 @@ When a command or a watcher starts, the check runs once. A watcher started by `c
 
 - The `index-resolution` spec states the refusal from #374: a `.codegraph` or `.codegraph/store` that resolves outside the directory that holds `.codegraph` is refused, not skipped. The spec covers a dangling link, the linked-worktree fallback, a subdirectory link to an ancestor's index, and the text of the error. A link that resolves inside stays allowed.
 - A watcher resolves the index paths again before it takes its lock file and before each flush. If the resolution fails, is refused, or differs from the paths the watcher started with, the watcher writes nothing, stops, and reports why. The `serve --mcp` process keeps serving tool calls. Those calls already refuse a link that leads outside.
-- A watcher that shuts down checks two things before it removes its lock file: `.codegraph` still resolves to its start directory, and the lock names its own process. If either check fails, it leaves the lock file in place.
+- A watcher that shuts down checks two things before it removes its lock file: `.codegraph` still resolves inside the repository, and the lock names its own process. If either check fails, it leaves the lock file in place.
 - **BREAKING** (narrow): when its index moves inside the repository, a watcher now stops and asks for a restart. An example is a `.codegraph` directory that becomes a link to `.cg-real`. Before, the watcher kept writing through the new path.
 
 Out of scope:

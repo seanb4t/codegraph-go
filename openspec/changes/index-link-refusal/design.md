@@ -51,7 +51,7 @@ Alternatives:
 
 ### D2. Stop on any change, not only on a refusal
 
-A link that now resolves inside the repository passes `IndexDirs`. The watcher still stops. Its lock file and its pending sidecar are in the old directory. A second daemon started on the new path does not see that lock. Stopping keeps one writer for each index, and a restart costs one command. A change of the store alone counts as a change.
+A link that now resolves inside the repository passes `IndexDirs`. The watcher still stops. The paths the watcher holds are the resolved paths of its start. After a change, they no longer name the index that commands open: a path such as `<repo>/.codegraph/store` now passes through the new link. A write through them goes where the change points. Stopping keeps one writer for each index, and a restart costs one command. A change of the store alone counts as a change.
 
 Alternative: switch to the new paths and continue. Rejected, because the switch must move the lock and the sidecar while another process can start.
 
@@ -59,13 +59,13 @@ Alternative: switch to the new paths and continue. Rejected, because the switch 
 
 `internal/daemon` adds `IndexChangedError{Was, Now query.IndexPaths}` and the sentinel `ErrIndexChanged`. Its message names each path that differs, `Dir`, `Store` or both, at start and now, and says `restart the watcher`.
 
-`Run` makes its child context with `context.WithCancelCause` in place of `context.WithCancel`. A stop calls `cancel(err)`, and the first cause wins. The debounce callback calls `cancel(err)` on a failed `checkIndex`. The branch where the watch loop exits on its own calls `cancel(ErrWatcherClosed)`, so the `runErr` variable goes away and `Run` has one stop path. `startWatchdog` gets a function that calls `cancel(nil)`. After the join, `Run` returns `context.Cause(ctx)`, or `nil` when the cause is `context.Canceled`. A later watch on `.codegraph` can call the same `cancel` without a move of code.
+`Run` makes its child context with `context.WithCancelCause` in place of `context.WithCancel`. A stop calls `cancel(err)`, and the first cause wins. The debounce callback calls `cancel(err)` on a failed `checkIndex`. The branch where the watch loop exits on its own calls `cancel(ErrWatcherClosed)`, so the `runErr` variable goes away and `Run` has one stop path. `startWatchdog` gets a function that calls `cancel(nil)`. After the join, `Run` returns `context.Cause(ctx)`, or `nil` when the cause is `context.Canceled`. `Run` also returns `nil` when the cause is the cause of the parent context, for example `context.DeadlineExceeded` or a cause that the caller set. Before this change, `Run` returned `nil` whenever its parent ended, and a stop that the caller asked for is not an error. A later watch on `.codegraph` can call the same `cancel` without a move of code.
 
 A requeue for `ErrStoreLocked` stays as it is. Any other `Sync` error stays a logged error, and the watcher continues.
 
 ### D4. Remove the lock only when it is this process's lock inside the repository
 
-The deferred release in `Run` calls a new `releaseOwnLock`. It resolves `<repoRoot>/.codegraph` alone with `realpath.Resolve`, and checks with `realpath.Within` that the result is inside the resolved repository root. When it is, it reads the lock with `readLock`. Only when `lockInfo.PID` equals `os.Getpid()` does it remove the file. In every other case, it logs the path and leaves the file.
+The deferred release in `Run` calls a new `releaseOwnLock`. It resolves `<repoRoot>/.codegraph` alone with the new `query.IndexDir`, the first half of `IndexDirs`. `IndexDir` returns `*IndexOutsideRootError` for a result outside the repository, so a refusal has one error shape everywhere. When it is, it reads the lock with `readLock`. Only when `lockInfo.PID` equals `os.Getpid()` does it remove the file. In every other case, it logs the path and leaves the file.
 
 The decision uses `.codegraph` alone, because the lock lives there. It accepts any directory inside the repository, not only the start directory. When the user moves `.codegraph` to `.cg-real` and links it, the watcher's own lock moves too. Leaving it would be wrong: under `serve`, it names the live `serve` pid, so `isStale` keeps it, and `daemon start` and `daemon unlock` refuse it until `serve` exits. A change of the store alone leaves `.codegraph` in place, so the own lock is removed in that case too.
 
@@ -86,7 +86,7 @@ A test sets either one to return an error. It does not need a real watcher.
 
 ### D6. A property for D2
 
-D2 stops the watcher on any inequality, so `IndexDirs` must return equal results for a tree that did not change. A `pgregory.net/rapid` property in `internal/query` checks this over random trees of links under `.codegraph` and `store`. It follows `TestResolve_AgreesWithTheOperatingSystem` in `internal/realpath/realpath_test.go`.
+D2 stops the watcher on any inequality, so `IndexDirs` must return equal results for a tree that did not change. A table test in `internal/query` checks this for every pair of states that a pull can leave `.codegraph` and `store` in: absent, a real directory, a link inside, a link outside, a dangling link and a link to itself. That is 36 trees at most, so a table covers each one, and a random generator adds nothing.
 
 ## Risks / Trade-offs
 

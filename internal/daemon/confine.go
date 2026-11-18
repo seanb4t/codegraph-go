@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/query"
-	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
 // ErrIndexChanged is the sentinel an *IndexChangedError matches with
@@ -45,16 +43,9 @@ func (e *IndexChangedError) Is(target error) bool {
 // other than the start one is accepted: when .codegraph moved to a link
 // inside the repository, the watcher's own lock moved with it.
 func (d *Daemon) releaseOwnLock() error {
-	rootReal, err := realpath.Resolve(d.repoRoot)
+	dir, err := query.IndexDir(d.repoRoot)
 	if err != nil {
-		return err
-	}
-	dir, err := realpath.Resolve(filepath.Join(d.repoRoot, codegraphDirName))
-	if err != nil {
-		return err
-	}
-	if !realpath.Within(rootReal, dir) {
-		return fmt.Errorf("left %s in place: %s now leads outside %s", lockPath(dir), filepath.Join(d.repoRoot, codegraphDirName), rootReal)
+		return fmt.Errorf("left the lock file in place: %w", err)
 	}
 	info, ok, err := readLock(dir)
 	if err != nil || !ok {

@@ -169,6 +169,54 @@ func TestRunReleasesOnlyItsOwnLock(t *testing.T) {
 	}
 }
 
+// TestRunReturnsNilWhenParentEnds covers the clean-stop rule of design D3:
+// whatever cause ends the parent context, Run returns nil, because a stop
+// that the caller asked for is not an error.
+func TestRunReturnsNilWhenParentEnds(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// start returns the parent context, the function that ends it, and
+		// a cancel for the test's join.
+		start func() (context.Context, func(), context.CancelFunc)
+	}{
+		{"cancel", func() (context.Context, func(), context.CancelFunc) {
+			ctx, cancel := context.WithCancel(context.Background())
+			return ctx, cancel, cancel
+		}},
+		{"deadline", func() (context.Context, func(), context.CancelFunc) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+			return ctx, func() { time.Sleep(2 * time.Hour) }, cancel
+		}},
+		{"cause of the caller", func() (context.Context, func(), context.CancelFunc) {
+			ctx, cancel := context.WithCancelCause(context.Background())
+			return ctx, func() { cancel(errors.New("the caller stopped")) }, func() { cancel(nil) }
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := mkIndexDirs(t)
+			synctest.Test(t, func(t *testing.T) {
+				fw := newFakeWatcher()
+				d := newFakeDaemon(t, root, fw)
+				d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
+					return indexer.Stats{}, nil
+				}
+				synced := make(chan error, 4)
+				d.onSync = func(_ indexer.Stats, err error) { synced <- err }
+
+				ctx, end, cancel := tc.start()
+				runErr := startFakeRun(t, ctx, cancel, d)
+				if err := waitCatchUpSync(t, synced); err != nil {
+					t.Fatalf("catch-up sync: %v", err)
+				}
+				end()
+				if err := receive(t, runErr, "Run to return after its parent ended"); err != nil {
+					t.Fatalf("Run = %v, want nil", err)
+				}
+			})
+		})
+	}
+}
+
 // TestRunStopsWhenIndexChanges covers the flush-time check of #375: after
 // a catch-up flush with the index unchanged, a pull changes the index, and
 // the next event stops Run with the error of checkIndex and no second sync.

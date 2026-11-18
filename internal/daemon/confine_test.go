@@ -68,7 +68,7 @@ func TestIndexChangedErrorText(t *testing.T) {
 			name: "dir",
 			was:  query.IndexPaths{Dir: "/r/.codegraph", Store: "/r/.codegraph/store"},
 			now:  query.IndexPaths{Dir: "/r/.cg-real", Store: "/r/.cg-real/store"},
-			want: []string{`"/r/.codegraph"`, `"/r/.cg-real"`},
+			want: []string{`"/r/.codegraph"`, `"/r/.cg-real"`, `"/r/.codegraph/store"`, `"/r/.cg-real/store"`},
 		},
 		{
 			name: "store only",

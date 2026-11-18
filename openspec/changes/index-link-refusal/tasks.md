@@ -40,7 +40,7 @@
   - first call: `<outside>` holds a stale `daemon.lock` (a dead pid), and `<repo>/.codegraph` is linked to `<outside>` after `New`. `RunWithRetry` returns an error that matches `query.ErrIndexOutsideRoot` after one call to `Run`.
   - retry: `<repo>/.codegraph/daemon.lock` names this pid with `selfStartedAt()`, so the first `Run` returns `ErrLockLive`. The `onDeferred` callback links `<repo>/.codegraph` to `<outside>`, which holds a stale `daemon.lock`. `RunWithRetry` returns an error that matches `query.ErrIndexOutsideRoot` from the second `Run`.
 - [x] 2.6 Add the positive control `TestRunSyncsWhenIndexUnchanged` for the scenario "The index is unchanged". It leaves `syncFn` nil, so the real `indexer.Sync` runs. It writes a Go file that declares the function `added` and sends one event. After the flush, it asserts that a search through `query.OpenAt` finds `added`, and that `Run` returns `nil` after a cancel. Verify that it passes before and after 2.4.
-- [x] 2.7 Add the property `TestIndexDirsIsStableOnAnUnchangedTree` in `internal/query` with `pgregory.net/rapid` (design D6). It builds a random tree of real directories and links under `.codegraph` and `store`, inside and outside the root, and calls `IndexDirs` twice. Assert equal paths, or two errors with the same text.
+- [x] 2.7 Add the table test `TestIndexDirsIsStableOnAnUnchangedTree` in `internal/query` (design D6). It builds one tree for each pair of states of `.codegraph` and `store`, and calls `IndexDirs` twice on each. Assert equal paths, or two errors with the same text. Also assert that both outcomes occur.
 
 ## 3. A stopping watcher removes only its own lock (#375)
 
@@ -62,6 +62,12 @@
 - [x] 5.1 Run `mise exec -- task test` and `mise exec -- task lint`. Verify that both pass with no new lint findings.
 - [ ] 5.2 Run `/sb:openspec-review index-link-refusal implementation` and resolve every `changes-requested` finding.
 - [x] 5.3 Add the changelog fragment: `task changie -- new --interactive=false -k Fixes -b "A running watcher stops, and writes nothing, when a pull turns .codegraph or its store into a link that leads elsewhere."`
+
+## 6. Fixes from the implementation review
+
+- [x] 6.1 Add `query.IndexDir(root)`, which resolves `.codegraph` alone and returns `*IndexOutsideRootError` outside root (design D4). Make `IndexDirs` and `releaseOwnLock` use it. Verify that `TestIndexDirsRefusesDanglingLink` and `TestRunReleasesOnlyItsOwnLock` still pass.
+- [x] 6.2 Add `TestRunReturnsNilWhenParentEnds` in `internal/daemon` (design D3). Rows: the parent is cancelled, the parent passes its deadline, and the parent is cancelled with a cause of its own. Each row asserts that `Run` returns `nil`.
+- [x] 6.3 In the `dir` row of `TestIndexChangedErrorText`, also assert both `Store` values.
 
 ## Workflow follow-up
 
