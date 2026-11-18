@@ -19,8 +19,8 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
-// codegraphDirName and storeDirName are the index layout internal/query
-// defines.
+// codegraphDirName and storeDirName are the index layout that
+// internal/indexdir defines.
 const (
 	codegraphDirName = indexdir.Name
 	storeDirName     = indexdir.StoreName
@@ -257,7 +257,7 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // Run checks the index (checkIndex) before acquire and before each flush
 // (#375). If .codegraph or its store no longer resolves to the paths New
 // resolved, Run writes nothing more, stops through the same join path and
-// returns the error of checkIndex: a indexdir.ErrOutsideRoot refusal, an
+// returns the error of checkIndex: an indexdir.ErrOutsideRoot refusal, an
 // *IndexChangedError, or the resolve error.
 //
 // Before any of the above, Run enforces watch.WatchDisabledReason as its

@@ -449,8 +449,8 @@ func (r *liveRegistry) Current() *uiv1.WatchGraphEvent {
 
 // --- Task 3: the store watcher ------------------------------------------
 
-// liveCodegraphDirName and liveStoreSubdir are the index layout
-// internal/query defines.
+// liveCodegraphDirName and liveStoreSubdir are the index layout that
+// internal/indexdir defines.
 const (
 	liveCodegraphDirName = indexdir.Name
 	liveStoreSubdir      = indexdir.StoreName
