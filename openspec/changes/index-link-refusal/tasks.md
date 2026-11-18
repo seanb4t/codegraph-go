@@ -3,8 +3,8 @@
 ## 1. Coverage of the refusal at start (#377)
 
 - [ ] 1.1 Record this map of scenario to test in the PR body. Verify that `go test -count=1 -run 'Refuse|Accept|IndexDirs|Confine|Outside' ./internal/query/... ./internal/cli/... ./internal/mcp/...` passes.
-  - A .codegraph link that leads outside: `TestResolveIndexRefusesRootIndexLinkedOutside` (read commands) and the new row of task 1.2 (`sync`, `index`).
-  - A store link that leads outside: `TestResolveIndexRefusesRootStoreLinkedOutside` and `TestIndexCommandsRefuseStoreLinkedOutside`.
+  - A .codegraph link that leads outside: `TestResolveIndexRefusesRootIndexLinkedOutside` (read commands) and the `index` row of `TestIndexCommandsRefuseIndexLinkedOutside` (`sync`, `index`).
+  - A store link that leads outside: `TestResolveIndexRefusesRootStoreLinkedOutside` and the `store` row of `TestIndexCommandsRefuseIndexLinkedOutside`.
   - init through a link that leads outside: `TestInitRefusesIndexLinkedOutside`.
   - A dangling link is refused, not skipped: `TestResolveIndexRefusesDanglingIndexLinkOutside`.
   - A subdirectory link to an ancestor's index: `TestResolveIndexRefusesSubdirectoryIndexLinkedToAncestorIndex`.
@@ -13,9 +13,9 @@
   - A .codegraph link that stays inside: `TestResolveIndexAcceptsIndexLinkedInside` and `TestIndexCommandsAcceptIndexLinkedInside`.
   - A store link that stays inside: `TestResolveIndexAcceptsStoreLinkedInside`.
   - The text of the refusal: `TestIndexDirsRefusesDanglingLink`, extended in task 1.3.
-- [ ] 1.2 Turn `TestIndexCommandsRefuseStoreLinkedOutside` in `internal/cli/index_confine_test.go` into a table with two rows: the store linked outside, and `.codegraph` linked outside. Each row runs `sync`, `index --force` and `status`, and asserts the refusal and an empty outside directory. Make `indexDirs` in `internal/cli/init.go` skip `query.IndexDirs`, and verify that the new row then fails.
-- [ ] 1.3 Extend `TestIndexDirsRefusesDanglingLink` in `internal/query/resolve_confine_test.go`. Also assert that the message contains the quoted resolved root and the whole phrase `remove the link or point it inside that directory`.
-- [ ] 1.4 Add `TestServeServerPathsRefusesIndexLinkedOutside` in `internal/cli/serve_test.go` for the scenario "serve refuses to start". It links `<repo>/.codegraph` to a temporary directory outside. It asserts that `serveServerPaths` returns an error that matches `query.ErrIndexOutsideRoot`, and that the outside directory is still empty. Make `serveServerPaths` map every error to "not initialized", and verify that the test then fails.
+- [x] 1.2 Turn `TestIndexCommandsRefuseStoreLinkedOutside` in `internal/cli/index_confine_test.go` into the table `TestIndexCommandsRefuseIndexLinkedOutside` with two rows: the store linked outside, and `.codegraph` linked outside. Each row runs `sync`, `index --force` and `status`, and asserts the refusal and an empty outside directory. Make `indexDirs` in `internal/cli/init.go` skip `query.IndexDirs`, and verify that the new row then fails.
+- [x] 1.3 Extend `TestIndexDirsRefusesDanglingLink` in `internal/query/resolve_confine_test.go`. Also assert that the message contains the quoted resolved root and the whole phrase `remove the link or point it inside that directory`.
+- [x] 1.4 Add `TestServeServerPathsRefusesIndexLinkedOutside` in `internal/cli/serve_test.go` for the scenario "serve refuses to start". It links `<repo>/.codegraph` to a temporary directory outside. It asserts that `serveServerPaths` returns an error that matches `query.ErrIndexOutsideRoot`, and that the outside directory is still empty. Make `serveServerPaths` map every error to "not initialized", and verify that the test then fails.
 
 ## 2. A watcher checks the index again before its lock and each flush (#375)
 

@@ -51,21 +51,31 @@ func TestInitRefusesIndexLinkedOutside(t *testing.T) {
 	})
 }
 
-func TestIndexCommandsRefuseStoreLinkedOutside(t *testing.T) {
-	dir := copyFixture(t)
-	if err := os.Mkdir(filepath.Join(dir, codegraphDirName), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	outside := t.TempDir()
-	symlinkT(t, outside, filepath.Join(dir, codegraphDirName, storeDirName))
+func TestIndexCommandsRefuseIndexLinkedOutside(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		link string
+	}{
+		{"store", filepath.Join(codegraphDirName, storeDirName)},
+		{"index", codegraphDirName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := copyFixture(t)
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, tc.link)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			outside := t.TempDir()
+			symlinkT(t, outside, filepath.Join(dir, tc.link))
 
-	for _, args := range [][]string{{"sync", dir}, {"index", "--force", dir}, {"status", "-p", dir}} {
-		_, _, err := execCmd(args...)
-		wantIndexOutsideRoot(t, err)
-	}
-	entries, err := os.ReadDir(outside)
-	if err != nil || len(entries) != 0 {
-		t.Fatalf("outside directory holds %d entries (err %v), want none", len(entries), err)
+			for _, args := range [][]string{{"sync", dir}, {"index", "--force", dir}, {"status", "-p", dir}} {
+				_, _, err := execCmd(args...)
+				wantIndexOutsideRoot(t, err)
+			}
+			entries, err := os.ReadDir(outside)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("outside directory holds %d entries (err %v), want none", len(entries), err)
+			}
+		})
 	}
 }
 

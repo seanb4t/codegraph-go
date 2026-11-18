@@ -172,7 +172,7 @@ func TestIndexDirsRefusesDanglingLink(t *testing.T) {
 		t.Fatalf("Root = %q, want %q", outside.Root, want)
 	}
 	msg := err.Error()
-	for _, part := range []string{strconv.Quote(link), strconv.Quote(outside.Target), "remove the link"} {
+	for _, part := range []string{strconv.Quote(link), strconv.Quote(outside.Target), strconv.Quote(outside.Root), "remove the link or point it inside that directory"} {
 		if !strings.Contains(msg, part) {
 			t.Errorf("message %q does not contain %s", msg, part)
 		}
