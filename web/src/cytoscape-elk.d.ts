@@ -6,9 +6,8 @@
 // `cytoscape.use(elk)` — that installs the 'elk' layout name
 // GraphCanvas.svelte (05-03 Task 3) passes to `layout: { name: 'elk',
 // ... }`. A minimal ambient declaration here avoids adding a new
-// devDependency for a type shim, matching ambient-node.d.ts's precedent
-// of a narrowly-scoped standalone ambient module file over installing a
-// package. This declaration is kept in its own file (rather than folded
+// devDependency for a type shim: a narrowly-scoped standalone ambient
+// module file over installing a package. This declaration is kept in its own file (rather than folded
 // into app.d.ts) because svelte-check does not pick up a module
 // augmentation of this shape when it lives inside app.d.ts alongside
 // app.d.ts's own `declare global` block — confirmed empirically this

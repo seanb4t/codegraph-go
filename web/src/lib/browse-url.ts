@@ -21,6 +21,8 @@
 // DIFFERENT link than the one its sender saw. URLSearchParams itself is a
 // multimap; this module keeps that shape.
 
+import type { ReadonlyURLSearchParams } from '$app/state';
+
 export const BROWSE_PARAM_KEYS = ['symbol', 'file', 'line', 'depth', 'limit', 'q'] as const;
 
 const KNOWN_KEYS: ReadonlySet<string> = new Set(BROWSE_PARAM_KEYS);
@@ -72,7 +74,7 @@ export function parseShapeInteger(raw: string | null): number | undefined {
 	return Number(raw);
 }
 
-export function parseBrowseParams(params: URLSearchParams): BrowseParams {
+export function parseBrowseParams(params: ReadonlyURLSearchParams): BrowseParams {
 	const unknown: Array<[string, string]> = [];
 	for (const [key, value] of params.entries()) {
 		if (!KNOWN_KEYS.has(key)) {

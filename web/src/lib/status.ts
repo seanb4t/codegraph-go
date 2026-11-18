@@ -22,6 +22,7 @@
 // never recorded, which is this repository's own long-lived index
 // today.
 import type { MessageInitShape } from '@bufbuild/protobuf';
+import type { ReadonlyURL } from '$app/state';
 import type { GetStatusRequestSchema, GetStatusResponse } from '$lib/gen/ui_pb';
 
 // StatusVerdict is INDEX HEALTH only — exactly five members, no sixth.
@@ -138,8 +139,8 @@ const ROUTE_LOCAL_PARAMS: Record<string, readonly string[]> = {
 // entry (if any), so two renders of the same view never read as two
 // distinct navigations, and the two call sites can never disagree
 // because there is only one implementation.
-export function navigationIdentity(url: URL): string {
-	const params = new URLSearchParams(url.searchParams);
+export function navigationIdentity(url: ReadonlyURL): string {
+	const params = new URLSearchParams(url.search);
 	for (const k of VIEW_LOCAL_PARAMS) params.delete(k);
 	for (const k of ROUTE_LOCAL_PARAMS[url.pathname] ?? []) params.delete(k);
 	params.sort();
