@@ -187,7 +187,11 @@ func TestRunStopsWhenIndexChanges(t *testing.T) {
 				t.Fatalf("Run = %v, want the resolve error of checkIndex", err)
 			}
 		}},
-		{indexMovedInside, false, func(t *testing.T, err error) { wantChanged(t, err) }},
+		{indexMovedInside, false, func(t *testing.T, err error) {
+			if changed := wantChanged(t, err); changed.Was.Dir == changed.Now.Dir {
+				t.Fatalf("Dir did not change: %+v", changed)
+			}
+		}},
 		{storeMovedInside, true, func(t *testing.T, err error) {
 			changed := wantChanged(t, err)
 			for _, p := range []string{changed.Was.Store, changed.Now.Store} {
