@@ -7,8 +7,9 @@
 # request that touches none of the paths below; a required check skipped that
 # way would stay Pending, so keep this workflow out of the protect-main ruleset.
 # go.mod and go.sum are listed because golang.org/x/sys supplies the darwin
-# sysctl reader. internal/indexer/discover and internal/indexdir supply the
-# path filter of the FSEvents backend.
+# sysctl reader. internal/indexer/discover, internal/indexdir and the
+# packages that indexdir imports (internal/realpath, internal/scratchdir)
+# supply the path filter of the FSEvents backend.
 
 name: daemon darwin
 
@@ -20,6 +21,8 @@ on:
       - "internal/watch/**"
       - "internal/indexer/discover/**"
       - "internal/indexdir/**"
+      - "internal/realpath/**"
+      - "internal/scratchdir/**"
       - ".github/workflows/daemon-darwin.yml"
       - "go.mod"
       - "go.sum"

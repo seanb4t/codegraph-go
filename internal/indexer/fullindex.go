@@ -28,8 +28,7 @@ import (
 
 const (
 	// scratchSuffix follows the name of the store directory in the prefix
-	// of the scratch directories of that store. Walks skip those
-	// directories by this name.
+	// of the scratch directories of that store.
 	scratchSuffix = indexdir.ScratchSuffix
 	// stagingName is the name of the staging store inside a scratch
 	// directory, and spillName that of the spill file.

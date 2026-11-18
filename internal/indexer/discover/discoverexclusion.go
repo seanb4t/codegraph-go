@@ -48,8 +48,8 @@ func buildTagDetail(ctx build.Context) string {
 // "vendor" or a dot-prefixed name, and must not call ShouldSkipDir:
 // TestDirExclusionReasonAgreesWithShouldSkipDir keeps the two in step, and
 // it would prove nothing if this function called the predicate it checks.
-// DirFilter decides the prune; this function only names its reason. ok is
-// false for a name that neither branch covers.
+// DirFilter decides the prune, and this function only names its reason. ok
+// is false for a name that neither branch covers.
 func dirExclusionReason(name string) (schema.ExclusionReason, bool) {
 	switch {
 	case name == "vendor":
@@ -97,22 +97,23 @@ func sizeLimitDetail(sizeBytes int64) string {
 
 // DiscoverAll walks root and returns every file whose extension is
 // claimed by a registered LanguageSpec (D-03), sorted by RelPath in
-// ascending byte order, PLUS one ExcludedFile record per path or pruned
-// directory the walker visited but did not index, except the parts of the
-// index — the same walk result feeds both (Phase 10 D-01), so the
-// discovered-count denominator and the per-file reason list can never
-// disagree. This stable order is
-// determinism's first line of defense: the same input tree always yields
-// the same output order, regardless of filesystem walk order.
+// ascending byte order. It also returns one ExcludedFile record for each
+// path or pruned directory that the walk visited but did not index. A part
+// of the index that no name rule skips gets no record. One walk feeds both
+// lists, so the discovered count and the list of reasons always agree.
+// This stable order is determinism's first line of defense: the same input
+// tree always yields the same output order, regardless of filesystem walk
+// order.
 //
 // Four decision points in the walk each record their own exclusion
-// reason, in this order: (1) a pruned directory — vendor/ or any
-// dot-prefixed directory (.git, .codegraph, etc.), via the DirFilter that
-// the watchers share — gets ONE directory-level record (DIR_VENDOR /
-// DIR_DOTPREFIX); its contents are never visited, so they
-// contribute nothing to the discovered count. A part of the index under
-// another name, such as a store directory, its lock files or its scratch
-// directories, is skipped too, with no record. (2) a file
+// reason, in this order. (1) A directory that the DirFilter prunes by
+// name, vendor/ or a dot-prefixed directory such as .git or .codegraph,
+// gets one directory-level record (DIR_VENDOR or DIR_DOTPREFIX). The walk
+// never visits its contents, so they add nothing to the discovered count.
+// A directory of the index that no name rule skips, such as a linked store
+// or a scratch directory, is pruned with no record. A file of the index,
+// such as a lock file beside the store, is skipped with no record before
+// the next check. (2) a file
 // whose extension is not registered in the extension->language registry
 // (languages.go) gets an UNSUPPORTED_EXTENSION record (D-03). (3) a Go
 // source file that go/build.Context.MatchFile reports does not belong to

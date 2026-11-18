@@ -1,8 +1,8 @@
 // Package indexdir locates a repository's index: the .codegraph directory
 // below a root and the store inside it, with every symlink resolved. It
 // also names the parts of the index that a walk of the repository skips.
-// The query engine and the discovery of the indexer both use it, so it
-// imports neither.
+// Packages on both sides of the query and indexer boundary import it, so
+// it must not import internal/query or internal/indexer.
 package indexdir
 
 import (
@@ -24,10 +24,10 @@ const StoreName = "store"
 // errors.Is.
 var ErrOutsideRoot = errors.New("the index leads outside the directory that holds it")
 
-// OutsideRootError reports that Link, a .codegraph directory or the store
-// inside it as written below Root, resolves to Target, which is not Root
-// or a descendant of it. Root is the resolved directory that holds the
-// .codegraph; Link is not resolved; Target is.
+// OutsideRootError reports that Link resolves to Target, which is not Root
+// or a descendant of it. Link is the .codegraph directory, or the store
+// inside it, joined to the root as the caller spelled it. Link is not
+// resolved. Root is the resolved root, and Target is the resolved Link.
 type OutsideRootError struct {
 	Link, Target, Root string
 }

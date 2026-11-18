@@ -60,11 +60,10 @@ func Open(root string) (*Watcher, error) {
 	return w, nil
 }
 
-// addRecursive walks root and calls w.Add on every directory that w.filter
-// does not skip. fsnotify.Add only watches a directory's direct children
-// (RESEARCH Pattern 3) — recursive coverage requires this explicit walk at
-// startup, plus a re-addRecursive call on any subdirectory discovered
-// later via a Create event (see watchLoop).
+// addRecursive walks root, watches every directory that w.filter does not
+// skip, and records it in w.dirs. fsnotify watches only the direct children
+// of a directory, so recursive coverage needs this walk at startup and
+// again for each directory that appears later (see watchLoop).
 func addRecursive(w *Watcher, root string) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -85,11 +84,10 @@ func addRecursive(w *Watcher, root string) error {
 }
 
 // addCreatedDir watches a directory that appeared after Open. addRecursive
-// never applies w.filter to its own root, so the created directory is checked
-// here first: without that check, a new .venv/ or node_modules/ sibling of
-// a watched directory is walked in full, and kqueue holds one file
-// descriptor for every file in it. A path that is not a directory is
-// ignored.
+// never applies w.filter to its own root, so this function checks the
+// created directory first. Without that check, a new .venv/ or vendor/
+// directory is walked in full, and kqueue holds one file descriptor for
+// every file in it. A path that is not a directory is ignored.
 func addCreatedDir(w *Watcher, path string) error {
 	if w.filter.SkipDir(path) {
 		return nil

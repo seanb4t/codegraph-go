@@ -17,8 +17,9 @@ type DirFilter struct {
 
 // NewDirFilter returns the DirFilter of root. Pass root as the walk will
 // spell it: the filter compares the paths of the walk to root. On an error
-// it returns the zero DirFilter and the error of indexdir.NewFilter, which
-// wraps an *indexdir.OutsideRootError for an index outside root.
+// it returns the zero DirFilter and an error that wraps the error of
+// indexdir.NewFilter, such as an *indexdir.OutsideRootError for an index
+// outside root.
 func NewDirFilter(root string) (DirFilter, error) {
 	index, err := indexdir.NewFilter(root)
 	if err != nil {
@@ -34,8 +35,9 @@ func (f DirFilter) SkipDir(path string) bool {
 	return ShouldSkipDir(filepath.Base(path)) || f.index.Skip(path)
 }
 
-// SkipFile reports whether a walk skips the file at path, a path under the
-// root of f: a lock file beside the store, or another part of the index.
+// SkipFile reports whether path, a path under the root of f, is a part of
+// the index, such as a lock file beside the store. It applies no name rule,
+// so a watcher can call it for an event path of any kind.
 func (f DirFilter) SkipFile(path string) bool {
 	return f.index.Skip(path)
 }

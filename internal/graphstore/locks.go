@@ -88,9 +88,9 @@ func LockWriter(dir string) (io.Closer, error) {
 // one, never a part of either, and a crash leaves one of the two.
 //
 // If live exists, ReplaceStore exchanges the two directories, and staging
-// then holds what live held. The last two paragraphs name the live
-// directories that it refuses instead. If live does not
-// exist, it renames staging to live. Both paths must be on one
+// then holds what live held. It refuses a live path that is a symbolic
+// link or that CheckLiveStore rejects, as described below. If live does
+// not exist, it renames staging to live. Both paths must be on one
 // filesystem. A filesystem that cannot exchange two directories gives an
 // error that wraps fsatomic.ErrExchangeUnsupported, and live stays as it
 // was.
