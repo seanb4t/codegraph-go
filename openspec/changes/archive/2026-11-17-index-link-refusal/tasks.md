@@ -2,7 +2,7 @@
 
 ## 1. Coverage of the refusal at start (#377)
 
-- [ ] 1.1 Record this map of scenario to test in the PR body. Verify that `go test -count=1 -run 'Refuse|Accept|IndexDirs|Confine|Outside' ./internal/query/... ./internal/cli/... ./internal/mcp/...` passes.
+- [x] 1.1 Record this map of scenario to test in the PR body. Verify that `go test -count=1 -run 'Refuse|Accept|IndexDirs|Confine|Outside' ./internal/query/... ./internal/cli/... ./internal/mcp/...` passes.
   - A .codegraph link that leads outside: `TestResolveIndexRefusesRootIndexLinkedOutside` (read commands) and the `index` row of `TestIndexCommandsRefuseIndexLinkedOutside` (`sync`, `index`).
   - A store link that leads outside: `TestResolveIndexRefusesRootStoreLinkedOutside` and the `store` row of `TestIndexCommandsRefuseIndexLinkedOutside`.
   - init through a link that leads outside: `TestInitRefusesIndexLinkedOutside`.
