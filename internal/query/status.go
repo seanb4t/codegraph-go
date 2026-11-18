@@ -92,28 +92,36 @@ type IndexHealth struct {
 // commit, which removes it.
 const staleSidecarName = ".sync-pending"
 
-// shouldSkipStaleDir mirrors internal/indexer/discover.ShouldSkipDir's directory
-// exclusions (vendor/ and any dot-prefixed directory), duplicated here
-// rather than imported to avoid an internal/query -> internal/indexer
-// dependency edge — the same package-local-duplication precedent Plan
-// 04-03 established for buildReverseAdjacency (04-03-SUMMARY.md).
+// shouldSkipStaleDir is the directory name rule of
+// internal/indexer/discover.ShouldSkipDir: vendor/ and every dot-prefixed
+// directory. internal/query does not import internal/indexer, so the rule
+// is copied here. Keep the two the same.
 func shouldSkipStaleDir(name string) bool {
 	return name == "vendor" || strings.HasPrefix(name, ".")
 }
 
-// newestSourceMtime walks root (skipping vendor/ and dot-prefixed
-// directories) and returns the newest regular file's modification time —
-// the no-daemon staleness fallback's raw signal (D-04a).
+// newestSourceMtime walks root and returns the newest modification time of
+// a file, the raw signal of the no-daemon staleness fallback (D-04a). It
+// skips the directories that shouldSkipStaleDir names and every part of
+// the index of root that indexdir.Filter names: the store writes its own
+// files after each sync, and they are not sources.
 func newestSourceMtime(root string) (time.Time, error) {
+	filter, err := indexdir.NewFilter(root)
+	if err != nil {
+		return time.Time{}, err
+	}
 	var newest time.Time
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if p != root && shouldSkipStaleDir(d.Name()) {
+			if p != root && (shouldSkipStaleDir(d.Name()) || filter.Skip(p)) {
 				return fs.SkipDir
 			}
+			return nil
+		}
+		if filter.Skip(p) {
 			return nil
 		}
 		info, err := d.Info()

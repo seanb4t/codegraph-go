@@ -66,3 +66,42 @@ func TestStalenessFreshNotStale(t *testing.T) {
 		t.Fatal("Status.Stale: got true, want false (freshly indexed, no sidecar, no newer files)")
 	}
 }
+
+// TestNewestSourceMtimeSkipsTheIndexBehindALink pins the walk of the
+// fallback to the sources: a store that links to a directory at the root,
+// its lock files and its scratch directories all hold newer files, and
+// none of them counts.
+func TestNewestSourceMtimeSkipsTheIndexBehindALink(t *testing.T) {
+	root := t.TempDir()
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	source := filepath.Join(root, "main.go")
+	if err := os.WriteFile(source, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(source, old, old); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"store-real/000001.log", "store-real.swap", "store-real.write", "store-real.scratch-abc/store/000002.sst"} {
+		path := filepath.Join(root, f)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, indexdir.Name), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "store-real"), filepath.Join(root, indexdir.Name, indexdir.StoreName)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := newestSourceMtime(root)
+	if err != nil {
+		t.Fatalf("newestSourceMtime: %v", err)
+	}
+	if !got.Equal(old) {
+		t.Fatalf("newestSourceMtime = %v, want %v, the time of main.go", got, old)
+	}
+}
