@@ -3,9 +3,12 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/realpath"
 )
 
 // ErrIndexChanged is the sentinel an *IndexChangedError matches with
@@ -32,6 +35,35 @@ func (e *IndexChangedError) Error() string {
 // Is reports whether target is ErrIndexChanged.
 func (e *IndexChangedError) Is(target error) bool {
 	return target == ErrIndexChanged
+}
+
+// releaseOwnLock removes the lock file of a stopping watcher (#375). A
+// pull can change .codegraph while the watcher runs, so it resolves
+// .codegraph again and removes daemon.lock only when .codegraph resolves
+// inside the repository and the lock names this process. In every other
+// case it leaves the file and returns an error that names it. A directory
+// other than the start one is accepted: when .codegraph moved to a link
+// inside the repository, the watcher's own lock moved with it.
+func (d *Daemon) releaseOwnLock() error {
+	rootReal, err := realpath.Resolve(d.repoRoot)
+	if err != nil {
+		return err
+	}
+	dir, err := realpath.Resolve(filepath.Join(d.repoRoot, codegraphDirName))
+	if err != nil {
+		return err
+	}
+	if !realpath.Within(rootReal, dir) {
+		return fmt.Errorf("left %s in place: %s now leads outside %s", lockPath(dir), filepath.Join(d.repoRoot, codegraphDirName), rootReal)
+	}
+	info, ok, err := readLock(dir)
+	if err != nil || !ok {
+		return err
+	}
+	if info.PID != os.Getpid() {
+		return fmt.Errorf("left %s in place: it names pid %d, not this process", lockPath(dir), info.PID)
+	}
+	return release(dir)
 }
 
 // checkIndex resolves the index paths again. It returns the error of

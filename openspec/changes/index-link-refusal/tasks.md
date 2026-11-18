@@ -44,7 +44,7 @@
 
 ## 3. A stopping watcher removes only its own lock (#375)
 
-- [ ] 3.1 Replace the deferred `release` in `Daemon.Run` with `releaseOwnLock` (design D4). Cover it with the table test `TestRunReleasesOnlyItsOwnLock`. Each row stops `Run` with a cancel. Rows:
+- [x] 3.1 Replace the deferred `release` in `Daemon.Run` with `releaseOwnLock` (design D4). Cover it with the table test `TestRunReleasesOnlyItsOwnLock`. Each row stops `Run` with a cancel. Rows:
   - `<repo>/.codegraph` linked to `<other>/.codegraph`, whose `daemon.lock` names this pid with `selfStartedAt()`: the bytes of that file are unchanged. Only the path check keeps it.
   - the lock in `<repo>/.codegraph` rewritten with another live pid, path unchanged: the file is unchanged. Only the owner check keeps it.
   - only the store linked outside: `<repo>/.codegraph/daemon.lock` is gone.

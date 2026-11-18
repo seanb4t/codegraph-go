@@ -284,7 +284,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return err
 	}
 	defer func() {
-		if err := release(d.start.Dir); err != nil {
+		if err := d.releaseOwnLock(); err != nil {
 			log.Printf("daemon: releasing lock: %v", err)
 		}
 	}()
@@ -437,7 +437,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// cancelled. deb.Stop() (watchLoop's and the backstop above) can
 	// only cancel a timer that hasn't fired yet; deb.Wait() is the
 	// explicit join for one that has, closing the window where Run
-	// released the daemon lock (see the deferred release() above) while a
+	// released the daemon lock (see the deferred releaseOwnLock above) while a
 	// Sync was still mid-commit against the single coordinated Writer
 	// (INDX-05, D-07, SYNC-06).
 	deb.Wait()

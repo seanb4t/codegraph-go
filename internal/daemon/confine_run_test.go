@@ -82,6 +82,93 @@ func TestRunChecksIndexBeforeLock(t *testing.T) {
 	}
 }
 
+// TestRunReleasesOnlyItsOwnLock covers #375's shutdown: Run removes
+// daemon.lock only where .codegraph now resolves inside the repository and
+// only when the lock names this process. Each row changes the index while
+// Run holds its lock, then cancels Run.
+func TestRunReleasesOnlyItsOwnLock(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// apply changes the index and returns the directory whose
+		// daemon.lock the row checks.
+		apply func(t *testing.T, root string) string
+		keep  bool
+	}{
+		{
+			// The other lock names this pid, so only the path check keeps it.
+			name: "index linked to another project",
+			apply: func(t *testing.T, root string) string {
+				other := filepath.Join(t.TempDir(), codegraphDirName)
+				if err := os.Mkdir(other, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				writeLockInfo(t, other, lockInfo{PID: os.Getpid(), StartedAt: selfStartedAt()})
+				replaceWithLink(t, filepath.Join(root, codegraphDirName), other)
+				return other
+			},
+			keep: true,
+		},
+		{
+			// The path is unchanged, so only the owner check keeps it.
+			name: "lock taken by another process",
+			apply: func(t *testing.T, root string) string {
+				dir := filepath.Join(root, codegraphDirName)
+				writeLock(t, dir, os.Getppid())
+				return dir
+			},
+			keep: true,
+		},
+		{
+			name: storeLinkedOutside.name,
+			apply: func(t *testing.T, root string) string {
+				storeLinkedOutside.apply(t, root)
+				return filepath.Join(root, codegraphDirName)
+			},
+		},
+		{name: indexMovedInside.name, apply: indexMovedInside.apply},
+		{
+			name: indexUnchanged.name,
+			apply: func(t *testing.T, root string) string {
+				return filepath.Join(root, codegraphDirName)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := mkIndexDirs(t)
+			synctest.Test(t, func(t *testing.T) {
+				fw := newFakeWatcher()
+				d := newFakeDaemon(t, root, fw)
+				d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
+					return indexer.Stats{}, nil
+				}
+				synced := make(chan error, 4)
+				d.onSync = func(_ indexer.Stats, err error) { synced <- err }
+
+				ctx, cancel := context.WithCancel(context.Background())
+				runErr := startFakeRun(t, ctx, cancel, d)
+				if err := waitCatchUpSync(t, synced); err != nil {
+					t.Fatalf("catch-up sync: %v", err)
+				}
+
+				lockDir := tc.apply(t, root)
+				before, _ := os.ReadFile(lockPath(lockDir))
+				cancel()
+				if err := receive(t, runErr, "Run to return after cancel"); err != nil {
+					t.Fatalf("Run: %v", err)
+				}
+
+				after, err := os.ReadFile(lockPath(lockDir))
+				switch {
+				case tc.keep && (err != nil || !bytes.Equal(after, before)):
+					t.Fatalf("%s changed: %q (err %v), want %q", lockPath(lockDir), after, err, before)
+				case !tc.keep && !os.IsNotExist(err):
+					t.Fatalf("%s is still there (err %v), want it removed", lockPath(lockDir), err)
+				}
+			})
+		})
+	}
+}
+
 // TestRunStopsWhenIndexChanges covers the flush-time check of #375: after
 // a catch-up flush with the index unchanged, a pull changes the index, and
 // the next event stops Run with the error of checkIndex and no second sync.
