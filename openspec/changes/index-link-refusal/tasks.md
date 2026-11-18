@@ -19,28 +19,28 @@
 
 ## 2. A watcher checks the index again before its lock and each flush (#375)
 
-- [ ] 2.1 Add `IndexChangedError{Was, Now query.IndexPaths}` and the sentinel `ErrIndexChanged` in `internal/daemon` (design D3). Cover the message with the table test `TestIndexChangedErrorText`. Rows:
+- [x] 2.1 Add `IndexChangedError{Was, Now query.IndexPaths}` and the sentinel `ErrIndexChanged` in `internal/daemon` (design D3). Cover the message with the table test `TestIndexChangedErrorText`. Rows:
   - `Dir` changed: the message holds both `Dir` values and `restart the watcher`.
   - only `Store` changed: `Dir` is equal, and the message holds both `Store` values and `restart the watcher`.
   - Each row also asserts `errors.Is(err, ErrIndexChanged)`.
-- [ ] 2.2 Replace `Daemon.codegraphDir` and `Daemon.storeDir` with `start query.IndexPaths`, and add `(*Daemon).checkIndex() error` (design D1). Verify that `go test -count=1 ./internal/daemon/...` still passes, `TestNewUsesResolvedIndexPaths` included.
-- [ ] 2.3 Cover `checkIndex` with the table test `TestCheckIndexReportsEveryChange` in `internal/daemon/confine_test.go`. Rows:
+- [x] 2.2 Replace `Daemon.codegraphDir` and `Daemon.storeDir` with `start query.IndexPaths`, and add `(*Daemon).checkIndex() error` (design D1). Verify that `go test -count=1 ./internal/daemon/...` still passes, `TestNewUsesResolvedIndexPaths` included.
+- [x] 2.3 Cover `checkIndex` with the table test `TestCheckIndexReportsEveryChange` in `internal/daemon/confine_test.go`. Rows:
   - `.codegraph` linked outside: the error matches `query.ErrIndexOutsideRoot`.
   - the store linked outside: the error matches `query.ErrIndexOutsideRoot`.
   - `.codegraph` moved to an inside link: `*IndexChangedError` with different `Dir` values.
   - only the store moved to `<repo>/.store-real`: `*IndexChangedError` with equal `Dir` values and different `Store` values.
   - `.codegraph` replaced by a link to itself: a non-nil error that matches neither sentinel.
   - nothing changed: `nil`.
-- [ ] 2.4 In `Daemon.Run`, make the child context with `context.WithCancelCause`, route the watcher-closed branch through `cancel(ErrWatcherClosed)`, and remove `runErr` (design D3). Call `checkIndex` before `acquire`, and in the debounce callback before `flush`. Verify that the existing `ErrWatcherClosed` tests still pass. Cover the new stop with the table test `TestRunStopsWhenIndexChanges`, built on `newFakeDaemon` and `fakeWatcher`. Each row changes the index after the catch-up flush, then sends one event. Rows:
+- [x] 2.4 In `Daemon.Run`, make the child context with `context.WithCancelCause`, route the watcher-closed branch through `cancel(ErrWatcherClosed)`, and remove `runErr` (design D3). Call `checkIndex` before `acquire`, and in the debounce callback before `flush`. Verify that the existing `ErrWatcherClosed` tests still pass. Cover the new stop with the table test `TestRunStopsWhenIndexChanges`, built on `newFakeDaemon` and `fakeWatcher`. Each row changes the index after the catch-up flush, then sends one event. Rows:
   - `.codegraph` linked outside, the store linked outside, and `.codegraph` linked to itself: `Run` returns the error of `checkIndex`.
   - `.codegraph` moved to an inside link `<repo>/.cg-real`: `Run` returns `*IndexChangedError`.
   - only the store moved to `<repo>/.store-real`: `Run` returns `*IndexChangedError`, and its message holds both store paths.
   - Every row asserts that `syncFn` ran exactly once, for the catch-up flush with the index unchanged. It also asserts that no `.sync-pending` file and no store files appear in the target.
-- [ ] 2.5 Add the table test `TestRunChecksIndexBeforeLock`. Both rows assert that the bytes of `<outside>/daemon.lock` are unchanged.
+- [x] 2.5 Add the table test `TestRunChecksIndexBeforeLock`. Both rows assert that the bytes of `<outside>/daemon.lock` are unchanged.
   - first call: `<outside>` holds a stale `daemon.lock` (a dead pid), and `<repo>/.codegraph` is linked to `<outside>` after `New`. `RunWithRetry` returns an error that matches `query.ErrIndexOutsideRoot` after one call to `Run`.
   - retry: `<repo>/.codegraph/daemon.lock` names this pid with `selfStartedAt()`, so the first `Run` returns `ErrLockLive`. The `onDeferred` callback links `<repo>/.codegraph` to `<outside>`, which holds a stale `daemon.lock`. `RunWithRetry` returns an error that matches `query.ErrIndexOutsideRoot` from the second `Run`.
-- [ ] 2.6 Add the positive control `TestRunSyncsWhenIndexUnchanged` for the scenario "The index is unchanged". It leaves `syncFn` nil, so the real `indexer.Sync` runs. It writes a Go file that declares the function `added` and sends one event. After the flush, it asserts that a search through `query.OpenAt` finds `added`, and that `Run` returns `nil` after a cancel. Verify that it passes before and after 2.4.
-- [ ] 2.7 Add the property `TestIndexDirsIsStableOnAnUnchangedTree` in `internal/query` with `pgregory.net/rapid` (design D6). It builds a random tree of real directories and links under `.codegraph` and `store`, inside and outside the root, and calls `IndexDirs` twice. Assert equal paths, or two errors with the same text.
+- [x] 2.6 Add the positive control `TestRunSyncsWhenIndexUnchanged` for the scenario "The index is unchanged". It leaves `syncFn` nil, so the real `indexer.Sync` runs. It writes a Go file that declares the function `added` and sends one event. After the flush, it asserts that a search through `query.OpenAt` finds `added`, and that `Run` returns `nil` after a cancel. Verify that it passes before and after 2.4.
+- [x] 2.7 Add the property `TestIndexDirsIsStableOnAnUnchangedTree` in `internal/query` with `pgregory.net/rapid` (design D6). It builds a random tree of real directories and links under `.codegraph` and `store`, inside and outside the root, and calls `IndexDirs` twice. Assert equal paths, or two errors with the same text.
 
 ## 3. A stopping watcher removes only its own lock (#375)
 

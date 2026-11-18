@@ -84,7 +84,7 @@ func startFakeRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, 
 	t.Helper()
 	runErr := startRun(t, ctx, cancel, d)
 	synctest.Wait()
-	if _, ok, err := readLock(d.codegraphDir); err != nil || !ok {
+	if _, ok, err := readLock(d.start.Dir); err != nil || !ok {
 		t.Fatalf("Run does not hold the lock after it started (ok=%v err=%v)", ok, err)
 	}
 	return runErr
