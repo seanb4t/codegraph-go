@@ -84,10 +84,44 @@ func startFakeRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, 
 	t.Helper()
 	runErr := startRun(t, ctx, cancel, d)
 	synctest.Wait()
-	if _, ok, err := readLock(d.codegraphDir); err != nil || !ok {
+	if _, ok, err := readLock(d.start.Dir); err != nil || !ok {
 		t.Fatalf("Run does not hold the lock after it started (ok=%v err=%v)", ok, err)
 	}
 	return runErr
+}
+
+// caughtUpRun is a Run that startCaughtUpFakeRun started.
+type caughtUpRun struct {
+	fw     *fakeWatcher
+	d      *Daemon
+	syncs  *atomic.Int32
+	synced <-chan error
+	runErr <-chan error
+}
+
+// startCaughtUpFakeRun starts Run on root inside the bubble, with a fake
+// watcher and a syncFn that counts its calls and succeeds. configure, when
+// non-nil, changes the Daemon before Run starts. It returns after the
+// catch-up sync, so the next sync answers the test's first event.
+func startCaughtUpFakeRun(t *testing.T, root string, ctx context.Context, cancel context.CancelFunc, configure func(*Daemon)) *caughtUpRun {
+	t.Helper()
+	r := &caughtUpRun{fw: newFakeWatcher(), syncs: new(atomic.Int32)}
+	r.d = newFakeDaemon(t, root, r.fw)
+	r.d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
+		r.syncs.Add(1)
+		return indexer.Stats{}, nil
+	}
+	synced := make(chan error, 4)
+	r.d.onSync = func(_ indexer.Stats, err error) { synced <- err }
+	r.synced = synced
+	if configure != nil {
+		configure(r.d)
+	}
+	r.runErr = startFakeRun(t, ctx, cancel, r.d)
+	if err := waitCatchUpSync(t, r.synced); err != nil {
+		t.Fatalf("catch-up sync: %v", err)
+	}
+	return r
 }
 
 // TestRunUsesInjectedWatcher proves Run drives the watcher that openWatcher
@@ -96,25 +130,11 @@ func startFakeRun(t *testing.T, ctx context.Context, cancel context.CancelFunc, 
 func TestRunUsesInjectedWatcher(t *testing.T) {
 	root, _ := fakeFixture(t)
 	synctest.Test(t, func(t *testing.T) {
-		fw := newFakeWatcher()
-		d := newFakeDaemon(t, root, fw)
-		var syncs atomic.Int32
-		d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
-			syncs.Add(1)
-			return indexer.Stats{}, nil
-		}
-		synced := make(chan error, 4)
-		d.onSync = func(_ indexer.Stats, err error) { synced <- err }
-
 		ctx, cancel := context.WithCancel(context.Background())
-		runErr := startFakeRun(t, ctx, cancel, d)
-
-		if err := waitCatchUpSync(t, synced); err != nil {
-			t.Fatalf("catch-up sync: %v", err)
-		}
-		fw.events <- "main.go"
+		r := startCaughtUpFakeRun(t, root, ctx, cancel, nil)
+		r.fw.events <- "main.go"
 		select {
-		case err := <-synced:
+		case err := <-r.synced:
 			if err != nil {
 				t.Fatalf("sync: %v", err)
 			}
@@ -122,24 +142,24 @@ func TestRunUsesInjectedWatcher(t *testing.T) {
 			t.Fatal("no sync after an event from the injected watcher")
 		}
 		select {
-		case err := <-synced:
+		case err := <-r.synced:
 			t.Fatalf("a second sync ran (err=%v) after one event", err)
 		case <-time.After(10 * watch.DebounceDuration()):
 		}
 
 		cancel()
 		select {
-		case err := <-runErr:
+		case err := <-r.runErr:
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 		case <-time.After(time.Minute):
 			t.Fatal("Run did not return after cancel")
 		}
-		if got := syncs.Load(); got != 2 {
+		if got := r.syncs.Load(); got != 2 {
 			t.Fatalf("syncFn ran %d times, want 2: the catch-up sync and one for the event", got)
 		}
-		if !fw.closed.Load() {
+		if !r.fw.closed.Load() {
 			t.Fatal("Run returned without closing the injected watcher")
 		}
 	})

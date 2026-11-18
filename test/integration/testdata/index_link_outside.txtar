@@ -1,0 +1,11 @@
+# #374, #377: a .codegraph that leads outside the directory that holds it
+# is refused. The binary exits with an error, and stderr names the link and
+# the next step.
+
+mkdir repo outside
+symlink repo/.codegraph -> $WORK/outside
+
+! exec codegraph status --path $WORK/repo
+stderr 'repo/\.codegraph'
+stderr 'remove the link or point it inside that directory'
+! stdout .

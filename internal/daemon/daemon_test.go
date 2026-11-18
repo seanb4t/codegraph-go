@@ -488,33 +488,23 @@ func TestDaemonCleanShutdown(t *testing.T) {
 func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 	root, codegraphDir := fakeFixture(t)
 	synctest.Test(t, func(t *testing.T) {
-		fw := newFakeWatcher()
-		d := newFakeDaemon(t, root, fw)
-		d.syncFn = func(string, string, indexer.Options) (indexer.Stats, error) {
-			return indexer.Stats{}, nil
-		}
 		flushStarted := make(chan struct{})
 		releaseFlush := make(chan struct{})
 		// hold is false for the catch-up flush, which must pass through.
 		var hold atomic.Bool
-		d.onSyncStart = func() {
-			if !hold.Load() {
-				return
-			}
-			close(flushStarted)
-			<-releaseFlush
-		}
-		synced := make(chan error, 4)
-		d.onSync = func(_ indexer.Stats, err error) { synced <- err }
-
 		ctx, cancel := context.WithCancel(context.Background())
-		runErr := startFakeRun(t, ctx, cancel, d)
-
-		if err := waitCatchUpSync(t, synced); err != nil {
-			t.Fatalf("catch-up sync: %v", err)
-		}
+		r := startCaughtUpFakeRun(t, root, ctx, cancel, func(d *Daemon) {
+			d.onSyncStart = func() {
+				if !hold.Load() {
+					return
+				}
+				close(flushStarted)
+				<-releaseFlush
+			}
+		})
+		runErr := r.runErr
 		hold.Store(true)
-		fw.events <- "extra.go"
+		r.fw.events <- "extra.go"
 
 		select {
 		case <-flushStarted:

@@ -110,6 +110,10 @@ func servePrepareIndex(ctx context.Context, start string, optOut bool, lim wtind
 // holder exits. Jitter is applied inside daemon.RunWithRetry itself.
 const watchRetryInterval = 30 * time.Second
 
+// runDaemonWithRetry is daemon.RunWithRetry. A test replaces it to make
+// the watcher of serveWatchStart stop with a chosen error.
+var runDaemonWithRetry = daemon.RunWithRetry
+
 // serveWatchStart is WATCH-02's off-handshake-path seam (D-06/D-08),
 // mirroring serveServerPaths's WR-01 precedent above: extracted so a test
 // can pin THIS function's actual behavior — the watcher startup newServeCmd's
@@ -199,7 +203,7 @@ func serveWatchStart(
 			fmt.Fprintln(stderr, "codegraph serve: a daemon is already running, deferring to it")
 		})
 
-		runErr := daemon.RunWithRetry(watchCtx, d, watchRetryInterval, logOnce)
+		runErr := runDaemonWithRetry(watchCtx, d, watchRetryInterval, logOnce)
 		var de *watch.DisabledError
 		switch {
 		case runErr == nil, errors.Is(runErr, context.Canceled):

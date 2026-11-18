@@ -34,7 +34,7 @@ const testBinEnvVar = "CODEGRAPH_TEST_BIN"
 // minScripts is the number of scripts in testdata/. TestScripts fails if
 // the directory holds fewer, so a lost or renamed script cannot pass by
 // running nothing.
-const minScripts = 11
+const minScripts = 14
 
 func TestMain(m *testing.M) {
 	testscript.Main(m, map[string]func(){

@@ -42,15 +42,11 @@ type IndexPaths struct {
 // through any link to a missing target. When the resolved .codegraph
 // exists and is not a directory, Store is joined to it without resolving.
 func IndexDirs(root string) (IndexPaths, error) {
-	rootReal, err := realpath.Resolve(root)
-	if err != nil {
-		return IndexPaths{}, fmt.Errorf("resolve %q: %w", root, err)
-	}
-	index := filepath.Join(root, IndexDirName)
-	dir, err := resolveInside(rootReal, index)
+	rootReal, dir, err := indexDir(root)
 	if err != nil {
 		return IndexPaths{}, err
 	}
+	index := filepath.Join(root, IndexDirName)
 	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
 		return IndexPaths{Dir: dir, Store: filepath.Join(dir, StoreDirName)}, nil
 	}
@@ -59,6 +55,26 @@ func IndexDirs(root string) (IndexPaths, error) {
 		return IndexPaths{}, err
 	}
 	return IndexPaths{Dir: dir, Store: store}, nil
+}
+
+// IndexDir resolves root's .codegraph directory alone, as the first half
+// of IndexDirs does. It returns an *IndexOutsideRootError when it resolves
+// outside root.
+func IndexDir(root string) (string, error) {
+	_, dir, err := indexDir(root)
+	return dir, err
+}
+
+func indexDir(root string) (rootReal, dir string, err error) {
+	rootReal, err = realpath.Resolve(root)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve %q: %w", root, err)
+	}
+	dir, err = resolveInside(rootReal, filepath.Join(root, IndexDirName))
+	if err != nil {
+		return "", "", err
+	}
+	return rootReal, dir, nil
 }
 
 func resolveInside(rootReal, link string) (string, error) {

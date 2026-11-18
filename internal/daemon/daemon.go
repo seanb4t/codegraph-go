@@ -76,10 +76,11 @@ const maxFlushLockRequeues = 5
 // blocks until ctx is cancelled and every spawned goroutine has joined
 // (D-07).
 type Daemon struct {
-	repoRoot     string
-	codegraphDir string
-	storeDir     string
-	opts         indexer.Options
+	repoRoot string
+	// start holds the resolved index paths of New. checkIndex compares
+	// every later resolution with it.
+	start query.IndexPaths
+	opts  indexer.Options
 
 	// syncMu serializes indexer.Sync invocations. The debouncer already
 	// guarantees at most one flush is scheduled at a time in the common
@@ -226,10 +227,9 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 		return nil, err
 	}
 	d := &Daemon{
-		repoRoot:     abs,
-		codegraphDir: paths.Dir,
-		storeDir:     paths.Store,
-		opts:         opts,
+		repoRoot: abs,
+		start:    paths,
+		opts:     opts,
 	}
 	for _, opt := range options {
 		opt(d)
@@ -252,10 +252,13 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // immediately without starting a watcher. If the watch loop exits without
 // ctx being cancelled (abnormal fsnotify teardown, IN-07), Run tears down
 // through the same join path, releases the lock, and returns
-// ErrWatcherClosed instead of holding the lock as a zombie — though on
-// that path (ctx still live) an in-flight lock-lost flush can extend the
-// join by a bounded requeue chain; see the backstop deb.Stop() comment in
-// the function body (IN-01).
+// ErrWatcherClosed instead of holding the lock as a zombie.
+//
+// Run checks the index (checkIndex) before acquire and before each flush
+// (#375). If .codegraph or its store no longer resolves to the paths New
+// resolved, Run writes nothing more, stops through the same join path and
+// returns the error of checkIndex: a query.ErrIndexOutsideRoot refusal, an
+// *IndexChangedError, or the resolve error.
 //
 // Before any of the above, Run enforces watch.WatchDisabledReason as its
 // FIRST action (WATCH-03/D-11): a policy-disabled Daemon returns a
@@ -271,11 +274,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 		// errors.Is(err, watch.ErrWatchDisabled) still matches.
 		return &watch.DisabledError{Reason: reason}
 	}
-	if err := acquire(d.codegraphDir); err != nil {
+	// #375: a pull between New and this Run, or between two Runs of
+	// RunWithRetry, can turn .codegraph into a link that leads elsewhere.
+	// acquire writes through d.start.Dir, so check the index first.
+	if err := d.checkIndex(); err != nil {
+		return err
+	}
+	if err := acquire(d.start.Dir); err != nil {
 		return err
 	}
 	defer func() {
-		if err := release(d.codegraphDir); err != nil {
+		if err := d.releaseOwnLock(); err != nil {
 			log.Printf("daemon: releasing lock: %v", err)
 		}
 	}()
@@ -304,14 +313,20 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// cancel() first guarantees that happens promptly on every teardown
 	// path, including watch.Open failing below before the watch loop ever
 	// starts.
-	ctx, cancel := context.WithCancel(ctx)
+	//
+	// The cancel carries a cause, and the first cause wins: a changed
+	// index (checkIndex in the flush callback) and a watch loop that closed
+	// on its own each stop Run through stopWith, and Run returns that
+	// cause.
+	ctx, cancel := context.WithCancelCause(ctx)
+	stopWith := func(err error) { cancel(&runStop{err}) }
 	ppid := d.getppid
 	if ppid == nil {
 		ppid = os.Getppid
 	}
-	stop := startWatchdog(ctx, cancel, watchdogInterval, ppid, d.watchdogTicks)
+	stop := startWatchdog(ctx, func() { cancel(nil) }, watchdogInterval, ppid, d.watchdogTicks)
 	defer func() {
-		cancel()
+		cancel(nil)
 		stop()
 	}()
 
@@ -349,6 +364,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 	var deb *watch.Debouncer
 	var lockRequeues int32
 	deb = watch.NewDebouncer(ctx, watch.DebounceDuration(), func(paths map[string]struct{}) {
+		// #375: flush writes the sidecar and the store through d.start, so
+		// a changed index stops Run before it writes anything.
+		if err := d.checkIndex(); err != nil {
+			stopWith(err)
+			return
+		}
 		err := d.flush(paths)
 		switch {
 		case err == nil:
@@ -391,13 +412,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// wg.Wait(), even when the watch loop has already exited.
 	deb.Add(flushSentinelPath)
 
-	var runErr error
 	select {
 	case <-ctx.Done():
 	case <-loopExited:
-		if ctx.Err() == nil {
-			runErr = ErrWatcherClosed
-		}
+		// A no-op when ctx is already done: the first cause wins.
+		stopWith(ErrWatcherClosed)
 	}
 	wg.Wait()
 	// IN-04 belt-and-suspenders: watchLoop's own deb.Stop() ran inside
@@ -407,18 +426,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// debounce window. The structural fix is Debouncer.Add's own ctx gate
 	// (internal/watch/debounce.go) — this is the caller-side backstop.
 	//
-	// IN-01 (round 5): both of those defenses are ctx gates, so they only
-	// cover the CANCELLATION teardown. In the loopExited-with-live-ctx
-	// path (ErrWatcherClosed above), ctx is not done: a lock-lost
-	// in-flight flush can requeue PAST this Stop (Add re-arms because ctx
-	// is alive) and deb.Wait() below rides out the new timer — repeatable
-	// up to maxFlushLockRequeues times, so Run's return can lag by up to
-	// that many debounce windows plus sync durations. Bounded and
-	// invariant-safe (the chain terminates via success, non-lock error,
-	// or give-up; the lock is correctly held throughout, and the extra
-	// syncs are legitimate pending work), so this is accepted teardown
-	// latency on an already-abnormal path — cancelling an internal
-	// context here would be the fix if prompt teardown ever matters.
+	// IN-01 (round 5): both of those defenses are ctx gates. Every path
+	// that reaches this point has cancelled ctx, the loopExited path
+	// included (stopWith(ErrWatcherClosed) above), so both gates hold on
+	// every teardown.
 	deb.Stop()
 	// CR-01: wg.Wait() only joins the tracked watcher goroutine — it does
 	// NOT join a debounce flush that had already started running its
@@ -426,12 +437,25 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// cancelled. deb.Stop() (watchLoop's and the backstop above) can
 	// only cancel a timer that hasn't fired yet; deb.Wait() is the
 	// explicit join for one that has, closing the window where Run
-	// released the daemon lock (see the deferred release() above) while a
+	// released the daemon lock (see the deferred releaseOwnLock above) while a
 	// Sync was still mid-commit against the single coordinated Writer
 	// (INDX-05, D-07, SYNC-06).
 	deb.Wait()
-	return runErr
+	// Run returns a cause only when Run itself stopped. The end of the
+	// parent, whatever its cause, and a watchdog cancel are a clean
+	// shutdown.
+	if s, ok := errors.AsType[*runStop](context.Cause(ctx)); ok {
+		return s.err
+	}
+	return nil
 }
+
+// runStop marks a cause that Run set itself, so Run can tell it from a
+// cause of the parent context without comparing the two.
+type runStop struct{ err error }
+
+func (s *runStop) Error() string { return s.err.Error() }
+func (s *runStop) Unwrap() error { return s.err }
 
 // RunWithRetry drives d.Run(ctx) in a loop, converging concurrent
 // serve --mcp sessions on a single writer (WATCH-04/D-14): defer-and-retry
@@ -513,7 +537,7 @@ func (d *Daemon) flush(_ map[string]struct{}) error {
 		syncFn = d.syncFn
 	}
 	d.syncMu.Lock()
-	stats, err := syncFn(d.repoRoot, d.storeDir, d.opts)
+	stats, err := syncFn(d.repoRoot, d.start.Store, d.opts)
 	d.syncMu.Unlock()
 
 	if err != nil {
@@ -529,11 +553,11 @@ func (d *Daemon) flush(_ map[string]struct{}) error {
 }
 
 func (d *Daemon) touchPending() error {
-	return nofollow.WriteFile(filepath.Join(d.codegraphDir, staleSidecarName), nil, 0o644)
+	return nofollow.WriteFile(filepath.Join(d.start.Dir, staleSidecarName), nil, 0o644)
 }
 
 func (d *Daemon) clearPending() error {
-	err := os.Remove(filepath.Join(d.codegraphDir, staleSidecarName))
+	err := os.Remove(filepath.Join(d.start.Dir, staleSidecarName))
 	if err != nil && os.IsNotExist(err) {
 		return nil
 	}

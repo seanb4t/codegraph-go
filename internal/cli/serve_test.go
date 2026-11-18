@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/wtindex"
 )
 
@@ -85,6 +87,21 @@ func TestServeServerPathsNoIndex(t *testing.T) {
 	}
 	if repoPath != dir || indexRoot != dir {
 		t.Fatalf("serveServerPaths(%s) = index root %q, confinement root %q, want %q for both (no index found: both fall back to start)", dir, indexRoot, repoPath, dir)
+	}
+}
+
+func TestServeServerPathsRefusesIndexLinkedOutside(t *testing.T) {
+	repo := t.TempDir()
+	outside := t.TempDir()
+	symlinkT(t, outside, filepath.Join(repo, codegraphDirName))
+
+	_, _, _, err := serveServerPaths(repo)
+	if !errors.Is(err, query.ErrIndexOutsideRoot) {
+		t.Fatalf("serveServerPaths(%s) err = %v, want query.ErrIndexOutsideRoot", repo, err)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("outside directory holds %d entries (err %v), want none", len(entries), err)
 	}
 }
 
