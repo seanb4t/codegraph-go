@@ -387,6 +387,37 @@ func TestReplaceStoreWaitsForHandleOpenedThroughLink(t *testing.T) {
 	}
 }
 
+func TestReplaceStoreThroughLinkReplacesTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		oldStore bool
+	}{
+		{"a link to a store", true},
+		{"a link to a missing store", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			real, link := linkedStore(t)
+			if tc.oldStore {
+				buildStore(t, real, "old")
+			} else if err := os.Remove(real); err != nil {
+				t.Fatalf("remove: %v", err)
+			}
+			staging := filepath.Join(t.TempDir(), "store")
+			newExport := buildStore(t, staging, "new")
+
+			if err := ReplaceStore(staging, link); err != nil {
+				t.Fatalf("ReplaceStore through the link: %v", err)
+			}
+			if target, err := os.Readlink(link); err != nil || target != real {
+				t.Fatalf("the link reads %q, %v after the replace, want %q", target, err, real)
+			}
+			if !bytes.Equal(exportAt(t, real), newExport) {
+				t.Errorf("the store behind the link does not hold the staging store")
+			}
+		})
+	}
+}
+
 func TestOpenWaitsForSwapLockTakenThroughOtherName(t *testing.T) {
 	noRetrySleep(t)
 	real, link := linkedStore(t)

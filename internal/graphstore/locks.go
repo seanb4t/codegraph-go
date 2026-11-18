@@ -108,6 +108,9 @@ func LockWriter(dir string) (io.Closer, error) {
 // Before it locks live, ReplaceStore runs CheckLiveStore on it and returns
 // its error. So a live directory that holds a symbolic link, or files but
 // no store, is not replaced.
+//
+// ReplaceStore resolves every symlink of live first and replaces the store
+// at the resolved path. A link at live stays as it is.
 func ReplaceStore(staging, live string) (err error) {
 	// replaced turns true once staging is in the place of live. An error
 	// after that moment, also one of the deferred releases below, tells
@@ -118,6 +121,11 @@ func ReplaceStore(staging, live string) (err error) {
 			err = fmt.Errorf("%w: %w", ErrAfterReplace, err)
 		}
 	}()
+	resolved, err := resolveStorePath(live)
+	if err != nil {
+		return fmt.Errorf("graphstore: resolve the store %s: %w", live, err)
+	}
+	live = resolved
 	swap, err := lockBeside(live, swapLockSuffix, flock.Exclusive)
 	if err != nil {
 		return err
