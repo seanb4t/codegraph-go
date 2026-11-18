@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -62,6 +62,30 @@ func serveServerPaths(start string) (indexRoot, confineRoot string, hasIndex boo
 	default:
 		return "", "", false, resolveErr
 	}
+}
+
+// serveReconcile syncs the index of indexRoot before the server answers its
+// first tool call, so the graph includes changes made while no watcher ran.
+// It syncs the store path that indexdir.Resolve returns, because a full
+// index refuses a store path that is a symbolic link. A store that another
+// codegraph process holds is not an error: serveReconcile writes one stderr
+// line and returns nil, and that process brings the graph up to date.
+// Every other error is returned.
+func serveReconcile(indexRoot string, stderr io.Writer) error {
+	paths, err := indexdir.Resolve(indexRoot)
+	if err != nil {
+		return err
+	}
+	_, err = indexer.Sync(indexRoot, paths.Store, indexer.Options{Quiet: true})
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, graphstore.ErrStoreLocked) {
+		return err
+	}
+	fmt.Fprintf(stderr,
+		"codegraph serve: startup reconcile skipped — the graph store is locked by another codegraph process (likely an in-flight sync; the graph will refresh shortly): %v\n", err)
+	return nil
 }
 
 // codegraphNoWorktreeIndexEnv turns the worktree index off when it is set
@@ -306,38 +330,9 @@ checkout's index.`,
 				return err
 			}
 
-			// D-06/SYNC-03: on (re)connect, reconcile any offline changes
-			// (made while the watcher/daemon was down) via the same
-			// indexer.Sync entry `codegraph sync` and the daemon use —
-			// before the first tool is served, so the first
-			// codegraph_explore reads a current graph. A no-op when
-			// nothing changed (the stat pre-filter makes this cheap by
-			// construction). MCP-03's absent-index case is unaffected:
-			// hasIndex false skips reconcile entirely.
 			if hasIndex {
-				storeDir := filepath.Join(indexRoot, codegraphDirName, storeDirName)
-				if _, err := indexer.Sync(indexRoot, storeDir, indexer.Options{Quiet: true}); err != nil {
-					// CR-01 scenario 3 (03-REVIEW.md): a lock-held failure
-					// here means another codegraph process (a sibling
-					// session's flush or reconcile) is actively syncing the
-					// SAME store right now — which is exactly the "graph
-					// will be fresh" case. Killing this session's MCP server
-					// over it is strictly worse than starting against a
-					// possibly seconds-stale graph the stale banner already
-					// covers (D-04a), so degrade to a stderr warning and
-					// continue. Every non-lock error stays fatal: a corrupt
-					// or unreadable store is not something serving through
-					// papers over. errors.Is on the ErrStoreLocked sentinel,
-					// which graphstore gives for a store that another process
-					// holds (classified inside graphstore, the only seam with
-					// unambiguous provenance — 03-REVIEW-2.md WR-01), means a
-					// permission error anywhere in Sync's chain can never
-					// masquerade as lock contention here.
-					if !errors.Is(err, graphstore.ErrStoreLocked) {
-						return err
-					}
-					fmt.Fprintf(cmd.ErrOrStderr(),
-						"codegraph serve: startup reconcile skipped — the graph store is locked by another codegraph process (likely an in-flight sync; the graph will refresh shortly): %v\n", err)
+				if err := serveReconcile(indexRoot, cmd.ErrOrStderr()); err != nil {
+					return err
 				}
 			}
 

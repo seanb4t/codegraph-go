@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
@@ -94,6 +97,76 @@ func TestIndexCommandsAcceptIndexLinkedInside(t *testing.T) {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
+}
+
+// linkStoreInside moves the store of an initialized dir to dir/store-real
+// and links .codegraph/store to it. It returns the path of store-real.
+func linkStoreInside(t *testing.T, dir string) string {
+	t.Helper()
+	real := filepath.Join(dir, "store-real")
+	if err := os.Rename(filepath.Join(dir, codegraphDirName, storeDirName), real); err != nil {
+		t.Fatal(err)
+	}
+	symlinkT(t, filepath.Join("..", "store-real"), filepath.Join(dir, codegraphDirName, storeDirName))
+	return real
+}
+
+func wantStoreLinkKept(t *testing.T, dir, real string) {
+	t.Helper()
+	target, err := os.Readlink(filepath.Join(dir, codegraphDirName, storeDirName))
+	if err != nil || target != filepath.Join("..", "store-real") {
+		t.Fatalf("store link = %q (err %v), want ../store-real", target, err)
+	}
+	if err := graphstore.CheckLiveStore(real); err != nil {
+		t.Fatalf("store-real does not hold the store: %v", err)
+	}
+}
+
+func TestIndexCommandsAcceptAStoreLinkedInside(t *testing.T) {
+	dir := copyFixture(t)
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	real := linkStoreInside(t, dir)
+
+	for _, args := range [][]string{{"index", "--force", dir}, {"sync", dir}} {
+		if _, _, err := execCmd(args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	wantStoreLinkKept(t, dir, real)
+
+	out, _, err := execCmd("status", "-p", dir, "--json")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	var status struct {
+		FileCount int64 `json:"fileCount"`
+		Stale     bool  `json:"stale"`
+	}
+	if err := json.Unmarshal([]byte(out), &status); err != nil {
+		t.Fatalf("status output %q: %v", out, err)
+	}
+	if status.FileCount == 0 || status.Stale {
+		t.Fatalf("status = %+v, want indexed files and a graph that is not stale", status)
+	}
+}
+
+func TestServeReconcileBuildsTheStoreBehindALinkInside(t *testing.T) {
+	dir := copyFixture(t)
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	real := linkStoreInside(t, dir)
+	if err := os.RemoveAll(real); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	if err := serveReconcile(dir, &stderr); err != nil {
+		t.Fatalf("serveReconcile: %v (stderr %q)", err, stderr.String())
+	}
+	wantStoreLinkKept(t, dir, real)
 }
 
 func TestInitKeepsAlreadyExistsForIndexThatIsARegularFile(t *testing.T) {
