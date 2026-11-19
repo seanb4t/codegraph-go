@@ -1,0 +1,3 @@
+kind: Fixes
+body: Installing the Codex PreToolUse nudge now refuses a global guard path with a single quote, a backslash, a control character or invalid UTF-8, because Codex may run the hook under a shell that does not read the quoting as one word; set CODEX_HOME to another path or install with --location local.
+time: 2026-11-18T23:48:23.062363-05:00

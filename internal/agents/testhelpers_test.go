@@ -28,13 +28,29 @@ func fakeHome(t *testing.T) string {
 // homeEnv returns every home-derived env var this package's targets
 // consult, pointed under home. fakeHome and TestMain both set exactly
 // this set; a new agent target that reads another variable adds it here.
+// CODEX_HOME is empty, so Codex uses its default under HOME. A test that needs
+// a working CODEX_HOME calls useCodexHome.
 func homeEnv(home string) map[string]string {
 	return map[string]string{
 		"HOME":            home,
 		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
 		"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
 		"HERMES_HOME":     filepath.Join(home, ".hermes"),
+		"CODEX_HOME":      "",
 	}
+}
+
+// useCodexHome makes an empty directory, points CODEX_HOME at it and returns
+// it. The path is already resolved, so a test can compare it with the paths
+// codegraph reports.
+func useCodexHome(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(realpathtest.TempDir(t), "codex")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", dir)
+	return dir
 }
 
 // readFile reads path and fails the test on error, for terse test-body

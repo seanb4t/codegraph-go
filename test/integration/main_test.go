@@ -101,6 +101,9 @@ func TestScripts(t *testing.T) {
 				}
 				env.Setenv(key, value)
 			}
+			// An empty CODEX_HOME keeps the default under HOME, whatever the
+			// host sets.
+			env.Setenv("CODEX_HOME", "")
 			// The D-11 notice glyph (U+26A0, no U+FE0F) comes from
 			// gitmeta itself, so the scripts cannot drift from it.
 			notice := (&gitmeta.Mismatch{WorktreeRoot: "/a", IndexRoot: "/b"}).Notice()

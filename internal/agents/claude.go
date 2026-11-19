@@ -2,10 +2,12 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
 )
@@ -107,7 +109,7 @@ func claudeConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return ".mcp.json", nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -126,7 +128,7 @@ func claudeInstructionsPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "CLAUDE.md"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -137,7 +139,7 @@ func claudeSettingsPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "settings.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -148,7 +150,15 @@ func claudeSettingsPath(loc Location) (string, error) {
 // Phase 6's embedded hooks fragment (.claude/hooks/hooks.json) uses for
 // every SessionStart entry — the value claudeSessionStartBlocks rewrites
 // into claudeHookCommand(loc) for the location actually being installed.
-const claudeFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
+// The path is double-quoted so a project directory with whitespace stays one
+// shell word; the ${CLAUDE_PROJECT_DIR} expansion still happens inside the
+// quotes.
+const claudeFragmentCommand = `"` + claudeUnquotedFragmentCommand + `"`
+
+// claudeUnquotedFragmentCommand is claudeFragmentCommand without the quotes.
+// Nothing writes this text. It is only matched, as one of the owned
+// commands, so a handler that carries it is codegraph's own.
+const claudeUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
 
 // claudeSkillDirPath resolves to the directory Phase 7 installs the
 // Claude Code skill into: .claude/skills/codegraph for local,
@@ -158,7 +168,7 @@ func claudeSkillDirPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "skills", "codegraph"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -185,7 +195,7 @@ func claudeHooksScriptPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "hooks", "session-nudge.sh"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -235,15 +245,29 @@ func claudeSkillPolicy(loc Location) (unmanifestedPolicy, error) {
 // 6's dogfooded, project-relative fragment verbatim so
 // TestHookRegistrationMatchesFragmentAndScript stays green. Global scope
 // uses the fully-resolved absolute path to the script this same install
-// writes (claudeHooksScriptPath(LocationGlobal)) rather than a literal
-// "~" — RESEARCH Assumption A3 flags tilde expansion in a shell-form hook
-// command as unverified against a live session, and resolving it here
-// costs nothing and removes the assumption entirely. Copying Phase 6's
-// project-relative command verbatim into a global install would name a
-// path that exists in no project but this one (RESEARCH Pitfall 4).
+// writes (claudeHooksScriptPath(LocationGlobal)) rather than a literal "~",
+// because tilde expansion in a shell-form hook command is unverified.
+// Copying the project-relative command verbatim into a global install would
+// name a path that exists in no project but this one. The global path is
+// single-quoted: Claude Code runs the command through a shell, so a home
+// directory with whitespace or a quote must stay one word.
 func claudeHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudeFragmentCommand, nil
+	}
+	unquoted, err := claudeUnquotedHookCommand(loc)
+	if err != nil {
+		return "", err
+	}
+	return shellSingleQuote(unquoted), nil
+}
+
+// claudeUnquotedHookCommand is claudeHookCommand's text without the shell
+// quoting. Nothing writes it; it is only matched, as one of the owned
+// commands.
+func claudeUnquotedHookCommand(loc Location) (string, error) {
+	if loc == LocationLocal {
+		return claudeUnquotedFragmentCommand, nil
 	}
 	return claudeHooksScriptPath(LocationGlobal)
 }
@@ -255,10 +279,15 @@ func claudeHookCommand(loc Location) (string, error) {
 // the blocks from the embedded fragment rather than re-authoring them in
 // Go keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
 // matcher literal is hand-typed here. Returns the rewritten blocks and
-// the single-element list of owned command strings writeHookEntry uses
-// for identity.
+// the owned command strings writeHookEntry, removeHookEntry and
+// hasOwnHookBlock use for identity: the quoted command the blocks carry,
+// then its unquoted spelling.
 func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := claudeHookCommand(loc)
+	if err != nil {
+		return nil, nil, err
+	}
+	unquoted, err := claudeUnquotedHookCommand(loc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -266,7 +295,7 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return blocks, []string{ownCommand}, nil
+	return blocks, []string{ownCommand, unquoted}, nil
 }
 
 // claudeFragmentEventBlocks decodes hooks.<event> from the embedded hooks
@@ -341,11 +370,13 @@ func addClaudeAllowPermission(path string) (FileResult, error) {
 	if err != nil {
 		return FileResult{}, err
 	}
-	permissions, _ := existing["permissions"].(map[string]any)
+	permissions, allow, err := claudeAllowArray(existing)
+	if err != nil {
+		return FileResult{}, err
+	}
 	if permissions == nil {
 		permissions = map[string]any{}
 	}
-	allow, _ := permissions["allow"].([]any)
 	for _, v := range allow {
 		if s, ok := v.(string); ok && s == claudeAllowToken {
 			return FileResult{Path: path, Action: ActionUnchanged}, nil
@@ -362,6 +393,77 @@ func addClaudeAllowPermission(path string) (FileResult, error) {
 		action = ActionUpdated
 	}
 	return FileResult{Path: path, Action: action}, nil
+}
+
+// claudeAllowArray returns the permissions object and the permissions.allow
+// array of a decoded settings object. Each is nil when the key is absent or
+// null. A value of the wrong JSON type is an error naming the key, so a
+// caller never overwrites a value it does not understand. The caller adds
+// the file name.
+func claudeAllowArray(existing map[string]any) (permissions map[string]any, allow []any, err error) {
+	if v := existing["permissions"]; v != nil {
+		p, ok := v.(map[string]any)
+		if !ok {
+			return nil, nil, errors.New(`"permissions" is not a JSON object`)
+		}
+		permissions = p
+	}
+	if v := permissions["allow"]; v != nil {
+		a, ok := v.([]any)
+		if !ok {
+			return nil, nil, errors.New(`"permissions.allow" is not a JSON array`)
+		}
+		allow = a
+	}
+	return permissions, allow, nil
+}
+
+// claudeSettingsPreflight reads the settings file at loc once, strictly, and
+// checks everything Install edits in it: hooks.SessionStart and
+// hooks.PreToolUse and, when autoAllow is set, permissions.allow. A file
+// whose real location is outside the project (at local scope), a malformed
+// file and a value of the wrong JSON type are each one error naming the file.
+// Install runs no settings step and writes no script or guard after an error,
+// so one bad value cannot leave the other steps half done. At global scope, a
+// script or guard path that is not valid UTF-8 is an error too: JSON cannot
+// carry it, so the registration would never match on uninstall. A settings
+// file that does not resolve is this function's own error. Only a failure to
+// compute a path (no usable home directory) is left to the steps, which
+// report it.
+func claudeSettingsPreflight(loc Location, autoAllow bool) error {
+	path, err := claudeSettingsPath(loc)
+	if err != nil {
+		return nil
+	}
+	real, err := preflightUserFile(path, loc)
+	if err != nil {
+		return err
+	}
+	existing, _, err := readJSONFileStrict(real)
+	if err == nil && autoAllow {
+		_, _, err = claudeAllowArray(existing)
+	}
+	for _, event := range []string{"SessionStart", "PreToolUse"} {
+		if err != nil {
+			break
+		}
+		_, _, err = hookEventArray(existing, event)
+	}
+	if err != nil {
+		if !strings.Contains(err.Error(), path) {
+			err = fmt.Errorf("%s: %w", path, err)
+		}
+		return err
+	}
+	if loc == LocationGlobal {
+		for _, hookPath := range []func(Location) (string, error){claudeHooksScriptPath, claudePreToolGuardPath} {
+			p, perr := hookPath(loc)
+			if perr == nil && !utf8.ValidString(p) {
+				return fmt.Errorf("%s: a global Claude Code hook path that is not valid UTF-8 is refused, because JSON cannot hold it and the registration would not match on uninstall; install with --location local", p)
+			}
+		}
+	}
+	return nil
 }
 
 // removeClaudeAllowPermission removes claudeAllowToken from
@@ -453,7 +555,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// registration, so a foreign/unmanifested skill directory (D-14) —
 	// where the manifest step below never runs — cannot silently forget a
 	// live opt-in.
-	preToolRecorded, preToolReadable := preToolNudgeEvidenced(loc)
+	preToolRecorded, preToolReadable, preToolProbeErr := preToolNudgeEvidenced(loc)
 
 	// Pitfall 3: migrate a legacy ./.claude.json local entry into
 	// ./.mcp.json before writing the correct entry.
@@ -476,7 +578,19 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		installInstructions(&result, instrPath, loc)
 	}
 
-	if opts.AutoAllow {
+	// One strict read of settings.json before its three steps (the allow
+	// entry, SessionStart and PreToolUse), so a value of the wrong type in
+	// one key cannot let the other steps write the file.
+	settingsOK := true
+	if perr := claudeSettingsPreflight(loc, opts.AutoAllow); perr != nil {
+		result.Errors = append(result.Errors, perr)
+		settingsOK = false
+	}
+	if preToolProbeErr != nil && opts.PreToolNudge == PreToolNudgeKeep && settingsOK {
+		result.Notes = append(result.Notes, fmt.Sprintf("the codegraph PreToolUse nudge was not refreshed: %v", preToolProbeErr))
+	}
+
+	if opts.AutoAllow && settingsOK {
 		if settingsPath, err := claudeSettingsPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
 		} else {
@@ -534,35 +648,43 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude hooks script path: %w", err))
-	} else {
-		content, rerr := claudeassets.SessionNudgeScript()
-		if rerr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", scriptPath, rerr))
+	// A settings.json that failed the preflight skips the script and the
+	// SessionStart registration with it.
+	if settingsOK {
+		if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude hooks script path: %w", err))
 		} else {
-			fr, werr := writeEmbeddedFile(scriptPath, string(content), true)
-			recordFile(&result, scriptPath, fr, werr)
-			if werr == nil {
-				scriptContent = content
-				haveScriptContent = true
+			content, rerr := claudeassets.SessionNudgeScript()
+			if rerr != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", scriptPath, rerr))
+			} else {
+				fr, werr := writeEmbeddedFile(scriptPath, string(content), true)
+				recordFile(&result, scriptPath, fr, werr)
+				if werr == nil {
+					scriptContent = content
+					haveScriptContent = true
+				}
 			}
 		}
-	}
 
-	if settingsPath, err := claudeSettingsPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
-	} else {
-		blocks, ownCommands, berr := claudeSessionStartBlocks(loc)
-		if berr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
-		} else {
-			werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
-				return writeHookEntry(real, "SessionStart", blocks, ownCommands)
-			})
-			if werr == nil {
-				sessionStartBlocks = blocks
-				haveSessionStart = true
+		// The registration waits for its script: with no script written, nothing
+		// points at a file that is not there.
+		if haveScriptContent {
+			if settingsPath, err := claudeSettingsPath(loc); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+			} else {
+				blocks, ownCommands, berr := claudeSessionStartBlocks(loc)
+				if berr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+				} else {
+					werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
+						return writeHookEntry(real, "SessionStart", blocks, ownCommands)
+					})
+					if werr == nil {
+						sessionStartBlocks = blocks
+						haveSessionStart = true
+					}
+				}
 			}
 		}
 	}
@@ -588,8 +710,8 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		havePreTool         bool
 		dropPreTool         bool
 	)
-	enablePreTool := opts.PreToolNudge == PreToolNudgeOn ||
-		(opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable)
+	enablePreTool := settingsOK && (opts.PreToolNudge == PreToolNudgeOn ||
+		(opts.PreToolNudge == PreToolNudgeKeep && preToolRecorded && preToolReadable))
 	if enablePreTool {
 		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
@@ -615,19 +737,12 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 				}
 			}
 		}
-	} else if opts.PreToolNudge == PreToolNudgeOff {
+	} else if opts.PreToolNudge == PreToolNudgeOff && settingsOK {
 		// Only artifacts actually removed are reported, so an Off install on
 		// a location that never opted in adds no lines (errors still surface).
+		// The registration goes first, so a failure never leaves a
+		// registration that points at a guard that is already gone.
 		removeFailed := false
-		if guardPath, err := claudePreToolGuardPath(loc); err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
-			removeFailed = true
-		} else if fr, rerr := removeEmbeddedFile(guardPath); rerr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, rerr))
-			removeFailed = true
-		} else if fr.Action == ActionRemoved {
-			result.Files = append(result.Files, fr)
-		}
 		if settingsPath, err := claudeSettingsPath(loc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
 			removeFailed = true
@@ -638,6 +753,18 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 			return removeHookEntry(real, "PreToolUse", ownCommands)
 		})); werr != nil {
 			removeFailed = true
+		}
+		// The registration stays when its removal failed, and so does its guard.
+		if !removeFailed {
+			if guardPath, err := claudePreToolGuardPath(loc); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+				removeFailed = true
+			} else if fr, rerr := removeEmbeddedFile(guardPath); rerr != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, rerr))
+				removeFailed = true
+			} else if fr.Action == ActionRemoved {
+				result.Files = append(result.Files, fr)
+			}
 		}
 		dropPreTool = !removeFailed
 	}
@@ -736,50 +863,52 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		}, policy)
 	}
 
+	// Each registration is removed before the script or guard it points at.
+	// The file stays, with a note, when the registration may remain: the
+	// removal failed, or settings.json was kept because it lies outside the
+	// project.
+	settingsPath, settingsErr := claudeSettingsPath(loc)
+	if settingsErr != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", settingsErr))
+	}
+	removeRegistration := func(event string, blocks func(Location) ([]any, []string, error)) bool {
+		if settingsErr != nil {
+			return true
+		}
+		_, ownCommands, berr := blocks(loc)
+		if berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+			return true
+		}
+		rerr := recordUserFile(&result, settingsPath, loc, opUninstall, func(real string) (FileResult, error) {
+			return removeHookEntry(real, event, ownCommands)
+		})
+		return registrationRemains(&result, settingsPath, rerr)
+	}
+
+	sessionStartRemains := removeRegistration("SessionStart", claudeSessionStartBlocks)
 	if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude hooks script path: %w", err))
+	} else if sessionStartRemains {
+		keepFileNote(&result, scriptPath, settingsPath)
 	} else {
 		fr, rerr := removeEmbeddedFile(scriptPath)
 		recordFile(&result, scriptPath, fr, rerr)
 	}
 
-	if settingsPath, err := claudeSettingsPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
-	} else {
-		_, ownCommands, berr := claudeSessionStartBlocks(loc)
-		if berr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
-		} else {
-			_ = recordUserFile(&result, settingsPath, loc, opUninstall, func(real string) (FileResult, error) {
-				return removeHookEntry(real, "SessionStart", ownCommands)
-			})
-		}
-	}
-
-	// D-11: the PreToolUse guard and codegraph's own PreToolUse handlers
-	// are ALWAYS attempted, whether or not the manifest records the opt-in
-	// (a foreign skill directory skips the record but not the writes), and
-	// report not-found when the user never opted in. Ownership is the exact
-	// command string (242ec0a): an unrelated block under the same matcher
-	// is never touched.
+	// The PreToolUse guard and codegraph's own PreToolUse handlers are
+	// removed whether or not the manifest records the opt-in (a foreign skill
+	// directory skips the record but not the removal), and report not-found
+	// when the user never opted in. Ownership is the exact command string, so
+	// an unrelated block under the same matcher is never touched.
+	preToolRemains := removeRegistration("PreToolUse", claudePreToolUseBlocks)
 	if guardPath, err := claudePreToolGuardPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude PreToolUse guard path: %w", err))
+	} else if preToolRemains {
+		keepFileNote(&result, guardPath, settingsPath)
 	} else {
 		fr, rerr := removeEmbeddedFile(guardPath)
 		recordFile(&result, guardPath, fr, rerr)
-	}
-
-	if settingsPath, err := claudeSettingsPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
-	} else {
-		_, ownCommands, berr := claudePreToolUseBlocks(loc)
-		if berr != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
-		} else {
-			_ = recordUserFile(&result, settingsPath, loc, opUninstall, func(real string) (FileResult, error) {
-				return removeHookEntry(real, "PreToolUse", ownCommands)
-			})
-		}
 	}
 
 	return result

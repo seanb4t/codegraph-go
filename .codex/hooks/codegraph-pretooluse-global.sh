@@ -4,7 +4,7 @@
 # The Codex CLI PreToolUse nudge guard (global/user scope). This is the
 # TEMPLATE codegraph embeds and renders at install time; the file Codex
 # itself trusts and runs is the rendered copy at
-# ~/.codex/hooks/codegraph-pretooluse.sh.
+# $CODEX_HOME/hooks/codegraph-pretooluse.sh (default ~/.codex).
 #
 # Unlike the local guard, a global hook's cwd is simply the session's own
 # working directory (D-22) — there is no repo-relative path to derive, so

@@ -626,6 +626,9 @@ func TestCodexPreToolNudge_OnWritesAndNotesTrust(t *testing.T) {
 			if n != 1 {
 				t.Fatalf("Notes mentioning /hooks = %d, want 1: %#v", n, res.Notes)
 			}
+			if noteNaming(res, "review your other hooks") {
+				t.Fatalf("a fresh install told the user to review other hooks: %#v", res.Notes)
+			}
 		})
 	}
 }
@@ -705,7 +708,8 @@ func TestCodexPreToolNudge_KeepNoopWhenNotOptedIn(t *testing.T) {
 // TestCodexPreToolNudge_KeepWithMalformedHooksJSONTouchesNothing: a
 // malformed hooks.json with Keep writes nothing, reports no error, and
 // leaves the file byte-identical (hasOwnHookBlock's read failure is
-// treated as "cannot tell", never surfaced as an Install error).
+// treated as "cannot tell" and surfaces as a note, never as an Install
+// error).
 func TestCodexPreToolNudge_KeepWithMalformedHooksJSONTouchesNothing(t *testing.T) {
 	fakeHome(t)
 	t.Chdir(t.TempDir())

@@ -240,3 +240,38 @@ func TestInstallPrintConfigStyle_Filters(t *testing.T) {
 		t.Fatalf("expected no target line to print before the unknown-target error, got:\n%s", out)
 	}
 }
+
+// TestInstallPrintConfigStyle_UnresolvedTargetDoesNotHideTheOthers: a target
+// whose paths do not resolve prints an error field, every other target still
+// prints its line, and the command still exits with the error.
+func TestInstallPrintConfigStyle_UnresolvedTargetDoesNotHideTheOthers(t *testing.T) {
+	fakeHome(t)
+	t.Setenv("CODEX_HOME", "rel")
+
+	// A read-only report lists every target with no --target, with
+	// --target all and with --target auto, and does not skip the one that
+	// fails.
+	for _, extra := range [][]string{nil, {"--target", "all"}, {"--target", "auto"}} {
+		out, _, err := execCmd(append([]string{"install", "--print-config-style", "--location", "global"}, extra...)...)
+		if err == nil || !strings.Contains(err.Error(), `CODEX_HOME "rel"`) {
+			t.Fatalf("%v: install --print-config-style error = %v, want one naming CODEX_HOME", extra, err)
+		}
+		lines := splitNonEmptyLines(out)
+		ids := agents.AllTargetIDs()
+		if len(lines) != len(ids) {
+			t.Fatalf("%v: stdout has %d lines, want %d (one per registered target):\n%s", extra, len(lines), len(ids), out)
+		}
+		for i, id := range ids {
+			prefix := string(id) + ": "
+			if !strings.HasPrefix(lines[i], prefix) {
+				t.Errorf("%v: line %d = %q, want it to start with %q", extra, i, lines[i], prefix)
+			}
+			if isCodex := id == agents.Codex; isCodex != strings.Contains(lines[i], "error=") {
+				t.Errorf("%v: line %d = %q, want an error field only for codex", extra, i, lines[i])
+			}
+			if strings.Contains(lines[i], "error=codex:") {
+				t.Errorf("%v: line %d = %q repeats the target id after error=", extra, i, lines[i])
+			}
+		}
+	}
+}

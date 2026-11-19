@@ -86,7 +86,7 @@ func refreshInstalledSkills(execPath string, out io.Writer) error {
 
 	var errs []error
 	for _, loc := range locs {
-		targets, err := agents.ResolveTargetFlag(string(agents.Claude), loc)
+		targets, _, err := agents.ResolveTargets(string(agents.Claude), loc)
 		if err != nil {
 			errs = append(errs, err)
 			continue

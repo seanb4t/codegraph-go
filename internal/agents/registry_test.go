@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,13 +16,14 @@ import (
 type fakeTarget struct {
 	id        TargetID
 	installed bool
+	err       error
 }
 
 func (f fakeTarget) ID() TargetID                   { return f.id }
 func (f fakeTarget) DisplayName() string            { return string(f.id) }
 func (f fakeTarget) SupportsLocation(Location) bool { return true }
 func (f fakeTarget) Detect(Location) DetectionResult {
-	return DetectionResult{Installed: f.installed}
+	return DetectionResult{Installed: f.installed, Err: f.err}
 }
 func (f fakeTarget) Install(Location, InstallOptions) WriteResult { return WriteResult{} }
 func (f fakeTarget) Uninstall(Location) WriteResult               { return WriteResult{} }
@@ -75,12 +77,12 @@ func TestRegistry_AllTargetIDsSorted(t *testing.T) {
 	}
 }
 
-func TestResolveTargetFlag_All(t *testing.T) {
+func TestResolveTargets_All(t *testing.T) {
 	resetRegistryForTest(t)
 	registerTarget(fakeTarget{id: TargetID("a")})
 	registerTarget(fakeTarget{id: TargetID("b")})
 
-	got, err := ResolveTargetFlag("all", LocationGlobal)
+	got, _, err := ResolveTargets("all", LocationGlobal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,11 +91,11 @@ func TestResolveTargetFlag_All(t *testing.T) {
 	}
 }
 
-func TestResolveTargetFlag_None(t *testing.T) {
+func TestResolveTargets_None(t *testing.T) {
 	resetRegistryForTest(t)
 	registerTarget(fakeTarget{id: TargetID("a")})
 
-	got, err := ResolveTargetFlag("none", LocationGlobal)
+	got, _, err := ResolveTargets("none", LocationGlobal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,13 +104,13 @@ func TestResolveTargetFlag_None(t *testing.T) {
 	}
 }
 
-func TestResolveTargetFlag_CSVSelectsExactlyListedTargets(t *testing.T) {
+func TestResolveTargets_CSVSelectsExactlyListedTargets(t *testing.T) {
 	resetRegistryForTest(t)
 	registerTarget(fakeTarget{id: TargetID("claude")})
 	registerTarget(fakeTarget{id: TargetID("cursor")})
 	registerTarget(fakeTarget{id: TargetID("codex")})
 
-	got, err := ResolveTargetFlag("claude,cursor", LocationGlobal)
+	got, _, err := ResolveTargets("claude,cursor", LocationGlobal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,22 +126,22 @@ func TestResolveTargetFlag_CSVSelectsExactlyListedTargets(t *testing.T) {
 	}
 }
 
-func TestResolveTargetFlag_CSVUnknownIDErrors(t *testing.T) {
+func TestResolveTargets_CSVUnknownIDErrors(t *testing.T) {
 	resetRegistryForTest(t)
 	registerTarget(fakeTarget{id: TargetID("claude")})
 
-	_, err := ResolveTargetFlag("claude,nonexistent", LocationGlobal)
+	_, _, err := ResolveTargets("claude,nonexistent", LocationGlobal)
 	if err == nil {
 		t.Fatalf("want an error for an unknown target id in the csv")
 	}
 }
 
-func TestResolveTargetFlag_AutoReturnsOnlyDetectedTargets(t *testing.T) {
+func TestResolveTargets_AutoReturnsOnlyDetectedTargets(t *testing.T) {
 	resetRegistryForTest(t)
 	registerTarget(fakeTarget{id: TargetID("claude"), installed: true})
 	registerTarget(fakeTarget{id: TargetID("cursor"), installed: false})
 
-	got, err := ResolveTargetFlag("auto", LocationGlobal)
+	got, _, err := ResolveTargets("auto", LocationGlobal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,12 +150,12 @@ func TestResolveTargetFlag_AutoReturnsOnlyDetectedTargets(t *testing.T) {
 	}
 }
 
-func TestResolveTargetFlag_AutoFallsBackToClaudeWhenNoneDetected(t *testing.T) {
+func TestResolveTargets_AutoFallsBackToClaudeWhenNoneDetected(t *testing.T) {
 	resetRegistryForTest(t)
 	registerTarget(fakeTarget{id: Claude, installed: false})
 	registerTarget(fakeTarget{id: TargetID("cursor"), installed: false})
 
-	got, err := ResolveTargetFlag("auto", LocationGlobal)
+	got, _, err := ResolveTargets("auto", LocationGlobal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,20 +164,20 @@ func TestResolveTargetFlag_AutoFallsBackToClaudeWhenNoneDetected(t *testing.T) {
 	}
 }
 
-// TestResolveTargetFlag_AutoDetectsCodexAtLocal (D-09, D-26) asserts
+// TestResolveTargets_AutoDetectsCodexAtLocal asserts
 // "--target auto --location local" and the picker's pre-check detect Codex
 // through the local .codex/ directory, using the REAL registered
 // codexTarget (not a fake) so its real Detect(loc) — a bare .codex/
 // directory counting as "installed" even with no config.toml yet — is
 // exercised end to end.
-func TestResolveTargetFlag_AutoDetectsCodexAtLocal(t *testing.T) {
+func TestResolveTargets_AutoDetectsCodexAtLocal(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
 		t.Fatalf("mkdir .codex: %v", err)
 	}
 
-	got, err := ResolveTargetFlag("auto", LocationLocal)
+	got, _, err := ResolveTargets("auto", LocationLocal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -316,5 +318,23 @@ func TestInstructionsBlockGuardIsNotVacuous(t *testing.T) {
 				t.Fatalf("blockNamesUnshippedCapability(%q) = %v, want nil", tc.block, err)
 			}
 		})
+	}
+}
+
+// TestResolveTargets_AutoDoesNotFallBackToASkippedClaude: the fallback to
+// Claude is for a clean environment. When Claude's own detection failed, auto
+// selects nothing and lists Claude as skipped.
+func TestResolveTargets_AutoDoesNotFallBackToASkippedClaude(t *testing.T) {
+	resetRegistryForTest(t)
+	failure := errors.New("detection failed")
+	registerTarget(fakeTarget{id: Claude, err: failure})
+	registerTarget(fakeTarget{id: Cursor})
+
+	targets, skipped, err := ResolveTargets("auto", LocationGlobal)
+	if err != nil || len(targets) != 0 {
+		t.Fatalf("auto = %v, %v, want nothing selected", targets, err)
+	}
+	if len(skipped) != 1 || skipped[0].ID != Claude || !errors.Is(skipped[0].Err, failure) {
+		t.Fatalf("skipped = %v, want only claude with its error", skipped)
 	}
 }

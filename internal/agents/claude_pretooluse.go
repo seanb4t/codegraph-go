@@ -3,7 +3,6 @@ package agents
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -15,7 +14,15 @@ import (
 // claudePreToolUseBlocks rewrites into claudePreToolHookCommand(loc). It
 // names the guard script, never the binary, so the registered identity
 // survives a change of the binary's location (v0.14.0 Phase 6 D-01b).
-const claudePreToolFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+// The path is double-quoted so a project directory with whitespace stays one
+// shell word.
+const claudePreToolFragmentCommand = `"` + claudePreToolUnquotedFragmentCommand + `"`
+
+// claudePreToolUnquotedFragmentCommand is claudePreToolFragmentCommand
+// without the quotes. Nothing writes this text. It is only matched, as one
+// of the owned commands, so a handler that carries it is codegraph's own and
+// counts as the recorded opt-in (preToolNudgeEvidenced).
+const claudePreToolUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
 
 // preToolGuardExecPathToken is the single-quoted placeholder the guard
 // template carries exactly once, on its binary-path assignment line;
@@ -30,7 +37,7 @@ func claudePreToolGuardPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "hooks", "pretooluse-nudge.sh"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -39,20 +46,39 @@ func claudePreToolGuardPath(loc Location) (string, error) {
 
 // claudePreToolHookCommand returns the command string registered for every
 // PreToolUse handler at loc, mirroring claudeHookCommand (D-12): the
-// fragment's project-relative literal for local, the absolute guard path
-// for global — never the binary path (D-01b).
+// fragment's project-relative literal for local, the single-quoted
+// absolute guard path for global — never the binary path (D-01b).
 func claudePreToolHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudePreToolFragmentCommand, nil
+	}
+	unquoted, err := claudePreToolUnquotedHookCommand(loc)
+	if err != nil {
+		return "", err
+	}
+	return shellSingleQuote(unquoted), nil
+}
+
+// claudePreToolUnquotedHookCommand is claudePreToolHookCommand's text
+// without the shell quoting. Nothing writes it; it is only matched, as one
+// of the owned commands.
+func claudePreToolUnquotedHookCommand(loc Location) (string, error) {
+	if loc == LocationLocal {
+		return claudePreToolUnquotedFragmentCommand, nil
 	}
 	return claudePreToolGuardPath(LocationGlobal)
 }
 
 // claudePreToolUseBlocks returns the PreToolUse blocks for loc, derived
-// from the embedded fragment, plus the single owned command writeHookEntry
-// uses for identity.
+// from the embedded fragment, plus the owned commands writeHookEntry,
+// removeHookEntry and hasOwnHookBlock use for identity: the quoted command
+// the blocks carry, then its unquoted spelling.
 func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := claudePreToolHookCommand(loc)
+	if err != nil {
+		return nil, nil, err
+	}
+	unquoted, err := claudePreToolUnquotedHookCommand(loc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,7 +86,7 @@ func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return blocks, []string{ownCommand}, nil
+	return blocks, []string{ownCommand, unquoted}, nil
 }
 
 // preToolNudgeEvidenced widens preToolNudgeRecorded's manifest-only check
@@ -93,32 +119,33 @@ func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 // unchanged — corruption of a manifest that WAS written is a different,
 // untrusted signal than one that was never written at all, so it is never
 // overridden by evidence found elsewhere.
-func preToolNudgeEvidenced(loc Location) (recorded, readable bool) {
+func preToolNudgeEvidenced(loc Location) (recorded, readable bool, err error) {
 	manifestRecorded, manifestReadable := preToolNudgeRecorded(loc)
 	if manifestRecorded {
-		return true, true
+		return true, true, nil
 	}
 	if !manifestReadable {
-		return false, false
+		return false, false, nil
 	}
 
 	settingsPath, err := claudeSettingsPath(loc)
 	if err != nil {
-		return false, true
+		return false, true, err
 	}
 	_, ownCommands, err := claudePreToolUseBlocks(loc)
 	if err != nil {
-		return false, true
+		return false, true, err
 	}
 	settingsEvidenced, err := hasOwnHookBlock(settingsPath, "PreToolUse", ownCommands)
 	if err != nil {
-		// settings.json itself is unreadable/corrupt: report not-recorded
-		// rather than claiming evidence this read could not confirm. The
-		// manifest side already established readable=true (genuinely
+		// settings.json itself is unreadable or has a value of the wrong
+		// type: report not-recorded rather than claiming evidence this read
+		// could not confirm, and return the error so Install can say so.
+		// The manifest side already established readable=true (genuinely
 		// absent), so that verdict stands.
-		return false, true
+		return false, true, err
 	}
-	return settingsEvidenced, true
+	return settingsEvidenced, true, nil
 }
 
 // shellSingleQuote returns s as one POSIX single-quoted shell word: each

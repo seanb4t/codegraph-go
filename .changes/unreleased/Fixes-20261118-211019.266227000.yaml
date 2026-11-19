@@ -1,0 +1,3 @@
+kind: Fixes
+body: Claude Code hook commands are now shell-quoted, so a home directory or project directory with spaces no longer breaks them, and install, reinstall and uninstall still recognize entries written without quotes.
+time: 2026-11-18T21:10:19.266227-05:00

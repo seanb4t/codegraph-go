@@ -60,6 +60,12 @@ type DetectionResult struct {
 	// ConfigPath is the primary config file path this detection checked,
 	// surfaced for install/uninstall status reporting.
 	ConfigPath string
+	// Err is set when Detect could not tell, because a path it needs did
+	// not resolve (for example a CODEX_HOME that is not an absolute path).
+	// --target auto and --target all skip such a target with a warning, an
+	// explicit --target <id> still runs it so its Install or Uninstall
+	// reports the error, and the interactive picker shows the reason.
+	Err error
 }
 
 // FileAction records what happened to one file during Install/Uninstall,
@@ -81,8 +87,10 @@ const (
 	// ActionNotFound: uninstall found nothing to remove — the file didn't
 	// exist or had no codegraph entry (D-08: never errors in this case).
 	ActionNotFound FileAction = "not-found"
-	// ActionKept: a file was left untouched on purpose (e.g. a marker
-	// block target that had no markers present).
+	// ActionKept: a file that may hold something of codegraph's was left
+	// untouched on purpose, for example an instructions file with an
+	// incomplete section, or a shared skill that other agents still use. A
+	// file outside the project is left without being read.
 	ActionKept FileAction = "kept"
 )
 
@@ -92,6 +100,11 @@ type FileResult struct {
 	Path string
 	// Action is what happened to Path (D-07/D-08).
 	Action FileAction
+	// ForeignHookMoved is true when a hook write left another hook in a
+	// different group or at a different index: it split a group that held
+	// codegraph's handler beside another handler, or it shifted a foreign
+	// group. Codex asks for a changed or moved hook to be reviewed again.
+	ForeignHookMoved bool
 }
 
 // WriteResult is the full outcome of one AgentTarget.Install/Uninstall

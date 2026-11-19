@@ -7,35 +7,36 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 // codexPreToolFragmentCommand is the literal command the embedded Codex
-// hooks fragment uses for its PreToolUse handler — the exact D-20 local
-// form: a quoted git-root-relative path, matching the Codex docs' own
-// example verbatim (07-LIVE-SESSIONS.md, learn.chatgpt.com/docs/hooks).
-// codexPreToolUseBlocks rewrites this literal into
-// codexPreToolHookCommand(loc) for the location actually being installed.
+// hooks fragment uses for its PreToolUse handler: a quoted git-root-relative
+// path, as the Codex hooks documentation writes it. codexPreToolUseBlocks
+// rewrites this literal into codexPreToolHookCommand(loc) for the location
+// being installed.
 const codexPreToolFragmentCommand = "\"$(git rev-parse --show-toplevel)/.codex/hooks/codegraph-pretooluse.sh\""
 
 // codexHooksJSONPath resolves Codex's hooks.json file: local is the
-// project-relative <repo>/.codex/hooks.json; global is
-// ~/.codex/hooks.json.
+// project-relative <repo>/.codex/hooks.json; global is hooks.json under
+// codexHomeDir.
 func codexHooksJSONPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".codex", "hooks.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codex", "hooks.json"), nil
+	return filepath.Join(dir, "hooks.json"), nil
 }
 
 // codexPreToolGuardPath resolves where install writes the rendered
 // PreToolUse guard: .codex/hooks/codegraph-pretooluse.sh for local,
-// <home>/.codex/hooks/codegraph-pretooluse.sh for global. The installed
+// hooks/codegraph-pretooluse.sh under codexHomeDir for global. The installed
 // filename is deliberately different from either embedded template name
 // (codegraph-pretooluse-local.sh / -global.sh), so an install run inside
 // this repository never overwrites a template.
@@ -43,11 +44,11 @@ func codexPreToolGuardPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".codex", "hooks", "codegraph-pretooluse.sh"), nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codex", "hooks", "codegraph-pretooluse.sh"), nil
+	return filepath.Join(dir, "hooks", "codegraph-pretooluse.sh"), nil
 }
 
 // codexPreToolHookCommand returns the command string registered for the
@@ -65,13 +66,33 @@ func codexPreToolHookCommand(loc Location) (string, error) {
 	return shellSingleQuote(guardPath), nil
 }
 
+// codexLegacyGlobalHookCommand is the single-quoted guard path under
+// ~/.codex, the global command spelling used whenever CODEX_HOME is unset.
+// It is empty when it equals ownCommand or when the home directory cannot
+// be resolved. Nothing writes it. It is matched against $CODEX_HOME/hooks.json
+// only, where it identifies codegraph's handler when an older install wrote
+// it there, for example when ~/.codex links to CODEX_HOME.
+func codexLegacyGlobalHookCommand(ownCommand string) string {
+	home, err := userHomeDir()
+	if err != nil {
+		return ""
+	}
+	legacy := shellSingleQuote(filepath.Join(home, ".codex", "hooks", "codegraph-pretooluse.sh"))
+	if legacy == ownCommand {
+		return ""
+	}
+	return legacy
+}
+
 // codexPreToolUseBlocks returns the PreToolUse blocks for loc, derived
-// from the embedded Codex hooks fragment, plus the single owned command
-// writeHookEntry uses for identity. This is a Codex-specific copy of the
-// claudePreToolUseBlocks/claudeFragmentEventBlocks pattern — deliberately
-// not shared code, since the two fragments and command shapes diverge
-// (D-21): Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped literal
-// and its own quoted command form (D-20).
+// from the embedded Codex hooks fragment, plus the owned commands
+// writeHookEntry, removeHookEntry and hasOwnHookBlock use for identity: the
+// command the blocks carry and, at global scope when it differs, its
+// ~/.codex spelling (codexLegacyGlobalHookCommand). This is a Codex-specific
+// copy of the claudePreToolUseBlocks/claudeFragmentEventBlocks pattern,
+// deliberately not shared code, since the two fragments and command shapes
+// diverge: Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped literal and
+// has its own quoted command form.
 func codexPreToolUseBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := codexPreToolHookCommand(loc)
 	if err != nil {
@@ -124,7 +145,13 @@ func codexPreToolUseBlocks(loc Location) ([]any, []string, error) {
 		}
 		blocks = append(blocks, rewritten)
 	}
-	return blocks, []string{ownCommand}, nil
+	ownCommands := []string{ownCommand}
+	if loc == LocationGlobal {
+		if legacy := codexLegacyGlobalHookCommand(ownCommand); legacy != "" {
+			ownCommands = append(ownCommands, legacy)
+		}
+	}
+	return blocks, ownCommands, nil
 }
 
 // renderCodexPreToolGuard renders the embedded guard template for loc
@@ -157,21 +184,74 @@ func renderCodexPreToolGuard(loc Location, execPath string) (string, error) {
 	return strings.Replace(tmpl, preToolGuardExecPathToken, shellSingleQuote(execPath), 1), nil
 }
 
+// checkCodexGuardPath refuses a global guard path that a hook command cannot
+// quote for every shell. The command single-quotes the path for a POSIX
+// shell, but Codex may run it under another login shell. In fish, for one, a
+// backslash escapes the quote, so a path with a single quote or a backslash
+// can end the quoting and run the rest as commands. A control character or
+// an invalid UTF-8 byte is refused too. The check is deliberately
+// conservative, and it does not apply to local paths.
+func checkCodexGuardPath(path string) error {
+	bad := strings.ContainsAny(path, `'\`) || !utf8.ValidString(path) || strings.ContainsFunc(path, unicode.IsControl)
+	if bad {
+		return fmt.Errorf("%s: a global Codex hook path with a single quote, a backslash, a control character or invalid UTF-8 is refused, because the shell that runs the hook may not read it as one word; set CODEX_HOME to a path without those characters, or install with --location local", path)
+	}
+	return nil
+}
+
+// codexHooksPreflight reads the hooks.json at loc strictly and checks that
+// hooks.PreToolUse can take codegraph's registration. A file whose real
+// location is outside the project (at local scope), a malformed file and a
+// value of the wrong JSON type are each one error naming the file. Only a
+// failure to compute the path is left to the registration step, which
+// reports it.
+func codexHooksPreflight(loc Location) error {
+	path, err := codexHooksJSONPath(loc)
+	if err != nil {
+		return nil
+	}
+	real, err := preflightUserFile(path, loc)
+	if err != nil {
+		return err
+	}
+	existing, _, err := readJSONFileStrict(real)
+	if err == nil {
+		_, _, err = hookEventArray(existing, "PreToolUse")
+	}
+	if err != nil {
+		if !strings.Contains(err.Error(), path) {
+			err = fmt.Errorf("%s: %w", path, err)
+		}
+		return err
+	}
+	return nil
+}
+
 // installCodexPreToolNudge renders and writes the guard, then registers it
-// in hooks.json — the tracer's On-only path (07-08 gives Keep/Off their
-// meaning; D-18). The guard is written first; a guard-write failure skips
-// the registration step entirely, so no registration is ever left
-// pointing at a guard this call did not successfully write (mirrors
-// claude.go's Install havePreTool discipline).
+// in hooks.json. The guard is written first, and a guard-write failure
+// skips the registration, so no registration points at a guard this call did
+// not write (the same discipline as the Claude install's havePreTool).
 func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string) {
 	guardPath, err := codexPreToolGuardPath(loc)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
 		return
 	}
+	if loc == LocationGlobal {
+		if err := checkCodexGuardPath(guardPath); err != nil {
+			result.Errors = append(result.Errors, err)
+			return
+		}
+	}
 	rendered, err := renderCodexPreToolGuard(loc, execPath)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, err))
+		return
+	}
+	// hooks.json is read before the guard is written, so a value of the wrong
+	// type cannot leave a guard that nothing registers.
+	if err := codexHooksPreflight(loc); err != nil {
+		result.Errors = append(result.Errors, err)
 		return
 	}
 	fr, werr := writeEmbeddedFile(guardPath, rendered, true)
@@ -200,37 +280,47 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 // `.codex/config.toml` is read first; if it sets `features.hooks` (any of
 // tomlBoolSetting's three recognized forms) that value governs; else if it
 // sets the deprecated `features.codex_hooks` that governs instead; else the
-// same two checks fall back to the global `~/.codex/config.toml`. For
-// global, only the global file is consulted. source names the governing
-// file and key, for codexHooksDisabledNote. A read error other than
+// same two checks fall back to the global config.toml under codexHomeDir.
+// For global, only the global file is consulted. source names the governing
+// file and key, for codexHooksDisabledNote. At local scope, a CODEX_HOME or a
+// home directory that does not resolve leaves the global setting unknown: the
+// local decision goes on, and note names the bad value. A read error other than
 // not-exist is returned unwrapped — the caller records it and writes
 // nothing, per the "cannot tell, so don't guess" posture the rest of this
 // package's config reads already follow.
-func codexHooksExplicitlyDisabled(loc Location) (bool, string, error) {
+func codexHooksExplicitlyDisabled(loc Location) (disabled bool, source, note string, err error) {
 	if loc == LocationLocal {
 		localPath, err := codexConfigPath(LocationLocal)
 		if err != nil {
-			return false, "", err
+			return false, "", "", err
 		}
 		if disabled, source, found, err := codexConfigHooksSetting(localPath); err != nil {
-			return false, "", err
+			return false, "", "", err
 		} else if found {
-			return disabled, source, nil
+			return disabled, source, "", nil
 		}
 	}
 
 	globalPath, err := codexConfigPath(LocationGlobal)
 	if err != nil {
-		return false, "", err
+		var homeErr codexHomeError
+		var relativeHome relativeHomeError
+		if loc == LocationLocal && errors.As(err, &relativeHome) {
+			return false, "", "the global Codex config.toml was not checked for a disabled-hooks setting: " + relativeHome.short(), nil
+		}
+		if loc == LocationLocal && errors.As(err, &homeErr) {
+			return false, "", fmt.Sprintf("the global Codex config.toml was not checked for a disabled-hooks setting: %v", err), nil
+		}
+		return false, "", "", err
 	}
 	disabled, source, found, err := codexConfigHooksSetting(globalPath)
 	if err != nil {
-		return false, "", err
+		return false, "", "", err
 	}
 	if !found {
-		return false, "", nil
+		return false, "", "", nil
 	}
-	return disabled, source, nil
+	return disabled, source, "", nil
 }
 
 // codexConfigHooksSetting reads path (a Codex config.toml) and reports
@@ -260,16 +350,36 @@ func codexConfigHooksSetting(path string) (disabled bool, source string, found b
 	return false, "", false, nil
 }
 
-// codexHookTrustNote returns the D-19 Note every opt-in Codex PreToolUse
-// install adds: Codex skips a new or changed hook until it is trusted in
-// /hooks (07-LIVE-SESSIONS.md B5's live "Hooks need review" prompt), so the
-// user must open that review themselves — this Note never advises
-// `--dangerously-bypass-hook-trust` (T-07-24).
-func codexHookTrustNote(loc Location) string {
-	return "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
+// codexHookTrustNote returns the Note every opt-in Codex PreToolUse install
+// adds: Codex skips a new or changed hook until it is trusted in /hooks, so
+// the user must open that review themselves. The note never advises
+// `--dangerously-bypass-hook-trust`. When moved is true, the install also
+// split a group or shifted a group of the user's, so the note adds that
+// those hooks need review too.
+func codexHookTrustNote(moved bool) string {
+	note := "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
+	if moved {
+		note += ", and review your other hooks too: this install moved or regrouped one of them"
+	}
+	return note
 }
 
-// codexHooksDisabledNote returns the D-18 Note printed when an opt-in
+// codexHookRemovalNote is the Note an uninstall adds when removing
+// codegraph's hook moved or regrouped a hook of the user's.
+const codexHookRemovalNote = "Removing the codegraph hook moved or regrouped one of your other hooks, and Codex skips a changed hook until you trust it: review your hooks in /hooks"
+
+// codexForeignHookMoved reports whether files (a WriteResult.Files slice)
+// records a hook write that moved or regrouped a foreign hook.
+func codexForeignHookMoved(files []FileResult) bool {
+	for _, f := range files {
+		if f.ForeignHookMoved {
+			return true
+		}
+	}
+	return false
+}
+
+// codexHooksDisabledNote returns the Note printed when an opt-in
 // install is skipped because source (a codexConfigHooksSetting result)
 // explicitly disables Codex hooks.
 func codexHooksDisabledNote(source string) string {
@@ -290,21 +400,15 @@ func codexHooksFileWasWritten(files []FileResult, hooksPath string) bool {
 	return false
 }
 
-// uninstallCodexPreToolNudge always attempts removal of both the guard and
-// the hooks.json registration, reporting not-found when the user never
-// opted in — matching the "uninstall always attempts removal" discipline
-// already established for every other codegraph-owned artifact in this
-// package (D-09/D-11). op is the command that asked: an install that turns
-// the nudge off refuses a local hooks.json outside the project, and an
-// uninstall keeps it with a note.
+// uninstallCodexPreToolNudge removes the hooks.json registration and then the
+// guard, and reports not-found for each when the user never opted in. The
+// guard stays, with a note, when the registration may remain: its removal
+// failed, or hooks.json was kept because it lies outside the project. op is
+// the command that asked: an install that turns the nudge off refuses such a
+// local hooks.json, and an uninstall keeps it with a note. When removing the
+// registration moved or regrouped a hook of the user's, the result carries a
+// note that says to review it.
 func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp) {
-	if guardPath, err := codexPreToolGuardPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
-	} else {
-		fr, rerr := removeEmbeddedFile(guardPath)
-		recordFile(result, guardPath, fr, rerr)
-	}
-
 	hooksPath, err := codexHooksJSONPath(loc)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks.json path: %w", err))
@@ -315,7 +419,20 @@ func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, err))
 		return
 	}
-	_ = recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
+	beforeFiles := len(result.Files)
+	rerr := recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
 		return removeHookEntry(real, "PreToolUse", ownCommands)
 	})
+	if rerr == nil && codexForeignHookMoved(result.Files[beforeFiles:]) {
+		result.Notes = append(result.Notes, codexHookRemovalNote)
+	}
+
+	if guardPath, err := codexPreToolGuardPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
+	} else if registrationRemains(result, hooksPath, rerr) {
+		keepFileNote(result, guardPath, hooksPath)
+	} else {
+		fr, rerr := removeEmbeddedFile(guardPath)
+		recordFile(result, guardPath, fr, rerr)
+	}
 }

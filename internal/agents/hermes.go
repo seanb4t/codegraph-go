@@ -48,12 +48,17 @@ func (hermesTarget) Capabilities() Capabilities {
 }
 
 // hermesConfigPath resolves $HERMES_HOME/config.yaml, defaulting
-// HERMES_HOME to ~/.hermes when unset.
+// HERMES_HOME to ~/.hermes when unset or empty. A HERMES_HOME that is not an
+// absolute path is an error, never a fallback, because the path would then
+// depend on the working directory.
 func hermesConfigPath() (string, error) {
 	if v := os.Getenv("HERMES_HOME"); v != "" {
+		if !filepath.IsAbs(v) {
+			return "", fmt.Errorf("HERMES_HOME %q is not an absolute path", v)
+		}
 		return filepath.Join(v, "config.yaml"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -343,7 +348,7 @@ func (t hermesTarget) Detect(loc Location) DetectionResult {
 	}
 	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
-		return DetectionResult{}
+		return DetectionResult{Err: err}
 	}
 	installed := fileExists(configPath)
 	if !installed {

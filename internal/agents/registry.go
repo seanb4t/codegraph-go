@@ -2,6 +2,7 @@ package agents
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -60,37 +61,54 @@ func DetectAll(loc Location) map[TargetID]DetectionResult {
 	return out
 }
 
-// ResolveTargetFlag resolves the --target flag's value at loc into a
-// concrete, TargetID-sorted list of AgentTarget (D-03):
-//   - "all": every registered target
+// SkippedTarget is a target that --target all or --target auto left out
+// because its Detect reported an error. Err says why.
+type SkippedTarget struct {
+	ID  TargetID
+	Err error
+}
+
+// ResolveTargets resolves the --target flag's value at loc into a concrete,
+// TargetID-sorted list of AgentTarget, and lists the targets it left out
+// because Detect(loc).Err was set. A target is never both selected and
+// skipped.
+//   - "all": every registered target whose Detect reports no error
 //   - "none": no targets
-//   - "auto": only targets whose Detect(loc).Installed is true; if that
-//     detects zero targets, falls back to just the Claude target rather
-//     than installing nothing — least-surprise for a clean environment
-//     (RESEARCH.md recommendation, not a hard requirement)
+//   - "auto": the targets whose Detect(loc).Installed is true and whose Detect
+//     reports no error. When that selects none, it falls back to the Claude
+//     target alone, unless Claude itself was skipped, rather than installing
+//     nothing, so a clean environment still gets a working install.
 //   - anything else: a comma-separated list of TargetIDs, resolved to
-//     exactly those targets; an unknown id in the list is an error
-func ResolveTargetFlag(spec string, loc Location) ([]AgentTarget, error) {
+//     exactly those targets, whatever Detect says, so that an explicit
+//     request reports the error itself. An unknown id in the list is an
+//     error.
+func ResolveTargets(spec string, loc Location) ([]AgentTarget, []SkippedTarget, error) {
 	switch spec {
-	case "all":
-		return AllTargets(), nil
 	case "none":
-		return nil, nil
-	case "auto":
-		var detected []AgentTarget
+		return nil, nil, nil
+	case "all", "auto":
+		var selected []AgentTarget
+		var skipped []SkippedTarget
 		for _, id := range AllTargetIDs() {
 			t := registry[id]
-			if t.Detect(loc).Installed {
-				detected = append(detected, t)
+			d := t.Detect(loc)
+			switch {
+			case d.Err != nil:
+				skipped = append(skipped, SkippedTarget{ID: id, Err: d.Err})
+			case spec == "all" || d.Installed:
+				selected = append(selected, t)
 			}
 		}
-		if len(detected) == 0 {
-			if claude, ok := GetTarget(Claude); ok {
-				return []AgentTarget{claude}, nil
+		if spec == "auto" && len(selected) == 0 {
+			// Claude's detection reports no error today. The check keeps the
+			// fallback from selecting a target that detection skipped, if that
+			// changes.
+			claudeSkipped := slices.ContainsFunc(skipped, func(s SkippedTarget) bool { return s.ID == Claude })
+			if claude, ok := GetTarget(Claude); ok && !claudeSkipped {
+				selected = []AgentTarget{claude}
 			}
-			return nil, nil
 		}
-		return detected, nil
+		return selected, skipped, nil
 	default:
 		parts := strings.Split(spec, ",")
 		out := make([]AgentTarget, 0, len(parts))
@@ -98,10 +116,10 @@ func ResolveTargetFlag(spec string, loc Location) ([]AgentTarget, error) {
 			id := TargetID(strings.TrimSpace(raw))
 			t, ok := GetTarget(id)
 			if !ok {
-				return nil, fmt.Errorf("unknown agent target %q", id)
+				return nil, nil, fmt.Errorf("unknown agent target %q", id)
 			}
 			out = append(out, t)
 		}
-		return out, nil
+		return out, nil, nil
 	}
 }
