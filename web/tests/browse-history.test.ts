@@ -12,14 +12,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createBrowseNavigator, NAV_INTENT, type GotoFn } from '$lib/browse-nav';
 import { parseBrowseParams } from '$lib/browse-url';
 
-// realGotoFn exercises goto()'s OWN replaceState-option contract
+// realGotoFn exercises goto()'s OWN replace-option contract
 // against jsdom's REAL history object — the same push-vs-replace choice
 // the real SvelteKit goto() makes — rather than a spy that only records
 // what it was called with.
 function realGotoFn(): GotoFn {
-	const fn = (url: string | URL, opts?: { replaceState?: boolean }) => {
+	const fn = (url: string | URL, opts?: { replace?: boolean }) => {
 		const href = typeof url === 'string' ? url : url.toString();
-		if (opts?.replaceState) {
+		if (opts?.replace) {
 			window.history.replaceState(null, '', href);
 		} else {
 			window.history.pushState(null, '', href);
