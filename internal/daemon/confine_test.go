@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
@@ -25,8 +26,8 @@ func TestNewRefusesIndexLinkedOutside(t *testing.T) {
 			}
 
 			_, err := New(root, indexer.Options{Quiet: true})
-			if !errors.Is(err, query.ErrIndexOutsideRoot) {
-				t.Fatalf("New = %v, want query.ErrIndexOutsideRoot", err)
+			if !errors.Is(err, indexdir.ErrOutsideRoot) {
+				t.Fatalf("New = %v, want indexdir.ErrOutsideRoot", err)
 			}
 		})
 	}
@@ -60,20 +61,20 @@ func TestNewUsesResolvedIndexPaths(t *testing.T) {
 func TestIndexChangedErrorText(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		was  query.IndexPaths
-		now  query.IndexPaths
+		was  indexdir.Paths
+		now  indexdir.Paths
 		want []string
 	}{
 		{
 			name: "dir",
-			was:  query.IndexPaths{Dir: "/r/.codegraph", Store: "/r/.codegraph/store"},
-			now:  query.IndexPaths{Dir: "/r/.cg-real", Store: "/r/.cg-real/store"},
+			was:  indexdir.Paths{Dir: "/r/.codegraph", Store: "/r/.codegraph/store"},
+			now:  indexdir.Paths{Dir: "/r/.cg-real", Store: "/r/.cg-real/store"},
 			want: []string{`"/r/.codegraph"`, `"/r/.cg-real"`, `"/r/.codegraph/store"`, `"/r/.cg-real/store"`},
 		},
 		{
 			name: "store only",
-			was:  query.IndexPaths{Dir: "/r/.codegraph", Store: "/r/.codegraph/store"},
-			now:  query.IndexPaths{Dir: "/r/.codegraph", Store: "/r/.store-real"},
+			was:  indexdir.Paths{Dir: "/r/.codegraph", Store: "/r/.codegraph/store"},
+			now:  indexdir.Paths{Dir: "/r/.codegraph", Store: "/r/.store-real"},
 			want: []string{`"/r/.codegraph/store"`, `"/r/.store-real"`},
 		},
 	} {
@@ -176,7 +177,7 @@ func TestCheckIndexReportsEveryChange(t *testing.T) {
 			}
 		}},
 		{indexLinkedToItself, func(t *testing.T, err error) {
-			if err == nil || errors.Is(err, query.ErrIndexOutsideRoot) || errors.Is(err, ErrIndexChanged) {
+			if err == nil || errors.Is(err, indexdir.ErrOutsideRoot) || errors.Is(err, ErrIndexChanged) {
 				t.Fatalf("checkIndex = %v, want an error that matches neither sentinel", err)
 			}
 		}},
@@ -247,8 +248,8 @@ func TestRunSyncsWhenIndexUnchanged(t *testing.T) {
 
 func wantOutside(t *testing.T, err error) {
 	t.Helper()
-	if !errors.Is(err, query.ErrIndexOutsideRoot) {
-		t.Fatalf("err = %v, want query.ErrIndexOutsideRoot", err)
+	if !errors.Is(err, indexdir.ErrOutsideRoot) {
+		t.Fatalf("err = %v, want indexdir.ErrOutsideRoot", err)
 	}
 }
 

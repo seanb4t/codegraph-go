@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 )
 
 // waitFlush blocks until a flush arrives on ch or timeout elapses, failing
@@ -48,7 +46,7 @@ func TestAddCreatedDirSkipsExcludedDirs(t *testing.T) {
 	}
 
 	for _, d := range []string{filepath.Join(root, ".venv"), filepath.Join(root, "pkg")} {
-		if err := addCreatedDir(w, d, discover.ShouldSkipDir); err != nil {
+		if err := addCreatedDir(w, d); err != nil {
 			t.Fatalf("addCreatedDir %s: %v", d, err)
 		}
 	}
@@ -139,7 +137,7 @@ func TestRemoveMovedDropsTheSubtree(t *testing.T) {
 	}
 	removeMoved(w, filepath.Join(root, "unrelated.txt"))
 	removeMoved(w, old)
-	if err := addCreatedDir(w, moved, discover.ShouldSkipDir); err != nil {
+	if err := addCreatedDir(w, moved); err != nil {
 		t.Fatalf("addCreatedDir: %v", err)
 	}
 
@@ -160,4 +158,73 @@ func TestRemoveMovedDropsTheSubtree(t *testing.T) {
 	if len(watched) != len(w.dirs) {
 		t.Errorf("watch list has %d entries, the directory set %d", len(watched), len(w.dirs))
 	}
+}
+
+// TestOpenSkipsTheIndexBehindAStoreLink opens the watcher on a repository
+// whose store links to a directory at the root, beside its lock files and
+// a scratch directory. None of them is watched, and the event of a lock
+// file does not reach the debouncer.
+func TestOpenSkipsTheIndexBehindAStoreLink(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+
+	root := t.TempDir()
+	storeReal := filepath.Join(root, "store-real")
+	scratch := filepath.Join(root, "store-real.scratch-abc", "store")
+	pkg := filepath.Join(root, "pkg")
+	for _, d := range []string{filepath.Join(root, ".codegraph"), storeReal, scratch, pkg} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+	}
+	if err := os.Symlink(filepath.Join("..", "store-real"), filepath.Join(root, ".codegraph", "store")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	w, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer w.Close()
+
+	watched := make(map[string]bool)
+	for _, p := range w.fsw.WatchList() {
+		watched[p] = true
+	}
+	if !watched[root] || !watched[pkg] {
+		t.Fatalf("root or pkg not watched; watch list: %v", w.fsw.WatchList())
+	}
+	for _, d := range []string{storeReal, filepath.Dir(scratch), scratch} {
+		if watched[d] {
+			t.Errorf("%s watched, but it is a part of the index", d)
+		}
+	}
+
+	flushed := make(chan map[string]struct{}, 8)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deb := NewDebouncer(ctx, DebounceDuration(), func(paths map[string]struct{}) {
+		flushed <- paths
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Run(ctx, deb)
+	}()
+
+	lock := filepath.Join(root, "store-real.swap")
+	source := filepath.Join(root, "main.go")
+	for _, p := range []string{lock, source} {
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+	for seen := false; !seen; {
+		paths := waitFlush(t, flushed, 2*time.Second)
+		if _, ok := paths[lock]; ok {
+			t.Fatalf("the event of %s reached the debouncer", lock)
+		}
+		_, seen = paths[source]
+	}
+
+	cancel()
+	<-done
 }

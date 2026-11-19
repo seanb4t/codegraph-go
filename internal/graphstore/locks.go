@@ -12,6 +12,8 @@ import (
 
 	"github.com/seanb4t/codegraph-go/internal/flock"
 	"github.com/seanb4t/codegraph-go/internal/fsatomic"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
+	"github.com/seanb4t/codegraph-go/internal/nofollow"
 )
 
 // Two lock files sit beside each store, in its parent directory. Both are
@@ -28,8 +30,8 @@ import (
 // not take it, so a query reads the previous graph while a full index
 // builds the next one.
 const (
-	swapLockSuffix   = ".swap"
-	writerLockSuffix = ".write"
+	swapLockSuffix   = indexdir.SwapLockSuffix
+	writerLockSuffix = indexdir.WriterLockSuffix
 )
 
 // ErrAfterReplace reports that ReplaceStore put the new store in place and
@@ -85,9 +87,10 @@ func LockWriter(dir string) (io.Closer, error) {
 // live, in one atomic step. A reader of live sees the old store or the new
 // one, never a part of either, and a crash leaves one of the two.
 //
-// If live exists, whatever it holds, ReplaceStore exchanges the two
-// directories, and staging then holds what live held. If live does not
-// exist, it renames staging to live. Both paths must be on one
+// If live exists, ReplaceStore exchanges the two directories, and staging
+// then holds what live held. It refuses a live path that is a symbolic
+// link or that CheckLiveStore rejects, as described below. If live does
+// not exist, it renames staging to live. Both paths must be on one
 // filesystem. A filesystem that cannot exchange two directories gives an
 // error that wraps fsatomic.ErrExchangeUnsupported, and live stays as it
 // was.
@@ -108,6 +111,11 @@ func LockWriter(dir string) (io.Closer, error) {
 // Before it locks live, ReplaceStore runs CheckLiveStore on it and returns
 // its error. So a live directory that holds a symbolic link, or files but
 // no store, is not replaced.
+//
+// A symbolic link at live gives a *nofollow.SymlinkError, and live stays as
+// it was. ReplaceStore looks at live under the swap lock, so it also
+// refuses a link that appears at live while a full index builds. Pass the
+// resolved store path that indexdir.Resolve returns.
 func ReplaceStore(staging, live string) (err error) {
 	// replaced turns true once staging is in the place of live. An error
 	// after that moment, also one of the deferred releases below, tells
@@ -124,13 +132,18 @@ func ReplaceStore(staging, live string) (err error) {
 	}
 	defer func() { err = errors.Join(err, swap.Close()) }()
 
-	if _, statErr := os.Lstat(live); statErr != nil {
+	info, statErr := os.Lstat(live)
+	if statErr != nil {
 		if !errors.Is(statErr, os.ErrNotExist) {
 			return statErr
 		}
 		err = fsatomic.RenameDir(staging, live)
 		replaced = err == nil || errors.Is(err, fsatomic.ErrNotDurable)
 		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, _ := os.Readlink(live)
+		return &nofollow.SymlinkError{Link: live, Target: target}
 	}
 	if err := CheckLiveStore(live); err != nil {
 		return err

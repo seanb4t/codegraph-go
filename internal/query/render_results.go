@@ -294,10 +294,8 @@ func RenderFilesMarkdown(r FilesResult) string {
 // internal/cli/files.go's own printFileTree is left in place and
 // unmodified — moving it is out of this plan's scope and would put a CLI
 // file in this plan's files_modified, creating a wave conflict with plan
-// 02-07. This is a deliberate, bounded package-local duplication, the
-// same precedent status.go's shouldSkipStaleDir already set (duplicated
-// rather than imported to avoid an unwanted dependency edge —
-// internal/query must not import internal/cli).
+// 02-07. This is a deliberate, bounded package-local duplication:
+// internal/query must not import internal/cli.
 func renderFileTreeMarkdown(nodes []*FileTreeNode, indent string) string {
 	var b strings.Builder
 	for _, n := range nodes {

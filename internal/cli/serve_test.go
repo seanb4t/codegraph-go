@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
-	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/wtindex"
 )
 
@@ -96,8 +96,8 @@ func TestServeServerPathsRefusesIndexLinkedOutside(t *testing.T) {
 	symlinkT(t, outside, filepath.Join(repo, codegraphDirName))
 
 	_, _, _, err := serveServerPaths(repo)
-	if !errors.Is(err, query.ErrIndexOutsideRoot) {
-		t.Fatalf("serveServerPaths(%s) err = %v, want query.ErrIndexOutsideRoot", repo, err)
+	if !errors.Is(err, indexdir.ErrOutsideRoot) {
+		t.Fatalf("serveServerPaths(%s) err = %v, want indexdir.ErrOutsideRoot", repo, err)
 	}
 	entries, err := os.ReadDir(outside)
 	if err != nil || len(entries) != 0 {

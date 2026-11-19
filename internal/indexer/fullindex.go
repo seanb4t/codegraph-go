@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer/discover"
 	"github.com/seanb4t/codegraph-go/internal/indexer/extract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -28,7 +29,7 @@ import (
 const (
 	// scratchSuffix follows the name of the store directory in the prefix
 	// of the scratch directories of that store.
-	scratchSuffix = ".scratch-"
+	scratchSuffix = indexdir.ScratchSuffix
 	// stagingName is the name of the staging store inside a scratch
 	// directory, and spillName that of the spill file.
 	stagingName = "store"
@@ -117,8 +118,12 @@ func run(ctx context.Context, repoRoot, storeDir string, opts Options) (stats St
 	// must exist before it. The lock files sit in the parent of the
 	// resolved store.
 	storeDir = filepath.Clean(storeDir)
-	// ReplaceStore checks the live store again under its lock. This check
-	// refuses the store before the build and before any lock file exists.
+	// ReplaceStore checks the live store again under its lock. These checks
+	// refuse the store before the build and before any lock file exists.
+	if info, err := os.Lstat(storeDir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		target, _ := os.Readlink(storeDir)
+		return stats, &nofollow.SymlinkError{Link: storeDir, Target: target}
+	}
 	if err := graphstore.CheckLiveStore(storeDir); err != nil {
 		return stats, err
 	}

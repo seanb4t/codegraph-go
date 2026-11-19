@@ -220,17 +220,20 @@ func readFileOrEmpty(path string) string {
 // repo root, unlike go.mod/package.json — languages_csharp.go's own
 // readCSharpDescriptor only reads a root-level *.csproj for module
 // identity, but a dependency signature like Microsoft.AspNetCore can live
-// in ANY csproj in the tree, so this walk is intentionally broader),
-// reusing ShouldSkipDir so vendor/.git/etc. are never descended into —
-// bounded by the same walk discipline Discover itself uses.
+// in ANY csproj in the tree, so this walk is intentionally broader). It
+// skips the directories that the DirFilter of root skips, as Discover
+// does.
 func csprojManifestText(root string) string {
 	var sb strings.Builder
+	// A filter that cannot resolve the index is the zero DirFilter, which
+	// skips by name only: this scan is best effort.
+	filter, _ := discover.NewDirFilter(root)
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // best-effort manifest scan, never fails the caller
 		}
 		if d.IsDir() {
-			if p != root && discover.ShouldSkipDir(d.Name()) {
+			if p != root && filter.SkipDir(p) {
 				return fs.SkipDir
 			}
 			return nil

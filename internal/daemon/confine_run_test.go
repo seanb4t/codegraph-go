@@ -12,8 +12,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
-	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
@@ -69,8 +69,8 @@ func TestRunChecksIndexBeforeLock(t *testing.T) {
 				deferred++
 				tc.deferred(t, root, outside)
 			})
-			if !errors.Is(err, query.ErrIndexOutsideRoot) {
-				t.Fatalf("RunWithRetry = %v, want query.ErrIndexOutsideRoot", err)
+			if !errors.Is(err, indexdir.ErrOutsideRoot) {
+				t.Fatalf("RunWithRetry = %v, want indexdir.ErrOutsideRoot", err)
 			}
 			if deferred != tc.wantDeferred {
 				t.Fatalf("onDeferred ran %d times, want %d", deferred, tc.wantDeferred)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 // TestOpenAtDuringSync checks that OpenAt succeeds while another user of
@@ -14,7 +15,7 @@ import (
 func TestOpenAtDuringSync(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
-	storeDir := filepath.Join(dir, IndexDirName, StoreDirName)
+	storeDir := filepath.Join(dir, indexdir.Name, indexdir.StoreName)
 
 	held, err := graphstore.Open(storeDir)
 	if err != nil {

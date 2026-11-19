@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/daemon"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
-	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // refusalFixture returns a directory with an empty .codegraph, enough for
@@ -23,7 +23,7 @@ func refusalFixture(t *testing.T) (string, error) {
 	if err := os.Mkdir(filepath.Join(dir, codegraphDirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return dir, &query.IndexOutsideRootError{
+	return dir, &indexdir.OutsideRootError{
 		Link:   filepath.Join(dir, codegraphDirName),
 		Target: "/elsewhere",
 		Root:   dir,
@@ -74,7 +74,7 @@ func TestDaemonStartReturnsIndexChange(t *testing.T) {
 	runDaemon = func(*daemon.Daemon, context.Context) error { return refusal }
 
 	_, _, err := execCmd("daemon", "start", "-p", dir)
-	if !errors.Is(err, query.ErrIndexOutsideRoot) {
-		t.Fatalf("daemon start = %v, want query.ErrIndexOutsideRoot", err)
+	if !errors.Is(err, indexdir.ErrOutsideRoot) {
+		t.Fatalf("daemon start = %v, want indexdir.ErrOutsideRoot", err)
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -886,7 +887,7 @@ func BuildServer(hasIndex bool, companions map[string]bool, repoPath, startPath 
 				toolCount.Store(0)
 				hasCatalog = false
 			}
-		case errors.Is(err, query.ErrIndexOutsideRoot):
+		case errors.Is(err, indexdir.ErrOutsideRoot):
 			// Permanent until the link changes. The catalog stays as it
 			// is, so each tool call returns the refusal.
 			if !reportedOutside && cfg.sessionLog != nil {

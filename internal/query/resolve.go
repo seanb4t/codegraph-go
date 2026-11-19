@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 )
 
 // ErrNotInitialized mirrors the internal/cli sentinel of the same name
@@ -20,10 +21,6 @@ import (
 // CLI-depends-on-query dependency direction). Callers compare against this
 // sentinel via errors.Is/errors.As, not string matching.
 var ErrNotInitialized = errors.New("query: not initialized")
-
-// IndexDirName is the directory ResolveCodegraphDir looks for at each
-// level of the upward walk (D-01b layout).
-const IndexDirName = ".codegraph"
 
 // Resolution is where an index was found for a start directory.
 // IndexRoot holds the .codegraph directory. ConfineRoot is the tree a
@@ -70,8 +67,8 @@ func ResolveCodegraphDir(start string) (string, error) {
 //
 // A .codegraph that is a directory or a symlink, at the walk's directory
 // or at the main worktree, must resolve inside the directory that holds
-// it, and so must its store (IndexDirs). Otherwise ResolveIndex returns
-// an *IndexOutsideRootError and does not walk further. A symlink whose
+// it, and so must its store (indexdir.Resolve). Otherwise ResolveIndex returns
+// an *indexdir.OutsideRootError and does not walk further. A symlink whose
 // missing target is inside that directory is walked past.
 func ResolveIndex(start string) (Resolution, error) {
 	dir, err := filepath.Abs(start)
@@ -140,10 +137,10 @@ func ProjectIndexed(dir string) bool {
 }
 
 // indexAt reports whether dir holds a .codegraph directory. When dir's
-// .codegraph is a directory or a symlink, it first returns IndexDirs's
+// .codegraph is a directory or a symlink, it first returns indexdir.Resolve's
 // error, if any.
 func indexAt(dir string) (bool, error) {
-	index := filepath.Join(dir, IndexDirName)
+	index := filepath.Join(dir, indexdir.Name)
 	info, err := os.Lstat(index)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
@@ -154,7 +151,7 @@ func indexAt(dir string) (bool, error) {
 	if !info.IsDir() && info.Mode()&fs.ModeSymlink == 0 {
 		return false, nil
 	}
-	if _, err := IndexDirs(dir); err != nil {
+	if _, err := indexdir.Resolve(dir); err != nil {
 		return false, err
 	}
 	return isDir(index), nil

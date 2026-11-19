@@ -13,28 +13,28 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
+	"github.com/seanb4t/codegraph-go/internal/indexdir"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/nofollow"
-	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // codegraphDirName is the directory (D-01b) created at the target repo
 // root by init and removed wholesale by uninit.
-const codegraphDirName = query.IndexDirName
+const codegraphDirName = indexdir.Name
 
 // storeDirName is the Pebble store's subdirectory under codegraphDirName
 // (D-01b: layout is executor's discretion; the store lives in a subdir
 // alongside room for future non-store state without a separate on-disk
 // config file).
-const storeDirName = query.StoreDirName
+const storeDirName = indexdir.StoreName
 
 // indexDirs returns root's .codegraph directory as written, for messages,
-// and the resolved paths of it and its store, to open (query.IndexDirs).
-func indexDirs(root string) (codegraphDir string, paths query.IndexPaths, err error) {
-	paths, err = query.IndexDirs(root)
+// and the resolved paths of it and its store, to open (indexdir.Resolve).
+func indexDirs(root string) (codegraphDir string, paths indexdir.Paths, err error) {
+	paths, err = indexdir.Resolve(root)
 	if err != nil {
-		return "", query.IndexPaths{}, err
+		return "", indexdir.Paths{}, err
 	}
 	return filepath.Join(root, codegraphDirName), paths, nil
 }

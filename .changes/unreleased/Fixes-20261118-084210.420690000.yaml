@@ -1,0 +1,3 @@
+kind: Fixes
+body: Indexing, the file watcher and the staleness check of codegraph status skip the index when .codegraph or its store is a link to a directory with a plain name, together with the lock files and scratch directories beside the store, so no store file is indexed or marks the graph stale.
+time: 2026-11-18T08:42:10.42069-05:00
