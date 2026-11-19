@@ -56,32 +56,47 @@ func (codexTarget) Capabilities() Capabilities {
 	}
 }
 
+// codexHomeDir resolves the directory Codex keeps its global files in:
+// $CODEX_HOME when it is set and non-empty, else ~/.codex. Every global
+// Codex path goes through it, so no install, uninstall or status path can
+// disagree with another about where Codex's home is.
+func codexHomeDir() (string, error) {
+	if v := os.Getenv("CODEX_HOME"); v != "" {
+		return v, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".codex"), nil
+}
+
 // codexConfigPath resolves Codex's MCP config file: local is the
 // project-relative <repo>/.codex/config.toml; global is
-// ~/.codex/config.toml.
+// config.toml under codexHomeDir.
 func codexConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".codex", "config.toml"), nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codex", "config.toml"), nil
+	return filepath.Join(dir, "config.toml"), nil
 }
 
 // codexInstructionsPath resolves Codex's instructions file: local is the
 // repo-root AGENTS.md (shared with opencode, D-11 lands in 07-06); global
-// is ~/.codex/AGENTS.md, unchanged.
+// is AGENTS.md under codexHomeDir.
 func codexInstructionsPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return "AGENTS.md", nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codex", "AGENTS.md"), nil
+	return filepath.Join(dir, "AGENTS.md"), nil
 }
 
 // codexSkillDirs resolves Codex's skill directories (D-14, D-15): index 0
@@ -89,7 +104,7 @@ func codexInstructionsPath(loc Location) (string, error) {
 // entry is appended for the Codex-specific root the live evidence showed
 // Codex actually reads at that scope — ".codex/skills/codegraph" locally
 // (D-15 ".codex/skills read: yes"), "$CODEX_HOME/skills/codegraph"
-// (~/.codex/skills/codegraph) globally (D-15 "CODEX_HOME/skills read:
+// (skills/codegraph under codexHomeDir) globally (D-15 "CODEX_HOME/skills read:
 // yes") — 07-LIVE-SESSIONS.md CODEX-01 verdicts, both "yes". codegraph
 // never writes to either read-only root (D-14): same-name skills are not
 // merged by Codex, so a second physical copy would list twice.
@@ -101,11 +116,11 @@ func codexSkillDirs(loc Location) ([]string, error) {
 	if loc == LocationLocal {
 		return append(dirs, filepath.Join(".codex", "skills", "codegraph")), nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	return append(dirs, filepath.Join(home, ".codex", "skills", "codegraph")), nil
+	return append(dirs, filepath.Join(dir, "skills", "codegraph")), nil
 }
 
 // codexTrustNote returns the D-10 advisory Note every local install adds:
@@ -126,9 +141,13 @@ func codexTrustNote(loc Location) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	configRef := "~/.codex/config.toml"
+	if v := os.Getenv("CODEX_HOME"); v != "" {
+		configRef = filepath.Join(v, "config.toml")
+	}
 	return fmt.Sprintf(
-		"Codex loads this project's MCP server (%s) only once the project is trusted — accept Codex's trust prompt, or add `trust_level = \"trusted\"` under `[projects.%q]` in ~/.codex/config.toml (codegraph never writes this entry itself). The codegraph skill and the AGENTS.md block are read regardless of trust.",
-		root, root,
+		"Codex loads this project's MCP server (%s) only once the project is trusted — accept Codex's trust prompt, or add `trust_level = \"trusted\"` under `[projects.%q]` in %s (codegraph never writes this entry itself). The codegraph skill and the AGENTS.md block are read regardless of trust.",
+		root, root, configRef,
 	), nil
 }
 

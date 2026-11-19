@@ -57,6 +57,7 @@ func homeEnv(home string) map[string]string {
 		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
 		"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
 		"HERMES_HOME":     filepath.Join(home, ".hermes"),
+		"CODEX_HOME":      filepath.Join(home, ".codex"),
 	}
 }
 

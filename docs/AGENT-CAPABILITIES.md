@@ -77,8 +77,8 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
   hook group that precedes a foreign one re-flags that foreign hook as "modified" even though
   its bytes never changed (`07-LIVE-SESSIONS.md`, D-23). Appending last means codegraph's own
   install/uninstall never shifts — and therefore never re-flags — anyone else's hook.
-- **codegraph resolves Codex's global files under `~/.codex`.** A non-default `CODEX_HOME` is
-  not honoured.
+- **codegraph resolves Codex's global files under `$CODEX_HOME`** when it is set and non-empty,
+  and under `~/.codex` otherwise. The `~/.codex` paths in the table are the default.
 - **Codex's interactive skill listing may truncate the codegraph skill's description** (an
   advisory, not a `SKILL.md` change — the front-loaded trigger words survive either way);
   `codex debug prompt-input`'s raw dump showed the full, untruncated description

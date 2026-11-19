@@ -20,22 +20,22 @@ import (
 const codexPreToolFragmentCommand = "\"$(git rev-parse --show-toplevel)/.codex/hooks/codegraph-pretooluse.sh\""
 
 // codexHooksJSONPath resolves Codex's hooks.json file: local is the
-// project-relative <repo>/.codex/hooks.json; global is
-// ~/.codex/hooks.json.
+// project-relative <repo>/.codex/hooks.json; global is hooks.json under
+// codexHomeDir.
 func codexHooksJSONPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".codex", "hooks.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codex", "hooks.json"), nil
+	return filepath.Join(dir, "hooks.json"), nil
 }
 
 // codexPreToolGuardPath resolves where install writes the rendered
 // PreToolUse guard: .codex/hooks/codegraph-pretooluse.sh for local,
-// <home>/.codex/hooks/codegraph-pretooluse.sh for global. The installed
+// hooks/codegraph-pretooluse.sh under codexHomeDir for global. The installed
 // filename is deliberately different from either embedded template name
 // (codegraph-pretooluse-local.sh / -global.sh), so an install run inside
 // this repository never overwrites a template.
@@ -43,11 +43,11 @@ func codexPreToolGuardPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".codex", "hooks", "codegraph-pretooluse.sh"), nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := codexHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".codex", "hooks", "codegraph-pretooluse.sh"), nil
+	return filepath.Join(dir, "hooks", "codegraph-pretooluse.sh"), nil
 }
 
 // codexPreToolHookCommand returns the command string registered for the
