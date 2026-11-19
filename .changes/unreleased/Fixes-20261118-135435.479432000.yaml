@@ -1,3 +1,0 @@
-kind: Fixes
-body: A full index refuses a store path that is a symbolic link, also one that appears while the index builds, instead of putting the new store in place of the link and leaving the old store behind it.
-time: 2026-11-18T13:54:35.479432-05:00

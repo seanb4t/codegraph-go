@@ -1,3 +1,0 @@
-kind: Fixes
-body: A running watcher stops, and writes nothing, when a pull turns .codegraph or its store into a link that leads elsewhere.
-time: 2026-11-17T21:00:50.312211-05:00

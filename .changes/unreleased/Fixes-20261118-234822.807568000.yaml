@@ -1,3 +1,0 @@
-kind: Fixes
-body: Install and uninstall now report failed or partial as an agent's status when its result has errors, and kept when nothing changed and some file was kept in place, an instructions file that holds nothing of codegraph's counts as not found so an agent that was never installed still reads not-configured, and install --print-config-style prints an error= field for an agent whose paths do not resolve, with no --target, --target all or --target auto, instead of stopping.
-time: 2026-11-18T23:48:22.807568-05:00
