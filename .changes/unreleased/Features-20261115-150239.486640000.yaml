@@ -1,3 +1,0 @@
-kind: Features
-body: C and C++ calls now resolve across files through quoted includes, and a call through a header prototype reaches its one definition in another file.
-time: 2026-11-15T15:02:39.48664-05:00

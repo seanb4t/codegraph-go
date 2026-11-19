@@ -1,3 +1,0 @@
-kind: Fixes
-body: Colored output, path messages and prompts now show format and other invisible characters, such as bidi overrides, zero-width spaces and variation selectors, as <U+XXXX> escapes, path messages and prompts also show control characters as escapes, and invalid UTF-8 shows as U+FFFD.
-time: 2026-11-18T21:05:56.541156-05:00

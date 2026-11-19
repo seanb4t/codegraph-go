@@ -1,3 +1,0 @@
-kind: Fixes
-body: A C++ function or method that returns a reference, such as `int &get(int i)`, `int &&get(int i)` or `int &Foo::get(int i)`, now gets a node with its parameters, arity and return type, and calls in its body resolve through its parameters and class.
-time: 2026-11-16T21:42:07.540295-05:00

@@ -1,3 +1,0 @@
-kind: Fixes
-body: Sync now removes a package node when no file imports that package any more, so the store matches a fresh index.
-time: 2026-11-16T21:48:39.251785-05:00

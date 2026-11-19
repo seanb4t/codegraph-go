@@ -1,3 +1,0 @@
-kind: Fixes
-body: Commands that open or rebuild the index now stop with an error when the store directory holds a symbolic link or holds files but no store, and codegraph opens its lock files, the .sync-pending marker and .codegraph/.gitignore without following a symbolic link.
-time: 2026-11-17T09:25:00.934352-05:00

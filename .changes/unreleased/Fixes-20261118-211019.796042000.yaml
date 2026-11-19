@@ -1,3 +1,0 @@
-kind: Fixes
-body: The Codex install target now writes its global config.toml, AGENTS.md, hooks.json and PreToolUse guard under CODEX_HOME when it is set and not empty, and under ~/.codex otherwise; CODEX_HOME must be an existing absolute directory, `--target codex` stops with an error when it is not, `--target auto` and `--target all` skip Codex with a warning line and a skipped row (uninstall adds a note when Codex is still a requester of the shared skill), and anyone who sets CODEX_HOME should re-run `codegraph install -t codex -l global` because upgrade does not move files from ~/.codex.
-time: 2026-11-18T21:10:19.796042-05:00
