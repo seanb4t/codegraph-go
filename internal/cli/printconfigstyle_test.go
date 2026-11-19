@@ -248,22 +248,29 @@ func TestInstallPrintConfigStyle_UnresolvedTargetDoesNotHideTheOthers(t *testing
 	fakeHome(t)
 	t.Setenv("CODEX_HOME", "rel")
 
-	out, _, err := execCmd("install", "--print-config-style", "--location", "global")
-	if err == nil || !strings.Contains(err.Error(), `CODEX_HOME "rel"`) {
-		t.Fatalf("install --print-config-style error = %v, want one naming CODEX_HOME", err)
-	}
-	lines := splitNonEmptyLines(out)
-	ids := agents.AllTargetIDs()
-	if len(lines) != len(ids) {
-		t.Fatalf("stdout has %d lines, want %d (one per registered target):\n%s", len(lines), len(ids), out)
-	}
-	for i, id := range ids {
-		prefix := string(id) + ": "
-		if !strings.HasPrefix(lines[i], prefix) {
-			t.Errorf("line %d = %q, want it to start with %q", i, lines[i], prefix)
+	// A read-only report lists every target with no --target and with
+	// --target all, and does not skip the one that fails.
+	for _, extra := range [][]string{nil, {"--target", "all"}} {
+		out, _, err := execCmd(append([]string{"install", "--print-config-style", "--location", "global"}, extra...)...)
+		if err == nil || !strings.Contains(err.Error(), `CODEX_HOME "rel"`) {
+			t.Fatalf("%v: install --print-config-style error = %v, want one naming CODEX_HOME", extra, err)
 		}
-		if isCodex := id == agents.Codex; isCodex != strings.Contains(lines[i], "error=") {
-			t.Errorf("line %d = %q, want an error field only for codex", i, lines[i])
+		lines := splitNonEmptyLines(out)
+		ids := agents.AllTargetIDs()
+		if len(lines) != len(ids) {
+			t.Fatalf("%v: stdout has %d lines, want %d (one per registered target):\n%s", extra, len(lines), len(ids), out)
+		}
+		for i, id := range ids {
+			prefix := string(id) + ": "
+			if !strings.HasPrefix(lines[i], prefix) {
+				t.Errorf("%v: line %d = %q, want it to start with %q", extra, i, lines[i], prefix)
+			}
+			if isCodex := id == agents.Codex; isCodex != strings.Contains(lines[i], "error=") {
+				t.Errorf("%v: line %d = %q, want an error field only for codex", extra, i, lines[i])
+			}
+			if strings.Contains(lines[i], "error=codex:") {
+				t.Errorf("%v: line %d = %q repeats the target id after error=", extra, i, lines[i])
+			}
 		}
 	}
 }

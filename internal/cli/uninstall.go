@@ -14,7 +14,7 @@ import (
 // presents the SAME bubbles checkbox multi-select install uses (D-14),
 // pre-checked from agents.DetectAll(loc) — off-TTY or -y/--yes (D-15)
 // keeps the historical default of resolving to every registered target
-// (ResolveTargetFlag("all", ...)) without prompting, since Uninstall never
+// (ResolveTargets("all", ...)) without prompting, since Uninstall never
 // errors on a target that was never configured (D-08) and this keeps the
 // no-TTY/CI path trivially non-blocking (D-13's never-hang guarantee
 // applies here too, by construction).
@@ -34,8 +34,12 @@ func newUninstallCmd() *cobra.Command {
 			"that installed it remains, and a skill directory codegraph did not\n" +
 			"write is never touched. It also removes the Claude Code and Codex\n" +
 			"CLI PreToolUse nudge hooks and their guard scripts when present.\n" +
-			"Reports removed / not-configured / unsupported per agent and never\n" +
-			"errors on an agent that was never installed.",
+			"Reports removed, kept, not-configured, unsupported, failed or partial\n" +
+			"per agent, and never errors on an agent that was never installed.\n" +
+			"With --target all or --target auto, an agent whose detection fails\n" +
+			"(for example a CODEX_HOME that is not an existing absolute directory)\n" +
+			"is skipped: a \"<id>: skipped: <reason>\" line on stderr and a skipped\n" +
+			"row in the report. Naming the agent with --target reports the error.",
 		Example: "  codegraph uninstall\n" +
 			"  codegraph uninstall --target all --location global\n" +
 			"  codegraph uninstall --target claude,cursor",
@@ -47,30 +51,28 @@ func newUninstallCmd() *cobra.Command {
 			}
 
 			var targets []agents.AgentTarget
+			var skipped []agents.SkippedTarget
 			switch {
 			case cmd.Flags().Changed("target"):
-				// D-13: an explicit --target wins over --yes — --yes only
-				// supplies the non-interactive default when no target was
-				// named.
-				targets, err = resolveTargets(cmd, target, loc)
+				// An explicit --target wins over --yes, which only supplies
+				// the non-interactive default when no target was named.
+				targets, skipped, err = resolveTargets(cmd, target, loc)
 			case yes:
-				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
-				// branch, not merely skip rendering the picker, whenever
+				// --yes short-circuits before the TTY branch whenever
 				// --target was not given.
-				targets, err = resolveTargets(cmd, "all", loc)
+				targets, skipped, err = resolveTargets(cmd, "all", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:
-				// D-13: no TTY (or CI) never blocks on a prompt — resolve
-				// to the historical default (every registered target),
-				// same as an explicit --target all.
-				targets, err = resolveTargets(cmd, "all", loc)
+				// No TTY (or CI) never blocks on a prompt: resolve to every
+				// registered target, as an explicit --target all does.
+				targets, skipped, err = resolveTargets(cmd, "all", loc)
 			}
 			if err != nil {
 				return fmt.Errorf("codegraph uninstall: %w", err)
 			}
 
-			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
+			return printAgentResults(cmd, targets, skipped, skippedUninstallNote, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Uninstall(loc)
 			}, uninstallStatus)
 		},
@@ -83,11 +85,15 @@ func newUninstallCmd() *cobra.Command {
 	return cmd
 }
 
-// uninstallStatus rolls WriteResult's per-file actions up into D-08's
-// status: "removed" if any file's codegraph entry/section was actually
-// deleted, else "not-configured" (nothing was there to begin with, which is
-// not an error per D-08). A result with errors is "failed" when nothing was
-// removed and "partial" when something was.
+// skippedUninstallNote is the note under the row of a target that uninstall
+// skipped: its shared skill package keeps the target as a requester.
+const skippedUninstallNote = "the shared skill package keeps this agent as a requester until its detection is fixed and `codegraph uninstall --target <id>` runs"
+
+// uninstallStatus rolls WriteResult's per-file actions up into one word:
+// "removed" if any file's codegraph entry or section was actually deleted,
+// "kept" if every entry was kept in place, else "not-configured" (nothing
+// was there to begin with, which is not an error). A result with errors is
+// "failed" when nothing was removed and "partial" when something was.
 func uninstallStatus(result agents.WriteResult) string {
 	removed := false
 	for _, f := range result.Files {

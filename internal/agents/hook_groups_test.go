@@ -215,7 +215,7 @@ func TestClaudeAllowPermission_WrongTypeValues(t *testing.T) {
 // permissions value has the wrong JSON type gets one error that names the
 // file, stays byte for byte as it was, and gets no hook script or guard.
 func TestClaudeInstall_WrongTypeValueSkipsEverySettingsStep(t *testing.T) {
-	for _, content := range []string{`{"hooks":{"PreToolUse":"x"}}`, `{"permissions":["x"]}`, `{"hooks":["x"]}`} {
+	for _, content := range []string{`{"hooks":{"PreToolUse":"x"}}`, `{"hooks":{"SessionStart":"x"}}`, `{"permissions":["x"]}`, `{"hooks":["x"]}`} {
 		t.Run(content, func(t *testing.T) {
 			fakeHome(t)
 			t.Chdir(t.TempDir())
@@ -296,61 +296,61 @@ func TestHookGroups_InstallReinstallUninstallKeepForeignGroups(t *testing.T) {
 	stale := staleOwnGroup("^Bash$", nil, ownCmd)
 
 	cases := []struct {
-		name          string
-		seed          []any
-		afterInstall  []any
-		installMoved  bool
-		afterRemove   []any
-		removeMoved   bool
-		afterReinstal []any
+		name           string
+		seed           []any
+		afterInstall   []any
+		installMoved   bool
+		afterRemove    []any
+		removeMoved    bool
+		afterReinstall []any
 	}{
 		{
-			name:          "mixed group between two foreign groups",
-			seed:          []any{a, staleOwnGroup("^Bash$", extra, ownCmd, "echo u"), b},
-			afterInstall:  []any{a, hookGroup("^Bash$", extra, "echo u"), b, own},
-			installMoved:  true,
-			afterRemove:   []any{a, hookGroup("^Bash$", extra, "echo u"), b},
-			afterReinstal: []any{a, hookGroup("^Bash$", extra, "echo u"), b, own},
+			name:           "mixed group between two foreign groups",
+			seed:           []any{a, staleOwnGroup("^Bash$", extra, ownCmd, "echo u"), b},
+			afterInstall:   []any{a, hookGroup("^Bash$", extra, "echo u"), b, own},
+			installMoved:   true,
+			afterRemove:    []any{a, hookGroup("^Bash$", extra, "echo u"), b},
+			afterReinstall: []any{a, hookGroup("^Bash$", extra, "echo u"), b, own},
 		},
 		{
-			name:          "mixed group with a hook on each side of codegraph's",
-			seed:          []any{a, staleOwnGroup("^Bash$", extra, "echo u", ownCmd, "echo v"), b},
-			afterInstall:  []any{a, hookGroup("^Bash$", extra, "echo u", "echo v"), b, own},
-			installMoved:  true,
-			afterRemove:   []any{a, hookGroup("^Bash$", extra, "echo u", "echo v"), b},
-			afterReinstal: []any{a, hookGroup("^Bash$", extra, "echo u", "echo v"), b, own},
+			name:           "mixed group with a hook on each side of codegraph's",
+			seed:           []any{a, staleOwnGroup("^Bash$", extra, "echo u", ownCmd, "echo v"), b},
+			afterInstall:   []any{a, hookGroup("^Bash$", extra, "echo u", "echo v"), b, own},
+			installMoved:   true,
+			afterRemove:    []any{a, hookGroup("^Bash$", extra, "echo u", "echo v"), b},
+			afterReinstall: []any{a, hookGroup("^Bash$", extra, "echo u", "echo v"), b, own},
 		},
 		{
-			name:          "two owned groups collapse and a later group moves",
-			seed:          []any{a, own, b, legacy, c},
-			afterInstall:  []any{a, own, b, c},
-			installMoved:  true,
-			afterRemove:   []any{a, b, c},
-			removeMoved:   true,
-			afterReinstal: []any{a, b, c, own},
+			name:           "two owned groups collapse and a later group moves",
+			seed:           []any{a, own, b, legacy, c},
+			afterInstall:   []any{a, own, b, c},
+			installMoved:   true,
+			afterRemove:    []any{a, b, c},
+			removeMoved:    true,
+			afterReinstall: []any{a, b, c, own},
 		},
 		{
-			name:          "two owned groups collapse and the later group keeps its index",
-			seed:          []any{a, legacy, b, own},
-			afterInstall:  []any{a, own, b},
-			afterRemove:   []any{a, b},
-			removeMoved:   true,
-			afterReinstal: []any{a, b, own},
+			name:           "two owned groups collapse and the later group keeps its index",
+			seed:           []any{a, legacy, b, own},
+			afterInstall:   []any{a, own, b},
+			afterRemove:    []any{a, b},
+			removeMoved:    true,
+			afterReinstall: []any{a, b, own},
 		},
 		{
-			name:          "owned group first",
-			seed:          []any{stale, a, b},
-			afterInstall:  []any{own, a, b},
-			afterRemove:   []any{a, b},
-			removeMoved:   true,
-			afterReinstal: []any{a, b, own},
+			name:           "owned group first",
+			seed:           []any{stale, a, b},
+			afterInstall:   []any{own, a, b},
+			afterRemove:    []any{a, b},
+			removeMoved:    true,
+			afterReinstall: []any{a, b, own},
 		},
 		{
-			name:          "owned group last",
-			seed:          []any{a, b, stale},
-			afterInstall:  []any{a, b, own},
-			afterRemove:   []any{a, b},
-			afterReinstal: []any{a, b, own},
+			name:           "owned group last",
+			seed:           []any{a, b, stale},
+			afterInstall:   []any{a, b, own},
+			afterRemove:    []any{a, b},
+			afterReinstall: []any{a, b, own},
 		},
 	}
 	owned := []string{ownCmd, legacyCmd}
@@ -385,7 +385,7 @@ func TestHookGroups_InstallReinstallUninstallKeepForeignGroups(t *testing.T) {
 			if err != nil || res.ForeignHookMoved {
 				t.Fatalf("reinstall = %+v, %v, want no move", res, err)
 			}
-			assertGroups("after reinstall", tc.afterReinstal)
+			assertGroups("after reinstall", tc.afterReinstall)
 		})
 	}
 }

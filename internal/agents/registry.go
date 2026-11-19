@@ -67,63 +67,43 @@ type SkippedTarget struct {
 	Err error
 }
 
-// ResolveTargetFlag resolves the --target flag's value at loc into a
-// concrete, TargetID-sorted list of AgentTarget (D-03), without the targets
-// that ResolveTargets skips.
-func ResolveTargetFlag(spec string, loc Location) ([]AgentTarget, error) {
-	targets, _, err := ResolveTargets(spec, loc)
-	return targets, err
-}
-
 // ResolveTargets resolves the --target flag's value at loc into a concrete,
-// TargetID-sorted list of AgentTarget (D-03), and lists the targets it left
-// out because Detect(loc).Err was set:
+// TargetID-sorted list of AgentTarget, and lists the targets it left out
+// because Detect(loc).Err was set. A target is never both selected and
+// skipped.
 //   - "all": every registered target whose Detect reports no error
 //   - "none": no targets
-//   - "auto": only targets whose Detect(loc).Installed is true; if that
-//     detects zero targets, falls back to just the Claude target rather
-//     than installing nothing — least-surprise for a clean environment
-//     (RESEARCH.md recommendation, not a hard requirement). A target whose
-//     Detect reports an error is skipped and does not count as detected.
+//   - "auto": the targets whose Detect(loc).Installed is true and whose Detect
+//     reports no error. When that selects none, it falls back to the Claude
+//     target alone rather than installing nothing, so a clean environment
+//     still gets a working install.
 //   - anything else: a comma-separated list of TargetIDs, resolved to
 //     exactly those targets, whatever Detect says, so that an explicit
-//     request reports the error itself; an unknown id in the list is an error
+//     request reports the error itself. An unknown id in the list is an
+//     error.
 func ResolveTargets(spec string, loc Location) ([]AgentTarget, []SkippedTarget, error) {
 	switch spec {
-	case "all":
-		var kept []AgentTarget
-		var skipped []SkippedTarget
-		for _, t := range AllTargets() {
-			if d := t.Detect(loc); d.Err != nil {
-				skipped = append(skipped, SkippedTarget{ID: t.ID(), Err: d.Err})
-				continue
-			}
-			kept = append(kept, t)
-		}
-		return kept, skipped, nil
 	case "none":
 		return nil, nil, nil
-	case "auto":
-		var detected []AgentTarget
+	case "all", "auto":
+		var selected []AgentTarget
 		var skipped []SkippedTarget
 		for _, id := range AllTargetIDs() {
 			t := registry[id]
 			d := t.Detect(loc)
-			if d.Err != nil {
+			switch {
+			case d.Err != nil:
 				skipped = append(skipped, SkippedTarget{ID: id, Err: d.Err})
-				continue
-			}
-			if d.Installed {
-				detected = append(detected, t)
+			case spec == "all" || d.Installed:
+				selected = append(selected, t)
 			}
 		}
-		if len(detected) == 0 {
+		if spec == "auto" && len(selected) == 0 {
 			if claude, ok := GetTarget(Claude); ok {
-				return []AgentTarget{claude}, skipped, nil
+				selected = []AgentTarget{claude}
 			}
-			return nil, skipped, nil
 		}
-		return detected, skipped, nil
+		return selected, skipped, nil
 	default:
 		parts := strings.Split(spec, ",")
 		out := make([]AgentTarget, 0, len(parts))

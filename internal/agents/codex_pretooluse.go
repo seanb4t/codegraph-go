@@ -7,16 +7,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 // codexPreToolFragmentCommand is the literal command the embedded Codex
-// hooks fragment uses for its PreToolUse handler — the exact D-20 local
-// form: a quoted git-root-relative path, matching the Codex docs' own
-// example verbatim (07-LIVE-SESSIONS.md, learn.chatgpt.com/docs/hooks).
-// codexPreToolUseBlocks rewrites this literal into
-// codexPreToolHookCommand(loc) for the location actually being installed.
+// hooks fragment uses for its PreToolUse handler: a quoted git-root-relative
+// path, as the Codex hooks documentation writes it. codexPreToolUseBlocks
+// rewrites this literal into codexPreToolHookCommand(loc) for the location
+// being installed.
 const codexPreToolFragmentCommand = "\"$(git rev-parse --show-toplevel)/.codex/hooks/codegraph-pretooluse.sh\""
 
 // codexHooksJSONPath resolves Codex's hooks.json file: local is the
@@ -88,10 +89,10 @@ func codexLegacyGlobalHookCommand(ownCommand string) string {
 // writeHookEntry, removeHookEntry and hasOwnHookBlock use for identity: the
 // command the blocks carry and, at global scope when it differs, its
 // ~/.codex spelling (codexLegacyGlobalHookCommand). This is a Codex-specific
-// copy of the claudePreToolUseBlocks/claudeFragmentEventBlocks pattern —
+// copy of the claudePreToolUseBlocks/claudeFragmentEventBlocks pattern,
 // deliberately not shared code, since the two fragments and command shapes
-// diverge (D-21): Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped
-// literal and its own quoted command form (D-20).
+// diverge: Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped literal and
+// has its own quoted command form.
 func codexPreToolUseBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := codexPreToolHookCommand(loc)
 	if err != nil {
@@ -183,18 +184,34 @@ func renderCodexPreToolGuard(loc Location, execPath string) (string, error) {
 	return strings.Replace(tmpl, preToolGuardExecPathToken, shellSingleQuote(execPath), 1), nil
 }
 
+// checkCodexGuardPath refuses a global guard path that a hook command cannot
+// quote for every shell. The command single-quotes the path for a POSIX
+// shell, but Codex may run it under another login shell. In fish, for one, a
+// backslash escapes the quote, so a path with a single quote or a backslash
+// can end the quoting and run the rest as commands. A control character or
+// an invalid UTF-8 byte is refused too. The check is deliberately
+// conservative, and it does not apply to local paths.
+func checkCodexGuardPath(path string) error {
+	bad := strings.ContainsAny(path, `'\`) || !utf8.ValidString(path) || strings.ContainsFunc(path, unicode.IsControl)
+	if bad {
+		return fmt.Errorf("%s: a global Codex hook path with a single quote, a backslash, a control character or invalid UTF-8 is refused, because the shell that runs the hook may not read it as one word; set CODEX_HOME to a path without those characters, or install with --location local", path)
+	}
+	return nil
+}
+
 // codexHooksPreflight reads the hooks.json at loc strictly and checks that
-// hooks.PreToolUse can take codegraph's registration. A malformed file or a
-// value of the wrong JSON type is an error naming the file. A location that
-// does not resolve is left to the registration step, which reports it.
+// hooks.PreToolUse can take codegraph's registration. A file whose real
+// location is outside the project (at local scope), a malformed file and a
+// value of the wrong JSON type are each one error naming the file. A path
+// that does not resolve is left to the registration step, which reports it.
 func codexHooksPreflight(loc Location) error {
 	path, err := codexHooksJSONPath(loc)
 	if err != nil {
 		return nil
 	}
-	real, err := resolveUserFile(path, loc)
+	real, err := preflightUserFile(path, loc)
 	if err != nil {
-		return nil
+		return err
 	}
 	existing, _, err := readJSONFileStrict(real)
 	if err == nil {
@@ -210,11 +227,9 @@ func codexHooksPreflight(loc Location) error {
 }
 
 // installCodexPreToolNudge renders and writes the guard, then registers it
-// in hooks.json — the tracer's On-only path (07-08 gives Keep/Off their
-// meaning; D-18). The guard is written first; a guard-write failure skips
-// the registration step entirely, so no registration is ever left
-// pointing at a guard this call did not successfully write (mirrors
-// claude.go's Install havePreTool discipline).
+// in hooks.json. The guard is written first, and a guard-write failure
+// skips the registration, so no registration points at a guard this call did
+// not write (the same discipline as the Claude install's havePreTool).
 func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string) {
 	guardPath, err := codexPreToolGuardPath(loc)
 	if err != nil {
@@ -222,7 +237,7 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 		return
 	}
 	if loc == LocationGlobal {
-		if err := checkShellSafeHookPath(guardPath); err != nil {
+		if err := checkCodexGuardPath(guardPath); err != nil {
 			result.Errors = append(result.Errors, err)
 			return
 		}
@@ -330,13 +345,12 @@ func codexConfigHooksSetting(path string) (disabled bool, source string, found b
 	return false, "", false, nil
 }
 
-// codexHookTrustNote returns the D-19 Note every opt-in Codex PreToolUse
-// install adds: Codex skips a new or changed hook until it is trusted in
-// /hooks (07-LIVE-SESSIONS.md B5's live "Hooks need review" prompt), so the
-// user must open that review themselves — this Note never advises
-// `--dangerously-bypass-hook-trust` (T-07-24). When moved is true, the
-// install also split a group or shifted a group of the user's, so the note
-// adds that those hooks need review too.
+// codexHookTrustNote returns the Note every opt-in Codex PreToolUse install
+// adds: Codex skips a new or changed hook until it is trusted in /hooks, so
+// the user must open that review themselves. The note never advises
+// `--dangerously-bypass-hook-trust`. When moved is true, the install also
+// split a group or shifted a group of the user's, so the note adds that
+// those hooks need review too.
 func codexHookTrustNote(moved bool) string {
 	note := "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
 	if moved {
@@ -360,7 +374,7 @@ func codexForeignHookMoved(files []FileResult) bool {
 	return false
 }
 
-// codexHooksDisabledNote returns the D-18 Note printed when an opt-in
+// codexHooksDisabledNote returns the Note printed when an opt-in
 // install is skipped because source (a codexConfigHooksSetting result)
 // explicitly disables Codex hooks.
 func codexHooksDisabledNote(source string) string {
@@ -381,16 +395,14 @@ func codexHooksFileWasWritten(files []FileResult, hooksPath string) bool {
 	return false
 }
 
-// uninstallCodexPreToolNudge always attempts removal of both the hooks.json
-// registration and the guard, reporting not-found when the user never opted
-// in — matching the "uninstall always attempts removal" discipline of every
-// other codegraph-owned artifact in this package. The registration goes
-// first, and a registration that could not be removed keeps the guard, so
-// no registration is left pointing at a guard that is gone. op is the
-// command that asked: an install that turns the nudge off refuses a local
-// hooks.json outside the project, and an uninstall keeps it with a note.
-// When removing the registration moved or regrouped a hook of the user's,
-// the result carries a note that says to review it.
+// uninstallCodexPreToolNudge removes the hooks.json registration and then the
+// guard, and reports not-found for each when the user never opted in. The
+// guard stays, with a note, when the registration may remain: its removal
+// failed, or hooks.json was kept because it lies outside the project. op is
+// the command that asked: an install that turns the nudge off refuses such a
+// local hooks.json, and an uninstall keeps it with a note. When removing the
+// registration moved or regrouped a hook of the user's, the result carries a
+// note that says to review it.
 func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp) {
 	hooksPath, err := codexHooksJSONPath(loc)
 	if err != nil {
@@ -403,17 +415,17 @@ func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp
 		return
 	}
 	beforeFiles := len(result.Files)
-	if err := recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
+	rerr := recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
 		return removeHookEntry(real, "PreToolUse", ownCommands)
-	}); err != nil {
-		return
-	}
-	if codexForeignHookMoved(result.Files[beforeFiles:]) {
+	})
+	if rerr == nil && codexForeignHookMoved(result.Files[beforeFiles:]) {
 		result.Notes = append(result.Notes, codexHookRemovalNote)
 	}
 
 	if guardPath, err := codexPreToolGuardPath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
+	} else if registrationRemains(result, hooksPath, rerr) {
+		keepFileNote(result, guardPath, hooksPath)
 	} else {
 		fr, rerr := removeEmbeddedFile(guardPath)
 		recordFile(result, guardPath, fr, rerr)

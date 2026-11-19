@@ -149,18 +149,6 @@ func preToolNudgeEvidenced(loc Location) (recorded, readable bool, err error) {
 	return settingsEvidenced, true, nil
 }
 
-// checkShellSafeHookPath refuses a global hook path that holds a single quote
-// or a backslash. A hook command quotes its script path for a POSIX shell,
-// but the agent may run it under another login shell (fish, for one), where
-// a backslash before a quote ends the quoting and runs the rest of the path
-// as commands. Local paths are not checked.
-func checkShellSafeHookPath(path string) error {
-	if strings.ContainsAny(path, `'\`) {
-		return fmt.Errorf("%s: a global hook path with a single quote or a backslash is refused, because the shell that runs the hook may not read it as one word", path)
-	}
-	return nil
-}
-
 // shellSingleQuote returns s as one POSIX single-quoted shell word: each
 // embedded single quote is emitted as close-quote, backslash-quote,
 // reopen-quote, so no byte of s is ever interpreted by the shell (T-06-01).

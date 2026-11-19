@@ -1,6 +1,8 @@
 package agents
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -155,6 +157,7 @@ func TestCodexGlobal_RelativeCodexHomeIsRefused(t *testing.T) {
 // --target codex still selects it, so its install reports the error.
 func TestResolveTargets_BadCodexHomeSkipsCodexUnlessAsked(t *testing.T) {
 	home := fakeHome(t)
+	t.Chdir(t.TempDir())
 	t.Setenv("CODEX_HOME", "rel")
 	ids := func(targets []AgentTarget) []TargetID {
 		var out []TargetID
@@ -241,8 +244,9 @@ func TestCodexLocal_RelativeCodexHomeDoesNotFailLocalInstall(t *testing.T) {
 		prepare(t)
 		t.Setenv("CODEX_HOME", "rel")
 		res := install(t, PreToolNudgeKeep, "/usr/local/bin/codegraph")
-		if !noteNaming(res, "$CODEX_HOME/config.toml") {
-			t.Errorf("notes = %q, want the trust note to name $CODEX_HOME/config.toml", res.Notes)
+		const want = `in $CODEX_HOME/config.toml, which does not resolve because CODEX_HOME "rel" is not an absolute path (`
+		if !noteNaming(res, want) {
+			t.Errorf("notes = %q, want the trust note to say %s", res.Notes, want)
 		}
 	})
 
@@ -370,8 +374,8 @@ func TestCodexKeep_UnreadableHooksFileSaysSo(t *testing.T) {
 
 	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeKeep})
 	assertNoErrors(t, res)
-	if !noteNaming(res, "nudge was not refreshed") {
-		t.Errorf("notes = %q, want one saying the nudge was not refreshed", res.Notes)
+	if !noteNaming(res, "nudge was not refreshed") || !noteNaming(res, hooksPath) {
+		t.Errorf("notes = %q, want one saying the nudge was not refreshed and naming %s", res.Notes, hooksPath)
 	}
 	if got := readFile(t, hooksPath); got != "{not json" {
 		t.Errorf("Keep changed hooks.json to %q", got)
@@ -412,8 +416,12 @@ func TestCodexHomeDir_ResolvesTheWayCodexDoes(t *testing.T) {
 		"a missing parent":    filepath.Join(base, "missing", "codex"),
 	} {
 		t.Setenv("CODEX_HOME", value)
-		if _, err := codexHomeDir(); err == nil || !strings.Contains(err.Error(), value) {
+		_, err := codexHomeDir()
+		if err == nil || !strings.Contains(err.Error(), value) {
 			t.Errorf("%s: codexHomeDir() error = %v, want one naming %q", name, err, value)
+		}
+		if name != "a regular file" && !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s: errors.Is(err, fs.ErrNotExist) = false for %v", name, err)
 		}
 		res := codexTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
 		if !errorNaming(res, value) {
@@ -454,11 +462,11 @@ func TestCodexGlobal_UninstallDropsTheSkillRequesterWithABadCodexHome(t *testing
 	}
 }
 
-// TestCodexGlobal_RefusesAGuardPathAPosixShellCannotQuote: a global guard
-// path with a single quote or a backslash is an error that names the path,
-// and nothing is written, because the shell that runs the hook may not be a
-// POSIX one.
-func TestCodexGlobal_RefusesAGuardPathAPosixShellCannotQuote(t *testing.T) {
+// TestCodexGlobal_RefusesAGuardPathWithAQuoteOrBackslash: a global guard path
+// with a single quote or a backslash is an error that names the path and
+// the remedy, and nothing is written, because Codex may run the hook under a
+// shell that does not read the quoting as one word.
+func TestCodexGlobal_RefusesAGuardPathWithAQuoteOrBackslash(t *testing.T) {
 	for _, name := range []string{"it's", `back\slash`} {
 		t.Run(name, func(t *testing.T) {
 			fakeHome(t)
@@ -470,8 +478,8 @@ func TestCodexGlobal_RefusesAGuardPathAPosixShellCannotQuote(t *testing.T) {
 			t.Setenv("CODEX_HOME", codexHome)
 
 			res := codexTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
-			if !errorNaming(res, codexHome, "single quote or a backslash") {
-				t.Errorf("errors = %v, want one naming %s", res.Errors, codexHome)
+			if !errorNaming(res, codexHome, "single quote, a backslash", "set CODEX_HOME", "--location local") {
+				t.Errorf("errors = %v, want one naming %s and the remedy", res.Errors, codexHome)
 			}
 			assertMissing(t, filepath.Join(codexHome, "hooks"))
 			assertMissing(t, filepath.Join(codexHome, "hooks.json"))
@@ -485,7 +493,7 @@ func TestCodexGlobal_RefusesAGuardPathAPosixShellCannotQuote(t *testing.T) {
 func TestCodexLocalTrustNote_DefaultsToTildeConfig(t *testing.T) {
 	for _, name := range []string{"unset", "the default directory"} {
 		t.Run(name, func(t *testing.T) {
-			home := fakeHome(t)
+			home := realHome(t)
 			t.Chdir(t.TempDir())
 			if name != "unset" {
 				dir := filepath.Join(home, ".codex")
@@ -499,7 +507,7 @@ func TestCodexLocalTrustNote_DefaultsToTildeConfig(t *testing.T) {
 			assertNoErrors(t, res)
 			for _, n := range res.Notes {
 				if strings.Contains(n, `trust_level = "trusted"`) {
-					if !strings.Contains(n, "in ~/.codex/config.toml (") || strings.Contains(n, home) && strings.Contains(n, filepath.Join(home, ".codex", "config.toml")) {
+					if !strings.Contains(n, "in ~/.codex/config.toml (") || strings.Contains(n, filepath.Join(home, ".codex")) {
 						t.Fatalf("trust note = %q, want it to name ~/.codex/config.toml and not the absolute path", n)
 					}
 					return

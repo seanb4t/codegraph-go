@@ -51,8 +51,8 @@ func fakeHome(t *testing.T) string {
 // homeEnv returns every home-derived env var codegraph's agent targets
 // consult, pointed under home. fakeHome and TestMain both set exactly
 // this set; a new agent target that reads another variable adds it here.
-// CODEX_HOME is empty, so Codex uses its default under HOME; a test that sets
-// it names an existing directory.
+// CODEX_HOME is empty, so Codex uses its default under HOME. A test that needs
+// a working CODEX_HOME points it at an existing directory.
 func homeEnv(home string) map[string]string {
 	return map[string]string{
 		"HOME":            home,
@@ -184,7 +184,7 @@ func TestInstall_NoTargetNonTTY_ResolvesAutoWithoutBlocking(t *testing.T) {
 		t.Fatalf("install (no --target): %v", err)
 	}
 	// Zero agents are ever "detected" in a fresh fake home, so auto falls
-	// back to just Claude (registry.ResolveTargetFlag's least-surprise
+	// back to just Claude (agents.ResolveTargets' least-surprise
 	// fallback).
 	if !strings.Contains(out, "Claude Code:") {
 		t.Fatalf("expected auto fallback to configure Claude Code, got:\n%s", out)
@@ -663,7 +663,8 @@ func TestInstall_InteractiveAllowed_CallsRunAgentPicker(t *testing.T) {
 	var called bool
 	withStubbedPicker(t, func(cmd *cobra.Command, loc agents.Location) ([]agents.AgentTarget, error) {
 		called = true
-		return agents.ResolveTargetFlag("claude", loc)
+		targets, _, err := agents.ResolveTargets("claude", loc)
+		return targets, err
 	})
 
 	out, _, err := execCmd("install", "--location", "global")
@@ -720,7 +721,8 @@ func TestUninstall_InteractiveAllowed_CallsRunAgentPicker(t *testing.T) {
 	var called bool
 	withStubbedPicker(t, func(cmd *cobra.Command, loc agents.Location) ([]agents.AgentTarget, error) {
 		called = true
-		return agents.ResolveTargetFlag("claude", loc)
+		targets, _, err := agents.ResolveTargets("claude", loc)
+		return targets, err
 	})
 
 	out, _, err := execCmd("uninstall", "--location", "global")

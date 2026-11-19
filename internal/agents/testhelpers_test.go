@@ -28,8 +28,8 @@ func fakeHome(t *testing.T) string {
 // homeEnv returns every home-derived env var this package's targets
 // consult, pointed under home. fakeHome and TestMain both set exactly
 // this set; a new agent target that reads another variable adds it here.
-// CODEX_HOME is empty, so Codex uses its default under HOME; a test that sets
-// it names an existing directory.
+// CODEX_HOME is empty, so Codex uses its default under HOME. A test that needs
+// a working CODEX_HOME calls useCodexHome.
 func homeEnv(home string) map[string]string {
 	return map[string]string{
 		"HOME":            home,

@@ -490,7 +490,7 @@ func TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation(t *t
 	// (exactly what a plain `codegraph install` run from there does) DOES
 	// refresh it, because preToolNudgeEvidenced widens "recorded" to
 	// settings.json's own registration (CR-01's actual fix).
-	targets, err := agents.ResolveTargetFlag(string(agents.Claude), agents.LocationGlobal)
+	targets, _, err := agents.ResolveTargets(string(agents.Claude), agents.LocationGlobal)
 	if err != nil {
 		t.Fatalf("ResolveTargetFlag: %v", err)
 	}

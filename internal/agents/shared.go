@@ -123,6 +123,47 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 	return nil
 }
 
+// fileKept reports whether result records path as kept in place on purpose,
+// which an uninstall does for a local file whose real location is outside the
+// project.
+func fileKept(result *WriteResult, path string) bool {
+	for _, f := range result.Files {
+		if f.Path == path && f.Action == ActionKept {
+			return true
+		}
+	}
+	return false
+}
+
+// registrationRemains reports whether a hook registration may still be in
+// the file at path after a removal step that returned err: the step failed,
+// or the file was kept. A script or guard that the registration points at
+// stays then.
+func registrationRemains(result *WriteResult, path string, err error) bool {
+	return err != nil || fileKept(result, path)
+}
+
+// keepFileNote records, when path exists, that it is left in place because
+// the hook registration in registrationPath remains.
+func keepFileNote(result *WriteResult, path, registrationPath string) {
+	if fileExists(path) {
+		result.Notes = append(result.Notes, fmt.Sprintf("%s is left in place because its registration in %s remains", path, registrationPath))
+	}
+}
+
+// preflightUserFile resolves path as an install would and returns the real
+// location, or the error that recordUserFile would record for it.
+func preflightUserFile(path string, loc Location) (string, error) {
+	real, err := resolveUserFile(path, loc)
+	if err != nil {
+		if errors.Is(err, errOutsideProject) {
+			err = fmt.Errorf("%w; %s", err, outsideProjectAdvice)
+		}
+		return "", fmt.Errorf("%s: %w", path, err)
+	}
+	return real, nil
+}
+
 // isSymlink reports whether path itself is a symlink.
 func isSymlink(path string) bool {
 	info, err := os.Lstat(path)

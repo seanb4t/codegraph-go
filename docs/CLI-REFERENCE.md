@@ -1053,8 +1053,12 @@ shared skill directory's package is deleted only when no other agent
 that installed it remains, and a skill directory codegraph did not
 write is never touched. It also removes the Claude Code and Codex
 CLI PreToolUse nudge hooks and their guard scripts when present.
-Reports removed / not-configured / unsupported per agent and never
-errors on an agent that was never installed.
+Reports removed, kept, not-configured, unsupported, failed or partial
+per agent, and never errors on an agent that was never installed.
+With --target all or --target auto, an agent whose detection fails
+(for example a CODEX_HOME that is not an existing absolute directory)
+is skipped: a "<id>: skipped: <reason>" line on stderr and a skipped
+row in the report. Naming the agent with --target reports the error.
 
 ```
 codegraph uninstall [flags]

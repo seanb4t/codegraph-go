@@ -26,6 +26,9 @@ func TestInstallAndUninstallStatus(t *testing.T) {
 		{"only unchanged files", agents.WriteResult{Files: file(agents.ActionUnchanged)}, "unchanged", "not-configured"},
 		{"a created file", agents.WriteResult{Files: file(agents.ActionCreated)}, "configured", "not-configured"},
 		{"a removed file", agents.WriteResult{Files: file(agents.ActionRemoved)}, "configured", "removed"},
+		{"only kept entries", agents.WriteResult{Files: file(agents.ActionKept)}, "kept", "kept"},
+		{"a kept entry beside an unchanged one", agents.WriteResult{Files: []agents.FileResult{{Path: "a", Action: agents.ActionKept}, {Path: "b", Action: agents.ActionUnchanged}}}, "unchanged", "not-configured"},
+		{"a kept entry beside a removed one", agents.WriteResult{Files: []agents.FileResult{{Path: "a", Action: agents.ActionKept}, {Path: "b", Action: agents.ActionRemoved}}}, "configured", "removed"},
 		{"an error and no change", agents.WriteResult{Files: file(agents.ActionUnchanged), Errors: failure}, "failed", "failed"},
 		{"an error and nothing touched", agents.WriteResult{Errors: failure}, "failed", "failed"},
 		{"an error after a created file", agents.WriteResult{Files: file(agents.ActionCreated), Errors: failure}, "partial", "failed"},
@@ -59,8 +62,11 @@ func TestBadCodexHome_OnlyAnExplicitCodexTargetFails(t *testing.T) {
 		if got := strings.Count(errOut, "codex: skipped: CODEX_HOME"); got != 1 {
 			t.Errorf("%v: stderr has %d skip lines for codex, want 1:\n%s", args, got, errOut)
 		}
-		if strings.Contains(out, "Codex CLI:") {
-			t.Errorf("%v: stdout reports Codex although it was skipped:\n%s", args, out)
+		if !strings.Contains(out, "Codex CLI: skipped (CODEX_HOME") || strings.Contains(out, "Codex CLI: configured") || strings.Contains(out, "Codex CLI: failed") {
+			t.Errorf("%v: stdout has no skipped row for Codex:\n%s", args, out)
+		}
+		if args[0] == "uninstall" && !strings.Contains(out, "the shared skill package keeps this agent as a requester") {
+			t.Errorf("%v: stdout has no note about the shared skill:\n%s", args, out)
 		}
 	}
 

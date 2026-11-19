@@ -111,16 +111,17 @@ func newInstallCmd() *cobra.Command {
 				return fmt.Errorf("codegraph install: %w", err)
 			}
 
-			// D-04: --print-config-style is read-only and short-circuits
-			// BEFORE os.Executable() and the target-resolution switch below
-			// — it never opens the interactive picker and never writes a
-			// byte. It still honours -t/--target and -l/--location like
-			// every other branch, resolving "all" when --target was not
-			// explicitly changed on this invocation.
+			// --print-config-style is a read-only report. It short-circuits
+			// before os.Executable() and the target-resolution switch below,
+			// never opens the interactive picker and never writes a byte. It
+			// lists every target when --target is absent or is "all", and
+			// prints an "error=" field for a target whose paths do not
+			// resolve instead of skipping it. Any other --target value
+			// selects targets as install does.
 			if printCfgStyle {
 				targets := agents.AllTargets()
-				if cmd.Flags().Changed("target") {
-					targets, err = resolveTargets(cmd, target, loc)
+				if cmd.Flags().Changed("target") && target != "all" {
+					targets, _, err = resolveTargets(cmd, target, loc)
 					if err != nil {
 						return fmt.Errorf("codegraph install: %w", err)
 					}
@@ -144,24 +145,23 @@ func newInstallCmd() *cobra.Command {
 			}
 
 			var targets []agents.AgentTarget
+			var skipped []agents.SkippedTarget
 			switch {
 			case cmd.Flags().Changed("target"):
-				// D-13: an explicit --target wins over --yes — --yes only
-				// supplies the non-interactive default when no target was
-				// named.
-				targets, err = resolveTargets(cmd, target, loc)
+				// An explicit --target wins over --yes, which only supplies
+				// the non-interactive default when no target was named.
+				targets, skipped, err = resolveTargets(cmd, target, loc)
 			case yes:
-				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
-				// branch, not merely skip rendering the picker — checked
-				// here so it always wins regardless of stdin/stdout's
-				// actual state whenever --target was not given.
-				targets, err = resolveTargets(cmd, "auto", loc)
+				// --yes short-circuits before the TTY branch, so it wins
+				// whatever stdin and stdout are, whenever --target was not
+				// given.
+				targets, skipped, err = resolveTargets(cmd, "auto", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:
-				// D-13: no TTY (or CI) never blocks on a prompt — resolve
-				// straight to auto, same as an explicit --target auto.
-				targets, err = resolveTargets(cmd, "auto", loc)
+				// No TTY (or CI) never blocks on a prompt: resolve straight
+				// to auto, as an explicit --target auto does.
+				targets, skipped, err = resolveTargets(cmd, "auto", loc)
 			}
 			if err != nil {
 				return fmt.Errorf("codegraph install: %w", err)
@@ -189,7 +189,7 @@ func newInstallCmd() *cobra.Command {
 				}
 			}
 			opts.PreToolNudge = nudge
-			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
+			return printAgentResults(cmd, targets, skipped, "", loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Install(loc, opts)
 			}, installStatus)
 		},
@@ -207,27 +207,29 @@ func newInstallCmd() *cobra.Command {
 
 // resolveTargets resolves a --target value like agents.ResolveTargets and
 // prints one "<id>: skipped: <reason>" line on stderr for each target that
-// --target all or --target auto left out because its detection failed.
-func resolveTargets(cmd *cobra.Command, spec string, loc agents.Location) ([]agents.AgentTarget, error) {
+// --target all or --target auto left out because its detection failed. The
+// skipped targets are returned so the report can list them.
+func resolveTargets(cmd *cobra.Command, spec string, loc agents.Location) ([]agents.AgentTarget, []agents.SkippedTarget, error) {
 	targets, skipped, err := agents.ResolveTargets(spec, loc)
 	for _, s := range skipped {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: skipped: %s\n", s.ID, sanitizePathForDisplay(s.Err.Error()))
 	}
-	return targets, err
+	return targets, skipped, err
 }
 
 // installStatus rolls WriteResult's per-file actions up into one word for
 // install's per-agent summary line. A result with errors is "failed" when
 // no file changed and "partial" when some did, so the headline never reads
-// as success above an error line. Without errors, "unchanged" means every
-// touched file was already correct (D-07 idempotency) or reports
-// agents.ActionKeptForeign (a foreign skill directory codegraph left
-// untouched is not a change codegraph made — D-14), and "configured" means
-// anything else.
+// as success above an error line. Without errors, "configured" means some
+// file changed, "kept" means every entry was kept in place, and "unchanged"
+// means every touched file was already correct or is a foreign skill
+// directory that codegraph left untouched, which is not a change it made.
 func installStatus(result agents.WriteResult) string {
 	changed := false
 	for _, f := range result.Files {
-		if f.Action != agents.ActionUnchanged && f.Action != agents.ActionKeptForeign {
+		switch f.Action {
+		case agents.ActionUnchanged, agents.ActionKeptForeign, agents.ActionKept:
+		default:
 			changed = true
 		}
 	}
@@ -235,8 +237,8 @@ func installStatus(result agents.WriteResult) string {
 }
 
 // statusWithErrors picks a status word: "failed" or "partial" when the
-// result has errors (by whether anything changed), else changedWord or
-// unchangedWord.
+// result has errors (by whether anything changed), else changedWord, "kept"
+// when every entry of the result was kept in place, or unchangedWord.
 func statusWithErrors(result agents.WriteResult, changed bool, changedWord, unchangedWord string) string {
 	switch {
 	case len(result.Errors) > 0 && changed:
@@ -245,9 +247,22 @@ func statusWithErrors(result agents.WriteResult, changed bool, changedWord, unch
 		return "failed"
 	case changed:
 		return changedWord
+	case onlyKept(result.Files):
+		return "kept"
 	default:
 		return unchangedWord
 	}
+}
+
+// onlyKept reports whether files is not empty and every entry was kept in
+// place on purpose.
+func onlyKept(files []agents.FileResult) bool {
+	for _, f := range files {
+		if f.Action != agents.ActionKept {
+			return false
+		}
+	}
+	return len(files) > 0
 }
 
 // printAgentResults is install's and uninstall's shared per-agent
@@ -264,7 +279,7 @@ func statusWithErrors(result agents.WriteResult, changed bool, changedWord, unch
 // "not-configured" in the CLI's own status line, and `codegraph
 // install`/`uninstall` must exit non-zero when it happens. A nil return
 // means every touched file's write/remove actually completed.
-func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) error {
+func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped []agents.SkippedTarget, skippedNote string, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) error {
 	out := cmd.OutOrStdout()
 	mode := resolveColor(cmd)
 	var pal present.Palette
@@ -274,7 +289,7 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc age
 		w = mode.Writer(out)
 	}
 
-	if len(targets) == 0 {
+	if len(targets) == 0 && len(skipped) == 0 {
 		if mode.Styled {
 			_ = present.Line(w, pal, present.RoleLabel, "no agents selected")
 		} else {
@@ -340,6 +355,27 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc age
 				fmt.Fprintf(out, "  error: %s\n", msg)
 			}
 			errs = append(errs, fmt.Errorf("%s: %w", t.DisplayName(), e))
+		}
+	}
+	// A target that --target all or --target auto skipped gets a row of its
+	// own, after the targets that ran.
+	for _, s := range skipped {
+		name := string(s.ID)
+		if t, ok := agents.GetTarget(s.ID); ok {
+			name = t.DisplayName()
+		}
+		reason := sanitizePathForDisplay(s.Err.Error())
+		if mode.Styled {
+			_, _ = io.WriteString(w, pal.Header.Render(name+":")+" "+pal.Warning.Render("skipped ("+reason+")")+"\n")
+		} else {
+			fmt.Fprintf(out, "%s: skipped (%s)\n", name, reason)
+		}
+		if skippedNote != "" {
+			if mode.Styled {
+				_, _ = io.WriteString(w, "  "+pal.Label.Render("note:")+" "+pal.Value.Render(skippedNote)+"\n")
+			} else {
+				fmt.Fprintf(out, "  note: %s\n", skippedNote)
+			}
 		}
 	}
 	return errors.Join(errs...)

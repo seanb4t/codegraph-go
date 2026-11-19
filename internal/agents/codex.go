@@ -3,6 +3,7 @@ package agents
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -61,11 +62,22 @@ func (codexTarget) Capabilities() Capabilities {
 
 // codexHomeError reports a CODEX_HOME that is set but cannot name Codex's
 // home: it is not an absolute path, or it is not an existing directory.
-type codexHomeError struct{ value, problem string }
+type codexHomeError struct {
+	value, problem string
+	cause          error
+}
 
 func (e codexHomeError) Error() string {
-	return fmt.Sprintf("CODEX_HOME %q %s", e.value, e.problem)
+	msg := fmt.Sprintf("CODEX_HOME %q %s", e.value, e.problem)
+	// A missing directory says enough. Any other cause (permission denied, a
+	// symlink loop) is part of the message.
+	if e.cause != nil && !errors.Is(e.cause, fs.ErrNotExist) {
+		msg += ": " + e.cause.Error()
+	}
+	return msg
 }
+
+func (e codexHomeError) Unwrap() error { return e.cause }
 
 // codexHomeDir resolves the directory Codex keeps its global files in:
 // $CODEX_HOME when it is set and non-empty, else ~/.codex. Every global
@@ -88,9 +100,13 @@ func codexHomeDir() (string, error) {
 		}
 		real, err := realpath.Resolve(v)
 		if err != nil {
-			return "", codexHomeError{value: v, problem: "cannot be resolved: " + err.Error()}
+			return "", codexHomeError{value: v, problem: "cannot be resolved", cause: err}
 		}
-		if info, err := os.Stat(real); err != nil || !info.IsDir() {
+		info, err := os.Stat(real)
+		if err != nil {
+			return "", codexHomeError{value: v, problem: "is not an existing directory", cause: err}
+		}
+		if !info.IsDir() {
 			return "", codexHomeError{value: v, problem: "is not an existing directory"}
 		}
 		return real, nil
@@ -160,18 +176,17 @@ func codexSkillDirs(loc Location) ([]string, error) {
 	return append(dirs, filepath.Join(dir, "skills", "codegraph")), nil
 }
 
-// codexTrustNote returns the D-10 advisory Note every local install adds:
-// Codex loads a project's MCP server only once the project is trusted, via
-// its own TUI trust prompt or the "trust_level" key it writes into the
-// user's global config.toml (codexConfigPath, shown as ~/.codex/config.toml
-// when that is the default location, and as $CODEX_HOME/config.toml when
-// CODEX_HOME does not resolve) — codegraph never writes that entry
-// itself (D-10; 07-LIVE-SESSIONS.md confirmed a -c override does NOT grant
-// trust, so this note never suggests one). Per the live D-16/A2 verdicts (both
-// "no": neither the codegraph skill nor the AGENTS.md block is
-// trust-gated), the note also says those two are read regardless of
-// trust, so a user does not conclude the whole install needs trusting.
-// Returns "" at global scope, where no trust concept applies.
+// codexTrustNote returns the advisory Note every local install adds: Codex
+// loads a project's MCP server only once the project is trusted, via its own
+// TUI trust prompt or the "trust_level" key it writes into the user's global
+// config.toml (codexConfigPath, shown as ~/.codex/config.toml when that is
+// the default location, and as $CODEX_HOME/config.toml when CODEX_HOME does
+// not resolve). codegraph never writes that entry itself, and the note never
+// suggests a -c override, which does not grant trust. Neither the codegraph
+// skill nor the AGENTS.md block is trust-gated, so the note also says those
+// two are read regardless of trust, so a user does not conclude the whole
+// install needs trusting. Returns "" at global scope, where no trust concept
+// applies.
 func codexTrustNote(loc Location) (string, error) {
 	if loc != LocationLocal {
 		return "", nil
