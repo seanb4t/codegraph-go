@@ -154,8 +154,9 @@ func claudeSettingsPath(loc Location) (string, error) {
 const claudeFragmentCommand = `"` + claudeUnquotedFragmentCommand + `"`
 
 // claudeUnquotedFragmentCommand is claudeFragmentCommand without the quotes.
-// A handler registered with this text is still codegraph's own, so install
-// replaces it and uninstall removes it.
+// Nothing writes this text; it is only matched, as one of the owned
+// commands, so a handler carrying it is still replaced on install and
+// removed on uninstall.
 const claudeUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
 
 // claudeSkillDirPath resolves to the directory Phase 7 installs the
@@ -263,7 +264,8 @@ func claudeHookCommand(loc Location) (string, error) {
 }
 
 // claudeUnquotedHookCommand is claudeHookCommand's text without the shell
-// quoting. A handler registered with it is still codegraph's own.
+// quoting. Nothing writes it; it is only matched, as one of the owned
+// commands.
 func claudeUnquotedHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudeUnquotedFragmentCommand, nil
@@ -278,8 +280,9 @@ func claudeUnquotedHookCommand(loc Location) (string, error) {
 // the blocks from the embedded fragment rather than re-authoring them in
 // Go keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
 // matcher literal is hand-typed here. Returns the rewritten blocks and
-// the owned command strings writeHookEntry and removeHookEntry use for
-// identity: the quoted command the blocks carry, then its unquoted spelling.
+// the owned command strings writeHookEntry, removeHookEntry and
+// hasOwnHookBlock use for identity: the quoted command the blocks carry,
+// then its unquoted spelling.
 func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := claudeHookCommand(loc)
 	if err != nil {

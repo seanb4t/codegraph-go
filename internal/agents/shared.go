@@ -342,6 +342,42 @@ func blockOwnsAnyCommand(block any, ownCommands []string) bool {
 	return false
 }
 
+// splitOwnedBlock splits block, one {matcher, hooks[]} object of a hook
+// event, by ownership of its handlers. ownedPart is a copy of block holding
+// only the handlers whose command is in ownCommands, foreignPart a copy
+// holding the rest (nil when every handler is owned), and ownsAny is false
+// when block holds no owned handler at all.
+func splitOwnedBlock(block any, ownCommands []string) (ownedPart, foreignPart any, ownsAny bool) {
+	if !blockOwnsAnyCommand(block, ownCommands) {
+		return nil, nil, false
+	}
+	obj, _ := block.(map[string]any)
+	handlers, _ := obj["hooks"].([]any)
+	var ownedHandlers, foreignHandlers []any
+	for _, h := range handlers {
+		hObj, _ := h.(map[string]any)
+		cmd, _ := hObj["command"].(string)
+		if commandIsOwned(cmd, ownCommands) {
+			ownedHandlers = append(ownedHandlers, h)
+		} else {
+			foreignHandlers = append(foreignHandlers, h)
+		}
+	}
+	withHandlers := func(hs []any) map[string]any {
+		cp := make(map[string]any, len(obj))
+		for k, v := range obj {
+			cp[k] = v
+		}
+		cp["hooks"] = hs
+		return cp
+	}
+	ownedPart = withHandlers(ownedHandlers)
+	if len(foreignHandlers) > 0 {
+		foreignPart = withHandlers(foreignHandlers)
+	}
+	return ownedPart, foreignPart, true
+}
+
 // commandIsOwned reports whether cmd exactly matches one of ownCommands —
 // the single hook-level identity check blockOwnsAnyCommand (and, through
 // it, writeHookEntry's isOwned call site and hasOwnHookBlock) and
@@ -379,6 +415,11 @@ func commandIsOwned(cmd string, ownCommands []string) bool {
 // is untidy; silently destroying content codegraph never wrote is not an
 // acceptable trade to avoid it.
 //
+// A block whose hooks[] mixes codegraph's own handler with an unrelated one
+// is split, the way removeHookEntry strips it: the owned handlers are
+// replaced by ownBlocks, and the unrelated handlers stay in a block of
+// their own that keeps the original block's other fields.
+//
 // If the owned partition already jsonDeepEquals the normalized ownBlocks,
 // nothing is written (ActionUnchanged). Otherwise the array is rebuilt: if
 // an owned block already existed, ownBlocks is spliced back in at the
@@ -406,13 +447,17 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 	var owned, unowned []any
 	ownedInsertAt := -1
 	for _, b := range events {
-		if blockOwnsAnyCommand(b, ownCommands) {
-			if ownedInsertAt == -1 {
-				ownedInsertAt = len(unowned)
-			}
-			owned = append(owned, b)
-		} else {
+		ownedPart, foreignPart, ownsAny := splitOwnedBlock(b, ownCommands)
+		if !ownsAny {
 			unowned = append(unowned, b)
+			continue
+		}
+		if ownedInsertAt == -1 {
+			ownedInsertAt = len(unowned)
+		}
+		owned = append(owned, ownedPart)
+		if foreignPart != nil {
+			unowned = append(unowned, foreignPart)
 		}
 	}
 

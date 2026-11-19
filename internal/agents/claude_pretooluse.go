@@ -20,8 +20,9 @@ import (
 const claudePreToolFragmentCommand = `"` + claudePreToolUnquotedFragmentCommand + `"`
 
 // claudePreToolUnquotedFragmentCommand is claudePreToolFragmentCommand
-// without the quotes. A handler registered with this text is still
-// codegraph's own, so install replaces it and uninstall removes it.
+// without the quotes. Nothing writes this text; it is only matched, as one
+// of the owned commands, so a handler carrying it is still replaced on
+// install and removed on uninstall.
 const claudePreToolUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
 
 // preToolGuardExecPathToken is the single-quoted placeholder the guard
@@ -60,8 +61,8 @@ func claudePreToolHookCommand(loc Location) (string, error) {
 }
 
 // claudePreToolUnquotedHookCommand is claudePreToolHookCommand's text
-// without the shell quoting. A handler registered with it is still
-// codegraph's own.
+// without the shell quoting. Nothing writes it; it is only matched, as one
+// of the owned commands.
 func claudePreToolUnquotedHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudePreToolUnquotedFragmentCommand, nil
@@ -70,9 +71,9 @@ func claudePreToolUnquotedHookCommand(loc Location) (string, error) {
 }
 
 // claudePreToolUseBlocks returns the PreToolUse blocks for loc, derived
-// from the embedded fragment, plus the owned commands writeHookEntry uses
-// for identity: the quoted command the blocks carry, then its unquoted
-// spelling.
+// from the embedded fragment, plus the owned commands writeHookEntry,
+// removeHookEntry and hasOwnHookBlock use for identity: the quoted command
+// the blocks carry, then its unquoted spelling.
 func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := claudePreToolHookCommand(loc)
 	if err != nil {

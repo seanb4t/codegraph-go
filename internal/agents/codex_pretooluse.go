@@ -65,9 +65,28 @@ func codexPreToolHookCommand(loc Location) (string, error) {
 	return shellSingleQuote(guardPath), nil
 }
 
+// codexLegacyGlobalHookCommand is the global PreToolUse command spelling
+// that points into ~/.codex, the guard location whenever CODEX_HOME is
+// unset. It is empty when it equals ownCommand or the home directory cannot
+// be resolved. A handler carrying it is still codegraph's own when
+// CODEX_HOME names a directory that ~/.codex links to, so it is matched,
+// never written.
+func codexLegacyGlobalHookCommand(ownCommand string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	legacy := shellSingleQuote(filepath.Join(home, ".codex", "hooks", "codegraph-pretooluse.sh"))
+	if legacy == ownCommand {
+		return ""
+	}
+	return legacy
+}
+
 // codexPreToolUseBlocks returns the PreToolUse blocks for loc, derived
-// from the embedded Codex hooks fragment, plus the single owned command
-// writeHookEntry uses for identity. This is a Codex-specific copy of the
+// from the embedded Codex hooks fragment, plus the owned commands
+// writeHookEntry, removeHookEntry and hasOwnHookBlock use for identity: the
+// command the blocks carry, then at global scope its ~/.codex spelling. This is a Codex-specific copy of the
 // claudePreToolUseBlocks/claudeFragmentEventBlocks pattern — deliberately
 // not shared code, since the two fragments and command shapes diverge
 // (D-21): Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped literal
@@ -124,7 +143,13 @@ func codexPreToolUseBlocks(loc Location) ([]any, []string, error) {
 		}
 		blocks = append(blocks, rewritten)
 	}
-	return blocks, []string{ownCommand}, nil
+	ownCommands := []string{ownCommand}
+	if loc == LocationGlobal {
+		if legacy := codexLegacyGlobalHookCommand(ownCommand); legacy != "" {
+			ownCommands = append(ownCommands, legacy)
+		}
+	}
+	return blocks, ownCommands, nil
 }
 
 // renderCodexPreToolGuard renders the embedded guard template for loc
@@ -200,7 +225,7 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 // `.codex/config.toml` is read first; if it sets `features.hooks` (any of
 // tomlBoolSetting's three recognized forms) that value governs; else if it
 // sets the deprecated `features.codex_hooks` that governs instead; else the
-// same two checks fall back to the global `~/.codex/config.toml`. For
+// same two checks fall back to the global config.toml under codexHomeDir. For
 // global, only the global file is consulted. source names the governing
 // file and key, for codexHooksDisabledNote. A read error other than
 // not-exist is returned unwrapped — the caller records it and writes
