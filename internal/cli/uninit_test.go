@@ -171,11 +171,12 @@ func TestSanitizePathForDisplay(t *testing.T) {
 		want string
 	}{
 		{"clean path unchanged", "/repo/café/main.go", "/repo/café/main.go"},
-		{"strips ESC and newline", "/a\x1b[31m/b\nc", "/a[31m/bc"},
-		{"strips tab", "/a\tb", "/ab"},
-		{"strips the bidi override", "/repo/gpj.\u202Eexe", "/repo/gpj.exe"},
-		{"strips the bidi isolates", "/a\u2066b\u2067c\u2068d\u2069e", "/abcde"},
-		{"strips zero-width and direction marks", "/a\u200Bb\u200Fc\u200Ed", "/abcd"},
+		{"path with a space unchanged", "/a b", "/a b"},
+		{"drops ESC, newline and tab", "/a\x1b[31m/b\nc\td", "/a[31m/bcd"},
+		{"escapes the bidi override", "/repo/gpj.\u202Eexe", "/repo/gpj.<U+202E>exe"},
+		{"escapes the bidi isolates", "/a\u2066b\u2067c\u2068d\u2069e", "/a<U+2066>b<U+2067>c<U+2068>d<U+2069>e"},
+		{"escapes zero-width and direction marks", "/a\u200Bb\u200Fc\u200Ed", "/a<U+200B>b<U+200F>c<U+200E>d"},
+		{"replaces an invalid byte", "/a\x9b8m", "/a\uFFFD8m"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -184,4 +185,63 @@ func TestSanitizePathForDisplay(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUninitAndIndexSanitizeTheDirectoryName runs the uninit and index
+// commands in a directory whose name holds a bidi override and checks every
+// printed line and prompt that names it, in plain output.
+func TestUninitAndIndexSanitizeTheDirectoryName(t *testing.T) {
+	newRoot := func(t *testing.T, withIndex bool) string {
+		t.Helper()
+		root := filepath.Join(t.TempDir(), "gpj.\u202Eexe")
+		dir := root
+		if withIndex {
+			dir = filepath.Join(root, ".codegraph")
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", dir, err)
+		}
+		return root
+	}
+	requireEscaped := func(t *testing.T, label, out string) {
+		t.Helper()
+		if strings.Contains(out, "\u202E") {
+			t.Errorf("%s holds a raw U+202E: %q", label, out)
+		}
+		if !strings.Contains(out, "gpj.<U+202E>exe") {
+			t.Errorf("%s lacks the <U+202E> escape: %q", label, out)
+		}
+	}
+
+	t.Run("uninit with no index", func(t *testing.T) {
+		out, _, err := execCmd("uninit", newRoot(t, false))
+		if err != nil {
+			t.Fatalf("uninit: %v", err)
+		}
+		requireEscaped(t, "nothing-to-do line", out)
+	})
+
+	t.Run("uninit confirmation prompt", func(t *testing.T) {
+		out, _, err := execCmdWithInput("n\n", "uninit", newRoot(t, true))
+		if err != nil {
+			t.Fatalf("uninit: %v", err)
+		}
+		requireEscaped(t, "prompt", out)
+	})
+
+	t.Run("uninit removed line", func(t *testing.T) {
+		out, _, err := execCmd("uninit", "--force", newRoot(t, true))
+		if err != nil {
+			t.Fatalf("uninit --force: %v", err)
+		}
+		requireEscaped(t, "removed line", out)
+	})
+
+	t.Run("index confirmation prompt", func(t *testing.T) {
+		out, _, err := execCmdWithInput("n\n", "index", newRoot(t, true))
+		if err != nil {
+			t.Fatalf("index: %v", err)
+		}
+		requireEscaped(t, "prompt", out)
+	})
 }

@@ -46,7 +46,7 @@ func newIndexCmd() *cobra.Command {
 			}
 
 			if !force {
-				ok, err := confirm(cmd, fmt.Sprintf("Rebuild the graph at %s from scratch?", codegraphDir))
+				ok, err := confirm(cmd, fmt.Sprintf("Rebuild the graph at %s from scratch?", sanitizePathForDisplay(codegraphDir)))
 				if err != nil {
 					return err
 				}

@@ -49,7 +49,7 @@ func newUninitCmd() *cobra.Command {
 				if mode.Styled {
 					fmt.Fprintf(w, "%s does not exist — nothing to do\n", pal.Path.Render(sanitizePathForDisplay(codegraphDir)))
 				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s does not exist — nothing to do\n", codegraphDir)
+					fmt.Fprintf(cmd.OutOrStdout(), "%s does not exist — nothing to do\n", sanitizePathForDisplay(codegraphDir))
 				}
 				return nil
 			} else if err != nil {
@@ -57,7 +57,7 @@ func newUninitCmd() *cobra.Command {
 			}
 
 			if !force {
-				ok, err := confirm(cmd, fmt.Sprintf("Remove %s?", codegraphDir))
+				ok, err := confirm(cmd, fmt.Sprintf("Remove %s?", sanitizePathForDisplay(codegraphDir)))
 				if err != nil {
 					return err
 				}
@@ -98,7 +98,7 @@ func newUninitCmd() *cobra.Command {
 			if mode.Styled {
 				fmt.Fprintf(w, "removed %s\n", pal.Path.Render(sanitizePathForDisplay(codegraphDir)))
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", codegraphDir)
+				fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", sanitizePathForDisplay(codegraphDir))
 			}
 			return nil
 		},
@@ -135,18 +135,9 @@ func plural(n int) string {
 	return "s"
 }
 
-// sanitizePathForDisplay drops every rune present.UnsafeDisplayRune reports
-// (control and format runes, including any embedded ANSI/OSC escape byte)
-// from a path or error text before it reaches the terminal. It drops tabs
-// too, unlike present's sanitizeControl, which keeps them.
+// sanitizePathForDisplay is present.SanitizeDisplay: the sanitizer for a path
+// or message that the CLI prints in styled and plain output alike. Control
+// runes and tabs are removed, and format runes show as "<U+XXXX>" escapes.
 func sanitizePathForDisplay(s string) string {
-	if !strings.ContainsFunc(s, present.UnsafeDisplayRune) {
-		return s
-	}
-	return strings.Map(func(r rune) rune {
-		if present.UnsafeDisplayRune(r) {
-			return -1
-		}
-		return r
-	}, s)
+	return present.SanitizeDisplay(s)
 }

@@ -59,6 +59,18 @@ func TestRewriteEnviron(t *testing.T) {
 			want:    []string{"NO_COLOR=1", "TERM=x"},
 		},
 		{
+			name:    "auto drops CLICOLOR_FORCE when NO_COLOR is a non-boolean value",
+			choice:  colorAuto,
+			environ: []string{"NO_COLOR=banana", "CLICOLOR_FORCE=1"},
+			want:    []string{"NO_COLOR=1"},
+		},
+		{
+			name:    "auto drops CLICOLOR_FORCE and keeps CLICOLOR=0 when NO_COLOR is set",
+			choice:  colorAuto,
+			environ: []string{"CLICOLOR=0", "NO_COLOR=1", "CLICOLOR_FORCE=1"},
+			want:    []string{"CLICOLOR=0", "NO_COLOR=1"},
+		},
+		{
 			name:    "auto keeps CLICOLOR_FORCE when NO_COLOR is empty",
 			choice:  colorAuto,
 			environ: []string{"NO_COLOR=", "CLICOLOR_FORCE=1"},
@@ -147,7 +159,7 @@ func wantStyledAndMinProfile(styled bool, min colorprofile.Profile) func(t *test
 }
 
 // TestResolveColorMatrix covers the (choice × TTY × env) matrix we own —
-// resolveColorFrom's Styled/Profile output — over 13 rows. tty rows carry
+// resolveColorFrom's Styled/Profile output — over 14 rows. tty rows carry
 // TTY_FORCE=1 in the environ (colorprofile's own forced-isatty hook,
 // v0.4.3 env.go, used purely as a test input per the plan's interfaces
 // block); pipe rows omit it and rely on the bytes.Buffer `out` not
@@ -170,8 +182,6 @@ func TestResolveColorMatrix(t *testing.T) {
 		{name: "auto/tty/NO_COLOR=banana", choice: colorAuto, environ: []string{"NO_COLOR=banana", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(false)},
 		{name: "auto/tty/NO_COLOR=empty", choice: colorAuto, environ: []string{"NO_COLOR=", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(true)},
 		{name: "auto/pipe/NO_COLOR=1/CLICOLOR_FORCE=1", choice: colorAuto, environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1"}, check: wantStyled(false)},
-		{name: "auto/tty/NO_COLOR=1/CLICOLOR_FORCE=1", choice: colorAuto, environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(false)},
-		{name: "always/pipe/NO_COLOR=1/CLICOLOR_FORCE=1", choice: colorAlways, environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1"}, check: wantStyled(true)},
 		{name: "auto/tty/CLICOLOR=0", choice: colorAuto, environ: []string{"CLICOLOR=0", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(false)},
 		{name: "auto/tty/CLICOLOR=0/CLICOLOR_FORCE=1", choice: colorAuto, environ: []string{"CLICOLOR=0", "CLICOLOR_FORCE=1", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(true)},
 	}

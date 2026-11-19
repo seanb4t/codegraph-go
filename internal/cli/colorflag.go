@@ -67,12 +67,15 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 }
 
 // rewriteEnviron is the D-09 environ rewrite --color applies before the
-// resolver's single colorprofile.Detect call. Below --color, precedence is
-// colorprofile@v0.4.3's own (NO_COLOR > CLICOLOR_FORCE > CLICOLOR > TTY;
-// github.com/charmbracelet/colorprofile@v0.4.3 env.go) — cited here, never
-// re-tested (D-00). Node's FORCE_COLOR convention is the opposite of
-// CLICOLOR_FORCE's "force on" semantics, so nobody should "fix" this
-// precedence by analogy.
+// resolver's single colorprofile.Detect call. Below --color, the order is
+// NO_COLOR > CLICOLOR_FORCE > CLICOLOR > TTY. This rewrite establishes the
+// NO_COLOR over CLICOLOR_FORCE step: colorprofile@v0.4.3 reads NO_COLOR only when the writer
+// is a terminal (github.com/charmbracelet/colorprofile@v0.4.3 env.go), so
+// on a pipe it lets CLICOLOR_FORCE win unless the rewrite drops
+// CLICOLOR_FORCE first. Deleting that drop breaks the order. The rest is
+// colorprofile's own parsing, cited here and never re-tested (D-00). Node's
+// FORCE_COLOR convention is the opposite of CLICOLOR_FORCE's "force on"
+// semantics, so nobody should "fix" this precedence by analogy.
 //
 //   - always: drops every NO_COLOR=/CLICOLOR= entry and appends
 //     CLICOLOR_FORCE=1.
@@ -85,7 +88,7 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 //     the floor-at-ASCII branch at all if CLICOLOR_FORCE=1 is also set;
 //     without dropping CLICOLOR_FORCE, `CLICOLOR_FORCE=1 ... --color=never
 //     | cat` would still render styled).
-//   - auto: passes through, with two normalizations of OUR OWN input
+//   - auto: passes through, with three normalizations of OUR OWN input
 //     before it reaches colorprofile, never a re-test of colorprofile's
 //     parsing:
 //     (1) a non-empty NO_COLOR is rewritten to NO_COLOR=1 — colorprofile's
@@ -93,9 +96,11 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 //     NO_COLOR=banana would NOT disable colour there, diverging from this
 //     project's historical present.ChoosePresentation contract (any
 //     non-empty value disables). An empty NO_COLOR= is left untouched
-//     ("unset"). A non-empty NO_COLOR also drops every CLICOLOR_FORCE=
-//     entry, so NO_COLOR outranks CLICOLOR_FORCE.
-//     (2) amendment A2: a non-empty CLICOLOR whose value strconv.ParseBool
+//     ("unset").
+//     (2) a non-empty NO_COLOR drops every CLICOLOR_FORCE= entry.
+//     colorprofile consults NO_COLOR only on a terminal, so a pipe with
+//     both variables set would otherwise render styled.
+//     (3) amendment A2: a non-empty CLICOLOR whose value strconv.ParseBool
 //     reads as false (0, false, …) appends NO_COLOR=1, UNLESS
 //     CLICOLOR_FORCE is ParseBool-true. colorprofile only floors on a
 //     truthy CLICOLOR and never lowers on a falsy one (verified this

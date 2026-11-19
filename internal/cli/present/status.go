@@ -158,7 +158,7 @@ func RenderStatus(r query.StatusResult, projectPath string, pal Palette, w io.Wr
 	var b strings.Builder
 	b.WriteString(pal.Header.Render("CodeGraph Status") + "\n\n")
 	// projectPath is the CLI's resolved start path (--path flag or
-	// os.Getwd()) and may be adversarial — strip control characters
+	// os.Getwd()) and may be adversarial — sanitize unsafe display runes
 	// before it reaches the terminal (CR-01).
 	fmt.Fprintf(&b, "%s %s\n", pal.Label.Render("Project:"), sanitizeControl(projectPath))
 

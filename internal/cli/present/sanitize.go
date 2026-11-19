@@ -1,45 +1,80 @@
 package present
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 )
 
-// UnsafeDisplayRune reports whether r must not reach a terminal: a control
-// rune (Unicode category Cc) or a format rune (category Cf), such as a bidi
-// override or isolate, a zero-width character or a byte order mark. Every
-// display sanitizer in the cli packages decides through this predicate.
-func UnsafeDisplayRune(r rune) bool {
-	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+// dropRune reports whether a display sanitizer removes r: a control rune
+// (Unicode category Cc), such as ESC, the C0 and C1 ranges, newline, carriage
+// return and DEL. A control rune can start a terminal escape sequence or
+// move the cursor, so it is removed and never shown.
+func dropRune(r rune) bool {
+	return unicode.IsControl(r)
 }
 
-// sanitizeControl strips terminal control characters from s so that
-// filesystem-derived names (directory names and file paths from the indexed
-// repository, which may be adversarial) and verbatim source-code lines
-// cannot inject ANSI/OSC escape sequences into the styled TTY output
-// (CR-01, and narrowed by CR-02/04-REVIEW.md). Every rune for which
-// UnsafeDisplayRune reports true — ESC (0x1b), the C0/C1 control ranges,
-// embedded newline/carriage-return that would otherwise break the line
-// structure, and format runes that reorder or hide text — is dropped, EXCEPT the literal tab (0x09): a bare tab cannot
-// start an OSC/CSI/DCS escape sequence and cannot overwrite prior output
-// the way CR/backspace can, so it poses no injection risk, and stripping it
-// was destroying the indentation of tab-indented source (e.g. gofmt'd Go)
-// shown by the styled `explore`/`node` renderers.
+// escapeRune reports whether a display sanitizer shows r as a "<U+XXXX>"
+// escape instead of printing it: a format rune (category Cf), a line
+// separator (Zl) or a paragraph separator (Zp). These reorder or hide text,
+// for example a bidi override or isolate, a zero-width space, a soft hyphen,
+// a word joiner or a byte order mark. The escape keeps the rune visible, so
+// a printed path cannot look like a different path.
 //
-// This guards the pretty (TTY) renderer only. The plain (piped/non-TTY)
-// renderer in internal/query is intentionally NOT changed: it is frozen for
-// byte-identity (TUI-02), and a non-TTY sink does not interpret escapes the
-// way an interactive terminal does — the pretty path is the injection vector
-// this closes.
-func sanitizeControl(s string) string {
-	isDangerous := func(r rune) bool { return UnsafeDisplayRune(r) && r != '\t' }
-	if !strings.ContainsFunc(s, isDangerous) {
-		return s // fast path: nothing to strip, no allocation
+// Three groups of Cf runes pass through unchanged because they cannot
+// reorder text and real scripts need them: ZWNJ (U+200C), ZWJ (U+200D) and
+// the tag characters (U+E0020 to U+E007F).
+func escapeRune(r rune) bool {
+	switch {
+	case r == 0x200C, r == 0x200D:
+		return false
+	case r >= 0xE0020 && r <= 0xE007F:
+		return false
 	}
-	return strings.Map(func(r rune) rune {
-		if isDangerous(r) {
-			return -1 // drop
+	return unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp)
+}
+
+// SanitizeDisplay returns s made safe to print to a terminal: invalid UTF-8
+// bytes become U+FFFD, every dropRune rune is removed, and every escapeRune
+// rune becomes a "<U+XXXX>" escape. The CLI display sanitizers that cover
+// paths, names, prompts and messages call it through sanitizePathForDisplay.
+// It removes a tab as well, because a tab inside a one-line value would
+// shift the columns that follow it.
+func SanitizeDisplay(s string) string {
+	return sanitize(s, false)
+}
+
+// sanitizeControl is SanitizeDisplay for the text the styled renderers draw
+// from the indexed repository: names, paths and verbatim source lines. It
+// keeps the tab, because a bare tab cannot start an escape sequence and the
+// indentation of tab-indented source depends on it.
+//
+// It guards styled output only. The plain renderers in internal/query are
+// frozen for byte identity and do not call it.
+func sanitizeControl(s string) string {
+	return sanitize(s, true)
+}
+
+// sanitize is the shared body of SanitizeDisplay and sanitizeControl. The
+// invalid-UTF-8 replacement runs first: a raw 0x9B byte passes for no rune
+// in the fast-path check below, and the colour writer turns it into a real
+// escape sequence.
+func sanitize(s string, keepTab bool) string {
+	s = strings.ToValidUTF8(s, "�")
+	drops := func(r rune) bool { return dropRune(r) && (r != '\t' || !keepTab) }
+	if !strings.ContainsFunc(s, func(r rune) bool { return drops(r) || escapeRune(r) }) {
+		return s // fast path: nothing to change, no allocation
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case drops(r):
+		case escapeRune(r):
+			fmt.Fprintf(&b, "<U+%04X>", r)
+		default:
+			b.WriteRune(r)
 		}
-		return r
-	}, s)
+	}
+	return b.String()
 }

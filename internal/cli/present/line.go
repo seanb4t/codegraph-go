@@ -45,7 +45,7 @@ type lineWriter struct {
 }
 
 // NewLineWriter returns an io.Writer that styles each complete
-// "\n"-terminated line written to it in role, sanitizing control runes
+// "\n"-terminated line written to it in role, sanitizing unsafe display runes
 // first exactly like Line. A trailing, non-newline-terminated partial
 // segment from any given Write is sanitized but passed through UNSTYLED
 // and is never buffered across calls (D-08) — used by later plans for
