@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -162,4 +163,96 @@ func TestUninit_MalformedHook_SurfacesWarning(t *testing.T) {
 	if string(got) != malformed {
 		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
 	}
+}
+
+// TestSanitizePathForDisplay shows that the wrapper delegates to
+// present.SanitizeDisplay. The rune rules are tested in package present.
+func TestSanitizePathForDisplay(t *testing.T) {
+	in := "/a\x1b/b" + string(rune(0x202E)) + "c"
+	if got, want := sanitizePathForDisplay(in), "/a<U+001B>/b<U+202E>c"; got != want {
+		t.Errorf("sanitizePathForDisplay(%q) = %q, want %q", in, got, want)
+	}
+}
+
+// TestUninitAndIndexSanitizeTheDirectoryName runs the uninit and index
+// commands in a directory whose name holds a bidi override and checks every
+// printed line and prompt that names it, in plain output.
+func TestUninitAndIndexSanitizeTheDirectoryName(t *testing.T) {
+	newRoot := func(t *testing.T, withIndex bool) string {
+		t.Helper()
+		root := filepath.Join(t.TempDir(), "gpj.\u202Eexe")
+		dir := root
+		if withIndex {
+			dir = filepath.Join(root, ".codegraph")
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", dir, err)
+		}
+		return root
+	}
+	requireEscaped := func(t *testing.T, label, out string) {
+		t.Helper()
+		if strings.Contains(out, "\u202E") {
+			t.Errorf("%s holds a raw U+202E: %q", label, out)
+		}
+		if !strings.Contains(out, "gpj.<U+202E>exe") {
+			t.Errorf("%s lacks the <U+202E> escape: %q", label, out)
+		}
+	}
+
+	t.Run("uninit with no index", func(t *testing.T) {
+		out, _, err := execCmd("uninit", newRoot(t, false))
+		if err != nil {
+			t.Fatalf("uninit: %v", err)
+		}
+		requireEscaped(t, "nothing-to-do line", out)
+	})
+
+	t.Run("uninit confirmation prompt", func(t *testing.T) {
+		out, _, err := execCmdWithInput("n\n", "uninit", newRoot(t, true))
+		if err != nil {
+			t.Fatalf("uninit: %v", err)
+		}
+		requireEscaped(t, "prompt", out)
+	})
+
+	t.Run("uninit removed line", func(t *testing.T) {
+		out, _, err := execCmd("uninit", "--force", newRoot(t, true))
+		if err != nil {
+			t.Fatalf("uninit --force: %v", err)
+		}
+		requireEscaped(t, "removed line", out)
+	})
+
+	t.Run("sync not initialized error", func(t *testing.T) {
+		_, _, err := execCmd("sync", newRoot(t, false))
+		if !errors.Is(err, ErrNotInitialized) {
+			t.Fatalf("sync: %v; want errors.Is(err, ErrNotInitialized)", err)
+		}
+		requireEscaped(t, "error", err.Error())
+	})
+
+	t.Run("init already initialized error", func(t *testing.T) {
+		_, _, err := execCmd("init", newRoot(t, true))
+		if !errors.Is(err, ErrAlreadyInitialized) {
+			t.Fatalf("init: %v; want errors.Is(err, ErrAlreadyInitialized)", err)
+		}
+		requireEscaped(t, "error", err.Error())
+	})
+
+	t.Run("index not initialized error", func(t *testing.T) {
+		_, _, err := execCmd("index", newRoot(t, false))
+		if !errors.Is(err, ErrNotInitialized) {
+			t.Fatalf("index: %v; want errors.Is(err, ErrNotInitialized)", err)
+		}
+		requireEscaped(t, "error", err.Error())
+	})
+
+	t.Run("index confirmation prompt", func(t *testing.T) {
+		out, _, err := execCmdWithInput("n\n", "index", newRoot(t, true))
+		if err != nil {
+			t.Fatalf("index: %v", err)
+		}
+		requireEscaped(t, "prompt", out)
+	})
 }

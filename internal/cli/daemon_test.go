@@ -127,7 +127,7 @@ func assertNoStderr(t *testing.T, stderr string) {
 }
 
 // Skipped registry paths the stubbed listings return. skippedEsc holds an
-// escape byte, which the warning line must not carry.
+// escape byte, which the warning line shows as an escape.
 const (
 	skippedA   = "/state/codegraph/daemons/41.json"
 	skippedB   = "/state/codegraph/daemons/43.json"
@@ -147,7 +147,7 @@ func skippedWarning(paths ...string) string {
 
 // TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords: off a terminal, skipped
 // registry files leave stdout exactly as it is without them, and stderr holds
-// one warning line naming each one, with control bytes removed.
+// one warning line naming each one, with control bytes shown as escapes.
 func TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords(t *testing.T) {
 	fakeHome(t)
 	records := []daemon.Record{{PID: 111, StartedAt: time.Now().UTC(), RepoRoot: "/other/repo"}}
@@ -166,7 +166,7 @@ func TestDaemonBareCmd_NonTTY_WarnsAboutSkippedRecords(t *testing.T) {
 	if out != wantOut {
 		t.Fatalf("stdout = %q, want it unchanged by skipped files: %q", out, wantOut)
 	}
-	if want := skippedWarning(skippedA, "/state/codegraph/daemons/42.json"); errOut != want {
+	if want := skippedWarning(skippedA, "/state/codegraph/daemons/4<U+001B>2.json"); errOut != want {
 		t.Fatalf("stderr = %q, want %q", errOut, want)
 	}
 }
@@ -641,4 +641,51 @@ func TestDaemonUnlockCmd(t *testing.T) {
 			t.Fatalf("daemon unlock -p <dir> error = %q, want it to contain %q", err.Error(), "unknown shorthand flag")
 		}
 	})
+}
+
+// TestDaemonStopCmd_PlainLinesEscapeTheRepoRoot: the plain "no running
+// daemon" and "stopped pid" lines show a format rune in the repository path
+// as an escape.
+func TestDaemonStopCmd_PlainLinesEscapeTheRepoRoot(t *testing.T) {
+	fakeHome(t)
+	bidi := string(rune(0x202E))
+	dir := filepath.Join(t.TempDir(), "gpj."+bidi+"exe")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	t.Chdir(dir)
+
+	for name, stopped := range map[string][]daemon.Record{
+		"no running daemon": nil,
+		"stopped pid":       {{PID: 42, RepoRoot: dir}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withStubbedDaemonStop(t, func(string) ([]daemon.Record, []string, error) {
+				return stopped, nil, nil
+			}, nil)
+			out, _, err := execCmd("daemon", "stop")
+			if err != nil {
+				t.Fatalf("daemon stop: %v", err)
+			}
+			if strings.Contains(out, bidi) || !strings.Contains(out, "gpj.<U+202E>exe") {
+				t.Errorf("stdout = %q, want the path with a <U+202E> escape and no raw U+202E", out)
+			}
+		})
+	}
+}
+
+// TestDaemonBareCmd_NonTTY_ListEscapesTheRepoRoot: the plain listing shows a
+// format rune in a repository path as an escape.
+func TestDaemonBareCmd_NonTTY_ListEscapesTheRepoRoot(t *testing.T) {
+	fakeHome(t)
+	bidi := string(rune(0x202E))
+	withStubbedDaemonList(t, []daemon.Record{{PID: 7, StartedAt: time.Now().UTC(), RepoRoot: "/repo/gpj." + bidi + "exe"}})
+
+	out, _, err := execCmd("daemon")
+	if err != nil {
+		t.Fatalf("daemon: %v", err)
+	}
+	if strings.Contains(out, bidi) || !strings.Contains(out, "/repo/gpj.<U+202E>exe") {
+		t.Errorf("stdout = %q, want the path with a <U+202E> escape and no raw U+202E", out)
+	}
 }

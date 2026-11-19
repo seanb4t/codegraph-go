@@ -64,7 +64,7 @@ func newInitCmd() *cobra.Command {
 				return err
 			}
 			if _, err := os.Stat(paths.Dir); err == nil {
-				return fmt.Errorf("%w: %s already exists — use `codegraph index --force` to rebuild", ErrAlreadyInitialized, codegraphDir)
+				return fmt.Errorf("%w: %s already exists — use `codegraph index --force` to rebuild", ErrAlreadyInitialized, sanitizePathForDisplay(codegraphDir))
 			} else if !os.IsNotExist(err) {
 				return err
 			}
@@ -137,7 +137,7 @@ func targetRoot(args []string) (string, error) {
 		return "", err
 	}
 	if home, homeErr := os.UserHomeDir(); homeErr == nil && filepath.Clean(root) == filepath.Clean(home) {
-		return "", fmt.Errorf("%w: %s", ErrHomeDirectoryTarget, root)
+		return "", fmt.Errorf("%w: %s", ErrHomeDirectoryTarget, sanitizePathForDisplay(root))
 	}
 	return root, nil
 }

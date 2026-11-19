@@ -17,12 +17,12 @@ import (
 func writeFileTree(b *strings.Builder, pal Palette, nodes []*query.FileTreeNode, indent string) {
 	for _, n := range nodes {
 		if n.IsDir {
-			// n.Name is filesystem-derived and may be adversarial — strip
-			// control characters before it reaches the terminal (CR-01).
+			// n.Name is filesystem-derived and may be adversarial — sanitize
+			// unsafe display runes before it reaches the terminal.
 			fmt.Fprintf(b, "%s%s\n", indent, pal.Path.Render(sanitizeControl(n.Name)+"/"))
 			writeFileTree(b, pal, n.Children, indent+"  ")
 		} else {
-			fmt.Fprintf(b, "%s%s (%s)\n", indent, pal.Path.Render(sanitizeControl(n.Name)), pal.Label.Render(n.Language))
+			fmt.Fprintf(b, "%s%s (%s)\n", indent, pal.Path.Render(sanitizeControl(n.Name)), pal.Label.Render(sanitizeControl(n.Language)))
 		}
 	}
 }
@@ -41,9 +41,9 @@ func RenderFiles(r query.FilesResult, pal Palette, w io.Writer) error {
 		writeFileTree(&b, pal, r.Tree, "")
 	} else {
 		for _, f := range r.Files {
-			// f.Path is filesystem-derived and may be adversarial — strip
-			// control characters before it reaches the terminal (CR-01).
-			fmt.Fprintf(&b, "%s (%s)\n", pal.Path.Render(sanitizeControl(f.Path)), pal.Label.Render(f.Language))
+			// f.Path is filesystem-derived and may be adversarial — sanitize
+			// unsafe display runes before it reaches the terminal.
+			fmt.Fprintf(&b, "%s (%s)\n", pal.Path.Render(sanitizeControl(f.Path)), pal.Label.Render(sanitizeControl(f.Language)))
 		}
 	}
 	_, err := io.WriteString(w, b.String())

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -50,7 +49,7 @@ func newUninitCmd() *cobra.Command {
 				if mode.Styled {
 					fmt.Fprintf(w, "%s does not exist — nothing to do\n", pal.Path.Render(sanitizePathForDisplay(codegraphDir)))
 				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s does not exist — nothing to do\n", codegraphDir)
+					fmt.Fprintf(cmd.OutOrStdout(), "%s does not exist — nothing to do\n", sanitizePathForDisplay(codegraphDir))
 				}
 				return nil
 			} else if err != nil {
@@ -58,7 +57,7 @@ func newUninitCmd() *cobra.Command {
 			}
 
 			if !force {
-				ok, err := confirm(cmd, fmt.Sprintf("Remove %s?", codegraphDir))
+				ok, err := confirm(cmd, fmt.Sprintf("Remove %s?", sanitizePathForDisplay(codegraphDir)))
 				if err != nil {
 					return err
 				}
@@ -99,7 +98,7 @@ func newUninitCmd() *cobra.Command {
 			if mode.Styled {
 				fmt.Fprintf(w, "removed %s\n", pal.Path.Render(sanitizePathForDisplay(codegraphDir)))
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", codegraphDir)
+				fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", sanitizePathForDisplay(codegraphDir))
 			}
 			return nil
 		},
@@ -136,24 +135,10 @@ func plural(n int) string {
 	return "s"
 }
 
-// sanitizePathForDisplay strips control runes (including any embedded
-// ANSI/OSC escape byte) from codegraphDir before it reaches a styled
-// pal.Path.Render call — codegraphDir derives from the caller's own
-// --path/root argument, the same class of value present/status.go's
-// projectPath sanitizes before styling (CR-01). A package-local duplicate
-// of present's unexported sanitizeControl, matching this codebase's
-// existing convention of small helpers duplicated across the cli/present
-// boundary rather than exporting internal-only logic (e.g.
-// present/status.go's kindCount/formatNumber duplicating internal/query's
-// unexported equivalents).
+// sanitizePathForDisplay is present.SanitizeDisplay: the sanitizer for the
+// paths, error text and prompts that the CLI prints in styled and plain
+// output alike. It escapes control and format runes as "<U+XXXX>" and turns
+// invalid UTF-8 into U+FFFD.
 func sanitizePathForDisplay(s string) string {
-	if !strings.ContainsFunc(s, unicode.IsControl) {
-		return s
-	}
-	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
+	return present.SanitizeDisplay(s)
 }

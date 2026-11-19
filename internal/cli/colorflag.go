@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -66,17 +67,20 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 }
 
 // rewriteEnviron is the D-09 environ rewrite --color applies before the
-// resolver's single colorprofile.Detect call. Below --color, precedence is
-// colorprofile@v0.4.3's own (NO_COLOR > CLICOLOR_FORCE > CLICOLOR > TTY;
-// github.com/charmbracelet/colorprofile@v0.4.3 env.go) — cited here, never
-// re-tested (D-00). Node's FORCE_COLOR convention is the opposite of
-// CLICOLOR_FORCE's "force on" semantics, so nobody should "fix" this
-// precedence by analogy.
+// resolver's single colorprofile.Detect call. Below --color, the order is
+// NO_COLOR > CLICOLOR_FORCE > CLICOLOR > TTY. colorprofile@v0.4.3 reads
+// NO_COLOR only when the writer is a terminal (env.go), so on a pipe it
+// lets CLICOLOR_FORCE win. The rewrite itself enforces NO_COLOR over
+// CLICOLOR_FORCE by dropping CLICOLOR_FORCE, and deleting that drop breaks
+// the order. Where the rewrite leaves the environment alone, colorprofile
+// decides and its own parsing is not re-tested. Node's FORCE_COLOR
+// convention is the opposite of CLICOLOR_FORCE's "force on" semantics, so
+// nobody should "fix" this precedence by analogy.
 //
 //   - always: drops every NO_COLOR=/CLICOLOR= entry and appends
 //     CLICOLOR_FORCE=1.
 //   - never: appends NO_COLOR=1 AND drops every CLICOLOR_FORCE=/CLICOLOR=
-//     entry (amendment A1, verified this session against v0.4.3:
+//     entry (colorprofile v0.4.3:
 //     colorProfile's cliColorForced branch returns before NO_COLOR is ever
 //     consulted when the output is not a TTY — env.go's colorProfile only
 //     checks `envNoColor(env) && isatty` before falling through to
@@ -84,23 +88,22 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 //     the floor-at-ASCII branch at all if CLICOLOR_FORCE=1 is also set;
 //     without dropping CLICOLOR_FORCE, `CLICOLOR_FORCE=1 ... --color=never
 //     | cat` would still render styled).
-//   - auto: passes through, with two normalizations of OUR OWN input
-//     before it reaches colorprofile, never a re-test of colorprofile's
-//     parsing:
+//   - auto: passes through, with three rewrites of OUR OWN input before it
+//     reaches colorprofile:
 //     (1) a non-empty NO_COLOR is rewritten to NO_COLOR=1 — colorprofile's
 //     envNoColor is strconv.ParseBool-gated (env.go), so a raw
 //     NO_COLOR=banana would NOT disable colour there, diverging from this
 //     project's historical present.ChoosePresentation contract (any
 //     non-empty value disables). An empty NO_COLOR= is left untouched
 //     ("unset").
-//     (2) amendment A2: a non-empty CLICOLOR whose value strconv.ParseBool
-//     reads as false (0, false, …) appends NO_COLOR=1, UNLESS
-//     CLICOLOR_FORCE is ParseBool-true. colorprofile only floors on a
-//     truthy CLICOLOR and never lowers on a falsy one (verified this
-//     session: CLICOLOR=0 alone is a no-op against v0.4.3), so without
-//     this normalization CLI-03's stated NO_COLOR > CLICOLOR_FORCE >
-//     CLICOLOR=0 > TTY order would not actually hold for a user's own
-//     CLICOLOR=0.
+//     (2) a non-empty NO_COLOR drops every CLICOLOR_FORCE= entry, so a
+//     pipe with both variables set renders plain.
+//     (3) a non-empty CLICOLOR whose value strconv.ParseBool reads as
+//     false (0, false, …) appends NO_COLOR=1, UNLESS CLICOLOR_FORCE is
+//     ParseBool-true. colorprofile only floors on a truthy CLICOLOR and
+//     never lowers on a falsy one (CLICOLOR=0 alone is a no-op against
+//     v0.4.3), so without this rewrite CLICOLOR=0 would not rank above
+//     TTY detection.
 //
 // The input slice is never mutated — a fresh slice is built and returned.
 func rewriteEnviron(choice colorChoice, environ []string) []string {
@@ -109,6 +112,10 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 	var clicolorForceVal string
 	sawClicolor := false
 	sawClicolorForce := false
+	noColorSet := choice == colorAuto && slices.ContainsFunc(environ, func(e string) bool {
+		v, ok := strings.CutPrefix(e, "NO_COLOR=")
+		return ok && v != ""
+	})
 
 	for _, e := range environ {
 		switch {
@@ -127,9 +134,11 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 		case strings.HasPrefix(e, "CLICOLOR_FORCE="):
 			sawClicolorForce = true
 			clicolorForceVal = strings.TrimPrefix(e, "CLICOLOR_FORCE=")
-			switch choice {
-			case colorNever, colorAlways:
-				continue // A1 (never) / superseded by our own CLICOLOR_FORCE=1 (always)
+			switch {
+			case choice == colorNever || choice == colorAlways:
+				continue // never drops it / our own CLICOLOR_FORCE=1 replaces it (always)
+			case noColorSet:
+				continue // auto: a non-empty NO_COLOR outranks CLICOLOR_FORCE
 			default:
 				out = append(out, e)
 			}
@@ -152,7 +161,7 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 		out = append(out, "CLICOLOR_FORCE=1")
 	case colorNever:
 		out = append(out, "NO_COLOR=1")
-	default: // auto — amendment A2
+	default: // auto: a falsy CLICOLOR becomes NO_COLOR=1
 		if sawClicolor && clicolorVal != "" {
 			if b, err := strconv.ParseBool(clicolorVal); err == nil && !b {
 				forced := false

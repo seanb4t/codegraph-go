@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 )
 
@@ -61,7 +62,7 @@ func (d daemonDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		cursor = "> "
 	}
 	age := time.Since(di.record.StartedAt).Round(time.Second)
-	fmt.Fprintf(w, "%s%s (pid %d, up %s)", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
+	fmt.Fprintf(w, "%s%s (pid %d, up %s)", cursor, present.SanitizeDisplay(filepath.Base(di.record.RepoRoot)), di.record.PID, age)
 }
 
 // resolveRepoRoot normalizes p via filepath.EvalSymlinks for comparison —
@@ -299,7 +300,7 @@ func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.
 		return
 	}
 	for _, rec := range stopped {
-		fmt.Fprintf(w, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
+		fmt.Fprintf(w, "stopped pid %d (%s)\n", rec.PID, present.SanitizeDisplay(rec.RepoRoot))
 	}
 }
 

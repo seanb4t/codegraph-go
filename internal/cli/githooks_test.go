@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // runGit runs `git <args...>` in dir with deterministic, hermetic flags
@@ -265,4 +269,36 @@ func TestGithooksInstall_NonGitDirectory_SkipsCleanlyWithExitZero(t *testing.T) 
 	if !strings.Contains(out, "not a git repository") {
 		t.Fatalf("expected stdout to contain the not-a-git-repository skip message, got %q", out)
 	}
+}
+
+// TestGithooksStatusAndHookErrorsEscapeTheRepoPath: the plain "hooks dir:"
+// line and the hook-error warnings show a format rune in a path as an escape.
+func TestGithooksStatusAndHookErrorsEscapeTheRepoPath(t *testing.T) {
+	bidi := string(rune(0x202E))
+
+	t.Run("hooks dir line", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "gpj."+bidi+"exe")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		initGitRepo(t, dir)
+		out, _, err := execCmd("githooks", "status", dir)
+		if err != nil {
+			t.Fatalf("githooks status: %v", err)
+		}
+		if strings.Contains(out, bidi) || !strings.Contains(out, "gpj.<U+202E>exe") {
+			t.Errorf("stdout = %q, want the hooks dir with a <U+202E> escape and no raw U+202E", out)
+		}
+	})
+
+	t.Run("hook error warning", func(t *testing.T) {
+		cmd := &cobra.Command{}
+		var stderr bytes.Buffer
+		cmd.SetErr(&stderr)
+		printHookErrors(cmd, []error{errors.New("write /repo/gpj." + bidi + "exe/hooks/post-commit: denied")})
+		got := stderr.String()
+		if strings.Contains(got, bidi) || !strings.Contains(got, "gpj.<U+202E>exe") {
+			t.Errorf("stderr = %q, want the path with a <U+202E> escape and no raw U+202E", got)
+		}
+	})
 }
