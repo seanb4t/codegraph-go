@@ -100,6 +100,9 @@ func ResolveTargets(spec string, loc Location) ([]AgentTarget, []SkippedTarget, 
 			}
 		}
 		if spec == "auto" && len(selected) == 0 {
+			// Claude's detection reports no error today. The check keeps the
+			// fallback from selecting a target that detection skipped, if that
+			// changes.
 			claudeSkipped := slices.ContainsFunc(skipped, func(s SkippedTarget) bool { return s.ID == Claude })
 			if claude, ok := GetTarget(Claude); ok && !claudeSkipped {
 				selected = []AgentTarget{claude}

@@ -123,16 +123,23 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 	return nil
 }
 
+// relativeHomeError reports a home directory that is not an absolute path.
+type relativeHomeError struct{ home string }
+
+func (e relativeHomeError) Error() string {
+	return fmt.Sprintf("the home directory %q is not an absolute path, so codegraph cannot find its global files: run with an absolute HOME", e.home)
+}
+
 // userHomeDir is os.UserHomeDir for a global path. A home directory that is
-// not absolute (a relative $HOME) is an error, because every global path
-// would then depend on the working directory.
+// not absolute (a relative $HOME) is a relativeHomeError, because every
+// global path would then depend on the working directory.
 func userHomeDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 	if !filepath.IsAbs(home) {
-		return "", fmt.Errorf("the home directory %q is not an absolute path", home)
+		return "", relativeHomeError{home: home}
 	}
 	return home, nil
 }
@@ -946,8 +953,9 @@ func replaceOrAppendMarkedSection(filePath, body, startMarker, endMarker string)
 // (plus the blank-line separator replaceOrAppendMarkedSection's append
 // path introduces before it), restoring the file to its exact pre-insert
 // bytes — the inverse of replaceOrAppendMarkedSection (T-06-02). A file
-// with no markers is left completely untouched (ActionKept); a missing
-// file reports ActionNotFound. If removing the span empties the file
+// with no markers holds nothing of codegraph's and is left completely
+// untouched; like a missing file, it reports ActionNotFound. If removing the
+// span empties the file
 // entirely, the file itself is deleted (mirrors "the file never existed
 // before install" for the missing-file insert case).
 func removeMarkedSection(filePath, startMarker, endMarker string) (FileAction, error) {
@@ -962,7 +970,7 @@ func removeMarkedSection(filePath, startMarker, endMarker string) (FileAction, e
 	startIdx := strings.Index(s, startMarker)
 	endIdx := strings.Index(s, endMarker)
 	if startIdx == -1 || endIdx == -1 || endIdx < startIdx {
-		return ActionKept, nil
+		return ActionNotFound, nil
 	}
 	spanEnd := endIdx + len(endMarker)
 

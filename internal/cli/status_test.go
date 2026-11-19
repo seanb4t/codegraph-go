@@ -143,3 +143,44 @@ func TestUninstallClaudeLocal_SettingsOutsideProjectReadsKept(t *testing.T) {
 		t.Errorf("the kept note appears %d times, want 1:\n%s", n, out)
 	}
 }
+
+// TestUninstall_UserOwnedInstructionFilesReadNotConfigured: an agent that was
+// never installed reads not-configured even when the user keeps their own
+// CLAUDE.md, AGENTS.md or GEMINI.md, and an uninstall that follows a real
+// one reads not-configured too.
+func TestUninstall_UserOwnedInstructionFilesReadNotConfigured(t *testing.T) {
+	home := fakeHome(t)
+	for _, f := range []string{".claude/CLAUDE.md", ".codex/AGENTS.md", ".gemini/GEMINI.md"} {
+		path := filepath.Join(home, f)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("# my own notes\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out, _, err := execCmd("uninstall", "--target", "claude,codex,gemini", "--yes")
+	if err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out)
+	}
+	for _, name := range []string{"Claude Code", "Codex CLI", "Gemini CLI"} {
+		if !strings.Contains(out, name+": not-configured\n") {
+			t.Errorf("%s does not read not-configured:\n%s", name, out)
+		}
+	}
+	if strings.Contains(out, "kept") {
+		t.Errorf("the report mentions a kept file for files that hold nothing of codegraph's:\n%s", out)
+	}
+
+	if _, _, err := execCmd("install", "--target", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err := execCmd("uninstall", "--target", "claude", "--yes"); err != nil || !strings.Contains(out, "Claude Code: removed\n") {
+		t.Fatalf("the uninstall after an install did not read removed: %v\n%s", err, out)
+	}
+	out, _, err = execCmd("uninstall", "--target", "claude", "--yes")
+	if err != nil || !strings.Contains(out, "Claude Code: not-configured\n") {
+		t.Errorf("the second uninstall does not read not-configured: %v\n%s", err, out)
+	}
+}

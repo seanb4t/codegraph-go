@@ -282,9 +282,9 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 // sets the deprecated `features.codex_hooks` that governs instead; else the
 // same two checks fall back to the global config.toml under codexHomeDir.
 // For global, only the global file is consulted. source names the governing
-// file and key, for codexHooksDisabledNote. At local scope, a CODEX_HOME that
-// does not resolve leaves the global setting unknown: the local decision goes
-// on, and note names the bad value. A read error other than
+// file and key, for codexHooksDisabledNote. At local scope, a CODEX_HOME or a
+// home directory that does not resolve leaves the global setting unknown: the
+// local decision goes on, and note names the bad value. A read error other than
 // not-exist is returned unwrapped — the caller records it and writes
 // nothing, per the "cannot tell, so don't guess" posture the rest of this
 // package's config reads already follow.
@@ -304,7 +304,8 @@ func codexHooksExplicitlyDisabled(loc Location) (disabled bool, source, note str
 	globalPath, err := codexConfigPath(LocationGlobal)
 	if err != nil {
 		var homeErr codexHomeError
-		if loc == LocationLocal && errors.As(err, &homeErr) {
+		var relativeHome relativeHomeError
+		if loc == LocationLocal && (errors.As(err, &homeErr) || errors.As(err, &relativeHome)) {
 			return false, "", fmt.Sprintf("the global Codex config.toml was not checked for a disabled-hooks setting: %v", err), nil
 		}
 		return false, "", "", err

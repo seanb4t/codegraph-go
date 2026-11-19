@@ -1,3 +1,3 @@
 kind: Fixes
-body: Global installs now refuse a relative home directory, and the Claude Code hook install refuses a global hook path that is not valid UTF-8 and tells you to install with --location local, because JSON cannot hold such a path and the registration would not match on uninstall.
+body: Global installs now refuse a relative home directory or a relative HERMES_HOME with an error that says codegraph cannot find its global files, a relative XDG_CONFIG_HOME is ignored as the XDG specification says, and the Claude Code hook install refuses a global hook path that is not valid UTF-8 and tells you to install with --location local, because JSON cannot hold such a path and the registration would not match on uninstall.
 time: 2026-11-19T00:17:19.178913-05:00

@@ -230,7 +230,7 @@ func resolveTargets(cmd *cobra.Command, spec string, loc agents.Location) ([]age
 // file changed, "kept" means nothing changed and at least one entry was kept
 // in place, and "unchanged" means every touched file was already correct or
 // is a foreign skill directory that codegraph left untouched, which is not a
-// change it made.
+// change it made. Entries that were not found count as no change.
 func installStatus(result agents.WriteResult) string {
 	changed := false
 	for _, f := range result.Files {
@@ -321,16 +321,19 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped
 		} else {
 			fmt.Fprintf(out, "%s: %s\n", t.DisplayName(), statusOf(result))
 		}
-		// Several steps can keep the same file, and each records a row and a
-		// note. The report shows each kept file and each note once.
-		keptShown := map[string]bool{}
+		// Several steps can act on the same file, and each records a row and
+		// possibly a note. The report shows each row, and each note, once.
+		type row struct {
+			action agents.FileAction
+			path   string
+		}
+		rowsShown := map[row]bool{}
 		for _, f := range result.Files {
-			if f.Action == agents.ActionKept {
-				if keptShown[f.Path] {
-					continue
-				}
-				keptShown[f.Path] = true
+			r := row{f.Action, f.Path}
+			if rowsShown[r] {
+				continue
 			}
+			rowsShown[r] = true
 			// CR-01/T-04-24: f.Path is filesystem-derived (a resolved
 			// config location, absolute at global scope) — sanitized in
 			// BOTH branches, since a plain render reaches a terminal too

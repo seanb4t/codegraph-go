@@ -153,8 +153,8 @@ func TestMarkerRemove_NoMarkersLeavesBytesUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if action != ActionKept {
-		t.Fatalf("want ActionKept, got %s", action)
+	if action != ActionNotFound {
+		t.Fatalf("want ActionNotFound, got %s", action)
 	}
 	got := readFile(t, path)
 	if got != original {

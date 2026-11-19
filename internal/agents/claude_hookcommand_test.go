@@ -469,3 +469,79 @@ func TestClaudeInstall_SessionStartWaitsForItsScript(t *testing.T) {
 		}
 	}
 }
+
+// TestRelativeHome_UninstallSaysCodegraphCannotFindItsFiles: a relative
+// $HOME makes a global uninstall an error that says codegraph cannot find its
+// files and gives the remedy, in one sentence.
+func TestRelativeHome_UninstallSaysCodegraphCannotFindItsFiles(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", "relhome")
+
+	for _, target := range []AgentTarget{claudeTarget{}, codexTarget{}} {
+		res := target.Uninstall(LocationGlobal)
+		if !errorNaming(res, `"relhome"`, "cannot find its global files", "run with an absolute HOME") {
+			t.Errorf("%s: errors = %v, want one saying codegraph cannot find its files", target.ID(), res.Errors)
+		}
+	}
+}
+
+// TestCodexLocal_RelativeHomeStillInstalls: a relative $HOME fails global
+// operations only. A local Codex install, with the nudge on, succeeds, names
+// the global config.toml it cannot resolve, and installs the local nudge.
+func TestCodexLocal_RelativeHomeStillInstalls(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", "relhome")
+
+	res := codexTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+	assertNoErrors(t, res)
+	hooksPath, err := codexHooksJSONPath(LocationLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, err := codexPreToolGuardPath(LocationLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(hooksPath) || !fileExists(guard) {
+		t.Errorf("the local nudge was not installed: hooks.json %v, guard %v", fileExists(hooksPath), fileExists(guard))
+	}
+	if !noteNaming(res, `~/.codex/config.toml, which does not resolve because the home directory "relhome"`) {
+		t.Errorf("notes = %q, want the trust note to say why ~/.codex/config.toml does not resolve", res.Notes)
+	}
+}
+
+// TestOpencodeConfigDir_IgnoresARelativeXDGConfigHome: the XDG specification
+// says a relative XDG_CONFIG_HOME is invalid and ignored, so opencode uses
+// ~/.config.
+func TestOpencodeConfigDir_IgnoresARelativeXDGConfigHome(t *testing.T) {
+	home := fakeHome(t)
+	t.Setenv("XDG_CONFIG_HOME", "rel")
+
+	got, err := resolveOpencodeConfigDir()
+	if want := filepath.Join(home, ".config"); err != nil || got != want {
+		t.Fatalf("resolveOpencodeConfigDir() = %q, %v, want %q", got, err, want)
+	}
+}
+
+// TestHermes_RefusesARelativeHermesHome: a relative HERMES_HOME is an error
+// naming it, never a fallback, and detection reports it.
+func TestHermes_RefusesARelativeHermesHome(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("HERMES_HOME", "rel")
+
+	if _, err := hermesConfigPath(); err == nil || !strings.Contains(err.Error(), `"rel"`) {
+		t.Errorf("hermesConfigPath() error = %v, want one naming %q", err, "rel")
+	}
+	if d := (hermesTarget{}).Detect(LocationGlobal); d.Err == nil || d.Installed {
+		t.Errorf("Detect = %+v, want an error and not installed", d)
+	}
+	if res := (hermesTarget{}).Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"}); !errorNaming(res, `"rel"`) {
+		t.Errorf("Install errors = %v, want one naming %q", res.Errors, "rel")
+	}
+	if names := dirNames(t, "."); len(names) != 0 {
+		t.Errorf("working directory holds %v, want nothing written there", names)
+	}
+}

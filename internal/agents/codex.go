@@ -195,6 +195,7 @@ func codexTrustNote(loc Location) (string, error) {
 	var configRef string
 	configPath, err := codexConfigPath(LocationGlobal)
 	var homeErr codexHomeError
+	var relativeHome relativeHomeError
 	switch {
 	case err == nil:
 		configRef = configPath
@@ -208,6 +209,8 @@ func codexTrustNote(loc Location) (string, error) {
 		}
 	case errors.As(err, &homeErr):
 		configRef = fmt.Sprintf("$CODEX_HOME/config.toml, which does not resolve because %v", err)
+	case errors.As(err, &relativeHome):
+		configRef = fmt.Sprintf("~/.codex/config.toml, which does not resolve because %v", err)
 	default:
 		return "", err
 	}

@@ -55,12 +55,12 @@ func (opencodeTarget) Capabilities() Capabilities {
 }
 
 // resolveOpencodeConfigDir returns the base config directory opencode
-// itself resolves to: XDG_CONFIG_HOME if set and non-empty, else
-// ~/.config — unconditionally on every OS including Windows. opencode
-// never reads %APPDATA% (Pitfall 4, TS issue #535); do not add a
-// runtime.GOOS branch here.
+// itself resolves to: XDG_CONFIG_HOME if set to an absolute path, else
+// ~/.config — unconditionally on every OS including Windows. The XDG
+// specification says a relative value is invalid and ignored. opencode
+// never reads %APPDATA%; do not add a runtime.GOOS branch here.
 func resolveOpencodeConfigDir() (string, error) {
-	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
+	if v := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(v) {
 		return v, nil
 	}
 	home, err := userHomeDir()

@@ -96,12 +96,10 @@ func skippedUninstallNote(s agents.SkippedTarget, loc agents.Location) string {
 	return fmt.Sprintf("the shared skill package keeps %s as a requester until its detection is fixed and `codegraph uninstall --target %s` runs", s.ID, s.ID)
 }
 
-// uninstallStatus rolls WriteResult's per-file actions up into one word. It
-// returns "removed" if any file's codegraph entry or section was actually
-// deleted. Otherwise it returns "kept" if some entry was kept in place, and
-// "not-configured" if nothing was there to begin with, which is not an
-// error. A result with errors is "failed" when nothing was removed and
-// "partial" when something was.
+// uninstallStatus returns "removed" if any file's codegraph entry or section
+// was deleted, "kept" if nothing was removed and some entry was kept in
+// place, and "not-configured" otherwise. A result with errors is "failed"
+// when nothing was removed and "partial" when something was.
 func uninstallStatus(result agents.WriteResult) string {
 	removed := false
 	for _, f := range result.Files {
