@@ -326,7 +326,7 @@ func newDaemonStopCmd() *cobra.Command {
 					pal := present.NewPalette(mode.Dark)
 					_, _ = io.WriteString(mode.Writer(out), pal.Value.Render("no running daemon for")+" "+pal.Path.Render(sanitizePathForDisplay(repoRoot))+"\n")
 				} else {
-					fmt.Fprintf(out, "no running daemon for %s\n", repoRoot)
+					fmt.Fprintf(out, "no running daemon for %s\n", sanitizePathForDisplay(repoRoot))
 				}
 			}
 			warnSkippedRegistryFiles(cmd, skipped)
@@ -363,7 +363,7 @@ func printStoppedDaemons(mode colorMode, out io.Writer, stopped []daemon.Record)
 		return
 	}
 	for _, rec := range stopped {
-		fmt.Fprintf(out, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
+		fmt.Fprintf(out, "stopped pid %d (%s)\n", rec.PID, sanitizePathForDisplay(rec.RepoRoot))
 	}
 }
 

@@ -75,7 +75,7 @@ func newIndexCmd() *cobra.Command {
 				// (D-10): name the holder and the two live remedies.
 				// `codegraph daemon unlock` is the live verb (Phase 3
 				// VERB-04, D-08). The store did not change.
-				return fmt.Errorf("%w: another process holds %s open — stop it first with `codegraph daemon stop`, or run `codegraph daemon unlock` once it has exited", err, storeDir)
+				return fmt.Errorf("%w: another process holds %s open — stop it first with `codegraph daemon stop`, or run `codegraph daemon unlock` once it has exited", err, sanitizePathForDisplay(storeDir))
 			}
 			if err != nil {
 				return err
@@ -85,7 +85,7 @@ func newIndexCmd() *cobra.Command {
 				// run could not read its prior coverage generation, so
 				// it started again from 0. `--force` is the sanctioned
 				// way to repair exactly this case.
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read prior coverage generation from %s (%v); rebuilding with floor 0\n", storeDir, stats.PriorGenerationErr)
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read prior coverage generation from %s (%v); rebuilding with floor 0\n", sanitizePathForDisplay(storeDir), sanitizePathForDisplay(stats.PriorGenerationErr.Error()))
 			}
 			warnAfterReplace(cmd, storeDir, stats)
 			printSummary(cmd, stats, quiet, verbose)
@@ -106,6 +106,6 @@ func newIndexCmd() *cobra.Command {
 // does too.
 func warnAfterReplace(cmd *cobra.Command, storeDir string, stats indexer.Stats) {
 	if stats.AfterReplaceErr != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: the new index is in place at %s, but a later step failed: %v\n", storeDir, stats.AfterReplaceErr)
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: the new index is in place at %s, but a later step failed: %s\n", sanitizePathForDisplay(storeDir), sanitizePathForDisplay(stats.AfterReplaceErr.Error()))
 	}
 }

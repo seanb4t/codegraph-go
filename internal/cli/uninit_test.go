@@ -172,7 +172,9 @@ func TestSanitizePathForDisplay(t *testing.T) {
 	}{
 		{"clean path unchanged", "/repo/café/main.go", "/repo/café/main.go"},
 		{"path with a space unchanged", "/a b", "/a b"},
-		{"drops ESC, newline and tab", "/a\x1b[31m/b\nc\td", "/a[31m/bcd"},
+		{"escapes ESC, newline and tab", "/a\x1b[31m/b\nc\td", "/a<U+001B>[31m/b<U+000A>c<U+0009>d"},
+		{"escapes a tag run", "/a\U000E0067\U000E007F", "/a<U+E0067><U+E007F>"},
+		{"escapes a ZWJ after an ASCII rune", "/w/pro\u200Dject", "/w/pro<U+200D>ject"},
 		{"escapes the bidi override", "/repo/gpj.\u202Eexe", "/repo/gpj.<U+202E>exe"},
 		{"escapes the bidi isolates", "/a\u2066b\u2067c\u2068d\u2069e", "/a<U+2066>b<U+2067>c<U+2068>d<U+2069>e"},
 		{"escapes zero-width and direction marks", "/a\u200Bb\u200Fc\u200Ed", "/a<U+200B>b<U+200F>c<U+200E>d"},

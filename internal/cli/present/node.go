@@ -22,8 +22,9 @@ const (
 
 // nodeSectionAnsi matches an SGR escape sequence — used ONLY to measure a
 // multi-def section's byte length for the BODY_BUDGET decision (T-04-17),
-// so the decision matches the plain renderer's own budget arithmetic
-// exactly. A local pattern (not charmbracelet/x/ansi, D-15), distinct
+// so the decision follows the plain renderer's budget arithmetic. The two
+// can differ near the budget when a section holds text that sanitizing or
+// styling changes in length, such as a format rune or a tab. A local pattern (not charmbracelet/x/ansi, D-15), distinct
 // from ansistrip_test.go's test-only stripANSI, which production code in
 // this file cannot import.
 var nodeSectionAnsi = regexp.MustCompile("\x1b\\[[0-9;]*m")

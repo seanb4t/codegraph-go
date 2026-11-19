@@ -15,9 +15,9 @@ import (
 // terminals).
 const hostileText = "gpj.\u202Eexe\x1b]0;x\x07\x9b8m"
 
-// requireSanitizedRaw checks the raw styled output, with no ANSI stripping:
-// every hostile rune is gone or shown as an escape, and the escape for the
-// bidi override is present, so an empty output cannot pass.
+// requireSanitizedRaw checks the raw styled output, with no ANSI stripping.
+// The output must be valid UTF-8 and hold no U+202E, no ESC "]" and no BEL.
+// It must also hold the "<U+202E>" escape, so an empty output cannot pass.
 func requireSanitizedRaw(t *testing.T, raw string) {
 	t.Helper()
 	if !utf8.ValidString(raw) {

@@ -1,3 +1,3 @@
 kind: Fixes
-body: In coloured output and in the install, daemon, githooks, upgrade, print-config-style and uninit messages and the uninit and index prompts, control characters are now removed and format characters such as bidi overrides and zero-width spaces are shown as <U+XXXX> escapes, including in source lines.
+body: Colored output, prompts and path messages now show format and other invisible characters, such as bidi overrides and zero-width spaces, as <U+XXXX> escapes, paths also show control characters as escapes, and invalid UTF-8 shows as U+FFFD.
 time: 2026-11-18T21:05:56.541156-05:00

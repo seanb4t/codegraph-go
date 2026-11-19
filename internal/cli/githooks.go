@@ -136,7 +136,7 @@ func newGithooksRemoveCmd() *cobra.Command {
 // touched." A no-op when errs is empty.
 func printHookErrors(cmd *cobra.Command, errs []error) {
 	for _, e := range errs {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", e)
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", sanitizePathForDisplay(e.Error()))
 	}
 }
 
@@ -172,7 +172,7 @@ func newGithooksStatusCmd() *cobra.Command {
 			if mode.Styled {
 				_, _ = io.WriteString(w, pal.Label.Render("hooks dir:")+" "+pal.Path.Render(sanitizePathForDisplay(result.HooksDir))+"\n")
 			} else {
-				fmt.Fprintf(out, "hooks dir: %s\n", result.HooksDir)
+				fmt.Fprintf(out, "hooks dir: %s\n", sanitizePathForDisplay(result.HooksDir))
 			}
 			for _, h := range result.Hooks {
 				state := "not installed"

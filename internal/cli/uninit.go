@@ -135,9 +135,10 @@ func plural(n int) string {
 	return "s"
 }
 
-// sanitizePathForDisplay is present.SanitizeDisplay: the sanitizer for a path
-// or message that the CLI prints in styled and plain output alike. Control
-// runes and tabs are removed, and format runes show as "<U+XXXX>" escapes.
+// sanitizePathForDisplay is present.SanitizeDisplay: the sanitizer for the
+// paths, error text and prompts that the CLI prints in styled and plain
+// output alike. It escapes control and format runes as "<U+XXXX>" and turns
+// invalid UTF-8 into U+FFFD.
 func sanitizePathForDisplay(s string) string {
 	return present.SanitizeDisplay(s)
 }

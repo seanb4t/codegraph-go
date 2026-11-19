@@ -150,12 +150,16 @@ What it does **not** defend against, stated plainly:
   as of this writing (the SPA ships zero such components); it becomes live
   at the first `shadcn-svelte add`. No provenance pinning exists for this
   path yet.
-- **Bidirectional-text tricks in terminal output.** `sanitizeControl`
-  (`internal/cli/present/sanitize.go`) strips control characters from source
-  text printed to a terminal, but it lets Unicode bidi overrides and isolates
-  (U+202E, U+2066 to U+2069) through. A crafted file can therefore make a
-  printed symbol or snippet display out of order (Trojan Source). It cannot
-  inject terminal escape sequences.
+- **Bidirectional-text tricks in terminal output.** Styled output and the
+  `uninit` and `index` prompts escape bidi overrides and isolates (U+202E,
+  U+2066 to U+2069) and other invisible format characters as `<U+XXXX>`
+  (`sanitizeControl` and `SanitizeDisplay` in
+  `internal/cli/present/sanitize.go`), so a crafted file cannot make a printed
+  symbol or snippet display out of order (Trojan Source) without a visible
+  mark. The plain renderers still print repository text unsanitized, so under
+  `--color=never` or `NO_COLOR` the trick works against a terminal reader
+  (tracked in #392). The sanitizers also stop terminal escape injection in
+  styled output. Plain output has no such guard yet.
 - **Codex hook trust covers the command, not the script.** Codex records trust
   for the hook command that `codegraph install` registers, and that command
   stays byte-stable across upgrades. If the guard script it runs changes,

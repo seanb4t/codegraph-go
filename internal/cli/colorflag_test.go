@@ -159,7 +159,7 @@ func wantStyledAndMinProfile(styled bool, min colorprofile.Profile) func(t *test
 }
 
 // TestResolveColorMatrix covers the (choice × TTY × env) matrix we own —
-// resolveColorFrom's Styled/Profile output — over 14 rows. tty rows carry
+// resolveColorFrom's Styled/Profile output — over the rows below. tty rows carry
 // TTY_FORCE=1 in the environ (colorprofile's own forced-isatty hook,
 // v0.4.3 env.go, used purely as a test input per the plan's interfaces
 // block); pipe rows omit it and rely on the bytes.Buffer `out` not
