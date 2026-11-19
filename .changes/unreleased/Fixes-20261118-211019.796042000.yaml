@@ -1,0 +1,3 @@
+kind: Fixes
+body: The Codex install target now writes its global config, instructions, hooks and skill root under CODEX_HOME when it is set, and under ~/.codex otherwise.
+time: 2026-11-18T21:10:19.796042-05:00
