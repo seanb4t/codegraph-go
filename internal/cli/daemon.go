@@ -134,10 +134,8 @@ func printDaemonList(cmd *cobra.Command, currentRepo string, records []daemon.Re
 	sorted := tui.SortRecordsCurrentFirst(records, currentRepo)
 	if mode.Styled {
 		// The header and each record's tabs are literal separators between
-		// independently-styled fields, never passed through present.Line
-		// (which would sanitizeControl away the tab bytes — CR-01's control-
-		// char strip targets adversarial data, not this package's own
-		// hardcoded formatting).
+		// independently styled fields. A row joins several fields, so it is
+		// not written through present.Line, which styles one value.
 		_, _ = io.WriteString(w, pal.Header.Render("pid\trepo\tstarted")+"\n")
 		for _, r := range sorted {
 			fmt.Fprintf(w, "%s\t%s\t%s\n",
@@ -149,7 +147,7 @@ func printDaemonList(cmd *cobra.Command, currentRepo string, records []daemon.Re
 	}
 	fmt.Fprintln(out, "pid\trepo\tstarted")
 	for _, r := range sorted {
-		fmt.Fprintf(out, "%d\t%s\t%s\n", r.PID, r.RepoRoot, r.StartedAt.Format(time.RFC3339))
+		fmt.Fprintf(out, "%d\t%s\t%s\n", r.PID, sanitizePathForDisplay(r.RepoRoot), r.StartedAt.Format(time.RFC3339))
 	}
 }
 

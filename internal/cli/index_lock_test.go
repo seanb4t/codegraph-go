@@ -272,3 +272,32 @@ func TestIndexReportsHeldWriterLock(t *testing.T) {
 		t.Fatalf("index --force after the writer lock is free: %v", err)
 	}
 }
+
+// TestIndexLockedStoreErrorEscapesTheStorePath: the held-lock error shows a
+// format rune in the store path as an escape.
+func TestIndexLockedStoreErrorEscapesTheStorePath(t *testing.T) {
+	bidi := string(rune(0x202E))
+	fixture := copyFixture(t)
+	dir := filepath.Join(filepath.Dir(fixture), "gpj."+bidi+"exe")
+	if err := os.Rename(fixture, dir); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	lock, err := graphstore.LockWriter(filepath.Join(dir, codegraphDirName, storeDirName))
+	if err != nil {
+		t.Fatalf("LockWriter: %v", err)
+	}
+	_, _, err = execCmd("index", "--force", dir)
+	if closeErr := lock.Close(); closeErr != nil {
+		t.Fatalf("release the writer lock: %v", closeErr)
+	}
+
+	if !errors.Is(err, graphstore.ErrStoreLocked) {
+		t.Fatalf("index --force under a held writer lock: %v; want errors.Is(err, graphstore.ErrStoreLocked)", err)
+	}
+	if msg := err.Error(); strings.Contains(msg, bidi) || !strings.Contains(msg, "gpj.<U+202E>exe") {
+		t.Errorf("error = %q, want the store path with a <U+202E> escape and no raw U+202E", msg)
+	}
+}

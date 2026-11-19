@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 )
 
@@ -299,7 +300,7 @@ func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.
 		return
 	}
 	for _, rec := range stopped {
-		fmt.Fprintf(w, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
+		fmt.Fprintf(w, "stopped pid %d (%s)\n", rec.PID, present.SanitizeDisplay(rec.RepoRoot))
 	}
 }
 

@@ -72,3 +72,32 @@ func TestRenderExploreSanitizesRepositoryText(t *testing.T) {
 	}
 	requireSanitizedRaw(t, buf.String())
 }
+
+func TestRenderFilesAndStatusSanitizeLabels(t *testing.T) {
+	t.Run("file language", func(t *testing.T) {
+		r := query.FilesResult{Format: "flat", Files: []query.FileEntry{{Path: "a.go", Language: hostileText}}}
+		var buf bytes.Buffer
+		if err := RenderFiles(r, NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderFiles: %v", err)
+		}
+		requireSanitizedRaw(t, buf.String())
+	})
+
+	t.Run("tree language", func(t *testing.T) {
+		r := query.FilesResult{Format: "tree", Tree: []*query.FileTreeNode{{Name: "a.go", Language: hostileText}}}
+		var buf bytes.Buffer
+		if err := RenderFiles(r, NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderFiles: %v", err)
+		}
+		requireSanitizedRaw(t, buf.String())
+	})
+
+	t.Run("status breakdown key", func(t *testing.T) {
+		r := query.StatusResult{FilesByLanguage: map[string]int64{hostileText: 1}}
+		var buf bytes.Buffer
+		if err := RenderStatus(r, "/p", NewPalette(true), &buf); err != nil {
+			t.Fatalf("RenderStatus: %v", err)
+		}
+		requireSanitizedRaw(t, buf.String())
+	})
+}

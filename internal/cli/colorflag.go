@@ -80,7 +80,7 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 //   - always: drops every NO_COLOR=/CLICOLOR= entry and appends
 //     CLICOLOR_FORCE=1.
 //   - never: appends NO_COLOR=1 AND drops every CLICOLOR_FORCE=/CLICOLOR=
-//     entry (amendment A1, verified this session against v0.4.3:
+//     entry (colorprofile v0.4.3:
 //     colorProfile's cliColorForced branch returns before NO_COLOR is ever
 //     consulted when the output is not a TTY — env.go's colorProfile only
 //     checks `envNoColor(env) && isatty` before falling through to
@@ -98,14 +98,12 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 //     ("unset").
 //     (2) a non-empty NO_COLOR drops every CLICOLOR_FORCE= entry, so a
 //     pipe with both variables set renders plain.
-//     (3) amendment A2: a non-empty CLICOLOR whose value strconv.ParseBool
-//     reads as false (0, false, …) appends NO_COLOR=1, UNLESS
-//     CLICOLOR_FORCE is ParseBool-true. colorprofile only floors on a
-//     truthy CLICOLOR and never lowers on a falsy one (verified this
-//     session: CLICOLOR=0 alone is a no-op against v0.4.3), so without
-//     this normalization CLI-03's stated NO_COLOR > CLICOLOR_FORCE >
-//     CLICOLOR=0 > TTY order would not actually hold for a user's own
-//     CLICOLOR=0.
+//     (3) a non-empty CLICOLOR whose value strconv.ParseBool reads as
+//     false (0, false, …) appends NO_COLOR=1, UNLESS CLICOLOR_FORCE is
+//     ParseBool-true. colorprofile only floors on a truthy CLICOLOR and
+//     never lowers on a falsy one (CLICOLOR=0 alone is a no-op against
+//     v0.4.3), so without this rewrite CLICOLOR=0 would not rank above
+//     TTY detection.
 //
 // The input slice is never mutated — a fresh slice is built and returned.
 func rewriteEnviron(choice colorChoice, environ []string) []string {

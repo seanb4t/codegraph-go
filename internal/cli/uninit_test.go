@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -164,28 +165,12 @@ func TestUninit_MalformedHook_SurfacesWarning(t *testing.T) {
 	}
 }
 
+// TestSanitizePathForDisplay shows that the wrapper delegates to
+// present.SanitizeDisplay. The rune rules are tested in package present.
 func TestSanitizePathForDisplay(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"clean path unchanged", "/repo/café/main.go", "/repo/café/main.go"},
-		{"path with a space unchanged", "/a b", "/a b"},
-		{"escapes ESC, newline and tab", "/a\x1b[31m/b\nc\td", "/a<U+001B>[31m/b<U+000A>c<U+0009>d"},
-		{"escapes a tag run", "/a\U000E0067\U000E007F", "/a<U+E0067><U+E007F>"},
-		{"escapes a ZWJ after an ASCII rune", "/w/pro\u200Dject", "/w/pro<U+200D>ject"},
-		{"escapes the bidi override", "/repo/gpj.\u202Eexe", "/repo/gpj.<U+202E>exe"},
-		{"escapes the bidi isolates", "/a\u2066b\u2067c\u2068d\u2069e", "/a<U+2066>b<U+2067>c<U+2068>d<U+2069>e"},
-		{"escapes zero-width and direction marks", "/a\u200Bb\u200Fc\u200Ed", "/a<U+200B>b<U+200F>c<U+200E>d"},
-		{"replaces an invalid byte", "/a\x9b8m", "/a\uFFFD8m"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := sanitizePathForDisplay(tt.in); got != tt.want {
-				t.Errorf("sanitizePathForDisplay(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
+	in := "/a\x1b/b" + string(rune(0x202E)) + "c"
+	if got, want := sanitizePathForDisplay(in), "/a<U+001B>/b<U+202E>c"; got != want {
+		t.Errorf("sanitizePathForDisplay(%q) = %q, want %q", in, got, want)
 	}
 }
 
@@ -237,6 +222,14 @@ func TestUninitAndIndexSanitizeTheDirectoryName(t *testing.T) {
 			t.Fatalf("uninit --force: %v", err)
 		}
 		requireEscaped(t, "removed line", out)
+	})
+
+	t.Run("index not initialized error", func(t *testing.T) {
+		_, _, err := execCmd("index", newRoot(t, false))
+		if !errors.Is(err, ErrNotInitialized) {
+			t.Fatalf("index: %v; want errors.Is(err, ErrNotInitialized)", err)
+		}
+		requireEscaped(t, "error", err.Error())
 	})
 
 	t.Run("index confirmation prompt", func(t *testing.T) {

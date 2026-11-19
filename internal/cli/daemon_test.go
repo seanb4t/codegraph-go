@@ -673,3 +673,19 @@ func TestDaemonStopCmd_PlainLinesEscapeTheRepoRoot(t *testing.T) {
 		})
 	}
 }
+
+// TestDaemonBareCmd_NonTTY_ListEscapesTheRepoRoot: the plain listing shows a
+// format rune in a repository path as an escape.
+func TestDaemonBareCmd_NonTTY_ListEscapesTheRepoRoot(t *testing.T) {
+	fakeHome(t)
+	bidi := string(rune(0x202E))
+	withStubbedDaemonList(t, []daemon.Record{{PID: 7, StartedAt: time.Now().UTC(), RepoRoot: "/repo/gpj." + bidi + "exe"}})
+
+	out, _, err := execCmd("daemon")
+	if err != nil {
+		t.Fatalf("daemon: %v", err)
+	}
+	if strings.Contains(out, bidi) || !strings.Contains(out, "/repo/gpj.<U+202E>exe") {
+		t.Errorf("stdout = %q, want the path with a <U+202E> escape and no raw U+202E", out)
+	}
+}

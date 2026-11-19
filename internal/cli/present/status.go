@@ -116,7 +116,7 @@ func writeStatLine(b *strings.Builder, pal Palette, label, value string) {
 func writeBreakdownText(b *strings.Builder, pal Palette, header string, counts []kindCount) {
 	b.WriteString(pal.Header.Render(header) + "\n")
 	for _, kc := range counts {
-		fmt.Fprintf(b, "  %-*s %s\n", breakdownKeyWidth, kc.Key, pal.Count.Render(formatNumber(kc.Count)))
+		fmt.Fprintf(b, "  %-*s %s\n", breakdownKeyWidth, sanitizeControl(kc.Key), pal.Count.Render(formatNumber(kc.Count)))
 	}
 }
 

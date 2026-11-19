@@ -20,13 +20,13 @@ const (
 	nodeMultiDefBodyBudget = 12000
 )
 
-// nodeSectionAnsi matches an SGR escape sequence — used ONLY to measure a
-// multi-def section's byte length for the BODY_BUDGET decision (T-04-17),
+// nodeSectionAnsi matches an SGR escape sequence. It is used only to
+// measure a multi-def section's byte length for the body-budget decision,
 // so the decision follows the plain renderer's budget arithmetic. The two
 // can differ near the budget when a section holds text that sanitizing or
-// styling changes in length, such as a format rune or a tab. A local pattern (not charmbracelet/x/ansi, D-15), distinct
-// from ansistrip_test.go's test-only stripANSI, which production code in
-// this file cannot import.
+// styling changes in length, such as a format rune or a tab. It is a local
+// pattern, distinct from ansistrip_test.go's test-only stripANSI, which
+// production code in this file cannot import.
 var nodeSectionAnsi = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // strippedLen returns s's length with every SGR escape sequence removed —
@@ -200,7 +200,7 @@ func writeMultiDef(b *strings.Builder, pal Palette, m *query.MultiDefDetail) err
 			b.WriteString("- … +" + strconv.Itoa(more) + " more\n")
 		}
 		b.WriteString("\n")
-		hint := "Need one of these in full? Call codegraph_node again with file (e.g. " + strconv.Quote(path.Base(listed[0].FilePath)) + ") or line — do NOT Read it."
+		hint := "Need one of these in full? Call codegraph_node again with file (e.g. " + sanitizeControl(strconv.Quote(path.Base(listed[0].FilePath))) + ") or line — do NOT Read it."
 		b.WriteString(pal.Label.Render(hint))
 		b.WriteString("\n")
 	}

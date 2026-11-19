@@ -432,6 +432,12 @@ func TestPrintDaemonPickerResult(t *testing.T) {
 			want:    "stopped pid 1 (/repo/a)\n",
 		},
 		{
+			name:    "escapes a format rune in the repo path",
+			action:  daemonActionStopOne,
+			stopped: []daemon.Record{rec("/repo/gpj."+string(rune(0x202E))+"exe", 1)},
+			want:    "stopped pid 1 (/repo/gpj.<U+202E>exe)\n",
+		},
+		{
 			name:    "cancel prints nothing",
 			action:  daemonActionNone,
 			stopped: nil,

@@ -38,6 +38,17 @@ func TestSanitizeControl(t *testing.T) {
 		{"replaces an invalid byte, so a raw 0x9B cannot reach the writer", "a\x9b8mb", "a�8mb"},
 		{"replaces a run of invalid bytes with one U+FFFD", "a\x9b\x9bb", "a�b"},
 		{"drops a control rune and escapes a format rune in one string", "\x1b\u202E", "<U+202E>"},
+		{"a dropped rune does not unlock a ZWJ", "pro\u0085\u200Dject", "pro<U+200D>ject"},
+		{"escapes a presentation selector after ASCII", "main\uFE0F.go", "main<U+FE0F>.go"},
+		{"escapes a presentation selector at the start", "\uFE0Fmain.go", "<U+FE0F>main.go"},
+		{"escapes a selector then a ZWJ after ASCII", "pro\uFE0F\u200Dject", "pro<U+FE0F><U+200D>ject"},
+		{"escapes a run of selector and joiners after ASCII", "a\uFE0F\u200D\u200Cb", "a<U+FE0F><U+200D><U+200C>b"},
+		{"escapes a second joiner in a row", "\U0001F468\u200D\u200D\U0001F469", "\U0001F468\u200D<U+200D>\U0001F469"},
+		{"escapes a second selector in a row", "❤\uFE0F\uFE0F", "❤\uFE0F<U+FE0F>"},
+		{"escapes a selector after a joiner", "\U0001F468\u200D\uFE0F", "\U0001F468\u200D<U+FE0F>"},
+		{"keeps a keycap sequence", "1\uFE0F\u20E3", "1\uFE0F\u20E3"},
+		{"keeps an emoji ZWJ sequence with selectors", "\U0001F441\uFE0F\u200D\U0001F5E8\uFE0F", "\U0001F441\uFE0F\u200D\U0001F5E8\uFE0F"},
+		{"keeps a ZWJ emoji after a dropped control rune", "\x1b\U0001F468\u200D\U0001F469", "\U0001F468\u200D\U0001F469"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,8 +102,17 @@ func TestEscapeRune(t *testing.T) {
 		{"ZWNJ after ASCII", 0x200C, 'a', true},
 		{"ZWJ after a non-ASCII rune", 0x200D, 0x1F468, false},
 		{"ZWNJ after a non-ASCII rune", 0x200C, 0x06CC, false},
-		{"text presentation selector", 0xFE0E, 'a', false},
-		{"emoji presentation selector", 0xFE0F, 'a', false},
+		{"text presentation selector after a non-ASCII rune", 0xFE0E, 0x2764, false},
+		{"emoji presentation selector after ASCII", 0xFE0F, 'a', true},
+		{"emoji presentation selector at the start", 0xFE0F, 0, true},
+		{"emoji presentation selector after a digit", 0xFE0F, '1', false},
+		{"emoji presentation selector after a non-ASCII rune", 0xFE0F, 0x2764, false},
+		{"emoji presentation selector after a selector", 0xFE0F, 0xFE0F, true},
+		{"emoji presentation selector after a joiner", 0xFE0F, 0x200D, true},
+		{"text presentation selector after a digit", 0xFE0E, '1', true},
+		{"ZWJ after a selector", 0x200D, 0xFE0F, false},
+		{"ZWJ after a joiner", 0x200D, 0x200C, true},
+		{"ZWJ after the last rune of an escape", 0x200D, '>', true},
 		{"letter", 'a', 'b', false},
 		{"no-break space", 0x00A0, 'a', false},
 	}
@@ -122,6 +142,9 @@ func TestSanitizeDisplay(t *testing.T) {
 		{"shows a ZWJ after an ASCII rune", "/w/pro\u200Dject", "/w/pro<U+200D>ject"},
 		{"keeps ZWJ in an emoji sequence", "/a\U0001F468\u200D\U0001F469", "/a\U0001F468\u200D\U0001F469"},
 		{"replaces an invalid byte", "/a\x9b8m", "/a�8m"},
+		{"an escaped rune does not unlock a ZWJ", "a\u200B\u200Db", "a<U+200B><U+200D>b"},
+		{"keeps a ZWJ emoji after an escaped control rune", "/a\tb\U0001F468\u200D\U0001F469", "/a<U+0009>b\U0001F468\u200D\U0001F469"},
+		{"escapes a presentation selector after ASCII", "/w/main\uFE0F.go", "/w/main<U+FE0F>.go"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
