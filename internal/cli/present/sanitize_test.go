@@ -39,6 +39,16 @@ func TestSanitizeControl(t *testing.T) {
 		{"replaces a run of invalid bytes with one U+FFFD", "a\x9b\x9bb", "a�b"},
 		{"drops a control rune and escapes a format rune in one string", "\x1b\u202E", "<U+202E>"},
 		{"a dropped rune does not unlock a ZWJ", "pro\u0085\u200Dject", "pro<U+200D>ject"},
+		{"escapes a selector before a non-keycap after a digit", "v1\uFE0F.go", "v1<U+FE0F>.go"},
+		{"escapes a selector and a joiner after a digit", "v1\uFE0F\u200D.go", "v1<U+FE0F><U+200D>.go"},
+		{"keeps a keycap sequence for a digit", "1\uFE0F\u20E3", "1\uFE0F\u20E3"},
+		{"keeps a keycap sequence for a hash", "#\uFE0F\u20E3", "#\uFE0F\u20E3"},
+		{"keeps a keycap sequence for a star", "*\uFE0F\u20E3", "*\uFE0F\u20E3"},
+		{"a keycap does not unlock a ZWJ", "1\uFE0F\u20E3\u200D", "1\uFE0F\u20E3<U+200D>"},
+		{"a mark on an ASCII base does not unlock a selector and a joiner", "a\u0307\uFE0F\u200D", "a\u0307<U+FE0F><U+200D>"},
+		{"keeps a Devanagari conjunct", "क\u094D\u200Dष", "क\u094D\u200Dष"},
+		{"keeps a Sinhala conjunct", "ක\u0DCA\u200Dෂ", "ක\u0DCA\u200Dෂ"},
+		{"keeps a combining mark on a letter", "a\u0307", "a\u0307"},
 		{"escapes a presentation selector after ASCII", "main\uFE0F.go", "main<U+FE0F>.go"},
 		{"escapes a presentation selector at the start", "\uFE0Fmain.go", "<U+FE0F>main.go"},
 		{"escapes a selector then a ZWJ after ASCII", "pro\uFE0F\u200Dject", "pro<U+FE0F><U+200D>ject"},
@@ -68,6 +78,7 @@ func TestSanitizeCleanStringDoesNotAllocate(t *testing.T) {
 		in   string
 	}{
 		{"sanitizeControl", sanitizeControl, "internal/cli/present/files.go\té\U0001F468\u200D\U0001F469"},
+		{"sanitizeControl keycap", sanitizeControl, "1" + string(rune(0xFE0F)) + string(rune(0x20E3))},
 		{"SanitizeDisplay", SanitizeDisplay, "/repo/café/main.go"},
 	}
 	for _, tt := range tests {
@@ -87,39 +98,47 @@ func TestSanitizeCleanStringDoesNotAllocate(t *testing.T) {
 // each class it escapes.
 func TestEscapeRune(t *testing.T) {
 	tests := []struct {
-		name string
-		r    rune
-		prev rune
-		want bool
+		name       string
+		r          rune
+		prev, base rune
+		next       rune
+		want       bool
 	}{
-		{"format rune", 0x202E, 'a', true},
-		{"line separator", 0x2028, 'a', true},
-		{"variation selector", 0xE0100, 'a', true},
-		{"other default-ignorable rune", 0x034F, 'a', true},
-		{"tag character", 0xE0041, 'a', true},
-		{"ZWJ after ASCII", 0x200D, 'a', true},
-		{"ZWJ at the start", 0x200D, 0, true},
-		{"ZWNJ after ASCII", 0x200C, 'a', true},
-		{"ZWJ after a non-ASCII rune", 0x200D, 0x1F468, false},
-		{"ZWNJ after a non-ASCII rune", 0x200C, 0x06CC, false},
-		{"text presentation selector after a non-ASCII rune", 0xFE0E, 0x2764, false},
-		{"emoji presentation selector after ASCII", 0xFE0F, 'a', true},
-		{"emoji presentation selector at the start", 0xFE0F, 0, true},
-		{"emoji presentation selector after a digit", 0xFE0F, '1', false},
-		{"emoji presentation selector after a non-ASCII rune", 0xFE0F, 0x2764, false},
-		{"emoji presentation selector after a selector", 0xFE0F, 0xFE0F, true},
-		{"emoji presentation selector after a joiner", 0xFE0F, 0x200D, true},
-		{"text presentation selector after a digit", 0xFE0E, '1', true},
-		{"ZWJ after a selector", 0x200D, 0xFE0F, false},
-		{"ZWJ after a joiner", 0x200D, 0x200C, true},
-		{"ZWJ after the last rune of an escape", 0x200D, '>', true},
-		{"letter", 'a', 'b', false},
-		{"no-break space", 0x00A0, 'a', false},
+		{"format rune", 0x202E, 'a', 'a', 0, true},
+		{"line separator", 0x2028, 'a', 'a', 0, true},
+		{"variation selector", 0xE0100, 'a', 'a', 0, true},
+		{"other default-ignorable rune", 0x034F, 'a', 'a', 0, true},
+		{"tag character", 0xE0041, 'a', 'a', 0, true},
+		{"ZWJ after ASCII", 0x200D, 'a', 'a', 0, true},
+		{"ZWJ at the start", 0x200D, 0, 0, 0, true},
+		{"ZWNJ after ASCII", 0x200C, 'a', 'a', 0, true},
+		{"ZWJ after a non-ASCII rune", 0x200D, 0x1F468, 0x1F468, 0, false},
+		{"ZWNJ after a non-ASCII rune", 0x200C, 0x06CC, 0x06CC, 0, false},
+		{"ZWJ after a selector", 0x200D, 0xFE0F, 0x2764, 0, false},
+		{"ZWJ after a joiner", 0x200D, 0x200C, 0x06CC, 0, true},
+		{"ZWJ after the last rune of an escape", 0x200D, '>', '>', 0, true},
+		{"ZWJ after a mark on an ASCII base", 0x200D, 0x0307, 'a', 0, true},
+		{"ZWJ after a virama on a non-ASCII base", 0x200D, 0x094D, 0x0915, 0, false},
+		{"ZWJ after a keycap mark", 0x200D, 0x20E3, '1', 0, true},
+		{"text presentation selector after a non-ASCII rune", 0xFE0E, 0x2764, 0x2764, 0, false},
+		{"emoji presentation selector after ASCII", 0xFE0F, 'a', 'a', 0, true},
+		{"emoji presentation selector at the start", 0xFE0F, 0, 0, 0, true},
+		{"emoji presentation selector after a non-ASCII rune", 0xFE0F, 0x2764, 0x2764, 0, false},
+		{"emoji presentation selector after a selector", 0xFE0F, 0xFE0F, 0x2764, 0, true},
+		{"emoji presentation selector after a joiner", 0xFE0F, 0x200D, 0x1F468, 0, true},
+		{"keycap selector before the keycap mark", 0xFE0F, '1', '1', 0x20E3, false},
+		{"keycap selector after # and *", 0xFE0F, '#', '#', 0x20E3, false},
+		{"keycap selector without the keycap mark", 0xFE0F, '1', '1', '.', true},
+		{"keycap selector at the end", 0xFE0F, '1', '1', 0, true},
+		{"text presentation selector is not a keycap selector", 0xFE0E, '1', '1', 0x20E3, true},
+		{"letter", 'a', 'b', 'b', 0, false},
+		{"no-break space", 0x00A0, 'a', 'a', 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := escapeRune(tt.r, tt.prev); got != tt.want {
-				t.Errorf("escapeRune(%U, %U) = %v, want %v", tt.r, tt.prev, got, tt.want)
+			st := runeState{prev: tt.prev, base: tt.base}
+			if got := escapeRune(tt.r, st, tt.next); got != tt.want {
+				t.Errorf("escapeRune(%U, prev %U, base %U, next %U) = %v, want %v", tt.r, tt.prev, tt.base, tt.next, got, tt.want)
 			}
 		})
 	}
@@ -142,7 +161,7 @@ func TestSanitizeDisplay(t *testing.T) {
 		{"shows a ZWJ after an ASCII rune", "/w/pro\u200Dject", "/w/pro<U+200D>ject"},
 		{"keeps ZWJ in an emoji sequence", "/a\U0001F468\u200D\U0001F469", "/a\U0001F468\u200D\U0001F469"},
 		{"replaces an invalid byte", "/a\x9b8m", "/a�8m"},
-		{"an escaped rune does not unlock a ZWJ", "a\u200B\u200Db", "a<U+200B><U+200D>b"},
+		{"an escaped rune does not unlock a ZWJ", "é\u200B\u200Db", "é<U+200B><U+200D>b"},
 		{"keeps a ZWJ emoji after an escaped control rune", "/a\tb\U0001F468\u200D\U0001F469", "/a<U+0009>b\U0001F468\u200D\U0001F469"},
 		{"escapes a presentation selector after ASCII", "/w/main\uFE0F.go", "/w/main<U+FE0F>.go"},
 	}

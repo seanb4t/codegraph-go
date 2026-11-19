@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
 
 	tea "charm.land/bubbletea/v2"
@@ -553,5 +554,19 @@ func TestDaemonEmptyRegistryWritesNoModeQuery(t *testing.T) {
 	}
 	if got, want := out.String(), "no running daemons\n"; got != want {
 		t.Fatalf("empty registry output = %q, want %q", got, want)
+	}
+}
+
+// TestDaemonDelegateRenderEscapesTheRepoName: a format rune in the repository
+// directory name shows as an escape in the picker row.
+func TestDaemonDelegateRenderEscapesTheRepoName(t *testing.T) {
+	bidi := string(rune(0x202E))
+	item := daemonItem{record: rec("/repo/gpj."+bidi+"exe", 1)}
+	m := list.New([]list.Item{item}, daemonDelegate{}, 80, 5)
+
+	var buf bytes.Buffer
+	daemonDelegate{}.Render(&buf, m, 0, item)
+	if got := buf.String(); strings.Contains(got, bidi) || !strings.Contains(got, "gpj.<U+202E>exe") {
+		t.Errorf("row = %q, want the name with a <U+202E> escape and no raw U+202E", got)
 	}
 }

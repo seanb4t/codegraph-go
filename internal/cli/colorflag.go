@@ -136,7 +136,7 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 			clicolorForceVal = strings.TrimPrefix(e, "CLICOLOR_FORCE=")
 			switch {
 			case choice == colorNever || choice == colorAlways:
-				continue // A1 (never) / superseded by our own CLICOLOR_FORCE=1 (always)
+				continue // never drops it / our own CLICOLOR_FORCE=1 replaces it (always)
 			case noColorSet:
 				continue // auto: a non-empty NO_COLOR outranks CLICOLOR_FORCE
 			default:
@@ -161,7 +161,7 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 		out = append(out, "CLICOLOR_FORCE=1")
 	case colorNever:
 		out = append(out, "NO_COLOR=1")
-	default: // auto — amendment A2
+	default: // auto: a falsy CLICOLOR becomes NO_COLOR=1
 		if sawClicolor && clicolorVal != "" {
 			if b, err := strconv.ParseBool(clicolorVal); err == nil && !b {
 				forced := false

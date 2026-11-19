@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
 // storeDirEntryNames returns the sorted list of entry names directly under
@@ -299,5 +303,21 @@ func TestIndexLockedStoreErrorEscapesTheStorePath(t *testing.T) {
 	}
 	if msg := err.Error(); strings.Contains(msg, bidi) || !strings.Contains(msg, "gpj.<U+202E>exe") {
 		t.Errorf("error = %q, want the store path with a <U+202E> escape and no raw U+202E", msg)
+	}
+}
+
+// TestWarnAfterReplaceEscapesTheStorePathAndError: the warning shows a format
+// rune in the store path and in the error text as an escape.
+func TestWarnAfterReplaceEscapesTheStorePathAndError(t *testing.T) {
+	bidi := string(rune(0x202E))
+	cmd := &cobra.Command{}
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+
+	warnAfterReplace(cmd, "/repo/gpj."+bidi+"exe", indexer.Stats{AfterReplaceErr: errors.New("sync " + bidi + "failed")})
+
+	got := stderr.String()
+	if strings.Contains(got, bidi) || !strings.Contains(got, "gpj.<U+202E>exe") || !strings.Contains(got, "sync <U+202E>failed") {
+		t.Errorf("stderr = %q, want the path and the error with <U+202E> escapes and no raw U+202E", got)
 	}
 }

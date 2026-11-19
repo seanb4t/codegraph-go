@@ -160,7 +160,10 @@ What it does **not** defend against, stated plainly:
   sanitizers also stop terminal escape injection in those places. The plain
   query renderers (`files`, `search`, `node`, `explore`, `callers` and the
   like) still print repository text unsanitized, so under `--color=never` or
-  `NO_COLOR` both attacks work against a terminal reader (tracked in #392).
+  `NO_COLOR` both attacks work against a terminal reader. Two other places
+  still print paths unsanitized: the error text that `main.go` prints and the
+  worktree path lines of `serve`. The `daemon start` error text from
+  `internal/daemon` is a third. All of these are tracked in #392.
 - **Codex hook trust covers the command, not the script.** Codex records trust
   for the hook command that `codegraph install` registers, and that command
   stays byte-stable across upgrades. If the guard script it runs changes,

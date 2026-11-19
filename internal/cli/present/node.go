@@ -172,7 +172,7 @@ func writeMultiDef(b *strings.Builder, pal Palette, m *query.MultiDefDetail) err
 		}
 	}
 
-	b.WriteString(pal.Header.Render(query.DefinitionsHeading(len(m.Matches), m.Symbol)))
+	b.WriteString(pal.Header.Render(sanitizeControl(query.DefinitionsHeading(len(m.Matches), m.Symbol))))
 	b.WriteString("\n")
 	overflow := ""
 	if len(listed) > 0 {

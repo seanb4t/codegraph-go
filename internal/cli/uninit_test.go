@@ -224,6 +224,22 @@ func TestUninitAndIndexSanitizeTheDirectoryName(t *testing.T) {
 		requireEscaped(t, "removed line", out)
 	})
 
+	t.Run("sync not initialized error", func(t *testing.T) {
+		_, _, err := execCmd("sync", newRoot(t, false))
+		if !errors.Is(err, ErrNotInitialized) {
+			t.Fatalf("sync: %v; want errors.Is(err, ErrNotInitialized)", err)
+		}
+		requireEscaped(t, "error", err.Error())
+	})
+
+	t.Run("init already initialized error", func(t *testing.T) {
+		_, _, err := execCmd("init", newRoot(t, true))
+		if !errors.Is(err, ErrAlreadyInitialized) {
+			t.Fatalf("init: %v; want errors.Is(err, ErrAlreadyInitialized)", err)
+		}
+		requireEscaped(t, "error", err.Error())
+	})
+
 	t.Run("index not initialized error", func(t *testing.T) {
 		_, _, err := execCmd("index", newRoot(t, false))
 		if !errors.Is(err, ErrNotInitialized) {

@@ -62,7 +62,7 @@ func (d daemonDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		cursor = "> "
 	}
 	age := time.Since(di.record.StartedAt).Round(time.Second)
-	fmt.Fprintf(w, "%s%s (pid %d, up %s)", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
+	fmt.Fprintf(w, "%s%s (pid %d, up %s)", cursor, present.SanitizeDisplay(filepath.Base(di.record.RepoRoot)), di.record.PID, age)
 }
 
 // resolveRepoRoot normalizes p via filepath.EvalSymlinks for comparison —
