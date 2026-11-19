@@ -89,10 +89,9 @@ func codexLegacyGlobalHookCommand(ownCommand string) string {
 // command the blocks carry and, at global scope when it differs, its
 // ~/.codex spelling (codexLegacyGlobalHookCommand). This is a Codex-specific
 // copy of the claudePreToolUseBlocks/claudeFragmentEventBlocks pattern —
-// deliberately
-// not shared code, since the two fragments and command shapes diverge
-// (D-21): Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped literal
-// and its own quoted command form (D-20).
+// deliberately not shared code, since the two fragments and command shapes
+// diverge (D-21): Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped
+// literal and its own quoted command form (D-20).
 func codexPreToolUseBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := codexPreToolHookCommand(loc)
 	if err != nil {
@@ -184,6 +183,32 @@ func renderCodexPreToolGuard(loc Location, execPath string) (string, error) {
 	return strings.Replace(tmpl, preToolGuardExecPathToken, shellSingleQuote(execPath), 1), nil
 }
 
+// codexHooksPreflight reads the hooks.json at loc strictly and checks that
+// hooks.PreToolUse can take codegraph's registration. A malformed file or a
+// value of the wrong JSON type is an error naming the file. A location that
+// does not resolve is left to the registration step, which reports it.
+func codexHooksPreflight(loc Location) error {
+	path, err := codexHooksJSONPath(loc)
+	if err != nil {
+		return nil
+	}
+	real, err := resolveUserFile(path, loc)
+	if err != nil {
+		return nil
+	}
+	existing, _, err := readJSONFileStrict(real)
+	if err == nil {
+		_, _, err = hookEventArray(existing, "PreToolUse")
+	}
+	if err != nil {
+		if !strings.Contains(err.Error(), path) {
+			err = fmt.Errorf("%s: %w", path, err)
+		}
+		return err
+	}
+	return nil
+}
+
 // installCodexPreToolNudge renders and writes the guard, then registers it
 // in hooks.json — the tracer's On-only path (07-08 gives Keep/Off their
 // meaning; D-18). The guard is written first; a guard-write failure skips
@@ -196,9 +221,21 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
 		return
 	}
+	if loc == LocationGlobal {
+		if err := checkShellSafeHookPath(guardPath); err != nil {
+			result.Errors = append(result.Errors, err)
+			return
+		}
+	}
 	rendered, err := renderCodexPreToolGuard(loc, execPath)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", guardPath, err))
+		return
+	}
+	// hooks.json is read before the guard is written, so a value of the wrong
+	// type cannot leave a guard that nothing registers.
+	if err := codexHooksPreflight(loc); err != nil {
+		result.Errors = append(result.Errors, err)
 		return
 	}
 	fr, werr := writeEmbeddedFile(guardPath, rendered, true)
@@ -230,7 +267,7 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 // same two checks fall back to the global config.toml under codexHomeDir.
 // For global, only the global file is consulted. source names the governing
 // file and key, for codexHooksDisabledNote. At local scope, a CODEX_HOME that
-// is not absolute leaves the global setting unknown: the local decision goes
+// does not resolve leaves the global setting unknown: the local decision goes
 // on, and note names the bad value. A read error other than
 // not-exist is returned unwrapped — the caller records it and writes
 // nothing, per the "cannot tell, so don't guess" posture the rest of this
@@ -250,8 +287,8 @@ func codexHooksExplicitlyDisabled(loc Location) (disabled bool, source, note str
 
 	globalPath, err := codexConfigPath(LocationGlobal)
 	if err != nil {
-		var notAbsolute codexHomeNotAbsoluteError
-		if loc == LocationLocal && errors.As(err, &notAbsolute) {
+		var homeErr codexHomeError
+		if loc == LocationLocal && errors.As(err, &homeErr) {
 			return false, "", fmt.Sprintf("the global Codex config.toml was not checked for a disabled-hooks setting: %v", err), nil
 		}
 		return false, "", "", err
@@ -297,22 +334,26 @@ func codexConfigHooksSetting(path string) (disabled bool, source string, found b
 // install adds: Codex skips a new or changed hook until it is trusted in
 // /hooks (07-LIVE-SESSIONS.md B5's live "Hooks need review" prompt), so the
 // user must open that review themselves — this Note never advises
-// `--dangerously-bypass-hook-trust` (T-07-24). When split is true, the
-// install also split a hook group that held another hook beside codegraph's,
-// so the note adds that the other hook needs review too.
-func codexHookTrustNote(split bool) string {
+// `--dangerously-bypass-hook-trust` (T-07-24). When moved is true, the
+// install also split a group or shifted a group of the user's, so the note
+// adds that those hooks need review too.
+func codexHookTrustNote(moved bool) string {
 	note := "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
-	if split {
-		note += ", and review your other hook that shared its group, which now sits in a group of its own"
+	if moved {
+		note += ", and review your other hooks too: this install moved or regrouped one of them"
 	}
 	return note
 }
 
-// codexHookGroupSplit reports whether files (a WriteResult.Files slice)
-// records a hook group split by a write.
-func codexHookGroupSplit(files []FileResult) bool {
+// codexHookRemovalNote is the Note an uninstall adds when removing
+// codegraph's hook moved or regrouped a hook of the user's.
+const codexHookRemovalNote = "Removing the codegraph hook moved or regrouped one of your other hooks, and Codex skips a changed hook until you trust it: review your hooks in /hooks"
+
+// codexForeignHookMoved reports whether files (a WriteResult.Files slice)
+// records a hook write that moved or regrouped a foreign hook.
+func codexForeignHookMoved(files []FileResult) bool {
 	for _, f := range files {
-		if f.HookGroupSplit {
+		if f.ForeignHookMoved {
 			return true
 		}
 	}
@@ -340,21 +381,17 @@ func codexHooksFileWasWritten(files []FileResult, hooksPath string) bool {
 	return false
 }
 
-// uninstallCodexPreToolNudge always attempts removal of both the guard and
-// the hooks.json registration, reporting not-found when the user never
-// opted in — matching the "uninstall always attempts removal" discipline
-// already established for every other codegraph-owned artifact in this
-// package (D-09/D-11). op is the command that asked: an install that turns
-// the nudge off refuses a local hooks.json outside the project, and an
-// uninstall keeps it with a note.
+// uninstallCodexPreToolNudge always attempts removal of both the hooks.json
+// registration and the guard, reporting not-found when the user never opted
+// in — matching the "uninstall always attempts removal" discipline of every
+// other codegraph-owned artifact in this package. The registration goes
+// first, and a registration that could not be removed keeps the guard, so
+// no registration is left pointing at a guard that is gone. op is the
+// command that asked: an install that turns the nudge off refuses a local
+// hooks.json outside the project, and an uninstall keeps it with a note.
+// When removing the registration moved or regrouped a hook of the user's,
+// the result carries a note that says to review it.
 func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp) {
-	if guardPath, err := codexPreToolGuardPath(loc); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
-	} else {
-		fr, rerr := removeEmbeddedFile(guardPath)
-		recordFile(result, guardPath, fr, rerr)
-	}
-
 	hooksPath, err := codexHooksJSONPath(loc)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks.json path: %w", err))
@@ -365,7 +402,20 @@ func uninstallCodexPreToolNudge(result *WriteResult, loc Location, op userFileOp
 		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, err))
 		return
 	}
-	_ = recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
+	beforeFiles := len(result.Files)
+	if err := recordUserFile(result, hooksPath, loc, op, func(real string) (FileResult, error) {
 		return removeHookEntry(real, "PreToolUse", ownCommands)
-	})
+	}); err != nil {
+		return
+	}
+	if codexForeignHookMoved(result.Files[beforeFiles:]) {
+		result.Notes = append(result.Notes, codexHookRemovalNote)
+	}
+
+	if guardPath, err := codexPreToolGuardPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve codex PreToolUse guard path: %w", err))
+	} else {
+		fr, rerr := removeEmbeddedFile(guardPath)
+		recordFile(result, guardPath, fr, rerr)
+	}
 }

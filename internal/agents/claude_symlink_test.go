@@ -650,8 +650,8 @@ func TestSymlinkedSkillDir_PreToolNudgeEvidencedBySettingsWhenForeign(t *testing
 
 	// The fix: preToolNudgeEvidenced widens that to true via settings.json's
 	// own registration.
-	if recorded, readable := preToolNudgeEvidenced(LocationGlobal); !recorded || !readable {
-		t.Fatalf("preToolNudgeEvidenced = (%v, %v), want (true, true): settings.json already carries codegraph's own PreToolUse registration (CR-01)", recorded, readable)
+	if recorded, readable, err := preToolNudgeEvidenced(LocationGlobal); !recorded || !readable || err != nil {
+		t.Fatalf("preToolNudgeEvidenced = (%v, %v, %v), want (true, true, nil): settings.json already carries codegraph's own PreToolUse registration (CR-01)", recorded, readable, err)
 	}
 
 	// A moved binary: a subsequent plain (Keep) install must refresh the

@@ -73,20 +73,24 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
   (`07-LIVE-SESSIONS.md`, A4). This is the same granularity Claude Code already has — not a
   narrower, Codex-specific limitation.
 - **codegraph always appends its hook group LAST** in `hooks.json`. Codex's hook trust is
-  position-keyed (a group's trust hash is recorded against its array index), so removing a
-  hook group that precedes a foreign one re-flags that foreign hook as "modified" even though
-  its bytes never changed (`07-LIVE-SESSIONS.md`, D-23). Appending last means codegraph's own
-  install/uninstall never shifts — and therefore never re-flags — anyone else's hook. There is
-  one exception: a hook of your own that you placed inside codegraph's group is moved into a group
-  of its own, at the same index, the next time codegraph rewrites its handler. That group changed,
-  so Codex asks you to review it again, and the install prints a note that says so. A group after
-  codegraph's also moves when codegraph's own groups change in number, for example when two copies
-  in one file become one.
+  position-keyed: it records a group's trust hash against the group's array index. So a group
+  that moves to another index, or whose content changes, is reviewed again even when its bytes
+  are the same as before (`07-LIVE-SESSIONS.md`, D-23). Appending last means codegraph's own
+  install and uninstall normally leave every other group at its index. Two cases change that,
+  and each prints a note that tells you to review your hooks in `/hooks`:
+  - A hook of your own sits inside codegraph's group. When codegraph rewrites or removes its
+    handler, your hook moves into a group of its own at the same index. That group changed.
+  - Codegraph's own groups change in number, for example two copies in one file become one, or
+    codegraph removes a group that stood before a group of yours. Later groups then move.
 - **codegraph resolves Codex's global files under `$CODEX_HOME`** when it is set and non-empty,
-  and under `~/.codex` otherwise. The `~/.codex` paths in the table are the default. A
-  `CODEX_HOME` that is not an absolute path is an error for every global operation, never a
-  fallback to `~/.codex`. A local install still works, and names `$CODEX_HOME/config.toml` in its
-  trust note.
+  and under `~/.codex` otherwise. The `~/.codex` paths in the table are the default.
+  codegraph resolves `CODEX_HOME` the way Codex does: it follows every symlink, and the
+  directory must exist. A value that is not an absolute path, or not an existing directory,
+  is an error for every global Codex operation, never a fallback to `~/.codex`. A local
+  install still works and names `$CODEX_HOME/config.toml` in its trust note. `install` and
+  `uninstall` with `--target auto` or `--target all` skip Codex with one warning line, and only
+  `--target codex` fails. The shared skill under `~/.agents/skills` does not depend on
+  `CODEX_HOME`.
 - **Codex's interactive skill listing may truncate the codegraph skill's description** (an
   advisory, not a `SKILL.md` change — the front-loaded trigger words survive either way);
   `codex debug prompt-input`'s raw dump showed the full, untruncated description

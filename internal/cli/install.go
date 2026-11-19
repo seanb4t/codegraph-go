@@ -120,7 +120,7 @@ func newInstallCmd() *cobra.Command {
 			if printCfgStyle {
 				targets := agents.AllTargets()
 				if cmd.Flags().Changed("target") {
-					targets, err = agents.ResolveTargetFlag(target, loc)
+					targets, err = resolveTargets(cmd, target, loc)
 					if err != nil {
 						return fmt.Errorf("codegraph install: %w", err)
 					}
@@ -149,19 +149,19 @@ func newInstallCmd() *cobra.Command {
 				// D-13: an explicit --target wins over --yes — --yes only
 				// supplies the non-interactive default when no target was
 				// named.
-				targets, err = agents.ResolveTargetFlag(target, loc)
+				targets, err = resolveTargets(cmd, target, loc)
 			case yes:
 				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
 				// branch, not merely skip rendering the picker — checked
 				// here so it always wins regardless of stdin/stdout's
 				// actual state whenever --target was not given.
-				targets, err = agents.ResolveTargetFlag("auto", loc)
+				targets, err = resolveTargets(cmd, "auto", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:
 				// D-13: no TTY (or CI) never blocks on a prompt — resolve
 				// straight to auto, same as an explicit --target auto.
-				targets, err = agents.ResolveTargetFlag("auto", loc)
+				targets, err = resolveTargets(cmd, "auto", loc)
 			}
 			if err != nil {
 				return fmt.Errorf("codegraph install: %w", err)
@@ -205,18 +205,49 @@ func newInstallCmd() *cobra.Command {
 	return cmd
 }
 
+// resolveTargets resolves a --target value like agents.ResolveTargets and
+// prints one "<id>: skipped: <reason>" line on stderr for each target that
+// --target all or --target auto left out because its detection failed.
+func resolveTargets(cmd *cobra.Command, spec string, loc agents.Location) ([]agents.AgentTarget, error) {
+	targets, skipped, err := agents.ResolveTargets(spec, loc)
+	for _, s := range skipped {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s: skipped: %s\n", s.ID, sanitizePathForDisplay(s.Err.Error()))
+	}
+	return targets, err
+}
+
 // installStatus rolls WriteResult's per-file actions up into one word for
-// install's per-agent summary line: "unchanged" only when every touched
-// file was already correct (D-07 idempotency) or reports agents.ActionKeptForeign
-// (a foreign skill directory codegraph left untouched is not a change
-// codegraph made — D-14), "configured" otherwise.
+// install's per-agent summary line. A result with errors is "failed" when
+// no file changed and "partial" when some did, so the headline never reads
+// as success above an error line. Without errors, "unchanged" means every
+// touched file was already correct (D-07 idempotency) or reports
+// agents.ActionKeptForeign (a foreign skill directory codegraph left
+// untouched is not a change codegraph made — D-14), and "configured" means
+// anything else.
 func installStatus(result agents.WriteResult) string {
+	changed := false
 	for _, f := range result.Files {
 		if f.Action != agents.ActionUnchanged && f.Action != agents.ActionKeptForeign {
-			return "configured"
+			changed = true
 		}
 	}
-	return "unchanged"
+	return statusWithErrors(result, changed, "configured", "unchanged")
+}
+
+// statusWithErrors picks a status word: "failed" or "partial" when the
+// result has errors (by whether anything changed), else changedWord or
+// unchangedWord.
+func statusWithErrors(result agents.WriteResult, changed bool, changedWord, unchangedWord string) string {
+	switch {
+	case len(result.Errors) > 0 && changed:
+		return "partial"
+	case len(result.Errors) > 0:
+		return "failed"
+	case changed:
+		return changedWord
+	default:
+		return unchangedWord
+	}
 }
 
 // printAgentResults is install's and uninstall's shared per-agent

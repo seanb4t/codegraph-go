@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
+	"unicode"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -18,6 +20,9 @@ import (
 // interface with the same text the row renders.
 type agentItem struct {
 	target agents.AgentTarget
+	// reason is why detection failed for this target; the row shows it, and
+	// the row is not pre-checked.
+	reason string
 }
 
 func (i agentItem) FilterValue() string { return i.target.DisplayName() }
@@ -65,6 +70,9 @@ func (d *checkboxDelegate) Render(w io.Writer, m list.Model, index int, item lis
 		cursor = "> "
 	}
 	fmt.Fprintf(w, "%s%s %s", cursor, box, ai.target.DisplayName())
+	if ai.reason != "" {
+		fmt.Fprintf(w, " (%s)", ai.reason)
+	}
 }
 
 // agentPickerModel is the bubbletea Model backing RunAgentPicker: a
@@ -89,8 +97,13 @@ func newAgentPickerModel(all []agents.AgentTarget, detection map[agents.TargetID
 	checked := make(map[int]bool, len(all))
 	items := make([]list.Item, len(all))
 	for i, t := range all {
+		d := detection[t.ID()]
 		items[i] = agentItem{target: t}
-		if detection[t.ID()].Installed {
+		if d.Err != nil {
+			items[i] = agentItem{target: t, reason: printable(d.Err.Error())}
+			continue
+		}
+		if d.Installed {
 			checked[i] = true
 		}
 	}
@@ -166,6 +179,17 @@ func (m agentPickerModel) resolvedTargets() []agents.AgentTarget {
 		}
 	}
 	return selectByIndices(m.targets, indices)
+}
+
+// printable drops control characters from text that came from the
+// environment, so it cannot move the cursor or recolor the terminal.
+func printable(text string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, text)
 }
 
 // selectByIndices mirrors internal/cli/install.go's selectByIndices (dedup

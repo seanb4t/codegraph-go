@@ -626,6 +626,9 @@ func TestCodexPreToolNudge_OnWritesAndNotesTrust(t *testing.T) {
 			if n != 1 {
 				t.Fatalf("Notes mentioning /hooks = %d, want 1: %#v", n, res.Notes)
 			}
+			if noteNaming(res, "review your other hooks") {
+				t.Fatalf("a fresh install told the user to review other hooks: %#v", res.Notes)
+			}
 		})
 	}
 }

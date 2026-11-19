@@ -120,32 +120,45 @@ func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 // unchanged — corruption of a manifest that WAS written is a different,
 // untrusted signal than one that was never written at all, so it is never
 // overridden by evidence found elsewhere.
-func preToolNudgeEvidenced(loc Location) (recorded, readable bool) {
+func preToolNudgeEvidenced(loc Location) (recorded, readable bool, err error) {
 	manifestRecorded, manifestReadable := preToolNudgeRecorded(loc)
 	if manifestRecorded {
-		return true, true
+		return true, true, nil
 	}
 	if !manifestReadable {
-		return false, false
+		return false, false, nil
 	}
 
 	settingsPath, err := claudeSettingsPath(loc)
 	if err != nil {
-		return false, true
+		return false, true, err
 	}
 	_, ownCommands, err := claudePreToolUseBlocks(loc)
 	if err != nil {
-		return false, true
+		return false, true, err
 	}
 	settingsEvidenced, err := hasOwnHookBlock(settingsPath, "PreToolUse", ownCommands)
 	if err != nil {
-		// settings.json itself is unreadable/corrupt: report not-recorded
-		// rather than claiming evidence this read could not confirm. The
-		// manifest side already established readable=true (genuinely
+		// settings.json itself is unreadable or has a value of the wrong
+		// type: report not-recorded rather than claiming evidence this read
+		// could not confirm, and return the error so Install can say so.
+		// The manifest side already established readable=true (genuinely
 		// absent), so that verdict stands.
-		return false, true
+		return false, true, err
 	}
-	return settingsEvidenced, true
+	return settingsEvidenced, true, nil
+}
+
+// checkShellSafeHookPath refuses a global hook path that holds a single quote
+// or a backslash. A hook command quotes its script path for a POSIX shell,
+// but the agent may run it under another login shell (fish, for one), where
+// a backslash before a quote ends the quoting and runs the rest of the path
+// as commands. Local paths are not checked.
+func checkShellSafeHookPath(path string) error {
+	if strings.ContainsAny(path, `'\`) {
+		return fmt.Errorf("%s: a global hook path with a single quote or a backslash is refused, because the shell that runs the hook may not read it as one word", path)
+	}
+	return nil
 }
 
 // shellSingleQuote returns s as one POSIX single-quoted shell word: each

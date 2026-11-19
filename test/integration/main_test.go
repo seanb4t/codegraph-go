@@ -95,13 +95,15 @@ func TestScripts(t *testing.T) {
 				"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
 				"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
 				"HERMES_HOME":     filepath.Join(home, ".hermes"),
-				"CODEX_HOME":      filepath.Join(home, ".codex"),
 			} {
 				if err := os.MkdirAll(value, 0o755); err != nil {
 					return err
 				}
 				env.Setenv(key, value)
 			}
+			// An empty CODEX_HOME keeps the default under HOME, whatever the
+			// host sets.
+			env.Setenv("CODEX_HOME", "")
 			// The D-11 notice glyph (U+26A0, no U+FE0F) comes from
 			// gitmeta itself, so the scripts cannot drift from it.
 			notice := (&gitmeta.Mismatch{WorktreeRoot: "/a", IndexRoot: "/b"}).Notice()

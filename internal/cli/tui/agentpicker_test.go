@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -433,5 +434,35 @@ func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 				t.Fatalf("TTY-05: %s resolved %d targets, want 0", name, len(got))
 			}
 		})
+	}
+}
+
+// TestAgentPickerModel_ShowsWhyDetectionFailedAndDoesNotPreCheckIt asserts a
+// target whose detection reported an error is listed with that reason, is
+// not pre-checked even when it also reports Installed, and does not change
+// the rows of the other targets.
+func TestAgentPickerModel_ShowsWhyDetectionFailedAndDoesNotPreCheckIt(t *testing.T) {
+	all := fakeTargets("a", "b")
+	detection := map[agents.TargetID]agents.DetectionResult{
+		"a": {Installed: true},
+		"b": {Installed: true, Err: errors.New("CODEX_HOME \"rel\" is not an absolute path\x1b[31m")},
+	}
+
+	m := newAgentPickerModel(all, detection)
+
+	if !m.delegate.checked[0] || m.delegate.checked[1] {
+		t.Errorf("checked = %v, want only the target without an error pre-checked", m.delegate.checked)
+	}
+	row := func(index int) string {
+		var buf bytes.Buffer
+		m.delegate.Render(&buf, m.list, index, m.list.Items()[index])
+		return buf.String()
+	}
+	if got := row(0); strings.Contains(got, "(") {
+		t.Errorf("row 0 = %q, want no reason", got)
+	}
+	got := row(1)
+	if !strings.Contains(got, `b (CODEX_HOME "rel" is not an absolute path`) || strings.ContainsRune(got, 0x1b) {
+		t.Errorf("row 1 = %q, want the reason, without control characters", got)
 	}
 }

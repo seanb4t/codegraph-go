@@ -1,0 +1,3 @@
+kind: Fixes
+body: Installing the Claude Code or Codex hooks now stops with an error that names the key when the hooks, permissions or permissions.allow value in settings.json or hooks.json has the wrong JSON type, and leaves the file unchanged, instead of overwriting the value.
+time: 2026-11-18T23:12:10.45448-05:00

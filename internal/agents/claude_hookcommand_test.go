@@ -55,8 +55,8 @@ func shellWord(t *testing.T, command string, env ...string) string {
 }
 
 // TestClaudeHookCommands_ArePathsAsOneShellWord: a global hook command
-// stays one shell word when the home directory holds a space and a single
-// quote, and a local one when CLAUDE_PROJECT_DIR holds a space.
+// stays one shell word when the home directory holds a space, and a local one
+// when CLAUDE_PROJECT_DIR holds a space.
 func TestClaudeHookCommands_ArePathsAsOneShellWord(t *testing.T) {
 	cases := []struct {
 		loc  Location
@@ -64,7 +64,7 @@ func TestClaudeHookCommands_ArePathsAsOneShellWord(t *testing.T) {
 	}{
 		{LocationGlobal, func(t *testing.T) (string, []string) {
 			fakeHome(t)
-			home := filepath.Join(t.TempDir(), "a b'c")
+			home := filepath.Join(t.TempDir(), "a b")
 			t.Setenv("HOME", home)
 			t.Chdir(t.TempDir())
 			return home, nil
@@ -291,8 +291,8 @@ func TestClaudePreToolNudge_BareHandlerIsEvidenceAndRefreshed(t *testing.T) {
 	}
 	writeFile(t, settings, string(data))
 
-	if recorded, readable := preToolNudgeEvidenced(LocationGlobal); !recorded || !readable {
-		t.Fatalf("preToolNudgeEvidenced = (%v, %v), want (true, true) for a bare-path handler", recorded, readable)
+	if recorded, readable, err := preToolNudgeEvidenced(LocationGlobal); !recorded || !readable || err != nil {
+		t.Fatalf("preToolNudgeEvidenced = (%v, %v, %v), want (true, true, nil) for a bare-path handler", recorded, readable, err)
 	}
 
 	res := claudeTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph-v2", PreToolNudge: PreToolNudgeKeep})
@@ -312,5 +312,45 @@ func TestClaudePreToolNudge_BareHandlerIsEvidenceAndRefreshed(t *testing.T) {
 		if cmd != quoted {
 			t.Errorf("PreToolUse handler %q after Keep, want only %q", cmd, quoted)
 		}
+	}
+}
+
+// TestClaudeGlobal_RefusesAHookPathAPosixShellCannotQuote: a global hook path
+// with a single quote or a backslash is an error that names the path, and
+// the install writes no hook script, guard or registration. A local install
+// is not checked.
+func TestClaudeGlobal_RefusesAHookPathAPosixShellCannotQuote(t *testing.T) {
+	for _, name := range []string{"it's", `back\slash`} {
+		t.Run(name, func(t *testing.T) {
+			fakeHome(t)
+			home := filepath.Join(t.TempDir(), name)
+			t.Setenv("HOME", home)
+			t.Chdir(t.TempDir())
+
+			res := claudeTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+			if !errorNaming(res, home, "single quote or a backslash") {
+				t.Errorf("errors = %v, want one naming %s", res.Errors, home)
+			}
+			assertMissing(t, filepath.Join(home, ".claude", "hooks"))
+			assertMissing(t, filepath.Join(home, ".claude", "settings.json"))
+		})
+	}
+}
+
+// TestClaudeKeep_ProbeErrorIsANote: a Keep install over a settings.json that
+// the nudge probe cannot read reports the error and says the nudge was not
+// refreshed.
+func TestClaudeKeep_ProbeErrorIsANote(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+	settings, err := claudeSettingsPath(LocationLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, settings, `{"hooks":{"PreToolUse":"x"}}`)
+
+	res := claudeTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeKeep})
+	if !noteNaming(res, "nudge was not refreshed") || !noteNaming(res, `"hooks.PreToolUse"`) {
+		t.Errorf("notes = %q, want one saying the nudge was not refreshed and naming the key", res.Notes)
 	}
 }

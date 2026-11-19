@@ -52,19 +52,19 @@ func newUninstallCmd() *cobra.Command {
 				// D-13: an explicit --target wins over --yes — --yes only
 				// supplies the non-interactive default when no target was
 				// named.
-				targets, err = agents.ResolveTargetFlag(target, loc)
+				targets, err = resolveTargets(cmd, target, loc)
 			case yes:
 				// D-15/Pitfall 6: --yes still short-circuits BEFORE the TTY
 				// branch, not merely skip rendering the picker, whenever
 				// --target was not given.
-				targets, err = agents.ResolveTargetFlag("all", loc)
+				targets, err = resolveTargets(cmd, "all", loc)
 			case interactiveAllowed(cmd):
 				targets, err = runAgentPicker(cmd, loc)
 			default:
 				// D-13: no TTY (or CI) never blocks on a prompt — resolve
 				// to the historical default (every registered target),
 				// same as an explicit --target all.
-				targets, err = agents.ResolveTargetFlag("all", loc)
+				targets, err = resolveTargets(cmd, "all", loc)
 			}
 			if err != nil {
 				return fmt.Errorf("codegraph uninstall: %w", err)
@@ -84,14 +84,16 @@ func newUninstallCmd() *cobra.Command {
 }
 
 // uninstallStatus rolls WriteResult's per-file actions up into D-08's
-// three-word status: "removed" if any file's codegraph entry/section was
-// actually deleted, else "not-configured" (nothing was there to begin
-// with — never an error, per D-08).
+// status: "removed" if any file's codegraph entry/section was actually
+// deleted, else "not-configured" (nothing was there to begin with, which is
+// not an error per D-08). A result with errors is "failed" when nothing was
+// removed and "partial" when something was.
 func uninstallStatus(result agents.WriteResult) string {
+	removed := false
 	for _, f := range result.Files {
 		if f.Action == agents.ActionRemoved {
-			return "removed"
+			removed = true
 		}
 	}
-	return "not-configured"
+	return statusWithErrors(result, removed, "removed", "not-configured")
 }

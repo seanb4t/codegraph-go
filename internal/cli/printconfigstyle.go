@@ -106,7 +106,7 @@ func printConfigStyle(cmd *cobra.Command, targets []agents.AgentTarget, loc agen
 			if firstErr == nil {
 				firstErr = err
 			}
-			fields = "error=" + sanitizePathForDisplay(err.Error())
+			fields = "error=" + sanitizePathForDisplay(strings.TrimPrefix(err.Error(), string(t.ID())+": "))
 		}
 		if mode.Styled {
 			if err := present.KV(w, pal, string(t.ID())+":", fields); err != nil {
