@@ -163,3 +163,25 @@ func TestUninit_MalformedHook_SurfacesWarning(t *testing.T) {
 		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
 	}
 }
+
+func TestSanitizePathForDisplay(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"clean path unchanged", "/repo/café/main.go", "/repo/café/main.go"},
+		{"strips ESC and newline", "/a\x1b[31m/b\nc", "/a[31m/bc"},
+		{"strips tab", "/a\tb", "/ab"},
+		{"strips the bidi override", "/repo/gpj.\u202Eexe", "/repo/gpj.exe"},
+		{"strips the bidi isolates", "/a\u2066b\u2067c\u2068d\u2069e", "/abcde"},
+		{"strips zero-width and direction marks", "/a\u200Bb\u200Fc\u200Ed", "/abcd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sanitizePathForDisplay(tt.in); got != tt.want {
+				t.Errorf("sanitizePathForDisplay(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

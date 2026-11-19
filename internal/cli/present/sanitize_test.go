@@ -17,6 +17,9 @@ func TestSanitizeControl(t *testing.T) {
 		{"strips CR, keeps tab (CR-02: a bare tab cannot start an escape sequence)", "a\tb\rc", "a\tbc"},
 		{"keeps leading tab indentation", "\treturn helper()", "\treturn helper()"},
 		{"strips DEL", "a\x7fb\u009bc", "abc"},
+		{"strips the bidi override", "gpj.\u202Eexe", "gpj.exe"},
+		{"strips the bidi isolates", "a\u2066b\u2067c\u2068d\u2069e", "abcde"},
+		{"strips zero-width and direction marks", "a\u200Bb\u200Fc\u200Ed", "abcd"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -34,5 +37,18 @@ func TestSanitizeControl_CleanStringIdentity(t *testing.T) {
 	const clean = "internal/cli/present/files.go"
 	if got := sanitizeControl(clean); got != clean {
 		t.Fatalf("clean string was altered: got %q, want %q", got, clean)
+	}
+}
+
+func TestUnsafeDisplayRune(t *testing.T) {
+	for _, r := range []rune{0x00, 0x1b, 0x7f, 0x9b, 0x200B, 0x200F, 0x202A, 0x202E, 0x2066, 0x2069, 0xFEFF} {
+		if !UnsafeDisplayRune(r) {
+			t.Errorf("UnsafeDisplayRune(%U) = false, want true", r)
+		}
+	}
+	for _, r := range []rune{'a', ' ', '/', 'é', '世', 0x1F600} {
+		if UnsafeDisplayRune(r) {
+			t.Errorf("UnsafeDisplayRune(%U) = true, want false", r)
+		}
 	}
 }

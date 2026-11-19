@@ -1,0 +1,3 @@
+kind: Fixes
+body: Paths and names printed to a terminal no longer keep Unicode format characters such as bidi overrides and zero-width marks.
+time: 2026-11-18T21:05:56.541156-05:00

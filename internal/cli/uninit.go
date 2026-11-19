@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -136,22 +135,16 @@ func plural(n int) string {
 	return "s"
 }
 
-// sanitizePathForDisplay strips control runes (including any embedded
-// ANSI/OSC escape byte) from codegraphDir before it reaches a styled
-// pal.Path.Render call — codegraphDir derives from the caller's own
-// --path/root argument, the same class of value present/status.go's
-// projectPath sanitizes before styling (CR-01). A package-local duplicate
-// of present's unexported sanitizeControl, matching this codebase's
-// existing convention of small helpers duplicated across the cli/present
-// boundary rather than exporting internal-only logic (e.g.
-// present/status.go's kindCount/formatNumber duplicating internal/query's
-// unexported equivalents).
+// sanitizePathForDisplay drops every rune present.UnsafeDisplayRune reports
+// (control and format runes, including any embedded ANSI/OSC escape byte)
+// from a path or error text before it reaches the terminal. It drops tabs
+// too, unlike present's sanitizeControl, which keeps them.
 func sanitizePathForDisplay(s string) string {
-	if !strings.ContainsFunc(s, unicode.IsControl) {
+	if !strings.ContainsFunc(s, present.UnsafeDisplayRune) {
 		return s
 	}
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if present.UnsafeDisplayRune(r) {
 			return -1
 		}
 		return r
