@@ -59,9 +59,8 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
 - **Codex project config loads only for a trusted project.** Codex's `.codex/config.toml` (and,
   per the live D-16/A2 verdicts recorded in `07-LIVE-SESSIONS.md`, the codegraph skill and the
   repo-root `AGENTS.md` block) load only once the project is trusted, via Codex's own TUI trust
-  prompt or a `trust_level = "trusted"` entry it writes to its global `config.toml` (`~/.codex/config.toml`
-  by default). codegraph
-  never writes that trust entry itself.
+  prompt or a `trust_level = "trusted"` entry it writes to its global `config.toml`
+  (`~/.codex/config.toml` by default). codegraph never writes that trust entry itself.
 - **Codex's PreToolUse nudge is opt-in and hook-trust-gated.** It is written only when `--pretool-nudge`
   is passed, is skipped (with a Note) when the user has explicitly set `[features] hooks = false`
   (or the deprecated `codex_hooks = false`), and — like any new or changed Codex hook — will not
@@ -77,9 +76,17 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
   position-keyed (a group's trust hash is recorded against its array index), so removing a
   hook group that precedes a foreign one re-flags that foreign hook as "modified" even though
   its bytes never changed (`07-LIVE-SESSIONS.md`, D-23). Appending last means codegraph's own
-  install/uninstall never shifts — and therefore never re-flags — anyone else's hook.
+  install/uninstall never shifts — and therefore never re-flags — anyone else's hook. There is
+  one exception: a hook of your own that you placed inside codegraph's group is moved into a group
+  of its own, at the same index, the next time codegraph rewrites its handler. That group changed,
+  so Codex asks you to review it again, and the install prints a note that says so. A group after
+  codegraph's also moves when codegraph's own groups change in number, for example when two copies
+  in one file become one.
 - **codegraph resolves Codex's global files under `$CODEX_HOME`** when it is set and non-empty,
-  and under `~/.codex` otherwise. The `~/.codex` paths in the table are the default.
+  and under `~/.codex` otherwise. The `~/.codex` paths in the table are the default. A
+  `CODEX_HOME` that is not an absolute path is an error for every global operation, never a
+  fallback to `~/.codex`. A local install still works, and names `$CODEX_HOME/config.toml` in its
+  trust note.
 - **Codex's interactive skill listing may truncate the codegraph skill's description** (an
   advisory, not a `SKILL.md` change — the front-loaded trigger words survive either way);
   `codex debug prompt-input`'s raw dump showed the full, untruncated description

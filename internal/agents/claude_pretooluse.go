@@ -20,9 +20,9 @@ import (
 const claudePreToolFragmentCommand = `"` + claudePreToolUnquotedFragmentCommand + `"`
 
 // claudePreToolUnquotedFragmentCommand is claudePreToolFragmentCommand
-// without the quotes. Nothing writes this text; it is only matched, as one
-// of the owned commands, so a handler carrying it is still replaced on
-// install and removed on uninstall.
+// without the quotes. Nothing writes this text. It is only matched, as one
+// of the owned commands, so a handler that carries it is codegraph's own and
+// counts as the recorded opt-in (preToolNudgeEvidenced).
 const claudePreToolUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
 
 // preToolGuardExecPathToken is the single-quoted placeholder the guard
@@ -53,11 +53,11 @@ func claudePreToolHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudePreToolFragmentCommand, nil
 	}
-	path, err := claudePreToolGuardPath(LocationGlobal)
+	unquoted, err := claudePreToolUnquotedHookCommand(loc)
 	if err != nil {
 		return "", err
 	}
-	return shellSingleQuote(path), nil
+	return shellSingleQuote(unquoted), nil
 }
 
 // claudePreToolUnquotedHookCommand is claudePreToolHookCommand's text

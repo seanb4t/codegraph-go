@@ -60,6 +60,11 @@ type DetectionResult struct {
 	// ConfigPath is the primary config file path this detection checked,
 	// surfaced for install/uninstall status reporting.
 	ConfigPath string
+	// Err is set when Detect could not tell, because a path it needs did
+	// not resolve (for example a CODEX_HOME that is not an absolute path).
+	// --target auto still selects such a target, so its Install or
+	// Uninstall reports the error instead of skipping the agent silently.
+	Err error
 }
 
 // FileAction records what happened to one file during Install/Uninstall,
@@ -92,6 +97,11 @@ type FileResult struct {
 	Path string
 	// Action is what happened to Path (D-07/D-08).
 	Action FileAction
+	// HookGroupSplit is true when a hook group that held codegraph's handler
+	// beside another handler was split by a write, so the other handler now
+	// sits in a group of its own. Codex asks for a changed hook group to be
+	// reviewed again.
+	HookGroupSplit bool
 }
 
 // WriteResult is the full outcome of one AgentTarget.Install/Uninstall

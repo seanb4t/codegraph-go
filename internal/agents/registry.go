@@ -64,7 +64,8 @@ func DetectAll(loc Location) map[TargetID]DetectionResult {
 // concrete, TargetID-sorted list of AgentTarget (D-03):
 //   - "all": every registered target
 //   - "none": no targets
-//   - "auto": only targets whose Detect(loc).Installed is true; if that
+//   - "auto": only targets whose Detect(loc).Installed is true, or whose
+//     Detect(loc).Err is set so that the error reaches the user; if that
 //     detects zero targets, falls back to just the Claude target rather
 //     than installing nothing — least-surprise for a clean environment
 //     (RESEARCH.md recommendation, not a hard requirement)
@@ -80,7 +81,7 @@ func ResolveTargetFlag(spec string, loc Location) ([]AgentTarget, error) {
 		var detected []AgentTarget
 		for _, id := range AllTargetIDs() {
 			t := registry[id]
-			if t.Detect(loc).Installed {
+			if d := t.Detect(loc); d.Installed || d.Err != nil {
 				detected = append(detected, t)
 			}
 		}

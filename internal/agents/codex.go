@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,17 +57,29 @@ func (codexTarget) Capabilities() Capabilities {
 	}
 }
 
+// codexHomeNotAbsoluteError reports a CODEX_HOME that is set but is not an
+// absolute path.
+type codexHomeNotAbsoluteError struct{ value string }
+
+func (e codexHomeNotAbsoluteError) Error() string {
+	return fmt.Sprintf("CODEX_HOME %q is not an absolute path", e.value)
+}
+
 // codexHomeDir resolves the directory Codex keeps its global files in:
 // $CODEX_HOME when it is set and non-empty, else ~/.codex. Every global
-// Codex path goes through it, so no install, uninstall or status path can
-// disagree with another about where Codex's home is. A CODEX_HOME that is
-// not absolute is an error, never a fallback: install must not write to
-// ~/.codex when the user asked for another directory, and a relative guard
-// path registered in hooks.json fails from every other working directory.
+// Codex path (config.toml, AGENTS.md, hooks.json, the PreToolUse guard and
+// the read-only skill root) goes through it, so install, uninstall and
+// status agree about where Codex's home is. A CODEX_HOME that is not
+// absolute is a codexHomeNotAbsoluteError, never a fallback: install must
+// not write to ~/.codex when the user asked for another directory, and a
+// relative guard path registered in hooks.json fails from every other
+// working directory. Only global operations need it. A local install names
+// the global config.toml in codexTrustNote and reads its hooks setting, and
+// both cope with this error.
 func codexHomeDir() (string, error) {
 	if v := os.Getenv("CODEX_HOME"); v != "" {
 		if !filepath.IsAbs(v) {
-			return "", fmt.Errorf("CODEX_HOME %q is not an absolute path", v)
+			return "", codexHomeNotAbsoluteError{value: v}
 		}
 		return filepath.Clean(v), nil
 	}
@@ -110,9 +123,10 @@ func codexInstructionsPath(loc Location) (string, error) {
 // entry is appended for the Codex-specific root the live evidence showed
 // Codex actually reads at that scope — ".codex/skills/codegraph" locally
 // (D-15 ".codex/skills read: yes"), skills/codegraph under codexHomeDir
-// globally (D-15 "CODEX_HOME/skills read: yes") — 07-LIVE-SESSIONS.md CODEX-01 verdicts, both "yes". codegraph
-// never writes to either read-only root (D-14): same-name skills are not
-// merged by Codex, so a second physical copy would list twice.
+// globally (D-15 "CODEX_HOME/skills read: yes") — 07-LIVE-SESSIONS.md
+// CODEX-01 verdicts, both "yes". codegraph never writes to either
+// read-only root (D-14): same-name skills are not merged by Codex, so a
+// second physical copy would list twice.
 func codexSkillDirs(loc Location) ([]string, error) {
 	dirs, err := sharedSkillDirs(loc)
 	if err != nil {
@@ -132,9 +146,10 @@ func codexSkillDirs(loc Location) ([]string, error) {
 // Codex loads a project's MCP server only once the project is trusted, via
 // its own TUI trust prompt or the "trust_level" key it writes into the
 // user's global config.toml (codexConfigPath, shown as ~/.codex/config.toml
-// when that is the default location) — codegraph never writes that entry itself
-// (D-10; 07-LIVE-SESSIONS.md confirmed a -c override does NOT grant trust,
-// so this note never suggests one). Per the live D-16/A2 verdicts (both
+// when that is the default location, and as $CODEX_HOME/config.toml when
+// CODEX_HOME is not an absolute path) — codegraph never writes that entry
+// itself (D-10; 07-LIVE-SESSIONS.md confirmed a -c override does NOT grant
+// trust, so this note never suggests one). Per the live D-16/A2 verdicts (both
 // "no": neither the codegraph skill nor the AGENTS.md block is
 // trust-gated), the note also says those two are read regardless of
 // trust, so a user does not conclude the whole install needs trusting.
@@ -147,13 +162,17 @@ func codexTrustNote(loc Location) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	configRef := "$CODEX_HOME/config.toml"
 	configPath, err := codexConfigPath(LocationGlobal)
-	if err != nil {
+	var notAbsolute codexHomeNotAbsoluteError
+	switch {
+	case err == nil:
+		configRef = configPath
+		if home, herr := os.UserHomeDir(); herr == nil && configPath == filepath.Join(home, ".codex", "config.toml") {
+			configRef = "~/.codex/config.toml"
+		}
+	case !errors.As(err, &notAbsolute):
 		return "", err
-	}
-	configRef := configPath
-	if home, herr := os.UserHomeDir(); herr == nil && configPath == filepath.Join(home, ".codex", "config.toml") {
-		configRef = "~/.codex/config.toml"
 	}
 	return fmt.Sprintf(
 		"Codex loads this project's MCP server (%s) only once the project is trusted — accept Codex's trust prompt, or add `trust_level = \"trusted\"` under `[projects.%q]` in %s (codegraph never writes this entry itself). The codegraph skill and the AGENTS.md block are read regardless of trust.",
@@ -206,7 +225,7 @@ func (t codexTarget) Detect(loc Location) DetectionResult {
 	}
 	configPath, err := caps.MCPConfig(loc)
 	if err != nil {
-		return DetectionResult{}
+		return DetectionResult{Err: err}
 	}
 	installed := fileExists(configPath)
 	if !installed {
@@ -291,16 +310,19 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// 07-08: the sticky Keep/On/Off lifecycle (D-18, D-19, D-23).
 	switch opts.PreToolNudge {
 	case PreToolNudgeOn:
-		disabled, source, err := codexHooksExplicitlyDisabled(loc)
+		disabled, source, globalNote, err := codexHooksExplicitlyDisabled(loc)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks-disabled setting: %w", err))
 		} else if disabled {
 			result.Notes = append(result.Notes, codexHooksDisabledNote(source))
 		} else {
-			beforeErrs := len(result.Errors)
+			if globalNote != "" {
+				result.Notes = append(result.Notes, globalNote)
+			}
+			beforeErrs, beforeFiles := len(result.Errors), len(result.Files)
 			installCodexPreToolNudge(&result, loc, opts.ExecPath)
 			if len(result.Errors) == beforeErrs {
-				result.Notes = append(result.Notes, codexHookTrustNote(loc))
+				result.Notes = append(result.Notes, codexHookTrustNote(codexHookGroupSplit(result.Files[beforeFiles:])))
 			}
 		}
 	case PreToolNudgeKeep:
@@ -308,23 +330,30 @@ func (t codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 			result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks.json path: %w", err))
 		} else if _, ownCommands, berr := codexPreToolUseBlocks(loc); berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hooksPath, berr))
-		} else if recorded, herr := hasOwnHookBlock(hooksPath, "PreToolUse", ownCommands); herr == nil && recorded {
-			disabled, source, derr := codexHooksExplicitlyDisabled(loc)
+		} else if recorded, herr := hasOwnHookBlock(hooksPath, "PreToolUse", ownCommands); herr != nil {
+			// An unreadable or malformed hooks.json: Keep touches nothing,
+			// "cannot tell, so don't guess" (matches Claude's
+			// preToolNudgeEvidenced posture for the same ambiguity), and
+			// says so.
+			result.Notes = append(result.Notes, fmt.Sprintf("%s could not be read, so the codegraph PreToolUse nudge was not refreshed: %v", hooksPath, herr))
+		} else if recorded {
+			disabled, source, globalNote, derr := codexHooksExplicitlyDisabled(loc)
 			if derr != nil {
 				result.Errors = append(result.Errors, fmt.Errorf("resolve codex hooks-disabled setting: %w", derr))
 			} else if disabled {
 				result.Notes = append(result.Notes, codexHooksDisabledNote(source))
 			} else {
+				if globalNote != "" {
+					result.Notes = append(result.Notes, globalNote)
+				}
 				beforeFiles := len(result.Files)
 				installCodexPreToolNudge(&result, loc, opts.ExecPath)
 				if codexHooksFileWasWritten(result.Files[beforeFiles:], hooksPath) {
-					result.Notes = append(result.Notes, codexHookTrustNote(loc))
+					result.Notes = append(result.Notes, codexHookTrustNote(codexHookGroupSplit(result.Files[beforeFiles:])))
 				}
 			}
 		}
-		// herr != nil (unreadable/malformed hooks.json) or !recorded: Keep
-		// touches nothing — "cannot tell, so don't guess" (matches Claude's
-		// preToolNudgeEvidenced posture for the same ambiguity).
+		// !recorded: Keep touches nothing, as for a user who never opted in.
 	case PreToolNudgeOff:
 		uninstallCodexPreToolNudge(&result, loc, opInstall)
 	}

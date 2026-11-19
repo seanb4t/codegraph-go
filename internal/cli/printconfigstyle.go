@@ -71,6 +71,9 @@ func configStyleFields(t agents.AgentTarget, loc agents.Location) (string, error
 // printConfigStyle renders every target in targets at loc, one line per
 // target, in the order given — the read-only body of `install
 // --print-config-style` (D-04). Zero targets prints "no agents selected".
+// A target whose paths do not resolve prints an "error=..." field in place
+// of its fields, the other targets still print, and the first such error
+// is returned after the last line.
 // Resolves the shared color mode exactly once, mirroring printAgentResults'
 // styled/plain split: styled renders each line via present.KV through
 // Phase 4's palette; plain (the default, and always on a non-TTY pipe)
@@ -95,10 +98,15 @@ func printConfigStyle(cmd *cobra.Command, targets []agents.AgentTarget, loc agen
 		w = mode.Writer(out)
 	}
 
+	var firstErr error
 	for _, t := range targets {
 		fields, err := configStyleFields(t, loc)
 		if err != nil {
-			return fmt.Errorf("codegraph install: %w", err)
+			// One target that cannot resolve a path must not hide the others.
+			if firstErr == nil {
+				firstErr = err
+			}
+			fields = "error=" + sanitizePathForDisplay(err.Error())
 		}
 		if mode.Styled {
 			if err := present.KV(w, pal, string(t.ID())+":", fields); err != nil {
@@ -107,6 +115,9 @@ func printConfigStyle(cmd *cobra.Command, targets []agents.AgentTarget, loc agen
 			continue
 		}
 		fmt.Fprintf(out, "%s: %s\n", t.ID(), fields)
+	}
+	if firstErr != nil {
+		return fmt.Errorf("codegraph install: %w", firstErr)
 	}
 	return nil
 }

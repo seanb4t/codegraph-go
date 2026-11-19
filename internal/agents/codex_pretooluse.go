@@ -65,12 +65,12 @@ func codexPreToolHookCommand(loc Location) (string, error) {
 	return shellSingleQuote(guardPath), nil
 }
 
-// codexLegacyGlobalHookCommand is the global PreToolUse command spelling
-// that points into ~/.codex, the guard location whenever CODEX_HOME is
-// unset. It is empty when it equals ownCommand or the home directory cannot
-// be resolved. A handler carrying it is still codegraph's own when
-// CODEX_HOME names a directory that ~/.codex links to, so it is matched,
-// never written.
+// codexLegacyGlobalHookCommand is the single-quoted guard path under
+// ~/.codex, the global command spelling used whenever CODEX_HOME is unset.
+// It is empty when it equals ownCommand or when the home directory cannot
+// be resolved. Nothing writes it. It is matched against $CODEX_HOME/hooks.json
+// only, where it identifies codegraph's handler when an older install wrote
+// it there, for example when ~/.codex links to CODEX_HOME.
 func codexLegacyGlobalHookCommand(ownCommand string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -86,8 +86,10 @@ func codexLegacyGlobalHookCommand(ownCommand string) string {
 // codexPreToolUseBlocks returns the PreToolUse blocks for loc, derived
 // from the embedded Codex hooks fragment, plus the owned commands
 // writeHookEntry, removeHookEntry and hasOwnHookBlock use for identity: the
-// command the blocks carry, then at global scope its ~/.codex spelling. This is a Codex-specific copy of the
-// claudePreToolUseBlocks/claudeFragmentEventBlocks pattern — deliberately
+// command the blocks carry and, at global scope when it differs, its
+// ~/.codex spelling (codexLegacyGlobalHookCommand). This is a Codex-specific
+// copy of the claudePreToolUseBlocks/claudeFragmentEventBlocks pattern —
+// deliberately
 // not shared code, since the two fragments and command shapes diverge
 // (D-21): Codex's fragment carries no CLAUDE_PROJECT_DIR-shaped literal
 // and its own quoted command form (D-20).
@@ -225,37 +227,43 @@ func installCodexPreToolNudge(result *WriteResult, loc Location, execPath string
 // `.codex/config.toml` is read first; if it sets `features.hooks` (any of
 // tomlBoolSetting's three recognized forms) that value governs; else if it
 // sets the deprecated `features.codex_hooks` that governs instead; else the
-// same two checks fall back to the global config.toml under codexHomeDir. For
-// global, only the global file is consulted. source names the governing
-// file and key, for codexHooksDisabledNote. A read error other than
+// same two checks fall back to the global config.toml under codexHomeDir.
+// For global, only the global file is consulted. source names the governing
+// file and key, for codexHooksDisabledNote. At local scope, a CODEX_HOME that
+// is not absolute leaves the global setting unknown: the local decision goes
+// on, and note names the bad value. A read error other than
 // not-exist is returned unwrapped — the caller records it and writes
 // nothing, per the "cannot tell, so don't guess" posture the rest of this
 // package's config reads already follow.
-func codexHooksExplicitlyDisabled(loc Location) (bool, string, error) {
+func codexHooksExplicitlyDisabled(loc Location) (disabled bool, source, note string, err error) {
 	if loc == LocationLocal {
 		localPath, err := codexConfigPath(LocationLocal)
 		if err != nil {
-			return false, "", err
+			return false, "", "", err
 		}
 		if disabled, source, found, err := codexConfigHooksSetting(localPath); err != nil {
-			return false, "", err
+			return false, "", "", err
 		} else if found {
-			return disabled, source, nil
+			return disabled, source, "", nil
 		}
 	}
 
 	globalPath, err := codexConfigPath(LocationGlobal)
 	if err != nil {
-		return false, "", err
+		var notAbsolute codexHomeNotAbsoluteError
+		if loc == LocationLocal && errors.As(err, &notAbsolute) {
+			return false, "", fmt.Sprintf("the global Codex config.toml was not checked for a disabled-hooks setting: %v", err), nil
+		}
+		return false, "", "", err
 	}
 	disabled, source, found, err := codexConfigHooksSetting(globalPath)
 	if err != nil {
-		return false, "", err
+		return false, "", "", err
 	}
 	if !found {
-		return false, "", nil
+		return false, "", "", nil
 	}
-	return disabled, source, nil
+	return disabled, source, "", nil
 }
 
 // codexConfigHooksSetting reads path (a Codex config.toml) and reports
@@ -289,9 +297,26 @@ func codexConfigHooksSetting(path string) (disabled bool, source string, found b
 // install adds: Codex skips a new or changed hook until it is trusted in
 // /hooks (07-LIVE-SESSIONS.md B5's live "Hooks need review" prompt), so the
 // user must open that review themselves — this Note never advises
-// `--dangerously-bypass-hook-trust` (T-07-24).
-func codexHookTrustNote(loc Location) string {
-	return "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
+// `--dangerously-bypass-hook-trust` (T-07-24). When split is true, the
+// install also split a hook group that held another hook beside codegraph's,
+// so the note adds that the other hook needs review too.
+func codexHookTrustNote(split bool) string {
+	note := "Codex skips a new or changed hook until you trust it — open /hooks in Codex and trust the codegraph PreToolUse hook"
+	if split {
+		note += ", and review your other hook that shared its group, which now sits in a group of its own"
+	}
+	return note
+}
+
+// codexHookGroupSplit reports whether files (a WriteResult.Files slice)
+// records a hook group split by a write.
+func codexHookGroupSplit(files []FileResult) bool {
+	for _, f := range files {
+		if f.HookGroupSplit {
+			return true
+		}
+	}
+	return false
 }
 
 // codexHooksDisabledNote returns the D-18 Note printed when an opt-in

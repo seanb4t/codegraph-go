@@ -312,11 +312,8 @@ func readJSONFileForWrite(path string) (map[string]any, error) {
 
 // blockOwnsAnyCommand reports whether block's own hooks[] sub-array
 // contains any command in ownCommands — the single ownership-identity test
-// writeHookEntry's isOwned call site, removeHookEntry's isOwnCommand
-// closure, and hasOwnHookBlock all apply (code review WR-02, 06-REVIEW.md:
-// three independent copies of this rule were kept in sync only by
-// TestOwnershipExactIdentity and developer discipline, not by the
-// compiler). Ownership keys on exact hooks[i]["command"] string equality
+// that splitOwnedBlock (and through it writeHookEntry and removeHookEntry)
+// and hasOwnHookBlock all apply (code review WR-02, 06-REVIEW.md). Ownership keys on exact hooks[i]["command"] string equality
 // against ownCommands, ignoring matcher, if, and any other field — a block
 // that fails to cast to map[string]any, or whose "hooks" key fails to cast
 // to []any, is never owned.
@@ -345,8 +342,8 @@ func blockOwnsAnyCommand(block any, ownCommands []string) bool {
 // splitOwnedBlock splits block, one {matcher, hooks[]} object of a hook
 // event, by ownership of its handlers. ownedPart is a copy of block holding
 // only the handlers whose command is in ownCommands, foreignPart a copy
-// holding the rest (nil when every handler is owned), and ownsAny is false
-// when block holds no owned handler at all.
+// holding the rest (nil when every handler is owned), and ownsAny is false,
+// with both parts nil, when block holds no owned handler at all.
 func splitOwnedBlock(block any, ownCommands []string) (ownedPart, foreignPart any, ownsAny bool) {
 	if !blockOwnsAnyCommand(block, ownCommands) {
 		return nil, nil, false
@@ -379,10 +376,8 @@ func splitOwnedBlock(block any, ownCommands []string) (ownedPart, foreignPart an
 }
 
 // commandIsOwned reports whether cmd exactly matches one of ownCommands —
-// the single hook-level identity check blockOwnsAnyCommand (and, through
-// it, writeHookEntry's isOwned call site and hasOwnHookBlock) and
-// removeHookEntry's isOwnCommand closure both reduce to (WR-02,
-// 06-REVIEW.md).
+// the single hook-level identity check that blockOwnsAnyCommand and
+// splitOwnedBlock reduce to (WR-02, 06-REVIEW.md).
 func commandIsOwned(cmd string, ownCommands []string) bool {
 	for _, own := range ownCommands {
 		if cmd == own {
@@ -416,48 +411,58 @@ func commandIsOwned(cmd string, ownCommands []string) bool {
 // acceptable trade to avoid it.
 //
 // A block whose hooks[] mixes codegraph's own handler with an unrelated one
-// is split, the way removeHookEntry strips it: the owned handlers are
-// replaced by ownBlocks, and the unrelated handlers stay in a block of
-// their own that keeps the original block's other fields.
+// is left as it is while its owned part already equals ownBlocks. Once
+// codegraph's handlers need rewriting, the block is split: the unrelated
+// handlers stay in a block of their own, which keeps the original block's
+// other fields and its index, and the write reports FileResult.HookGroupSplit.
 //
 // If the owned partition already jsonDeepEquals the normalized ownBlocks,
-// nothing is written (ActionUnchanged). Otherwise the array is rebuilt: if
-// an owned block already existed, ownBlocks is spliced back in at the
-// index its first owned block originally occupied among the unowned
-// blocks, preserving the position of any foreign block that already
-// followed it (WR-01, 07-REVIEW.md) — Codex's hook trust is keyed on
-// array position, so leapfrogging an untouched foreign block to a new
-// index spuriously re-flags it for review. Only a genuine first install —
-// no owned block existed before this call — appends ownBlocks after every
-// existing block, preserving D-23's "codegraph's group is appended last on
-// first install" guarantee. Every unrelated event key and every unowned
-// block under the same event is carried through untouched.
+// nothing is written (ActionUnchanged). Otherwise the array is rebuilt, and
+// no unowned block other than a split remainder changes index through the
+// splice: Codex's hook trust is keyed on array position, so moving an
+// untouched foreign block to a new index re-flags it for review (WR-01,
+// 07-REVIEW.md). If a fully owned block existed, ownBlocks is spliced in at
+// the index its first one occupied among the unowned blocks. Otherwise (a
+// first install, or every owned block was mixed) ownBlocks go after every
+// other block, preserving D-23's "codegraph's group is appended last". A
+// foreign block after the splice point still moves by the difference
+// between the number of fully owned blocks and the number of ownBlocks.
+// Every unrelated event key and every unowned block under the same event is
+// carried through untouched.
+//
+// A "hooks" value that is not an object, or a hooks.<event> value that is
+// not an array, is an error naming path, and the file stays unchanged.
 func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
 	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
 	}
 
-	hooks, _ := existing["hooks"].(map[string]any)
+	hooks, events, err := hookEventArray(existing, path, event)
+	if err != nil {
+		return FileResult{}, err
+	}
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	events, _ := hooks[event].([]any)
 
 	var owned, unowned []any
 	ownedInsertAt := -1
+	split := false
 	for _, b := range events {
 		ownedPart, foreignPart, ownsAny := splitOwnedBlock(b, ownCommands)
-		if !ownsAny {
+		switch {
+		case !ownsAny:
 			unowned = append(unowned, b)
-			continue
-		}
-		if ownedInsertAt == -1 {
-			ownedInsertAt = len(unowned)
-		}
-		owned = append(owned, ownedPart)
-		if foreignPart != nil {
+		case foreignPart == nil:
+			if ownedInsertAt == -1 {
+				ownedInsertAt = len(unowned)
+			}
+			owned = append(owned, ownedPart)
+		default:
+			owned = append(owned, ownedPart)
 			unowned = append(unowned, foreignPart)
+			split = true
 		}
 	}
 
@@ -473,8 +478,8 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 
 	var newEvents []any
 	if ownedInsertAt == -1 {
-		// First install: no owned block existed to preserve the position
-		// of, so codegraph's group goes after every existing block (D-23).
+		// No fully owned block holds a position to preserve, so codegraph's
+		// group goes after every other block (D-23).
 		newEvents = append(append([]any{}, unowned...), normalizedOwn...)
 	} else {
 		newEvents = append(append([]any{}, unowned[:ownedInsertAt]...), normalizedOwn...)
@@ -490,7 +495,30 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (
 	if existedBefore {
 		action = ActionUpdated
 	}
-	return FileResult{Path: path, Action: action}, nil
+	return FileResult{Path: path, Action: action, HookGroupSplit: split}, nil
+}
+
+// hookEventArray returns the "hooks" object of a decoded settings object and
+// its event array. Each is nil when the key is absent or null. A "hooks"
+// value that is not an object, or an event value that is not an array, is
+// an error naming path and the key, so a caller never overwrites a value it
+// does not understand.
+func hookEventArray(existing map[string]any, path, event string) (hooks map[string]any, events []any, err error) {
+	if v := existing["hooks"]; v != nil {
+		h, ok := v.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf("%s: \"hooks\" is not a JSON object", path)
+		}
+		hooks = h
+	}
+	if v := hooks[event]; v != nil {
+		a, ok := v.([]any)
+		if !ok {
+			return nil, nil, fmt.Errorf("%s: \"hooks.%s\" is not a JSON array", path, event)
+		}
+		events = a
+	}
+	return hooks, events, nil
 }
 
 // atomicWriteExecutableFile writes content to path via fsatomic.WriteFile
@@ -585,73 +613,39 @@ func writeEmbeddedFile(path, content string, executable bool) (FileResult, error
 // array deletes the event key, an emptied hooks object deletes the
 // top-level hooks key, and an emptied settings object deletes the file
 // entirely — mirroring "the file never existed before install" for the
-// uninstall direction. Reports ActionNotFound (never an error) when
-// there is no hooks object, no such event, or nothing owned to remove —
-// matching the pre-existing D-08 invariant.
+// uninstall direction. Reports ActionNotFound when there is no hooks
+// object, no such event, or nothing owned to remove — matching the
+// pre-existing D-08 invariant. A "hooks" value that is not an object, or
+// an event value that is not an array, is an error naming path, and the
+// file stays unchanged.
 func removeHookEntry(path, event string, ownCommands []string) (FileResult, error) {
 	existing, _, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
 	}
 
-	hooks, ok := existing["hooks"].(map[string]any)
-	if !ok {
-		return FileResult{Path: path, Action: ActionNotFound}, nil
+	hooks, events, err := hookEventArray(existing, path, event)
+	if err != nil {
+		return FileResult{}, err
 	}
-	events, ok := hooks[event].([]any)
-	if !ok {
+	if events == nil {
 		return FileResult{Path: path, Action: ActionNotFound}, nil
-	}
-
-	isOwnCommand := func(cmd string) bool {
-		return commandIsOwned(cmd, ownCommands)
 	}
 
 	var anyRemoved bool
 	var kept []any
 	for _, b := range events {
-		obj, ok := b.(map[string]any)
-		if !ok {
+		_, foreignPart, ownsAny := splitOwnedBlock(b, ownCommands)
+		if !ownsAny {
 			kept = append(kept, b)
 			continue
 		}
-		blockHooks, ok := obj["hooks"].([]any)
-		if !ok {
-			kept = append(kept, b)
-			continue
+		anyRemoved = true
+		// A block that held only codegraph's own handlers drops entirely;
+		// one that also held others keeps just those.
+		if foreignPart != nil {
+			kept = append(kept, foreignPart)
 		}
-
-		var survivingHooks []any
-		blockChanged := false
-		for _, h := range blockHooks {
-			hObj, ok := h.(map[string]any)
-			if !ok {
-				survivingHooks = append(survivingHooks, h)
-				continue
-			}
-			cmd, _ := hObj["command"].(string)
-			if isOwnCommand(cmd) {
-				blockChanged = true
-				anyRemoved = true
-				continue
-			}
-			survivingHooks = append(survivingHooks, h)
-		}
-
-		if !blockChanged {
-			kept = append(kept, b)
-			continue
-		}
-		if len(survivingHooks) == 0 {
-			// The whole block was codegraph's own — drop it entirely.
-			continue
-		}
-		newObj := make(map[string]any, len(obj))
-		for k, v := range obj {
-			newObj[k] = v
-		}
-		newObj["hooks"] = survivingHooks
-		kept = append(kept, newObj)
 	}
 
 	if !anyRemoved {
@@ -687,14 +681,12 @@ func removeHookEntry(path, event string, ownCommands []string) (FileResult, erro
 // the PreToolUse opt-in can be evidenced by settings.json even when the
 // manifest never recorded it, e.g. a foreign/unmanifested D-14 skill
 // directory). Ownership is determined by blockOwnsAnyCommand, the same
-// command-string identity test writeHookEntry's own isOwned call site and
-// removeHookEntry's own isOwnCommand closure reduce to (WR-02, 06-REVIEW.md
-// — this used to be a third independent duplicate of the identity rule,
-// kept in sync only by TestOwnershipExactIdentity and developer discipline;
-// it is now the same code path the compiler enforces). A malformed or
-// unreadable file surfaces its error unwritten, exactly like
-// readJSONFileStrict's other callers; a missing file, missing hooks
-// object, or missing event key is (false, nil), never an error.
+// command-string identity test splitOwnedBlock applies for writeHookEntry
+// and removeHookEntry (WR-02, 06-REVIEW.md). A malformed or unreadable file
+// surfaces its error unwritten, exactly like readJSONFileStrict's other
+// callers, and so does a "hooks" or event value of the wrong JSON type; a
+// missing file, missing hooks object, or missing event key is (false, nil),
+// never an error.
 func hasOwnHookBlock(path, event string, ownCommands []string) (bool, error) {
 	existing, present, err := readJSONFileStrict(path)
 	if err != nil {
@@ -703,11 +695,10 @@ func hasOwnHookBlock(path, event string, ownCommands []string) (bool, error) {
 	if !present {
 		return false, nil
 	}
-	hooks, _ := existing["hooks"].(map[string]any)
-	if hooks == nil {
-		return false, nil
+	_, events, err := hookEventArray(existing, path, event)
+	if err != nil {
+		return false, err
 	}
-	events, _ := hooks[event].([]any)
 	for _, b := range events {
 		if blockOwnsAnyCommand(b, ownCommands) {
 			return true, nil

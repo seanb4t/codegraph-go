@@ -154,9 +154,8 @@ func claudeSettingsPath(loc Location) (string, error) {
 const claudeFragmentCommand = `"` + claudeUnquotedFragmentCommand + `"`
 
 // claudeUnquotedFragmentCommand is claudeFragmentCommand without the quotes.
-// Nothing writes this text; it is only matched, as one of the owned
-// commands, so a handler carrying it is still replaced on install and
-// removed on uninstall.
+// Nothing writes this text. It is only matched, as one of the owned
+// commands, so a handler that carries it is codegraph's own.
 const claudeUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
 
 // claudeSkillDirPath resolves to the directory Phase 7 installs the
@@ -256,11 +255,11 @@ func claudeHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudeFragmentCommand, nil
 	}
-	path, err := claudeHooksScriptPath(LocationGlobal)
+	unquoted, err := claudeUnquotedHookCommand(loc)
 	if err != nil {
 		return "", err
 	}
-	return shellSingleQuote(path), nil
+	return shellSingleQuote(unquoted), nil
 }
 
 // claudeUnquotedHookCommand is claudeHookCommand's text without the shell
@@ -371,11 +370,25 @@ func addClaudeAllowPermission(path string) (FileResult, error) {
 	if err != nil {
 		return FileResult{}, err
 	}
-	permissions, _ := existing["permissions"].(map[string]any)
+	var permissions map[string]any
+	if v := existing["permissions"]; v != nil {
+		p, ok := v.(map[string]any)
+		if !ok {
+			return FileResult{}, fmt.Errorf("%s: \"permissions\" is not a JSON object", path)
+		}
+		permissions = p
+	}
 	if permissions == nil {
 		permissions = map[string]any{}
 	}
-	allow, _ := permissions["allow"].([]any)
+	var allow []any
+	if v := permissions["allow"]; v != nil {
+		a, ok := v.([]any)
+		if !ok {
+			return FileResult{}, fmt.Errorf("%s: \"permissions.allow\" is not a JSON array", path)
+		}
+		allow = a
+	}
 	for _, v := range allow {
 		if s, ok := v.(string); ok && s == claudeAllowToken {
 			return FileResult{Path: path, Action: ActionUnchanged}, nil

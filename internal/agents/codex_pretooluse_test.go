@@ -705,7 +705,8 @@ func TestCodexPreToolNudge_KeepNoopWhenNotOptedIn(t *testing.T) {
 // TestCodexPreToolNudge_KeepWithMalformedHooksJSONTouchesNothing: a
 // malformed hooks.json with Keep writes nothing, reports no error, and
 // leaves the file byte-identical (hasOwnHookBlock's read failure is
-// treated as "cannot tell", never surfaced as an Install error).
+// treated as "cannot tell" and surfaces as a note, never as an Install
+// error).
 func TestCodexPreToolNudge_KeepWithMalformedHooksJSONTouchesNothing(t *testing.T) {
 	fakeHome(t)
 	t.Chdir(t.TempDir())

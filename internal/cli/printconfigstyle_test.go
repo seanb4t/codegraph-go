@@ -240,3 +240,30 @@ func TestInstallPrintConfigStyle_Filters(t *testing.T) {
 		t.Fatalf("expected no target line to print before the unknown-target error, got:\n%s", out)
 	}
 }
+
+// TestInstallPrintConfigStyle_UnresolvedTargetDoesNotHideTheOthers: a target
+// whose paths do not resolve prints an error field, every other target still
+// prints its line, and the command still exits with the error.
+func TestInstallPrintConfigStyle_UnresolvedTargetDoesNotHideTheOthers(t *testing.T) {
+	fakeHome(t)
+	t.Setenv("CODEX_HOME", "rel")
+
+	out, _, err := execCmd("install", "--print-config-style", "--location", "global")
+	if err == nil || !strings.Contains(err.Error(), `CODEX_HOME "rel"`) {
+		t.Fatalf("install --print-config-style error = %v, want one naming CODEX_HOME", err)
+	}
+	lines := splitNonEmptyLines(out)
+	ids := agents.AllTargetIDs()
+	if len(lines) != len(ids) {
+		t.Fatalf("stdout has %d lines, want %d (one per registered target):\n%s", len(lines), len(ids), out)
+	}
+	for i, id := range ids {
+		prefix := string(id) + ": "
+		if !strings.HasPrefix(lines[i], prefix) {
+			t.Errorf("line %d = %q, want it to start with %q", i, lines[i], prefix)
+		}
+		if isCodex := id == agents.Codex; isCodex != strings.Contains(lines[i], "error=") {
+			t.Errorf("line %d = %q, want an error field only for codex", i, lines[i])
+		}
+	}
+}
