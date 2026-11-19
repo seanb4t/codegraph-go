@@ -1,0 +1,3 @@
+kind: Dependencies
+body: Move the embedded graph UI to SvelteKit 3.3.1 to fix two SvelteKit security advisories (GHSA-3r8g-jcqq-3p5j and GHSA-6cf5-gc4q-fm3x).
+time: 2026-11-18T17:50:21.331989-05:00

@@ -19,14 +19,15 @@
 //
 // This module never imports SvelteKit's two shallow-routing history
 // exports from $app/navigation — the standalone history-mutating pair,
-// distinct from goto's own like-named OPTION below — here or anywhere
+// distinct from goto's own `replace` OPTION below — here or anywhere
 // else in web/src/. Those two assign only to page.state, never to
 // page.url, so a component reading page.url.searchParams would never
 // react to them (03-RESEARCH.md Pitfall 1; the address bar would
-// visibly change while the view did not). goto's OWN replaceState
-// OPTION is the real lever D-11 needs, and it is the only thing this
-// module calls.
+// visibly change while the view did not). goto's OWN `replace`
+// OPTION (named replaceState before SvelteKit 3) is the real lever D-11
+// needs, and it is the only thing this module calls.
 import type { goto } from '$app/navigation';
+import type { ReadonlyURL } from '$app/state';
 import { parseBrowseParams, serializeBrowseParams, type BrowseParams } from '$lib/browse-url';
 
 export type GotoFn = typeof goto;
@@ -57,7 +58,7 @@ export interface BrowseNavigator {
 	// choice. `currentUrl` is passed in explicitly (rather than read
 	// internally from $app/state) so this stays free of any SvelteKit
 	// runtime dependency.
-	navigate(currentUrl: URL, delta: BrowseNavDelta, intent: NavIntent): void;
+	navigate(currentUrl: ReadonlyURL, delta: BrowseNavDelta, intent: NavIntent): void;
 }
 
 // hasOwn distinguishes "delta explicitly sets this key" (including to
@@ -136,9 +137,8 @@ export function createBrowseNavigator(gotoFn: GotoFn): BrowseNavigator {
 			// unhandled — it is exactly the same "expected, ignorable
 			// failure" shape as browse-tracer.ts's own hljs fallback.
 			void gotoFn(url, {
-				replaceState: intent === NAV_INTENT.REFINE,
-				noScroll: true,
-				keepFocus: true
+				replace: intent === NAV_INTENT.REFINE,
+				reset: false
 			}).catch(() => {});
 		}
 	};

@@ -16,47 +16,45 @@ function lastCall(gotoFn: GotoFn) {
 	const calls = (gotoFn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
 	const [url, opts] = calls[calls.length - 1] as [
 		URL,
-		{ replaceState: boolean; noScroll: boolean; keepFocus: boolean }
+		{ replace: boolean; reset: boolean }
 	];
 	return { url, opts, params: parseBrowseParams(url.searchParams) };
 }
 
-describe('createBrowseNavigator: intent -> replaceState, and the two intents DIFFER', () => {
-	it('a navigate intent calls the injected navigation function with replaceState false', () => {
+describe('createBrowseNavigator: intent -> replace, and the two intents DIFFER', () => {
+	it('a navigate intent calls the injected navigation function with replace false', () => {
 		const gotoFn = spyGoto();
 		const nav = createBrowseNavigator(gotoFn);
 		nav.navigate(new URL('http://x/browse'), { symbol: 'Foo' }, NAV_INTENT.NAVIGATE);
-		expect(lastCall(gotoFn).opts.replaceState).toBe(false);
+		expect(lastCall(gotoFn).opts.replace).toBe(false);
 	});
 
-	it('a refine intent calls the injected navigation function with replaceState true', () => {
+	it('a refine intent calls the injected navigation function with replace true', () => {
 		const gotoFn = spyGoto();
 		const nav = createBrowseNavigator(gotoFn);
 		nav.navigate(new URL('http://x/browse'), { q: 'ab' }, NAV_INTENT.REFINE);
-		expect(lastCall(gotoFn).opts.replaceState).toBe(true);
+		expect(lastCall(gotoFn).opts.replace).toBe(true);
 	});
 
 	it('the two booleans DIFFER — not merely that each intent was called', () => {
 		const gotoFn = spyGoto();
 		const nav = createBrowseNavigator(gotoFn);
 		nav.navigate(new URL('http://x/browse'), { symbol: 'Foo' }, NAV_INTENT.NAVIGATE);
-		const navigateReplaceState = lastCall(gotoFn).opts.replaceState;
+		const navigateReplace = lastCall(gotoFn).opts.replace;
 		nav.navigate(new URL('http://x/browse'), { q: 'ab' }, NAV_INTENT.REFINE);
-		const refineReplaceState = lastCall(gotoFn).opts.replaceState;
-		expect(navigateReplaceState).not.toBe(refineReplaceState);
+		const refineReplace = lastCall(gotoFn).opts.replace;
+		expect(navigateReplace).not.toBe(refineReplace);
 	});
 });
 
-describe('createBrowseNavigator: both noScroll and keepFocus are always set', () => {
-	it('every call carries noScroll:true and keepFocus:true, for both intents', () => {
+describe('createBrowseNavigator: reset is always false', () => {
+	it('every call carries reset:false, for both intents', () => {
 		const gotoFn = spyGoto();
 		const nav = createBrowseNavigator(gotoFn);
 		nav.navigate(new URL('http://x/browse'), { symbol: 'Foo' }, NAV_INTENT.NAVIGATE);
-		expect(lastCall(gotoFn).opts.noScroll).toBe(true);
-		expect(lastCall(gotoFn).opts.keepFocus).toBe(true);
+		expect(lastCall(gotoFn).opts.reset).toBe(false);
 		nav.navigate(new URL('http://x/browse'), { q: 'ab' }, NAV_INTENT.REFINE);
-		expect(lastCall(gotoFn).opts.noScroll).toBe(true);
-		expect(lastCall(gotoFn).opts.keepFocus).toBe(true);
+		expect(lastCall(gotoFn).opts.reset).toBe(false);
 	});
 });
 

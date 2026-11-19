@@ -83,6 +83,12 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
+			// SvelteKit 3 dropped the built-in $lib alias in favor of #lib
+			// subpath imports, and deprecates this option. The source and
+			// components.json still import $lib, so this keeps it until they
+			// move to #lib.
+			alias: { $lib: 'src/lib' },
+
 			// adapter-static (D-01/D-03/D-04): pages/assets default to
 			// 'build' (adapter's own default, unchanged here); fallback
 			// is 'index.html' — NOT SvelteKit's own recommended

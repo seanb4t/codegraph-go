@@ -30,6 +30,7 @@
 // into a shared core both views import. The next author of a
 // multi-valued URL key should read this comment before adding a third
 // grammar.
+import type { ReadonlyURLSearchParams } from '$app/state';
 import { isShapeInteger, parseShapeInteger } from './browse-url';
 
 export const WORKBENCH_PARAM_KEYS = ['mode', 'symbol', 'file', 'depth', 'limit'] as const;
@@ -58,7 +59,7 @@ export type WorkbenchParams = {
 	unknown: Array<[string, string]>;
 };
 
-export function parseWorkbenchParams(params: URLSearchParams): WorkbenchParams {
+export function parseWorkbenchParams(params: ReadonlyURLSearchParams): WorkbenchParams {
 	const unknown: Array<[string, string]> = [];
 	for (const [key, value] of params.entries()) {
 		if (!KNOWN_KEYS.has(key)) {
