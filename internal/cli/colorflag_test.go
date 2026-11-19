@@ -53,6 +53,18 @@ func TestRewriteEnviron(t *testing.T) {
 			want:    []string{"NO_COLOR=1"},
 		},
 		{
+			name:    "auto drops CLICOLOR_FORCE when NO_COLOR is non-empty",
+			choice:  colorAuto,
+			environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1", "TERM=x"},
+			want:    []string{"NO_COLOR=1", "TERM=x"},
+		},
+		{
+			name:    "auto keeps CLICOLOR_FORCE when NO_COLOR is empty",
+			choice:  colorAuto,
+			environ: []string{"NO_COLOR=", "CLICOLOR_FORCE=1"},
+			want:    []string{"NO_COLOR=", "CLICOLOR_FORCE=1"},
+		},
+		{
 			name:    "auto leaves an empty NO_COLOR alone",
 			choice:  colorAuto,
 			environ: []string{"NO_COLOR="},
@@ -157,6 +169,9 @@ func TestResolveColorMatrix(t *testing.T) {
 		{name: "auto/tty/TERM=dumb", choice: colorAuto, environ: []string{"TERM=dumb", "TTY_FORCE=1"}, check: wantStyled(false)},
 		{name: "auto/tty/NO_COLOR=banana", choice: colorAuto, environ: []string{"NO_COLOR=banana", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(false)},
 		{name: "auto/tty/NO_COLOR=empty", choice: colorAuto, environ: []string{"NO_COLOR=", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(true)},
+		{name: "auto/pipe/NO_COLOR=1/CLICOLOR_FORCE=1", choice: colorAuto, environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1"}, check: wantStyled(false)},
+		{name: "auto/tty/NO_COLOR=1/CLICOLOR_FORCE=1", choice: colorAuto, environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(false)},
+		{name: "always/pipe/NO_COLOR=1/CLICOLOR_FORCE=1", choice: colorAlways, environ: []string{"NO_COLOR=1", "CLICOLOR_FORCE=1"}, check: wantStyled(true)},
 		{name: "auto/tty/CLICOLOR=0", choice: colorAuto, environ: []string{"CLICOLOR=0", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(false)},
 		{name: "auto/tty/CLICOLOR=0/CLICOLOR_FORCE=1", choice: colorAuto, environ: []string{"CLICOLOR=0", "CLICOLOR_FORCE=1", "TERM=xterm-256color", "TTY_FORCE=1"}, check: wantStyled(true)},
 	}
@@ -214,6 +229,30 @@ func TestColorFlagInvalidValue(t *testing.T) {
 	}
 	if bare, never := maskDBSize(bareOut), maskDBSize(neverOut); never != bare {
 		t.Errorf("status --color=never output differs from the bare (no-flag) plain output, DB Size masked: %s", diffLines(bare, never))
+	}
+}
+
+// TestColorNoColorBeatsClicolorForce runs the version command with both
+// variables set: auto emits no escape byte, while an explicit
+// --color=always still styles the output.
+func TestColorNoColorBeatsClicolorForce(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("CLICOLOR_FORCE", "1")
+
+	auto, _, err := execCmd("version", "--color=auto")
+	if err != nil {
+		t.Fatalf("execCmd(version --color=auto): %v", err)
+	}
+	if strings.Contains(auto, "\x1b") {
+		t.Errorf("--color=auto with NO_COLOR=1 and CLICOLOR_FORCE=1 emitted an escape byte: %q", auto)
+	}
+
+	always, _, err := execCmd("version", "--color=always")
+	if err != nil {
+		t.Fatalf("execCmd(version --color=always): %v", err)
+	}
+	if !strings.Contains(always, "\x1b") {
+		t.Errorf("--color=always with NO_COLOR=1 emitted no escape byte: %q", always)
 	}
 }
 

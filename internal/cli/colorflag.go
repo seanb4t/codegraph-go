@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -92,7 +93,8 @@ func colorChoiceOf(cmd *cobra.Command) colorChoice {
 //     NO_COLOR=banana would NOT disable colour there, diverging from this
 //     project's historical present.ChoosePresentation contract (any
 //     non-empty value disables). An empty NO_COLOR= is left untouched
-//     ("unset").
+//     ("unset"). A non-empty NO_COLOR also drops every CLICOLOR_FORCE=
+//     entry, so NO_COLOR outranks CLICOLOR_FORCE.
 //     (2) amendment A2: a non-empty CLICOLOR whose value strconv.ParseBool
 //     reads as false (0, false, …) appends NO_COLOR=1, UNLESS
 //     CLICOLOR_FORCE is ParseBool-true. colorprofile only floors on a
@@ -109,6 +111,10 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 	var clicolorForceVal string
 	sawClicolor := false
 	sawClicolorForce := false
+	noColorSet := choice == colorAuto && slices.ContainsFunc(environ, func(e string) bool {
+		v, ok := strings.CutPrefix(e, "NO_COLOR=")
+		return ok && v != ""
+	})
 
 	for _, e := range environ {
 		switch {
@@ -127,9 +133,11 @@ func rewriteEnviron(choice colorChoice, environ []string) []string {
 		case strings.HasPrefix(e, "CLICOLOR_FORCE="):
 			sawClicolorForce = true
 			clicolorForceVal = strings.TrimPrefix(e, "CLICOLOR_FORCE=")
-			switch choice {
-			case colorNever, colorAlways:
+			switch {
+			case choice == colorNever || choice == colorAlways:
 				continue // A1 (never) / superseded by our own CLICOLOR_FORCE=1 (always)
+			case noColorSet:
+				continue // auto: a non-empty NO_COLOR outranks CLICOLOR_FORCE
 			default:
 				out = append(out, e)
 			}

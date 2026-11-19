@@ -1,0 +1,3 @@
+kind: Fixes
+body: A non-empty NO_COLOR now turns colour off under --color=auto even when CLICOLOR_FORCE is also set.
+time: 2026-11-18T21:04:09.72021-05:00
