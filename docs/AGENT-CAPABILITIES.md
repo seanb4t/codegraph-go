@@ -98,9 +98,9 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
   guard path with a single quote, a backslash, a control character or invalid UTF-8 is an
   error. The error tells you to set `CODEX_HOME` to another path or to install at
   `--location local`. A global Claude Code hook path that is not valid UTF-8 is an error too,
-  because JSON cannot hold it. A relative home directory is an error for every global path,
-  and so is a relative `HERMES_HOME`. A relative `XDG_CONFIG_HOME` is ignored, as the XDG
-  specification says, and opencode uses `~/.config`.
+  because JSON cannot hold it. A relative home directory is an error for every global path.
+  A relative `HERMES_HOME` is an error too. codegraph ignores a relative `XDG_CONFIG_HOME`, as
+  the XDG specification says, and installs opencode's files under `~/.config` with a note.
 - **Codex's interactive skill listing may truncate the codegraph skill's description** (an
   advisory, not a `SKILL.md` change — the front-loaded trigger words survive either way);
   `codex debug prompt-input`'s raw dump showed the full, untruncated description

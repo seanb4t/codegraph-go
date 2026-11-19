@@ -127,7 +127,13 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 type relativeHomeError struct{ home string }
 
 func (e relativeHomeError) Error() string {
-	return fmt.Sprintf("the home directory %q is not an absolute path, so codegraph cannot find its global files: run with an absolute HOME", e.home)
+	return e.short() + ", so codegraph cannot find its global files: run with an absolute HOME"
+}
+
+// short is the message without the remedy, for a note about a global path that
+// a local operation does not need.
+func (e relativeHomeError) short() string {
+	return fmt.Sprintf("the home directory %q is not an absolute path", e.home)
 }
 
 // userHomeDir is os.UserHomeDir for a global path. A home directory that is
@@ -953,9 +959,12 @@ func replaceOrAppendMarkedSection(filePath, body, startMarker, endMarker string)
 // (plus the blank-line separator replaceOrAppendMarkedSection's append
 // path introduces before it), restoring the file to its exact pre-insert
 // bytes — the inverse of replaceOrAppendMarkedSection (T-06-02). A file
-// with no markers holds nothing of codegraph's and is left completely
-// untouched; like a missing file, it reports ActionNotFound. If removing the
-// span empties the file
+// with neither marker holds nothing of codegraph's and is left completely
+// untouched; like a missing file, it reports ActionNotFound. A file with one
+// marker alone, or the end marker before the start marker, holds an
+// incomplete codegraph section: it is left untouched and reports ActionKept,
+// and the caller says that the section must be removed by hand. If removing
+// the span empties the file
 // entirely, the file itself is deleted (mirrors "the file never existed
 // before install" for the missing-file insert case).
 func removeMarkedSection(filePath, startMarker, endMarker string) (FileAction, error) {
@@ -969,8 +978,11 @@ func removeMarkedSection(filePath, startMarker, endMarker string) (FileAction, e
 	s := string(content)
 	startIdx := strings.Index(s, startMarker)
 	endIdx := strings.Index(s, endMarker)
-	if startIdx == -1 || endIdx == -1 || endIdx < startIdx {
+	if startIdx == -1 && endIdx == -1 {
 		return ActionNotFound, nil
+	}
+	if startIdx == -1 || endIdx == -1 || endIdx < startIdx {
+		return ActionKept, nil
 	}
 	spanEnd := endIdx + len(endMarker)
 
@@ -1120,7 +1132,11 @@ func removeSharedInstructions(result *WriteResult, path string, loc Location, se
 		return
 	}
 	_ = recordUserAction(result, path, loc, opUninstall, func(real string) (FileAction, error) {
-		return removeMarkedSection(real, codegraphSectionStart, codegraphSectionEnd)
+		action, err := removeMarkedSection(real, codegraphSectionStart, codegraphSectionEnd)
+		if action == ActionKept {
+			result.Notes = append(result.Notes, fmt.Sprintf("%s holds an incomplete codegraph section, with one marker or the end marker first, and is left as it is: remove the section by hand", path))
+		}
+		return action, err
 	})
 }
 

@@ -334,6 +334,9 @@ func (t opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	if loc == LocationGlobal {
 		if cfgDir, err := resolveOpencodeConfigDir(); err == nil {
 			opencodeSweepStaleAppData(cfgDir)
+			if v := os.Getenv("XDG_CONFIG_HOME"); v != "" && !filepath.IsAbs(v) {
+				result.Notes = append(result.Notes, fmt.Sprintf("XDG_CONFIG_HOME %q is not an absolute path and was ignored: codegraph wrote opencode's files under %s", v, cfgDir))
+			}
 		}
 	}
 

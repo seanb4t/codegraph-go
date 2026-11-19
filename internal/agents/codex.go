@@ -210,7 +210,7 @@ func codexTrustNote(loc Location) (string, error) {
 	case errors.As(err, &homeErr):
 		configRef = fmt.Sprintf("$CODEX_HOME/config.toml, which does not resolve because %v", err)
 	case errors.As(err, &relativeHome):
-		configRef = fmt.Sprintf("~/.codex/config.toml, which does not resolve because %v", err)
+		configRef = "~/.codex/config.toml, which does not resolve because " + relativeHome.short()
 	default:
 		return "", err
 	}

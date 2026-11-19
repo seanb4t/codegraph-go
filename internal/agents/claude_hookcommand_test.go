@@ -507,7 +507,7 @@ func TestCodexLocal_RelativeHomeStillInstalls(t *testing.T) {
 	if !fileExists(hooksPath) || !fileExists(guard) {
 		t.Errorf("the local nudge was not installed: hooks.json %v, guard %v", fileExists(hooksPath), fileExists(guard))
 	}
-	if !noteNaming(res, `~/.codex/config.toml, which does not resolve because the home directory "relhome"`) {
+	if !noteNaming(res, `~/.codex/config.toml, which does not resolve because the home directory "relhome" is not an absolute path (`) || noteNaming(res, "run with an absolute HOME") {
 		t.Errorf("notes = %q, want the trust note to say why ~/.codex/config.toml does not resolve", res.Notes)
 	}
 }
@@ -540,6 +540,47 @@ func TestHermes_RefusesARelativeHermesHome(t *testing.T) {
 	}
 	if res := (hermesTarget{}).Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"}); !errorNaming(res, `"rel"`) {
 		t.Errorf("Install errors = %v, want one naming %q", res.Errors, "rel")
+	}
+	if names := dirNames(t, "."); len(names) != 0 {
+		t.Errorf("working directory holds %v, want nothing written there", names)
+	}
+}
+
+// TestClaudeUninstall_IncompleteInstructionsSectionIsKeptWithANote: an
+// instructions file with a start marker and no end marker is left as it is,
+// reads kept, and the note names the file and says to remove the section by
+// hand.
+func TestClaudeUninstall_IncompleteInstructionsSectionIsKeptWithANote(t *testing.T) {
+	home := fakeHome(t)
+	path := filepath.Join(home, ".claude", "CLAUDE.md")
+	content := "# Notes\n\n" + codegraphSectionStart + "\nhalf a section\n"
+	writeFile(t, path, content)
+
+	res := claudeTarget{}.Uninstall(LocationGlobal)
+	assertNoErrors(t, res)
+	if readFile(t, path) != content {
+		t.Errorf("CLAUDE.md changed")
+	}
+	if fileAction(res, path) != ActionKept || !noteNaming(res, path+" holds an incomplete codegraph section") || !noteNaming(res, "remove the section by hand") {
+		t.Errorf("action %q, notes %q, want kept and a note naming the file", fileAction(res, path), res.Notes)
+	}
+}
+
+// TestOpencodeInstall_RelativeXDGConfigHomeIsIgnoredWithANote: the install
+// ignores a relative XDG_CONFIG_HOME, writes under ~/.config, and says so.
+func TestOpencodeInstall_RelativeXDGConfigHomeIsIgnoredWithANote(t *testing.T) {
+	home := fakeHome(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "rel")
+
+	res := opencodeTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	assertNoErrors(t, res)
+	want := filepath.Join(home, ".config")
+	if !noteNaming(res, `XDG_CONFIG_HOME "rel" is not an absolute path and was ignored`) || !noteNaming(res, want) {
+		t.Errorf("notes = %q, want one naming the ignored value and %s", res.Notes, want)
+	}
+	if !fileExists(filepath.Join(want, "opencode")) {
+		t.Errorf("nothing was written under %s", want)
 	}
 	if names := dirNames(t, "."); len(names) != 0 {
 		t.Errorf("working directory holds %v, want nothing written there", names)

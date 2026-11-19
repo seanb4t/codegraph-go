@@ -305,7 +305,10 @@ func codexHooksExplicitlyDisabled(loc Location) (disabled bool, source, note str
 	if err != nil {
 		var homeErr codexHomeError
 		var relativeHome relativeHomeError
-		if loc == LocationLocal && (errors.As(err, &homeErr) || errors.As(err, &relativeHome)) {
+		if loc == LocationLocal && errors.As(err, &relativeHome) {
+			return false, "", "the global Codex config.toml was not checked for a disabled-hooks setting: " + relativeHome.short(), nil
+		}
+		if loc == LocationLocal && errors.As(err, &homeErr) {
 			return false, "", fmt.Sprintf("the global Codex config.toml was not checked for a disabled-hooks setting: %v", err), nil
 		}
 		return false, "", "", err

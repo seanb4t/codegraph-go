@@ -856,3 +856,22 @@ func TestWriteHookEntry_FirstInstallAppendsAfterForeignBlocks(t *testing.T) {
 		t.Fatalf("D-23: codegraph's own new group must be appended last on first install, got %q at index 1", got)
 	}
 }
+
+func TestMarkerRemove_IncompleteSectionIsKeptAndUntouched(t *testing.T) {
+	cases := map[string]string{
+		"start marker alone": "# Notes\n\n" + testStartMarker + "\nhalf a section\n",
+		"end marker alone":   "# Notes\n\nhalf a section\n" + testEndMarker + "\n",
+		"end before start":   testEndMarker + "\ntext\n" + testStartMarker + "\n",
+	}
+	for name, content := range cases {
+		path := filepath.Join(t.TempDir(), "CLAUDE.md")
+		writeFile(t, path, content)
+		action, err := removeMarkedSection(path, testStartMarker, testEndMarker)
+		if err != nil || action != ActionKept {
+			t.Errorf("%s: removeMarkedSection = %s, %v, want ActionKept", name, action, err)
+		}
+		if got := readFile(t, path); got != content {
+			t.Errorf("%s: bytes changed to %q", name, got)
+		}
+	}
+}

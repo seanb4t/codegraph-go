@@ -87,9 +87,10 @@ const (
 	// ActionNotFound: uninstall found nothing to remove — the file didn't
 	// exist or had no codegraph entry (D-08: never errors in this case).
 	ActionNotFound FileAction = "not-found"
-	// ActionKept: a file that holds something of codegraph's was left
-	// untouched on purpose, for example a file outside the project or a
-	// shared skill that other agents still use.
+	// ActionKept: a file that may hold something of codegraph's was left
+	// untouched on purpose, for example an instructions file with an
+	// incomplete section, or a shared skill that other agents still use. A
+	// file outside the project is left without being read.
 	ActionKept FileAction = "kept"
 )
 
