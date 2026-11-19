@@ -412,7 +412,7 @@ func TestHookRegistrationMatchesFragmentAndScript(t *testing.T) {
 					if command == "" {
 						t.Fatalf("hook entry has no command string: %#v", hookObj)
 					}
-					resolved := strings.Replace(command, "${CLAUDE_PROJECT_DIR}", "../..", 1)
+					resolved := strings.Replace(strings.Trim(command, `"`), "${CLAUDE_PROJECT_DIR}", "../..", 1)
 					info, err := os.Stat(resolved)
 					if err != nil {
 						t.Fatalf("command path %q (resolved %q) does not exist: %v", command, resolved, err)
@@ -435,7 +435,7 @@ func TestHookRegistrationMatchesFragmentAndScript(t *testing.T) {
 // so a hand-edit of any single handler duplicates rather than being
 // overwritten via its unedited siblings.
 func TestPreToolUseRegistrationShape(t *testing.T) {
-	const wantCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+	const wantCommand = `"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"`
 	want := []struct{ matcher, ifRule string }{
 		{"Bash", "Bash(grep *)"},
 		{"Bash", "Bash(rg *)"},

@@ -15,7 +15,14 @@ import (
 // claudePreToolUseBlocks rewrites into claudePreToolHookCommand(loc). It
 // names the guard script, never the binary, so the registered identity
 // survives a change of the binary's location (v0.14.0 Phase 6 D-01b).
-const claudePreToolFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+// The path is double-quoted so a project directory with whitespace stays one
+// shell word.
+const claudePreToolFragmentCommand = `"` + claudePreToolUnquotedFragmentCommand + `"`
+
+// claudePreToolUnquotedFragmentCommand is claudePreToolFragmentCommand
+// without the quotes. A handler registered with this text is still
+// codegraph's own, so install replaces it and uninstall removes it.
+const claudePreToolUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
 
 // preToolGuardExecPathToken is the single-quoted placeholder the guard
 // template carries exactly once, on its binary-path assignment line;
@@ -39,20 +46,39 @@ func claudePreToolGuardPath(loc Location) (string, error) {
 
 // claudePreToolHookCommand returns the command string registered for every
 // PreToolUse handler at loc, mirroring claudeHookCommand (D-12): the
-// fragment's project-relative literal for local, the absolute guard path
-// for global — never the binary path (D-01b).
+// fragment's project-relative literal for local, the single-quoted
+// absolute guard path for global — never the binary path (D-01b).
 func claudePreToolHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudePreToolFragmentCommand, nil
+	}
+	path, err := claudePreToolGuardPath(LocationGlobal)
+	if err != nil {
+		return "", err
+	}
+	return shellSingleQuote(path), nil
+}
+
+// claudePreToolUnquotedHookCommand is claudePreToolHookCommand's text
+// without the shell quoting. A handler registered with it is still
+// codegraph's own.
+func claudePreToolUnquotedHookCommand(loc Location) (string, error) {
+	if loc == LocationLocal {
+		return claudePreToolUnquotedFragmentCommand, nil
 	}
 	return claudePreToolGuardPath(LocationGlobal)
 }
 
 // claudePreToolUseBlocks returns the PreToolUse blocks for loc, derived
-// from the embedded fragment, plus the single owned command writeHookEntry
-// uses for identity.
+// from the embedded fragment, plus the owned commands writeHookEntry uses
+// for identity: the quoted command the blocks carry, then its unquoted
+// spelling.
 func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := claudePreToolHookCommand(loc)
+	if err != nil {
+		return nil, nil, err
+	}
+	unquoted, err := claudePreToolUnquotedHookCommand(loc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,7 +86,7 @@ func claudePreToolUseBlocks(loc Location) ([]any, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return blocks, []string{ownCommand}, nil
+	return blocks, []string{ownCommand, unquoted}, nil
 }
 
 // preToolNudgeEvidenced widens preToolNudgeRecorded's manifest-only check

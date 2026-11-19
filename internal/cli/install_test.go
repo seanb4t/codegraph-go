@@ -834,7 +834,7 @@ const preToolNudgeNote = "note: --pretool-nudge only configures Claude Code and 
 // localPreToolCommand the command every local PreToolUse handler registers.
 const (
 	localPreToolGuard   = ".claude/hooks/pretooluse-nudge.sh"
-	localPreToolCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+	localPreToolCommand = `"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"`
 )
 
 // ownPreToolHandlerCount counts the PreToolUse handlers in settingsPath

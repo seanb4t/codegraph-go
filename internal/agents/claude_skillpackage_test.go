@@ -78,7 +78,7 @@ func TestClaude_Install_WritesSkillPackage_EndToEnd(t *testing.T) {
 	if !ok {
 		t.Fatalf("installed settings.json has no hooks.SessionStart array: %#v", hooks)
 	}
-	wantCommand := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
+	wantCommand := "'" + filepath.Join(home, ".claude", "hooks", "session-nudge.sh") + "'"
 	gotMatchers := map[string]int{}
 	for _, e := range sessionStart {
 		entry, ok := e.(map[string]any)
@@ -285,9 +285,9 @@ func TestClaude_Install_PreservesUnrelatedHooksContent(t *testing.T) {
 		switch {
 		case matcher == "startup" && cmd == "/some/other/unrelated-script.sh":
 			sawUnrelatedStartup = true
-		case matcher == "startup" && strings.HasSuffix(cmd, "session-nudge.sh"):
+		case matcher == "startup" && strings.Contains(cmd, "session-nudge.sh"):
 			sawCodegraphStartup = true
-		case matcher == "resume" && strings.HasSuffix(cmd, "session-nudge.sh"):
+		case matcher == "resume" && strings.Contains(cmd, "session-nudge.sh"):
 			sawCodegraphResume = true
 		default:
 			t.Fatalf("unexpected SessionStart entry: matcher=%q command=%q", matcher, cmd)
@@ -432,7 +432,7 @@ func TestClaude_Install_HookCommandIsLocationAware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claudeHookCommand(global): %v", err)
 	}
-	wantGlobal := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
+	wantGlobal := "'" + filepath.Join(home, ".claude", "hooks", "session-nudge.sh") + "'"
 	if globalCmd != wantGlobal {
 		t.Fatalf("global command = %q, want %q", globalCmd, wantGlobal)
 	}
@@ -444,7 +444,7 @@ func TestClaude_Install_HookCommandIsLocationAware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claudeHookCommand(local): %v", err)
 	}
-	wantLocal := "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
+	wantLocal := `"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"`
 	if localCmd != wantLocal {
 		t.Fatalf("local command = %q, want %q", localCmd, wantLocal)
 	}

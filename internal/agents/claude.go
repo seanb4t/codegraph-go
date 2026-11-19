@@ -148,7 +148,15 @@ func claudeSettingsPath(loc Location) (string, error) {
 // Phase 6's embedded hooks fragment (.claude/hooks/hooks.json) uses for
 // every SessionStart entry — the value claudeSessionStartBlocks rewrites
 // into claudeHookCommand(loc) for the location actually being installed.
-const claudeFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
+// The path is double-quoted so a project directory with whitespace stays one
+// shell word; the ${CLAUDE_PROJECT_DIR} expansion still happens inside the
+// quotes.
+const claudeFragmentCommand = `"` + claudeUnquotedFragmentCommand + `"`
+
+// claudeUnquotedFragmentCommand is claudeFragmentCommand without the quotes.
+// A handler registered with this text is still codegraph's own, so install
+// replaces it and uninstall removes it.
+const claudeUnquotedFragmentCommand = "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh"
 
 // claudeSkillDirPath resolves to the directory Phase 7 installs the
 // Claude Code skill into: .claude/skills/codegraph for local,
@@ -240,10 +248,25 @@ func claudeSkillPolicy(loc Location) (unmanifestedPolicy, error) {
 // command as unverified against a live session, and resolving it here
 // costs nothing and removes the assumption entirely. Copying Phase 6's
 // project-relative command verbatim into a global install would name a
-// path that exists in no project but this one (RESEARCH Pitfall 4).
+// path that exists in no project but this one (RESEARCH Pitfall 4). The
+// global path is single-quoted: Claude Code runs the command through a
+// shell, so a home directory with whitespace or a quote must stay one word.
 func claudeHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudeFragmentCommand, nil
+	}
+	path, err := claudeHooksScriptPath(LocationGlobal)
+	if err != nil {
+		return "", err
+	}
+	return shellSingleQuote(path), nil
+}
+
+// claudeUnquotedHookCommand is claudeHookCommand's text without the shell
+// quoting. A handler registered with it is still codegraph's own.
+func claudeUnquotedHookCommand(loc Location) (string, error) {
+	if loc == LocationLocal {
+		return claudeUnquotedFragmentCommand, nil
 	}
 	return claudeHooksScriptPath(LocationGlobal)
 }
@@ -255,10 +278,14 @@ func claudeHookCommand(loc Location) (string, error) {
 // the blocks from the embedded fragment rather than re-authoring them in
 // Go keeps Phase 6's .claude/ the canonical source (Phase 6 D-04) — no
 // matcher literal is hand-typed here. Returns the rewritten blocks and
-// the single-element list of owned command strings writeHookEntry uses
-// for identity.
+// the owned command strings writeHookEntry and removeHookEntry use for
+// identity: the quoted command the blocks carry, then its unquoted spelling.
 func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 	ownCommand, err := claudeHookCommand(loc)
+	if err != nil {
+		return nil, nil, err
+	}
+	unquoted, err := claudeUnquotedHookCommand(loc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -266,7 +293,7 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return blocks, []string{ownCommand}, nil
+	return blocks, []string{ownCommand, unquoted}, nil
 }
 
 // claudeFragmentEventBlocks decodes hooks.<event> from the embedded hooks

@@ -15,7 +15,7 @@ import (
 
 // preToolFragmentCommandLiteral is the local-scope registered command,
 // hand-typed as an independent oracle for claudePreToolFragmentCommand.
-const preToolFragmentCommandLiteral = "${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"
+const preToolFragmentCommandLiteral = `"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-nudge.sh"`
 
 // readSettingsHooks decodes settingsPath and returns its "hooks" object.
 func readSettingsHooks(t *testing.T, settingsPath string) map[string]any {
@@ -137,7 +137,7 @@ func TestClaude_Install_PreToolNudgeOn_WritesGuardAndBlocks(t *testing.T) {
 			t.Fatalf("global guard not written: %v", err)
 		}
 		hooks := readSettingsHooks(t, filepath.Join(home, ".claude", "settings.json"))
-		assertPreToolUseBlocks(t, hooks, guard)
+		assertPreToolUseBlocks(t, hooks, "'"+guard+"'")
 		if _, ok := hooks["SessionStart"]; !ok {
 			t.Fatalf("hooks.SessionStart missing after an opt-in install")
 		}
