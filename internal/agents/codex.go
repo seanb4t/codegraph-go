@@ -111,7 +111,7 @@ func codexHomeDir() (string, error) {
 		}
 		return real, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -146,15 +146,12 @@ func codexInstructionsPath(loc Location) (string, error) {
 	return filepath.Join(dir, "AGENTS.md"), nil
 }
 
-// codexSkillDirs resolves Codex's skill directories (D-14, D-15): index 0
-// is always the shared package this target writes; a second, read-only
-// entry is appended for the Codex-specific root the live evidence showed
-// Codex actually reads at that scope — ".codex/skills/codegraph" locally
-// (D-15 ".codex/skills read: yes"), skills/codegraph under codexHomeDir
-// globally (D-15 "CODEX_HOME/skills read: yes") — 07-LIVE-SESSIONS.md
-// CODEX-01 verdicts, both "yes". codegraph never writes to either
-// read-only root (D-14): same-name skills are not merged by Codex, so a
-// second physical copy would list twice.
+// codexSkillDirs resolves Codex's skill directories: index 0 is always the
+// shared package this target writes. A second, read-only entry names the
+// Codex-specific root that Codex reads at that scope: ".codex/skills/codegraph"
+// locally, and skills/codegraph under codexHomeDir globally. codegraph never
+// writes to either read-only root, because Codex does not merge same-name
+// skills, so a second physical copy would list twice.
 func codexSkillDirs(loc Location) ([]string, error) {
 	dirs, err := sharedSkillDirs(loc)
 	if err != nil {
@@ -201,7 +198,7 @@ func codexTrustNote(loc Location) (string, error) {
 	switch {
 	case err == nil:
 		configRef = configPath
-		if home, herr := os.UserHomeDir(); herr == nil {
+		if home, herr := userHomeDir(); herr == nil {
 			// CODEX_HOME resolves symlinks, so the default is compared both as
 			// written and resolved.
 			def := filepath.Join(home, ".codex", "config.toml")

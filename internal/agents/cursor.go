@@ -50,7 +50,7 @@ func cursorConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".cursor", "mcp.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +65,7 @@ func cursorLegacyRulesPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".cursor", "rules", "codegraph.mdc"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

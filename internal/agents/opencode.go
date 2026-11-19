@@ -63,7 +63,7 @@ func resolveOpencodeConfigDir() (string, error) {
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
 		return v, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

@@ -53,7 +53,7 @@ func hermesConfigPath() (string, error) {
 	if v := os.Getenv("HERMES_HOME"); v != "" {
 		return filepath.Join(v, "config.yaml"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

@@ -716,6 +716,13 @@ remembered until --pretool-nudge=false or uninstall. Codex skips a
 new or changed hook until it is trusted in /hooks. Idempotent —
 re-running install is a no-op when nothing changed.
 
+The report gives each agent a status: configured, unchanged, kept,
+unsupported, failed or partial. With --target all or --target auto,
+install skips an agent whose detection fails, for example a CODEX_HOME
+that is not an existing absolute directory. It prints a
+"<id>: skipped: <reason>" line on stderr and a skipped row in the
+report. Naming the agent with --target reports the error instead.
+
 Install records the absolute path of the binary that runs it. It
 refuses a binary that Go deletes later (a test binary, or one built
 by go run), exits non-zero and writes nothing. Build codegraph and
@@ -1055,10 +1062,11 @@ write is never touched. It also removes the Claude Code and Codex
 CLI PreToolUse nudge hooks and their guard scripts when present.
 Reports removed, kept, not-configured, unsupported, failed or partial
 per agent, and never errors on an agent that was never installed.
-With --target all or --target auto, an agent whose detection fails
-(for example a CODEX_HOME that is not an existing absolute directory)
-is skipped: a "<id>: skipped: <reason>" line on stderr and a skipped
-row in the report. Naming the agent with --target reports the error.
+With --target all or --target auto, uninstall skips an agent whose
+detection fails, for example a CODEX_HOME that is not an existing
+absolute directory. It prints a "<id>: skipped: <reason>" line on
+stderr and a skipped row in the report. Naming the agent with --target
+reports the error instead.
 
 ```
 codegraph uninstall [flags]

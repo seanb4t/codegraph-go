@@ -61,7 +61,7 @@ func antigravitySkillDirs(loc Location) ([]string, error) {
 	if loc != LocationGlobal {
 		return nil, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func antigravitySkillDirs(loc Location) ([]string, error) {
 // antigravityUnifiedPath is the post-migration config location a current
 // Antigravity release reads/writes.
 func antigravityUnifiedPath() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -83,7 +83,7 @@ func antigravityUnifiedPath() (string, error) {
 // antigravityLegacyPath is the pre-migration config location an older
 // Antigravity release used.
 func antigravityLegacyPath() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -94,7 +94,7 @@ func antigravityLegacyPath() (string, error) {
 // existing) signals that this machine's Antigravity install has completed
 // its unified-config migration.
 func antigravityMigratedMarker() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

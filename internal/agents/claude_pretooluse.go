@@ -3,7 +3,6 @@ package agents
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -38,7 +37,7 @@ func claudePreToolGuardPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "hooks", "pretooluse-nudge.sh"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

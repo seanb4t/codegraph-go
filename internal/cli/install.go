@@ -84,6 +84,12 @@ func newInstallCmd() *cobra.Command {
 			"remembered until --pretool-nudge=false or uninstall. Codex skips a\n" +
 			"new or changed hook until it is trusted in /hooks. Idempotent —\n" +
 			"re-running install is a no-op when nothing changed.\n\n" +
+			"The report gives each agent a status: configured, unchanged, kept,\n" +
+			"unsupported, failed or partial. With --target all or --target auto,\n" +
+			"install skips an agent whose detection fails, for example a CODEX_HOME\n" +
+			"that is not an existing absolute directory. It prints a\n" +
+			"\"<id>: skipped: <reason>\" line on stderr and a skipped row in the\n" +
+			"report. Naming the agent with --target reports the error instead.\n\n" +
 			"Install records the absolute path of the binary that runs it. It\n" +
 			"refuses a binary that Go deletes later (a test binary, or one built\n" +
 			"by go run), exits non-zero and writes nothing. Build codegraph and\n" +
@@ -114,13 +120,13 @@ func newInstallCmd() *cobra.Command {
 			// --print-config-style is a read-only report. It short-circuits
 			// before os.Executable() and the target-resolution switch below,
 			// never opens the interactive picker and never writes a byte. It
-			// lists every target when --target is absent or is "all", and
+			// lists every target when --target is absent, "all" or "auto", and
 			// prints an "error=" field for a target whose paths do not
 			// resolve instead of skipping it. Any other --target value
 			// selects targets as install does.
 			if printCfgStyle {
 				targets := agents.AllTargets()
-				if cmd.Flags().Changed("target") && target != "all" {
+				if cmd.Flags().Changed("target") && target != "all" && target != "auto" {
 					targets, _, err = resolveTargets(cmd, target, loc)
 					if err != nil {
 						return fmt.Errorf("codegraph install: %w", err)
@@ -189,7 +195,7 @@ func newInstallCmd() *cobra.Command {
 				}
 			}
 			opts.PreToolNudge = nudge
-			return printAgentResults(cmd, targets, skipped, "", loc, func(t agents.AgentTarget) agents.WriteResult {
+			return printAgentResults(cmd, targets, skipped, nil, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Install(loc, opts)
 			}, installStatus)
 		},
@@ -221,14 +227,15 @@ func resolveTargets(cmd *cobra.Command, spec string, loc agents.Location) ([]age
 // install's per-agent summary line. A result with errors is "failed" when
 // no file changed and "partial" when some did, so the headline never reads
 // as success above an error line. Without errors, "configured" means some
-// file changed, "kept" means every entry was kept in place, and "unchanged"
-// means every touched file was already correct or is a foreign skill
-// directory that codegraph left untouched, which is not a change it made.
+// file changed, "kept" means nothing changed and at least one entry was kept
+// in place, and "unchanged" means every touched file was already correct or
+// is a foreign skill directory that codegraph left untouched, which is not a
+// change it made.
 func installStatus(result agents.WriteResult) string {
 	changed := false
 	for _, f := range result.Files {
 		switch f.Action {
-		case agents.ActionUnchanged, agents.ActionKeptForeign, agents.ActionKept:
+		case agents.ActionUnchanged, agents.ActionKeptForeign, agents.ActionKept, agents.ActionNotFound:
 		default:
 			changed = true
 		}
@@ -238,7 +245,8 @@ func installStatus(result agents.WriteResult) string {
 
 // statusWithErrors picks a status word: "failed" or "partial" when the
 // result has errors (by whether anything changed), else changedWord, "kept"
-// when every entry of the result was kept in place, or unchangedWord.
+// when nothing changed and some entry was kept in place (entries that were
+// not found or unchanged do not count against it), or unchangedWord.
 func statusWithErrors(result agents.WriteResult, changed bool, changedWord, unchangedWord string) string {
 	switch {
 	case len(result.Errors) > 0 && changed:
@@ -247,22 +255,21 @@ func statusWithErrors(result agents.WriteResult, changed bool, changedWord, unch
 		return "failed"
 	case changed:
 		return changedWord
-	case onlyKept(result.Files):
+	case anyKept(result.Files):
 		return "kept"
 	default:
 		return unchangedWord
 	}
 }
 
-// onlyKept reports whether files is not empty and every entry was kept in
-// place on purpose.
-func onlyKept(files []agents.FileResult) bool {
+// anyKept reports whether some entry of files was kept in place on purpose.
+func anyKept(files []agents.FileResult) bool {
 	for _, f := range files {
-		if f.Action != agents.ActionKept {
-			return false
+		if f.Action == agents.ActionKept {
+			return true
 		}
 	}
-	return len(files) > 0
+	return false
 }
 
 // printAgentResults is install's and uninstall's shared per-agent
@@ -279,7 +286,7 @@ func onlyKept(files []agents.FileResult) bool {
 // "not-configured" in the CLI's own status line, and `codegraph
 // install`/`uninstall` must exit non-zero when it happens. A nil return
 // means every touched file's write/remove actually completed.
-func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped []agents.SkippedTarget, skippedNote string, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) error {
+func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped []agents.SkippedTarget, skippedNote func(agents.SkippedTarget) string, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) error {
 	out := cmd.OutOrStdout()
 	mode := resolveColor(cmd)
 	var pal present.Palette
@@ -314,7 +321,16 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped
 		} else {
 			fmt.Fprintf(out, "%s: %s\n", t.DisplayName(), statusOf(result))
 		}
+		// Several steps can keep the same file, and each records a row and a
+		// note. The report shows each kept file and each note once.
+		keptShown := map[string]bool{}
 		for _, f := range result.Files {
+			if f.Action == agents.ActionKept {
+				if keptShown[f.Path] {
+					continue
+				}
+				keptShown[f.Path] = true
+			}
 			// CR-01/T-04-24: f.Path is filesystem-derived (a resolved
 			// config location, absolute at global scope) — sanitized in
 			// BOTH branches, since a plain render reaches a terminal too
@@ -332,7 +348,12 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped
 				fmt.Fprintf(out, "  %s: %s\n", f.Action, path)
 			}
 		}
+		notesShown := map[string]bool{}
 		for _, note := range result.Notes {
+			if notesShown[note] {
+				continue
+			}
+			notesShown[note] = true
 			// T-04-24: a note is filesystem-derived too — codexTrustNote
 			// and the shared-instructions notes interpolate an absolute
 			// path — so it is sanitized exactly like the file and error
@@ -370,11 +391,14 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, skipped
 		} else {
 			fmt.Fprintf(out, "%s: skipped (%s)\n", name, reason)
 		}
-		if skippedNote != "" {
+		if skippedNote == nil {
+			continue
+		}
+		if note := sanitizePathForDisplay(skippedNote(s)); note != "" {
 			if mode.Styled {
-				_, _ = io.WriteString(w, "  "+pal.Label.Render("note:")+" "+pal.Value.Render(skippedNote)+"\n")
+				_, _ = io.WriteString(w, "  "+pal.Label.Render("note:")+" "+pal.Value.Render(note)+"\n")
 			} else {
-				fmt.Fprintf(out, "  note: %s\n", skippedNote)
+				fmt.Fprintf(out, "  note: %s\n", note)
 			}
 		}
 	}

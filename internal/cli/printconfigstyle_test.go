@@ -248,9 +248,10 @@ func TestInstallPrintConfigStyle_UnresolvedTargetDoesNotHideTheOthers(t *testing
 	fakeHome(t)
 	t.Setenv("CODEX_HOME", "rel")
 
-	// A read-only report lists every target with no --target and with
-	// --target all, and does not skip the one that fails.
-	for _, extra := range [][]string{nil, {"--target", "all"}} {
+	// A read-only report lists every target with no --target, with
+	// --target all and with --target auto, and does not skip the one that
+	// fails.
+	for _, extra := range [][]string{nil, {"--target", "all"}, {"--target", "auto"}} {
 		out, _, err := execCmd(append([]string{"install", "--print-config-style", "--location", "global"}, extra...)...)
 		if err == nil || !strings.Contains(err.Error(), `CODEX_HOME "rel"`) {
 			t.Fatalf("%v: install --print-config-style error = %v, want one naming CODEX_HOME", extra, err)

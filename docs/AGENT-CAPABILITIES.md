@@ -74,29 +74,31 @@ If this document and the code ever drift, `go test ./internal/agents/ -run
   narrower, Codex-specific limitation.
 - **codegraph always appends its hook group LAST** in `hooks.json`. Codex records a group's
   trust hash against the group's array index. A group that moves to another index, or whose
-  content changes, needs a new review even when its bytes did not change
-  (`07-LIVE-SESSIONS.md`, D-23). Appending last means codegraph's own install and uninstall
-  normally leave every other group at its index. Two cases change that, and each prints a note
-  that tells you to review your hooks in `/hooks`:
+  content changes, needs a new review even when its bytes did not change. Appending last means
+  codegraph's own install and uninstall normally leave every other group at its index. Two
+  cases change that, and each prints a note that tells you to review your hooks in `/hooks`:
   - A hook of your own sits inside codegraph's group. When codegraph rewrites or removes its
     handler, your hook moves into a group of its own at the same index. That group changed.
-  - Codegraph's own groups change in number, for example two copies in one file become one, or
-    codegraph removes a group that stood before a group of yours. Later groups then move.
+  - Codegraph's own groups change in number. For example, two copies in one file become one,
+    or codegraph removes a group that stood before a group of yours. Later groups then move.
 - **codegraph resolves Codex's global files under `$CODEX_HOME`** when it is set and non-empty,
   and under `~/.codex` otherwise. The `~/.codex` paths in the table are the default.
   codegraph resolves `CODEX_HOME` the way Codex does: it follows every symlink, and the
   directory must exist. A value that is not an absolute path, or not an existing directory,
-  is an error for every global Codex operation, and codegraph never falls back to `~/.codex`
+  is an error for every global Codex operation. codegraph never falls back to `~/.codex`
   then. A local install still works and names `$CODEX_HOME/config.toml` in its trust note.
-  These commands fail on a bad `CODEX_HOME`: `--target codex`, a `--target` list that names
-  `codex`, and a picker selection of Codex. `--target auto` and `--target all` skip Codex
-  instead, with one `codex: skipped: <reason>` line on stderr and a `skipped` row in the
-  report. `install --print-config-style` prints an `error=` field for it. The shared skill
-  under `~/.agents/skills` does not depend on `CODEX_HOME`.
-- **codegraph refuses some global Codex hook paths.** The hook command single-quotes the guard
-  path for a POSIX shell, but Codex may run it under another login shell. A global guard path
-  with a single quote, a backslash, a control character or invalid UTF-8 is an error. The error
-  tells you to set `CODEX_HOME` to another path or to install at `--location local`.
+  - These commands fail on a bad `CODEX_HOME`: `--target codex`, a `--target` list that names
+    `codex`, and a picker selection of Codex.
+  - `--target auto` and `--target all` skip Codex instead. They print one
+    `codex: skipped: <reason>` line on stderr and a `skipped` row in the report.
+  - `install --print-config-style` prints an `error=` field for Codex.
+  - The shared skill under `~/.agents/skills` does not depend on `CODEX_HOME`.
+- **codegraph refuses some global hook paths.** The Codex hook command single-quotes the guard
+  path for a POSIX shell, but Codex can run it under another login shell. A global Codex
+  guard path with a single quote, a backslash, a control character or invalid UTF-8 is an
+  error. The error tells you to set `CODEX_HOME` to another path or to install at
+  `--location local`. A global Claude Code hook path that is not valid UTF-8 is an error too,
+  because JSON cannot hold it. A relative home directory is an error for every global path.
 - **Codex's interactive skill listing may truncate the codegraph skill's description** (an
   advisory, not a `SKILL.md` change — the front-loaded trigger words survive either way);
   `codex debug prompt-input`'s raw dump showed the full, untruncated description

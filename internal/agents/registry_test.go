@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,13 +16,14 @@ import (
 type fakeTarget struct {
 	id        TargetID
 	installed bool
+	err       error
 }
 
 func (f fakeTarget) ID() TargetID                   { return f.id }
 func (f fakeTarget) DisplayName() string            { return string(f.id) }
 func (f fakeTarget) SupportsLocation(Location) bool { return true }
 func (f fakeTarget) Detect(Location) DetectionResult {
-	return DetectionResult{Installed: f.installed}
+	return DetectionResult{Installed: f.installed, Err: f.err}
 }
 func (f fakeTarget) Install(Location, InstallOptions) WriteResult { return WriteResult{} }
 func (f fakeTarget) Uninstall(Location) WriteResult               { return WriteResult{} }
@@ -162,7 +164,7 @@ func TestResolveTargets_AutoFallsBackToClaudeWhenNoneDetected(t *testing.T) {
 	}
 }
 
-// TestResolveTargets_AutoDetectsCodexAtLocal (D-09, D-26) asserts
+// TestResolveTargets_AutoDetectsCodexAtLocal asserts
 // "--target auto --location local" and the picker's pre-check detect Codex
 // through the local .codex/ directory, using the REAL registered
 // codexTarget (not a fake) so its real Detect(loc) — a bare .codex/
@@ -316,5 +318,23 @@ func TestInstructionsBlockGuardIsNotVacuous(t *testing.T) {
 				t.Fatalf("blockNamesUnshippedCapability(%q) = %v, want nil", tc.block, err)
 			}
 		})
+	}
+}
+
+// TestResolveTargets_AutoDoesNotFallBackToASkippedClaude: the fallback to
+// Claude is for a clean environment. When Claude's own detection failed, auto
+// selects nothing and lists Claude as skipped.
+func TestResolveTargets_AutoDoesNotFallBackToASkippedClaude(t *testing.T) {
+	resetRegistryForTest(t)
+	failure := errors.New("detection failed")
+	registerTarget(fakeTarget{id: Claude, err: failure})
+	registerTarget(fakeTarget{id: Cursor})
+
+	targets, skipped, err := ResolveTargets("auto", LocationGlobal)
+	if err != nil || len(targets) != 0 {
+		t.Fatalf("auto = %v, %v, want nothing selected", targets, err)
+	}
+	if len(skipped) != 1 || skipped[0].ID != Claude || !errors.Is(skipped[0].Err, failure) {
+		t.Fatalf("skipped = %v, want only claude with its error", skipped)
 	}
 }

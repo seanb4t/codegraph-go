@@ -2,10 +2,13 @@ package cli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/realpath/realpathtest"
 )
 
 // TestInstallAndUninstallStatus: a result with errors reads "failed" when
@@ -27,7 +30,8 @@ func TestInstallAndUninstallStatus(t *testing.T) {
 		{"a created file", agents.WriteResult{Files: file(agents.ActionCreated)}, "configured", "not-configured"},
 		{"a removed file", agents.WriteResult{Files: file(agents.ActionRemoved)}, "configured", "removed"},
 		{"only kept entries", agents.WriteResult{Files: file(agents.ActionKept)}, "kept", "kept"},
-		{"a kept entry beside an unchanged one", agents.WriteResult{Files: []agents.FileResult{{Path: "a", Action: agents.ActionKept}, {Path: "b", Action: agents.ActionUnchanged}}}, "unchanged", "not-configured"},
+		{"a kept entry beside an unchanged one", agents.WriteResult{Files: []agents.FileResult{{Path: "a", Action: agents.ActionKept}, {Path: "b", Action: agents.ActionUnchanged}}}, "kept", "kept"},
+		{"a kept entry beside a not-found one", agents.WriteResult{Files: []agents.FileResult{{Path: "a", Action: agents.ActionKept}, {Path: "b", Action: agents.ActionNotFound}}}, "kept", "kept"},
 		{"a kept entry beside a removed one", agents.WriteResult{Files: []agents.FileResult{{Path: "a", Action: agents.ActionKept}, {Path: "b", Action: agents.ActionRemoved}}}, "configured", "removed"},
 		{"an error and no change", agents.WriteResult{Files: file(agents.ActionUnchanged), Errors: failure}, "failed", "failed"},
 		{"an error and nothing touched", agents.WriteResult{Errors: failure}, "failed", "failed"},
@@ -65,8 +69,8 @@ func TestBadCodexHome_OnlyAnExplicitCodexTargetFails(t *testing.T) {
 		if !strings.Contains(out, "Codex CLI: skipped (CODEX_HOME") || strings.Contains(out, "Codex CLI: configured") || strings.Contains(out, "Codex CLI: failed") {
 			t.Errorf("%v: stdout has no skipped row for Codex:\n%s", args, out)
 		}
-		if args[0] == "uninstall" && !strings.Contains(out, "the shared skill package keeps this agent as a requester") {
-			t.Errorf("%v: stdout has no note about the shared skill:\n%s", args, out)
+		if strings.Contains(out, "note: the shared skill package keeps") {
+			t.Errorf("%v: stdout has a skill note although Codex is not a requester:\n%s", args, out)
 		}
 	}
 
@@ -78,5 +82,64 @@ func TestBadCodexHome_OnlyAnExplicitCodexTargetFails(t *testing.T) {
 		if !strings.Contains(out, "Codex CLI: failed") && !strings.Contains(out, "Codex CLI: partial") {
 			t.Errorf("%s --target codex stdout = %q, want a failed or partial headline for Codex", command, out)
 		}
+	}
+}
+
+// TestUninstallSkippedRowNote_NamesTheTargetAndNeedsARecordedRequester: the
+// note under a skipped row says that the shared skill package keeps the
+// target as a requester, names the target and the command that fixes it, and
+// appears only when the manifest records the target.
+func TestUninstallSkippedRowNote_NamesTheTargetAndNeedsARecordedRequester(t *testing.T) {
+	const note = "note: the shared skill package keeps codex as a requester until its detection is fixed and `codegraph uninstall --target codex` runs"
+
+	fakeHome(t)
+	t.Setenv("CODEX_HOME", "")
+	if _, _, err := execCmd("install", "--target", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", "rel")
+	out, _, err := execCmd("uninstall", "--yes")
+	if err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Codex CLI: skipped (CODEX_HOME") || !strings.Contains(out, note) {
+		t.Errorf("stdout lacks the skipped row and its note:\n%s", out)
+	}
+
+	fakeHome(t)
+	t.Setenv("CODEX_HOME", "rel")
+	out, _, err = execCmd("uninstall", "--yes")
+	if err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Codex CLI: skipped (CODEX_HOME") || strings.Contains(out, "note: the shared skill package") {
+		t.Errorf("stdout should have the skipped row and no skill note:\n%s", out)
+	}
+}
+
+// TestUninstallClaudeLocal_SettingsOutsideProjectReadsKept: an uninstall whose
+// only outcome is a settings.json kept outside the project reads "kept", not
+// "not-configured", although it also reports files that were not found. The
+// kept file and its note appear once, not once per step.
+func TestUninstallClaudeLocal_SettingsOutsideProjectReadsKept(t *testing.T) {
+	fakeHome(t)
+	target := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	realpathtest.Symlink(t, target, filepath.Join(".claude", "settings.json"))
+
+	out, _, err := execCmd("uninstall", "--target", "claude", "--location", "local")
+	if err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out)
+	}
+	if !strings.HasPrefix(out, "Claude Code: kept\n") {
+		t.Errorf("headline is not kept:\n%s", out)
+	}
+	if n := strings.Count(out, "  kept: .claude/settings.json\n"); n != 1 {
+		t.Errorf("the kept row appears %d times, want 1:\n%s", n, out)
+	}
+	if n := strings.Count(out, "note: .claude/settings.json is left as it is"); n != 1 {
+		t.Errorf("the kept note appears %d times, want 1:\n%s", n, out)
 	}
 }

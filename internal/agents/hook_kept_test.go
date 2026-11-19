@@ -184,8 +184,11 @@ func countErrorsNaming(result WriteResult, part string) int {
 }
 
 // TestClaudeInstall_NudgeOffIsGatedOnThePreflight: an install that turns the
-// nudge off over a settings.json that fails the preflight reports the error
-// and leaves the guard in place, because the registration may still be there.
+// nudge off over a settings.json that fails the preflight changes nothing. The
+// file holds codegraph's PreToolUse registration and a SessionStart value of
+// the wrong type, so a removal would succeed and write the file if the
+// preflight did not gate it. The install reports one error, leaves the file
+// byte for byte as it was, and leaves the guard in place.
 func TestClaudeInstall_NudgeOffIsGatedOnThePreflight(t *testing.T) {
 	fakeHome(t)
 	t.Chdir(t.TempDir())
@@ -197,18 +200,23 @@ func TestClaudeInstall_NudgeOffIsGatedOnThePreflight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, settings, "{not json")
+	preToolCmd, err := claudePreToolHookCommand(LocationLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := `{"hooks":{"SessionStart":"x","PreToolUse":[{"matcher":"Grep","hooks":[{"type":"command","command":` + jsonString(t, preToolCmd) + `}]}]}}`
+	writeFile(t, settings, seed)
 	writeFile(t, guard, "#!/bin/sh\n")
 
 	res := claudeTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOff})
-	if !errorNaming(res, settings) {
-		t.Errorf("errors = %v, want one naming %s", res.Errors, settings)
+	if len(res.Errors) != 1 || !errorNaming(res, settings, `"hooks.SessionStart"`) {
+		t.Errorf("errors = %v, want exactly one naming %s and the key", res.Errors, settings)
+	}
+	if got := readFile(t, settings); got != seed {
+		t.Errorf("settings.json changed to %q", got)
 	}
 	if !fileExists(guard) {
-		t.Errorf("the guard was removed although settings.json could not be read")
-	}
-	if got := readFile(t, settings); got != "{not json" {
-		t.Errorf("settings.json changed to %q", got)
+		t.Errorf("the guard was removed although the preflight failed")
 	}
 }
 

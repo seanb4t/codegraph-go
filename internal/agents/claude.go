@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
 )
@@ -108,7 +109,7 @@ func claudeConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return ".mcp.json", nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +128,7 @@ func claudeInstructionsPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "CLAUDE.md"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -138,7 +139,7 @@ func claudeSettingsPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "settings.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -167,7 +168,7 @@ func claudeSkillDirPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "skills", "codegraph"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -194,7 +195,7 @@ func claudeHooksScriptPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".claude", "hooks", "session-nudge.sh"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -244,14 +245,12 @@ func claudeSkillPolicy(loc Location) (unmanifestedPolicy, error) {
 // 6's dogfooded, project-relative fragment verbatim so
 // TestHookRegistrationMatchesFragmentAndScript stays green. Global scope
 // uses the fully-resolved absolute path to the script this same install
-// writes (claudeHooksScriptPath(LocationGlobal)) rather than a literal
-// "~" — RESEARCH Assumption A3 flags tilde expansion in a shell-form hook
-// command as unverified against a live session, and resolving it here
-// costs nothing and removes the assumption entirely. Copying Phase 6's
-// project-relative command verbatim into a global install would name a
-// path that exists in no project but this one (RESEARCH Pitfall 4). The
-// global path is single-quoted: Claude Code runs the command through a
-// shell, so a home directory with whitespace or a quote must stay one word.
+// writes (claudeHooksScriptPath(LocationGlobal)) rather than a literal "~",
+// because tilde expansion in a shell-form hook command is unverified.
+// Copying the project-relative command verbatim into a global install would
+// name a path that exists in no project but this one. The global path is
+// single-quoted: Claude Code runs the command through a shell, so a home
+// directory with whitespace or a quote must stay one word.
 func claudeHookCommand(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return claudeFragmentCommand, nil
@@ -425,8 +424,12 @@ func claudeAllowArray(existing map[string]any) (permissions map[string]any, allo
 // whose real location is outside the project (at local scope), a malformed
 // file and a value of the wrong JSON type are each one error naming the file.
 // Install runs no settings step and writes no script or guard after an error,
-// so one bad value cannot leave the other steps half done. A path that does
-// not resolve is left to the steps, which report it.
+// so one bad value cannot leave the other steps half done. At global scope, a
+// script or guard path that is not valid UTF-8 is an error too: JSON cannot
+// carry it, so the registration would never match on uninstall. A settings
+// file that does not resolve is this function's own error. Only a failure to
+// compute a path (no usable home directory) is left to the steps, which
+// report it.
 func claudeSettingsPreflight(loc Location, autoAllow bool) error {
 	path, err := claudeSettingsPath(loc)
 	if err != nil {
@@ -451,6 +454,14 @@ func claudeSettingsPreflight(loc Location, autoAllow bool) error {
 			err = fmt.Errorf("%s: %w", path, err)
 		}
 		return err
+	}
+	if loc == LocationGlobal {
+		for _, hookPath := range []func(Location) (string, error){claudeHooksScriptPath, claudePreToolGuardPath} {
+			p, perr := hookPath(loc)
+			if perr == nil && !utf8.ValidString(p) {
+				return fmt.Errorf("%s: a global Claude Code hook path that is not valid UTF-8 is refused, because JSON cannot hold it and the registration would not match on uninstall; install with --location local", p)
+			}
+		}
 	}
 	return nil
 }
@@ -656,19 +667,23 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 			}
 		}
 
-		if settingsPath, err := claudeSettingsPath(loc); err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
-		} else {
-			blocks, ownCommands, berr := claudeSessionStartBlocks(loc)
-			if berr != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+		// The registration waits for its script: with no script written, nothing
+		// points at a file that is not there.
+		if haveScriptContent {
+			if settingsPath, err := claudeSettingsPath(loc); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
 			} else {
-				werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
-					return writeHookEntry(real, "SessionStart", blocks, ownCommands)
-				})
-				if werr == nil {
-					sessionStartBlocks = blocks
-					haveSessionStart = true
+				blocks, ownCommands, berr := claudeSessionStartBlocks(loc)
+				if berr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+				} else {
+					werr := recordUserFile(&result, settingsPath, loc, opInstall, func(real string) (FileResult, error) {
+						return writeHookEntry(real, "SessionStart", blocks, ownCommands)
+					})
+					if werr == nil {
+						sessionStartBlocks = blocks
+						haveSessionStart = true
+					}
 				}
 			}
 		}

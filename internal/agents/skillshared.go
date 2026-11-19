@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
 	"github.com/seanb4t/codegraph-go/internal/realpath"
@@ -51,7 +52,7 @@ func sharedSkillDirPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".agents", "skills", "codegraph"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -402,4 +403,16 @@ func sameRealPath(a, b string) (bool, error) {
 		return false, err
 	}
 	return ra == rb, nil
+}
+
+// IsSharedSkillRequester reports whether id is recorded as a requester in the
+// manifest of the shared skill package at loc. A missing or unreadable
+// manifest means no.
+func IsSharedSkillRequester(id TargetID, loc Location) bool {
+	dir, err := sharedSkillDirPath(loc)
+	if err != nil {
+		return false
+	}
+	m, present, err := readManifest(filepath.Join(dir, skillManifestFileName))
+	return err == nil && present && slices.Contains(m.Targets, id)
 }

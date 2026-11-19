@@ -2,7 +2,6 @@ package agents
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 )
 
@@ -56,7 +55,7 @@ func geminiSkillDirs(loc Location) ([]string, error) {
 	if loc == LocationLocal {
 		harnessDir = filepath.Join(".gemini", "skills", "codegraph")
 	} else {
-		home, err := os.UserHomeDir()
+		home, err := userHomeDir()
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +72,7 @@ func geminiConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".gemini", "settings.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +85,7 @@ func geminiInstructionsPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return "GEMINI.md", nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

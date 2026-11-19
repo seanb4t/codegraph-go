@@ -60,7 +60,7 @@ func kiroSkillDirs(loc Location) ([]string, error) {
 	if loc == LocationLocal {
 		return []string{filepath.Join(".kiro", "skills", "codegraph")}, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func kiroConfigPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".kiro", "settings", "mcp.json"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -85,7 +85,7 @@ func kiroLegacySteeringPath(loc Location) (string, error) {
 	if loc == LocationLocal {
 		return filepath.Join(".kiro", "steering", "codegraph.md"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}

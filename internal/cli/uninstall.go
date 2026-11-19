@@ -36,10 +36,11 @@ func newUninstallCmd() *cobra.Command {
 			"CLI PreToolUse nudge hooks and their guard scripts when present.\n" +
 			"Reports removed, kept, not-configured, unsupported, failed or partial\n" +
 			"per agent, and never errors on an agent that was never installed.\n" +
-			"With --target all or --target auto, an agent whose detection fails\n" +
-			"(for example a CODEX_HOME that is not an existing absolute directory)\n" +
-			"is skipped: a \"<id>: skipped: <reason>\" line on stderr and a skipped\n" +
-			"row in the report. Naming the agent with --target reports the error.",
+			"With --target all or --target auto, uninstall skips an agent whose\n" +
+			"detection fails, for example a CODEX_HOME that is not an existing\n" +
+			"absolute directory. It prints a \"<id>: skipped: <reason>\" line on\n" +
+			"stderr and a skipped row in the report. Naming the agent with --target\n" +
+			"reports the error instead.",
 		Example: "  codegraph uninstall\n" +
 			"  codegraph uninstall --target all --location global\n" +
 			"  codegraph uninstall --target claude,cursor",
@@ -72,7 +73,7 @@ func newUninstallCmd() *cobra.Command {
 				return fmt.Errorf("codegraph uninstall: %w", err)
 			}
 
-			return printAgentResults(cmd, targets, skipped, skippedUninstallNote, loc, func(t agents.AgentTarget) agents.WriteResult {
+			return printAgentResults(cmd, targets, skipped, func(s agents.SkippedTarget) string { return skippedUninstallNote(s, loc) }, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Uninstall(loc)
 			}, uninstallStatus)
 		},
@@ -86,14 +87,21 @@ func newUninstallCmd() *cobra.Command {
 }
 
 // skippedUninstallNote is the note under the row of a target that uninstall
-// skipped: its shared skill package keeps the target as a requester.
-const skippedUninstallNote = "the shared skill package keeps this agent as a requester until its detection is fixed and `codegraph uninstall --target <id>` runs"
+// skipped. It says that the shared skill package still lists the target as a
+// requester, and is empty when the manifest at loc does not list it.
+func skippedUninstallNote(s agents.SkippedTarget, loc agents.Location) string {
+	if !agents.IsSharedSkillRequester(s.ID, loc) {
+		return ""
+	}
+	return fmt.Sprintf("the shared skill package keeps %s as a requester until its detection is fixed and `codegraph uninstall --target %s` runs", s.ID, s.ID)
+}
 
-// uninstallStatus rolls WriteResult's per-file actions up into one word:
-// "removed" if any file's codegraph entry or section was actually deleted,
-// "kept" if every entry was kept in place, else "not-configured" (nothing
-// was there to begin with, which is not an error). A result with errors is
-// "failed" when nothing was removed and "partial" when something was.
+// uninstallStatus rolls WriteResult's per-file actions up into one word. It
+// returns "removed" if any file's codegraph entry or section was actually
+// deleted. Otherwise it returns "kept" if some entry was kept in place, and
+// "not-configured" if nothing was there to begin with, which is not an
+// error. A result with errors is "failed" when nothing was removed and
+// "partial" when something was.
 func uninstallStatus(result agents.WriteResult) string {
 	removed := false
 	for _, f := range result.Files {

@@ -73,7 +73,7 @@ func codexPreToolHookCommand(loc Location) (string, error) {
 // only, where it identifies codegraph's handler when an older install wrote
 // it there, for example when ~/.codex links to CODEX_HOME.
 func codexLegacyGlobalHookCommand(ownCommand string) string {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return ""
 	}
@@ -202,8 +202,9 @@ func checkCodexGuardPath(path string) error {
 // codexHooksPreflight reads the hooks.json at loc strictly and checks that
 // hooks.PreToolUse can take codegraph's registration. A file whose real
 // location is outside the project (at local scope), a malformed file and a
-// value of the wrong JSON type are each one error naming the file. A path
-// that does not resolve is left to the registration step, which reports it.
+// value of the wrong JSON type are each one error naming the file. Only a
+// failure to compute the path is left to the registration step, which
+// reports it.
 func codexHooksPreflight(loc Location) error {
 	path, err := codexHooksJSONPath(loc)
 	if err != nil {

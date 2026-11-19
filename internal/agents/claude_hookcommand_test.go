@@ -269,6 +269,7 @@ func TestClaudeHookCommands_ForeignHandlerInOwnedBlockSurvives(t *testing.T) {
 // refreshes the guard and registers the quoted command.
 func TestClaudePreToolNudge_BareHandlerIsEvidenceAndRefreshed(t *testing.T) {
 	symlinkedClaudeLayout(t)
+	t.Chdir(t.TempDir())
 	sharedDir, err := sharedSkillDirPath(LocationGlobal)
 	if err != nil {
 		t.Fatal(err)
@@ -364,5 +365,107 @@ func TestClaudeKeep_PreflightErrorReplacesTheProbeNote(t *testing.T) {
 	}
 	if noteNaming(res, "nudge was not refreshed") {
 		t.Errorf("notes = %q, want none about the nudge", res.Notes)
+	}
+}
+
+// TestClaudeGlobal_HomeWithANewlineOrControlCharacterRoundTrips: a global hook
+// path with a newline or another control character still installs, and the
+// registered command reads back as one shell word. Uninstall removes the
+// registrations, the script and the guard.
+func TestClaudeGlobal_HomeWithANewlineOrControlCharacterRoundTrips(t *testing.T) {
+	for name, dir := range map[string]string{"newline": "a\nb", "control": "a\x01b"} {
+		t.Run(name, func(t *testing.T) {
+			fakeHome(t)
+			home := filepath.Join(t.TempDir(), dir)
+			t.Setenv("HOME", home)
+			t.Chdir(t.TempDir())
+
+			assertNoErrors(t, claudeTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn}))
+			settings := filepath.Join(home, ".claude", "settings.json")
+			for event, script := range map[string]string{"SessionStart": "session-nudge.sh", "PreToolUse": "pretooluse-nudge.sh"} {
+				commands := settingsHandlerCommands(t, settings, event)
+				if len(commands) == 0 {
+					t.Fatalf("no %s handler registered", event)
+				}
+				want := filepath.Join(home, ".claude", "hooks", script) + "|"
+				for _, cmd := range commands {
+					if got := shellWord(t, cmd); got != want {
+						t.Errorf("%s command %q reads as %q, want one word %q", event, cmd, got, want)
+					}
+				}
+			}
+
+			assertNoErrors(t, claudeTarget{}.Uninstall(LocationGlobal))
+			for _, script := range []string{"session-nudge.sh", "pretooluse-nudge.sh"} {
+				assertMissing(t, filepath.Join(home, ".claude", "hooks", script))
+			}
+			if fileExists(settings) {
+				for _, event := range []string{"SessionStart", "PreToolUse"} {
+					if got := settingsHandlerCommands(t, settings, event); len(got) != 0 {
+						t.Errorf("%s handlers after uninstall = %q, want none", event, got)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestClaudeGlobal_RefusesAHookPathThatIsNotUTF8: JSON cannot carry an invalid
+// UTF-8 path, so a registration for it would never match on uninstall. The
+// install reports one error that names the path and the remedy and writes no
+// script, guard or registration.
+func TestClaudeGlobal_RefusesAHookPathThatIsNotUTF8(t *testing.T) {
+	fakeHome(t)
+	home := filepath.Join(t.TempDir(), "a\xffb")
+	t.Setenv("HOME", home)
+	t.Chdir(t.TempDir())
+
+	res := claudeTarget{}.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+	if !errorNaming(res, home, "not valid UTF-8", "--location local") {
+		t.Errorf("errors = %v, want one naming %q and the remedy", res.Errors, home)
+	}
+	assertMissing(t, filepath.Join(home, ".claude", "hooks", "session-nudge.sh"))
+	assertMissing(t, filepath.Join(home, ".claude", "hooks", "pretooluse-nudge.sh"))
+}
+
+// TestGlobalPaths_RefuseARelativeHomeDirectory: a relative $HOME is an error
+// naming it, and nothing is written under the working directory.
+func TestGlobalPaths_RefuseARelativeHomeDirectory(t *testing.T) {
+	fakeHome(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	t.Setenv("HOME", "relhome")
+
+	for _, target := range []AgentTarget{claudeTarget{}, codexTarget{}} {
+		res := target.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", PreToolNudge: PreToolNudgeOn})
+		if !errorNaming(res, `"relhome"`, "not an absolute path") {
+			t.Errorf("%s: errors = %v, want one naming the relative home", target.ID(), res.Errors)
+		}
+	}
+	if names := dirNames(t, cwd); len(names) != 0 {
+		t.Errorf("working directory holds %v, want nothing written there", names)
+	}
+}
+
+// TestClaudeInstall_SessionStartWaitsForItsScript: when the hook script cannot
+// be written, the SessionStart registration is not written either, so
+// nothing points at a script that is not there.
+func TestClaudeInstall_SessionStartWaitsForItsScript(t *testing.T) {
+	fakeHome(t)
+	t.Chdir(t.TempDir())
+	settings, err := claudeSettingsPath(LocationLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(".claude", "hooks"), "a file where the hooks directory belongs\n")
+
+	res := claudeTarget{}.Install(LocationLocal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	if len(res.Errors) == 0 {
+		t.Fatalf("install reported no error although the script could not be written")
+	}
+	if fileExists(settings) {
+		if got := settingsHandlerCommands(t, settings, "SessionStart"); len(got) != 0 {
+			t.Errorf("SessionStart handlers = %q, want none without the script", got)
+		}
 	}
 }

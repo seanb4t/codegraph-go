@@ -492,7 +492,7 @@ func TestRefreshInstalledSkills_ForeignSkillDirLocationIsAcceptedLimitation(t *t
 	// settings.json's own registration (CR-01's actual fix).
 	targets, _, err := agents.ResolveTargets(string(agents.Claude), agents.LocationGlobal)
 	if err != nil {
-		t.Fatalf("ResolveTargetFlag: %v", err)
+		t.Fatalf("ResolveTargets: %v", err)
 	}
 	for _, tg := range targets {
 		result := tg.Install(agents.LocationGlobal, agents.InstallOptions{

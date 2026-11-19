@@ -2,6 +2,7 @@ package agents
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -75,8 +76,8 @@ type SkippedTarget struct {
 //   - "none": no targets
 //   - "auto": the targets whose Detect(loc).Installed is true and whose Detect
 //     reports no error. When that selects none, it falls back to the Claude
-//     target alone rather than installing nothing, so a clean environment
-//     still gets a working install.
+//     target alone, unless Claude itself was skipped, rather than installing
+//     nothing, so a clean environment still gets a working install.
 //   - anything else: a comma-separated list of TargetIDs, resolved to
 //     exactly those targets, whatever Detect says, so that an explicit
 //     request reports the error itself. An unknown id in the list is an
@@ -99,7 +100,8 @@ func ResolveTargets(spec string, loc Location) ([]AgentTarget, []SkippedTarget, 
 			}
 		}
 		if spec == "auto" && len(selected) == 0 {
-			if claude, ok := GetTarget(Claude); ok {
+			claudeSkipped := slices.ContainsFunc(skipped, func(s SkippedTarget) bool { return s.ID == Claude })
+			if claude, ok := GetTarget(Claude); ok && !claudeSkipped {
 				selected = []AgentTarget{claude}
 			}
 		}

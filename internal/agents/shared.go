@@ -123,6 +123,20 @@ func recordUserFile(result *WriteResult, path string, loc Location, op userFileO
 	return nil
 }
 
+// userHomeDir is os.UserHomeDir for a global path. A home directory that is
+// not absolute (a relative $HOME) is an error, because every global path
+// would then depend on the working directory.
+func userHomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(home) {
+		return "", fmt.Errorf("the home directory %q is not an absolute path", home)
+	}
+	return home, nil
+}
+
 // fileKept reports whether result records path as kept in place on purpose,
 // which an uninstall does for a local file whose real location is outside the
 // project.
